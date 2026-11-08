@@ -1867,16 +1867,6 @@ export interface components {
             /** Has More */
             has_more: boolean;
         };
-        /** BadQuery */
-        BadQuery: {
-            /** Error */
-            error: string;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
-        };
         /**
          * Batch
          * @description `Assessments.batch_status`.
@@ -1969,8 +1959,11 @@ export interface components {
         };
         /** Cancelled */
         Cancelled: {
-            /** Ok */
-            ok: boolean;
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
         };
         /** CleanedUp */
         CleanedUp: {
@@ -2422,21 +2415,22 @@ export interface components {
             busy?: true | null;
             /** Conflict */
             conflict?: true | null;
-            /** Error */
-            error?: string | null;
+            /** Detail */
+            detail?: string | null;
             /** Limit Micros */
             limit_micros?: number | null;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
             /** Over Limit */
             over_limit?: true | null;
             /** Read Only */
             read_only?: true | null;
             /** Spent Micros */
             spent_micros?: number | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
             /** Version */
             version?: number | null;
         };
@@ -2574,8 +2568,8 @@ export interface components {
             ai_off?: true | null;
             /** Busy */
             busy?: true | null;
-            /** Error */
-            error?: string | null;
+            /** Detail */
+            detail?: string | null;
             /**
              * Expired
              * @constant
@@ -2583,17 +2577,18 @@ export interface components {
             expired: true;
             /** Limit Micros */
             limit_micros?: number | null;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
             /** Over Limit */
             over_limit?: true | null;
             /** Read Only */
             read_only?: true | null;
             /** Spent Micros */
             spent_micros?: number | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
         };
         /** ExportGroup */
         ExportGroup: {
@@ -2625,29 +2620,32 @@ export interface components {
         };
         /**
          * Failure
-         * @description What any route may answer when it can't (`shared.failure_answer`), or the perimeter when it won't. A route that says more
-         *     (a Problem's `more`) names a subclass of its own for that status, through `answers`.
+         * @description What any route may answer when it can't (`shared.failure_answer`), or the perimeter when it won't: a problem document
+         *     (RFC 9457), as application/problem+json. `type` names the kind of problem, `/problems/<kind>` or `about:blank`, and `detail`
+         *     is what a person is told, left out where the page words it. The rest is what the page acts on. A route that says more (a
+         *     Problem's `more`) names a subclass of its own for that status, through `answers`.
          */
         Failure: {
             /** Ai Off */
             ai_off?: true | null;
             /** Busy */
             busy?: true | null;
-            /** Error */
-            error?: string | null;
+            /** Detail */
+            detail?: string | null;
             /** Limit Micros */
             limit_micros?: number | null;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
             /** Over Limit */
             over_limit?: true | null;
             /** Read Only */
             read_only?: true | null;
             /** Spent Micros */
             spent_micros?: number | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
         };
         /** FeatureCost */
         FeatureCost: {
@@ -2786,23 +2784,24 @@ export interface components {
             ai_off?: true | null;
             /** Busy */
             busy?: true | null;
-            /** Error */
-            error?: string | null;
+            /** Detail */
+            detail?: string | null;
             /** Folders */
             folders?: components["schemas"]["RailFolder"][] | null;
             /** Limit Micros */
             limit_micros?: number | null;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
             /** Over Limit */
             over_limit?: true | null;
             /** Read Only */
             read_only?: true | null;
             /** Spent Micros */
             spent_micros?: number | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
         };
         /**
          * Governor
@@ -3020,8 +3019,11 @@ export interface components {
             failed: number;
             /** Msg */
             msg: string;
-            /** Ok */
-            ok: boolean;
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
             /** Pks */
             pks: number[];
             /** Queued */
@@ -3217,31 +3219,6 @@ export interface components {
          * @description A POST that reads nothing of its body, which must still be a JSON object.
          */
         NoBody: Record<string, never>;
-        /**
-         * NoMessage
-         * @description No such message, or a prefetch that gave way to another job on the account's gate.
-         */
-        NoMessage: {
-            /** Busy */
-            busy?: true | null;
-            /** Error */
-            error?: string | null;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
-        };
-        /** NoThread */
-        NoThread: {
-            /** Error */
-            error: string;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
-        };
         /** NoisySender */
         NoisySender: {
             /** Accounts */
@@ -3279,41 +3256,6 @@ export interface components {
             /** Senders */
             senders: components["schemas"]["NoisySender"][];
         };
-        /**
-         * NotDone
-         * @description `ok: false` with a 200, in the use case's words.
-         */
-        NotDone: {
-            /** Error */
-            error: string;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
-        };
-        /** NotFiled */
-        NotFiled: {
-            /** Msg */
-            msg: string;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
-            /** Undoable */
-            undoable?: false | null;
-        };
-        /** NotUndone */
-        NotUndone: {
-            /** Error */
-            error: string;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
-        };
         /** NothingAsked */
         NothingAsked: {
             /** Has More */
@@ -3348,18 +3290,33 @@ export interface components {
              */
             ok: true;
         };
-        /** NothingToUndo */
+        /**
+         * NothingToUndo
+         * @description The stack is empty: any other 404 says what `Failure` says.
+         */
         NothingToUndo: {
-            /**
-             * Empty
-             * @constant
-             */
-            empty: true;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
+            /** Ai Off */
+            ai_off?: true | null;
+            /** Busy */
+            busy?: true | null;
+            /** Detail */
+            detail?: string | null;
+            /** Empty */
+            empty?: true | null;
+            /** Limit Micros */
+            limit_micros?: number | null;
+            /** Over Limit */
+            over_limit?: true | null;
+            /** Read Only */
+            read_only?: true | null;
+            /** Spent Micros */
+            spent_micros?: number | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
         };
         /** OnThread */
         OnThread: {
@@ -3594,11 +3551,8 @@ export interface components {
              * @constant
              */
             ok: true;
-            /**
-             * Prefetched
-             * @constant
-             */
-            prefetched: true;
+            /** Prefetched */
+            prefetched: boolean;
         };
         /** Queued */
         Queued: {
@@ -3954,8 +3908,11 @@ export interface components {
             failed: number;
             /** Msg */
             msg: string;
-            /** Ok */
-            ok: boolean;
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
             /** Partial */
             partial: boolean;
             /** Pks */
@@ -4021,16 +3978,6 @@ export interface components {
             token: string;
             /** Trashed */
             trashed: boolean;
-        };
-        /** RuleRefused */
-        RuleRefused: {
-            /** Msg */
-            msg: string;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
         };
         /** Rules */
         Rules: {
@@ -4226,16 +4173,6 @@ export interface components {
             /** Unseen */
             unseen: number;
             unsub: components["schemas"]["WayOut"];
-        };
-        /** SenderRefused */
-        SenderRefused: {
-            /** Error */
-            error: string;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
         };
         /** SentNow */
         SentNow: {
@@ -4572,15 +4509,10 @@ export interface components {
             ai_off?: true | null;
             /** Busy */
             busy?: true | null;
-            /** Error */
-            error?: string | null;
+            /** Detail */
+            detail?: string | null;
             /** Limit Micros */
             limit_micros?: number | null;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
             /** Over Limit */
             over_limit?: true | null;
             /** Read Only */
@@ -4589,6 +4521,12 @@ export interface components {
             retry?: true | null;
             /** Spent Micros */
             spent_micros?: number | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
         };
         /** Undone */
         Undone: {
@@ -4667,18 +4605,6 @@ export interface components {
             q?: string | null;
             /** Verb */
             verb?: string | null;
-        };
-        /** ViewRefused */
-        ViewRefused: {
-            /** Msg */
-            msg: string;
-            /**
-             * Ok
-             * @constant
-             */
-            ok: false;
-            /** Views */
-            views: components["schemas"]["ListedView"][];
         };
         /** Views */
         Views: {
@@ -4877,7 +4803,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -4886,7 +4812,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -4895,7 +4821,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -4904,7 +4830,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -4913,7 +4839,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -4922,7 +4848,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -4931,7 +4857,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -4940,7 +4866,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -4949,7 +4875,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -4958,7 +4884,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -4985,7 +4911,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -4994,7 +4920,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5003,7 +4929,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5012,7 +4938,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5021,7 +4947,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5030,7 +4956,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5039,7 +4965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5048,7 +4974,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5057,7 +4983,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5066,7 +4992,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -5095,7 +5021,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -5104,7 +5030,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5113,7 +5039,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5122,7 +5048,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5131,7 +5057,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5140,7 +5066,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5149,7 +5075,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5158,7 +5084,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5167,7 +5093,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5176,7 +5102,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -5205,7 +5131,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -5214,7 +5140,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5223,7 +5149,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5232,7 +5158,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5241,7 +5167,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5250,7 +5176,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5259,7 +5185,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5268,7 +5194,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5277,7 +5203,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5286,7 +5212,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -5319,7 +5245,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -5328,7 +5254,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5337,7 +5263,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5346,7 +5272,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5355,7 +5281,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5364,7 +5290,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5373,7 +5299,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5382,7 +5308,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5391,7 +5317,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5400,7 +5326,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -5424,7 +5350,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Removed"] | components["schemas"]["NotDone"];
+                    "application/json": components["schemas"]["Removed"];
                 };
             };
             /** @description Bad Request */
@@ -5433,7 +5359,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -5442,7 +5368,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5451,7 +5377,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5460,7 +5386,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5469,7 +5395,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5478,7 +5404,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5487,7 +5413,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5496,7 +5422,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5505,7 +5431,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5514,7 +5440,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -5538,7 +5464,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Saved"] | components["schemas"]["NotDone"];
+                    "application/json": components["schemas"]["Saved"];
                 };
             };
             /** @description Bad Request */
@@ -5547,7 +5473,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -5556,7 +5482,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5565,7 +5491,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5574,7 +5500,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5583,7 +5509,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5592,7 +5518,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5601,7 +5527,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5610,7 +5536,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5619,7 +5545,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5628,7 +5554,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -5652,7 +5578,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LoggedIn"] | components["schemas"]["CouldntLogIn"] | components["schemas"]["NotDone"];
+                    "application/json": components["schemas"]["LoggedIn"] | components["schemas"]["CouldntLogIn"];
                 };
             };
             /** @description Bad Request */
@@ -5661,7 +5587,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -5670,7 +5596,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5679,7 +5605,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5688,7 +5614,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5697,7 +5623,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5706,7 +5632,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5715,7 +5641,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5724,7 +5650,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5733,7 +5659,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5742,7 +5668,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -5775,7 +5701,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -5784,7 +5710,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5793,7 +5719,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5802,7 +5728,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5811,7 +5737,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5820,7 +5746,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5829,7 +5755,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5838,7 +5764,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5847,7 +5773,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5856,7 +5782,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -5889,7 +5815,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -5898,7 +5824,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -5907,7 +5833,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -5916,7 +5842,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -5925,7 +5851,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -5934,7 +5860,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -5943,7 +5869,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -5952,7 +5878,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -5961,7 +5887,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -5970,7 +5896,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -6003,7 +5929,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6012,7 +5938,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6021,7 +5947,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6030,7 +5956,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6039,7 +5965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Gone */
@@ -6048,7 +5974,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Expired"];
+                    "application/problem+json": components["schemas"]["Expired"];
                 };
             };
             /** @description Content Too Large */
@@ -6057,7 +5983,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6066,7 +5992,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6075,7 +6001,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6084,7 +6010,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -6093,7 +6019,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -6126,7 +6052,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6135,7 +6061,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6144,7 +6070,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6153,7 +6079,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6162,7 +6088,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -6171,7 +6097,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6180,7 +6106,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6189,7 +6115,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6198,7 +6124,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -6207,7 +6133,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -6239,7 +6165,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6248,7 +6174,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6257,7 +6183,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6266,7 +6192,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6275,7 +6201,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -6284,7 +6210,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6293,7 +6219,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6302,7 +6228,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6311,7 +6237,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -6320,7 +6246,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -6353,7 +6279,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6362,7 +6288,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6371,7 +6297,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6380,7 +6306,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6389,7 +6315,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -6398,7 +6324,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6407,7 +6333,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6416,7 +6342,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6425,7 +6351,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -6434,7 +6360,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -6467,7 +6393,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6476,7 +6402,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6485,7 +6411,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6494,7 +6420,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6503,7 +6429,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -6512,7 +6438,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6521,7 +6447,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6530,7 +6456,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6539,7 +6465,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -6548,7 +6474,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -6581,7 +6507,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6590,7 +6516,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6599,7 +6525,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6608,7 +6534,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6617,7 +6543,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -6626,7 +6552,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6635,7 +6561,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6644,7 +6570,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6653,7 +6579,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -6662,7 +6588,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
             /** @description Gateway Timeout */
@@ -6671,7 +6597,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -6695,7 +6621,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Filed"] | components["schemas"]["NotFiled"];
+                    "application/json": components["schemas"]["Filed"];
                 };
             };
             /** @description Bad Request */
@@ -6704,7 +6630,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6713,7 +6639,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6722,7 +6648,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6731,7 +6657,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6740,7 +6666,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -6749,7 +6675,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6758,7 +6684,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6767,7 +6693,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6776,7 +6702,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -6785,7 +6711,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -6816,7 +6742,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6825,7 +6751,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6834,7 +6760,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6843,7 +6769,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6852,7 +6778,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -6861,7 +6787,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6870,7 +6796,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6879,7 +6805,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6888,7 +6814,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -6897,7 +6823,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -6926,7 +6852,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -6935,7 +6861,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -6944,7 +6870,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -6953,7 +6879,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -6962,7 +6888,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -6971,7 +6897,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -6980,7 +6906,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -6989,7 +6915,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -6998,7 +6924,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7007,7 +6933,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -7040,7 +6966,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7049,7 +6975,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7058,7 +6984,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7067,7 +6993,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7076,7 +7002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7085,7 +7011,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7094,7 +7020,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -7103,7 +7029,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -7112,7 +7038,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7121,7 +7047,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -7154,7 +7080,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7163,7 +7089,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7172,7 +7098,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7181,7 +7107,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7190,7 +7116,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7199,7 +7125,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7208,7 +7134,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -7217,7 +7143,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -7226,7 +7152,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7235,7 +7161,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -7267,7 +7193,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7276,7 +7202,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7285,7 +7211,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7294,7 +7220,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7303,7 +7229,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7312,7 +7238,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7321,7 +7247,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -7330,7 +7256,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -7339,7 +7265,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7348,7 +7274,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -7381,7 +7307,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7390,7 +7316,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7399,7 +7325,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7408,7 +7334,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7417,7 +7343,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7426,7 +7352,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7435,7 +7361,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -7444,7 +7370,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -7453,7 +7379,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7462,7 +7388,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -7495,7 +7421,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7504,7 +7430,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7513,7 +7439,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7522,7 +7448,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7531,7 +7457,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7540,7 +7466,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7549,7 +7475,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -7558,7 +7484,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -7567,7 +7493,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7576,7 +7502,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -7609,7 +7535,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7618,7 +7544,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7627,7 +7553,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7636,7 +7562,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7645,7 +7571,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7654,7 +7580,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7663,7 +7589,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -7672,7 +7598,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -7681,7 +7607,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7690,7 +7616,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -7712,7 +7638,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SenderPreview"] | components["schemas"]["SenderRefused"];
+                    "application/json": components["schemas"]["SenderPreview"];
                 };
             };
             /** @description Bad Request */
@@ -7721,7 +7647,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7730,7 +7656,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7739,7 +7665,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7748,7 +7674,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7757,7 +7683,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7766,7 +7692,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7775,7 +7701,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -7784,7 +7710,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -7793,7 +7719,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7802,7 +7728,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -7831,7 +7757,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7840,7 +7766,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7849,7 +7775,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7858,7 +7784,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7867,7 +7793,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7876,7 +7802,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7885,7 +7811,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -7894,7 +7820,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -7903,7 +7829,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -7912,7 +7838,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -7943,7 +7869,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -7952,7 +7878,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -7961,7 +7887,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -7970,7 +7896,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -7979,7 +7905,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -7988,7 +7914,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -7997,7 +7923,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8006,7 +7932,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8015,7 +7941,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8024,7 +7950,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8055,7 +7981,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8064,7 +7990,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8073,7 +7999,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8082,7 +8008,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8091,7 +8017,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -8100,7 +8026,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -8109,7 +8035,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8118,7 +8044,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8127,7 +8053,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8136,7 +8062,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8169,7 +8095,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8178,7 +8104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8187,7 +8113,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8196,7 +8122,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8205,7 +8131,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -8214,7 +8140,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -8223,7 +8149,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8232,7 +8158,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8241,7 +8167,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8250,7 +8176,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8281,7 +8207,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8290,7 +8216,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8299,7 +8225,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8308,7 +8234,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8317,7 +8243,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -8326,7 +8252,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -8335,7 +8261,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8344,7 +8270,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8353,7 +8279,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8362,7 +8288,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8391,7 +8317,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8400,7 +8326,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8409,7 +8335,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8418,7 +8344,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8427,7 +8353,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -8436,7 +8362,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -8445,7 +8371,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8454,7 +8380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8463,7 +8389,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8472,7 +8398,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8501,7 +8427,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8510,7 +8436,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8519,7 +8445,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8528,7 +8454,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8537,7 +8463,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -8546,7 +8472,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -8555,7 +8481,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8564,7 +8490,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8573,7 +8499,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8582,7 +8508,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8611,7 +8537,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8620,7 +8546,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8629,7 +8555,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8638,7 +8564,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8647,7 +8573,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -8656,7 +8582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -8665,7 +8591,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8674,7 +8600,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8683,7 +8609,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8692,7 +8618,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8721,7 +8647,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8730,7 +8656,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8739,7 +8665,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8748,7 +8674,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8757,7 +8683,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -8766,7 +8692,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -8775,7 +8701,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8784,7 +8710,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8793,7 +8719,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8802,7 +8728,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8836,7 +8762,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8845,7 +8771,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8854,7 +8780,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8863,7 +8789,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8872,7 +8798,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -8881,7 +8807,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -8890,7 +8816,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -8899,7 +8825,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -8908,7 +8834,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -8917,7 +8843,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -8950,7 +8876,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -8959,7 +8885,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -8968,7 +8894,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -8977,7 +8903,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -8986,7 +8912,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DraftChanged"];
+                    "application/problem+json": components["schemas"]["DraftChanged"];
                 };
             };
             /** @description Content Too Large */
@@ -8995,7 +8921,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9004,7 +8930,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9013,7 +8939,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9022,7 +8948,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9031,7 +8957,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9064,7 +8990,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -9073,7 +8999,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9082,7 +9008,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9091,7 +9017,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -9100,7 +9026,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -9109,7 +9035,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9118,7 +9044,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9127,7 +9053,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9136,7 +9062,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9145,7 +9071,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9172,7 +9098,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -9181,7 +9107,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9190,7 +9116,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9199,7 +9125,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -9208,7 +9134,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -9217,7 +9143,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9226,7 +9152,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9235,7 +9161,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9244,7 +9170,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9253,7 +9179,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Service Unavailable */
@@ -9262,7 +9188,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9289,7 +9215,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -9298,7 +9224,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9307,7 +9233,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9316,7 +9242,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -9325,7 +9251,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -9334,7 +9260,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9343,7 +9269,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9352,7 +9278,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9361,7 +9287,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9370,7 +9296,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9399,7 +9325,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -9408,7 +9334,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9417,7 +9343,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9426,7 +9352,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -9435,7 +9361,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -9444,7 +9370,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9453,7 +9379,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9462,7 +9388,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9471,7 +9397,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9480,7 +9406,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9504,7 +9430,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Filed"] | components["schemas"]["NotFiled"];
+                    "application/json": components["schemas"]["Filed"];
                 };
             };
             /** @description Bad Request */
@@ -9513,7 +9439,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -9522,7 +9448,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9531,7 +9457,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9540,7 +9466,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -9549,7 +9475,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -9558,7 +9484,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9567,7 +9493,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9576,7 +9502,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9585,7 +9511,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9594,7 +9520,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9625,7 +9551,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FoldersRefused"];
+                    "application/problem+json": components["schemas"]["FoldersRefused"];
                 };
             };
             /** @description Payment Required */
@@ -9634,7 +9560,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9643,7 +9569,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9652,7 +9578,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -9661,7 +9587,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -9670,7 +9596,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9679,7 +9605,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9688,7 +9614,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9697,7 +9623,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9706,7 +9632,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9739,7 +9665,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -9748,7 +9674,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9757,7 +9683,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9766,7 +9692,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -9775,7 +9701,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -9784,7 +9710,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9793,7 +9719,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9802,7 +9728,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9811,7 +9737,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9820,7 +9746,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9853,7 +9779,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -9862,7 +9788,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9871,7 +9797,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9880,7 +9806,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -9889,7 +9815,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -9898,7 +9824,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -9907,7 +9833,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -9916,7 +9842,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -9925,7 +9851,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -9934,7 +9860,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -9967,7 +9893,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -9976,7 +9902,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -9985,7 +9911,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -9994,7 +9920,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10003,7 +9929,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10012,7 +9938,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10021,7 +9947,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10030,7 +9956,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10039,7 +9965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10048,7 +9974,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10072,7 +9998,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Filed"] | components["schemas"]["NotFiled"];
+                    "application/json": components["schemas"]["Filed"];
                 };
             };
             /** @description Bad Request */
@@ -10081,7 +10007,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10090,7 +10016,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -10099,7 +10025,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -10108,7 +10034,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10117,7 +10043,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10126,7 +10052,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10135,7 +10061,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10144,7 +10070,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10153,7 +10079,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10162,7 +10088,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10192,7 +10118,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10201,7 +10127,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -10210,7 +10136,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -10219,7 +10145,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10228,7 +10154,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10237,7 +10163,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10246,7 +10172,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10255,7 +10181,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10264,7 +10190,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10273,7 +10199,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10297,7 +10223,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageOpened"] | components["schemas"]["Prefetched"] | components["schemas"]["NoMessage"];
+                    "application/json": components["schemas"]["MessageOpened"] | components["schemas"]["Prefetched"];
                 };
             };
             /** @description Bad Request */
@@ -10306,7 +10232,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10315,7 +10241,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -10324,7 +10250,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -10333,7 +10259,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10342,7 +10268,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10351,7 +10277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10360,7 +10286,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10369,7 +10295,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10378,7 +10304,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10387,7 +10313,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10419,7 +10345,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10428,7 +10354,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -10437,7 +10363,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -10446,7 +10372,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10455,7 +10381,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10464,7 +10390,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10473,7 +10399,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10482,7 +10408,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10491,7 +10417,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10500,7 +10426,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10535,7 +10461,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10544,7 +10470,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -10553,7 +10479,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -10562,7 +10488,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10571,7 +10497,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10580,7 +10506,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10589,7 +10515,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10598,7 +10524,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10607,7 +10533,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10616,7 +10542,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10649,7 +10575,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10658,7 +10584,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -10667,7 +10593,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -10676,7 +10602,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10685,7 +10611,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10694,7 +10620,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10703,7 +10629,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10712,7 +10638,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10721,7 +10647,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10730,7 +10656,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10761,7 +10687,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10770,7 +10696,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -10779,7 +10705,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -10788,7 +10714,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10797,7 +10723,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10806,7 +10732,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10815,7 +10741,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10824,7 +10750,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10833,7 +10759,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10842,7 +10768,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10875,7 +10801,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10884,7 +10810,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -10893,7 +10819,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -10902,7 +10828,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -10911,7 +10837,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -10920,7 +10846,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -10929,7 +10855,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -10938,7 +10864,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -10947,7 +10873,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -10956,7 +10882,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -10989,7 +10915,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -10998,7 +10924,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11007,7 +10933,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11016,7 +10942,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11025,7 +10951,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11034,7 +10960,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11043,7 +10969,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11052,7 +10978,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11061,7 +10987,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11070,7 +10996,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -11103,7 +11029,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -11112,7 +11038,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11121,7 +11047,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11130,7 +11056,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11139,7 +11065,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11148,7 +11074,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11157,7 +11083,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11166,7 +11092,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11175,7 +11101,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11184,7 +11110,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -11213,7 +11139,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -11222,7 +11148,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11231,7 +11157,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11240,7 +11166,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11249,7 +11175,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11258,7 +11184,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11267,7 +11193,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11276,7 +11202,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11285,7 +11211,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11294,7 +11220,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -11327,7 +11253,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -11336,7 +11262,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11345,7 +11271,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11354,7 +11280,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11363,7 +11289,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11372,7 +11298,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11381,7 +11307,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11390,7 +11316,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11399,7 +11325,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11408,7 +11334,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -11441,7 +11367,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -11450,7 +11376,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11459,7 +11385,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11468,7 +11394,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11477,7 +11403,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11486,7 +11412,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11495,7 +11421,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11504,7 +11430,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11513,7 +11439,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11522,7 +11448,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -11555,7 +11481,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -11564,7 +11490,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11573,7 +11499,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11582,7 +11508,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11591,7 +11517,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11600,7 +11526,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11609,7 +11535,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11618,7 +11544,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11627,7 +11553,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11636,7 +11562,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -11669,7 +11595,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -11678,7 +11604,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11687,7 +11613,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11696,7 +11622,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11705,7 +11631,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11714,7 +11640,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11723,7 +11649,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11732,7 +11658,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11741,7 +11667,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11750,7 +11676,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -11783,7 +11709,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -11792,7 +11718,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11801,7 +11727,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11810,7 +11736,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11819,7 +11745,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11828,7 +11754,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11837,7 +11763,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11846,7 +11772,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11855,7 +11781,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11864,7 +11790,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -11893,7 +11819,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -11902,7 +11828,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -11911,7 +11837,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -11920,7 +11846,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -11929,7 +11855,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -11938,7 +11864,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -11947,7 +11873,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -11956,7 +11882,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -11965,7 +11891,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -11974,7 +11900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -12007,7 +11933,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12016,7 +11942,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12025,7 +11951,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12034,7 +11960,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12043,7 +11969,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12052,7 +11978,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12061,7 +11987,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12070,7 +11996,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12079,7 +12005,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12088,7 +12014,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -12121,7 +12047,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12130,7 +12056,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12139,7 +12065,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12148,7 +12074,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12157,7 +12083,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12166,7 +12092,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12175,7 +12101,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12184,7 +12110,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12193,7 +12119,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12202,7 +12128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unavailable"];
+                    "application/problem+json": components["schemas"]["Unavailable"];
                 };
             };
         };
@@ -12231,7 +12157,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12240,7 +12166,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12249,7 +12175,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12258,7 +12184,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12267,7 +12193,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12276,7 +12202,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12285,7 +12211,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12294,7 +12220,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12303,7 +12229,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12312,7 +12238,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -12336,7 +12262,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RuleChanged"] | components["schemas"]["RuleRefused"];
+                    "application/json": components["schemas"]["RuleChanged"];
                 };
             };
             /** @description Bad Request */
@@ -12345,7 +12271,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12354,7 +12280,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12363,7 +12289,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12372,7 +12298,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12381,7 +12307,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12390,7 +12316,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12399,7 +12325,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12408,7 +12334,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12417,7 +12343,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12426,7 +12352,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -12457,7 +12383,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12466,7 +12392,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12475,7 +12401,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12484,7 +12410,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12493,7 +12419,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12502,7 +12428,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12511,7 +12437,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12520,7 +12446,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12529,7 +12455,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12538,7 +12464,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -12564,7 +12490,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchPage"] | components["schemas"]["NothingAsked"] | components["schemas"]["BadQuery"];
+                    "application/json": components["schemas"]["SearchPage"] | components["schemas"]["NothingAsked"];
                 };
             };
             /** @description Bad Request */
@@ -12573,7 +12499,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12582,7 +12508,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12591,7 +12517,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12600,7 +12526,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12609,7 +12535,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12618,7 +12544,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12627,7 +12553,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12636,7 +12562,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12645,7 +12571,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12654,7 +12580,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -12678,7 +12604,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Filed"] | components["schemas"]["NotFiled"];
+                    "application/json": components["schemas"]["Filed"];
                 };
             };
             /** @description Bad Request */
@@ -12687,7 +12613,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12696,7 +12622,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12705,7 +12631,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12714,7 +12640,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12723,7 +12649,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12732,7 +12658,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12741,7 +12667,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12750,7 +12676,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12759,7 +12685,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12768,7 +12694,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -12801,7 +12727,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12810,7 +12736,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12819,7 +12745,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12828,7 +12754,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12837,7 +12763,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12846,7 +12772,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12855,7 +12781,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12864,7 +12790,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12873,7 +12799,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12882,7 +12808,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -12915,7 +12841,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -12924,7 +12850,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -12933,7 +12859,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -12942,7 +12868,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -12951,7 +12877,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -12960,7 +12886,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -12969,7 +12895,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -12978,7 +12904,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -12987,7 +12913,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -12996,7 +12922,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13025,7 +12951,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13034,7 +12960,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13043,7 +12969,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13052,7 +12978,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -13061,7 +12987,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13070,7 +12996,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13079,7 +13005,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13088,7 +13014,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -13097,7 +13023,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -13106,7 +13032,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13139,7 +13065,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13148,7 +13074,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13157,7 +13083,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13166,7 +13092,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -13175,7 +13101,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13184,7 +13110,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13193,7 +13119,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13202,7 +13128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -13211,7 +13137,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -13220,7 +13146,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13253,7 +13179,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13262,7 +13188,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13271,7 +13197,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13280,7 +13206,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -13289,7 +13215,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13298,7 +13224,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13307,7 +13233,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13316,7 +13242,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -13325,7 +13251,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -13334,7 +13260,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13357,7 +13283,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Thread"] | components["schemas"]["NoThread"];
+                    "application/json": components["schemas"]["Thread"];
                 };
             };
             /** @description Bad Request */
@@ -13366,7 +13292,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13375,7 +13301,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13384,7 +13310,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13393,7 +13319,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -13402,7 +13328,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13411,7 +13337,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13420,7 +13346,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13429,7 +13355,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -13438,7 +13364,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -13447,7 +13373,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13471,7 +13397,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ManyFiled"] | components["schemas"]["NotFiled"];
+                    "application/json": components["schemas"]["ManyFiled"];
                 };
             };
             /** @description Bad Request */
@@ -13480,7 +13406,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13489,7 +13415,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13498,7 +13424,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13507,7 +13433,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -13516,7 +13442,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13525,7 +13451,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13534,7 +13460,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13543,7 +13469,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -13552,7 +13478,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -13561,7 +13487,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13585,7 +13511,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ManyFiled"] | components["schemas"]["NotFiled"];
+                    "application/json": components["schemas"]["ManyFiled"];
                 };
             };
             /** @description Bad Request */
@@ -13594,7 +13520,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13603,7 +13529,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13612,7 +13538,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13621,7 +13547,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -13630,7 +13556,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13639,7 +13565,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13648,7 +13574,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13657,7 +13583,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -13666,7 +13592,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -13675,7 +13601,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13699,7 +13625,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Filed"] | components["schemas"]["NotFiled"];
+                    "application/json": components["schemas"]["Filed"];
                 };
             };
             /** @description Bad Request */
@@ -13708,7 +13634,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13717,7 +13643,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13726,7 +13652,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13735,7 +13661,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -13744,7 +13670,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13753,7 +13679,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13762,7 +13688,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13771,7 +13697,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -13780,7 +13706,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -13789,7 +13715,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13813,7 +13739,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Undone"] | components["schemas"]["NothingToUndo"] | components["schemas"]["NotUndone"];
+                    "application/json": components["schemas"]["Undone"];
                 };
             };
             /** @description Bad Request */
@@ -13822,7 +13748,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13831,7 +13757,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13840,7 +13766,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13849,7 +13775,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["NothingToUndo"];
                 };
             };
             /** @description Conflict */
@@ -13858,7 +13784,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13867,7 +13793,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13876,7 +13802,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13885,7 +13811,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -13894,7 +13820,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -13903,7 +13829,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -13936,7 +13862,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -13945,7 +13871,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -13954,7 +13880,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -13963,7 +13889,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -13972,7 +13898,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -13981,7 +13907,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -13990,7 +13916,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -13999,7 +13925,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14008,7 +13934,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14017,7 +13943,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14050,7 +13976,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14059,7 +13985,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14068,7 +13994,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14077,7 +14003,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14086,7 +14012,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14095,7 +14021,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14104,7 +14030,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14113,7 +14039,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14122,7 +14048,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14131,7 +14057,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14160,7 +14086,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14169,7 +14095,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14178,7 +14104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14187,7 +14113,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14196,7 +14122,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14205,7 +14131,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14214,7 +14140,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14223,7 +14149,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14232,7 +14158,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14241,7 +14167,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14270,7 +14196,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14279,7 +14205,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14288,7 +14214,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14297,7 +14223,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14306,7 +14232,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14315,7 +14241,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14324,7 +14250,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14333,7 +14259,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14342,7 +14268,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14351,7 +14277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14375,7 +14301,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Views"] | components["schemas"]["ViewRefused"];
+                    "application/json": components["schemas"]["Views"];
                 };
             };
             /** @description Bad Request */
@@ -14384,7 +14310,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14393,7 +14319,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14402,7 +14328,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14411,7 +14337,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14420,7 +14346,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14429,7 +14355,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14438,7 +14364,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14447,7 +14373,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14456,7 +14382,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14465,7 +14391,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14494,7 +14420,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14503,7 +14429,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14512,7 +14438,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14521,7 +14447,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14530,7 +14456,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14539,7 +14465,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14548,7 +14474,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14557,7 +14483,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14566,7 +14492,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14575,7 +14501,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14602,7 +14528,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14611,7 +14537,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14620,7 +14546,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14629,7 +14555,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14638,7 +14564,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14647,7 +14573,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14656,7 +14582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14665,7 +14591,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14674,7 +14600,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14683,7 +14609,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14710,7 +14636,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14719,7 +14645,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14728,7 +14654,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14737,7 +14663,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14746,7 +14672,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14755,7 +14681,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14764,7 +14690,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14773,7 +14699,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14782,7 +14708,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14791,7 +14717,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14818,7 +14744,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14827,7 +14753,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14836,7 +14762,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14845,7 +14771,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14854,7 +14780,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14863,7 +14789,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14872,7 +14798,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14881,7 +14807,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14890,7 +14816,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -14899,7 +14825,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -14926,7 +14852,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -14935,7 +14861,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -14944,7 +14870,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -14953,7 +14879,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -14962,7 +14888,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -14971,7 +14897,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -14980,7 +14906,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -14989,7 +14915,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -14998,7 +14924,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -15007,7 +14933,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -15034,7 +14960,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -15043,7 +14969,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -15052,7 +14978,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -15061,7 +14987,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -15070,7 +14996,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -15079,7 +15005,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -15088,7 +15014,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -15097,7 +15023,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -15106,7 +15032,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -15115,7 +15041,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
@@ -15142,7 +15068,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Payment Required */
@@ -15151,7 +15077,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Forbidden */
@@ -15160,7 +15086,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Not Found */
@@ -15169,7 +15095,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Conflict */
@@ -15178,7 +15104,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Content Too Large */
@@ -15187,7 +15113,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Unprocessable Content */
@@ -15196,7 +15122,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Locked */
@@ -15205,7 +15131,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Internal Server Error */
@@ -15214,7 +15140,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
             /** @description Bad Gateway */
@@ -15223,7 +15149,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Failure"];
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
