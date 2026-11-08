@@ -72,7 +72,7 @@
      }
     ],
     "description": "",
-    "end_iso": "2026-11-03T15:00:00",
+    "end_iso": "2026-11-03T15:00:00+01:00",
     "exdates": [],
     "location": "Room 2",
     "method": "REQUEST",
@@ -83,12 +83,12 @@
     "recurrence": "",
     "recurrence_id": "",
     "rrule": "",
-    "start_iso": "2026-11-03T14:00:00",
+    "start_iso": "2026-11-03T14:00:00+01:00",
     "status": "CONFIRMED",
     "summary": "Design review",
-    "tzid": "",
+    "tzid": "W. Europe Standard Time",
     "uid": "040000008200E00074C5B7101A82E0080000000000000000000000000000000000000000review",
-    "when": "Tue, Nov 3 · 2:00 PM–3:00 PM"
+    "when": "Tue, Nov 3 · 1:00 PM–2:00 PM"
    },
    "invite_part": "3",
    "key": 6,

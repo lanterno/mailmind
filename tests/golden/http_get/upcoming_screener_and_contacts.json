@@ -5,14 +5,14 @@
     {
      "account": "ada@example.test",
      "all_day": false,
-     "end": "2026-11-03T15:00",
+     "end": "2026-11-03T14:00",
      "folder": "INBOX",
      "invite": true,
      "key": 6,
      "location": "Room 2",
      "organizer": "Noor Haddad",
      "recurrence": "",
-     "start": "2026-11-03T14:00",
+     "start": "2026-11-03T13:00",
      "summary": "Design review",
      "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
      "uid": 6

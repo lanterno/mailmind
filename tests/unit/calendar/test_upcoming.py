@@ -154,6 +154,16 @@ def test_moving_or_cancelling_one_occurrence_leaves_the_series(data_dir):
         ("Standup (moved)", "2026-10-31T12:00"), ("Standup", "2026-11-13T12:00")]
 
 
+def test_a_stored_invite_from_outlook_shows_at_its_own_hour_in_your_zone(machine_zone, data_dir):
+    start = NOW + timedelta(days=1)
+    in_berlin = start.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Europe/Berlin"))
+    text = _ics("o", start).replace("DTSTART:" + start.strftime("%Y%m%dT%H%M%S"),
+                                    "DTSTART;TZID=W. Europe Standard Time:" + in_berlin.strftime("%Y%m%dT%H%M%S"))
+    _msg(text)
+    expected = start.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None).isoformat(timespec="minutes")
+    assert _up()[0]["start"] == expected
+
+
 def test_cancelling_the_series_drops_its_moved_occurrences_too(data_dir):
     _msg(_weekly(), ts=NOW - timedelta(days=20))
     _msg(_one(NOW + timedelta(days=1), NOW), ts=NOW - timedelta(days=2))

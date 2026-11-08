@@ -17,7 +17,7 @@ from icalendar.timezone import tzp
 
 from mailmind.bootstrap.calendar import ics
 from mailmind.calendar.adapters import icalendar_acl
-from mailmind.calendar.domain import rsvp
+from mailmind.calendar.domain import invite, rsvp
 from property_runs import runs
 
 NOW = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
@@ -87,7 +87,8 @@ def test_a_broken_invite_raises_nothing_when_asked_when_it_next_happens(inv):
     ics.next_occurrence(inv, NOW)
 
 
-_LINES = FULL + [r"UID:x\ny", r"ORGANIZER;CN=a^nb:mailto:c\nd@example.test", r"ATTENDEE;CN=a^nb:mailto:ada@example.test", r"SUMMARY:a\nb", r"LOCATION:a\,b"]
+_LINES = FULL + [r"UID:x\ny", r"ORGANIZER;CN=a^nb:mailto:c\nd@example.test", r"ATTENDEE;CN=a^nb:mailto:ada@example.test", r"SUMMARY:a\nb", r"LOCATION:a\,b",
+                 "DTSTART;TZID=W. Europe Standard Time:20261005T100000"]
 
 
 def _mangled():
@@ -202,13 +203,31 @@ def test_an_unknown_tzid_makes_the_time_floating(tzid):
     assert ics.next_occurrence(inv, NOW)[0] == datetime(2026, 11, 2, 10, 0)
 
 
-@pytest.mark.parametrize("tzid", ["W. Europe Standard Time", "Pacific Standard Time", "/freeassociation.sourceforge.net/Europe/Berlin", "Customized Time Zone"])
+@pytest.mark.parametrize("tzid", ["Customized Time Zone", "Customized Time Zone 1", "W. Europe Standard Tim", "/freeassociation.sourceforge.net/Berlin", "/a/b/c/d/e/Standup"])
 def test_a_name_only_a_vtimezone_or_a_guess_could_explain_floats_too(tzid):
-    """The library alone would map a Windows name or guess past a vendor's prefix. A VTIMEZONE doesn't count, and one rule says what a
-    TZID means (`invite.zone`)."""
+    """A VTIMEZONE doesn't count, and one rule says what a TZID means (`invite.zone`): the zone database's names, Windows' and a name
+    from a registry that ends in one."""
     zone = ["BEGIN:VTIMEZONE", f"TZID:{tzid}", "BEGIN:STANDARD", "DTSTART:19701025T030000", "TZOFFSETFROM:+0200", "TZOFFSETTO:+0100", "END:STANDARD", "END:VTIMEZONE"]
     inv = ics.parse(cal(*zone, "BEGIN:VEVENT", "UID:u", f"DTSTART;TZID={tzid}:20261102T100000", "END:VEVENT"))
     assert (inv["start_iso"], inv["tzid"]) == ("2026-11-02T10:00:00", "")
+
+
+@pytest.mark.parametrize("tzid, start, zone_name", [("W. Europe Standard Time", "2026-11-02T10:00:00+01:00", "W. Europe Standard Time"),
+                                                    ("Pacific Standard Time", "2026-11-02T10:00:00-08:00", "Pacific Standard Time"),
+                                                    ("/freeassociation.sourceforge.net/Europe/Berlin", "2026-11-02T10:00:00+01:00", "/freeassociation.sourceforge.net/Europe/Berlin"),
+                                                    ("/softwarestudio.org/Olson_20011030_5/America/New_York", "2026-11-02T10:00:00-05:00", "/softwarestudio.org/Olson_20011030_5/America/New_York"),
+                                                    ("/mozilla.org/20071231_1/America/Argentina/Buenos_Aires", "2026-11-02T10:00:00-03:00", "/mozilla.org/20071231_1/America/Argentina/Buenos_Aires")])
+def test_a_windows_name_or_one_from_a_registry_is_the_zone_it_names(tzid, start, zone_name):
+    """Whatever the invite's own VTIMEZONE says of it: this one, with an offset no such zone has, doesn't move it."""
+    wrong = ["BEGIN:VTIMEZONE", f"TZID:{tzid}", "BEGIN:STANDARD", "DTSTART:19701025T030000", "TZOFFSETFROM:+0500", "TZOFFSETTO:+0500", "END:STANDARD", "END:VTIMEZONE"]
+    inv = ics.parse(cal(*wrong, "BEGIN:VEVENT", "UID:u", f"DTSTART;TZID={tzid}:20261102T100000", f"DTEND;TZID={tzid}:20261102T103000", "END:VEVENT"))
+    assert (inv["start_iso"], inv["tzid"]) == (start, zone_name)
+    assert ics.next_occurrence(inv, NOW)[0].isoformat() == start
+
+
+def test_every_windows_name_is_a_zone_this_machine_can_load():
+    for name, iana in invite.WINDOWS_ZONES.items():
+        assert invite.zone(name) == ZoneInfo(iana), name
 
 
 def _zone_block(tzid, *rule, offset="+0000"):
