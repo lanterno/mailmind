@@ -1,6 +1,6 @@
 """What a request to send or save comes to, with no database and no server."""
-from mailmind.compose.domain import attachments, composition, limits
-from mailmind.content.quote import own_html
+from mailmind.compose.domain import attachments, composition, limits, markdown
+from mailmind.content.quote import own_html, quoted_text_html
 
 
 ORIGINAL = {"from_name": "Lin Ma", "from_addr": "lin@example.test", "subject": "Fabric", "message_id": "<o@example.test>",
@@ -23,6 +23,72 @@ def test_a_new_message_is_only_what_you_typed():
     made = composition.as_typed("Hello")
     assert (made.own, made.text, made.html, made.tail_text, made.tail_html, made.in_reply_to, made.references) == (
         "Hello", "Hello", None, None, None, None, None)
+
+
+# -- what you typed in Markdown ------------------------------------------------
+
+def test_a_new_message_in_markdown_goes_with_its_html():
+    made = composition.as_typed("**Hello**")
+    assert (made.own, made.text, made.html) == ("**Hello**", "**Hello**", "<p><strong>Hello</strong></p>")
+
+
+def test_a_reply_in_markdown_opens_with_it_and_keeps_the_originals_html():
+    made = composition.as_reply("*Yes*", ORIGINAL, {**PARSED, "html": "<p>Which <b>blue</b>?</p>"})
+    assert made.html.startswith("<p><em>Yes</em></p><div>On Mon") and "<b>blue</b>" in made.html
+    assert made.text.startswith("*Yes*\n\nOn Mon") and made.tail_html in made.html
+
+
+def test_a_reply_with_no_markdown_is_the_html_it_always_was():
+    made = composition.as_reply("Yes", ORIGINAL, {**PARSED, "html": "<p>Which <b>blue</b>?</p>"})
+    assert made.html.startswith(own_html("Yes") + "<div>On Mon")
+
+
+def test_a_reply_in_markdown_to_mail_with_no_html_quotes_its_text():
+    made = composition.as_reply("*Yes*", ORIGINAL, PARSED)
+    assert made.html.startswith("<p><em>Yes</em></p>") and "<blockquote" in made.html and "Which blue?</blockquote>" in made.html
+    assert made.tail_html is None                  # nothing to vouch for: a quote's text can always be written out again
+
+
+def test_a_reply_with_no_markdown_to_mail_with_no_html_has_none():
+    assert composition.as_reply("Yes", ORIGINAL, PARSED).html is None
+
+
+def test_a_forward_in_markdown_opens_with_it():
+    made = composition.as_forward("*FYI*", ORIGINAL, {**PARSED, "html": "<p>Which <b>blue</b>?</p>"})
+    assert made.html.startswith("<p><em>FYI</em></p><div>---------- Forwarded") and "<b>blue</b>" in made.html
+
+
+def test_a_reopened_draft_in_markdown_is_rendered_again_with_its_recorded_quote():
+    made = composition.as_drafted("*Mine*", "\n\n> quoted\n", recorded(), None, None)
+    assert made.html == "<p><em>Mine</em></p><blockquote>quoted</blockquote>"
+
+
+def test_a_reopened_draft_in_markdown_with_no_recorded_html_quotes_its_text():
+    made = composition.as_drafted("*Mine*", "\n\n> quoted\n", None, None, None)
+    assert made.html == "<p><em>Mine</em></p>" + quoted_text_html("\n\n> quoted\n")
+
+
+def test_a_reopened_draft_that_lost_its_markdown_goes_out_as_text():
+    assert composition.as_drafted("Mine", "\n\n> quoted\n", None, None, None).html is None
+
+
+def test_a_quotes_text_keeps_its_lines_and_its_quoted_part():
+    assert quoted_text_html("\n\nOn a day, Lin wrote:\n> one\n> <two>\n>three\n\nafter") == (
+        '<div>On a day, Lin wrote:</div><blockquote type="cite" style="margin:0 0 0 .8ex;border-left:2px solid #ccc;padding-left:1ex">'
+        "one<br>&lt;two&gt;<br>three</blockquote><div><br>after</div>")
+
+
+def test_the_preview_of_markdown_says_it_goes_as_html():
+    assert composition.preview("**a**") == ("<p><strong>a</strong></p>", True)
+
+
+def test_the_preview_of_plain_text_says_it_goes_as_it_is():
+    assert composition.preview("a & b") == (own_html("a & b"), False)
+
+
+def test_what_is_past_the_renderers_cap_goes_as_typed():
+    made = composition.as_typed("*a* " * markdown.MAX_TEXT)
+    assert made.html is None
 
 
 # -- a reopened draft -----------------------------------------------------------

@@ -21,7 +21,7 @@ from mailmind.bootstrap import accounts, mailbox
 from mailmind.bootstrap.compose import book, drafts, outbox, sending
 from mailmind.bootstrap.mailbox import store
 from mailmind.compose import api as compose
-from mailmind.compose.domain import limits
+from mailmind.compose.domain import limits, markdown
 from mailmind.content import mime
 from mailmind.content.headers import addr_chip
 from mailmind.content.quote import own_html, quote_tail
@@ -1076,6 +1076,58 @@ def test_changed_tail_sends_plain_text(calls):
     sending.send(p)
     text, html = _parts(_sent(calls)[0])
     assert html is None and text == OWN + p["resume"]["tail_text"], (text, html)
+
+
+def test_a_markdown_message_goes_as_text_and_html_and_a_plain_one_as_text_alone(calls):
+    sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": "See **you** Saturday"})
+    sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": "See you Saturday"})
+    marked, _, _ = _sent(calls, 0)
+    assert marked.get_content_type() == "multipart/alternative"
+    text, html = _parts(marked)
+    assert (text, html.strip()) == ("See **you** Saturday\n", "<p>See <strong>you</strong> Saturday</p>")
+    plain, _, _ = _sent(calls, 1)
+    assert plain.get_content_type() == "text/plain" and _parts(plain) == ("See you Saturday\n", None)
+
+
+def test_a_markdown_reply_keeps_the_originals_html_after_what_you_typed(calls):
+    sending.send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: Plans", "in_reply_to_pk": _original(),
+                  "text": "*Saturday* works"})
+    text, html = _parts(_sent(calls)[0])
+    assert text.startswith("*Saturday* works\n\nOn Mon, 02 Feb 2026")
+    assert html.startswith("<p><em>Saturday</em> works</p><div>On Mon, 02 Feb 2026") and "<b>Saturday</b>" in html
+
+
+def test_a_markdown_draft_reopens_as_the_markdown_you_typed(calls):
+    pk, _ = _saved_and_synced(calls, text="See **you**\n\n- soon")
+    r, code = _resume(pk)
+    assert code == 200, r
+    assert (r["text"], r["tail_text"], r["split"]) == ("See **you**\n\n- soon", "", "exact")
+    assert r["notes"]["plain"] is False
+
+
+def test_a_markdown_reply_reopens_as_what_you_typed_and_goes_out_with_one_quote(calls):
+    pk, _ = _saved_and_synced(calls, mode="reply", in_reply_to_pk=_original(), subject="Re: Plans", text="*Yes*", to=["bo@example.test"])
+    r, code = _resume(pk)
+    assert code == 200, r
+    assert r["text"] == "*Yes*" and r["tail_text"].startswith("\n\nOn Mon, 02 Feb 2026")
+    sending.send(_payload(r))
+    text, html = _parts(_sent(calls)[0])
+    assert text.count("Shall we meet") == 1 and html.count("Shall we meet") == 1
+    assert html.startswith("<p><em>Yes</em></p><div>On Mon, 02 Feb 2026")
+
+
+def test_a_markdown_draft_reopened_as_a_whole_says_nothing_is_lost(calls):
+    raw = compose.build_message({"account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": "See **you**",
+                                 "html": markdown.render("See **you**")}, draft=True)["raw"]
+    r, _ = _resume(_synced(raw, 12))
+    assert r["split"] == "whole" and r["text"] == "See **you**"
+    assert r["notes"]["plain"] is False
+
+
+def test_another_apps_formatting_on_a_text_that_has_markdown_is_still_said_to_go(calls):
+    raw = _foreign([lambda m: m.set_content("See **you**\n"), lambda m: m.add_alternative("<p>See <u>you</u></p>", subtype="html")])
+    r, _ = _resume(_synced(raw, 12))
+    assert r["split"] == "whole" and r["notes"]["plain"] is True
 
 
 def test_whole_resume_sends_as_typed(calls):
