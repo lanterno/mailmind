@@ -216,6 +216,15 @@ def test_the_account_menu_names_itself_marks_yours_says_who_cant_connect_and_lea
     clean(page)
 
 
+def test_a_line_sets_managing_accounts_apart_from_the_accounts(page, world):
+    opened(page)
+    page.locator("#acctSw").click()
+    line = page.locator('.acct-menu [role="separator"]')
+    expect(line).to_be_visible()
+    assert line.evaluate("e => [getComputedStyle(e).borderTopStyle, parseFloat(getComputedStyle(e).borderTopWidth) > 0]") == ["solid", True]
+    clean(page)
+
+
 def test_the_rail_keeps_its_order_and_all_inboxes_is_one_inbox(page, world):
     opened(page)
     names = page.locator("#folderrail .frow .fn")
