@@ -630,7 +630,7 @@ python3 -m mailmind assess --batch         # what has no summary yet, as a batch
 | `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. The server and every `python3 -m mailmind` command read it. |
 | `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves, flag changes and a draft's copy on the server wait for a full run, sweeps and one-click unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
-| `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`. Any value but empty, `0`, `false`, `no` or `off` turns it on, and it wins over `MAILMIND_PROFILE`. |
+| `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: AI is off. |
 | `MAILMIND_LOG_LEVEL=DEBUG` | Show debug lines and each error's text and traceback on the terminal, for chasing a fault. They can hold addresses and subjects. `mailmind.log` never does. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5` |
@@ -644,6 +644,13 @@ python3 -m mailmind assess --batch         # what has no summary yet, as a batch
 | `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for models without structured output. |
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
 | `MAILMIND_PROTON_OP_ITEM` | 1Password item id holding the Bridge password |
+
+A switch (`MAILMIND_NOSYNC`, the `MAILMIND_NO_*` ones, and `MAILMIND_POOL` and `MAILMIND_WARM_FOLDERS` when
+they list no addresses) is on for `1`, `true`, `yes` or `on` and off for `0`, `false`, `no`, `off` or nothing,
+in any case. A value a variable doesn't take is named in the log, the variable and never the value, and reads
+as the side that writes, sends or spends less: `MAILMIND_NOSYNC` turns read-only on, `MAILMIND_NO_DRAFT_TICK`
+turns drafting ahead off, an address list's entry that is no address names no account, and the rest read as
+if unset, but for `MAILMIND_PROFILE` (above). `mailmind/platform/environment.py` declares each variable.
 
 The server's port is the first argument to `serve` (default `8721`).
 

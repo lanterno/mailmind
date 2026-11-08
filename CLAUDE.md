@@ -225,11 +225,17 @@ side column from `/api/upcoming` and `/api/waiting-on-others`).
 
 The app lives in `mailmind/`.
 
+- `mailmind.platform.environment` declares every environment variable MailMind reads, `MAILMIND_*` and the two
+  `ANTHROPIC_*` ones: its type, what unset means and what it does. Its docstring and declarations are the one list,
+  and say how each reads: one rule for every switch, and what a value a variable doesn't take reads as, which the
+  log says once, by the variable's name, never its value. It is the only module that reads the environment
+  (`tests/unit/platform/test_environment.py`), and it reads at each call, so a test changes a variable with
+  `monkeypatch.setenv`. A new variable is declared there, and the README's table names it. It is standard library
+  only, not the pydantic-settings the proposal named, since the command line runs on Python alone.
 - `mailmind.platform.settings` is the one source of the data paths and the port. Code calls
   `settings.current()` where it opens a file or checks the port, never once at import, so a test
   can swap the whole data directory with `settings.use(...)`. `MAILMIND_HOME` names the data
-  directory; unset, it is the repo root. It must exist, and nothing creates it.
-  `python -m mailmind serve [port]` puts the port in the settings.
+  directory, and nothing creates it. `python -m mailmind serve [port]` puts the port in the settings.
 - `mailmind.bootstrap.wiring.wire()` subscribes the app, on `mailmind.platform.bus`, to
   what the workers publish: Compose's `Sent`, `Failed` and `DraftCopyRemoved`, the Mailbox's `Applied` and
   `InboxChanged`, and what Attention's use cases say happened, which refreshes the stats and tells the tabs.
@@ -670,11 +676,10 @@ move whose account is gone, as the outbox does a send.
 socket shutdown); the worker closes its own connection. Closing a socket another thread may be
 about to wait on frees its descriptor number for the next socket opened.
 
-`mailmind.platform.profile` is the only reader of `MAILMIND_PROFILE` (`full`, the default, or
-`read-only`) and of the older `MAILMIND_NOSYNC`, which still selects read-only: any value but
-empty, `0`, `false`, `no` or `off` turns it on, so a typo fails toward read-only, and read-only
-wins when the two disagree. The app refuses to start on a profile name it doesn't know.
-`background.nosync()` asks the profile.
+`mailmind.platform.profile` reads the profile from `MAILMIND_PROFILE` (`full`, the default, or
+`read-only`) and the older `MAILMIND_NOSYNC`, which still selects read-only and wins when the two
+disagree. A value either doesn't take fails toward read-only (`environment` says how), and the app
+refuses to start on a profile name it doesn't know. `background.nosync()` asks the profile.
 
 ### Writes, undo, and offline
 
