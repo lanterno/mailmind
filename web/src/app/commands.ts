@@ -4,7 +4,6 @@ import { panel } from "../features/assistant/Panels";
 import { doing } from "../features/assistant/ask";
 import { composing } from "../features/compose/compose";
 import { curateOpen, filterForm, newFilter } from "../features/curation/open";
-import { docsOpen } from "../features/discovery/open";
 import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
 import { summarize } from "../features/mailbox/AiCard";
@@ -142,7 +141,7 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   add({ id: "settings", group: "Commands", label: "Settings", keys: [","], hint: ",", run: m.openSettings });
   add({ id: "sync", group: "Commands", label: "Sync now", run: () => void syncNow(m.qc) });
   add({ id: "reconcile", group: "Commands", label: "Reconcile (prune ghosts)", run: () => void reconcile(m.qc) });
-  add({ id: "docs", group: "Navigation", label: "Documents — find any attachment", run: () => docsOpen.set(true) });
+  add({ id: "docs", group: "Navigation", label: "Documents — find any attachment", run: () => go({ source: { kind: "documents" }, opened: null }) });
   add({ id: "do", group: "Commands", label: "Do… — natural-language bulk action", run: () => doing.set({ state: "intro" }) });
   add({ id: "curate", group: "Commands", label: "Curate — rules and audit", run: () => curateOpen.set(true) });
   add({ id: "cleanup", group: "Commands", label: "Clean up senders (unsubscribe)", run: () => curateOpen.set(true) });

@@ -23,7 +23,7 @@ import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/
 import { useSwipe } from "../features/mailbox/swipe";
 import { Curate } from "../features/curation/Curate";
 import { filterForm, newFilter } from "../features/curation/open";
-import { Docs } from "../features/discovery/Docs";
+import { Hub } from "../features/discovery/Docs";
 import { FeedRiver, PaperTrail } from "../features/discovery/Lanes";
 import { ScreenerPane, useScreener } from "../features/curation/Screener";
 import { settingsOpen } from "../features/settings";
@@ -198,7 +198,7 @@ function useKeys(m: Mailbox, commands: Command[]) {
         } else if (readFocus.get()) setReadFocus(false);
         else if (m.marks.size) clearMarks();
         else if (m.opened || m.briefAsked) m.close();
-        else if (m.source?.kind === "digest") go({ source: backFromDigest(m.accounts), opened: null });
+        else if (m.source?.kind === "digest" || m.source?.kind === "documents") go({ source: backFromDigest(m.accounts), opened: null });
         else if (m.source?.kind === "search") go({ source: m.source.account ? { kind: "folder", account: m.source.account, folder: "INBOX" } : { kind: "allInboxes" }, opened: null });
         else return;
         e.preventDefault();
@@ -269,6 +269,7 @@ export function App() {
   const noun = m.grouped && !searching && m.source?.kind !== "digest" ? "conversation" : "message";
   const lane = source?.kind === "search" ? source.lane : undefined;
   const screening = folder === "__screener__";
+  const documents = source?.kind === "documents";
   const screener = useScreener(screening ? m.account : undefined);
   const toScreen = screener.data?.total ?? 0;
   const laneNoun = lane === "feed" ? "newsletter" : "receipt";
@@ -305,7 +306,7 @@ export function App() {
           <div className="listhead">
             <div className="lh1">
               <h1 className="lh-title" id="listTitle">{title}</h1>
-              {!searching && !screening && source?.kind !== "digest" && (
+              {!searching && !screening && source?.kind !== "digest" && !documents && (
                 <button className={m.grouped ? "thread-toggle on" : "thread-toggle"} id="threadToggle" title="Group into conversations" onClick={() => setGrouping(!m.grouped)}>
                   <Icon name={m.grouped ? "chat" : "list"} /> {m.grouped ? "Conversations" : "Messages"}
                 </button>
@@ -357,11 +358,11 @@ export function App() {
                 ))}
               </div>
             )}
-            <div className="lh-row"><span id="count">{asked ? (asked.state === "loading" ? "asking…" : asked.state === "answer" ? `${asked.answer.sources?.length ?? 0} source${asked.answer.sources?.length === 1 ? "" : "s"}` : "") : (screening ? screener.isSuccess : list.isSuccess) ? count : "—"}</span></div>
+            {!documents && <div className="lh-row"><span id="count">{asked ? (asked.state === "loading" ? "asking…" : asked.state === "answer" ? `${asked.answer.sources?.length ?? 0} source${asked.answer.sources?.length === 1 ? "" : "s"}` : "") : (screening ? screener.isSuccess : list.isSuccess) ? count : "—"}</span></div>}
           </div>
           <BulkBar m={m} />
           <NewMailPill />
-          {asked ? <AskPane at={asked} m={m} /> : screening ? <ScreenerPane account={m.account} /> : lane === "feed" ? <FeedRiver m={m} footer={footer} /> : lane === "papertrail" ? <PaperTrail m={m} footer={footer} /> : <MessageList
+          {asked ? <AskPane at={asked} m={m} /> : documents ? <Hub m={m} /> : screening ? <ScreenerPane account={m.account} /> : lane === "feed" ? <FeedRiver m={m} footer={footer} /> : lane === "papertrail" ? <PaperTrail m={m} footer={footer} /> : <MessageList
             above={inInbox && !searching ? <BriefRow m={m} /> : null}
             rows={rows}
             openId={m.openId}
@@ -395,7 +396,6 @@ export function App() {
       <DoPanel account={source?.kind === "folder" || source?.kind === "search" ? source.account : ""} />
       <Help legend={() => legendOf(m, ui)} />
       <Settings />
-      <Docs m={m} />
       <Curate />
       <OverLimitDialog />
       <ConfirmDialog />

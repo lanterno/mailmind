@@ -69,6 +69,7 @@ export function useRealtime() {
     es.addEventListener("sync-done", () => {
       again("digest");
       again("folders");
+      again("documents");
     });
     es.addEventListener("outbox", () => {
       again("outbox");

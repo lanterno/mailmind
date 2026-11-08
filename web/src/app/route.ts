@@ -1,6 +1,6 @@
 // Where you are lives in the URL, so a deep link, Back and a reload all come back to it. What the list shows is one
 // type, not a set of flags: a folder (a real one, or a virtual one named __like_this__), all inboxes, a virtual one over every
-// account, or a search.
+// account, a search, or the Document Hub, which holds files and not rows.
 import { useSyncExternalStore } from "react";
 import { navigate } from "../lib/backTrap";
 import type { Copy } from "../lib/copy";
@@ -14,6 +14,7 @@ export type ListSource =
   | { kind: "allInboxes" }
   | { kind: "across"; folder: VirtualFolder }
   | { kind: "search"; q: string; account: string; lane?: Lane; thread?: string; asked?: string }     // thread: only this conversation of the account. asked: the sentence `q` was translated from
+  | { kind: "documents" }
   | ({ kind: "digest" } & DigestList);
 
 // Lists the digest answers rather than a folder holds: what needs you, what is safe to file, a topic from the brief.
@@ -38,6 +39,7 @@ export function pathOf({ source, opened, brief }: Route): string {
   if (source?.kind === "folder") path += `/m/${seg(source.account)}/${seg(source.folder)}`;
   else if (source?.kind === "allInboxes") path += "/all";
   else if (source?.kind === "across") path += `/all/${source.folder}`;
+  else if (source?.kind === "documents") path += "/documents";
   else if (source?.kind === "search") {
     path += "/search";
     query.set("q", source.q);
@@ -67,6 +69,7 @@ export function parseRoute(pathname: string, search: string): Route {
   let source: ListSource | null = null;
   if (parts[0] === "m" && parts[1] && parts[2]) source = { kind: "folder", account: parts[1], folder: parts[2] };
   else if (parts[0] === "all") source = parts[1] && isVirtual(parts[1]) ? { kind: "across", folder: parts[1] } : { kind: "allInboxes" };
+  else if (parts[0] === "documents") source = { kind: "documents" };
   else if (parts[0] === "search") {
     const lane = q.get("lane");
     const thread = q.get("thread"), asked = q.get("asked");
@@ -124,6 +127,7 @@ export function sourceKey(s: ListSource | null): readonly unknown[] {
   if (!s) return ["none"];
   if (s.kind === "folder") return ["folder", s.account, s.folder];
   if (s.kind === "across") return ["across", s.folder];
+  if (s.kind === "documents") return ["documents"];
   if (s.kind === "search") return ["search", s.q, s.account, s.thread ?? ""];
   if (s.kind === "digest") return ["digest", s.list, s.list === "topic" ? s.label : ""];
   return ["all"];

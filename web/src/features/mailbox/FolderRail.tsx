@@ -140,7 +140,7 @@ function Views({ source, account }: { source: ListSource | null; account: string
 }
 
 export function FolderRail({ accounts, aliases, source, down }: { accounts: string[]; aliases: Record<string, string | null>; source: ListSource | null; down: string[] }) {
-  const across = source?.kind === "allInboxes" || source?.kind === "across";
+  const across = source?.kind === "allInboxes" || source?.kind === "across" || source?.kind === "documents";   // the Hub is every account's
   const account = source?.kind === "folder" ? source.account : source?.kind === "search" && source.account ? source.account : across ? undefined : accounts[0];
   const { data, isError, refetch } = useFolders(account);
   const everyAccount = useFoldersAcross(across).data;
@@ -171,6 +171,7 @@ export function FolderRail({ accounts, aliases, source, down }: { accounts: stri
           <RailRow key={f.name} source={to(f.name)} on={f.name === folder} icon={FOLDER_ICON[f.role] ?? "folder"} label={roleLabel(f)} count={f.unseen} />
         ))}
         <Views source={source} account={account ?? ""} />
+        <RailRow source={{ kind: "documents" }} on={source?.kind === "documents"} icon="file" label="Documents" />
         {screener > 0 && <RailRow source={to("__screener__")} on={folder === "__screener__"} icon="gate" label="Screener" count={screener} />}
         {virtual.map(([name, icon, label, n]) => (n || name === "__snoozed__" ? <RailRow key={name} source={lane(name)} on={folder === name} icon={icon} label={label} count={n} /> : null))}
       </nav>

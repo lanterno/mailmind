@@ -1,18 +1,15 @@
-// One findable place for every attachment across accounts. The server filters and pages, so a search reaches every file
-// and not only those loaded.
+// One findable place for every attachment across accounts, at /documents. The server filters and pages, so a search reaches
+// every file and not only those loaded.
 import { Fragment, useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { get } from "../../lib/api/client";
 import type { DocumentGrouping, DocumentKind } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
-import { useLayer } from "../../lib/backTrap";
 import { copyId, copyOf } from "../../lib/copy";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import type { Mailbox } from "../mailbox";
-import { docsOpen } from "./open";
 
 const PAGE = 200;
 // The server's kinds of document: each one's icon, and its words in the order the facets show them.
@@ -21,7 +18,7 @@ const LABEL: Record<DocumentKind, string> = { pdf: "PDFs", image: "Images", doc:
 // The sections the server can put them in, and the plain list. Sections by sender come first, the newest sender at the top, so the newest file still is.
 const GROUPED: Record<DocumentGrouping | "newest", string> = { sender: "By sender", type: "By type", newest: "Newest" };
 
-function Hub({ m }: { m: Mailbox }) {
+export function Hub({ m }: { m: Mailbox }) {
   const [kind, setKind] = useState<DocumentKind | "all">("all");
   const [typed, setTyped] = useState("");
   const [q, setQ] = useState("");
@@ -84,7 +81,7 @@ function Hub({ m }: { m: Mailbox }) {
               {group !== "newest" && x.group !== docs[i - 1]?.group && <h2 className="doc-sec">{called(x)} <span className="c">{sections.get(x.group)?.count}</span></h2>}
               <div className="doc-row" data-doc-key={x.key}>
                 <div className="doc-ic"><Icon name={ICON[x.kind]} /></div>
-                <button className="doc-body" onClick={() => { docsOpen.set(false); m.openAny(copyOf(x)); }}>
+                <button className="doc-body" onClick={() => m.openAny(copyOf(x))}>
                   <div className="doc-fn">{x.filename}</div>
                   <div className="doc-meta"><span className="who">{x.from}</span> · {x.subject} · {x.when}</div>
                 </button>
@@ -101,10 +98,8 @@ function Hub({ m }: { m: Mailbox }) {
     );
   }
   return (
-    <>
-      <div className="commit-hd"><Icon name="file" /> Documents <span className="sub" id="docCount">{first ? `· ${docs.length}${left > 0 ? ` of ${matched}` : ""}` : ""}</span></div>
-      {/* eslint-disable-next-line jsx-a11y/no-autofocus -- the hub was opened this moment, to search in */}
-      <input className="doc-search" id="docSearch" autoFocus placeholder="Search files, senders, subjects…" aria-label="Search documents" value={typed} onChange={(e) => setTyped(e.target.value)} />
+    <div className="docs-lane">
+      <input className="doc-search" id="docSearch" placeholder="Search files, senders, subjects…" aria-label="Search documents" value={typed} onChange={(e) => setTyped(e.target.value)} />
       <div className="doc-filters" id="docFilters">
         <button className={kind === "all" ? "doc-fchip on" : "doc-fchip"} onClick={() => setKind("all")}>All <span className="c">{total}</span></button>
         {entries(LABEL).filter(([k]) => facets[k]).map(([k, label]) => <button key={k} className={kind === k ? "doc-fchip on" : "doc-fchip"} onClick={() => setKind(k)}>{label} <span className="c">{facets[k]}</span></button>)}
@@ -112,20 +107,8 @@ function Hub({ m }: { m: Mailbox }) {
       <div className="doc-filters" id="docGroups" role="group" aria-label="Show files">
         {entries(GROUPED).map(([k, label]) => <button key={k} className={group === k ? "doc-fchip on" : "doc-fchip"} aria-pressed={group === k} onClick={() => setGroup(k)}>{label}</button>)}
       </div>
-      <div className="rv-scroll" id="docList">{body}</div>
-      <div className="commit-hint"><Icon name="download" /> download · click a file to open its email · Esc to close</div>
-    </>
-  );
-}
-
-export function Docs({ m }: { m: Mailbox }) {
-  const open = docsOpen.useValue();
-  useLayer(open, () => docsOpen.set(false));
-  return (
-    <ModalOverlay className="commit-overlay show" isOpen={open} isDismissable onOpenChange={docsOpen.set}>
-      <Modal className="modal-through">
-        <Dialog aria-label="Documents" className="commit-panel docs-panel"><Hub m={m} /></Dialog>
-      </Modal>
-    </ModalOverlay>
+      <div className="doc-count" id="docCount" role="status">{first ? `${docs.length}${left > 0 ? ` of ${matched}` : ""} file${matched === 1 ? "" : "s"}` : ""}</div>
+      <div id="docList">{body}</div>
+    </div>
   );
 }

@@ -1320,7 +1320,8 @@
   .rv-empty{color:var(--faint);font-size:12.5px;padding:2px 2px 8px;font-style:italic}
   .rv-foot{font-size:10.5px;color:var(--faint);margin-top:14px}
   /* ── Document Hub overlay ── */
-  .docs-panel{max-width:720px}
+  .docs-lane{padding:12px 12px 24px}
+  .doc-count{color:var(--faint);font-size:11px;margin:0 2px 8px}
   .doc-search{width:100%;background:var(--bg);border:1px solid transparent;border-radius:var(--r-sm);color:var(--ink);font:inherit;font-size:14px;padding:10px 13px;margin-bottom:10px}
   .doc-search:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 22%,transparent)}
   .doc-filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}

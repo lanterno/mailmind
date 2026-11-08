@@ -92,7 +92,7 @@ export function useMessages(source: ListSource | null, grouped: boolean) {
   const scope = searchScope.useValue();
   return useInfiniteQuery({
     queryKey: ["messages", ...sourceKey(source), source?.kind === "folder" || source?.kind === "allInboxes" ? grouped : source?.kind === "search" ? scope : false],
-    enabled: Boolean(source) && !(source?.kind === "folder" && source.folder === "__screener__"),
+    enabled: Boolean(source) && source?.kind !== "documents" && !(source?.kind === "folder" && source.folder === "__screener__"),
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
       if (source?.kind === "folder") return folderPage(source.account, source.folder, grouped, pageParam);
