@@ -169,6 +169,16 @@ def test_a_key_that_names_no_copy_or_wont_read_shows_nothing(app, world, wrong):
     assert names_no_copy(document(app, wrong))
 
 
+def test_a_key_with_noughts_before_it_shows_what_the_reader_opens(app, world):
+    """The frame reads the key as the body route does, so the two never disagree on which copy a key names."""
+    _, key = delivered(world, HOSTILE)
+    padded = f"000{key}"
+    assert opened(app, padded).status == 200
+    got = document(app, padded)
+    assert got.status == 200 and carries_a_frames_headers(got)
+    assert opened(app, padded).json["html"] in got.body.decode() and got.body == document(app, key).body
+
+
 @pytest.mark.parametrize("folder", ["", "Archive", "INBOX/", "INBOX' OR '1'='1", "%"])
 def test_a_key_shows_nothing_from_a_folder_it_has_no_copy_in(app, world, folder):
     _, key = delivered(world, HOSTILE)
