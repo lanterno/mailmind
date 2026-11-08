@@ -373,6 +373,17 @@ def test_the_ai_limit_goes_in_the_file_at_its_top_level_within_its_bounds(page, 
     clean(page)
 
 
+def test_the_morning_brief_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
+    dialog = preferences_open(page)
+    held = lambda: file_of(world).get("preferences", {})
+    box = dialog.get_by_label("Have today\u2019s brief ready each morning")
+    expect(box).not_to_be_checked()
+    assert "morning_brief" not in held()
+    box.check()
+    until(page, lambda: held().get("morning_brief") is True, "the file holds it")
+    clean(page)
+
+
 def test_notification_choices_and_quiet_hours_go_in_the_file(page, world):
     dialog = preferences_open(page)
     held = lambda: file_of(world).get("preferences", {})
