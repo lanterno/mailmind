@@ -2,7 +2,7 @@
 // asks the server; an answer of no, or no answer, puts it back and says so.
 import type { QueryClient } from "@tanstack/react-query";
 import { post, refusalOf } from "../../lib/api/client";
-import type { GetAnswers } from "../../lib/api/types";
+import type { GetAnswers, PostAnswers } from "../../lib/api/types";
 import { go, parseRoute, pathOf, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
@@ -65,7 +65,7 @@ export const readAgain = (qc: QueryClient) => {
   void qc.invalidateQueries({ queryKey: ["digest"] });
 };
 
-interface Answer { ok: boolean; error?: string; msg?: string; pks?: number[]; count?: number; failed?: number; status?: string | null; queued?: unknown; undoable?: boolean | null }
+interface Answer { ok: true; msg?: string; pks?: number[]; count?: number; failed?: number; status?: string | null; queued?: unknown; undoable?: boolean | null }
 
 // Take rows off the list, ask the server, and say how it went. A no or no answer puts them back.
 export async function act<R extends object>(qc: QueryClient, { rows, after, call, say, undoLabel, fail }: {
@@ -82,7 +82,6 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
   inFlight++;
   try {
     const r = (await call()) as R & Answer;
-    if (!r.ok) throw new Error(r.error || r.msg || "");
     const gone = new Set([...rows, ...(r.pks ?? [])]);
     editRows(qc, (list) => list.filter((x) => !gone.has(x.pk)));
     qc.setQueryData<GetAnswers["/api/digest"]>(["digest"], (d) => d && { ...d, items: d.items.filter((x) => !gone.has(x.pk)) });
@@ -178,10 +177,8 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
     let failed = 0;
     for (const pk of pks) {
       try {
-        const r: Answer = verb === "star"
-          ? await post("/api/flag", { pk, flag: "flagged", on: true })
-          : await post("/api/seen", { pk, seen: verb === "read" });
-        if (!r.ok) failed++;
+        if (verb === "star") await post("/api/flag", { pk, flag: "flagged", on: true });
+        else await post("/api/seen", { pk, seen: verb === "read" });
       } catch {
         failed++;
       }
@@ -200,7 +197,8 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
       call: async () => {
         for (const r of threads.values()) {
           try {
-            if ((await post("/api/mute", { account: r.account, thread_id: r.threadId, undo_group: group })).ok) done++;
+            await post("/api/mute", { account: r.account, thread_id: r.threadId, undo_group: group });
+            done++;
           } catch { /* counted by what's left */ }
         }
         return { ok: true };
@@ -238,7 +236,7 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
 
 export async function undo(qc: QueryClient) {
   undoFloat.set(null);
-  let d: { ok?: boolean; empty?: boolean; failed?: number | null; label?: string | null; error?: string };
+  let d: PostAnswers["/api/undo"];
   try {
     d = await post("/api/undo", {});
   } catch (e) {
@@ -248,9 +246,7 @@ export async function undo(qc: QueryClient) {
     readAgain(qc);
     return;
   }
-  if (d.empty) toast("Nothing to undo");
-  else if (!d.ok) toast(d.error || "Couldn’t undo");
-  else if (d.failed) toast(`${d.failed} couldn’t be restored — press z to try again`);
+  if (d.failed) toast(`${d.failed} couldn’t be restored — press z to try again`);
   else toast(`${d.label || "Action"} undone`);
   readAgain(qc);
 }
@@ -259,8 +255,7 @@ export async function setStar(qc: QueryClient, row: Pick<Row, "pk" | "flagged">)
   const on = !row.flagged;
   patchRow(qc, row.pk, { flagged: on });
   try {
-    const r = await post("/api/flag", { pk: row.pk, flag: "flagged", on });
-    if (!r.ok) throw new Error("refused");
+    await post("/api/flag", { pk: row.pk, flag: "flagged", on });
     toast(on ? "Starred" : "Unstarred");
   } catch {
     patchRow(qc, row.pk, { flagged: !on });
@@ -276,8 +271,7 @@ export const cancelDwell = () => clearTimeout(dwell);
 export async function markSeen(qc: QueryClient, pk: number, seen = true) {
   patchRow(qc, pk, { seen });
   try {
-    const r = await post("/api/seen", { pk, seen });
-    if (!r.ok) throw new Error("refused");
+    await post("/api/seen", { pk, seen });
     void qc.invalidateQueries({ queryKey: ["folders"] });
     return true;
   } catch {

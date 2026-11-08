@@ -28,7 +28,7 @@ async function testConnection(payload: unknown, say: (t: Tested) => void) {
   say({ kind: "run", text: "Testing… (approve Touch ID if asked)" });
   try {
     const d = await post("/api/accounts/test", payload);
-    if (d.ok && d.connect) say({ kind: "ok", text: "✓ Connected" });
+    if (d.connect) say({ kind: "ok", text: "✓ Connected" });
     else say({ kind: "err", text: `✕ ${d.error || "failed"}` });
   } catch (e) {
     const no = refusalOf(e);
@@ -88,12 +88,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
     if (!row && !c) return setError("Set a password (or 1Password ref / env var).");
     setSaving(true);
     try {
-      const d = await post(row ? "/api/accounts/edit" : "/api/accounts/add", { alias: alias.trim(), signature: signature.trim(), type, email: address, ...imapBits(), ...(c ? { credential: c } : {}) });
-      if (!d.ok) {
-        setError((d as { error?: string }).error || "Could not save.");
-        setSaving(false);
-        return;
-      }
+      await post(row ? "/api/accounts/edit" : "/api/accounts/add", { alias: alias.trim(), signature: signature.trim(), type, email: address, ...imapBits(), ...(c ? { credential: c } : {}) });
       toast(`${row ? "Updated" : "Added"} ${shortAddress(address)}`);
       done(!row);
     } catch (e) {
@@ -236,12 +231,10 @@ function ConnectionRow({ r, h, live, status, edit, again }: { r: Connection; h: 
     if (!arming) return setArming(true);
     setArming(false);
     try {
-      const d = await post("/api/accounts/delete", { email: r.email });
-      if (d.ok) {
-        toast(`Removed ${shortAddress(r.email)}`);
-        again();
-        void qc.invalidateQueries({ queryKey: ["digest"] });
-      } else toast(d.error || "Couldn’t remove");
+      await post("/api/accounts/delete", { email: r.email });
+      toast(`Removed ${shortAddress(r.email)}`);
+      again();
+      void qc.invalidateQueries({ queryKey: ["digest"] });
     } catch (e) {
       const gone = refusalOf(e)?.status === 404;
       toast(gone ? refusalOf(e)?.detail || "Couldn’t remove" : "Remove failed");
@@ -280,7 +273,7 @@ function Backup() {
     <div className="set-form" id="exportBlock">
       <div className="lbl">Backup &amp; Export</div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
-        <span id="exportPlan" className="set-help" style={{ margin: 0 }}>{data?.ok ? `${data.total.toLocaleString()} messages · ${data.bodies.toLocaleString()} with full bodies · ${data.groups.length} folders` : "Counting…"}</span>
+        <span id="exportPlan" className="set-help" style={{ margin: 0 }}>{data ? `${data.total.toLocaleString()} messages · ${data.bodies.toLocaleString()} with full bodies · ${data.groups.length} folders` : "Counting…"}</span>
         <a className="set-mini" href="/api/export" download title="Download a full local snapshot of your synced mail"><Icon name="download" /> Backup (.db)</a>
       </div>
       <div className="set-help">Portable per-message files: <code>python3 -m mailmind export --format eml --out DIR</code> (or <code>mbox</code>). All local · read-only · never opens IMAP.</div>

@@ -25,10 +25,6 @@ export async function ask(question: string, account = "all") {
   try {
     const d = await post("/api/ai/ask", { account, question }, { askOverLimit });
     if (seq !== askSeq) return;      // a newer one took its place
-    if (!d.ok) {
-      asking.set({ question, state: "error", error: (d as { error?: string }).error || "couldn’t answer" });
-      return;
-    }
     asking.set({ question, state: "answer", answer: d });
     const n = d.sources?.length ?? 0;
     announce(`Answer ready — ${n} cited source${n === 1 ? "" : "s"}`);
@@ -67,7 +63,6 @@ export async function runDo(cmd: string, search: (q: string) => void) {
     return;
   }
   if (seq !== doSeq) return;
-  if (!d.ok) return doing.set({ state: "error", cmd, error: (d as { error?: string }).error || "couldn’t plan that" });
   if (d.intent !== "act") {
     const q = (d.filter || "").trim();
     if (!q) return doing.set({ state: "nofilter", cmd });

@@ -59,7 +59,7 @@ function DraftRow({ d, readOnly, edit, discard }: { d: Waiting; readOnly: boolea
   );
 }
 
-type Call = (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean | null }) => string, fail: string, refused?: string) => void;
+type Call = (path: string, id: number, ok: (r: { gone?: boolean | null }) => string, fail: string, refused?: string) => void;
 
 function SentRow({ o, call }: { o: Sent; call: Call }) {
   const to = (o.to ?? []).join(", ") + (o.bcc_count ? ` +${o.bcc_count} bcc` : "");
@@ -71,7 +71,7 @@ function SentRow({ o, call }: { o: Sent; call: Call }) {
       {(o.scheduled || o.retrying) && (
         <>
           <button className="ob-retry" onClick={() => call("/api/outbox/sendnow", o.id, () => "Sending now…", "Couldn’t send now")}>{o.retrying ? "Try now" : "Send now"}</button>
-          <button className="ob-retry" onClick={() => call("/api/outbox/cancel", o.id, (r) => (r.ok ? "Send cancelled" : "Too late to cancel"), "Cancel failed", "Too late to cancel")}>Cancel</button>
+          <button className="ob-retry" onClick={() => call("/api/outbox/cancel", o.id, () => "Send cancelled", "Cancel failed", "Too late to cancel")}>Cancel</button>
         </>
       )}
       {o.state === "error" && <button className="ob-retry" onClick={() => call("/api/outbox/retry", o.id, (r) => (r.gone ? "It had gone out, so it wasn’t sent again" : "Retrying…"), "Retry failed")}>{o.unsure ? "Send again" : "Retry"}</button>}
@@ -101,8 +101,8 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
   const failed = items.filter((o) => o.state === "error").length + stuck;
   const act = async (what: "retry" | "discard", id: number) => {
     try {
-      const r = await post(`/api/pending/${what}`, { id });
-      toast(!r.ok ? "It has already settled" : what === "retry" ? "Trying again…" : "Discarded: it stays as it was");
+      await post(`/api/pending/${what}`, { id });
+      toast(what === "retry" ? "Trying again…" : "Discarded: it stays as it was");
     } catch (e) {
       toast(e instanceof ApiError && e.status === 409 ? "It’s being tried now. Try again in a moment" : "It has already settled");
     }

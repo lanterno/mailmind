@@ -7,7 +7,8 @@ type ApiPath = keyof paths & `/api/${string}`;
 
 type JsonOf<Response> = Response extends { content: { "application/json": infer Json } } ? Json : never;
 
-// What a route answers when it can, as its schema says: a union where it varies by branch, `ok: false` with a 200 included.
+// What a route answers when it can, as its schema says: a union where it varies by branch. A failure is no 200: it comes to the
+// caller as an ApiError (client.ts), the problem document it answered.
 type Answers<Method extends "get" | "post"> = {
   [P in ApiPath as [JsonOf<NonNullable<paths[P][Method]>["responses"][200]>] extends [never] ? never : P]:
     JsonOf<NonNullable<paths[P][Method]>["responses"][200]>;

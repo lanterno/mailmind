@@ -13,7 +13,7 @@ import type { Mailbox } from "../mailbox";
 function Card({ addr, m, close }: { addr: string; m: Mailbox; close: () => void }) {
   const inside = useFocusFirst<HTMLDivElement>("button");
   const { data: d, isError } = useQuery({ queryKey: ["contact", addr], queryFn: () => get(`/api/contact?addr=${encodeURIComponent(addr)}`) });
-  if (isError || (d && !d.ok)) return <div className="cc-load">Couldn’t load this sender.</div>;
+  if (isError) return <div className="cc-load">Couldn’t load this sender.</div>;
   if (!d) return <div className="cc-load" role="status">Loading…</div>;
   const stats = [`${d.count} email${d.count === 1 ? "" : "s"}`, `replied ${d.replied}×`, d.first_ago ? `first ${d.first_ago} ago` : "", d.last_ago ? `last ${d.last_ago} ago` : ""].filter(Boolean).join(" · ");
   const accounts = d.accounts ?? [], recent = d.recent ?? [];

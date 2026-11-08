@@ -17,11 +17,6 @@ export function whatWentWrong(e: unknown): string | null {
   return e instanceof Error && e.message ? e.message : "couldn’t reach the server";
 }
 
-const held = <T extends { ok?: boolean; error?: string }>(d: T): T => {
-  if (!d.ok) throw new Error(d.error || "no answer");
-  return d;
-};
-
 export function useBrief(ai: boolean | undefined) {
   const qc = useQueryClient();
   const read = useQuery({
@@ -31,11 +26,11 @@ export function useBrief(ai: boolean | undefined) {
     retry: false,
     queryFn: async (): Promise<Brief> => {
       const d = await get("/api/briefing");
-      return "missing" in d && ai ? held(await post("/api/briefing", {})) as Brief : held(d);
+      return "missing" in d && ai ? await post("/api/briefing", {}) as Brief : d;
     },
   });
   const write = useMutation({
-    mutationFn: async (again: boolean) => held(await post(again ? "/api/briefing/refresh" : "/api/briefing", {}, { askOverLimit })) as Brief,
+    mutationFn: async (again: boolean) => await post(again ? "/api/briefing/refresh" : "/api/briefing", {}, { askOverLimit }) as Brief,
     onSuccess: (d) => qc.setQueryData(["brief"], d),
     onSettled: (_d, _e, again) => {
       if (again) void qc.invalidateQueries({ queryKey: ["briefSide"] });

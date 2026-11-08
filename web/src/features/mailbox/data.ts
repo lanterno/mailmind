@@ -53,7 +53,7 @@ async function searchPage(query: string, account: string, offset: number, scope:
     if (!no) throw e;
     return { rows: [], hasMore: false, total: 0, syncing: false, syncFailed: false, catchingUp: false, ...(no.detail ? { error: no.detail } : {}) };
   }
-  return { rows: (d.items ?? []).map(fromSearch), hasMore: Boolean(d.has_more), total: d.total ?? 0, syncing: false, syncFailed: false, catchingUp: false, ...(d.error ? { error: d.error } : {}) };
+  return { rows: (d.items ?? []).map(fromSearch), hasMore: Boolean(d.has_more), total: d.total ?? 0, syncing: false, syncFailed: false, catchingUp: false };
 }
 
 // Every account's Inbox, newest first, from what is stored: an account that's away leaves the rest in place, and the sync

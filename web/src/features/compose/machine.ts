@@ -335,7 +335,7 @@ export function createComposing(env: Env) {
     } catch {
       return;   // pending or failed: no mark at all
     }
-    if (c !== x || !d?.ok) return;
+    if (c !== x) return;
     x.thin = Boolean(d.thin);
     for (const [a, p] of Object.entries<Answer>(d.items ?? {})) {
       const v = { known: Boolean(p.known), self: Boolean(p.self) };
@@ -427,7 +427,6 @@ export function createComposing(env: Env) {
       if (x.version !== null && (silent || !x.conflict)) payload.base_version = x.version;   // a save someone asked for overwrites
       try {
         const r = await env.post("/api/draft", payload);
-        if (!r.ok) throw new Error(r.error || "err");
         x.draftId = r.draft_id;
         x.version = r.version ?? x.version;
         x.conflict = false;
@@ -584,7 +583,6 @@ export function createComposing(env: Env) {
           Object.assign(snap, { draftId: x.draftId, resume: x.resume, attachments: x.attachments, fwdAttach: x.fwdAttach });
         }
         const r = await env.post("/api/send", payload);
-        if (!r.ok) throw new Error(r.error || "send failed");
         if (scheduled) showFloat({ kind: "done", clock: true, text: `Scheduled · ${fmtWhen(sendAfter)}` }, 2600);
         else countdown(r.outbox_id, snap, r.recipients);   // the grace window, with Undo
         env.sent(replyPk);
@@ -623,12 +621,10 @@ export function createComposing(env: Env) {
       clearInterval(undoTimer);
       void (async () => {
         try {
-          const d = await env.post("/api/outbox/cancel", { id });
-          if (d.ok) {
-            showFloat(null);
-            env.toast(`${what} not sent`);
-            env.outboxChanged();
-          } else showFloat({ kind: "done", text: "✓ Sent — too late to undo" }, 2200);
+          await env.post("/api/outbox/cancel", { id });
+          showFloat(null);
+          env.toast(`${what} not sent`);
+          env.outboxChanged();
         } catch (e) {
           showFloat(tooLate(e) ? { kind: "done", text: "✓ Sent — too late to undo" } : { kind: "done", text: "✓ Sent" }, tooLate(e) ? 2200 : 2000);
         }
@@ -649,13 +645,11 @@ export function createComposing(env: Env) {
   async function undoSend(id: number, snap: Snapshot) {
     clearInterval(undoTimer);
     try {
-      const d = await env.post("/api/outbox/cancel", { id });
-      if (d.ok) {
-        showFloat(null);
-        await reopenSend(snap);
-        env.toast("Send undone");
-        env.outboxChanged();
-      } else showFloat({ kind: "done", text: "✓ Sent — too late to undo" }, 2200);
+      await env.post("/api/outbox/cancel", { id });
+      showFloat(null);
+      await reopenSend(snap);
+      env.toast("Send undone");
+      env.outboxChanged();
     } catch (e) {
       showFloat(tooLate(e) ? { kind: "done", text: "✓ Sent — too late to undo" } : { kind: "done", text: "✓ Sent" }, tooLate(e) ? 2200 : 2000);
     }
@@ -681,8 +675,7 @@ export function createComposing(env: Env) {
   /* ---------- from the mail ---------- */
   const original = async (pk: number): Promise<OriginalMail | null> => {
     try {
-      const d = await env.get(`/api/message/${pk}/body`);
-      return d?.ok ? d : null;
+      return await env.get(`/api/message/${pk}/body`);
     } catch {
       return null;
     }
@@ -715,10 +708,9 @@ export function createComposing(env: Env) {
       await closeSaves;
       if (turn !== resumeTurn) return;
     }
-    let d: ReopenedDraft & { ok?: boolean; error?: string; text?: string; files?: Attachment[]; notes?: Parameters<typeof resumeNotice>[0] };
+    let d: ReopenedDraft & { text?: string; files?: Attachment[]; notes?: Parameters<typeof resumeNotice>[0] };
     try {
       d = await env.post("/api/draft/resume", pk === null ? { draft_id: draftId } : { pk });
-      if (!d.ok) throw new Error(d.error || "Couldn’t open this draft.");
     } catch (e) {
       if (turn !== resumeTurn) return;
       const m = (e instanceof Error && e.message) || "Couldn’t open this draft.";
@@ -755,7 +747,6 @@ export function createComposing(env: Env) {
     try {
       const d = await env.post("/api/ai/draft-reply", { pk: x.origPk, account: x.from, tone: opts.tone ?? env.tone(), instruction: opts.instruction ?? "" }, !opts.quiet);
       if (c !== x) return;   // closed (or replaced by another reply) while drafting: not this composer's text
-      if (!d.ok) throw new Error(d.retry ? "AI is unavailable" : d.error || "draft failed");
       if (opts.unless !== undefined && x.body !== opts.unless) return;   // a quick reply you've started editing: yours wins
       const had = x.body.trim() && x.body.trim() !== x.sigBlock.trim();
       if (had) x.rwUndo = { value: x.body, sel: env.selection() };   // what you'd written is one Undo away
@@ -786,7 +777,6 @@ export function createComposing(env: Env) {
     try {
       const d = await env.post("/api/ai/rewrite", { text, op, lang }, true);
       if (c !== x) return;   // closed while rewriting: the box now belongs to another composer, or none
-      if (!d.ok) throw new Error(d.retry ? "AI is unavailable" : d.error || "rewrite failed");
       x.rwUndo = { value: full, sel: [s, e] };   // one step back to what it was
       placeBody(x, hasSel ? full.slice(0, s) + d.text + full.slice(e) : d.text);
       publish();

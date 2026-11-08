@@ -32,7 +32,6 @@ async function peek(pk: number) {
   } catch {
     return;
   }
-  if (!d?.ok) return;
   if (d.status === "ready") mark(pk, "ready");
   else if (d.status === "generating" && chips.get().get(pk) !== "drafting") {   // one poll chain per message
     mark(pk, "drafting");
@@ -48,7 +47,6 @@ async function check(pk: number, tries: number) {
   } catch {
     return;
   }
-  if (!d?.ok) return;
   if (d.status === "ready" && d.body) {
     const first = chips.get().get(pk) !== "ready";
     mark(pk, "ready");
@@ -95,7 +93,7 @@ export async function peekCards(pks: number[]) {
   await Promise.all(fresh.map(async (pk) => {
     try {
       const d = await get(`/api/ai/draft-ahead?pk=${pk}&peek=1`);
-      if (d?.ok && d.status === "ready") mark(pk, "ready");
+      if (d.status === "ready") mark(pk, "ready");
     } catch { /* it stays a plain Reply */ }
   }));
 }

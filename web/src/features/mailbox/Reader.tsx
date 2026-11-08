@@ -86,12 +86,7 @@ function Rsvp({ pk }: { pk: number }) {
   const reply = async (decision: string) => {
     setSaid({ done: false, text: "Sending RSVP…" });
     try {
-      const r = await post("/api/invite/rsvp", { pk, decision }) as { ok: boolean; error?: string; organizer?: string; outbox_id?: number };
-      if (!r.ok) {
-        setSaid({ done: false, text: `Couldn’t RSVP: ${r.error ?? "error"}` });
-        toast(r.error ?? "RSVP failed");
-        return;
-      }
+      const r = await post("/api/invite/rsvp", { pk, decision });
       setSaid({ done: true, text: `${SAID[decision]} — reply sent to ${r.organizer || "organizer"}` });
       toast(`RSVP: ${SAID[decision]}`);
       if (r.outbox_id) composing.queued(r.outbox_id, "RSVP");
@@ -229,7 +224,6 @@ function MailContent({ pk, minHeight, pad, whole = false }: { pk: number; minHei
   if (gone) return <div className="nores">{gone.detail || "error"}</div>;
   if (isError) return <div className="nores">Couldn’t load. <button className="ai-rerun" id="rdRetry" onClick={() => void refetch()}>Retry</button></div>;
   if (!d) return <Fetching whole={whole} />;
-  if (!d.ok) return <div className="nores">{d.error ?? "error"}</div>;
   const blocked = images ? 0 : (d.blocked_images ?? 0) + (d.blocked_css_urls ?? 0);
   return (
     <>
@@ -255,9 +249,9 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
     return cancelDwell;
   }, [m.qc, pk, row?.seen]);
   const flagged = row?.flagged ?? false;
-  const isDraft = Boolean(d?.ok && d.is_draft);
+  const isDraft = Boolean(d?.is_draft);
   useDraftAhead(d ? pk : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
-  const quick = d?.ok && !isDraft && canQuickReply(d.from_addr, myAddresses(m.digest), row);
+  const quick = d && !isDraft && canQuickReply(d.from_addr, myAddresses(m.digest), row);
   return (
     <>
       <div className="rd-actions">
@@ -286,7 +280,7 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
           <div className="rd-from"><span className="nm">{row.fromName}</span> <span className="ad">{row.fromAddr}</span></div>
         </>
       )}
-      {d?.ok && (
+      {d && (
         <>
           <div className="rd-top"><span className="rd-tag">{m.title}</span><span className="rd-when">{d.date}</span></div>
           <div className="rd-subj">{d.subject || "(no subject)"}</div>
@@ -336,8 +330,8 @@ function Member({ m, startsOpen }: { m: Extract<GetAnswers["/api/thread"], { ok:
 
 function ConversationView({ opened, m }: { opened: { id: string; account: string }; m: Mailbox }) {
   const { data: d, isError } = useThread(opened.account, opened.id);
-  const items = d?.ok ? d.items : [];
-  const replyPk = d?.ok ? d.reply_pk : null;
+  const items = d?.items ?? [];
+  const replyPk = d?.reply_pk ?? null;
   const latest = items.find((x) => x.pk === replyPk);
   useDraftAhead(replyPk, false, m.folder === "__muted__");
   const quick = latest && canQuickReply(latest.from_addr, myAddresses(m.digest), { isJunk: Boolean(latest.is_junk), bucket: m.openRow?.bucket });
@@ -355,8 +349,7 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
         <ReaderNav m={m} />
       </div>
       {isError && <div className="nores">Couldn’t load.</div>}
-      {d && !d.ok && <div className="nores">error</div>}
-      {d?.ok && items.length > 0 && (
+      {d && items.length > 0 && (
         <>
           <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d.count} message{d.count === 1 ? "" : "s"}</span></div>
           <AiCard target={m.target()} row={m.openRow} />

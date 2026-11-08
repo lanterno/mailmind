@@ -1,6 +1,6 @@
 // Two looks over the same mail, each its own overlay: the AI's to-dos as one checkable agenda, and the week behind you.
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { ApiError } from "../../lib/api/client";
+import { ApiError, refusalOf } from "../../lib/api/client";
 import { createStore } from "../../lib/store";
 import { Icon } from "../../lib/ui/Icon";
 import { filing } from "../mailbox";
@@ -110,13 +110,12 @@ function YourWeek({ m }: { m: Mailbox }) {
   if (loading) body = <div className="rv-load"><span className="spin">↻</span> Looking back over your week…</div>;
   else if (error instanceof ApiError && error.aiOff) body = <div className="rv-err">AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.</div>;
   else if (error instanceof ApiError && error.overLimit) body = <div className="rv-err">Today’s AI limit is reached, so your review isn’t written. <button className="ai-rerun" onClick={again}>Write it</button></div>;
-  else if (error) body = <div className="rv-err">Couldn’t build your review. <button className="ai-rerun" onClick={again}>Retry</button></div>;
-  else if (review && !review.ok) body = <div className="rv-err">{(review as { error?: string }).error || "Review unavailable"} <button className="ai-rerun" onClick={again}>Retry</button></div>;
+  else if (error) body = <div className="rv-err">{refusalOf(error)?.detail || "Couldn’t build your review."} <button className="ai-rerun" onClick={again}>Retry</button></div>;
   else if (review) body = <ReviewBody d={review} m={m} again={again} />;
   return (
     <>
       <div className="commit-hd">
-        <Icon name="cal" /> Your week <span className="sub" id="rvRange">{review?.ok ? "· last 7 days" : ""}</span>
+        <Icon name="cal" /> Your week <span className="sub" id="rvRange">{review ? "· last 7 days" : ""}</span>
         <button className="ai-rerun" id="rvRerun" title="Regenerate" aria-label="Regenerate" style={{ marginLeft: 8 }} onClick={again}>↻</button>
       </div>
       <div className="rv-scroll" id="rvBody">{body}</div>

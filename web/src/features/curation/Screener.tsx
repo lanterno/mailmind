@@ -19,7 +19,6 @@ export function ScreenerPane({ account }: { account: string | undefined }) {
     setDecided(new Set([...decided, addr]));
     try {
       const d = await post("/api/rules", { token: addr, verdict });
-      if (!d.ok) throw new Error();
       toast(verdict === "keep" ? `Allowed ${shortAddress(addr)}` : `Screened out ${shortAddress(addr)}${(d as { trashed?: unknown }).trashed ? " · trashed" : ""}`);
       readAgain(qc);
       void qc.invalidateQueries({ queryKey: ["screener"] });

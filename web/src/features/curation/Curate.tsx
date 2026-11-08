@@ -16,7 +16,7 @@ import { curateOpen } from "./open";
 
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };
 
-type Sender = Extract<GetAnswers["/api/cleanup/sender"], { ok: true }>;     // a preview: one refused is never held
+type Sender = GetAnswers["/api/cleanup/sender"];
 interface Cleaning { d: Sender; scope: "sender" | "domain"; unsubscribe: boolean; armed: boolean }
 const cleaning = createStore<Cleaning | null>(null);
 const CLEANED: Record<string, string> = { unsubscribed_oneclick: "unsubscribed", mailto_sent: "unsub email sent", needs_browser: "opened the unsub page", no_method: "no unsub link", failed: "unsub couldn’t send — retry later", no_token: "unsub not sent — reopen to retry", read_only: "unsub not sent — MailMind is read-only", skipped: "" };
@@ -29,7 +29,6 @@ const again = (qc: QueryClient) => {
 async function previewCleanup(addr: string) {
   try {
     const d = await get(`/api/cleanup/sender?addr=${encodeURIComponent(addr)}`);
-    if (!d.ok) return toast((d as { error?: string }).error || "error");
     const method = d.unsub?.method ?? "none";
     cleaning.set({ d, scope: "sender", unsubscribe: method === "one-click" || method === "mailto", armed: false });
   } catch (e) {
@@ -51,10 +50,6 @@ async function runCleanup(qc: QueryClient, p: Cleaning) {
   } catch {
     tab?.close();
     return toast("Cleanup failed");
-  }
-  if (!d.ok) {
-    tab?.close();
-    return toast((d as { error?: string }).error || "failed");
   }
   const url = (d as { browser_url?: string }).browser_url;
   if (tab) {

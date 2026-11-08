@@ -101,11 +101,7 @@ async function saveSearch(m: Mailbox) {
   const name = (window.prompt("Name this view:", q.slice(0, 40)) ?? "").trim();
   if (!q || !name) return;
   try {
-    const d = await post("/api/views", { verb: "create", name, q });
-    if (!d.ok) {
-      toast(d.msg || "Couldn’t save");
-      return;
-    }
+    await post("/api/views", { verb: "create", name, q });
     void m.qc.invalidateQueries({ queryKey: ["views"] });
     toast(`Saved view · ${name}`);
   } catch (e) {

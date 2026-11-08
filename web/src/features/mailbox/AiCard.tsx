@@ -8,7 +8,7 @@ import type { Target } from "./actions";
 import type { Row } from "./rows";
 
 type Summary = PostAnswers["/api/ai/summarize"];
-type Card = { kind: "loading" } | { kind: "unavailable" } | { kind: "error"; error: string } | { kind: "done"; d: Summary };
+type Card = { kind: "loading" } | { kind: "error"; error: string } | { kind: "done"; d: Summary };
 
 const cards = createStore<{ key: string; card: Card } | null>(null);
 const inFlight = new Set<string>();
@@ -25,8 +25,7 @@ export async function summarize(target: Target, force = false) {
   show({ kind: "loading" });
   try {
     const d = await post("/api/ai/summarize", force ? { ...target, force: true } : target, { askOverLimit });
-    if (d.ok) show({ kind: "done", d });
-    else show((d as { retry?: boolean }).retry ? { kind: "unavailable" } : { kind: "error", error: (d as { error?: string }).error ?? "" });
+    show({ kind: "done", d });
   } catch (e) {
     show({ kind: "error", error: e instanceof ApiError ? e.message : String(e) });
   } finally {
@@ -62,7 +61,6 @@ export function AiCard({ target, row }: { target: Target | null; row: Row | unde
       </div>
     );
   }
-  if (shown.kind === "unavailable") return <div className="ai-card" id="aiCard"><div className="ai-err">AI summary is unavailable right now (Claude not reachable). <button className="ai-rerun" onClick={() => rerun(false)}>Try again</button></div></div>;
   if (shown.kind === "error") return <div className="ai-card" id="aiCard"><div className="ai-err">Couldn’t summarize{shown.error ? ` — ${shown.error}` : ""}. <button className="ai-rerun" onClick={() => rerun(false)}>Retry</button></div></div>;
   const { d } = shown;
   return (

@@ -8,7 +8,6 @@ export interface OverLimit { spent_micros?: number; limit_micros?: number }
 
 // What a failure answers: a problem document (RFC 9457). `detail` is what a person is told, `type` names the kind of problem
 // (`about:blank` where the status says it all), and the rest is what the page acts on: `over_limit`, `ai_off`, `busy` and the like.
-// An answer of `{ok: false, error}`, as the API wrote one before, reads the same, its `error` as the `detail`.
 export interface Problem {
   type?: string;
   title?: string;
@@ -30,7 +29,7 @@ export class ApiError extends Error {
   readonly retry: boolean;
 
   constructor(status: number, problem: Problem) {
-    const said = typeof problem.detail === "string" ? problem.detail : typeof problem["error"] === "string" ? problem["error"] : "";
+    const said = typeof problem.detail === "string" ? problem.detail : "";
     super(said || `HTTP ${status}`);
     this.name = "ApiError";
     this.status = status;
