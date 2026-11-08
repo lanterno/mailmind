@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filedWords, folderTitle, fromFolder, fromSearch, inDaySections, inTab, isConversation, roleLabel, type FolderRow, type Row, type SearchRow } from "./rows";
+import { filedWords, folderTitle, fromFolder, fromSearch, inDaySections, inTab, isConversation, labelQuery, roleLabel, type FolderRow, type Row, type SearchRow } from "./rows";
 
 const folderRow = (o: Partial<FolderRow> = {}): FolderRow => ({
   key: 1, folder: "INBOX", uid: 1, account: "a@example.test", bucket: "PERSONAL", flagged: false, from_addr: "bo@example.test", from_name: "Bo", has_attach: false,
@@ -97,5 +97,14 @@ describe("what filing says", () => {
   it("says when it will land", () => {
     expect(filedWords("Trashed", { status: "queued" }, false)).toBe("Trashed · once the server is back");
     expect(filedWords("Trashed", { queued: true }, true)).toBe("Trashed · waits for a full run");
+  });
+});
+
+describe("a label's query", () => {
+  it("reads back through the search grammar's quoting", () => {
+    expect(labelQuery("Travel")).toBe('label:"Travel"');
+    expect(labelQuery("Two words")).toBe('label:"Two words"');
+    expect(labelQuery('Say "hi"')).toBe('label:"Say \\"hi\\""');
+    expect(labelQuery("back\\slash")).toBe('label:"back\\\\slash"');
   });
 });
