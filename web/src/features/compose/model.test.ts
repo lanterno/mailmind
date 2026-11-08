@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addrOf, canQuickReply, chip, draftHash, fmtWhen, forwardSeed, guardView, looksLikeAddr, parseAddrs, quoteLabel, rcptAddr, rePrefix, sendLaterPresets, splitChips } from "./model";
+import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardView, isDraftTone, looksLikeAddr, parseAddrs, quoteLabel, rcptAddr, rePrefix, sendLaterPresets, splitChips } from "./model";
 
 describe("addresses", () => {
   it("finds addresses in a header, and the one a chip's mail goes to", () => {
@@ -105,5 +105,12 @@ describe("the check's lines", () => {
     const g = guardView([{ key: "new", block: "soft", addrs: ["a@x.test"] }, { key: "subject", block: "confirm" }], 0, 0, () => "");
     expect(g.keys).toEqual(["subject"]);
     expect(g.lines[0]!.soft).toBe(true);
+  });
+});
+
+describe("a reply's tone", () => {
+  it("is one of the server's, whatever storage held", () => {
+    for (const tone of Object.keys(DRAFT_TONES)) expect(isDraftTone(tone)).toBe(true);
+    for (const said of ["", "nope", "toString", "constructor", null, undefined, 3]) expect(isDraftTone(said)).toBe(false);
   });
 });

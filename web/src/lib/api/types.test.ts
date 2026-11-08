@@ -1,6 +1,6 @@
 // What types.ts makes of the schemas. These are checked by tsc, which `just check-web` runs over the tests too.
 import { describe, expectTypeOf, it } from "vitest";
-import type { AnyOf, GetAnswers, PostAnswers, PostBodies } from "./types";
+import type { AnyOf, BlockScope, ComposeMode, DocumentKind, DraftTone, FilingVerb, GetAnswers, PlanVerb, PostAnswers, PostBodies, RewriteOp, RsvpDecision, RuleChange, SnoozePreset, Verdict } from "./types";
 
 describe("the API's types", () => {
   it("give a file, a document or a stream no JSON to read", () => {
@@ -34,6 +34,36 @@ describe("the API's types", () => {
     expectTypeOf<{ pk: 1 }>().not.toExtend<PostBodies["/api/archive"]>();
     expectTypeOf<"/api/message/{pk}/body">().not.toExtend<keyof GetAnswers>();
     expectTypeOf<"pk">().not.toExtend<keyof GetAnswers["/api/message/body"]>();
+  });
+});
+
+describe("the closed sets", () => {
+  type Said<P extends keyof PostBodies, F extends keyof PostBodies[P]> = NonNullable<PostBodies[P][F]>;
+
+  it("are what a request may name, and nothing else", () => {
+    expectTypeOf<Said<"/api/snooze", "preset">>().toEqualTypeOf<SnoozePreset>();
+    expectTypeOf<Said<"/api/ai/draft-reply", "tone">>().toEqualTypeOf<DraftTone>();
+    expectTypeOf<Said<"/api/ai/rewrite", "op">>().toEqualTypeOf<RewriteOp>();
+    expectTypeOf<Said<"/api/bulk/file", "verb">>().toEqualTypeOf<FilingVerb>();
+    expectTypeOf<Said<"/api/rules", "verdict">>().toEqualTypeOf<RuleChange>();
+    expectTypeOf<Said<"/api/cleanup/execute", "block_scope">>().toEqualTypeOf<BlockScope>();
+    expectTypeOf<Said<"/api/invite/rsvp", "decision">>().toEqualTypeOf<RsvpDecision>();
+    expectTypeOf<Said<"/api/send", "mode">>().toEqualTypeOf<ComposeMode>();
+    expectTypeOf<{ key: 1; folder: "INBOX"; preset: "someday" }>().not.toExtend<PostBodies["/api/snooze"]>();
+    expectTypeOf<{ verb: "rename" }>().not.toExtend<PostBodies["/api/views"]>();
+    expectTypeOf<{ key: 1; folder: "INBOX"; flag: "deleted" }>().not.toExtend<PostBodies["/api/flag"]>();
+  });
+
+  it("are what an answer names", () => {
+    expectTypeOf<Extract<PostAnswers["/api/ai/do-plan"], { intent: "act" }>["verb"]>().toEqualTypeOf<PlanVerb>();
+    expectTypeOf<Extract<PostAnswers["/api/ai/do-plan"], { intent: "act" }>["snooze_preset"]>().toEqualTypeOf<SnoozePreset>();
+    expectTypeOf<PostAnswers["/api/ai/do-confirm"]["verb"]>().toEqualTypeOf<PlanVerb>();
+    expectTypeOf<GetAnswers["/api/documents"]["docs"][number]["kind"]>().toEqualTypeOf<DocumentKind>();
+  });
+
+  it("nest where the server's do: a rule's change is a verdict, or its removal", () => {
+    expectTypeOf<Verdict>().toExtend<RuleChange>();
+    expectTypeOf<Exclude<RuleChange, Verdict>>().toEqualTypeOf<"remove">();
   });
 });
 

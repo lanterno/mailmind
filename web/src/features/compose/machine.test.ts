@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { LIMITS } from "../../lib/api/limits.gen";
 import { createStore } from "../../lib/store";
 import { createComposing, type Answer, type Env, type Focus } from "./machine";
 
@@ -39,6 +40,7 @@ function setup(over: Partial<Env> = {}) {
     mine: () => new Set([FROM]),
     signature: () => "",
     tone: () => "balanced",
+    limits: LIMITS,
     focusHere: () => null,
     focusBack: (_w, fallback) => void focused.push(fallback),
     focus: (f) => void focused.push(f),
@@ -491,16 +493,16 @@ describe("sending", () => {
     expect(m.float.get()?.kind).toBe("done");
   });
 
-  it("counts ten seconds with an Undo, and Undo brings the words back", async () => {
-    const { m, posted, toasts } = setup();
+  it("counts the server's window with an Undo, and Undo brings the words back", async () => {
+    const { m, posted, toasts } = setup({ limits: { ...LIMITS, undo_send_seconds: 6 } });
     ready(m);
     m.send();
     await flush();
     const f = m.float.get();
-    expect(f).toMatchObject({ kind: "countdown", left: 10 });
+    expect(f).toMatchObject({ kind: "countdown", left: 6 });
     if (f?.kind !== "countdown") return;
     vi.advanceTimersByTime(3000);
-    expect(m.float.get()).toMatchObject({ kind: "countdown", left: 7 });
+    expect(m.float.get()).toMatchObject({ kind: "countdown", left: 3 });
     f.undo();
     await flush();
     expect(posted("/api/outbox/cancel")).toEqual([{ id: 9 }]);
@@ -607,11 +609,19 @@ describe("files", () => {
     expect(c.dirty).toBe(true);
   });
 
-  it("refuses what would pass 25 MB", () => {
+  it("refuses what would pass the server's limit, and says what that is", () => {
+    const { m, toasts } = setup({ limits: { ...LIMITS, attach_bytes: 10 * 1024 * 1024 } });
+    m.open();
+    m.addFiles([file("small.bin", 9 * 1024 * 1024), file("big.bin", 2 * 1024 * 1024)]);
+    expect(toasts).toEqual(["Attachments too large (10 MB max)"]);
+    expect(m.view.get()!.attachments.length + m.view.get()!.reading.size).toBe(1);
+  });
+
+  it("holds the attachments to the server's limit, as it words it", () => {
     const { m, toasts } = setup();
     m.open();
-    m.addFiles([file("big.bin", 26 * 1024 * 1024)]);
-    expect(toasts).toEqual(["Attachments too large (25 MB max)"]);
+    m.addFiles([file("big.bin", LIMITS.attach_bytes + 1)]);
+    expect(toasts).toEqual([`Attachments too large (${LIMITS.attach_bytes / 1048576} MB max)`]);
   });
 });
 
