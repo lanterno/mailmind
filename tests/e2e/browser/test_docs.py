@@ -129,6 +129,46 @@ def test_only_one_image_previews_at_a_time(page, world):
     clean(page)
 
 
+def from_someone(world, name, sender, addr):
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        c.execute("UPDATE messages SET from_name=?, from_addr=? WHERE pk=?", (sender, addr, world.pk(name)))
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_the_hub_opens_in_sections_by_sender_and_shows_by_type_or_newest_when_asked(page, world):
+    other = "ada-inbox-03-newsletter.eml"
+    one_file(world, RECEIPT, "dee-a.pdf", "a")
+    one_file(world, RECEIPT, "dee-b.png", "b", "image/png")
+    one_file(world, other, "eli-a.pdf", "c")
+    from_someone(world, RECEIPT, "Dee", "dee@example.test")
+    from_someone(world, other, "Eli", "eli@example.test")
+    docs(page)
+    headings = page.locator("#docList .doc-sec")
+    expect(headings.filter(has_text="Dee")).to_have_text(re.compile(r"Dee\s*2"))
+    expect(headings.filter(has_text="Eli")).to_have_text(re.compile(r"Eli\s*1"))
+    expect(page.get_by_role("button", name="By sender")).to_have_attribute("aria-pressed", "true")
+    page.get_by_role("button", name="By type").click()
+    expect(headings.filter(has_text="PDFs")).to_have_text(re.compile(r"PDFs\s*2"))
+    expect(headings.filter(has_text="Images")).to_have_text(re.compile(r"Images\s*1"))
+    expect(headings).to_have_count(2)
+    page.get_by_role("button", name="Newest").click()
+    expect(headings).to_have_count(0)
+    expect(page.locator("#docList .doc-fn")).to_have_count(3)
+    clean(page)
+
+
+def test_a_section_with_nobody_named_says_so(page, world):
+    one_file(world, RECEIPT, "anon.pdf")
+    from_someone(world, RECEIPT, None, None)
+    docs(page)
+    expect(page.locator("#docList .doc-sec").filter(has_text="No sender")).to_have_count(1)
+    clean(page)
+
+
 def test_the_hub_shows_more_and_keeps_your_place(page, world):
     hub_files(world, 450)
     docs(page)
