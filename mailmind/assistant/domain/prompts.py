@@ -8,6 +8,9 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from mailmind.kernel import draft_tone
+from mailmind.kernel.draft_tone import DraftTone
+
 _SLOT = re.compile(r"\{([a-z]+)\}")
 
 # The one statement of the policy. A template says what to do; this says what the mail is. A bulk command is the one thing
@@ -112,11 +115,10 @@ Subject: {subject}
 Conversation (oldest first):
 {blocks}
 """)
-# The tones a reply may be drafted in, and the ways a text may be rewritten: what a request may name, as `DraftTone` and
-# `RewriteOp` in its schema, so the page has them as types and keeps only its words for each. Each table holds every member,
-# which tests/unit/http/test_closed_sets.py holds it to.
-type DraftTone = Literal["brief", "balanced", "warm", "formal"]
-DEFAULT_TONE: DraftTone = "balanced"
+# The tones a reply may be drafted in (the kernel's, since a person's preferences name them too), and the ways a text may be
+# rewritten: what a request may name, as `DraftTone` and `RewriteOp` in its schema, so the page has them as types and keeps only
+# its words for each. Each table holds every member, which tests/unit/http/test_closed_sets.py holds it to.
+DEFAULT_TONE = draft_tone.DEFAULT_TONE
 TONES: dict[DraftTone, str] = {
     "brief": "brief and to-the-point",
     "balanced": "clear, friendly and professional",
