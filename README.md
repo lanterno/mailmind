@@ -147,9 +147,10 @@ and the Claude API.
   couldn't be restored stays for the next `z`. Undo survives a restart, and reaches back 50 actions or 24 hours.
 - **Triage straight from the list.** Hovering a row offers Archive, Delete and Snooze
   without opening it.
-- **Links that keep their word.** What is open is in the URL by the message's key and the
-  folder its copy is in, never a row's number, so a link you kept, or a tab left open across
-  a resync, opens the message it named or nothing, and every action names it the same way.
+- **Links that keep their word.** What is open is in the URL by the message's key, the
+  folder its copy is in and the server's number for that copy, never a row's number. A link
+  you kept, or a tab left open across a resync, opens the copy it named or nothing, never a
+  message beside it that reuses its Message-ID, and every action names it the same way.
 - **Conversations file whole.** On a conversation — its row, the thread reader, `e`/`d`
   or a bulk selection — Archive and Delete take every message of it in that folder (your
   replies in Sent stay put), and one Undo brings them all back.
