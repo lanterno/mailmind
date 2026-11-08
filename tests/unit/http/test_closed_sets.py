@@ -9,6 +9,7 @@ import pytest
 
 import openapi_doc
 import problems
+from mailmind.accounts.domain import preferences
 from mailmind.assistant.application.bulk import DO_PLAN_SCHEMA
 from mailmind.assistant.domain import action_plan, prompts
 from mailmind.attention.domain import snooze
@@ -25,7 +26,9 @@ from mailmind.mailbox.domain import filing
 SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "RewriteOp": prompts.RewriteOp,
         "PlanVerb": action_plan.PlanVerb, "FilingVerb": filing.FilingVerb, "FlagName": filing.FlagName,
         "Verdict": rulebook.Verdict, "BlockScope": cleanup_plan.BlockScope, "RsvpDecision": rsvp.RsvpDecision,
-        "ComposeMode": resume.ComposeMode, "ViewVerb": views.ViewVerb, "DocumentKind": documents.DocumentKind}
+        "ComposeMode": resume.ComposeMode, "ViewVerb": views.ViewVerb, "DocumentKind": documents.DocumentKind,
+        "Density": preferences.Density, "Theme": preferences.Theme, "ReadWidth": preferences.ReadWidth, "ReadSize": preferences.ReadSize,
+        "ReadFont": preferences.ReadFont, "MailColors": preferences.MailColors, "SearchScope": preferences.SearchScope}
 
 
 def members(alias):
