@@ -1,7 +1,7 @@
 // What you can do to a message from anywhere: the list, the reader, the keyboard. Filing hides the row at once and
 // asks the server; an answer of no, or no answer, puts it back and says so.
 import type { QueryClient } from "@tanstack/react-query";
-import { post } from "../../lib/api/client";
+import { post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
 import { go, parseRoute, pathOf, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
@@ -241,8 +241,11 @@ export async function undo(qc: QueryClient) {
   let d: { ok?: boolean; empty?: boolean; failed?: number | null; label?: string | null; error?: string };
   try {
     d = await post("/api/undo", {});
-  } catch {
-    toast("Couldn’t undo");
+  } catch (e) {
+    const no = refusalOf(e);
+    if (!no) return toast("Couldn’t undo");
+    toast(no.problem["empty"] ? "Nothing to undo" : no.detail || "Couldn’t undo");
+    readAgain(qc);
     return;
   }
   if (d.empty) toast("Nothing to undo");

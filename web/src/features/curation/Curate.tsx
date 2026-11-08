@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { get, post } from "../../lib/api/client";
+import { get, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
 import { go } from "../../app/route";
 import { useLayer } from "../../lib/backTrap";
@@ -32,8 +32,9 @@ async function previewCleanup(addr: string) {
     if (!d.ok) return toast((d as { error?: string }).error || "error");
     const method = d.unsub?.method ?? "none";
     cleaning.set({ d, scope: "sender", unsubscribe: method === "one-click" || method === "mailto", armed: false });
-  } catch {
-    toast("Couldn’t load sender");
+  } catch (e) {
+    const no = refusalOf(e);
+    toast(no ? no.detail || "error" : "Couldn’t load sender");
   }
 }
 

@@ -1,7 +1,7 @@
 // The tray the top bar's ↑ opens: changes waiting for a server, and what the outbox holds, each with its way out.
 import { useEffect, useEffectEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, get, post } from "../../lib/api/client";
+import { ApiError, get, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
 import { toast } from "../../lib/toast";
 import { composing } from "./compose";
@@ -59,7 +59,9 @@ function DraftRow({ d, readOnly, edit, discard }: { d: Waiting; readOnly: boolea
   );
 }
 
-function SentRow({ o, call }: { o: Sent; call: (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean | null }) => string, fail: string) => void }) {
+type Call = (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean | null }) => string, fail: string, refused?: string) => void;
+
+function SentRow({ o, call }: { o: Sent; call: Call }) {
   const to = (o.to ?? []).join(", ") + (o.bcc_count ? ` +${o.bcc_count} bcc` : "");
   const label = o.scheduled ? "scheduled" : o.retrying ? "retrying" : o.unsure ? "unsure" : o.state;
   return (
@@ -69,7 +71,7 @@ function SentRow({ o, call }: { o: Sent; call: (path: string, id: number, ok: (r
       {(o.scheduled || o.retrying) && (
         <>
           <button className="ob-retry" onClick={() => call("/api/outbox/sendnow", o.id, () => "Sending now…", "Couldn’t send now")}>{o.retrying ? "Try now" : "Send now"}</button>
-          <button className="ob-retry" onClick={() => call("/api/outbox/cancel", o.id, (r) => (r.ok ? "Send cancelled" : "Too late to cancel"), "Cancel failed")}>Cancel</button>
+          <button className="ob-retry" onClick={() => call("/api/outbox/cancel", o.id, (r) => (r.ok ? "Send cancelled" : "Too late to cancel"), "Cancel failed", "Too late to cancel")}>Cancel</button>
         </>
       )}
       {o.state === "error" && <button className="ob-retry" onClick={() => call("/api/outbox/retry", o.id, (r) => (r.gone ? "It had gone out, so it wasn’t sent again" : "Retrying…"), "Retry failed")}>{o.unsure ? "Send again" : "Retry"}</button>}
@@ -123,12 +125,13 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
     void qc.invalidateQueries({ queryKey: ["messages"] });
     void qc.invalidateQueries({ queryKey: ["folders"] });
   };
-  const call = async (path: string, id: number, ok: (r: { ok?: boolean; gone?: boolean | null }) => string, fail: string) => {
+  // `refused`: what the server's no means, where it means more than that it failed.
+  const call = async (...[path, id, ok, fail, refused]: Parameters<Call>) => {
     try {
       const r = await post(path as "/api/outbox/retry", { id });
       toast(ok(r));
-    } catch {
-      toast(fail);
+    } catch (e) {
+      toast(refused && refusalOf(e) ? refused : fail);
     }
     setTimeout(again, 300);
   };
@@ -146,7 +149,7 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
           {drafts.map((d) => <DraftRow key={d.id} d={d} readOnly={readOnly} edit={() => editDraft(d.id)} discard={() => void discardDraft(d.id)} />)}
           {(items.length > 0 || (!held.length && !drafts.length)) && <h4>Outbox</h4>}
           {!items.length && !held.length && !drafts.length && <div className="ob-row"><span className="ob-sub">Nothing queued.</span></div>}
-          {items.map((o) => <SentRow key={o.id} o={o} call={(p, i, k, f) => void call(p, i, k, f)} />)}
+          {items.map((o) => <SentRow key={o.id} o={o} call={(...args) => void call(...args)} />)}
         </div>
       )}
     </>

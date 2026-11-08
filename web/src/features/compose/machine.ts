@@ -59,6 +59,9 @@ const AUTOSAVE_MS = 8000;
 const KNOWN_WAIT_MS = 150;
 const UNDO_SECONDS = 10;
 
+// An Undo Send the server said no to: it's past its window (a 409), and goes as it was going.
+const tooLate = (e: unknown) => (e as { status?: unknown } | null)?.status === 409;
+
 const randomId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`);
 
 export function createComposing(env: Env) {
@@ -626,8 +629,8 @@ export function createComposing(env: Env) {
             env.toast(`${what} not sent`);
             env.outboxChanged();
           } else showFloat({ kind: "done", text: "✓ Sent — too late to undo" }, 2200);
-        } catch {
-          showFloat({ kind: "done", text: "✓ Sent" }, 2000);
+        } catch (e) {
+          showFloat(tooLate(e) ? { kind: "done", text: "✓ Sent — too late to undo" } : { kind: "done", text: "✓ Sent" }, tooLate(e) ? 2200 : 2000);
         }
       })();
     };
@@ -653,8 +656,8 @@ export function createComposing(env: Env) {
         env.toast("Send undone");
         env.outboxChanged();
       } else showFloat({ kind: "done", text: "✓ Sent — too late to undo" }, 2200);
-    } catch {
-      showFloat({ kind: "done", text: "✓ Sent" }, 2000);
+    } catch (e) {
+      showFloat(tooLate(e) ? { kind: "done", text: "✓ Sent — too late to undo" } : { kind: "done", text: "✓ Sent" }, tooLate(e) ? 2200 : 2000);
     }
   }
 

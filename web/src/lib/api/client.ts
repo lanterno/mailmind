@@ -6,18 +6,49 @@ export const AI_OVER_HEADER = "X-MailMind-AI-Over-Limit";
 
 export interface OverLimit { spent_micros?: number; limit_micros?: number }
 
+// What a failure answers: a problem document (RFC 9457). `detail` is what a person is told, `type` names the kind of problem
+// (`about:blank` where the status says it all), and the rest is what the page acts on: `over_limit`, `ai_off`, `busy` and the like.
+// An answer of `{ok: false, error}`, as the API wrote one before, reads the same, its `error` as the `detail`.
+export interface Problem {
+  type?: string;
+  title?: string;
+  status?: number;
+  detail?: string;
+  [extension: string]: unknown;
+}
+
 export class ApiError extends Error {
   readonly status: number;
+  readonly type: string;
+  readonly detail: string;       // "" where the server left the words to the page
+  readonly problem: Problem;     // the whole of it, for what else it says
   readonly overLimit: boolean;
   readonly aiOff: boolean;
+  readonly busy: boolean;
+  readonly readOnly: boolean;
+  readonly conflict: boolean;
+  readonly retry: boolean;
 
-  constructor(message: string, status: number, overLimit: boolean, aiOff: boolean) {
-    super(message);
+  constructor(status: number, problem: Problem) {
+    const said = typeof problem.detail === "string" ? problem.detail : typeof problem["error"] === "string" ? problem["error"] : "";
+    super(said || `HTTP ${status}`);
     this.name = "ApiError";
     this.status = status;
-    this.overLimit = overLimit;
-    this.aiOff = aiOff;
+    this.type = typeof problem.type === "string" ? problem.type : "about:blank";
+    this.detail = said;
+    this.problem = problem;
+    this.overLimit = problem["over_limit"] === true;
+    this.aiOff = problem["ai_off"] === true;
+    this.busy = problem["busy"] === true;
+    this.readOnly = problem["read_only"] === true;
+    this.conflict = problem["conflict"] === true;
+    this.retry = problem["retry"] === true;
   }
+}
+
+// The server's no: a 4xx, in words for a person where it has some. A 5xx, or no answer at all, is the page's to word.
+export function refusalOf(e: unknown): ApiError | null {
+  return e instanceof ApiError && e.status >= 400 && e.status < 500 ? e : null;
 }
 
 export interface ApiOptions extends RequestInit {
@@ -30,12 +61,12 @@ export function csrfToken(doc: Document = document): string {
   return doc.querySelector<HTMLMetaElement>('meta[name="csrf"]')?.content ?? "";
 }
 
-async function errorBody(r: Response): Promise<Record<string, unknown> | null> {
+async function problemOf(r: Response): Promise<Problem> {
   try {
     const parsed: unknown = await r.json();
-    return parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Problem) : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
@@ -45,14 +76,12 @@ export async function request<T>(path: string, options: ApiOptions = {}): Promis
   headers.set("X-CSRF-Token", csrfToken());
   const r = await fetch(path, { ...init, headers });
   if (r.ok) return (await r.json()) as T;
-  const body = await errorBody(r);
-  const overLimit = Boolean(body?.["over_limit"]);
-  if (r.status === 402 && overLimit && askOverLimit && !headers.has(AI_OVER_HEADER) && (await askOverLimit(body as OverLimit))) {
+  const e = new ApiError(r.status, await problemOf(r));
+  if (r.status === 402 && e.overLimit && askOverLimit && !headers.has(AI_OVER_HEADER) && (await askOverLimit(e.problem as OverLimit))) {
     headers.set(AI_OVER_HEADER, "allow");
     return request<T>(path, { ...init, headers });
   }
-  const message = typeof body?.["error"] === "string" ? body["error"] : `HTTP ${r.status}`;
-  throw new ApiError(message, r.status, overLimit, Boolean(body?.["ai_off"]));
+  throw e;
 }
 
 // A path of the API with its {pk} filled in, and a query if it has one.

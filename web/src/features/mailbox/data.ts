@@ -1,7 +1,7 @@
 // What the mailbox reads, and when it reads it again. The event stream says what changed (app/realtime.ts); a query
 // refetches in place, so the row you are on and what you were reading stay put.
 import { useInfiniteQuery, useQuery, type InfiniteData, useQueries } from "@tanstack/react-query";
-import { get } from "../../lib/api/client";
+import { get, refusalOf } from "../../lib/api/client";
 import type { AnyOf, GetAnswers } from "../../lib/api/types";
 import { sourceKey, type ListSource } from "../../app/route";
 import { createStore, store, stored } from "../../lib/store";
@@ -43,8 +43,16 @@ export function setSearchScope(s: SearchScope) {
   store("mm_searchscope", s);
 }
 
+// A query the index can't read is refused in words of its own, which the list shows where its results would be.
 async function searchPage(query: string, account: string, offset: number, scope: SearchScope): Promise<ListPage> {
-  const d: AnyOf<GetAnswers["/api/search"]> = await get(`/api/search?q=${q(query)}&scope=${account ? scope : "all"}&account=${q(account)}&limit=${PAGE}&offset=${offset}`);
+  let d: AnyOf<GetAnswers["/api/search"]>;
+  try {
+    d = await get(`/api/search?q=${q(query)}&scope=${account ? scope : "all"}&account=${q(account)}&limit=${PAGE}&offset=${offset}`);
+  } catch (e) {
+    const no = refusalOf(e);
+    if (!no) throw e;
+    return { rows: [], hasMore: false, total: 0, syncing: false, syncFailed: false, catchingUp: false, ...(no.detail ? { error: no.detail } : {}) };
+  }
   return { rows: (d.items ?? []).map(fromSearch), hasMore: Boolean(d.has_more), total: d.total ?? 0, syncing: false, syncFailed: false, catchingUp: false, ...(d.error ? { error: d.error } : {}) };
 }
 

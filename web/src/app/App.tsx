@@ -1,6 +1,6 @@
 // The app's one view: the rail, the list and the reader, and the keys that work across them.
 import { useEffect, useEffectEvent, useRef } from "react";
-import { post } from "../lib/api/client";
+import { post, refusalOf } from "../lib/api/client";
 import { composing } from "../features/compose/compose";
 import { asking, stopAsking } from "../features/assistant/ask";
 import { AskPane } from "../features/assistant/AskPane";
@@ -108,8 +108,9 @@ async function saveSearch(m: Mailbox) {
     }
     void m.qc.invalidateQueries({ queryKey: ["views"] });
     toast(`Saved view · ${name}`);
-  } catch {
-    toast("Couldn’t save view");
+  } catch (e) {
+    const no = refusalOf(e);
+    toast(no ? no.detail || "Couldn’t save" : "Couldn’t save view");
   }
 }
 

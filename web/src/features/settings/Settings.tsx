@@ -3,7 +3,7 @@
 import { useEffect, useState, useEffectEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { get, post } from "../../lib/api/client";
+import { get, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
 import { avatarHue, relWhen, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
@@ -30,8 +30,9 @@ async function testConnection(payload: unknown, say: (t: Tested) => void) {
     const d = await post("/api/accounts/test", payload);
     if (d.ok && d.connect) say({ kind: "ok", text: "✓ Connected" });
     else say({ kind: "err", text: `✕ ${d.error || "failed"}` });
-  } catch {
-    say({ kind: "err", text: "✕ test failed" });
+  } catch (e) {
+    const no = refusalOf(e);
+    say({ kind: "err", text: no ? `✕ ${no.detail || "failed"}` : "✕ test failed" });
   }
 }
 
@@ -95,8 +96,9 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
       }
       toast(`${row ? "Updated" : "Added"} ${shortAddress(address)}`);
       done(!row);
-    } catch {
-      setError("Save failed.");
+    } catch (e) {
+      const gone = refusalOf(e)?.status === 404;
+      setError(gone ? refusalOf(e)?.detail || "Could not save." : "Save failed.");
       setSaving(false);
     }
   };
@@ -240,8 +242,9 @@ function ConnectionRow({ r, h, live, status, edit, again }: { r: Connection; h: 
         again();
         void qc.invalidateQueries({ queryKey: ["digest"] });
       } else toast(d.error || "Couldn’t remove");
-    } catch {
-      toast("Remove failed");
+    } catch (e) {
+      const gone = refusalOf(e)?.status === 404;
+      toast(gone ? refusalOf(e)?.detail || "Couldn’t remove" : "Remove failed");
     }
   };
   return (

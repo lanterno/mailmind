@@ -1,7 +1,7 @@
 // The reader pane: one message, or a whole conversation with its latest open.
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiError, post } from "../../lib/api/client";
+import { ApiError, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
 import { BriefPane } from "../assistant";
 import { composing, myAddresses, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
@@ -224,7 +224,9 @@ function Fetching({ whole }: { whole: boolean }) {
 
 function MailContent({ pk, minHeight, pad, whole = false }: { pk: number; minHeight: number; pad: number; whole?: boolean }) {
   const [images, setImages] = useState(false);
-  const { data: d, isError, refetch } = useBody(pk);
+  const { data: d, error, isError, refetch } = useBody(pk);
+  const gone = refusalOf(error);     // no such message: it says so, and a retry wouldn't find it either
+  if (gone) return <div className="nores">{gone.detail || "error"}</div>;
   if (isError) return <div className="nores">Couldn’t load. <button className="ai-rerun" id="rdRetry" onClick={() => void refetch()}>Retry</button></div>;
   if (!d) return <Fetching whole={whole} />;
   if (!d.ok) return <div className="nores">{d.error ?? "error"}</div>;
@@ -246,7 +248,7 @@ function MailContent({ pk, minHeight, pad, whole = false }: { pk: number; minHei
 }
 
 function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
-  const { data: d } = useBody(pk);
+  const { data: d, error } = useBody(pk);
   const row = m.openRow;
   useEffect(() => {
     if (row?.seen === false) armDwell(m.qc, pk);
@@ -277,7 +279,7 @@ function MessageView({ pk, m }: { pk: number; m: Mailbox }) {
         )}
         <ReaderNav m={m} />
       </div>
-      {!d && row && (
+      {!d && row && !refusalOf(error) && (
         <>
           <div className="rd-top"><span className="rd-tag">{m.title}</span></div>
           <div className="rd-subj">{row.subject}</div>
