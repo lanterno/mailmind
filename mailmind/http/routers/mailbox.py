@@ -22,6 +22,7 @@ from mailmind.http.schemas.mailbox import (
     FolderListArgs,
     FolderListing,
     Folders,
+    Labels,
     FoldersArgs,
     FoldersRefused,
     InboxesListing,
@@ -90,6 +91,10 @@ def router(mailbox):
     @r.get("/api/folders/across", responses=answers(ViewCounts))
     def folders_across():
         return mailbox.folders.across_accounts()
+
+    @r.get("/api/labels", responses=answers(Labels))         # a Gmail account's own labels: its lanes in the rail
+    def labels(args: Annotated[FoldersArgs, Query()]):
+        return mailbox.queries.labels(args.account)
 
     @r.get("/api/messages", responses=answers(FolderListing | SnoozedListing | MutedListing | WaitingListing | ReplyLaterListing))
     def messages(args: Annotated[FolderListArgs, Query()]):

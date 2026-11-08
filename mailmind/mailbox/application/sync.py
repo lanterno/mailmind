@@ -128,9 +128,9 @@ class Ingest:
         arriving=True says this mail is new to the folder, so the person's filters speak for what MailMind has never seen before."""
         rows: list[dict[str, Any]] = []
         max_uid, kept, junk = 0, 0, 0
-        gmail = self._accounts.profile(acct).gmail_threads            # only Gmail understands X-GM-THRID
+        gmail = self._accounts.profile(acct).gmail_threads            # only Gmail understands X-GM-THRID and X-GM-LABELS
         if uids:
-            for h in session.headers(uids, HEADER_FIELDS, gmail_thread=gmail):
+            for h in session.headers(uids, HEADER_FIELDS, gmail_thread=gmail, gmail_labels=gmail):
                 uid = h.uid
                 max_uid = max(max_uid, uid)
                 flags = self._flags_of(h.flags)
@@ -156,6 +156,7 @@ class Ingest:
                              "confidence": conf, "reason": reason, "is_junk": isj, "flags": flags,
                              "message_id": (msg.get("Message-ID") or "").strip(),
                              "gmail_thread": h.gmail_thread,
+                             "gmail_labels": h.gmail_labels,
                              "in_reply_to": (msg.get("In-Reply-To") or "").strip(),
                              "refs": (msg.get("References") or "").replace("\n", " ").strip(),
                              "recipient_addrs": mime.recipient_addrs(msg),
@@ -190,6 +191,8 @@ class Ingest:
                 self._store.set_local_flags(c, pk, **r["flags"])
                 self._store.set_list_unsub(c, pk, r["unsub"]["raw"], r["unsub"]["method"])
                 self._store.set_recipients(c, pk, r["recipient_addrs"])
+                if r["gmail_labels"] is not None:
+                    self._store.set_labels(c, pk, r["gmail_labels"])
                 if stored is not None and self._store.needs_threading(c, pk, r["in_reply_to"], r["refs"]):
                     stored.append(pk)
                 self._store.set_ingested_headers(c, pk, r["in_reply_to"], r["refs"], r["recipients"])

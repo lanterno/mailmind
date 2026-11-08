@@ -405,6 +405,7 @@ def mark_has_attachments(c, pk):
 
 # ------------------------------------------------------------------------- FTS
 RECIPIENT_ROWS_MAX = 5000
+LABEL_ROWS_MAX = 1000                           # a server is free to say as many as it likes
 RECIPIENTS_CHARS: int = 20000     # of the To and Cc text kept for search: a long list, not a forged one's whole length
 
 
@@ -414,6 +415,24 @@ def set_recipients(c, pk, addrs):
     c.execute("DELETE FROM message_recipients WHERE message_pk=?", (pk,))
     c.executemany("INSERT OR IGNORE INTO message_recipients(message_pk, addr) VALUES (?,?)",
                   [(pk, a) for a in addrs[:RECIPIENT_ROWS_MAX]])
+
+
+def set_labels(c, pk, labels):
+    """Gmail's labels on this copy of a message, as the last header fetch read them. They go with the copy. A sync reads them
+    only for what it fetches, and doesn't touch them when it reads flags again, so a label changed on Gmail's side reaches a
+    copy already stored only if a scan fetches it again."""
+    c.execute("DELETE FROM message_labels WHERE message_pk=?", (pk,))
+    c.executemany("INSERT OR IGNORE INTO message_labels(message_pk, label) VALUES (?,?)",
+                  [(pk, label) for label in sorted(labels)[:LABEL_ROWS_MAX]])
+
+
+def labels_of_account(c, account):
+    """An account's own labels, each with how many messages carry it. Gmail's system labels (\\Inbox and the like) are the
+    folders' to show. A message counts once however many copies it has."""
+    return c.execute(r"""SELECT l.label AS name, count(DISTINCT m.message_key) AS count
+                         FROM message_labels l JOIN messages m ON m.pk=l.message_pk
+                         WHERE m.account=? AND m.pending_removal IS NULL AND substr(l.label,1,1) <> '\'
+                         GROUP BY l.label ORDER BY l.label COLLATE NOCASE""", (account,)).fetchall()
 
 
 def set_recipients_text(c, pk, recipients):

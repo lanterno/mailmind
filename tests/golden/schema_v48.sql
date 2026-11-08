@@ -19,6 +19,9 @@ CREATE INDEX idx_draft_journal_due ON draft_journal(due_at);
 -- index idx_followups_state
 CREATE INDEX idx_followups_state ON followups(account, state);
 
+-- index idx_message_labels_label
+CREATE INDEX idx_message_labels_label ON message_labels(label);
+
 -- index idx_message_recipients_addr
 CREATE INDEX idx_message_recipients_addr ON message_recipients(addr);
 
@@ -100,6 +103,9 @@ CREATE TABLE mail_commands( -- keyed on message_id, never pk id INTEGER PRIMARY 
 -- table message_identity
 CREATE TABLE message_identity( key INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, identity TEXT NOT NULL, gone_at INTEGER, UNIQUE(account, identity));
 
+-- table message_labels
+CREATE TABLE message_labels( message_pk INTEGER NOT NULL REFERENCES messages(pk) ON DELETE CASCADE, label TEXT NOT NULL, PRIMARY KEY(message_pk, label));
+
 -- table message_recipients
 CREATE TABLE message_recipients( message_pk INTEGER NOT NULL REFERENCES messages(pk) ON DELETE CASCADE, addr TEXT NOT NULL, PRIMARY KEY(message_pk, addr));
 
@@ -154,4 +160,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=47;
+PRAGMA user_version=48;

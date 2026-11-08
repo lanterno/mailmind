@@ -13,7 +13,7 @@ from mailmind.platform.db.migrations import (m0021_ai_usage, m0022_thread_finger
                                              m0035_message_recipients, m0036_ai_batches, m0037_ai_answers,
                                              m0038_contentless_search, m0039_mail_commands, m0040_draft_journal, m0041_outbox_wait_kind,
                                              m0042_thread_links, m0043_assessment_record, m0044_outbox_original_key,
-                                             m0045_rollback_columns, m0046_stand_in, m0047_tasks)
+                                             m0045_rollback_columns, m0046_stand_in, m0047_tasks, m0048_message_labels)
 from mailmind.platform.db.migrations.m0001_m0020 import BASE_SCHEMA, LEGACY_COLS, _addcol
 from mailmind.platform.db.migrations.m0001_m0020 import MIGRATIONS as _FROZEN
 
@@ -50,6 +50,7 @@ MIGRATIONS = [
     (45, m0045_rollback_columns.migrate),
     (46, m0046_stand_in.migrate),
     (47, m0047_tasks.migrate),
+    (48, m0048_message_labels.migrate),
 ]
 
 BASE_UNTIL = _FROZEN[-1][0]     # a database at this version or later has all the base schema gave it

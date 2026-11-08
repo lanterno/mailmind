@@ -200,6 +200,16 @@ class _OfAnAccount(_Page):
     account: str | None
 
 
+class Label(Answer):
+    name: str
+    count: int                              # messages carrying it, each once
+
+
+class Labels(Answer):
+    ok: Literal[True]
+    labels: list[Label]
+
+
 class FolderListing(_OfAnAccount):
     items: list[FolderRow]
     grouped: bool

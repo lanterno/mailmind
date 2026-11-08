@@ -184,6 +184,14 @@ class Queries:
                 "total": total, "offset": offset, "has_more": offset + len(items) < total, **scan}
 
 
+    def labels(self, account: str | None) -> dict[str, Any]:
+        """A Gmail account's own labels and how many messages carry each: its lanes in the rail. None on any other account."""
+        if not account:
+            raise Refused("account required")
+        with self._uow.read() as c:
+            rows = self._store.labels_of_account(c, AccountId(account))
+        return {"ok": True, "labels": [{"name": r["name"], "count": r["count"]} for r in rows]}
+
     def all_inboxes(self, offset: int, limit: int, group: bool = False) -> dict[str, Any]:
         """Every account's Inbox as one list, newest first, each row naming its account. It answers from what is stored, so
         an account that's away or still on its first scan holds up no one."""
