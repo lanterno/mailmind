@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers, RsvpDecision } from "../../lib/api/types";
 import { BriefPane } from "../assistant";
-import { composing, myAddresses, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
+import { composing, isMine, myAddresses, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, copyQuery, eachCopyOnce, type Copy } from "../../lib/copy";
 import { fileSize } from "../../lib/text";
@@ -256,7 +256,8 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
   const flagged = row?.flagged ?? false;
   const isDraft = Boolean(d?.is_draft);
   useDraftAhead(d ? copy : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
-  const quick = d && !isDraft && canQuickReply(d.from_addr, myAddresses(m.digest), row);
+  const mine = myAddresses(m.digest);
+  const quick = d && !isDraft && canQuickReply(d.from_addr, mine, row);
   return (
     <>
       <div className="rd-actions">
@@ -291,7 +292,7 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
           <div className="rd-top"><span className="rd-tag">{m.title}</span><span className="rd-when">{d.date}</span></div>
           <div className="rd-subj">{d.subject || "(no subject)"}</div>
           <div className="rd-from">
-            <SenderButton name={d.from_name ?? ""} addr={d.from_addr ?? ""} m={m} />
+            <SenderButton name={d.from_name ?? ""} addr={d.from_addr ?? ""} m={m} facts={isDraft || isMine((d.from_addr ?? "").toLowerCase(), mine) ? null : d.sender} />
             {d.to ? ` · to ${d.to.slice(0, 80)}` : ""}
           </div>
         </>

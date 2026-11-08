@@ -1,6 +1,11 @@
 // Paper Trail: a local ledger read out of subjects and snippets. No AI and no network, so it never needs either.
 import type { Row } from "../mailbox";
 
+// What a contact card opens with, and the reader says beside a sender's name.
+export interface SenderFacts { count: number; replied: number; first_ago: string | null }
+export const senderStats = (d: SenderFacts) =>
+  [`${d.count} email${d.count === 1 ? "" : "s"}`, `replied ${d.replied}×`, d.first_ago ? `first ${d.first_ago} ago` : ""].filter(Boolean).join(" · ");
+
 const MONEY = /(?:[$€£]\s?\d[\d.,]*\d|\d[\d.,]*\d\s?(?:USD|EUR|GBP|EGP|CHF|AED))/gi;
 const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", EGP: "E£", CHF: "CHF", AED: "AED" };
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];

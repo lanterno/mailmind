@@ -10,18 +10,24 @@ import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
 import { composing } from "../compose";
 import type { Mailbox } from "../mailbox";
+import { senderStats, type SenderFacts } from "./model";
+
+// A sender's initial, in the colour their address always gets.
+function Monogram({ name, addr, className }: { name: string; addr: string; className: string }) {
+  return <span className={className} aria-hidden="true" style={{ color: `hsl(${avatarHue(addr)} var(--mono-s) var(--mono-l))` }}>{(name || addr || "?")[0]!.toUpperCase()}</span>;
+}
 
 function Card({ addr, m, close }: { addr: string; m: Mailbox; close: () => void }) {
   const inside = useFocusFirst<HTMLDivElement>("button");
   const { data: d, isError } = useQuery({ queryKey: ["contact", addr], queryFn: () => get(`/api/contact?addr=${encodeURIComponent(addr)}`) });
   if (isError) return <div className="cc-load">Couldn’t load this sender.</div>;
   if (!d) return <div className="cc-load" role="status">Loading…</div>;
-  const stats = [`${d.count} email${d.count === 1 ? "" : "s"}`, `replied ${d.replied}×`, d.first_ago ? `first ${d.first_ago} ago` : "", d.last_ago ? `last ${d.last_ago} ago` : ""].filter(Boolean).join(" · ");
+  const stats = [senderStats(d), d.last_ago ? `last ${d.last_ago} ago` : ""].filter(Boolean).join(" · ");
   const accounts = d.accounts ?? [], recent = d.recent ?? [];
   return (
     <div ref={inside}>
       <div className="cc-hd">
-        <span className="cc-mono" style={{ color: `hsl(${avatarHue(d.addr)} var(--mono-s) var(--mono-l))` }}>{(d.name || d.addr || "?")[0]!.toUpperCase()}</span>
+        <Monogram name={d.name} addr={d.addr} className="cc-mono" />
         <div><div className="cc-name">{d.name || d.addr}</div><div className="cc-addr">{d.addr}</div></div>
       </div>
       <div className="cc-stats">{stats}</div>
@@ -43,15 +49,18 @@ function Card({ addr, m, close }: { addr: string; m: Mailbox; close: () => void 
   );
 }
 
-export function SenderButton({ name, addr, m }: { name: string; addr: string; m: Mailbox }) {
+// Who wrote this, with what their card opens with beside it. `facts` come with the message, so showing them asks nothing of the
+// server, and only a click on the name asks for the card itself.
+export function SenderButton({ name, addr, m, facts }: { name: string; addr: string; m: Mailbox; facts?: SenderFacts | null }) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   if (!addr) return <span className="rd-sender"><span className="nm">{name}</span></span>;
   return (
     <>
       <button ref={button} className="rd-sender" title="About this sender" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
-        <span className="nm">{name}</span> <span className="ad">{addr}</span>
+        <Monogram name={name} addr={addr} className="rd-mono" /><span className="nm">{name}</span> <span className="ad">{addr}</span>
       </button>
+      {facts && <span className="rd-facts">{senderStats(facts)}</span>}
       <Popover className="contact-card rac" isOpen={open} triggerRef={button} placement="bottom start" offset={6} onOpenChange={setOpen}>
         <Dialog aria-label="About this sender"><Card addr={addr} m={m} close={() => setOpen(false)} /></Dialog>
       </Popover>
