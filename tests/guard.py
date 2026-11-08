@@ -24,9 +24,10 @@ ROOT = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 _data_dirs = {ROOT.lower()}
 
 # The owner's data at the repo root (CLAUDE.md, "Nothing personal is committed"), and the temp
-# files config.save and the saved views write beside it.
+# files config.save, the saved views and the snippets write beside it.
 PRIVATE = ("mailmind.db", "mailmind.db-*", "mailmind.config.json*", "mailmind_rules.json",
-           "mailmind_views.json", "*.jsonl", "*.sqlite", "*.db-journal", ".cfg-*.tmp", ".views-*.tmp",
+           "mailmind_views.json", "mailmind_snippets.json", "*.jsonl", "*.sqlite", "*.db-journal", ".cfg-*.tmp", ".views-*.tmp",
+           ".snippets-*.tmp",
            "mailmind.log", "mailmind.log.*")
 # A real AI call, a 1Password read and a Keychain read.
 PROGRAMS = ("claude", "op", "security")

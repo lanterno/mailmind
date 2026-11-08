@@ -9,12 +9,14 @@ mailmind_rules.json
 .rules-*.tmp
 .views-*.tmp
 .rules.lock
+.snippets-*.tmp
 
 # === Local data & caches (regenerated) ===
 mailmind.db
 mailmind.db-shm
 mailmind.db-wal
 mailmind_views.json
+mailmind_snippets.json
 *.sqlite
 *.db-journal
 *.jsonl
