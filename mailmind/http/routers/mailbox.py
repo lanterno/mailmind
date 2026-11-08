@@ -196,7 +196,7 @@ def router(mailbox):
 
     @r.post("/api/reconcile", responses=answers(Reconciled))
     def reconcile(body: ReconcileBody):
-        return mailbox.reconciler.do_reconcile(body.account, bool(body.dry_run), force=body.force is True)
+        return mailbox.reconciler.do_reconcile(body.account, bool(body.dry_run))
 
     @r.post("/api/sync-retry-account", responses=answers(SyncRetried))
     def sync_retry(body: SyncRetryBody):

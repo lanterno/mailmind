@@ -83,7 +83,7 @@ class Reconciler:
         res["live"] = len(live)
         res["ghosts"] = sum(1 for u in stored_uids if u not in live)
         if not live and res["stored"] > 0 and not force:
-            res["error"] = "empty SEARCH against non-empty store — skipped (use force)"
+            res["error"] = "empty SEARCH against non-empty store — skipped"
             return res
         if dry_run:
             return res
@@ -94,7 +94,7 @@ class Reconciler:
         return res
 
 
-    def _reconcile_folders(self, acct: Account, dry_run: bool = False, force: bool = False,
+    def _reconcile_folders(self, acct: Account, dry_run: bool = False,
                            priority: int = gates.Priority.INTERACTIVE, wait: bool = True) -> AccountPruned:
         """Reconcile each folder a sync has stored for `acct`, each as a job of its own on the
         account's gate, so a long run never holds it across folders. Returns one result for the
@@ -105,7 +105,7 @@ class Reconciler:
         for folder in self.reconciled_folders(acct["email"]):
             try:
                 res = gates.run(acct["email"], lambda f=folder: self.reconcile_account(
-                    acct, force=force, dry_run=dry_run, folder=f), priority=priority, wait=wait)
+                    acct, dry_run=dry_run, folder=f), priority=priority, wait=wait)
             except gates.Busy:
                 if not out["folders"]:
                     raise
@@ -162,15 +162,14 @@ class Reconciler:
         return reconcile_round
 
 
-    def do_reconcile(self, account: str | None, dry_run: bool, force: bool = False) -> dict[str, Any]:
-        """Reconcile the account named, or each in turn for "all", every folder a sync has stored.
-        force prunes even where the server's SEARCH came back empty against stored mail."""
+    def do_reconcile(self, account: str | None, dry_run: bool) -> dict[str, Any]:
+        """Reconcile the account named, or each in turn for "all", every folder a sync has stored."""
         self._accounts.preload_creds()
         try:
             accts = [self._accounts.get(account)] if account and account != "all" else self._accounts.accounts()
         except KeyError:
             raise Refused("unknown account")
-        results = [self._reconcile_folders(a, dry_run=dry_run, force=force) for a in accts]
+        results = [self._reconcile_folders(a, dry_run=dry_run) for a in accts]
         if not dry_run:
             stamp = now_iso()
             with open(settings.current().reconcile_audit, "a") as f:

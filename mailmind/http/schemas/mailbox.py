@@ -86,7 +86,6 @@ class BulkFileBody(RequestBody):
 class ReconcileBody(RequestBody):
     account: str | None = "all"
     dry_run: Flag | None = False
-    force: Flag | None = False
 
 
 class SyncRetryBody(RequestBody):
