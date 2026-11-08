@@ -1,10 +1,10 @@
 """Shared setup for the pytest-native tests in this directory.
 
 Before any MailMind module loads, this takes any Claude key out of the environment and installs
-the tripwire in guard.py. It takes MAILMIND_PROFILE and MAILMIND_NOSYNC out, so every test starts
-in the full profile and one that wants read-only sets it. It takes MAILMIND_HOME out too, so a
-test that forgets data_dir lands on the repo root, and has the tripwire guard the directory it
-named as it guards the repo root. Every test then fails if the tripwire refused anything during
+the tripwire in guard.py. It takes every variable `mailmind.platform.environment` declares out but
+the three modes the suite passes under either way (MAILMIND_WORKERS, MAILMIND_POOL and
+MAILMIND_WARM_FOLDERS), so every test starts in the full profile and one that wants another sets it. With MAILMIND_HOME gone, a test that forgets data_dir lands on the repo root, and the
+tripwire guards the directory it named as it guards the repo root. Every test then fails if the tripwire refused anything during
 it. The API itself is a local fake (fakes/anthropic_api.py) for the whole session; it refuses
 every call that lacks its key, and the `ai` fixture supplies that key. Without it there is no
 key, so AI is off and nothing reaches the fake.
@@ -22,12 +22,16 @@ import pytest
 import guard
 from mailmind.bootstrap import mailbox
 from mailmind.platform import perimeter
+from mailmind.platform import environment
 from mailmind.platform.logging import stop as stop_logging
 
-os.environ.pop("ANTHROPIC_API_KEY", None)
-os.environ.pop("MAILMIND_PROFILE", None)
-os.environ.pop("MAILMIND_NOSYNC", None)
-_home = os.environ.pop("MAILMIND_HOME", "")
+_home = os.environ.get("MAILMIND_HOME", "")
+# What a developer exported reaches no test, so each starts from the defaults. The modes the whole suite is meant to pass under
+# either way are the exception, so `MAILMIND_WORKERS=account just test` runs it under a gate for each account.
+_MODES = {environment.WORKERS.name, environment.POOL.name, environment.WARM_FOLDERS.name}
+for _variable in environment.VARIABLES:
+    if _variable.name not in _MODES:
+        os.environ.pop(_variable.name, None)
 os.environ["TZ"] = "UTC"            # "today" and local times must not depend on the machine
 time.tzset()
 if _home:
