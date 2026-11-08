@@ -27,13 +27,15 @@
     {
      "account": "bea@example.test",
      "filename": "comments.pdf",
+     "folder": "Drafts",
      "from": "Bea Novak",
+     "key": 21,
      "kind": "pdf",
      "part_id": "3",
      "pk": 21,
      "size": 45,
      "subject": "Re: Contract draft v2",
-     "url": "/api/message/21/attachment/3",
+     "url": "/api/message/attachment?key=21&folder=Drafts&part_id=3",
      "when": "16h ago"
     }
    ],
@@ -64,13 +66,15 @@
     {
      "account": "bea@example.test",
      "filename": "comments.pdf",
+     "folder": "Drafts",
      "from": "Bea Novak",
+     "key": 21,
      "kind": "pdf",
      "part_id": "3",
      "pk": 21,
      "size": 45,
      "subject": "Re: Contract draft v2",
-     "url": "/api/message/21/attachment/3",
+     "url": "/api/message/attachment?key=21&folder=Drafts&part_id=3",
      "when": "16h ago"
     }
    ],

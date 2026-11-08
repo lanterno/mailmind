@@ -76,7 +76,7 @@ def test_the_assistants_ports_only_read():
     """A plan's confirm runs through the mail's own contexts, so nothing the Assistant is handed can change mail."""
     from mailmind.bootstrap import assistant
     allowed = {"_Mail": {"fetch_body",                                 # fills a local cache, and writes to no server
-                         "pk_now", "accounts", "get_message", "any_copy", "for_asking", "brief_rows", "delta_rows",
+                         "copy_now", "accounts", "get_message", "any_copy", "for_asking", "brief_rows", "delta_rows",
                          "sent_since", "received_since", "received_by_bucket", "needs_you_rows", "awaited_threads",
                          "replylater_due", "senders_cleaned", "draft_candidates", "thread_stamps", "message_stamp",
                          "thread_anchor_pk", "conversation_rows", "message_to_reply_to"},

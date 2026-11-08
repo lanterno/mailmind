@@ -219,6 +219,8 @@
    "recent": [
     {
      "account": "ada@example.test",
+     "folder": "INBOX",
+     "key": 11,
      "pk": 11,
      "seen": false,
      "subject": "The finished quilt",
@@ -227,6 +229,8 @@
     },
     {
      "account": "ada@example.test",
+     "folder": "INBOX",
+     "key": 2,
      "pk": 2,
      "seen": false,
      "subject": "Re: Lunch on Thursday?",
@@ -235,6 +239,8 @@
     },
     {
      "account": "ada@example.test",
+     "folder": "INBOX",
+     "key": 1,
      "pk": 1,
      "seen": true,
      "subject": "Lunch on Thursday?",
@@ -243,6 +249,8 @@
     },
     {
      "account": "ada@example.test",
+     "folder": "Archive",
+     "key": 16,
      "pk": 16,
      "seen": true,
      "subject": "Quilt pattern ideas",

@@ -14,7 +14,9 @@
     {
      "account": "ada@example.test",
      "date": "2026-10-27T10:40:00+00:00",
+     "folder": "INBOX",
      "from": "Lin Mori",
+     "key": 2,
      "pk": 2,
      "snippet": "12:30 is perfect. See you there.",
      "subject": "Re: Lunch on Thursday?"

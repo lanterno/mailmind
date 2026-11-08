@@ -37,6 +37,12 @@
     {
      "count": 1,
      "label": "Contracts",
+     "messages": [
+      {
+       "folder": "INBOX",
+       "key": 18
+      }
+     ],
      "pks": [
       18
      ]
@@ -118,6 +124,12 @@
     {
      "count": 1,
      "label": "Contracts",
+     "messages": [
+      {
+       "folder": "INBOX",
+       "key": 18
+      }
+     ],
      "pks": [
       18
      ]
@@ -149,6 +161,12 @@
     {
      "count": 1,
      "label": "Contracts",
+     "messages": [
+      {
+       "folder": "INBOX",
+       "key": 18
+      }
+     ],
      "pks": [
       18
      ]
@@ -184,6 +202,12 @@
     {
      "count": 1,
      "label": "stub label",
+     "messages": [
+      {
+       "folder": "INBOX",
+       "key": 1
+      }
+     ],
      "pks": [
       1
      ]
