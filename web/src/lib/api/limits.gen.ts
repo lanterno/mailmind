@@ -30,5 +30,6 @@ export const PREFERENCE_DEFAULTS = {
   quiet_until: "07:00",
   guide_offered: false,
   morning_brief: false,
+  auto_tidy: false,
   ai_daily_limit_usd: 15.0,
 } as const;
