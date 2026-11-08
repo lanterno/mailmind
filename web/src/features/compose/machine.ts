@@ -5,12 +5,12 @@
 import { GUARD_ARM_MS, guardFanout, guardLine, guardList, isMine, type GuardSwap, type NearMiss } from "./sendGuard";
 import { resumeHidesAi, resumeNotice, resumeOpts, resumeSig, type ReopenedDraft, type ResumeFields } from "./draftResume";
 import type { LIMITS } from "../../lib/api/limits.gen";
-import type { DraftTone, RewriteOp } from "../../lib/api/types";
+import type { DraftTone, RewriteOp, Snippet, SnippetVerb } from "../../lib/api/types";
 import type { Copy } from "../../lib/copy";
 import type { Store } from "../../lib/store";
 import {
   blocks, chip, DRAFT_TONES, draftHash, FIELDS, fmtWhen, forwardSeed, guardView, isHard, isNewToYou, isPicture, looksLikeAddr, namesItself, nothingToSave, payloadOf,
-  pictureMark, pictureParts, QUICK, rcptAddr, recipientProblem, redirectOf, replySeed, runChecks, splitChips, withoutMark, withPictures,
+  pictureMark, pictureParts, placeholderAfter, placeholderBefore, QUICK, rcptAddr, recipientProblem, redirectOf, replySeed, runChecks, snippetOffered, splitChips, withoutMark, withPictures, wordBefore,
   type AnyWarning, type Attachment, type Composer, type Field, type OpenOptions, type OriginalMail, type Payload, type Person,
 } from "./model";
 
@@ -72,6 +72,7 @@ export function createComposing(env: Env) {
   const view = env.createStore<Composer | null>(null);
   const float = env.createStore<SendFloat | null>(null);
   const laterOpen = env.createStore(false);
+  const snippets = env.createStore<Snippet[]>([]);
   let c: Composer | null = null;
   let nextId = 1;
   let autosaver: ReturnType<typeof setInterval> | undefined;
@@ -126,8 +127,9 @@ export function createComposing(env: Env) {
       autoCc: opts.autoCc ? opts.autoCc.map((a) => a.toLowerCase()) : null, redirect: opts.redirect ?? null,
       ack: { subject: Boolean(opts.ack?.subject), attach: Boolean(opts.ack?.attach), fanout: Number(opts.ack?.fanout) || 0, unchecked: false, near: opts.ack?.near ?? [], redirect: Boolean(opts.ack?.redirect) },
       guard: null, pendingAfter: 0, participants: new Set((opts.participants ?? []).map((a) => a.toLowerCase())),
-      people: new Map(), thin: false, knownQ: new Set(), newSay: new Set(), rwUndo: null, ai: "", previewing: false, preview: null,
+      people: new Map(), thin: false, knownQ: new Set(), newSay: new Set(), rwUndo: null, ai: "", previewing: false, preview: null, offer: null, filling: false,
     };
+    void loadSnippets();
     autosaver = setInterval(autosaveTick, AUTOSAVE_MS);
     knownQueue(c, [...c.to, ...c.cc, ...c.bcc].map((x) => x.v), false);   // prefilled chips are marked silently
     publish();
@@ -250,10 +252,83 @@ export function createComposing(env: Env) {
   function edit(field: "subject" | "body", value: string) {
     if (!c) return;
     c[field] = value;
+    if (field === "body") noteOffer(c);
     markEdited(c);
     retireGuard(c);
     publish();
   }
+
+  /* ---------- snippets ---------- */
+  async function loadSnippets() {
+    try {
+      const d = await env.get("/api/snippets");
+      if (Array.isArray(d.snippets)) snippets.set(d.snippets as Snippet[]);
+    } catch {
+      // the last list read stands: none of this stops a message being written
+    }
+  }
+  function noteOffer(x: Composer) {
+    const [at, end] = env.selection(), word = at === end ? wordBefore(x.body, at) : null;
+    const offer = word ? snippetOffered(snippets.get(), word.word) : null, changed = offer !== x.offer;
+    x.offer = offer;
+    return changed;
+  }
+  function caretMoved() {
+    if (c && noteOffer(c)) publish();
+  }
+  // Words into the text between two places, the cursor on the first placeholder they hold, or after them if they hold none.
+  function bringIn(x: Composer, from: number, to: number, text: string) {
+    x.body = x.body.slice(0, from) + text + x.body.slice(to);
+    const after = from + text.length, first = placeholderAfter(x.body, from), here = first && first[1] <= after ? first : null;
+    x.offer = null;
+    x.filling = Boolean(here);
+    leavePreview(x);
+    markEdited(x);
+    retireGuard(x);
+    publish();
+    env.focus("body");
+    env.select(here ? here[0] : after, here ? here[1] : after);
+  }
+  function insertSnippet(s: Snippet) {
+    if (!c) return;
+    const [at, end] = env.selection();
+    bringIn(c, at, end, s.text);
+  }
+  // Tab in the text: brings in what the word before the cursor names, then goes through what that left to fill in. Otherwise it
+  // is the key it always was, and past the last placeholder it moves on, so it never holds anyone in the box. Says if it did anything.
+  function tabInBody(back: boolean) {
+    const x = c;
+    if (!x) return false;
+    const [at, end] = env.selection();
+    const word = !back && at === end ? wordBefore(x.body, at) : null, s = word && snippetOffered(snippets.get(), word.word);
+    if (word && s) {
+      bringIn(x, word.from, at, s.text);
+      return true;
+    }
+    if (!x.filling) return false;
+    const next = back ? placeholderBefore(x.body, at) : placeholderAfter(x.body, end);
+    if (next) env.select(next[0], next[1]);
+    else {
+      x.filling = false;
+      publish();
+    }
+    return Boolean(next);
+  }
+  function selectedText() {
+    const [at, end] = env.selection();
+    return c ? c.body.slice(at, end) : "";
+  }
+  async function changeSnippets(change: { verb: SnippetVerb; trigger: string; text?: string }) {
+    try {
+      const d = await env.post("/api/snippets", change);
+      snippets.set(d.snippets as Snippet[]);
+      return true;
+    } catch (e) {
+      env.toast(`Couldn’t ${change.verb} that snippet: ${e instanceof Error ? e.message : ""}`);
+      return false;
+    }
+  }
+
   function setFrom(value: string) {
     if (!c) return;
     c.from = value;
@@ -922,10 +997,11 @@ export function createComposing(env: Env) {
   }
 
   return {
-    view, float, laterOpen,
+    view, float, laterOpen, snippets,
     isOpen: () => c !== null,
     open, close, discard, save, autosaveTick, send, makeRoom,
     edit, setFrom, setTyped, commitChip, removeChip, showCopies, addFiles, removeAttachment, preview, write,
+    caretMoved, tabInBody, insertSnippet, selectedText, changeSnippets,
     dismissGuard, confirmGuard, guardFix,
     reply, forward, editDraft, quickReply, openDraftAhead, queued,
     aiOffered, aiDraft, aiRewrite, rewriteUndo,

@@ -2,7 +2,7 @@
 // and the send-time check's input. The machine beside it runs these.
 import { guardBlocks, guardCheck, guardHard, guardLine, isMine, type GuardFix, type GuardSnapshot, type GuardWarning, type NearMiss } from "./sendGuard";
 import { resumeFields, type ResumeFields } from "./draftResume";
-import type { ComposeMode, DraftTone, PictureType } from "../../lib/api/types";
+import type { ComposeMode, DraftTone, PictureType, Snippet } from "../../lib/api/types";
 
 export type Field = "to" | "cc" | "bcc";
 export const FIELDS: Field[] = ["to", "cc", "bcc"];
@@ -76,7 +76,27 @@ export interface Composer {
   ai: "" | "draft" | "rewrite";
   previewing: boolean;            // the box shows how the message will read, not what you typed
   preview: Preview | null;        // null while it's being asked for
+  offer: Snippet | null;          // what Tab would bring in where the cursor is
+  filling: boolean;               // Tab goes through the {{placeholders}} a snippet brought in
 }
+
+// A snippet's name as typed before the cursor: a word that opens with `;`. Whether it names one is for the list to say.
+export function wordBefore(body: string, caret: number): { from: number; word: string } | null {
+  let from = caret;
+  while (from > 0 && !/\s/.test(body[from - 1]!)) from--;
+  return from < caret && body[from] === ";" ? { from, word: body.slice(from + 1, caret) } : null;
+}
+// What that word brings in: the snippet of that name, or the only one it begins.
+export function snippetOffered(list: Snippet[], word: string): Snippet | null {
+  const typed = word.toLowerCase();
+  const starting = typed ? list.filter((s) => s.trigger.startsWith(typed)) : [];
+  return starting.find((s) => s.trigger === typed) ?? (starting.length === 1 ? starting[0]! : null);
+}
+
+// Each {{placeholder}} a text holds, as where it starts and ends.
+const placeholders = (text: string) => [...text.matchAll(/\{\{[^{}\n]{1,64}\}\}/g)].map((m): [number, number] => [m.index, m.index + m[0].length]);
+export const placeholderAfter = (text: string, at: number) => placeholders(text).find(([start]) => start >= at) ?? null;
+export const placeholderBefore = (text: string, at: number) => placeholders(text).filter(([, end]) => end <= at).at(-1) ?? null;
 
 export function parseAddrs(s: unknown): string[] { return String(s ?? "").match(/[^\s<>,;"]+@[^\s<>,;"]+/g) ?? []; }
 export function addrOf(s: unknown): string { return parseAddrs(s)[0] ?? ""; }
