@@ -27,6 +27,7 @@ export function useRealtime() {
       again("messages");
       again("folders");
       again("screener");
+      again("tidy");
       clearTimeout(digestSoon);
       digestSoon = setTimeout(() => again("digest"), 400);
     };

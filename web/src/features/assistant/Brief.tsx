@@ -1,12 +1,16 @@
 // Today's brief: what the Inbox opens on when nothing is open. The narrative is Claude's; the cards, tallies and side
 // column come from the digest, so they stand with AI off.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { go, type DigestList, type ListSource } from "../../app/route";
+import { get, post } from "../../lib/api/client";
 import { EMPTY } from "../../lib/emptyWords";
 import { minute } from "../../lib/clock";
 import { copyFromId, copyId, copyOf } from "../../lib/copy";
 import { askConfirm } from "../../lib/confirm";
+import { store, stored } from "../../lib/store";
 import { avatarHue, initialsOf, shortAddress } from "../../lib/text";
+import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { Scene } from "../../lib/ui/Scene";
 import { answer, peekCards, useDraftChip } from "../compose";
@@ -129,6 +133,32 @@ function Hero() {
   );
 }
 
+const TIDY_DISMISSED = "mm_tidy_dismissed";
+
+// What Tidy filed by itself, for someone who turned it on: how many, which, and one click to take it all back.
+function TidyRun() {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["tidy"], queryFn: () => get("/api/tidy") });
+  const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(() => stored(TIDY_DISMISSED));
+  const undo = useMutation({
+    mutationFn: (group: string) => post("/api/tidy/undo", { group }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["tidy"] }),
+    onError: () => toast("Couldn’t take that back."),
+  });
+  if (!data?.group || data.group === dismissed) return null;
+  const group = data.group, n = data.filed;
+  return (
+    <div className="bf-tidy" data-tidy-run>
+      <span><Icon name="wind" /> We filed <b>{n}</b> low-priority message{n === 1 ? "" : "s"} for you.</span>
+      <button className="bf-tally" aria-expanded={open} onClick={() => setOpen(!open)}>Review</button>
+      <button className="bf-tally" disabled={undo.isPending} onClick={() => undo.mutate(group)}>Undo</button>
+      <button className="bf-tally" onClick={() => { store(TIDY_DISMISSED, group); setDismissed(group); }}>Dismiss</button>
+      {open && <ul className="bf-tidied">{data.items.map((it, i) => <li key={i}><b>{it.who || "Unknown"}</b> {it.subject || "(no subject)"}</li>)}</ul>}
+    </div>
+  );
+}
+
 export function BriefPane({ m }: { m: Mailbox }) {
   const hidden = filing.useValue();
   const items = (m.digest?.items ?? []).filter((it) => !hidden.has(copyId(it)));
@@ -202,6 +232,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
               </>
             )
             : <p className="bf-calm">{EMPTY.briefCalm}</p>}
+          <TidyRun />
           {tidy.length > 0 && (
             <div className="bf-tidy">
               <span><Icon name="wind" /> <b>{tidy.length}</b> low-priority message{tidy.length > 1 ? "s" : ""} the AI rates as safe to file: no next step, nothing asked of you.</span>
