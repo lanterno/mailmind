@@ -701,7 +701,7 @@ export function createComposing(env: Env) {
       env.toast("Couldn’t load the message");
       return null;
     }
-    return open({ ...forwardSeed(d), origKey: of.key });
+    return open({ ...forwardSeed(d, env.limits.attach_bytes), origKey: of.key });
   }
 
   // Your text in the box, the quote folded below, files, Bcc and thread as saved.

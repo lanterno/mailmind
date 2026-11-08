@@ -95,7 +95,7 @@ export const chip = (v: string): Recipient => ({ v, bad: !looksLikeAddr(v) });
 export interface OriginalMail {
   account: string; subject?: string | null; text?: string | null; html?: string | null; has_html?: boolean;
   from_addr?: string | null; from_name?: string | null; reply_to?: string | null; to?: string | null; cc?: string | null; date?: string | null;
-  attachments?: { is_inline?: boolean; content_id?: string | null }[];
+  attachments?: { travels?: boolean; size?: number }[];
 }
 
 const quoteOf = (d: OriginalMail): Quote => ({ html: d.has_html ? d.html ?? null : null, text: d.text ?? "", from: d.from_name || d.from_addr || "", date: d.date ?? "" });
@@ -121,11 +121,20 @@ export function replySeed(d: OriginalMail, all: boolean, mine: Set<string>): Ope
   };
 }
 
-export function forwardSeed(d: OriginalMail): OpenOptions {
-  return {
-    mode: "forward", from: d.account, to: [], subject: rePrefix(d.subject, "Fwd:"), quote: quoteOf(d),
-    fwdAttach: (d.attachments ?? []).filter((a) => !(a.is_inline && a.content_id)).length,
-  };
+// How many of the original's files a forward takes along: those the server marks, up to the budget it stops at.
+function filesForwarded(d: OriginalMail, attachBytes: number): number {
+  let n = 0, total = 0;
+  for (const a of d.attachments ?? []) {
+    if (!a.travels) continue;
+    total += a.size ?? 0;
+    if (total > attachBytes) break;
+    n += 1;
+  }
+  return n;
+}
+
+export function forwardSeed(d: OriginalMail, attachBytes: number): OpenOptions {
+  return { mode: "forward", from: d.account, to: [], subject: rePrefix(d.subject, "Fwd:"), quote: quoteOf(d), fwdAttach: filesForwarded(d, attachBytes) };
 }
 
 export function quoteLabel(c: Pick<Composer, "mode" | "fwdAttach">, open: boolean): string {
