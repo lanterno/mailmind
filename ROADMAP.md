@@ -186,16 +186,13 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## The API, now that one client and one door read it
 
-- **`types.gen.ts` from the schemas** · high value · effort M — Every route is on FastAPI with a model in `http/schemas/`, so
-  `web/src/lib/api/types.gen.ts` comes from the schemas rather than from the JSON the suite saw (`just gen-api`,
-  `tests/gen_api_types.py`).
 - **`/api/v2`, with `pk` out of the API** · high value · effort L — A `pk` isn't stable, since reconcile can renumber rows,
   and durable state keys on a message's `key`. The API still speaks in pks: a list row carries one beside `key`, the write
   routes take one, `/api/message/<pk>/...` names one, and `Opened` in `web/src/app/route.ts` puts one in the URL (`?m=<pk>`,
   with `&c=<thread>&ca=<account>` for a conversation), so a link kept across a renumber can open another message, or none.
   `bodyUrl` in `mailDoc.ts` already sends both, and the frame refuses a pair that disagrees. One key spans a message's copies,
   so what names a copy is its key and folder, as undo entries do and `store.pk_now` reads back. `/api/v2`, on the schemas
-  above, takes and answers that, and `route.ts`, `useBody` and `features/mailbox`'s filing move across. One client reads the
+  the page's types come from, takes and answers that, and `route.ts`, `useBody` and `features/mailbox`'s filing move across. One client reads the
   API, so the old paths can go in the same change.
 - **RFC 9457 errors, and no `ok: false` with a 200** · medium value · effort M — A use case raises one of `kernel.errors`, and
   `shared.failure_answer` answers it as `{"ok": false, "error": ...}` by `shared.STATUS`. Those become problem documents,
@@ -314,5 +311,5 @@ implementation.
 
 1. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
-2. **What the old door's going unblocks** (high) — `types.gen.ts` from the schemas, then `/api/v2` with `pk` out of the
-   API, and RFC 9457 errors with it, all above.
+2. **What the old door's going unblocks** (high) — `/api/v2` with `pk` out of the API, and RFC 9457 errors with it, both
+   above.

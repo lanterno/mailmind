@@ -135,9 +135,12 @@ and strict ones on what `[tool.pyright]` lists, which a package joins once it re
 pytest's `--import-mode=importlib` keeps a folder like `tests/unit/calendar` from shadowing a module.
 
 `just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, lints it with ESLint and runs its Vitest suites; it installs `web/node_modules` from the lockfile if they
-are missing. `just gen-api` runs the whole test suite with `MAILMIND_RECORD_API` set and
-writes `web/src/lib/api/types.gen.ts` from the JSON answers it saw, shapes only (`tests/gen_api_types.py`), since the routes
-have no schema to generate from: run it when an answer's shape changes, and review the diff.
+are missing. First it writes the API's types afresh and fails if they differ from `web/src/lib/api/schema.gen.ts`, saying to run
+`just gen-api`. That takes a second or two: `tests/openapi_doc.py` writes the OpenAPI document of the app the routers make (no data
+directory read, nothing sent, and out of the command line's reach), and openapi-typescript writes `schema.gen.ts` from it. Run it when a
+schema in `mailmind/http/schemas/` or a route changes, and review the diff, in a commit of its own. `lib/api/types.ts` reads that by path:
+`GetAnswers` and `PostAnswers`, each a route's JSON answer at 200 (a file, a document or a stream has none), `PostBodies`, and `AnyOf`,
+a union read field by field for code that takes each of its shapes as one, as a list's rows do.
 
 `web/eslint.config.js` covers `web/src` only: typescript-eslint, `react-hooks` and `jsx-a11y`, each finding an error. A disable sits on its
 line with a reason. Three rules are our own:
@@ -146,7 +149,7 @@ line with a reason. Three rules are our own:
 - A feature imports another only through its `index.ts`, which holds what the others use (`lint/slices.js`). `app/` and `main.tsx` compose the features and may import any file. A barrel that grows can close a cycle: nothing at a module's top level may read another feature's binding.
 - `machine.ts`, `model.ts`, `sendGuard.ts`, `draftResume.ts`, `linkRisk.ts` and any `*.machine.ts` are pure: no DOM, no fetch, and only each other and types as imports. The machine gets its stores through `Env`.
 
-Never disable `react-hooks/exhaustive-deps` or `rules-of-hooks`: the React Compiler quietly skips a component that does (`react-hooks/rule-suppression` refuses it). What an effect reads but doesn't run for goes through `useEffectEvent`. typescript-eslint needs a TypeScript with a JavaScript API and `tsc` is on 7, which has none, so it and a TypeScript 6 live in the `web/lint` workspace until it supports 7.
+Never disable `react-hooks/exhaustive-deps` or `rules-of-hooks`: the React Compiler quietly skips a component that does (`react-hooks/rule-suppression` refuses it). What an effect reads but doesn't run for goes through `useEffectEvent`. typescript-eslint needs a TypeScript with a JavaScript API and `tsc` is on 7, which has none, so it and a TypeScript 6 live in the `web/lint` workspace until it supports 7. openapi-typescript needs one too, and takes only a TypeScript 5, which npm can't give it beside that 6, so it and a TypeScript 5 live in the `web/gen-api` workspace.
 
 `just audit` (part of `just verify`) looks up what `uv.lock` and `web/package-lock.json` pin: `pip-audit` for the first, `osv-scanner` for both.
 A finding fails it. With no network it says so and passes. `web/osv-scanner.toml` holds what it may pass over, each with its reason and a date it lapses on.
@@ -169,7 +172,7 @@ an inline `<script>` in `web/index.html` or raw control bytes in the app's sourc
   `app/route.ts` writes one) answer 404 and say how to build, and `python -m mailmind serve` logs a line saying so. `/next` redirects, to the app's own
   places only. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
   restart changes. A tab that loaded another offers a reload (`newBuild` in `app/realtime.ts`). `web/src` is strict TypeScript, and its API client
-  is `lib/api/client.ts`, typed by `lib/api/types.gen.ts`. Where you are lives in the URL
+  is `lib/api/client.ts`, typed by `lib/api/types.ts` from the routes' schemas. Where you are lives in the URL
   (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
   and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
   `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
@@ -516,8 +519,9 @@ def snooze(body: SnoozeBody):
   route whose `Problem` says more names a subclass of `Failure`.
 - Under test (`tests/schema_contract.py`, through the `app` fixture) each JSON answer of a route must fit its model,
   with no field it doesn't name, and a use case reading a name its model doesn't declare fails the test. So the suite is what says
-  a model is true, and a golden that changes is a question, not an update. `web/src/lib/api/types.gen.ts` holds the shapes the
-  suite saw, a place to start. What walks the routes (`tests/route_tables.py`: the perimeter matrix, the error scrubbing, the
+  a model is true, and a golden that changes is a question, not an update. The page's types come from the models
+  (`just gen-api`), so a model that says less than its route answers is one the page can't read. A file, a document or a stream
+  answers `answers(NotJson)`: `Route` gives its 200 no model and no media type, so OpenAPI gives it no JSON. What walks the routes (`tests/route_tables.py`: the perimeter matrix, the error scrubbing, the
   malformed-input walk) reads the routers, so a new route needs no edit there, and a stand-in for a handler is `route.work`.
 
 A route or a use case that can't do what was asked raises one of `mailmind.kernel.errors`, carrying what a person is told, and

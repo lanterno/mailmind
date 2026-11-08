@@ -688,7 +688,8 @@ These need [uv](https://docs.astral.sh/uv/). With [`just`](https://just.systems)
 together with the rest of the pytest suite in `tests/`. That suite drives the app against fake IMAP,
 SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
 `tests/golden/`. `just verify` adds lint (ruff, the import rules between the package's layers, and pyright), byte-compile, the
-frontend checks (the TypeScript's types, lint and tests, which need Node) and a look for known
+frontend checks (the page's API types against the routes' schemas, which `just gen-api` writes from their OpenAPI document,
+then the TypeScript's types, lint and tests, which need Node) and a look for known
 vulnerabilities in what the lockfiles pin.
 `just test-full` also runs the browser tests (`just test-browser` runs only those), which click
 through the app in Chromium, and `just test-dovecot` holds MailMind's IMAP code to the same promises against a
