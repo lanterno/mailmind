@@ -164,7 +164,7 @@ def test_the_audit_trail_shows_what_was_done(page, world):
     clean(page)
 
 
-def test_the_drawer_and_the_plan_pass_axe(page, world):
+def test_the_drawer_and_the_plan_pass_axe(page, world, every_theme):
     found = lambda: [(v["id"], [n["html"][:90] for n in v["nodes"]]) for v in Axe().run(page.pw, options={"iframes": False}).response["violations"]]
     issues(world)
     d = drawer(page)

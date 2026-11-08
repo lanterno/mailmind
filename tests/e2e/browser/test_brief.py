@@ -271,7 +271,7 @@ def test_mail_landing_elsewhere_says_so_and_takes_you_there(page, world, ai):
     clean(page)
 
 
-def test_the_page_has_nothing_axe_finds(page, world, ai):
+def test_the_page_has_nothing_axe_finds(page, world, ai, every_theme):
     judge(world, (LUNCH[1], 5, "action-needed", "Reply"), (RECEIPT, 1, "info", ""))
     brief_replies(ai)
     page.goto("/")

@@ -155,7 +155,7 @@ def test_a_card_that_cannot_load_says_so(page, world):
     clean(page)
 
 
-def test_the_screener_and_the_card_pass_axe(page, world):
+def test_the_screener_and_the_card_pass_axe(page, world, every_theme):
     found = lambda: [(v["id"], [n["html"][:90] for n in v["nodes"]]) for v in Axe().run(page.pw, options={"iframes": False}).response["violations"]]
     screener(page)
     page.pw.evaluate(FADES_DONE)

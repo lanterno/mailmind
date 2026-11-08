@@ -476,7 +476,7 @@ def test_a_narrow_window_folds_search_away_until_asked(page, world):
     clean(page)
 
 
-def test_axe_finds_nothing_on_the_list_or_the_reader(page, world):
+def test_axe_finds_nothing_on_the_list_or_the_reader(page, world, every_theme):
     from axe_playwright_python.sync_playwright import Axe
     opened(page)
     row(page, world, RECEIPT).click()
@@ -706,7 +706,7 @@ def test_focus_reading_hides_the_list_and_enter_or_escape_ends_it(page, world):
     clean(page)
 
 
-def test_axe_finds_nothing_with_the_palette_and_the_menus_open(page, world):
+def test_axe_finds_nothing_with_the_palette_and_the_menus_open(page, world, every_theme):
     from axe_playwright_python.sync_playwright import Axe
     opened(page)
     row(page, world, RECEIPT).click()

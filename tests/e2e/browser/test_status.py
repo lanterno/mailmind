@@ -163,7 +163,7 @@ def test_the_legend_comes_from_the_commands_and_names_keys_nothing_open_would_of
     clean(page)
 
 
-def test_axe_finds_nothing_on_status_help_or_settings(page, world):
+def test_axe_finds_nothing_on_status_help_or_settings(page, world, every_theme):
     from axe_playwright_python.sync_playwright import Axe
     found = lambda: {v["id"]: [n["target"] for n in v["nodes"]] for v in Axe().run(page.pw, options={"iframes": False}).response["violations"]}
     opened(page)

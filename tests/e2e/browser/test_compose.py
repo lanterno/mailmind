@@ -874,7 +874,7 @@ def test_rsvp_goes_out_after_its_ten_seconds_and_undo_stops_it(page, app, world)
 
 # ── accessibility ───────────────────────────────────────────────────────
 
-def test_axe_finds_nothing_in_the_composer_with_its_check_and_its_menu_open(page, world, ai):
+def test_axe_finds_nothing_in_the_composer_with_its_check_and_its_menu_open(page, world, ai, every_theme):
     from axe_playwright_python.sync_playwright import Axe
 
     def findings():

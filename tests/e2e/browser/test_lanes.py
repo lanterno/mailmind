@@ -136,7 +136,7 @@ def test_a_lane_in_the_palette_opens_as_a_lane(page, world):
 
 
 @pytest.mark.parametrize("view,mark", [("feed", ".fr-card"), ("papertrail", ".pt-row")])
-def test_a_lane_passes_axe(page, world, view, mark):
+def test_a_lane_passes_axe(page, world, view, mark, every_theme):
     lane(page, view)
     expect(page.locator(mark).first).to_be_visible()
     page.pw.evaluate(FADES_DONE)

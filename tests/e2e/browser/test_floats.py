@@ -4,6 +4,7 @@ tests/e2e/browser/test_compose.py and web/src/features/compose/machine.test.ts."
 import re
 
 import pytest
+from axe_playwright_python.sync_playwright import Axe
 from playwright.sync_api import expect
 
 pytestmark = pytest.mark.browser
@@ -126,4 +127,42 @@ def test_the_send_and_undo_floats_are_read_out_and_the_ticking_number_is_not(pag
     page.clock.run_for(8_000)
     expect(float_).to_contain_text("Sent")
     expect(status).to_contain_text("Sent · 1 recipient")
+    clean(page)
+
+
+# ── what axe finds on them, and on a row in each of its states, in every theme ─
+
+# Axe judges contrast as it finds it, so fades must end first. Not the bar, which is made to run out.
+FADES_DONE = """Promise.all(document.getAnimations()
+    .filter(a => a.animationName !== 'floatDrain' && a.effect.getComputedTiming().iterations !== Infinity)
+    .map(a => a.finished.catch(() => null)))"""
+
+
+def axe_says(page):
+    page.pw.evaluate(FADES_DONE)
+    found = Axe().run(page.pw, options={"iframes": False}).response["violations"]
+    return {v["id"]: [n["target"] for n in v["nodes"]] for v in found}
+
+
+def test_axe_finds_nothing_on_a_rows_states_or_the_floats(page, world, every_theme):
+    opened(page)
+    rows = page.locator("#rows .row.cmsg")
+    rows.filter(has=page.locator(".jb")).first.click()         # the chip, on a selected row
+    expect(page.locator("#rows .row.sel .jb")).to_be_visible()
+    rows.first.locator(".cbx").click(force=True)               # a marked row beside it
+    rows.nth(1).hover()
+    assert axe_says(page) == {}
+
+    page.keyboard.press("e")
+    expect(page.locator("#undoFloat")).to_contain_text("Archived")
+    assert axe_says(page) == {}
+
+    writing(page, LIN, "Fabric order", "Hi Lin, the linen came in.")
+    send(page)
+    float_ = page.locator("#sendFloat")
+    expect(float_).to_contain_text("Sending in")
+    assert axe_says(page) == {}
+    page.clock.run_for(11_000)
+    expect(float_).to_contain_text("Sent")
+    assert axe_says(page) == {}
     clean(page)

@@ -190,7 +190,7 @@ def test_opening_the_hub_again_reads_it_again(page, world):
     clean(page)
 
 
-def test_the_hub_passes_axe(page, world):
+def test_the_hub_passes_axe(page, world, every_theme):
     hub_files(world, 3)
     docs(page)
     expect(page.locator("#docList .doc-row").first).to_be_visible()

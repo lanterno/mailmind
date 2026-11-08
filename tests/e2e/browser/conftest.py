@@ -97,3 +97,10 @@ def page(chromium, app, monkeypatch):
         yield p
     finally:
         ctx.close()
+
+
+@pytest.fixture(params=["light", "dusk", "dark"], ids=["day", "dusk", "night"])
+def every_theme(page, request):
+    """Runs the test once in each theme, as `mm_theme` names it and theme.js reads it before the first paint."""
+    page.pw.add_init_script(f"try {{ localStorage.setItem('mm_theme', '{request.param}'); }} catch (e) {{}}")
+    return request.param
