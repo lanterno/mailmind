@@ -57,7 +57,7 @@ uv run pytest tests/unit/http/test_problems.py              # the problem docume
 uv run pytest tests/unit/http/test_route.py                 # what a route does around its handler, and what the app answers where none matches, on a toy router (183)
 uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (118)
 uv run pytest tests/unit/http/test_event_stream.py          # what a tab holds, and every way a stream ends, Ctrl-C included (12)
-uv run pytest tests/unit/http/test_export_route.py          # the download in chunks, and that no way it ends leaves its folder (7)
+uv run pytest tests/unit/http/test_export_route.py          # the download in chunks, and that no way it ends leaves its folder (17)
 ```
 
 The composer's send-time checks and reopen helpers are `web/src/features/compose/sendGuard.ts` and `draftResume.ts`, free of DOM
@@ -140,7 +140,7 @@ and `limits.gen.ts`, saying to run `just gen-api`. That takes a second or two: `
 app the routers make (no data directory read, nothing sent, and out of the command line's reach), and openapi-typescript writes
 `schema.gen.ts` from it. The same program writes `limits.gen.ts`, `LIMITS`, from `mailmind/http/page_limits.py`'s `PAGE_LIMITS`: each
 limit the page holds a person to before it asks (what one message's files may come to, the rows one `/api/bulk/file` names, the copies one
-`/api/snooze` names, the length of an instruction for a drafted reply, Undo Send's window), as the constant its use case enforces. They are a build's, as the types are, so nothing serves them
+`/api/snooze` names, the length of an instruction for a drafted reply, the shortest and longest Undo Send's window may be set to, the most the AI's daily limit may be set to), as the constant its use case enforces. A send's own window comes on its answer (`undo_seconds`), and what each preference is with nothing said is `PAGE_PREFERENCE_DEFAULTS`. They are a build's, as the types are, so nothing serves them
 and nothing waits for them to load. Run it when a schema in `mailmind/http/schemas/`, a route or a limit changes, and review the diff, in a
 commit of its own. `lib/api/types.ts` reads the types by path: `GetAnswers` and `PostAnswers`, each a route's JSON answer at 200 (a
 file, a document or a stream has none), `PostBodies`, and `AnyOf`, a union read field by field for code that takes each of its shapes as
@@ -184,7 +184,7 @@ an inline `<script>` in `web/index.html` or raw control bytes in the app's sourc
   (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
   and filing, and `app/commands.ts` the one list of commands that the keys, the palette (⌘K) and the keyboard help all read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
   `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
-  Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
+  Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections and the Preferences tab, which reads and writes `/api/preferences` (`accounts.domain.preferences`, a `"preferences"` block in `mailmind.config.json`; the page's `lib/prefs.ts` holds them and brings in once what a browser kept under its old keys).
   `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_details.py` holds what an audit found the app has to do, and ROADMAP says what is left. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. The
   search box acts on Enter, and the new-mail pill names only mail that landed outside the list on screen, since a list refreshes in place. A value hooks read outside React is a `lib/store.ts` store, whose hook is `useValue`, since the compiler
   doesn't take a method named `use` for a hook. The compiler also keeps what a call with no reactive input gave, so a component reads the time or storage in a child mounted when it's needed, or through a store.
@@ -322,7 +322,7 @@ The app lives in `mailmind/`.
   `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the
   quote after it) and `frame` (a body as the document its frame loads). A `domain` package may import it.
 - `mailmind.kernel` stays standard library only and imports nothing else from `mailmind`. So far it
-  holds `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized), `snoozed` (whether a row is snoozed, as SQL), `assessment` (`Assessment`, what the AI said of a message and how it came to say it, its importance held to 1 to 5) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
+  holds `draft_tone` and `send_window` (a set and a limit two contexts share), `conversation` (a list's badge), `when` (`now_iso`, `rel_time`, `ago`), `addresses` (a typed recipient, split, validated and IDNA-normalized), `snoozed` (whether a row is snoozed, as SQL), `assessment` (`Assessment`, what the AI said of a message and how it came to say it, its importance held to 1 to 5) and `attention`, what the AI's verdict on a message asks of you: `needs_you`, `reply_worthy`,
   `commitment_worthy` and `safe_to_file`, and the first two as SQL. Queries ask it, list rows in the API carry
   each answer, and the page reads those and never works them out. `row` (`Row`, a stored row read by column name) and `parsed`
   (`is_list` and `is_object`, the narrowing of JSON as it parsed) are for the types of those that read one, and `parsed` also

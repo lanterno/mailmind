@@ -25,10 +25,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `discovery.adapters.views_file` and `curation.adapters.rules_file` both do atomic JSON-file persistence with a GET/POST pair and a UI — so
   this is a snippets store plus an expander in `features/compose/machine.ts`, which stays free of the
   DOM, and `{{placeholder}}` tab-through in `#cmpBody`.
-- **Configurable Undo-Send delay** · low value · effort S — The feature ships; only "configurable"
-  is unmet. `outbox_item.SEND_DELAY = 10` has no config key and no env override, and `UNDO_SECONDS`
-  in `machine.ts` is a 10 of its own. Keep 10s as the default and expose it in the Settings home below.
-
 ## AI that acts, not just describes
 
 - **Events and tasks extracted from prose** · high value · effort L — Nothing turns message text
@@ -160,38 +156,13 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   click-through popover from `SenderButton`; the key facts should appear inline in `.rd-from`. And there is no spoof
   warning at all: `replySeed` reads `reply_to` to pick the recipient but nothing ever compares it
   to `from_addr`.
-- **Density modes (Comfortable / Cozy / Compact)** · low value · effort M — Zero matches for
-  `density` or `data-density`; Mailbox row metrics are hardcoded in the `.row.cmsg` rules. Worth more
-  now that rows carry a two-line summary and a next-step chip: a `--row-pad` / `--row-lh` pair under `body[data-density]`, with Compact clamping the gist to one
-  line and hiding the chip, pairs naturally with the missing Preferences pane.
-- **High-contrast toggle** · low value · effort S — Unbuilt: no `body.hc`, no preference, and `lib/theme.ts` knows only
-  the three themes. Lower priority now that the base palette passes AA, but the light theme proved the pattern — one
-  body-class override of the `:root` token block is the whole feature.
 ## Setup, first run and housekeeping
 
-- **A real Settings home with a Preferences tab** · high value · effort M — `Connections` in `features/settings/Settings.tsx`
-  is a single-purpose "Email connections" dialog; there is no tab strip, and `Directory` exposes only
-  accounts/alias/signature/webmail. It has become the natural landing zone for several other gaps —
-  density, high-contrast, AI model, the AI daily limit (file only today), the 10s undo-send window,
-  the 45s and 20s intervals of `whileDown` in `app/realtime.ts`, notification preferences and quiet hours — and for the `mm_*`
-  localStorage keys that currently hold every preference and die with a browser-data clear. Needs
-  the tab strip, a preferences block in `mailmind.config.json`, and a read/write route.
-- **Standard-format export from the UI** · medium value · effort S — `mailmind/platform/db/export.py` implements
-  `export_eml()` and `export_mbox()` (the latter with proper mboxrd `From `-escaping), but the only
-  download route is `/api/export` (`_snapshot` in `http/routers/export.py`), a `.db` snapshot, and
-  Settings exposes exactly one control, `Backup`. No route references
-  `export_eml`/`export_mbox`. Since `.db` is a MailMind-only format, the stated escape hatch does
-  not actually let a user leave. Add a format picker beside `Backup` and a route
-  that streams a zip.
 - **60-second guided first run** · medium value · effort M — `.firstrun`, in `App`'s `empty`, is a static empty state
   shown only when no accounts are connected; there are no coach-marks and no flag
   gating a walkthrough. The surfaces worth explaining have multiplied since this was first proposed
   — today's brief, the folder rail and focus reading, ⌘K, `?ask` / `!do` prefixes, the
   Screener — so it is worth more now, not less. Gate on one flag.
-- **First-sync feedback, with a live count** · medium value · effort S — A first scan says so
-  ("Reading this folder for the first time…", from `last?.syncing` in `App`), but never how far it has got.
-  `/api/digest`'s `stats` already holds how many messages are stored, and `Status.tsx` polls it while a sync
-  runs, so "read N messages so far…" is a small change.
 - **Consistency sweep: buttons, empty-state strings, toast vs. persistent** · low value · effort M —
   Three concrete, checkable changes rather than a vibe: (1) one `.btn-retry` replacing `.ai-rerun`,
   `.frail-retry`, `.ob-retry` and `.do-confirm`; (2) one string table replacing the

@@ -311,7 +311,7 @@ automatically.
   message has gone out, no one can say whether the server took it: the outbox says it may have gone out and sends it
   again only if you ask. On Gmail, which files sent mail itself, Send again looks in Sent first and leaves it at that
   if the message is there.
-- **Undo Send** — a 10-second grace window with a live countdown that pulls the
+- **Undo Send** — a grace window (10 seconds unless you choose another, from 5 to 60, in Settings) with a live countdown that pulls the
   message back before it hits the wire and restores everything you'd written. If you're
   writing another message by then, it is saved to Drafts before the undone one takes its
   place, and if that save fails it stays open while the undone one waits behind Edit.
@@ -429,6 +429,7 @@ automatically.
   handling for Proton Bridge's low connection cap. An account's `"pool": true` asks for it between runs. Off by default while it's being tried out.
 - **A hung server costs a click about twelve seconds, not two minutes,** and Undo is offered as soon as it answers;
   the worker keeps trying. Two processes changing your rules can't lose each other's change.
+- **A first read counts as it goes.** A folder read for the first time says how many messages have arrived so far.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect.
@@ -445,8 +446,8 @@ automatically.
 ### Data ownership & trust
 
 - **One-click local backup** of your whole mailbox as a consistent `.db` snapshot from
-  Settings, plus a CLI that exports lossless per-message `.eml` files or standard
-  `mbox` archives (`python3 -m mailmind export --format eml --out DIR`). Read-only — it never
+  Settings, or a zip of lossless per-message `.eml` files or standard `mbox` archives, there
+  or from the command line (`python3 -m mailmind export --format eml --out DIR`). Read-only — it never
   touches IMAP.
 - **Upgrades can't cost you mail.** Before a new version changes the database's layout, MailMind
   backs it up beside it (the newest three kept, readable only by you), and each step of the change
@@ -505,6 +506,8 @@ automatically.
   reduced-motion mode, and a "disable single-key shortcuts" toggle for voice and
   switch users.
 
+- **Preferences live in Settings,** kept in your config file so they outlive a browser-data clear: Comfortable,
+  Cozy or Compact rows, high contrast, what notifies you and quiet hours, and the AI's daily limit.
 - **Rows work on hover.** Star and Mark read join Archive, Delete and Snooze, and resting on a
   row or opening a conversation readies its mail ahead.
 - **Time you can see.** Undo offers and send countdowns show a draining bar of the time left,
