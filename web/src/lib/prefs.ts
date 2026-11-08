@@ -50,6 +50,7 @@ function lastKnown(): Partial<Prefs> {
 }
 
 export const prefs = createStore<Prefs>({ ...PREFERENCE_DEFAULTS, ...lastKnown(), ...heldUnderOldKeys(stored) });
+export const prefsRead = createStore(false);     // the server has answered, so `prefs` is what it holds and not this browser's guess
 
 function showing(p: Prefs) {
   if (typeof document === "undefined") return;     // a test with no page
@@ -113,5 +114,6 @@ export async function loadPrefs() {
     const answer = old.length ? await post("/api/preferences/import", { held: heldUnderOldKeys(stored) }) : await get("/api/preferences");
     old.forEach((key) => store(key, null));
     settle(answer.preferences);
+    prefsRead.set(true);
   } catch { /* the last known values stand, and the next load asks again */ }
 }

@@ -516,6 +516,15 @@
   .legend{position:fixed;inset:0;z-index:120;display:none;place-items:center;background:var(--scrim)}
   .legend.show{display:grid}
   .legend .box{background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-lg);padding:26px 30px;max-width:430px;box-shadow:var(--sh-3)}
+  .guide{position:fixed;inset:0;z-index:140} .guide-dlg{position:fixed;inset:0;outline:none}
+  .guide-spot{position:fixed;border-radius:var(--r-md);box-shadow:0 0 0 200vmax var(--scrim);pointer-events:none}
+  .guide-spot.bare{inset:0;border-radius:0;background:var(--scrim);box-shadow:none}
+  .guide-card{position:fixed;background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-lg);box-shadow:var(--sh-3);padding:18px 20px;animation:fsFade var(--t-med) ease-out}
+  .guide-n{color:var(--faint);font-size:11.5px}
+  .guide-t{font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--ink);margin:2px 0 6px}
+  .guide-b{color:var(--soft);font-size:13px;line-height:1.5;margin:0}
+  .guide-foot{display:flex;align-items:center;gap:6px;margin-top:14px} .guide-foot .sp{flex:1}
+  #legGuide{margin-top:12px}
   .legend h3{font-family:var(--font-display);font-weight:600;font-size:17px;letter-spacing:-.01em;color:var(--ink);margin-bottom:14px}
   .legend .g{display:grid;grid-template-columns:auto 1fr;gap:4px 15px;color:var(--soft);font-size:12.5px}
   .legend kbd{background:var(--bg);border:1px solid var(--line-hi);border-bottom-width:2px;border-radius:var(--r-xs);padding:1px 6px;color:var(--soft);font-size:11px;font-family:var(--font-mono)}

@@ -28,6 +28,7 @@ import { FeedRiver, PaperTrail } from "../features/discovery/Lanes";
 import { ScreenerPane, useScreener } from "../features/curation/Screener";
 import { settingsOpen } from "../features/settings";
 import { helpOpen } from "../features/status/Help";
+import { Guide, guideOpen } from "../features/status/Guide";
 import { Settings } from "../features/settings/Settings";
 import { Help } from "../features/status/Help";
 import { badAccounts } from "../features/status/model";
@@ -154,7 +155,7 @@ function useKeys(m: Mailbox, commands: Command[]) {
   const chord = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (composing.isOpen()) return;   // it has keys of its own
+      if (composing.isOpen() || guideOpen.get()) return;   // each has keys of its own
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         paletteOpen.set(!paletteOpen.get());
@@ -260,6 +261,12 @@ export function App() {
     (copy) => m.snooze(copy, { preset: "tomorrow" }, [copyId(copy)]),
   );
   const ui = { toggleRail, openSearchBar, saveSearch: () => void saveSearch(m), createFilter: () => createFilter(m) };
+  // The guide opens on the page it points at.
+  const showGuide = () => {
+    setReadFocus(false);
+    if (opened || !inInbox || searching) go({ source: firstAccount ? { kind: "folder", account: firstAccount, folder: "INBOX" } : { kind: "allInboxes" }, opened: null });
+    guideOpen.set(true);
+  };
   const commands = buildCommands(m, ui);
   useKeys(m, commands);
 
@@ -394,7 +401,8 @@ export function App() {
       />
       <Panels m={m} />
       <DoPanel account={source?.kind === "folder" || source?.kind === "search" ? source.account : ""} />
-      <Help legend={() => legendOf(m, ui)} />
+      <Help legend={() => legendOf(m, ui)} onGuide={showGuide} />
+      <Guide m={m} />
       <Settings />
       <Curate />
       <OverLimitDialog />

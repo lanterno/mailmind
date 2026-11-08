@@ -69,13 +69,16 @@ function Keys({ legend }: { legend: () => Legend }) {
   );
 }
 
-export function Help({ legend }: { legend: () => Legend }) {
+export function Help({ legend, onGuide }: { legend: () => Legend; onGuide: () => void }) {
   const open = helpOpen.useValue();
   useLayer(open, () => helpOpen.set(false));
   return (
     <ModalOverlay className="legend show" isOpen={open} isDismissable onOpenChange={helpOpen.set}>
       <Modal className="modal-through">
-        <Dialog aria-labelledby="legendTitle" className="box"><Keys legend={legend} /></Dialog>
+        <Dialog aria-labelledby="legendTitle" className="box">
+          <Keys legend={legend} />
+          <button type="button" className="abtn" id="legGuide" onClick={() => { helpOpen.set(false); onGuide(); }}>Show me around</button>
+        </Dialog>
       </Modal>
     </ModalOverlay>
   );
