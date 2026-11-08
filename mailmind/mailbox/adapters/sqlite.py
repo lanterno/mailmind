@@ -244,6 +244,12 @@ def mint_key(c, account, message_id, from_addr, date_iso, subject):
     return c.execute("SELECT key FROM message_identity WHERE account=? AND identity=?", who).fetchone()[0]
 
 
+def is_known(c, account, message_id, from_addr, date_iso, subject):
+    """Whether any copy of this message has been seen before: what `mint_key` would find."""
+    who = (account, identity.of(message_id, from_addr, date_iso, subject))
+    return c.execute("SELECT 1 FROM message_identity WHERE account=? AND identity=?", who).fetchone() is not None
+
+
 def repair_keys(c):
     """What only a run of an older commit leaves behind. A row with no key gets one, and a key it comes back to is no
     longer gone."""

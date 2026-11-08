@@ -227,6 +227,13 @@ class _Curation:
                 [curation.SPAM, curation.BLOCKED, curation.MKT, curation.NOTIF,
                  curation.RECEIPT, curation.PROTECTED, curation.PERSONAL]]
 
+    def arrival_flags(self, c, pk):
+        from mailmind.bootstrap import curation
+        return curation.filters.on_arrival(c, pk)
+
+    def flags_queued(self):
+        filing.flags_queued()
+
 
 class _Attention:
     def snooze(self, body):

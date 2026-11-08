@@ -13,6 +13,7 @@ from mailmind.content.mime import Parsed, dec
 from mailmind.content.text import body_text_of, text_body
 from mailmind.kernel.ids import INBOX, AccountId, FolderName
 from mailmind.kernel.row import Connection, Row
+from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Stored,
                                                 StoredMail)
@@ -117,13 +118,14 @@ class Ingest:
 
 
     def _process(self, session: MailSession, acct: Account, uids: Sequence[int], folder: FolderName = INBOX,
-                 with_body: bool = False, advance: bool = True, stored: list[int] | None = None) -> Stored:
+                 with_body: bool = False, advance: bool = True, stored: list[int] | None = None, arriving: bool = False) -> Stored:
         """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
         has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);
         other folders get headers+flags only (fast) and fetch the body lazily on open.
         advance=False stores them without touching the folder's watermark: only a sync that has
         seen every UID up to a point may say the folder is synced to there.
-        `stored` gets the pks of what threading has yet to hear of."""
+        `stored` gets the pks of what threading has yet to hear of.
+        arriving=True says this mail is new to the folder, so the person's filters speak for what MailMind has never seen before."""
         rows: list[dict[str, Any]] = []
         max_uid, kept, junk = 0, 0, 0
         gmail = self._accounts.profile(acct).gmail_threads            # only Gmail understands X-GM-THRID
@@ -158,6 +160,7 @@ class Ingest:
                              "refs": (msg.get("References") or "").replace("\n", " ").strip(),
                              "recipient_addrs": mime.recipient_addrs(msg),
                              "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:self._store.RECIPIENTS_CHARS]})
+        queued = False
         for r in rows:
             snippet, invite = "", None
             if with_body and not r["is_junk"]:
@@ -175,6 +178,7 @@ class Ingest:
                 except Exception:
                     snippet = ""
             with self._uow.write() as c:
+                news = arriving and not self._store.is_known(c, acct["email"], r["message_id"], r["from_addr"], r["date_iso"], r["subject"])
                 pk = self._store.upsert_message(c, {
                     "account": acct["email"], "kind": acct["kind"], "folder": folder,
                     "uid": r["uid"], "message_id": r["message_id"], "gmail_thread": r["gmail_thread"],
@@ -190,15 +194,30 @@ class Ingest:
                     stored.append(pk)
                 self._store.set_ingested_headers(c, pk, r["in_reply_to"], r["refs"], r["recipients"])
                 self._index.index_message(c, pk)           # refresh FTS so recipients is searchable immediately
+                if news and self._apply_filters(c, pk):
+                    queued = True
                 if invite:                       # Today & next reads invites from stored bodies only
                     try:
                         self._keep_body(c, pk, invite, mime.parse(invite))
                     except Exception as e:
                         log.warning("keep invite %(account)s uid %(id)s", {"account": acct["email"], "id": r["uid"]}, exc_info=e)
+        if queued:
+            self._curation.flags_queued()
         if advance:
             with self._uow.write() as c:
                 self._store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)
         return kept, junk, max_uid
+
+
+    def _apply_filters(self, c: Connection, pk: int) -> bool:
+        """A message never seen before, stored and indexed on this connection: what the person's filters ask of it goes through
+        the command path, so the server hears. Stars and read marks only; no filter moves mail. Whether anything was queued."""
+        wanted = self._curation.arrival_flags(c, pk)
+        row = self._store.get_message(c, pk) if wanted else None
+        if row is None:
+            return False
+        changes = {flag: on for flag, on in wanted.items() if bool(row[flag]) != on}     # what it came with needs saying to no one
+        return bool(changes) and self._store.queue_flags(c, row, changes, "filter", now_iso())
 
 
     def reclassify(self, token: str) -> int:
@@ -255,7 +274,8 @@ class Ingest:
                     self._store.set_uidvalidity(c, acct["email"], folder, uidv)
             uids, scan = plan.to_fetch(s.uids(*plan.search))    # scan: the scan_state this sync leaves
             stored: list[int] = []
-            result = self._process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"), stored=stored)
+            arriving = not plan.whole and folder.upper() == "INBOX"     # a first or a whole scan reads what was already there
+            result = self._process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"), stored=stored, arriving=arriving)
             if scan:
                 with self._uow.write() as c:
                     self._store.set_scan_state(c, acct["email"], folder, scan)
