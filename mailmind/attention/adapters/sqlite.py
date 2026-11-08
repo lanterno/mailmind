@@ -1,4 +1,4 @@
-"""Attention's tables: `snoozes`, `muted` and `followups`.
+"""Attention's tables: `snoozes`, `muted`, `followups` and `tasks`.
 Each function takes its caller's connection and leaves the commit to it."""
 from mailmind.attention.domain import followups
 from mailmind.kernel import attention
@@ -319,3 +319,34 @@ def due_followup_keys(c):
     """The set of currently-due (account, thread_id) pairs — to detect a swap (count unchanged)."""
     return {(r["account"], r["thread_id"]) for r in
             c.execute("SELECT account, thread_id FROM followups WHERE state='due'").fetchall()}
+
+
+# ----------------------------------------------------------- tasks
+def add_task(c, account, key, folder, title, due, when):
+    """A task from this message. The same one confirmed again is the same row, with the date it was last given."""
+    c.execute("""INSERT INTO tasks(account, message_key, folder, title, due, created_at) VALUES(?,?,?,?,?,?)
+                 ON CONFLICT(message_key, title) DO UPDATE SET due=excluded.due""",
+              (account, key, folder, title, due, when))
+    return c.execute("SELECT id FROM tasks WHERE message_key=? AND title=?", (key, title)).fetchone()["id"]
+
+
+def task_rows(c, task_id=None):
+    """Tasks with the copy each message has now (none where it has gone), open before done, the soonest due first."""
+    only = "WHERE t.id=? " if task_id is not None else ""
+    return c.execute(f"""SELECT t.id, t.account, t.message_key, t.title, t.due, t.done_at, m.folder, m.uid, m.thread_id,
+                                m.subject, m.from_name, m.from_addr
+                         FROM tasks t LEFT JOIN messages m ON m.pk=COALESCE(
+                             (SELECT pk FROM messages WHERE message_key=t.message_key AND folder=t.folder
+                              AND pending_removal IS NULL ORDER BY pk DESC LIMIT 1),
+                             (SELECT pk FROM messages WHERE message_key=t.message_key AND pending_removal IS NULL
+                              ORDER BY pk DESC LIMIT 1))
+                         {only}ORDER BY t.done_at IS NOT NULL, t.due IS NULL, t.due, t.id""",
+                     (task_id,) if task_id is not None else ()).fetchall()
+
+
+def set_task_done(c, task_id, done_at):
+    return c.execute("UPDATE tasks SET done_at=? WHERE id=?", (done_at, task_id)).rowcount > 0
+
+
+def remove_task(c, task_id):
+    return c.execute("DELETE FROM tasks WHERE id=?", (task_id,)).rowcount > 0

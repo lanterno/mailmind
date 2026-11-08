@@ -1,4 +1,4 @@
-"""What the page asks of Attention: snooze, mute, follow-ups and reply later."""
+"""What the page asks of Attention: snooze, mute, follow-ups, reply later and tasks."""
 from mailmind.http import named, route
 from mailmind.http.schemas.attention import (
     MuteBody,
@@ -9,6 +9,12 @@ from mailmind.http.schemas.attention import (
     ReplyLaterBody,
     SnoozeBody,
     Snoozed,
+    TaskAdded,
+    TaskBody,
+    TaskDoneBody,
+    TaskGone,
+    TaskRemoveBody,
+    TaskList,
     Unsnoozed,
 )
 from mailmind.http.schemas.common import answers
@@ -52,5 +58,21 @@ def router(attention, mailbox):
     @r.post("/api/replylater", responses=answers(RepliedLater))
     def reply_later(body: ReplyLaterBody):
         return attention.followups.reply_later(thread(body))
+
+    @r.get("/api/tasks", responses=answers(TaskList))
+    def tasks():
+        return attention.tasks.listing()
+
+    @r.post("/api/tasks", responses=answers(TaskAdded))     # one someone confirmed, from the message `key` names
+    def add_task(body: TaskBody):
+        return attention.tasks.add(named.with_message(mailbox, body.model_dump(exclude_unset=True)))
+
+    @r.post("/api/tasks/done", responses=answers(TaskGone))
+    def task_done(body: TaskDoneBody):
+        return attention.tasks.mark(body.model_dump(exclude_unset=True))
+
+    @r.post("/api/tasks/remove", responses=answers(TaskGone))
+    def remove_task(body: TaskRemoveBody):
+        return attention.tasks.remove(body.model_dump(exclude_unset=True))
 
     return r

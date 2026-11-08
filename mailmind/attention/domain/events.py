@@ -51,3 +51,8 @@ class ReplyLaterChanged:
     """A person pinned the thread to Reply Later, or took it off."""
     account: str
     thread_id: str
+
+
+@dataclass(frozen=True)
+class TasksChanged:
+    """A task someone confirmed was added, marked or removed."""

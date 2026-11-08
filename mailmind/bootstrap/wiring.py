@@ -7,7 +7,7 @@ import threading
 
 from mailmind.accounts.api import AccountAdded, AccountChanged, AccountRemoved, CredentialsRejected
 from mailmind.attention.domain.events import (FollowUpDismissed, FollowUpsChanged, ReplyLaterChanged, SnoozeLifted, SnoozeSet,
-                                              SnoozeWoke, ThreadMuted, ThreadUnmuted)
+                                              SnoozeWoke, TasksChanged, ThreadMuted, ThreadUnmuted)
 from mailmind.bootstrap import accounts, background, compose, mailbox
 from mailmind.compose.api import DraftCopyRemoved, Failed, Sent
 from mailmind.platform import bus, profile, sse
@@ -83,6 +83,11 @@ def _after_reply_later(changed):
     sse.publish("followup", {"account": changed.account})
 
 
+def _after_tasks_changed(_changed):
+    """TasksChanged: another tab's list of tasks is out of date."""
+    sse.publish("tasks-changed", {})
+
+
 def wire():
     """Subscribe the app to what the workers publish on mailmind.platform.bus: a send
     that went out or an attempt that failed, a queued move applied and one that won't be refresh the
@@ -108,7 +113,8 @@ def wire():
                    bus.subscribe(ThreadUnmuted, _after_mute),
                    bus.subscribe(FollowUpsChanged, _after_follow_ups_changed),
                    bus.subscribe(FollowUpDismissed, _after_dismissal),
-                   bus.subscribe(ReplyLaterChanged, _after_reply_later)])
+                   bus.subscribe(ReplyLaterChanged, _after_reply_later),
+                   bus.subscribe(TasksChanged, _after_tasks_changed)])
     _wired.extend(bus.subscribe(topic, accounts.logins.changed) for topic in     # ahead of what starts a new worker
                   (AccountChanged, AccountRemoved))
     _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in

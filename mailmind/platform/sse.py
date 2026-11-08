@@ -38,6 +38,7 @@ TOPICS = frozenset({
     "folder-synced",      # the first scan of a folder ended (ok: whether it read the folder)
     "snooze-wake",        # snoozed mail came back
     "followup",           # the follow-ups changed
+    "tasks-changed",      # a task someone confirmed was added, marked or removed
     "mute",               # a conversation was muted or unmuted
     "draft-ready",        # a reply draft written ahead is ready
     "outbox",             # a send went out, or a change was queued: what the outbox panel shows

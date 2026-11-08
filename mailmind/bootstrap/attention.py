@@ -5,11 +5,12 @@ from mailmind.attention.adapters import sqlite as book
 from mailmind.attention.application.followups import Clocked, FollowUps
 from mailmind.attention.application.muting import Muting
 from mailmind.attention.application.snoozing import Snoozing
+from mailmind.attention.application.tasks import Tasks
 from mailmind.attention.application.threads import Threads
 from mailmind.bootstrap import mailbox
 from mailmind.platform.db.uow import UnitOfWork
 
-__all__ = ["book", "clocked", "followups", "muting", "snoozing"]
+__all__ = ["book", "clocked", "followups", "muting", "snoozing", "tasks"]
 
 class _Messages:
     def get(self, c, pk):
@@ -53,3 +54,4 @@ snoozing = Snoozing(_uow, book, _Messages(), _Undo())
 muting = Muting(_uow, book, _Messages(), _threads, _Undo())
 followups = FollowUps(_uow, book, _threads, _Accounts())
 clocked = Clocked(snoozing, followups)
+tasks = Tasks(_uow, book, _Messages(), _Accounts())

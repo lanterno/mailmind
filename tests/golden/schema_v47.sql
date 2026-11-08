@@ -139,6 +139,9 @@ CREATE TABLE snoozes( message_key INTEGER NOT NULL REFERENCES message_identity(k
 -- table sync_state
 CREATE TABLE sync_state ( account TEXT NOT NULL, folder TEXT NOT NULL DEFAULT 'INBOX', last_sync TEXT, last_uid INTEGER DEFAULT 0, uidvalidity INTEGER, last_ok_ts TEXT, -- health: last successful sync (added _m15) last_error TEXT, -- exception CLASS name only (scrubbed; never the message) last_error_ts TEXT, last_error_kind TEXT, -- coarse enum: TIMEOUT|AUTH|UIDVALIDITY|IMAP|NETWORK|UNKNOWN sync_count INTEGER DEFAULT 0, scan_state TEXT NOT NULL DEFAULT 'never', highest_modseq INTEGER, PRIMARY KEY(account, folder) );
 
+-- table tasks
+CREATE TABLE tasks( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, message_key INTEGER NOT NULL, folder TEXT NOT NULL, title TEXT NOT NULL, due TEXT, done_at TEXT, created_at TEXT NOT NULL, UNIQUE(message_key, title));
+
 -- table thread_links
 CREATE TABLE thread_links( name TEXT NOT NULL, message_pk INTEGER NOT NULL REFERENCES messages(pk) ON DELETE CASCADE, PRIMARY KEY(name, message_pk));
 
@@ -151,4 +154,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=46;
+PRAGMA user_version=47;

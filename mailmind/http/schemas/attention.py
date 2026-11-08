@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from mailmind.attention.api import BULK_CAP
-from mailmind.http.schemas.common import ACopy, Answer, Flag, NamesAMessage, Number
+from mailmind.http.schemas.common import ACopy, Answer, Flag, NamesAMessage, Number, RequestBody
 from mailmind.kernel.snoozed import SnoozePreset
 
 
@@ -34,6 +34,50 @@ class MuteBody(NamesAThread):
 
 class ReplyLaterBody(NamesAThread):
     on: Flag | None = None                  # left out, it pins
+
+
+class TaskBody(NamesAMessage):
+    """A task someone confirmed from the message `key` names, as they left it."""
+    title: str | None = None
+    due: str | None = None                  # a day, YYYY-MM-DD; left out, it has none
+
+
+class TaskRemoveBody(RequestBody):
+    id: Number
+
+
+class TaskDoneBody(TaskRemoveBody):
+    done: Flag | None = None                # left out, it is done
+
+
+class Task(Answer):
+    """A task and the copy its message has now: `key`, `folder` and `uid` are null once none is left."""
+    id: int
+    account: str
+    title: str
+    due: str | None
+    done: bool
+    key: int | None
+    folder: str | None
+    uid: int | None
+    thread_id: str | None
+    subject: str | None
+    from_name: str | None
+    from_addr: str | None
+
+
+class TaskList(Answer):
+    ok: Literal[True]
+    items: list[Task]
+
+
+class TaskAdded(Answer):
+    ok: Literal[True]
+    task: Task
+
+
+class TaskGone(Answer):
+    ok: Literal[True]
 
 
 class Snoozed(Answer):
