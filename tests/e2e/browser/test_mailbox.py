@@ -205,6 +205,23 @@ def test_a_message_undo_brought_back_opens_though_its_uid_changed(page, world):
     clean(page)
 
 
+def test_a_conversation_undo_brought_back_opens_with_no_old_uid_asked_for(page, world):
+    opened(page)
+    rows = page.locator("#rows .row[data-key]").filter(has_text="Lunch on Thursday")
+    rows.click()
+    expect(page.locator(".rd-subj, .thread").first).to_be_visible()
+    expect(page.locator("iframe.rd-iframe").first).to_be_visible()
+    page.keyboard.press("e")
+    expect(rows).to_have_count(0)
+    expect(page.locator("#undoFloat")).to_be_visible()
+    page.keyboard.press("z")
+    expect(page.locator("#toast")).to_have_text(re.compile("undone"))
+    expect(rows).to_have_count(1)
+    rows.click()
+    expect(page.locator("iframe.rd-iframe").first).to_be_visible()
+    clean(page)
+
+
 def test_a_refused_archive_puts_the_row_back_and_says_so(page, world):
     opened(page)
     r = row(page, world, RECEIPT)
