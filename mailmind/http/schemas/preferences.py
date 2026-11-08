@@ -37,6 +37,7 @@ class ChangedPreferences(RequestBody):
     quiet_hours: Flag | None = None
     quiet_from: str | None = None
     quiet_until: str | None = None
+    guide_offered: Flag | None = None
     ai_daily_limit_usd: Dollars | None = None
 
 
@@ -65,6 +66,7 @@ class Preferences(Answer):
     quiet_hours: bool
     quiet_from: str
     quiet_until: str
+    guide_offered: bool
     ai_daily_limit_usd: float
 
 

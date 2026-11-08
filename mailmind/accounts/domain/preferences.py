@@ -54,6 +54,7 @@ DEFAULTS: Mapping[str, Any] = {
     "quiet_hours": False,
     "quiet_from": "22:00",
     "quiet_until": "07:00",
+    "guide_offered": False,                 # the first-run guide has been offered, here and in any browser from now on
 }
 AI_DAILY_LIMIT = "ai_daily_limit_usd"       # at the file's top level, not in the block
 AI_DAILY_LIMIT_MAX = 1000                   # dollars: past this is a slip of the keyboard, not a budget
