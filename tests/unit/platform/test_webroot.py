@@ -143,7 +143,7 @@ def test_a_first_build_changes_what_a_tab_compares(nothing_built, tmp_path, monk
     assert webroot.is_built() is True and webroot.build() != before
 
 
-@pytest.mark.parametrize("path", ["/", "/all", "/search", "/m/ada%40example.test/INBOX", "/brief/needs"])
+@pytest.mark.parametrize("path", ["/", "/all", "/all/__snoozed__", "/search", "/m/ada%40example.test/INBOX", "/brief/needs"])
 def test_with_nothing_built_home_and_every_place_say_how_to_build_it(app, nothing_built, path):
     r = app.get(path)
     assert r.status == 404 and b"just build-web" in r.body and r.headers["content-type"].startswith("text/plain")
@@ -162,7 +162,7 @@ def test_with_nothing_built_the_event_stream_still_opens_and_says_so(app, nothin
         conn.close()
 
 
-@pytest.mark.parametrize("path", ["/", "/?m=3", "/all", "/search", "/search?q=x", "/m/ada%40example.test/INBOX", "/brief/needs",
+@pytest.mark.parametrize("path", ["/", "/?m=3", "/all", "/all/__snoozed__", "/search", "/search?q=x", "/m/ada%40example.test/INBOX", "/brief/needs",
                                   "/brief/topic/Trips%20%26%20travel"])
 def test_home_and_every_place_in_it_is_the_app_holding_this_runs_token(app, path):
     r = app.get(path)
