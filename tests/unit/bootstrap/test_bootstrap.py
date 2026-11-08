@@ -128,7 +128,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     else:
         assert names[:-1] == ["worker_loop", "worker_loop", "job:snooze", "job:sync", "job:draft-push", "job:assess",
                               "job:backfill", "job:draft-ahead", "job:reconcile", "job:expire",
-                              "job:forget"]
+                              "job:forget", "job:brief-ahead"]
         assert spawned[-1] is realtime.start
     assert [j["name"] for j in background.JOBS.snapshot()] == [n.removeprefix("job:") for n in names if "job:" in n]
     out = capsys.readouterr().out
@@ -181,7 +181,7 @@ def test_the_full_profile_schedules_each_job_at_its_pace(monkeypatch):
     assert scheduled(monkeypatch) == [("snooze", 60, 60), ("sync", 300, 0), ("draft-push", 10, 5), ("assess", 300, 20),
                                       ("backfill", 600, 45), ("draft-ahead", 180, 120),
                                       ("reconcile", 1800, 120), ("expire", 3600, 180),
-                                      ("forget", 86400, 600)]
+                                      ("forget", 86400, 600), ("brief-ahead", 600, 90)]
 
 
 def test_read_only_schedules_snooze_wake_alone(monkeypatch):
@@ -192,7 +192,7 @@ def test_a_job_switched_off_is_left_out(monkeypatch):
     monkeypatch.setattr(mailbox.reconciler, "_RECONCILE_INTERVAL", 0)
     monkeypatch.setattr(background, "_EXPIRE_INTERVAL", 0)
     assert [n for n, *_ in scheduled(monkeypatch, MAILMIND_NO_DRAFT_TICK="1")] == ["snooze", "sync", "draft-push", "assess",
-                                                                                      "backfill", "forget"]
+                                                                                      "backfill", "forget", "brief-ahead"]
 
 
 @pytest.mark.parametrize("value", ["0", "false", "off"])

@@ -9,9 +9,10 @@ from datetime import timedelta
 import pytest
 
 import problems
-from mailmind.assistant.application.governor import (PRESENCE_SECONDS, TRIP_AFTER, YIELD_SECONDS,
+from mailmind.assistant.application.governor import (PRESENCE_SECONDS, SCHEDULED_PRESENCE_SECONDS, TRIP_AFTER, YIELD_SECONDS,
                                                      CostGovernor, allowing_over)
 from mailmind.assistant.application.ports import Deferred, ModelError, OverLimit
+from mailmind.assistant.domain import features
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import assistant
 from mailmind.bootstrap import web
@@ -124,6 +125,28 @@ def test_speculative_work_needs_someone_here_in_the_last_45_minutes_and_backgrou
     assert gov.held_back("background", "triage", "m", MODEL) is None
     gov.saw_someone()
     assert gov.held_back("speculative", "draft-ahead", "m", MODEL) is None
+
+
+def test_scheduled_work_asks_for_someone_in_the_last_two_days():
+    gov, clock, _ = governor()
+    clock.shift(SCHEDULED_PRESENCE_SECONDS)
+    assert gov.held_back("scheduled", "brief-ahead", "m", MODEL) is None
+    clock.shift(1)
+    assert gov.held_back("scheduled", "brief-ahead", "m", MODEL) == "away"
+    gov.saw_someone()
+    assert gov.held_back("scheduled", "brief-ahead", "m", MODEL) is None
+
+
+def test_a_scheduled_call_yields_to_a_click_and_stops_at_the_limit():
+    gov, clock, _ = governor(spent=10_000)
+    assert gov.held_back("scheduled", "brief-ahead", "m", MODEL) == "limit"
+    gov, clock, _ = governor()
+    with gov.call("interactive", "ask", "m", MODEL):
+        assert gov.held_back("scheduled", "brief-ahead", "m", MODEL) == "yielding"
+
+
+def test_the_morning_brief_is_scheduled_work_and_a_brief_someone_opens_is_not():
+    assert (features.kind("brief-ahead"), features.kind("brief")) == ("scheduled", "interactive")
 
 
 # ── the daily limit ──────────────────────────────────────────────────────────
