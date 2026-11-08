@@ -291,6 +291,10 @@ class _Reader:
         from mailmind.bootstrap import compose
         return compose.drafts.info(row)
 
+    def sender_facts(self, addr):
+        from mailmind.bootstrap import discovery
+        return discovery.contacts.facts(addr)
+
 
 def _reverse_snooze(d):
     from mailmind.bootstrap import attention

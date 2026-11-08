@@ -106,6 +106,7 @@ class Bodies:
             "to": parsed.get("to"), "cc": parsed.get("cc"), "date": parsed.get("date"),
             "reply_to": parsed.get("reply_to"),
             "from_name": row["from_name"], "from_addr": row["from_addr"],
+            "sender": self._reader.sender_facts(row["from_addr"]),
             "subject": row["subject"], "account": row["account"], "thread_id": row["thread_id"],
             # threading identifiers (from the stored row) so the client can build a reply
             "message_id": row["message_id"], "in_reply_to": row["in_reply_to"],

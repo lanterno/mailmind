@@ -176,6 +176,10 @@ class StoredMail:
               "COUNT(DISTINCT CASE WHEN answered=1 THEN message_key END) replied "
               "FROM messages WHERE lower(from_addr)=?")
 
+    def tally(self, a):
+        with _uow.read() as c:
+            return c.execute(self._TALLY, (a,)).fetchone()
+
     def card(self, a):
         with _uow.read() as c:
             agg = c.execute(self._TALLY, (a,)).fetchone()

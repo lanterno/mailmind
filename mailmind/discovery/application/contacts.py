@@ -18,6 +18,12 @@ class Contacts:
         rows = self._mail.senders_like(contacts.needle(q))
         return {"ok": True, "items": [contacts.suggestion(r) for r in rows]}
 
+    def facts(self, addr: str | None) -> dict[str, Any] | None:
+        """What is said of a sender beside their name as a message opens: one read, so opening a message asks nothing more of
+        the page. None for what can't be an address."""
+        a = contacts.address(addr)
+        return None if a is None else contacts.facts(self._mail.tally(a), ago)
+
     def card(self, addr: str | None) -> dict[str, Any]:
         """One sender's card."""
         a = contacts.address(addr)

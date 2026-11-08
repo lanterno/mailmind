@@ -440,6 +440,13 @@ class Invite(Answer):
     this_and_future: bool | None = None     # only where RANGE=THISANDFUTURE said so
 
 
+class SenderFacts(Answer):
+    """What the reader says beside a sender's name: what their card opens with."""
+    count: int
+    replied: int
+    first_ago: str | None
+
+
 class MessageOpened(Answer):
     ok: Literal[True]
     key: int
@@ -456,9 +463,10 @@ class MessageOpened(Answer):
     to: str
     cc: str
     date: str
-    reply_to: str
+    reply_to: str                           # the bare address a reply goes to, or ""
     from_name: str | None
     from_addr: str | None
+    sender: SenderFacts | None              # who they are to you, so the reader needn't ask; None with no address to go by
     subject: str | None
     account: str
     thread_id: str | None

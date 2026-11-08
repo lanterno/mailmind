@@ -20,15 +20,19 @@ def address(addr: str | None) -> str | None:
     return a if "@" in a else None
 
 
+def facts(agg: Row, ago: Callable[[str], str]) -> dict[str, Any]:
+    """What is said of a sender beside their name, as a card opens with it."""
+    return {"count": agg["n"] or 0, "replied": agg["replied"] or 0,
+            "first_ago": (ago(agg["first"]) if agg["first"] else None)}
+
+
 def card(a: str, agg: Row, accounts: list[str], recent: Iterable[Row], ago: Callable[[str], str],
          when: Callable[[str | None], str]) -> dict[str, Any]:
     """Relationship memory for one sender: interaction stats, which accounts they write to and recent threads. `ago` and `when`
     say a date as the card and a list do."""
-    n = agg["n"] or 0
-    return {"ok": True, "addr": a, "name": (agg["name"] or ""), "count": n,
-            "replied": agg["replied"] or 0, "known": n > 0,
+    said = facts(agg, ago)
+    return {"ok": True, "addr": a, "name": (agg["name"] or ""), **said, "known": said["count"] > 0,
             "last_ago": (ago(agg["last"]) if agg["last"] else None),
-            "first_ago": (ago(agg["first"]) if agg["first"] else None),
             "accounts": accounts,                      # raw emails; client renders via nameOf()
             "recent": [{"key": r["message_key"], "folder": r["folder"], "uid": r["uid"], "account": r["account"], "subject": r["subject"] or "(no subject)",
                         "thread_id": r["thread_id"], "when": when(r["date_iso"]), "seen": bool(r["seen"])}
