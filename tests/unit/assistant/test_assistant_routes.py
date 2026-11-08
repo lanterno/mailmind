@@ -25,13 +25,14 @@ REWRITE = {"op": "shorten", "text": "see you thursday"}
 SPENDS = [("/api/ai/summarize", {"key": LUNCH}), ("/api/ai/draft-reply", {"key": LUNCH, "tone": "warm"}), ("/api/ai/rewrite", REWRITE),
           ("/api/ai/ask", {"question": "When is lunch with Lin?"}), ("/api/ai/do-plan", {"cmd": "archive the newsletters"}),
           ("/api/briefing", {}), ("/api/briefing/refresh", {}), ("/api/briefing/since", {"since": 0}), ("/api/review", {}),
-          ("/api/review/refresh", {})]
+          ("/api/review/refresh", {}), ("/api/screener/suggest", {"account": w.ADA})]
 # Each with its own words for what it can't explain, and what it asks to have that said of.
 WORDS = [("/api/ai/summarize", {}, "asking", "summarize", "summary failed"), ("/api/ai/draft-reply", {}, "drafting", "reply", "draft failed"),
          ("/api/ai/rewrite", {}, "asking", "rewrite", "rewrite failed"), ("/api/ai/ask", {}, "asking", "ask", "ask failed"),
          ("/api/ai/do-plan", {}, "bulk", "plan", "plan failed"), ("/api/briefing", {}, "asking", "briefing", "briefing failed"),
          ("/api/briefing/refresh", {}, "asking", "briefing", "briefing failed"), ("/api/briefing/since", {}, "asking", "delta", "delta failed"),
-         ("/api/review", {}, "asking", "review", "review failed"), ("/api/review/refresh", {}, "asking", "review", "review failed")]
+         ("/api/review", {}, "asking", "review", "review failed"), ("/api/review/refresh", {}, "asking", "review", "review failed"),
+         ("/api/screener/suggest", {}, "screening", "suggest", "suggestions failed")]
 
 
 def triaged(pk):
