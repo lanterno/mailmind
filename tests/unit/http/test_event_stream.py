@@ -4,6 +4,7 @@ tests/characterization/test_http_events.py, and the hub's own part tests/unit/pl
 import asyncio
 import dataclasses
 import http.client
+import json
 import socket
 import threading
 import time
@@ -13,6 +14,7 @@ from anyio import from_thread, to_thread
 from anyio.from_thread import start_blocking_portal
 
 import app_client
+import problems
 from asgi_server import Uvicorn
 from mailmind.http import route
 from mailmind.http.app import create_app
@@ -131,7 +133,8 @@ def test_a_failure_before_the_stream_is_the_fixed_failure_with_no_listener_held(
     def boom(token):
         raise RuntimeError("hunter2")
     monkeypatch.setattr(webroot, "edition", boom)
-    assert get(server.port, "/api/events") == (500, b'{"ok": false, "error": "request failed"}')
+    status, body = get(server.port, "/api/events")
+    assert (status, json.loads(body)) == (500, problems.FAILED)
     assert sse.HUB.listening() == 0 and "hunter2" not in capsys.readouterr().out
 
 

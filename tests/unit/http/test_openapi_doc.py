@@ -47,7 +47,15 @@ def test_an_answer_is_closed_and_what_it_may_leave_out_isnt_required(doc):
 def test_a_route_that_answers_no_json_has_no_json_type(doc):
     for path in ("/api/events", "/api/export", "/api/message/{pk}/body.html", "/api/message/{pk}/attachment/{part_id}", "/"):
         assert "content" not in answered(doc, path), path
-    assert "application/json" in answered(doc, "/api/events", status="503")["content"]
+    assert list(answered(doc, "/api/events", status="503")["content"]) == ["application/problem+json"]
+
+
+def test_every_failure_a_route_declares_is_a_problem_document_and_no_success_is(doc):
+    said = {(status[:1], media) for ops in doc["paths"].values() for op in ops.values()
+            for status, answer in op["responses"].items() for media in answer.get("content", {})}
+    assert {media for kind, media in said if kind in "45"} == {"application/problem+json"}
+    assert "application/problem+json" not in {media for kind, media in said if kind == "2"}
+    assert answered(doc, "/api/undo", "post", "500")["content"]["application/problem+json"]["schema"]["$ref"].endswith("/Failure")
 
 
 def test_it_writes_the_document_as_a_program_reading_nothing_and_sending_nothing(tmp_path):

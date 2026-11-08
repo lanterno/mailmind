@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+import problems
 from answered import answered
 from mailmind.bootstrap.compose import composing, outbox, sending
 from mailmind.platform import settings
@@ -43,7 +44,7 @@ def test_a_bad_time_is_refused_before_building(send_after, error, queued, monkey
         raise AssertionError("_compose_spec ran for a refused send time")
     monkeypatch.setattr(composing, "spec", boom)
     res, code = answered(sending.send, _body(send_after(int(time.time()))))
-    assert (code, res) == (400, {"ok": False, "error": error})
+    assert (code, res) == (400, problems.refused(error))
     assert queued == []
 
 

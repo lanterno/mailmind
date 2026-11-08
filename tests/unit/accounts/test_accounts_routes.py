@@ -5,6 +5,7 @@ import pathlib
 
 import pytest
 
+import problems
 import schema_contract
 from fixtures import world as w
 from mailmind.accounts.domain.draft import throwaway_account
@@ -13,7 +14,7 @@ from mailmind.http.schemas.accounts import AccountDraft
 from mailmind.platform import logging as logs
 from mailmind.platform import settings
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
+BAD_REQUEST = problems.BAD_REQUEST
 SECRET = "hunter2-the-typed-password"
 TYPED = {"style": "plain", "value": SECRET}
 NEW = "dee@example.test"
@@ -53,9 +54,9 @@ def dee(world):
 def test_what_accounts_words_for_itself_it_still_gets_to_say(app, world, field, junk, said):
     before = config(world)
     added = app.post("/api/accounts/add", {"email": NEW, "type": "imap", "host": "mail.example.test", "credential": TYPED, field: junk})
-    assert (added.status, added.json) == (400, {"ok": False, "error": said})
+    assert (added.status, added.json) == (400, problems.refused(said))
     edited = app.post("/api/accounts/edit", {"email": w.ADA, field: junk})
-    assert (edited.status, edited.json) == (400, {"ok": False, "error": said})
+    assert (edited.status, edited.json) == (400, problems.refused(said))
     assert config(world) == before
 
 
@@ -67,7 +68,7 @@ def test_what_accounts_words_for_itself_it_still_gets_to_say(app, world, field, 
 ])
 def test_what_an_add_goes_without_is_the_use_cases_to_word(app, body, said):
     r = app.post("/api/accounts/add", body)
-    assert (r.status, r.json) == (400, {"ok": False, "error": said})
+    assert (r.status, r.json) == (400, problems.refused(said))
 
 
 def test_a_draft_that_isnt_one_is_still_a_failed_test_and_not_a_failed_request(app, world):
@@ -226,7 +227,7 @@ def test_a_use_case_that_raises_with_a_password_in_its_text_answers_the_fixed_50
         raise RuntimeError(f"could not log in with {SECRET}")
     monkeypatch.setattr(accounts.connections, "test", boom)
     r = app.post("/api/accounts/test", {"email": w.ADA})
-    assert (r.status, r.json) == (500, {"ok": False, "error": "request failed"})
+    assert (r.status, r.json) == (500, problems.FAILED)
     assert SECRET not in in_the_log(capsys)
 
 
@@ -262,17 +263,17 @@ def test_what_a_row_answered_with_a_secret_would_fail_the_contract(app):
 # ── an action that isn't one ─────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("path", ["/api/accounts/no-such-action", "/api/accounts/", "/api/accounts/test/", "/api/accounts/x/test", "/api/accounts"])
-def test_what_isnt_an_action_answers_not_found_in_plain_text(app, world, path):
+def test_what_isnt_an_action_answers_not_found(app, world, path):
     logins = len(world.server.commands_for(user=w.ADA, command="LOGIN"))
     r = app.post(path, {"email": w.ADA})
-    assert (r.status, r.body, r.headers["content-type"]) == (404, b"not found", "text/plain")
+    assert (r.status, r.json, r.headers["content-type"]) == (404, problems.NO_ROUTE, problems.CONTENT_TYPE)
     assert len(world.server.commands_for(user=w.ADA, command="LOGIN")) == logins
 
 
 @pytest.mark.parametrize("path", ["/api/accounts/test", "/api/accounts/add", "/api/accounts/edit", "/api/accounts/delete", "/api/accounts/trust-cert"])
 def test_an_action_answers_only_a_post(app, path):
     r = app.get(path)
-    assert (r.status, r.body) == (404, b"not found")
+    assert (r.status, r.json) == (404, problems.NO_ROUTE)
 
 
 def test_an_action_that_isnt_one_is_held_to_the_perimeter_all_the_same(app):

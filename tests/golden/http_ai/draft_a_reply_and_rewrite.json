@@ -82,12 +82,14 @@
  },
  {
   "body": {
-   "error": "bad request",
-   "ok": false
+   "detail": "bad request",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -327,12 +329,14 @@
  },
  {
   "body": {
-   "error": "unknown op",
-   "ok": false
+   "detail": "unknown op",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -345,12 +349,14 @@
  },
  {
   "body": {
-   "error": "nothing to rewrite",
-   "ok": false
+   "detail": "nothing to rewrite",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",

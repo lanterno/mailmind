@@ -28,12 +28,14 @@
  },
  {
   "body": {
-   "error": "unknown account",
-   "ok": false
+   "detail": "unknown account",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",

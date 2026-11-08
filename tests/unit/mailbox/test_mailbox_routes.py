@@ -4,12 +4,13 @@ import base64
 
 import pytest
 
+import problems
 from fixtures import world as w
 from mailmind.bootstrap import assistant, mailbox
 from mailmind.bootstrap.mailbox import store
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
-NOT_A_ROUTE = (404, b"not found")
+BAD_REQUEST = problems.BAD_REQUEST
+NOT_A_ROUTE = (404, problems.NO_ROUTE)
 RECEIPT = "ada-inbox-05-receipt.eml"
 PAST_2_53 = 2 ** 53 + 1
 PDF = b"%PDF-1.7 fictional"
@@ -125,7 +126,7 @@ def test_a_route_that_reads_no_body_still_wants_an_object(app, path):
     ("/api/bulk/file", 400, BAD_REQUEST),
     ("/api/pending/retry", 400, BAD_REQUEST),
     ("/api/pending/discard", 400, BAD_REQUEST),
-    ("/api/sync-retry-account", 400, {"ok": False, "error": "unknown account"}),
+    ("/api/sync-retry-account", 400, problems.refused("unknown account")),
 ])
 def test_what_is_left_out_stays_the_use_cases_to_word(app, path, status, answer):
     r = app.post(path, {})
@@ -238,13 +239,13 @@ def test_a_pk_that_wont_read_is_the_400(app, path, junk):
 @pytest.mark.parametrize("pk", [2 ** 53, 0, -1])
 def test_a_pk_that_reads_and_names_nothing_is_no_message(app, path, pk):
     r = app.get(path.format(pk))
-    assert r.json["ok"] is False and r.json["error"] in ("not found", "no such part")
+    assert r.json.get("detail", r.json.get("error")) in ("not found", "no such part")
 
 
 @pytest.mark.parametrize("part", ["1x", "1.0", "-1", "%31", "%D9%A3", "1%0A", "x"])
 def test_a_part_id_that_isnt_one_is_refused(app, world, part):
     r = app.get(f"/api/message/{world.pk(RECEIPT)}/attachment/{part}")
-    assert (r.status, r.json) == (400, {"ok": False, "error": "bad part id"})
+    assert (r.status, r.json) == (400, problems.refused("bad part id"))
 
 
 def test_a_bad_pk_is_said_before_a_bad_part_id(app):
@@ -255,7 +256,7 @@ def test_a_bad_pk_is_said_before_a_bad_part_id(app):
                                   "/api/message/1/attachment/", "/api/message/1/attachment/1/2", "/api/message/1/z/attachment/1"])
 def test_a_path_of_any_other_shape_is_no_route(app, path):
     r = app.get(path)
-    assert (r.status, r.body) == NOT_A_ROUTE
+    assert (r.status, r.json) == NOT_A_ROUTE
 
 
 # ── a message's file ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -289,15 +290,15 @@ def test_a_file_past_what_may_go_is_the_413(app, world, monkeypatch):
     parts = {a["filename"]: a["part_id"] for a in app.get(f"/api/message/{pk}/body").json["attachments"]}
     monkeypatch.setattr(routes, "MAX_ATTACH_BYTES", len(PDF) - 1)
     r = app.get(f"/api/message/{pk}/attachment/{parts['../../café \"final\".pdf']}")
-    assert (r.status, r.json) == (413, {"ok": False, "error": "too large"})
+    assert (r.status, r.json) == (413, problems.blank(413, "too large"))
 
 
 def test_no_such_part_is_the_404(app, world):
     pk = delivered(world, WITH_A_FILE)
     r = app.get(f"/api/message/{pk}/attachment/99")
-    assert (r.status, r.json) == (404, {"ok": False, "error": "no such part"})
+    assert (r.status, r.json) == (404, problems.not_found("no such part"))
     r = app.get("/api/message/999999/attachment/1")
-    assert (r.status, r.json) == (404, {"ok": False, "error": "not found"})
+    assert (r.status, r.json) == (404, problems.not_found("not found"))
 
 
 # ── a frame's document ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -338,12 +339,12 @@ def test_the_longest_pk_a_document_takes_is_a_document_and_one_more_is_no_route(
     r = app.get(f"/api/message/{'9' * 18}/body.html?key=1")
     assert r.status == 404 and is_a_document(r)
     r = app.get(f"/api/message/{'9' * 19}/body.html?key=1")
-    assert (r.status, r.body) == NOT_A_ROUTE and r.headers["x-frame-options"] == "DENY"
+    assert (r.status, r.json) == NOT_A_ROUTE and r.headers["x-frame-options"] == "DENY"
 
 
 def test_a_path_too_long_to_read_as_a_number_is_no_route_either(app):
     r = app.get(f"/api/message/{'9' * 5000}/body.html")
-    assert (r.status, r.body) == NOT_A_ROUTE
+    assert (r.status, r.json) == NOT_A_ROUTE
 
 
 # ── a refusal with a 200, and who counts as here ─────────────────────────────────────────────────────────────────────
@@ -360,7 +361,7 @@ def test_a_get_that_finds_nothing_still_answers_a_200_that_says_so(app, path, sa
 def test_folders_with_no_account_named_say_so_with_an_empty_list(app):
     for path in ("/api/folders", "/api/folders?account="):
         r = app.get(path)
-        assert (r.status, r.json) == (400, {"ok": False, "error": "account required", "folders": []})
+        assert (r.status, r.json) == (400, problems.refused("account required", folders=[]))
 
 
 def test_undo_with_nothing_to_undo_says_so(app):

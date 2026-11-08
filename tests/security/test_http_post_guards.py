@@ -8,6 +8,7 @@ import json
 import pytest
 
 import app_client
+import problems
 from fixtures import world as w
 
 # The routes that send mail or act on queued sends, where a POST the page didn't make costs most.
@@ -108,6 +109,6 @@ def test_a_post_is_refused_before_its_body_is_read(app):
             conn.putheader(k, v)
         conn.endheaders()
         r = conn.getresponse()
-        assert (r.status, json.loads(r.read())) == (403, {"ok": False, "error": "bad or missing CSRF token"})
+        assert (r.status, json.loads(r.read())) == (403, problems.blank(403, "bad or missing CSRF token"))
     finally:
         conn.close()

@@ -1,12 +1,14 @@
 [
  {
   "body": {
-   "error": "too many listeners",
-   "ok": false
+   "detail": "too many listeners",
+   "status": 503,
+   "title": "Service Unavailable",
+   "type": "about:blank"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",

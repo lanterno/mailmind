@@ -127,7 +127,7 @@ class AppClient:
         finally:
             conn.close()
         parsed = payload
-        if hdrs.get("content-type", "").startswith("application/json"):
+        if payload and hdrs.get("content-type", "").startswith(("application/json", "application/problem+json")):   # a HEAD has none
             parsed = json.loads(payload)
         return Response(r.status, hdrs, parsed)
 

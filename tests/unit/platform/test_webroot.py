@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+import problems
 from app_client import CSRF
 from fixtures import tiny_build
 from mailmind.http import shared
@@ -238,5 +239,5 @@ def test_a_failure_reading_the_page_is_the_fixed_failure(app, monkeypatch, capsy
         raise OSError(5, "hunter2")
     monkeypatch.setattr(webroot, "page", boom)
     r = app.get("/")
-    assert (r.status, r.json) == (500, {"ok": False, "error": "request failed"})
+    assert (r.status, r.json) == (500, problems.FAILED)
     assert "hunter2" not in capsys.readouterr().out

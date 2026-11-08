@@ -13,6 +13,7 @@ import pytest
 from anyio import from_thread, to_thread
 from anyio.from_thread import start_blocking_portal
 
+import problems
 import schema_contract
 from mailmind.http.routers import export as export_routes
 from mailmind.platform.db import export
@@ -78,7 +79,7 @@ def test_a_failed_snapshot_is_the_fixed_failure_and_leaves_no_folder(app, monkey
         raise OSError(13, "hunter2", "hunter2")
     monkeypatch.setattr(export, "export_db", boom)
     r = app.get("/api/export")
-    assert (r.status, r.json) == (500, {"ok": False, "error": "request failed"})
+    assert (r.status, r.json) == (500, problems.FAILED)
     assert not os.path.exists(made[0])
     said = capsys.readouterr().out
     assert "[http] GET /api/export failed: PermissionError" in said and "hunter2" not in said

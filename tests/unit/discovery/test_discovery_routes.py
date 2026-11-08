@@ -1,11 +1,12 @@
 """Discovery's routes on their router: a query string of any text answers, what the schemas refuse and let by, and the one route's own catch."""
 from urllib.parse import quote
 
+import problems
 from mailmind.bootstrap import assistant, discovery
 from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Refused
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
+BAD_REQUEST = problems.BAD_REQUEST
 NOTHING_ASKED = {"ok": True, "query": "", "items": [], "total": 0, "has_more": False}
 SECRET = "hunter2-secret-token"
 
@@ -91,7 +92,7 @@ def test_autocomplete_goes_by_the_first_value(app):
 def test_a_card_for_what_cant_be_an_address(app):
     for query in ("", "?addr=", "?addr=nobody", "?addr=%00"):
         r = app.get(f"/api/contact{query}")
-        assert (r.status, r.json) == (400, {"ok": False, "error": "bad address"}), query
+        assert (r.status, r.json) == (400, problems.refused("bad address")), query
 
 
 def test_a_card_for_who_you_know(app):
@@ -143,7 +144,7 @@ def test_a_method_a_route_doesnt_take_finds_no_route(app):
 def test_going_without_a_list_keeps_its_own_words(app):
     for body in ({}, {"addrs": None}):
         r = app.post("/api/contacts/known", body)
-        assert (r.status, r.json) == (400, {"ok": False, "error": "addrs must be a list"}), body
+        assert (r.status, r.json) == (400, problems.refused("addrs must be a list")), body
 
 
 def test_addrs_that_isnt_a_list_is_the_400(app):
@@ -160,12 +161,12 @@ def test_what_a_list_holds_is_its_use_cases_to_judge(app):
 
 def test_too_many_is_the_use_cases_too(app):
     r = app.post("/api/contacts/known", {"addrs": [f"p{i}@example.test" for i in range(101)]})
-    assert (r.status, r.json) == (400, {"ok": False, "error": "too many addresses"})
+    assert (r.status, r.json) == (400, problems.refused("too many addresses"))
 
 
 def test_what_asking_raises(app, monkeypatch):
-    for error, status, answer in ((RuntimeError(SECRET), 500, {"ok": False, "error": "lookup failed"}), (ValueError(SECRET), 500, {"ok": False, "error": "lookup failed"}),
-                                  (Refused("our own words"), 400, {"ok": False, "error": "our own words"})):
+    for error, status, answer in ((RuntimeError(SECRET), 500, problems.blank(500, "lookup failed")), (ValueError(SECRET), 500, problems.blank(500, "lookup failed")),
+                                  (Refused("our own words"), 400, problems.refused("our own words"))):
         def boom(addrs, raised=error):
             raise raised
         monkeypatch.setattr(discovery.known, "ask", boom)

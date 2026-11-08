@@ -10,6 +10,7 @@ from datetime import timedelta
 
 import pytest
 
+import problems
 from fixtures import world as w
 from mailmind.platform.profile import ReadOnlyError
 from mailmind.bootstrap.curation import safe_http
@@ -20,7 +21,7 @@ NEWSLETTER = "ada-inbox-03-newsletter.eml"
 CI = "ada-inbox-04-ci.eml"
 LUNCH_CONFIRM = "ada-inbox-02-lunch-confirm.eml"
 LOOM = "news@loom.example.test"
-REFUSED = {"ok": False, "error": "MailMind is running read-only", "read_only": True}
+REFUSED = problems.read_only()
 
 
 @pytest.fixture

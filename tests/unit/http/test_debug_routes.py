@@ -5,10 +5,11 @@ from datetime import timedelta
 
 import pytest
 
+import problems
 from fixtures import world as w
 from mailmind.bootstrap import accounts, assistant, mailbox
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
+BAD_REQUEST = problems.BAD_REQUEST
 QUIET = "/api/debug/health"
 NOTICED = ["/api/debug/pool", "/api/debug/jobs", "/api/debug/ai"]
 
@@ -54,7 +55,7 @@ def test_each_answers_in_ids_and_counts_and_never_an_address(app, world, path):
 @pytest.mark.parametrize("path", [QUIET, *NOTICED])
 def test_each_answers_only_a_get(app, path):
     r = app.post(path, {})
-    assert (r.status, r.body) == (404, b"not found")
+    assert (r.status, r.json) == (404, problems.NO_ROUTE)
 
 
 @pytest.mark.parametrize("path", NOTICED)

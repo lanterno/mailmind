@@ -8,6 +8,7 @@ from datetime import timedelta
 
 import pytest
 
+import problems
 from mailmind.assistant.application.governor import (PRESENCE_SECONDS, TRIP_AFTER, YIELD_SECONDS,
                                                      CostGovernor, allowing_over)
 from mailmind.assistant.application.ports import Deferred, ModelError, OverLimit
@@ -262,8 +263,7 @@ def test_at_the_limit_an_interactive_request_asks_first_and_goes_when_allowed(ap
     assert app.post("/api/ai/rewrite", REWRITE).status == 200      # $0.012: now over
     sent = len(ai.requests)
     r = app.post("/api/ai/rewrite", REWRITE)
-    assert (r.status, r.json) == (402, {"ok": False, "error": "today's AI spending has reached the daily limit",
-                                        "over_limit": True, "spent_micros": 12_000, "limit_micros": 10_000})
+    assert (r.status, r.json) == (402, problems.over_limit(12_000, 10_000))
     assert len(ai.requests) == sent                        # nothing was sent
     ai_line = app.get("/api/digest").json["ai"]
     assert (ai_line["last_ok"], ai_line["last_error"]) == (True, "")   # held back is not a failure

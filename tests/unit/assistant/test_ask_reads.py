@@ -3,6 +3,7 @@ import sqlite3
 
 import pytest
 
+import problems
 from answered import answered
 from fixtures import world as w
 from mailmind.bootstrap import assistant, discovery
@@ -22,7 +23,7 @@ def execute(sql, *args):
 def test_a_query_the_index_rejects_is_a_bad_query(world):
     execute("DROP TABLE msg_fts")
     assert discovery.search.for_asking('"lunch"', w.ADA, 40) is None
-    assert answered(assistant.asker.ask, "all", "When is lunch?") == ({"ok": False, "error": "bad query"}, 400)
+    assert answered(assistant.asker.ask, "all", "When is lunch?") == (problems.refused("bad query"), 400)
 
 
 def test_a_database_that_wont_open_is_not_a_bad_query(world, monkeypatch):

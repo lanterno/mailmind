@@ -3,12 +3,13 @@ import json
 
 import pytest
 
+import problems
 from fixtures import world as w
 from mailmind.bootstrap import curation
 from mailmind.bootstrap.curation import rules
 from mailmind.platform import settings
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
+BAD_REQUEST = problems.BAD_REQUEST
 LOOM = "news@loom.example.test"
 NEWSLETTER = "ada-inbox-03-newsletter.eml"
 
@@ -50,7 +51,7 @@ def test_a_cleanup_hands_its_use_case_what_was_sent_and_only_that(app, monkeypat
 
     def execute(body):
         got.append(dict(body))
-        return {"ok": False, "error": "stood in"}, 500
+        return problems.blank(500, "stood in"), 500
     monkeypatch.setattr(curation.cleanup, "execute", execute)
     sent = {"from_addr": LOOM, "block_scope": "domain", "do_unsubscribe": True, "confirm_token": " 1.Ab_c-= ", "undo_group": "g"}
     app.post("/api/cleanup/execute", sent)
@@ -105,7 +106,7 @@ def test_a_sender_that_wont_do_is_still_a_200(app, query, said):
 
 def test_a_cleanup_refused_says_so_in_its_own_words(app):
     r = app.post("/api/cleanup/execute", {"from_addr": "loom"})
-    assert (r.status, r.json) == (400, {"ok": False, "error": "bad address"})
+    assert (r.status, r.json) == (400, problems.refused("bad address"))
 
 
 def test_a_cleanup_that_breaks_keeps_its_own_words(app, monkeypatch):
@@ -113,7 +114,7 @@ def test_a_cleanup_that_breaks_keeps_its_own_words(app, monkeypatch):
         raise RuntimeError("what a server said")
     monkeypatch.setattr(curation.cleanup, "execute", broken)
     r = app.post("/api/cleanup/execute", {"from_addr": LOOM})
-    assert (r.status, r.json) == (500, {"ok": False, "error": "cleanup failed"})
+    assert (r.status, r.json) == (500, problems.blank(500, "cleanup failed"))
 
 
 def test_a_query_string_reads_as_it_did(app, world):

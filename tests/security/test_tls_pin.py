@@ -7,6 +7,7 @@ import time
 
 import pytest
 
+import problems
 from fixtures import world as w
 from mailmind.accounts.domain import tls_pin
 from mailmind.bootstrap import mailbox
@@ -117,7 +118,7 @@ def test_a_changed_certificate_shows_in_health_and_trusting_it_again_syncs(app, 
 
 def test_trusting_an_unknown_account_is_refused(app, world):
     r = app.post("/api/accounts/trust-cert", {"email": "zed@example.test"})
-    assert (r.status, r.json) == (404, {"ok": False, "error": "not found"})
+    assert (r.status, r.json) == (404, problems.not_found("not found"))
 
 
 def test_a_move_while_the_certificate_is_wrong_waits_in_the_queue(app, world):

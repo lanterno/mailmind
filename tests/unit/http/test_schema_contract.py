@@ -4,6 +4,7 @@ nothing, so here each is made to.
 import pytest
 from pydantic import BaseModel
 
+import problems
 import route_tables
 import schema_contract
 from mailmind.http.route import router
@@ -26,14 +27,14 @@ def said(body: NoBody):
 ROUTE = r.routes[0]
 
 
-@pytest.mark.parametrize("status, answer", [(200, {"ok": True, "count": 1}), (500, {"ok": False, "error": "request failed"}), (409, {"ok": False, "busy": True}),
-                                            (403, {"ok": False, "error": "bad or missing CSRF token"})])
+@pytest.mark.parametrize("status, answer", [(200, {"ok": True, "count": 1}), (500, problems.FAILED), (409, problems.busy()),
+                                            (403, problems.blank(403, "bad or missing CSRF token"))])
 def test_what_fits_says_nothing(status, answer):
     assert schema_contract.fault_in(ROUTE, status, answer) is None
 
 
 @pytest.mark.parametrize("status, answer, says", [(200, {"ok": True}, "count"), (200, {"ok": True, "count": 1, "more": 2}, "more"), (200, {"ok": True, "count": "1"}, "count"),
-                                                  (200, {"ok": True, "count": None}, "count"), (500, {"ok": False, "why": "x"}, "why"), (201, {"ok": True, "count": 1}, "doesn't declare")])
+                                                  (200, {"ok": True, "count": None}, "count"), (500, {**problems.FAILED, "why": "x"}, "why"), (500, {"ok": False, "error": "request failed"}, "ok"), (201, {"ok": True, "count": 1}, "doesn't declare")])
 def test_what_doesnt_is_a_fault(status, answer, says):
     assert says in schema_contract.fault_in(ROUTE, status, answer)
 
@@ -61,7 +62,7 @@ def test_json_from_a_route_that_says_it_answers_none_is_a_fault():
         return {}
     route = files.routes[0]
     assert "isn't JSON" in schema_contract.fault_in(route, 200, {"ok": True})
-    assert schema_contract.fault_in(route, 404, {"ok": False, "error": "not found"}) is None
+    assert schema_contract.fault_in(route, 404, problems.not_found("not found")) is None
 
 
 def test_each_failure_a_route_shares_has_a_model():

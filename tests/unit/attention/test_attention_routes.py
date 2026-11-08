@@ -1,10 +1,11 @@
 """Attention's routes on their router: what the schemas refuse, what they let by, and that a request still counts."""
 import pytest
 
+import problems
 from fixtures import world as w
 from mailmind.bootstrap import assistant
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
+BAD_REQUEST = problems.BAD_REQUEST
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 
 

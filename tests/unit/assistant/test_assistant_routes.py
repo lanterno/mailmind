@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+import problems
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.assistant.api import AIOff, OverLimit
@@ -15,8 +16,8 @@ from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Conflict, NotFound, Refused, Unreachable
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
-AI_OFF = {"ok": False, "error": "AI is off: MailMind has no Claude API key", "ai_off": True}
+BAD_REQUEST = problems.BAD_REQUEST
+AI_OFF = problems.ai_off()
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch thread
 VENUE_END = "cy-inbox-02-thread-end.eml"        # Mae's last word in the venue thread
 REWRITE = {"op": "shorten", "text": "see you thursday"}
@@ -61,7 +62,7 @@ def test_at_the_limit_a_route_asks_and_with_leave_it_goes(app, world, ai, path, 
     body = ready_to_call(world, body)
     spend(15_000_000)
     r = app.post(path, body)
-    assert (r.status, r.json["ok"], r.json["over_limit"], r.json["limit_micros"]) == (402, False, True, 15_000_000)
+    assert (r.status, r.json["type"], r.json["over_limit"], r.json["limit_micros"]) == (402, "/problems/over-limit", True, 15_000_000)
     assert ai.requests == []
     assert app.post(path, body, headers={web.AI_OVER_HEADER: "no"}).status == 402
     assert ai.requests == []
@@ -81,7 +82,7 @@ def test_when_the_model_fails_a_route_says_asking_again_can_help(app, world, ai,
     body = ready_to_call(world, body)
     ai.queue(fa.error(400, "invalid_request_error", "bad request"))
     r = app.post(path, body)
-    assert (r.status, r.json["ok"], r.json["retry"]) == (502, False, True)
+    assert (r.status, r.json["type"], r.json["retry"]) == (502, "/problems/unreachable", True)
 
 
 # ── what a route's own catch lets through ────────────────────────────────────────────────────────
@@ -92,23 +93,21 @@ def test_what_a_route_cant_explain_goes_in_its_own_words(app, monkeypatch, path,
         raise RuntimeError("what a server said")
     monkeypatch.setattr(getattr(assistant, on), method, broken)
     r = app.post(path, body)
-    assert (r.status, r.json) == (500, {"ok": False, "error": failed})
+    assert (r.status, r.json) == (500, problems.blank(500, failed))
 
 
-@pytest.mark.parametrize("raised, status, said", [(OverLimit(7, 5), 402, {"over_limit": True, "spent_micros": 7, "limit_micros": 5,
-                                                                         "error": "today's AI spending has reached the daily limit"}),
-                                                  (AIOff("off"), 409, {"ai_off": True, "error": "AI is off: MailMind has no Claude API key"}),
-                                                  (NotFound("gone"), 404, {"error": "gone"}), (Refused(), 400, {"error": "bad request"}),
-                                                  (Conflict("moved"), 409, {"error": "moved"}),
-                                                  (Unreachable("away", retry=True), 502, {"error": "away", "retry": True})],
+@pytest.mark.parametrize("raised, said", [(OverLimit(7, 5), problems.over_limit(7, 5)), (AIOff("off"), problems.ai_off()),
+                                          (NotFound("gone"), problems.not_found("gone")), (Refused(), problems.refused()),
+                                          (Conflict("moved"), problems.conflict("moved")),
+                                          (Unreachable("away", retry=True), problems.unreachable("away", retry=True))],
                          ids=lambda v: type(v).__name__ if isinstance(v, Exception) else "")
 @pytest.mark.parametrize("path, body, on, method, failed", WORDS)
-def test_what_the_route_class_answers_gets_past_a_routes_own_catch(app, monkeypatch, path, body, on, method, failed, raised, status, said):
+def test_what_the_route_class_answers_gets_past_a_routes_own_catch(app, monkeypatch, path, body, on, method, failed, raised, said):
     def raises(*args, **kwargs):
         raise raised
     monkeypatch.setattr(getattr(assistant, on), method, raises)
     r = app.post(path, body)
-    assert (r.status, r.json) == (status, {"ok": False, **said})
+    assert (r.status, r.headers["content-type"], r.json) == (said["status"], problems.CONTENT_TYPE, said)
 
 
 # ── a GET reads, and a POST writes ───────────────────────────────────────────────────────────────
@@ -140,7 +139,7 @@ def test_a_delta_read_calls_nothing_and_its_post_writes_it(app, world, ai):
                                   "/api/ai/ask", "/api/ai/do-plan", "/api/ai/do-confirm"])
 def test_what_spends_or_acts_has_no_get(app, ai, path):
     r = app.get(path)
-    assert (r.status, r.body, ai.requests) == (404, b"not found", [])
+    assert (r.status, r.json, ai.requests) == (404, problems.NO_ROUTE, [])
 
 
 def test_drafting_ahead_has_no_post(app, ai):
@@ -185,14 +184,14 @@ def test_asking_after_a_draft_ahead_counts_as_no_one(app, monkeypatch):
 def test_a_summary_still_going_is_the_504(app, world, ai, monkeypatch):
     monkeypatch.setattr(assistant.threads._FLIGHTS, "run", lambda *args, **kwargs: None)
     r = app.post("/api/ai/summarize", {"pk": world.pk(LUNCH)})
-    assert (r.status, r.json) == (504, {"ok": False, "error": "still summarizing"})
+    assert (r.status, r.json) == (504, problems.blank(504, "still summarizing"))
 
 
 @pytest.mark.parametrize("body", [{}, {"plan": ""}, {"plan": None}, {"plan": "made-up"}])
 def test_a_plan_no_one_made_is_the_410(app, world, body):
     since = world.mark()
     r = app.post("/api/ai/do-confirm", body)
-    assert (r.status, r.json) == (410, {"ok": False, "error": "this plan has expired", "expired": True})
+    assert (r.status, r.json) == (410, problems.blank(410, "this plan has expired", expired=True))
     assert world.writes(since) == []
 
 

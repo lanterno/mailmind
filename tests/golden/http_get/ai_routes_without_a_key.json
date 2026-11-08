@@ -86,12 +86,14 @@
  {
   "body": {
    "ai_off": true,
-   "error": "AI is off: MailMind has no Claude API key",
-   "ok": false
+   "detail": "AI is off: MailMind has no Claude API key",
+   "status": 409,
+   "title": "AI is off",
+   "type": "/problems/ai-off"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -105,12 +107,14 @@
  {
   "body": {
    "ai_off": true,
-   "error": "AI is off: MailMind has no Claude API key",
-   "ok": false
+   "detail": "AI is off: MailMind has no Claude API key",
+   "status": 409,
+   "title": "AI is off",
+   "type": "/problems/ai-off"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",

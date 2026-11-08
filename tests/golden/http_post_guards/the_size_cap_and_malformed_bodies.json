@@ -2,39 +2,41 @@
  {
   "note": "a control route over 1 MB: /api/seen",
   "value": {
-   "body": "{\"ok\": false, \"error\": \"payload too large\"}",
+   "body": "{\"type\": \"about:blank\", \"title\": \"Content Too Large\", \"status\": 413, \"detail\": \"payload too large\"}",
    "status": 413
   }
  },
  {
   "note": "the send route over 38 MB: /api/send",
   "value": {
-   "body": "{\"ok\": false, \"error\": \"payload too large\"}",
+   "body": "{\"type\": \"about:blank\", \"title\": \"Content Too Large\", \"status\": 413, \"detail\": \"payload too large\"}",
    "status": 413
   }
  },
  {
   "note": "a body that isn't JSON",
   "value": {
-   "body": "{\"ok\": false, \"error\": \"bad request\"}",
+   "body": "{\"type\": \"/problems/refused\", \"title\": \"Refused\", \"status\": 400, \"detail\": \"bad request\"}",
    "status": 400
   }
  },
  {
   "note": "a JSON body that isn't an object",
   "value": {
-   "body": "{\"ok\": false, \"error\": \"bad request\"}",
+   "body": "{\"type\": \"/problems/refused\", \"title\": \"Refused\", \"status\": 400, \"detail\": \"bad request\"}",
    "status": 400
   }
  },
  {
   "body": {
-   "error": "bad request",
-   "ok": false
+   "detail": "bad request",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -47,12 +49,14 @@
  },
  {
   "body": {
-   "error": "bad request",
-   "ok": false
+   "detail": "bad request",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",

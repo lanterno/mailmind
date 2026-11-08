@@ -151,7 +151,7 @@ def test_input_that_is_no_list_is_refused(addrs, home):
 
 def test_input_shape_and_limits(home):
     res, code = answered(discovery.known.ask, [f"p{i}@example.test" for i in range(101)])
-    assert code == 400 and res["error"] == "too many addresses", res
+    assert code == 400 and res["detail"] == "too many addresses", res
     _msg("lio@example.test")
     res, code = answered(discovery.known.ask, ["nobody", "a@b@c", "Lio <LIO@Example.test>",
                                      "LIO@example.test", "lio@example.test"])

@@ -1,12 +1,14 @@
 [
  {
   "body": {
-   "error": "cross-site request",
-   "ok": false
+   "detail": "cross-site request",
+   "status": 403,
+   "title": "Forbidden",
+   "type": "about:blank"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -19,12 +21,14 @@
  },
  {
   "body": {
-   "error": "bad host/origin",
-   "ok": false
+   "detail": "bad host/origin",
+   "status": 403,
+   "title": "Forbidden",
+   "type": "about:blank"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",

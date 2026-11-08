@@ -1,4 +1,5 @@
 """A message with no thread is read on its own: a reply drafted from it, and a draft ahead fingerprinted by it."""
+import problems
 from answered import answered
 from fakes import anthropic_api as fa
 from fixtures import world as w
@@ -31,7 +32,7 @@ def test_a_reply_to_a_lone_message_is_drafted_from_that_message(world, ai):
 
 
 def test_a_reply_to_a_message_that_has_gone_has_nothing_to_reply_to(world, ai):
-    assert answered(assistant.replies.draft, w.ADA, pk=999999) == ({"ok": False, "error": "nothing to reply to"}, 404)
+    assert answered(assistant.replies.draft, w.ADA, pk=999999) == (problems.not_found("nothing to reply to"), 404)
     assert ai.requests == []
 
 

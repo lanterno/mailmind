@@ -15,21 +15,24 @@ from fastapi.openapi.utils import get_openapi
 from starlette.responses import Response
 
 import app_client
+import problems
 import schema_contract
 from asgi_server import Uvicorn
 from mailmind.assistant.api import AIOff, OverLimit
 from mailmind.assistant.application import governor
 from mailmind.http import shared
 from mailmind.http.app import THREADS, create_app
-from mailmind.http.route import Route, router
+from mailmind.http.route import Route, problem, router
 from mailmind.http.schemas.common import Answer, Failure, Flag, NoBody, NotJson, Number, QueryArgs, RequestBody, answers
 from mailmind.kernel.errors import Busy, Conflict, Locked, NotFound, Problem, Refused, Unreachable, Unreadable
 from mailmind.platform import profile, settings
 from mailmind.platform.db import txguard
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import correlation
+from problems import CONTENT_TYPE
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
+BAD_REQUEST = problems.BAD_REQUEST
+TOO_LARGE = problems.blank(413, "payload too large")
 
 
 class Body(RequestBody):
@@ -134,8 +137,11 @@ def test_the_perimeters_headers_go_on_every_answer(served):
 def test_a_handler_may_say_its_status_or_write_its_own_answer(served, monkeypatch):
     route = on("/api/toy-work", "GET")
     monkeypatch.setattr(schema_contract, "HOLDING", False)
-    monkeypatch.setattr(route, "work", lambda: ({"ok": False, "error": "its own words"}, 500))
-    assert served.get("/api/toy-work").status == 500
+    monkeypatch.setattr(route, "work", lambda: ({"ok": True, "got": {}}, 202))
+    assert served.get("/api/toy-work").status == 202
+    monkeypatch.setattr(route, "work", lambda: problem(500, "its own words"))
+    r = served.get("/api/toy-work")
+    assert (r.status, r.headers["content-type"], r.json) == (500, CONTENT_TYPE, {"type": "about:blank", "title": "Internal Server Error", "status": 500, "detail": "its own words"})
     monkeypatch.setattr(route, "work", lambda: Response(b"hello", 201, headers={"Content-Type": "text/plain"}))
     status, headers, body = raw(served, "GET", "/api/toy-work")
     assert (status, headers["content-type"], body) == (201, "text/plain", b"hello")
@@ -171,15 +177,20 @@ def test_what_a_route_may_not_be_is_refused_as_it_is_written(wrong):
 
 # ── where no route matches ───────────────────────────────────────────────────────────────────────────
 
-def not_found(answer):
+API_NOT_FOUND = json.dumps(problems.NO_ROUTE).encode()
+
+
+def not_found(answer, api=True):
+    """The 404 where no route matches: a problem document under /api/, as any failure there is, and a line of text elsewhere."""
     status, headers, body = answer
-    return (status, headers["content-type"], headers["content-length"], body) == (404, "text/plain", "9", b"not found")
+    said = (problems.CONTENT_TYPE, API_NOT_FOUND) if api else ("text/plain", b"not found")
+    return (status, headers["content-type"], headers["content-length"], body) == (404, said[0], str(len(said[1])), said[1])
 
 
 @pytest.mark.parametrize("method, path", [("GET", "/api/toy-empty"), ("POST", "/api/toy-only-read"), ("GET", "/api/no-such-route"),
                                           ("POST", "/api/no-such-route"), ("GET", "/no-such-page"), ("POST", "/no-such-page"), ("POST", "/")])
 def test_a_get_or_a_post_no_route_takes_is_not_found(served, method, path):
-    assert not_found(raw(served, method, path, b"{}" if method == "POST" else None))
+    assert not_found(raw(served, method, path, b"{}" if method == "POST" else None), api=path.startswith("/api/"))
 
 
 @pytest.mark.parametrize("body", [b"not json", b"[1]", b'{"account": 5}'])
@@ -195,7 +206,9 @@ def test_a_post_it_has_no_route_for_may_run_past_any_cap_undeclared(served):
 @pytest.mark.parametrize("method", ["HEAD", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE"])
 def test_any_other_method_isnt_implemented(served, method, path):
     status, headers, body = raw(served, method, path)
-    assert (status, headers["content-type"], body) == (501, "text/plain", b"" if method == "HEAD" else b"not implemented")
+    said = ((problems.CONTENT_TYPE, json.dumps(problems.blank(501, "not implemented")).encode()) if path.startswith("/api/")
+            else ("text/plain", b"not implemented"))
+    assert (status, headers["content-type"], body) == (501, said[0], b"" if method == "HEAD" else said[1])
     assert headers["x-frame-options"] == "DENY"
 
 
@@ -216,7 +229,7 @@ def test_a_get_or_a_post_of_the_api_no_route_takes_says_someone_is_here(served, 
 def test_an_absolute_form_request_line_names_no_route(served, monkeypatch, path, site):
     """The perimeter reads the whole of it as the path, which is no part of the API, so it must then match nothing either."""
     monkeypatch.setattr(on("/api/toy-work", "GET"), "work", lambda: pytest.fail("a route ran"))
-    assert not_found(raw(served, "GET", f"http://127.0.0.1:{served.port}{path}", headers={"Sec-Fetch-Site": site}))
+    assert not_found(raw(served, "GET", f"http://127.0.0.1:{served.port}{path}", headers={"Sec-Fetch-Site": site}), api=False)
 
 
 @pytest.mark.parametrize("path", ["/api/toy-work", "/api/no-such-route"])
@@ -237,12 +250,13 @@ def test_a_body_a_get_declares_is_not_waited_for(served, monkeypatch, path):
 def test_a_path_written_oddly_is_no_route_of_this_table(served, path):
     """uvicorn decodes a path, so `/%61pi/toy` would pass the perimeter as no part of the API and then match as /api/toy."""
     status, _, body = raw(served, "GET", path, headers={"Sec-Fetch-Site": ""})
-    assert (status, body) in ((404, b"not found"), (403, b'{"ok": false, "error": "same-origin request required"}'))
+    assert (status, body) in ((404, b"not found"), (404, API_NOT_FOUND),
+                              (403, json.dumps(problems.blank(403, "same-origin request required")).encode()))
 
 
 @pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"])
 def test_the_schema_isnt_served(served, path):
-    assert not_found(raw(served, "GET", path))
+    assert not_found(raw(served, "GET", path), api=False)
 
 
 # ── a query string ───────────────────────────────────────────────────────────────────────────────────
@@ -270,7 +284,7 @@ def test_a_use_case_that_takes_the_query_whole_gets_it_as_parse_qs_gives_it(serv
 @pytest.mark.parametrize("path", ["/api/toy", "/api/toy-empty"])
 def test_a_body_that_isnt_a_json_object_is_the_bad_request_400(served, path, body):
     status, headers, said = raw(served, "POST", path, body, {"Content-Type": "application/json"})
-    assert (status, json.loads(said)) == (400, BAD_REQUEST) and headers["content-type"] == "application/json"
+    assert (status, json.loads(said)) == (400, BAD_REQUEST) and headers["content-type"] == CONTENT_TYPE
 
 
 @pytest.mark.parametrize("sent", [b"", b"{}"])
@@ -293,12 +307,12 @@ def test_a_body_with_no_length_counts_for_nothing(served):
 def test_a_body_that_runs_past_its_cap_undeclared_stops_there(served):
     """The perimeter judges only a declared length."""
     status, headers, said = raw(served, "POST", "/api/toy", iter([b"x" * (1 << 20), b"y"]), {"Transfer-Encoding": "chunked"}, chunked=True)
-    assert (status, said) == (413, b"payload too large") and headers["content-type"] == "text/plain; charset=utf-8"
+    assert (status, json.loads(said)) == (413, TOO_LARGE) and headers["content-type"] == CONTENT_TYPE
 
 
 def test_a_declared_length_past_the_cap_is_the_perimeters(served):
     status, _, said = raw(served, "POST", "/api/toy", b"x" * ((1 << 20) + 1), {"Content-Type": "application/json"})
-    assert (status, json.loads(said)) == (413, {"ok": False, "error": "payload too large"})
+    assert (status, json.loads(said)) == (413, TOO_LARGE)
 
 
 def test_a_declared_length_past_the_cap_isnt_waited_for(served):
@@ -311,7 +325,7 @@ def test_a_declared_length_past_the_cap_isnt_waited_for(served):
         conn.endheaders()
         conn.send(b"{}")
         r = conn.getresponse()
-        assert (r.status, json.loads(r.read())) == (413, {"ok": False, "error": "payload too large"})
+        assert (r.status, json.loads(r.read())) == (413, TOO_LARGE)
     finally:
         conn.close()
 
@@ -361,17 +375,16 @@ def asked(served, how):
 
 
 @pytest.mark.parametrize("how", ["GET", "POST"])
-@pytest.mark.parametrize("raised, status, said", [(NotFound("gone"), 404, {"error": "gone"}), (Conflict("moved", conflict=True, version=7), 409, {"error": "moved", "conflict": True, "version": 7}),
-                                                  (Locked("held"), 423, {"error": "held"}), (Refused(), 400, {"error": "bad request"}), (Unreachable("away"), 502, {"error": "away"}),
-                                                  (Unreadable("garbled"), 422, {"error": "garbled"}), (Busy(), 409, {"busy": True}), (NotFound(), 404, {}),
-                                                  (OverLimit(7, 5), 402, {"error": "today's AI spending has reached the daily limit", "over_limit": True, "spent_micros": 7, "limit_micros": 5}),
-                                                  (AIOff("hunter2"), 409, {"error": "AI is off: MailMind has no Claude API key", "ai_off": True})],
+@pytest.mark.parametrize("raised, doc", [(NotFound("gone"), problems.not_found("gone")), (Conflict("moved", conflict=True, version=7), problems.conflict("moved", conflict=True, version=7)),
+                                         (Locked("held"), problems.locked("held")), (Refused(), problems.refused()), (Unreachable("away"), problems.unreachable("away")),
+                                         (Unreadable("garbled"), problems.unreadable("garbled")), (Busy(), problems.busy()), (NotFound(), problems.not_found()),
+                                         (OverLimit(7, 5), problems.over_limit(7, 5)), (AIOff("hunter2"), problems.ai_off())],
                          ids=lambda v: type(v).__name__ if isinstance(v, Exception) else "")
-def test_a_problem_answers_what_it_means(served, monkeypatch, how, raised, status, said):
+def test_a_problem_answers_what_it_means(served, monkeypatch, how, raised, doc):
     raising(monkeypatch, raised)
     monkeypatch.setattr(schema_contract, "HOLDING", False)
     r = asked(served, how)
-    assert (r.status, r.json) == (status, {"ok": False, **said})
+    assert (r.status, r.headers["content-type"], r.json) == (doc["status"], CONTENT_TYPE, doc)
 
 
 @pytest.mark.parametrize("raised", [TypeError("hunter2"), ValueError("hunter2")], ids=repr)
@@ -380,13 +393,13 @@ def test_a_type_or_value_error_is_a_malformed_post_and_on_a_read_a_failure(serve
     r = served.post("/api/toy-work", {})
     assert (r.status, r.json) == (400, BAD_REQUEST)
     r = served.get("/api/toy-work")
-    assert (r.status, r.json) == (500, {"ok": False, "error": "request failed"})
+    assert (r.status, r.json) == (500, problems.FAILED)
 
 
 def test_a_write_this_process_may_not_make_is_a_409_on_a_post_and_on_a_read_a_failure(served, monkeypatch):
     raising(monkeypatch, profile.ReadOnlyError("hunter2"))
     r = served.post("/api/toy-work", {})
-    assert (r.status, r.json) == (409, {"ok": False, "error": "MailMind is running read-only", "read_only": True})
+    assert (r.status, r.json) == (409, problems.read_only())
     assert served.get("/api/toy-work").status == 500
 
 
@@ -395,7 +408,7 @@ def test_a_write_this_process_may_not_make_is_a_409_on_a_post_and_on_a_read_a_fa
 def test_anything_else_is_the_fixed_500_with_its_class_in_the_log_and_no_traceback(served, monkeypatch, capsys, raised, how):
     raising(monkeypatch, raised)
     r = asked(served, how)
-    assert (r.status, r.json) == (500, {"ok": False, "error": "request failed"})
+    assert (r.status, r.json) == (500, problems.FAILED)
     out = capsys.readouterr()
     assert f"[http] {how} /api/toy-work failed: {type(raised).__name__}\n" in out.out
     assert "hunter2" not in out.out + out.err and "Traceback" not in out.err
@@ -569,15 +582,16 @@ def test_an_answer_that_isnt_json_says_so(data_dir):
     schema = get_openapi(title="MailMind", version="0", routes=create_app(routers=[r], token=lambda: "", body_cap=lambda m, p: 0).routes)
     said = schema["paths"]["/api/file"]["get"]["responses"]
     assert "content" not in said["200"] and "NotJson" not in schema["components"]["schemas"]
-    assert said["404"]["content"]["application/json"]["schema"]["$ref"].endswith("/Failure")
+    assert said["404"]["content"]["application/json"]["schema"]["$ref"].endswith("/Failure")     # tests/openapi_doc.py says what it is
 
 
 def test_a_failure_says_nothing_it_doesnt_name():
-    Failure.model_validate({"ok": False, "error": "x", "busy": True})
+    Failure.model_validate({"type": "/problems/busy", "title": "Busy", "status": 409, "busy": True})
+    Failure.model_validate({"type": "about:blank", "title": "Gone", "status": 410, "detail": "x"})
     with pytest.raises(ValueError):
-        Failure.model_validate({"ok": False, "surprise": 1})
+        Failure.model_validate({"type": "about:blank", "title": "Gone", "status": 410, "surprise": 1})
     with pytest.raises(ValueError):
-        Failure.model_validate({"ok": True})
+        Failure.model_validate({"ok": False, "error": "x"})
 
 
 def test_every_route_is_a_route():

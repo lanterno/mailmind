@@ -11,6 +11,7 @@ from datetime import timedelta
 
 import pytest
 
+import problems
 import route_tables
 from fakes import anthropic_api as fa
 from fixtures import world as w
@@ -73,8 +74,7 @@ def test_whatever_a_route_raises_its_answer_says_only_that_it_failed(app, monkey
         r = app.post(path, {}) if method == "POST" else app.get(path)
         assert not holds_it(r, SECRET), (method, path, r.body)
         answers.setdefault((r.status, json.dumps(r.body)), (method, path))
-    fixed = {'{"ok": false, "error": "request failed"}', '{"ok": false, "error": "bad request"}',
-             '{"ok": false, "error": "MailMind is running read-only", "read_only": true}'}
+    fixed = {json.dumps(said) for said in (problems.FAILED, problems.BAD_REQUEST, problems.read_only())}
     assert {said for _, said in answers} <= fixed, answers
 
 

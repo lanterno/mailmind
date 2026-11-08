@@ -79,7 +79,7 @@ def test_its_own_policy_lets_remote_images_in_only_when_asked(app, world, images
 def test_only_this_origin_may_ask_for_it(app, world, site, error):
     pk = world.pk("ada-inbox-05-receipt.eml")
     r = document(app, pk, key_of(pk), headers={"Sec-Fetch-Site": site})
-    assert (r.status, r.json["error"]) == (403, error)
+    assert (r.status, r.json["detail"]) == (403, error)
     assert r.headers["x-frame-options"] == "DENY" and "content-security-policy" not in r.headers
 
 

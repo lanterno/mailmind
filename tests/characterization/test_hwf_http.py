@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import gate
+import problems
 from fixtures import world as w
 from mailmind.platform.workers import gates
 from mailmind.curation.domain import cleanup_plan
@@ -486,7 +487,7 @@ def test_a_refused_folder_list_keeps_the_last_list(app, world):
 @pytest.mark.parametrize("body", [b"[1, 2]", b'"pk"', b"7", b"null", b"{not json"])
 def test_a_json_body_that_isnt_an_object_is_a_bad_request(app, body):
     r = app.post("/api/seen", body)
-    assert (r.status, r.json) == (400, {"ok": False, "error": "bad request"})
+    assert (r.status, r.json) == (400, problems.BAD_REQUEST)
 
 
 def test_a_body_that_isnt_an_object_is_refused_by_the_guards_first(app):

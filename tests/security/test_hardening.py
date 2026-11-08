@@ -16,6 +16,7 @@ import urllib.parse
 import pytest
 
 import app_client
+import problems
 from fixtures import world as w
 from mailmind.bootstrap import accounts, assistant, background, curation, mailbox
 from mailmind.bootstrap.accounts import config
@@ -504,7 +505,7 @@ def test_a_failed_read_answers_without_the_exception_text(app, monkeypatch):
     monkeypatch.setattr(mailbox.digest, "answer", boom)
     r = bare_get(app, "/api/digest", _PAGE)
     assert r.status == 500
-    assert r.json == {"ok": False, "error": "request failed"}
+    assert r.json == problems.FAILED
 
 
 def _undo_target(uid, mid):

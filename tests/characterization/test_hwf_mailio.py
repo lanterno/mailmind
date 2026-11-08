@@ -896,7 +896,7 @@ def test_hwf_received_mail_in_a_folder_named_for_drafts_is_no_draft(app, world, 
     assert "is_draft" not in app.get(f"/api/message/{pk}/body").json
     since = world.mark()
     refused = app.post("/api/draft/resume", {"pk": pk})
-    assert (refused.status, refused.json["ok"]) == (400, False)
+    assert (refused.status, refused.json["type"]) == (400, "/problems/refused")
     assert world.writes(since) == [] and q("SELECT id FROM drafts WHERE folder=?", folder) == []
 
 

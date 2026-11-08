@@ -1,13 +1,14 @@
 """A request that doesn't read as one gets the 400 a malformed request gets, not the 500 that means a bug here."""
 import pytest
 
+import problems
 import route_tables
 from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.parsed import as_int, required_int
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
+BAD_REQUEST = {"type": "/problems/refused", "title": "Refused", "status": 400, "detail": "bad request"}
 TOO_LARGE = "99999999999999999999999"
 
 
@@ -49,7 +50,7 @@ def test_a_message_named_by_what_cant_be_a_number(app, path, junk):
 @pytest.mark.parametrize("junk", ["x", TOO_LARGE])
 def test_drafting_ahead_for_what_cant_be_a_message(app, junk):
     r = app.get(f"/api/ai/draft-ahead?pk={junk}")
-    assert (r.status, r.json) == (400, {"ok": False, "error": "bad pk"})
+    assert (r.status, r.json) == (400, problems.refused("bad pk"))
 
 
 @pytest.mark.parametrize("path", ["/api/outbox/retry", "/api/outbox/cancel", "/api/outbox/sendnow", "/api/pending/retry",
@@ -70,7 +71,7 @@ def test_a_queued_item_named_by_what_cant_be_a_number(app, path, junk):
 @pytest.mark.parametrize("junk", [[1], 10 ** 30])
 def test_a_message_named_in_a_body_by_what_cant_be_a_number(app, path, field, said, junk):
     r = app.post(path, {field: junk, "preset": "tomorrow"})
-    assert (r.status, r.json) == (400, {"ok": False, "error": said})
+    assert (r.status, r.json) == (400, problems.refused(said))
 
 
 @pytest.mark.parametrize("path", ["/api/seen", "/api/flag", "/api/archive", "/api/junk", "/api/thread/archive",
@@ -143,7 +144,7 @@ def test_a_text_field_may_say_nothing(app, world):
 def test_a_file_named_by_anything_but_text(app, path, junk):
     r = app.post(path, {"account": w.ADA, "mode": "new", "to": ["lin@example.test"], "subject": "Hi", "text": "Hello",
                         "attachments": [{"filename": junk, "b64": "aGk="}]})
-    assert (r.status, r.json) == (400, {"ok": False, "error": "bad attachment"})
+    assert (r.status, r.json) == (400, problems.refused("bad attachment"))
 
 
 @pytest.mark.parametrize("verb, field", [("delete", "id"), ("create", "name"), ("create", "q")])
@@ -157,13 +158,13 @@ def test_a_saved_view_named_by_anything_but_text(app, verb, field, junk):
 
 def test_asking_after_an_account_there_is_no_such_of(app):
     r = app.get("/api/folders?account=nobody@example.test")
-    assert (r.status, r.json) == (400, {"ok": False, "error": "unknown account"})
+    assert (r.status, r.json) == (400, problems.refused("unknown account"))
 
 
 @pytest.mark.parametrize("path", ["/api/reconcile", "/api/sweep"])
 def test_acting_on_an_account_there_is_no_such_of(app, path):
     r = app.post(path, {"account": "nobody@example.test", "dry_run": True})
-    assert (r.status, r.json) == (400, {"ok": False, "error": "unknown account"})
+    assert (r.status, r.json) == (400, problems.refused("unknown account"))
 
 
 @pytest.mark.parametrize("field, said", [("port", "port must be 1–65535"), ("smtp_port", "SMTP port must be 1–65535")])
@@ -171,9 +172,9 @@ def test_acting_on_an_account_there_is_no_such_of(app, path):
 def test_a_port_that_cant_be_a_number(app, field, said, junk):
     added = app.post("/api/accounts/add", {"email": "new@example.test", "type": "imap", "host": "mail.example.test",
                                            "credential": {"style": "plain", "value": "p"}, field: junk})
-    assert (added.status, added.json) == (400, {"ok": False, "error": said})
+    assert (added.status, added.json) == (400, problems.refused(said))
     edited = app.post("/api/accounts/edit", {"email": w.ADA, field: junk})
-    assert (edited.status, edited.json) == (400, {"ok": False, "error": said})
+    assert (edited.status, edited.json) == (400, problems.refused(said))
 
 
 @pytest.mark.parametrize("junk", [[1], "x", 5, True])

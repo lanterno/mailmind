@@ -353,7 +353,7 @@ def test_a_get_that_fails_says_its_path_and_the_class_of_its_error(app, monkeypa
     logs.setup()
     monkeypatch.setattr(mailbox.pool, "stats", raises())
     r = app.get("/api/debug/pool?account=ada@example.test")
-    assert (r.status, r.json["error"]) == (500, "request failed")
+    assert (r.status, r.json["detail"]) == (500, "request failed")
     out = capsys.readouterr().out
     assert "[http] GET /api/debug/pool failed: RuntimeError\n" in out
     assert "example.test" not in out and "Lunch" not in out

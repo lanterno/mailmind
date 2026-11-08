@@ -156,5 +156,6 @@ def test_the_page_keeps_its_policy_word_for_word_which_allows_nothing_for_mail()
         "frame-ancestors 'none'; object-src 'none'")
 
 
-def test_every_refusal_answers_in_one_shape():
-    assert perimeter.Refusal(403, "cross-site request").answer() == {"ok": False, "error": "cross-site request"}
+def test_a_refusal_is_its_status_and_the_words_for_it_which_the_middleware_answers_as_a_problem_document():
+    assert perimeter.Refusal(403, "cross-site request") == perimeter.Refusal(status=403, error="cross-site request")
+    assert not hasattr(perimeter.Refusal, "answer")

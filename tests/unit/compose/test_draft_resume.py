@@ -14,6 +14,7 @@ from email.message import EmailMessage
 import pytest
 
 import app_client
+import problems
 from answered import answered
 from mailmind.bootstrap import accounts, mailbox
 from mailmind.bootstrap.compose import book, drafts, outbox, sending
@@ -746,7 +747,7 @@ def test_html_only_draft_is_refused(calls):
     raw = _foreign([lambda m: m.set_content("<p>Only <a href='https://x.example.test'>formatted</a></p>",
                                             subtype="html")])
     r, code = _resume(_synced(raw, 10))
-    assert code == 422 and "only has formatted text" in r["error"], (code, r)
+    assert code == 422 and "only has formatted text" in r["detail"], (code, r)
 
 
 def test_attached_email_is_refused(calls):
@@ -758,7 +759,7 @@ def test_attached_email_is_refused(calls):
         m.set_content("See the thread below.")
         m.add_attachment(inner)
     r, code = _resume(_synced(_foreign([body]), 11))
-    assert code == 422 and "email attached as a file" in r["error"], (code, r)
+    assert code == 422 and "email attached as a file" in r["detail"], (code, r)
 
 
 def _part(content, **kw):
@@ -781,12 +782,12 @@ def test_text_after_a_file_is_refused_not_dropped(calls):
     raw = _mixed(_part(b"\xff\xd8jpeg", maintype="image", subtype="jpeg", filename="a.jpg", disposition="inline"),
                  _part("And the important part: meet at 5pm at the north gate."))
     r, code = _resume(_synced(raw, 12))
-    assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
+    assert code == 422 and "can’t reopen without losing it" in r["detail"], (code, r)
 
 
 def test_nameless_file_is_refused_unless_marked_an_attachment(calls):
     r, code = _resume(_synced(_mixed(_part(b"%PDF-1.4 scan", maintype="application", subtype="pdf")), 13))
-    assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
+    assert code == 422 and "can’t reopen without losing it" in r["detail"], (code, r)
     raw = _mixed(_part(b"%PDF-1.4 scan", maintype="application", subtype="pdf", disposition="attachment"))
     r, code = _resume(_synced(raw, 14))
     assert code == 200 and [f["filename"] for f in r["files"]] == ["part-2"], (code, r)
@@ -835,7 +836,7 @@ def test_html_beside_the_text_with_words_of_its_own_is_refused(calls):
         m.add_attachment(b"%PDF-1.4", maintype="application", subtype="pdf", filename="plan.pdf")
         m.attach(_part("<div>And bring the badge.</div>", subtype="html"))
     r, code = _resume(_synced(_foreign([body]), 32))
-    assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
+    assert code == 422 and "can’t reopen without losing it" in r["detail"], (code, r)
 
 
 def test_outlook_style_invite_is_refused_a_named_one_is_a_file(calls):
@@ -845,7 +846,7 @@ def test_outlook_style_invite_is_refused_a_named_one_is_a_file(calls):
         m.set_content("Let’s sync.")
         m.add_alternative(ics, subtype="calendar", params={"method": "REQUEST"})
     r, code = _resume(_synced(_foreign([inline]), 17))
-    assert code == 422 and "calendar invite" in r["error"], (code, r)
+    assert code == 422 and "calendar invite" in r["detail"], (code, r)
 
     def named(m):
         m.set_content("Let’s sync.")
@@ -870,7 +871,7 @@ def test_data_in_a_boundaryless_multipart_part_is_refused_not_dropped(calls):
            b"--M\r\nContent-Type: multipart/related\r\nContent-Disposition: attachment; filename=\"page.mhtml\"\r\n"
            b"Content-Transfer-Encoding: base64\r\n\r\nTUlNRSBwYWdl\r\n--M--\r\n")
     r, code = _resume(_synced(raw, 33))
-    assert code == 422 and "can’t reopen without losing it" in r["error"], (code, r)
+    assert code == 422 and "can’t reopen without losing it" in r["detail"], (code, r)
 
 
 def test_files_over_the_cap_are_refused(calls, monkeypatch):
@@ -878,7 +879,7 @@ def test_files_over_the_cap_are_refused(calls, monkeypatch):
                                                                 "b64": base64.b64encode(b"x" * 64).decode()}])
     monkeypatch.setattr(limits, "MAX_ATTACH_BYTES", 32)
     r, code = _resume(pk)
-    assert code == 422 and "more than 25 MB" in r["error"], (code, r)
+    assert code == 422 and "more than 25 MB" in r["detail"], (code, r)
 
 
 def test_draft_whose_saves_would_be_too_large_is_refused(calls, monkeypatch):
@@ -892,16 +893,16 @@ def test_draft_whose_saves_would_be_too_large_is_refused(calls, monkeypatch):
     assert _resume(pk)[1] == 200
     monkeypatch.setattr(limits, "MAX_SEND_POST", need - len(r["tail_text"]) // 2)      # the files alone would still fit
     r, code = _resume(pk)
-    assert code == 422 and "too large for MailMind to save or send" in r["error"], (code, r)
+    assert code == 422 and "too large for MailMind to save or send" in r["detail"], (code, r)
 
 
 def test_bad_pk_unknown_and_not_a_draft(calls):
     opk = _original()
-    assert answered(drafts.resume, {"pk": "x"}) == ({"ok": False, "error": "Missing draft."}, 400)
+    assert answered(drafts.resume, {"pk": "x"}) == (problems.refused("Missing draft."), 400)
     assert answered(drafts.resume, {})[1] == 400
     assert answered(drafts.resume, {"pk": 99999})[1] == 404
     r, code = answered(drafts.resume, {"pk": opk})
-    assert code == 400 and r["error"] == "That message isn’t a draft.", r
+    assert code == 400 and r["detail"] == "That message isn’t a draft.", r
 
 
 def test_resume_route_requires_csrf(app, recorders):
@@ -1008,14 +1009,14 @@ def test_resave_three_times_keeps_one_quote_and_the_bcc(calls):
 def test_bad_resume_shape_is_400(calls):
     _, r = _reply_resumed(calls)
     res, code = answered(sending.send, _payload(r, resume="x"))
-    assert (code, res["error"]) == (400, "bad draft data"), res
+    assert (code, res["detail"]) == (400, "bad draft data"), res
     assert calls.sent == []
 
 
 def test_unflagged_reply_still_needs_its_original(calls):
     res, code = answered(sending.send, {"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
                                 "text": "hi", "in_reply_to_pk": "<orig1@example.test>"})
-    assert (code, res["error"]) == (400, "missing original message"), res
+    assert (code, res["detail"]) == (400, "missing original message"), res
 
 
 def test_replaced_copy_is_refused_and_drafts_resynced(calls, monkeypatch):
@@ -1024,7 +1025,7 @@ def test_replaced_copy_is_refused_and_drafts_resynced(calls, monkeypatch):
     monkeypatch.setattr(mailbox.ingest, "sync_folder", lambda acct, folder, full=False, recent=None: synced.append((acct["email"], folder, full)))
     monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: False)
     r, code = _resume(pk)
-    assert code == 409 and "changed since the list loaded" in r["error"], (code, r)
+    assert code == 409 and "changed since the list loaded" in r["detail"], (code, r)
     c = store.conn()
     gone = store.get_message(c, pk) is None
     c.close()
@@ -1041,7 +1042,7 @@ def test_a_draft_waiting_in_the_outbox_is_not_reopened(calls):
     c.commit()
     c.close()
     r, code = _resume(pk)
-    assert code == 423 and "in the outbox" in r["error"], (code, r)
+    assert code == 423 and "in the outbox" in r["detail"], (code, r)
     c = store.conn()
     outbox.QUEUE.cancel_queued(c, oid)
     c.commit()
@@ -1066,7 +1067,7 @@ def test_a_copy_replaced_or_sent_while_edit_waited_is_refused(change, calls, mon
     synced = []
     monkeypatch.setattr(mailbox.ingest, "sync_folder", lambda acct, folder, full=False, recent=None: synced.append(full))
     r, code = _resume(pk)
-    assert code == 409 and "changed since the list loaded" in r["error"] and synced == [True], (code, r)
+    assert code == 409 and "changed since the list loaded" in r["detail"] and synced == [True], (code, r)
 
 
 def test_save_and_send_cleanup_move_the_row_under_the_lock(calls, monkeypatch):
@@ -1127,7 +1128,7 @@ def test_a_part_header_that_wont_parse_is_unreadable_not_a_500(calls):
            b"--M\r\nContent-Type: text/plain\r\n\r\nHi\r\n--M\r\nContent-Type: text/plain\r\n"
            b"Content-Transfer-Encoding: " + b"(" * 3000 + b"base64\r\n\r\nSGk=\r\n--M--\r\n")
     r, code = _resume(_synced(raw, 41))
-    assert code == 422 and "can’t read this draft" in r["error"], (code, r)
+    assert code == 422 and "can’t read this draft" in r["detail"], (code, r)
 
 
 def test_raw_utf8_headers_come_back_as_text_and_send_cleanly(calls):
@@ -1158,7 +1159,7 @@ def test_unreadable_draft_is_422_and_only_a_dead_server_502(exc, want, calls, mo
     monkeypatch.setattr(mailbox.ingest, "fetch_body", fetch)
     r, code = _resume(pk)
     assert code == want, (code, r)
-    assert ("Try again" in r["error"]) is (want == 502) and ("can’t read" in r["error"]) is (want == 422), r
+    assert ("Try again" in r["detail"]) is (want == 502) and ("can’t read" in r["detail"]) is (want == 422), r
 
 
 def test_a_body_that_wont_parse_is_unreadable(calls, monkeypatch):
@@ -1168,7 +1169,7 @@ def test_a_body_that_wont_parse_is_unreadable(calls, monkeypatch):
         raise ValueError("address parts cannot contain CR or LF")
     monkeypatch.setattr(mime, "parse", parse)              # a body cached by an older Python
     r, code = _resume(pk)
-    assert code == 422 and "can’t read this draft" in r["error"], (code, r)
+    assert code == 422 and "can’t read this draft" in r["detail"], (code, r)
 
 
 class _FakeIMAP:

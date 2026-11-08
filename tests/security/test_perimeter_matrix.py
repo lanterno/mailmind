@@ -10,6 +10,7 @@ import json
 import pytest
 from fastapi.routing import iter_route_contexts
 
+import problems
 import route_tables
 import schema_contract
 from mailmind.bootstrap import front
@@ -91,7 +92,7 @@ def refusals(app, table, routes, cases):
             table.reached.clear()
             r = knock(app, method, path, headers)
             said = r.body if isinstance(r.body, dict) else r.body[:80]
-            if r.status != 403 or said != {"ok": False, "error": error} or table.reached:
+            if r.status != 403 or said != problems.blank(403, error) or r.headers["content-type"] != problems.CONTENT_TYPE or table.reached:
                 wrong.append((method, path, what, r.status, said))
     return wrong
 

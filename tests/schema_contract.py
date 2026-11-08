@@ -59,7 +59,7 @@ class HoldingAnswers:
             nonlocal status, json_answer
             if message["type"] == "http.response.start":
                 status = message["status"]
-                json_answer = dict(message["headers"]).get(b"content-type", b"").startswith(b"application/json")
+                json_answer = dict(message["headers"]).get(b"content-type", b"").startswith((b"application/json", b"application/problem+json"))
             elif json_answer:
                 chunks.append(message.get("body", b""))
             await send(message)

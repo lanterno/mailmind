@@ -2,6 +2,7 @@
 with Retry for what the queue gave up on and Discard for any of them."""
 import pytest
 
+import problems
 from fixtures import world as w
 from mailmind.bootstrap import mailbox
 from mailmind.platform import undo
@@ -205,7 +206,7 @@ def test_discard_waits_for_a_try_under_the_gate_and_gives_up_as_busy(app, world,
     mid = queue_archive(app, world)
     with gate.held_elsewhere(w.ADA):
         r = app.post("/api/pending/discard", {"id": mid})
-    assert (r.status, r.json) == (409, {"ok": False, "busy": True})
+    assert (r.status, r.json) == (409, problems.busy())
     assert tray(app)["waiting"] == 1
 
 
