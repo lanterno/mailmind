@@ -38,6 +38,7 @@ class ChangedPreferences(RequestBody):
     quiet_from: str | None = None
     quiet_until: str | None = None
     guide_offered: Flag | None = None
+    morning_brief: Flag | None = None
     ai_daily_limit_usd: Dollars | None = None
 
 
@@ -67,6 +68,7 @@ class Preferences(Answer):
     quiet_from: str
     quiet_until: str
     guide_offered: bool
+    morning_brief: bool
     ai_daily_limit_usd: float
 
 

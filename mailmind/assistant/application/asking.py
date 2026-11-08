@@ -59,6 +59,9 @@ class Asking:
         acct = self._one(qs_or_body, "account") or None
         return {acct} if (acct and acct in enabled) else enabled
 
+    def write_brief_ahead(self) -> None:
+        self._briefs.write_ahead(self._enabled())
+
     def briefing(self, force: bool = False, generate: bool = True) -> Result:
         """The synthesized 'Today' card. GET only reads what is stored (generate=False); POST
         /api/briefing writes it once, and /api/briefing/refresh again (force)."""

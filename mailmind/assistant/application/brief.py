@@ -176,7 +176,23 @@ class Briefs:
             raise Unreachable("delta unavailable", retry=True)
         return answer
 
-    def build(self, accounts_set: Iterable[str] | None, force: bool = False, generate: bool = True) -> Result:
+    def write_ahead(self, accounts_set: Iterable[str] | None) -> None:
+        """Today's brief, before anyone opens the Inbox: in the morning, with none stored, and once triage has read the last
+        day's mail, which is what a brief is made from. What is held back or fails waits for the next round."""
+        local = datetime.now().astimezone()
+        if not brief.is_morning(local.hour):
+            return
+        accounts_set = set(accounts_set or [])
+        with self._uow.read() as c:
+            if self._answers.needs_summary(c, 1, newer_than=int(local.timestamp()) - brief.AHEAD_READS_BACK):
+                return
+        try:
+            self.build(accounts_set, feature="brief-ahead")
+        except (NotSent, Unreachable):
+            return
+
+    def build(self, accounts_set: Iterable[str] | None, force: bool = False, generate: bool = True,
+              feature: str = "brief") -> Result:
         """With generate=False it only reads: nothing stored yet ->
         {missing:true}, and no AI call."""
         accounts_set = set(accounts_set or [])
@@ -217,7 +233,7 @@ class Briefs:
                 lines.append(line)
             prompt = prompts.BRIEF.fill(items="\n".join(lines))
             try:
-                obj = self._calls.call_claude_json(prompt, BRIEFING_SCHEMA, feature="brief")
+                obj = self._calls.call_claude_json(prompt, BRIEFING_SCHEMA, feature=feature)
             except NotSent:                     # AI off, or over the daily limit: the route answers it
                 raise
             except Exception as e:                  # transport: retryable, do NOT cache

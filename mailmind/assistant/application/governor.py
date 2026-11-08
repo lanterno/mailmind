@@ -8,7 +8,8 @@
   YIELD_SECONDS after one ends: the user is in the middle of something.
 - Presence. Speculative work runs only while someone has used the app in the last
   PRESENCE_SECONDS (the server says so with saw_someone()), so a tab left open over a holiday
-  doesn't keep drafting.
+  doesn't keep drafting. Scheduled work asks for someone in the last SCHEDULED_PRESENCE_SECONDS, since what it is written
+  for comes after a night away.
 - The daily limit, counted across every call by the usage ledger. At the limit, background and
   speculative work stops for the day. An interactive call raises OverLimit instead of being sent,
   unless the user has given leave to go over (allowing_over). The page asks first.
@@ -29,12 +30,13 @@ from contextlib import contextmanager
 from typing import Any
 
 from mailmind.assistant.application.ports import Deferred, LanguageModel, ModelError, OverLimit
-from mailmind.assistant.domain.features import INTERACTIVE, SPECULATIVE
+from mailmind.assistant.domain.features import INTERACTIVE, SCHEDULED, SPECULATIVE
 from mailmind.platform.logging import get_logger
 
 log = get_logger("ai")
 YIELD_SECONDS = 45
 PRESENCE_SECONDS = 45 * 60
+SCHEDULED_PRESENCE_SECONDS = 48 * 3600   # a day off leaves it on, and a holiday stops it
 TRIP_AFTER = 3                      # permanent rejections in a row, for one feature and model
 _AUTH = frozenset({401, 403})       # the key itself was refused: no feature will do better
 _EVERY = "*"                        # the breaker's scope for a refused key
@@ -87,6 +89,8 @@ class CostGovernor:
             if self._running or now - self._last_interactive < YIELD_SECONDS:
                 return "yielding"
             if kind == SPECULATIVE and now - self._last_seen > PRESENCE_SECONDS:
+                return "away"
+            if kind == SCHEDULED and now - self._last_seen > SCHEDULED_PRESENCE_SECONDS:
                 return "away"
             if self._is_open(feature, model, instance):
                 return "breaker"

@@ -1,7 +1,7 @@
 """The background jobs: which run in which profile, how often, and who may ask for a round now."""
 import time
 
-from mailmind.bootstrap import assistant, attention, compose, curation, mailbox
+from mailmind.bootstrap import accounts, assistant, attention, compose, curation, mailbox
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
 from mailmind.platform import environment, profile
@@ -26,6 +26,12 @@ def forget_round():
         store.forget_gone_messages(c, int(time.time()))
         store.command_forget_finished(c, int(time.time()))
         answers.batch_forget_finished(c, int(time.time()))
+
+
+def brief_ahead_round():
+    """The morning's brief, for someone who turned it on in Settings. Nothing happens otherwise."""
+    if accounts.config.preferences()["morning_brief"]:
+        assistant.asking.write_brief_ahead()
 
 
 def nosync():
@@ -63,3 +69,4 @@ def schedule(jobs):
     if _EXPIRE_INTERVAL > 0:                                               # the expiry rules
         jobs.add("expire", curation.expiry.round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
     jobs.add("forget", forget_round, every=86400, first=600)               # keys with no copy left
+    jobs.add("brief-ahead", brief_ahead_round, every=600, first=90)        # opt-in: the morning's brief

@@ -13,6 +13,8 @@ GROUPS_MAX = 6
 DELTA_TOP_N = 25
 DELTA_FLOOR = 24 * 3600     # how far back a delta looks at most
 DELTA_FLOOR_STEP = 600      # the floor moves in these steps
+AHEAD_FROM, AHEAD_UNTIL = 5, 12     # the local hours a brief may be written ahead of the first open
+AHEAD_READS_BACK = 24 * 3600        # how far back triage must have caught up first
 
 
 class Group(TypedDict):
@@ -63,6 +65,11 @@ def trim_narrative(s: str | None, cap: int = 1500) -> str:
         return cut[:end + 1].rstrip()
     sp = cut.rfind(" ", int(cap * 0.5))      # a word boundary in the BACK half only (never collapse to a
     return (cut[:sp] if sp > 0 else cut).rstrip() + "…"   # first-half space; else hard-cut at the cap)
+
+
+def is_morning(hour: int) -> bool:
+    """Whether a brief may be written ahead at this local hour."""
+    return AHEAD_FROM <= hour < AHEAD_UNTIL
 
 
 def clean(obj: Mapping[str, Any], valid_pks: Collection[int]) -> tuple[str, list[Group]]:
