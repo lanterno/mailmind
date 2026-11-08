@@ -350,3 +350,36 @@ def test_axe_finds_nothing_on_high_contrast(page, world, every_theme):
     assert found() == {}
     clean(page)
 
+
+def test_the_ai_limit_goes_in_the_file_at_its_top_level_within_its_bounds(page, world):
+    dialog = preferences_open(page)
+    field = dialog.get_by_label("Daily limit, in US dollars")
+    expect(field).to_have_value("15")
+    with page.pw.expect_response(lambda r: r.url.endswith("/api/digest") and r.request.method == "GET") as digest:
+        field.fill("2.5")
+        field.press("Tab")
+    assert digest.value.ok                               # what the sync menu says of it comes again
+    until(page, lambda: file_of(world).get("ai_daily_limit_usd") == 2.5, "the file holds the limit")
+    assert "ai_daily_limit_usd" not in file_of(world).get("preferences", {})
+    field.fill("5000")
+    field.press("Tab")
+    expect(field).to_have_value("1,000")
+    until(page, lambda: file_of(world).get("ai_daily_limit_usd") == 1000, "held to its bound")
+    clean(page)
+
+
+def test_notification_choices_and_quiet_hours_go_in_the_file(page, world):
+    dialog = preferences_open(page)
+    held = lambda: file_of(world).get("preferences", {})
+    expect(dialog.get_by_label("Quiet from")).to_have_count(0)
+    dialog.get_by_label("New mail").uncheck()
+    dialog.get_by_label("A meeting about to start").uncheck()
+    until(page, lambda: held().get("notify_new_mail") is False and held().get("notify_meetings") is False, "the file holds both")
+    dialog.get_by_label("Quiet hours").check()
+    expect(dialog.get_by_label("Quiet from")).to_have_value("22:00")
+    expect(dialog.get_by_label("Quiet until")).to_have_value("07:00")
+    dialog.get_by_label("Quiet from").fill("21:30")
+    until(page, lambda: held().get("quiet_hours") is True and held().get("quiet_from") == "21:30", "the file holds quiet hours")
+    assert "quiet_until" not in held()                   # what nobody changed stays out of the file
+    clean(page)
+

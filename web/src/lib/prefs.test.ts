@@ -135,3 +135,67 @@ describe("one preference as a store", () => {
     expect(client.post).toHaveBeenCalledWith("/api/preferences", { conversations: false });
   });
 });
+
+describe("quiet hours", () => {
+  const on = { quiet_hours: true, quiet_from: "22:00", quiet_until: "07:00" };
+  const at = (hours: number, mins = 0) => new Date(2026, 10, 2, hours, mins);
+  it("cover nothing while they're off", async () => {
+    const { quietNow } = await load();
+    expect(quietNow(at(23), { ...on, quiet_hours: false })).toBe(false);
+  });
+  it("across midnight are that evening and the morning after, the start in and the end out", async () => {
+    const { quietNow } = await load();
+    expect([at(22), at(23, 30), at(3), at(6, 59)].map((t) => quietNow(t, on))).toEqual([true, true, true, true]);
+    expect([at(7), at(12), at(21, 59)].map((t) => quietNow(t, on))).toEqual([false, false, false]);
+  });
+  it("within a day are that span", async () => {
+    const { quietNow } = await load();
+    const span = { quiet_hours: true, quiet_from: "09:00", quiet_until: "17:30" };
+    expect([at(9), at(17, 29)].map((t) => quietNow(t, span))).toEqual([true, true]);
+    expect([at(8, 59), at(17, 30), at(23)].map((t) => quietNow(t, span))).toEqual([false, false, false]);
+  });
+  it("that start where they end cover nothing", async () => {
+    const { quietNow } = await load();
+    expect(quietNow(at(8), { quiet_hours: true, quiet_from: "08:00", quiet_until: "08:00" })).toBe(false);
+  });
+});
+
+describe("whether a notification may go", () => {
+  const held = (over: object) => browserHolding({ mm_prefs: JSON.stringify(over) });
+  const noon = new Date(2026, 10, 2, 12);
+  it("goes by its own kind", async () => {
+    held({ notify_new_mail: false });
+    const { mayNotify } = await load();
+    expect(mayNotify("notify_new_mail", noon)).toBe(false);
+    expect(mayNotify("notify_meetings", noon)).toBe(true);
+  });
+  it("is no for either in quiet hours", async () => {
+    held({ quiet_hours: true, quiet_from: "11:00", quiet_until: "13:00" });
+    const { mayNotify } = await load();
+    expect(mayNotify("notify_new_mail", noon)).toBe(false);
+    expect(mayNotify("notify_meetings", noon)).toBe(false);
+    expect(mayNotify("notify_meetings", new Date(2026, 10, 2, 13))).toBe(true);
+  });
+});
+
+describe("a change that says what follows it", () => {
+  it("runs that once the server has it", async () => {
+    browserHolding({});
+    client.post.mockResolvedValue(answer({}));
+    const { setPrefs } = await load();
+    const saved = vi.fn();
+    setPrefs({ ai_daily_limit_usd: 3 }, saved);
+    expect(saved).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(saved).toHaveBeenCalledOnce());
+  });
+  it("doesn't when the server refuses", async () => {
+    browserHolding({});
+    client.post.mockRejectedValue(new Error("no"));
+    client.get.mockResolvedValue(answer({}));
+    const { setPrefs } = await load();
+    const saved = vi.fn();
+    setPrefs({ ai_daily_limit_usd: 3 }, saved);
+    await vi.waitFor(() => expect(client.get).toHaveBeenCalled());
+    expect(saved).not.toHaveBeenCalled();
+  });
+});

@@ -191,6 +191,24 @@ def test_new_mail_in_the_background_notifies_and_counts_in_the_title_and_here_it
     clean(page)
 
 
+@pytest.mark.parametrize("preferences, notes", [
+    ({"notify_new_mail": False}, 0),
+    ({"quiet_hours": True, "quiet_from": "11:00", "quiet_until": "13:00"}, 0),
+    ({"quiet_hours": True, "quiet_from": "13:00", "quiet_until": "14:00"}, 1),
+    ({"notify_meetings": False}, 1),
+], ids=["turned off", "in quiet hours", "outside them", "the other kind off"])
+def test_new_mail_notifies_as_the_preferences_say_and_the_title_counts_it_anyway(page, world, preferences, notes):
+    from mailmind.bootstrap import accounts
+    accounts.config.set_preferences(preferences)
+    page.pw.add_init_script(AWAY)
+    opened(page)
+    page.pw.evaluate("window.away = true")
+    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 2})
+    expect(page.pw).to_have_title("(2) MailMind")
+    assert page.pw.evaluate("notes.length") == notes
+    clean(page)
+
+
 def test_filing_the_server_refuses_puts_you_back_on_the_message(page, world):
     opened(page)
     receipt = row(page, world, RECEIPT)
@@ -477,6 +495,19 @@ def test_a_meeting_about_to_start_notifies_with_where_and_a_click_opens_the_invi
     assert note["body"].endswith(" · Room 1")
     page.pw.evaluate("notes.find((x) => x.tag.startsWith('mailmind-soon-')).onclick()")
     expect(row(page, world, RECEIPT)).to_have_class(re.compile(r"\bsel\b"))
+    clean(page)
+
+
+def test_a_meeting_about_to_start_stays_on_the_pill_when_its_notification_is_turned_off(page, world):
+    from mailmind.bootstrap import accounts
+    accounts.config.set_preferences({"notify_meetings": False})
+    page.pw.add_init_script(AWAY + "window.away = true;")
+    page.pw.route("**/api/upcoming", lambda route: route.fulfill(json={"ok": True, "items": [
+        {"key": world.key(RECEIPT), "folder": "INBOX", "uid": world.uid(RECEIPT), "account": w.ADA, "start": "2026-11-02T12:05:00+00:00", "end": "2026-11-02T12:35:00+00:00", "summary": "Standup", "location": "Room 1", "organizer": "", "all_day": False}]}))
+    opened(page)
+    expect(page.locator("#soonPill")).to_be_visible()
+    expect(page.locator("#srLive")).to_have_text("Standup starts in 5 min")
+    assert page.pw.evaluate("notes.filter((n) => n.tag.startsWith('mailmind-soon-')).length") == 0
     clean(page)
 
 
