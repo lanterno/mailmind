@@ -186,14 +186,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## The API, now that one client and one door read it
 
-- **`/api/v2`, with `pk` out of the API** · high value · effort L — A `pk` isn't stable, since reconcile can renumber rows,
-  and durable state keys on a message's `key`. The API still speaks in pks: a list row carries one beside `key`, the write
-  routes take one, `/api/message/<pk>/...` names one, and `Opened` in `web/src/app/route.ts` puts one in the URL (`?m=<pk>`,
-  with `&c=<thread>&ca=<account>` for a conversation), so a link kept across a renumber can open another message, or none.
-  `bodyUrl` in `mailDoc.ts` already sends both, and the frame refuses a pair that disagrees. One key spans a message's copies,
-  so what names a copy is its key and folder, as undo entries do and `store.pk_now` reads back. `/api/v2`, on the schemas
-  the page's types come from, takes and answers that, and `route.ts`, `useBody` and `features/mailbox`'s filing move across. One client reads the
-  API, so the old paths can go in the same change.
 - **Move the command line off `urllib_http.py`** · low value · effort S — `python3 -m mailmind` runs on Python alone, so
   `assess` and the rest reach Claude through `UrllibModel` (`TRANSPORTS` in `bootstrap/assistant.py`; only `front.build` calls
   `assistant.use("sdk")`), and `tests/contract/test_ai_contract.py` holds the two to one behaviour over `adapters.wire`.
@@ -305,4 +297,3 @@ implementation.
 
 1. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
-2. **What the old door's going unblocks** (high) — `/api/v2` with `pk` out of the API, above.

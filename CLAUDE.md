@@ -51,11 +51,11 @@ uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" l
 uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
 uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (146)
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (101)
-uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (29)
-uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (159)
+uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (44)
+uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (198)
 uv run pytest tests/unit/http/test_problems.py              # the problem document each of kernel.errors answers (32)
-uv run pytest tests/unit/http/test_route.py                 # what a route does around its handler, and what the app answers where none matches, on a toy router (181)
-uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (116)
+uv run pytest tests/unit/http/test_route.py                 # what a route does around its handler, and what the app answers where none matches, on a toy router (183)
+uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (118)
 uv run pytest tests/unit/http/test_event_stream.py          # what a tab holds, and every way a stream ends, Ctrl-C included (12)
 uv run pytest tests/unit/http/test_export_route.py          # the download in chunks, and that no way it ends leaves its folder (7)
 ```
@@ -496,7 +496,7 @@ def snooze(body: SnoozeBody):
     return attention.snoozing.snooze(body.model_dump(exclude_unset=True))
 ```
 
-- A handler is a plain `def` naming its **literal path**, a parameter only where the path has one (`/api/message/{pk}/body`, after
+- A handler is a plain `def` naming its **literal path**, a parameter only where the path has one (`/m/{place:path}`, after
   the literal paths it could shadow). `Route` refuses an `async def`, a `response_model` and a POST with no body model, `NoBody` if
   it reads nothing, as that model is what refuses a body that isn't a JSON object. It returns an object, `(object, code)` or a
   `Response` for what isn't JSON, naming `Content-Type` in `headers=`, since `media_type` adds a charset.
@@ -845,7 +845,7 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
   for nothing, and a removal has no Undo, so Discard, a Send and a replacing save remove a copy only
   if MailMind saved it, the server flags it or its folder is Drafts (`Outbox.draft_copy_is_ours`).
   Older `drafts` rows may name received mail: those are forgotten and the mail stays.
-- A reply or forward names its original by pk until its first save, whose answer carries `resume`
+- A reply or forward names its original by key (`original_key`) until its first save, whose answer carries `resume`
   (threading, the quote) and a forward's `files`; the composer then works from those, as a reopened
   draft does, and needs no row. The outbox row keeps the original's account, Message-ID and thread
   (`orig_*`, migration 27) and its key (`original_key`), so `\Answered` (`server_ops.mark_answered`) and the follow-up land after an
@@ -868,10 +868,20 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
   against `mailmind.assistant.domain.fingerprint`, which names messages by Message-ID: a thread
   summary, a reply drafted ahead, the brief, the delta and the review all use it. Migration 22
   moved stored thread summaries onto it. A stored brief and a stored review name their messages by
-  key and folder (below), and a read gives the pks they have now (`store.pk_now`).
+  key and folder (below), and a read gives the copies they have now (`store.copy_now`).
   No column names a message by pk (migration 45 ended the last four): a send goes by `orig_*`, and with no Message-ID to go by by
   `original_key` (migration 44), a draft by its own In-Reply-To, a reply drafted ahead and a follow-up by thread or Message-ID.
-  `in_reply_to_pk` in a request is a pk a moment old, which `Composing` and `Outbox.enqueue` find the original by.
+  `in_reply_to_pk` is the pk a send's `original_key` gives as it comes, which `Composing` and `Outbox.enqueue` find the original by.
+- **The API names no pk.** A request names a message by its key and a copy by its key and folder, and so does every answer: a
+  list row, the reader, filing's `filed`, a thread's `reply_key`, the brief, the review, Ask's sources, the Document Hub, an
+  invite and `draft-ready`. `mailmind.http.named` looks up the pk the row has as the request comes. A route that acts on a copy
+  (filing, a flag, the reader's body, frame and attachment, a bulk row, a snooze's `copies`, a block's trash, a draft reopened)
+  takes the copy in that folder, a listed one first, then the newer (`store.copy_pk`). One that acts on the message (a summary,
+  a reply drafted now or ahead, an RSVP, a send's `original_key`, mute, reply later, a follow-up's dismissal) takes its copy in
+  that folder where there is one, else another, a listed one first, then the newer (`store.message_pk`). One that isn't there
+  is a 404, or for drafting ahead `none`, and nothing is done. The page's URL names what is open the same way
+  (`?key=<key>&folder=<folder>`, with `&c=<thread>&ca=<account>` for a conversation), so a kept link opens the message it
+  named or nothing, and an old `?m=<pk>` opens nothing.
 - **A message's key outlives its rows.** `store.mint_key` gives one key per account and Message-ID
   (`mailmind.mailbox.domain.identity`; a message with none goes by its envelope), and
   `messages.message_key` names it on each copy (migration 30). `store.save_summary` writes what the AI
@@ -879,7 +889,7 @@ wins when the two disagree. The app refuses to start on a profile name it doesn'
   renumber or Gmail's All Mail copy pays for no second call. `needs_summary` offers one copy of each, and no
   row without a key. A key with no copy left waits 30 days (`gone_at`) for one to come back, then the `forget` job ends it.
   `store.init` (`store.repair_keys`) gives a key to a row an older commit wrote. Message rows in the API carry the key as `key`,
-  beside `pk`. New durable state about a message keys on it. Migration 45 ended `summaries`, a row for each copy, and
+  and the copy's `folder`. New durable state about a message keys on it. Migration 45 ended `summaries`, a row for each copy, and
   `messages.snoozed_until`, first bringing across what a run of an older commit wrote only there.
 - **A snooze outlives its row.** `attention.book.set_snooze` writes a `snoozes` row (migration 33, by key and
   folder), and every query asks that (`kernel.snoozed`: `not_snoozed_sql`, `snoozed_sql`), so a resync keeps it,
@@ -965,11 +975,12 @@ Mail bodies render in a sandboxed iframe with a deny-all CSP. `mailmind.content.
 defense in depth — **the iframe sandbox is the actual boundary**, so a sanitizer miss
 alone cannot execute script. Preserve that ordering when touching either.
 
-The reader's frame loads `GET /api/message/<pk>/body.html?key=<key>&images=0|1`
-(`Bodies.as_document`), the same sanitized HTML as `/body` or the plain text escaped, under `perimeter.mail_frame_headers`: a policy
-of its own, with a `sandbox` that holds even if the frame's attribute goes (a `<meta>` can't do that), and the one answer this origin
-may frame. The pk names the copy, since one key spans a message's copies, and a sender who reuses a Message-ID shares another's. The
-key must be that row's, so a renumbered pk never shows another message under the bar the page drew. A failure answers as a
+The reader's frame loads `GET /api/message/body.html?key=<key>&folder=<folder>&images=0|1`
+(`Bodies.copy_document`), the same sanitized HTML as `/api/message/body` or the plain text escaped, under
+`perimeter.mail_frame_headers`: a policy of its own, with a `sandbox` that holds even if the frame's attribute goes (a `<meta>` can't
+do that), and the one answer this origin may frame. The folder names the copy, since one key spans a message's copies. The row found
+must still hold that key as its body is read (`Bodies.as_document`), so a renumber never shows another message under the bar the
+page drew. A failure answers as a
 document too, or the frame would show a browser's error page. The document holds no style: `MailFrame` gives it its look
 (`mailDoc.lookOf`) as soon as it is parsed, folds a plain mail's quote and takes its link clicks through `contentDocument`, so a
 reading setting fetches nothing. Load images is a new frame on `images=1`, since moving a loaded frame would add a history entry.
@@ -1096,7 +1107,7 @@ did; a batch already out is still brought in.
 The brief, the delta and the review each have a table (migration 37): `briefs` and `reviews` by account set
 and local day, `deltas` by account set, watermark and fingerprint, so a window that changes is written once
 more however large it is. A review's lists and a brief's groups are stored by message key and read back as
-the pks those messages have now, and a message that has gone leaves them. A delta's items are the model's own
+the copies those messages have now, by key and folder, and a message that has gone leaves them. A delta's items are the model's own
 words, with no message behind them. Each table keeps a week. They are read and written apart:
 - A GET of `/api/briefing`, `/api/briefing/since` or `/api/review` reads only what is stored. When
   there is none it answers `missing: true` and calls nothing (the builders' `generate=False`).
