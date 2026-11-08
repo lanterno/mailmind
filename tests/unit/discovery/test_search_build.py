@@ -11,6 +11,7 @@ import pytest
 import problems
 from fixtures import world as w
 
+LABELLED = "EXISTS (SELECT 1 FROM message_labels l WHERE l.message_pk = m.pk AND l.label COLLATE NOCASE IN (?, ?))"
 FROM = "{from_name from_addr}"
 
 TABLE = [
@@ -57,6 +58,8 @@ TABLE = [
     ("after:soon", (None, [], [])),                                # a date that isn't one is ignored
     # together
     ("from:lin is:unread in:INBOX", (f'{FROM} : "lin"', ["m.seen = ?", "m.folder = ?"], [0, "INBOX"])),
+    ("label:Travel", (None, [LABELLED], ["Travel", "\\Travel"])),
+    ("-label:Travel", (None, ["NOT " + LABELLED], ["Travel", "\\Travel"])),
 ]
 
 
