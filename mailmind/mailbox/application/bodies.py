@@ -139,7 +139,7 @@ class Bodies:
             return 500, frame.of_text("Couldn’t load this message.")
         if pk is None:
             return 404, frame.of_text(_GONE)
-        return self.as_document(pk, key, load_images)
+        return self.as_document(pk, str(number), load_images)     # the key as read, so "007" names what 7 does
 
     def attachment(self, pk: int, part_id: str) -> dict[str, Any]:
         """A part of a message: its bytes, content type and filename, or the error that says why not."""
