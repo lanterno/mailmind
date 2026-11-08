@@ -893,3 +893,33 @@ def test_axe_finds_nothing_in_the_composer_with_its_check_and_its_menu_open(page
     assert findings() == {}
     page.keyboard.press("Escape")
     clean(page)
+
+
+PASTE_INTO = """(el, text) => { const data = new DataTransfer(); data.setData("text/plain", text);
+  el.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data })); }"""
+
+
+def test_a_pasted_link_goes_in_without_its_tracking(page, world):
+    opened(page)
+    page.keyboard.press("c")
+    box = body(page)
+    box.fill("Read this: ")
+    box.press("End")
+    box.evaluate(PASTE_INTO, "https://shop.example.test/a?id=7&utm_source=news and "
+                             "https://www.google.com/url?q=https%3A%2F%2Freal.example.test%2Fb%3Ffbclid%3Dx&sa=D")
+    expect(box).to_have_value("Read this: https://shop.example.test/a?id=7 and https://real.example.test/b")
+    clean(page)
+
+
+def test_a_paste_with_nothing_to_clean_is_left_to_the_browser(page, world):
+    opened(page)
+    page.keyboard.press("c")
+    box = body(page)
+    box.fill("x")
+    box.press("End")
+    untouched = box.evaluate("""(el) => { const data = new DataTransfer(); data.setData("text/plain", "plain words");
+      const e = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data });
+      el.dispatchEvent(e); return !e.defaultPrevented; }""")
+    assert untouched
+    expect(box).to_have_value("x")                       # a script's event inserts nothing by itself: the browser's paste would
+    clean(page)
