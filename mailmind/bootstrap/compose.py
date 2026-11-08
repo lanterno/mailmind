@@ -1,15 +1,17 @@
 """Binds Compose. Legacy modules and the command line reach it through this module: `sending`, `drafts`, `composing`,
-`outbox`, `transport`, and `book`, its tables."""
+`outbox`, `transport`, `snippets`, and `book`, its tables."""
 import imaplib
 
 from mailmind.accounts.api import TLSPinMismatch, provider_of
 from mailmind.bootstrap.mailbox import copies
+from mailmind.compose.adapters import snippets_file
 from mailmind.compose.adapters import sqlite as book
 from mailmind.compose.adapters.smtp import SmtpTransport
 from mailmind.compose.application.composing import Composing
 from mailmind.compose.application.drafts import Drafts
 from mailmind.compose.application.outbox import Outbox
 from mailmind.compose.application.sending import Sending
+from mailmind.compose.application.snippets import Snippets
 from mailmind.compose.domain.draft_journal import PUSH_TICK
 from mailmind.mailbox.domain import roles
 from mailmind.platform import sse
@@ -17,7 +19,7 @@ from mailmind.platform.db.uow import UnitOfWork
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import accounts
 
-__all__ = ["PUSH_TICK", "book", "composing", "drafts", "outbox", "sending", "transport"]
+__all__ = ["PUSH_TICK", "book", "composing", "drafts", "outbox", "sending", "snippets", "transport"]
 
 class _Credentials:
     """An account's TLS and its secret, until Accounts holds them."""
@@ -154,3 +156,4 @@ outbox = Outbox(_uow, book, transport, copies, _accounts, _mail, _Effects(), _sc
 composing = Composing(_uow, book, _accounts, _mail, _screen)
 sending = Sending(_uow, composing, outbox, book)
 drafts = Drafts(_uow, composing, outbox, book, _accounts, _mail, copies, _screen)
+snippets = Snippets(snippets_file)

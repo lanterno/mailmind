@@ -1,7 +1,7 @@
 """What the page asks of Compose, and what it answers."""
 from typing import Any, Literal
 
-from mailmind.compose.api import ComposeMode, PictureType
+from mailmind.compose.api import ComposeMode, PictureType, SnippetVerb
 from mailmind.http.schemas.common import Answer, Failure, Flag, NamesAMessage, Number, QueryArgs, RequestBody
 
 # As a person typed them: a string of addresses, or one for each chip (`addresses.parse_addr_list`, which judges each).
@@ -53,6 +53,12 @@ class PreviewPicture(RequestBody):
 class PreviewBody(RequestBody):
     text: str | None = None
     pictures: list[PreviewPicture] | None = None
+
+
+class SnippetChange(RequestBody):
+    verb: SnippetVerb | None = None           # left out is the use case's `verb must be save|delete`
+    trigger: str | None = None
+    text: str | None = None
 
 
 class ResumeBody(NamesAMessage):
@@ -149,6 +155,16 @@ class NothingToSave(Answer):
 class DraftDiscarded(Answer):
     ok: Literal[True]
     deleted: Literal[True]
+
+
+class Snippet(Answer):
+    trigger: str
+    text: str
+
+
+class Snippets(Answer):
+    ok: Literal[True]
+    snippets: list[Snippet]
 
 
 class Preview(Answer):

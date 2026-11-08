@@ -2,11 +2,18 @@
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
+from mailmind.compose.domain.snippets import Snippet
 from mailmind.content.mime import Parsed
 from mailmind.kernel.ids import AccountId, FolderName
 from mailmind.kernel.row import Connection, Row
 
 type Account = dict[str, Any]     # an account as the configuration has it, whose fields are the file's word for them
+
+
+class SnippetsFile(Protocol):
+    """Where a person's snippets are kept. What it reads is whatever the file held."""
+    def read(self) -> object: ...
+    def write(self, snippets: list[Snippet]) -> None: ...
 
 
 class Transport(Protocol):

@@ -8,6 +8,7 @@ from mailmind.compose.domain.forward import forward_bodies
 from mailmind.compose.domain.limits import MAX_ATTACH_BYTES, MAX_SEND_POST
 from mailmind.compose.domain.reply import reply_bodies
 from mailmind.compose.domain.resume import ComposeMode, lf, resume_split
+from mailmind.compose.domain.snippets import SnippetVerb
 
-__all__ = ["Built", "ComposeMode", "DraftCopyRemoved", "Failed", "MAX_ATTACH_BYTES", "MAX_SEND_POST", "MessageSpec", "PictureType", "Sent", "Unanswered", "build_message", "forward_bodies", "lf", "reference_chain", "reply_bodies", "resume_split",
+__all__ = ["Built", "ComposeMode", "DraftCopyRemoved", "Failed", "MAX_ATTACH_BYTES", "MAX_SEND_POST", "MessageSpec", "PictureType", "Sent", "SnippetVerb", "Unanswered", "build_message", "forward_bodies", "lf", "reference_chain", "reply_bodies", "resume_split",
            "thread_ids"]

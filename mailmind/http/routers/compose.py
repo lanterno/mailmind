@@ -1,4 +1,4 @@
-"""What the page asks of Compose: a send, a draft and the outbox."""
+"""What the page asks of Compose: a send, a draft, the outbox and the snippets."""
 from typing import Annotated
 
 from fastapi import Query
@@ -23,6 +23,8 @@ from mailmind.http.schemas.compose import (
     Retried,
     SendBody,
     SentNow,
+    SnippetChange,
+    Snippets,
 )
 from mailmind.kernel.errors import Conflict, NotFound, Problem, Refused
 from mailmind.platform.logging import get_logger
@@ -46,6 +48,14 @@ def router(compose, mailbox):
                 raise NotFound("original message not found")
             asked["in_reply_to_pk"] = pk
         return asked
+
+    @r.get("/api/snippets", responses=answers(Snippets))
+    def snippets():
+        return compose.snippets.listed()
+
+    @r.post("/api/snippets", responses=answers(Snippets))
+    def snippets_post(body: SnippetChange):
+        return compose.snippets.post(body.model_dump(exclude_unset=True))
 
     @r.get("/api/outbox", responses=answers(Outbox))
     def outbox(args: Annotated[OutboxArgs, Query()]):
