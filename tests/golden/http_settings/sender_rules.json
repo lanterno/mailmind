@@ -8,6 +8,7 @@
     "block_domains": [],
     "block_senders": [],
     "expire_hours": {},
+    "filters": [],
     "keep_domains": [],
     "keep_senders": [
      "lin@example.test"
@@ -40,6 +41,7 @@
     ],
     "block_senders": [],
     "expire_hours": {},
+    "filters": [],
     "keep_domains": [],
     "keep_senders": [
      "lin@example.test"
@@ -74,6 +76,7 @@
      "news@loom.example.test"
     ],
     "expire_hours": {},
+    "filters": [],
     "keep_domains": [],
     "keep_senders": [
      "lin@example.test"
@@ -126,6 +129,7 @@
      "news@loom.example.test"
     ],
     "expire_hours": {},
+    "filters": [],
     "keep_domains": [],
     "keep_senders": [
      "lin@example.test"
@@ -195,6 +199,7 @@
     "news@loom.example.test"
    ],
    "expire_hours": {},
+   "filters": [],
    "keep_domains": [],
    "keep_senders": [
     "lin@example.test"

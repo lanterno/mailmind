@@ -107,6 +107,7 @@
     "block_domains": [],
     "block_senders": [],
     "expire_hours": {},
+    "filters": [],
     "keep_domains": [],
     "keep_senders": []
    }

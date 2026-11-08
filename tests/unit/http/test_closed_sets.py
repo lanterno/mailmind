@@ -16,7 +16,7 @@ from mailmind.assistant.domain import limits as limits_of_ai
 from mailmind.attention.domain import snooze
 from mailmind.calendar.domain import rsvp
 from mailmind.compose.domain import limits, resume
-from mailmind.curation.domain import cleanup_plan, rulebook
+from mailmind.curation.domain import cleanup_plan, filters, rulebook
 from mailmind.discovery.domain import documents, views
 from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
 from mailmind.kernel import send_window, snoozed
@@ -27,7 +27,7 @@ from mailmind.platform.db import export
 # Each, as the page has it: by its name in the document.
 SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "RewriteOp": prompts.RewriteOp,
         "PlanVerb": action_plan.PlanVerb, "FilingVerb": filing.FilingVerb, "FlagName": filing.FlagName,
-        "Verdict": rulebook.Verdict, "BlockScope": cleanup_plan.BlockScope, "RsvpDecision": rsvp.RsvpDecision,
+        "Verdict": rulebook.Verdict, "BlockScope": cleanup_plan.BlockScope, "FilterVerb": filters.FilterVerb, "RsvpDecision": rsvp.RsvpDecision,
         "ComposeMode": resume.ComposeMode, "ViewVerb": views.ViewVerb, "DocumentKind": documents.DocumentKind,
         "Density": preferences.Density, "Theme": preferences.Theme, "ReadWidth": preferences.ReadWidth, "ReadSize": preferences.ReadSize,
         "ReadFont": preferences.ReadFont, "MailColors": preferences.MailColors, "SearchScope": preferences.SearchScope,
