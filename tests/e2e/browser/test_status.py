@@ -2,6 +2,7 @@
 import json
 import re
 import time
+import zipfile
 
 import pytest
 from playwright.sync_api import expect
@@ -381,5 +382,24 @@ def test_notification_choices_and_quiet_hours_go_in_the_file(page, world):
     dialog.get_by_label("Quiet from").fill("21:30")
     until(page, lambda: held().get("quiet_hours") is True and held().get("quiet_from") == "21:30", "the file holds quiet hours")
     assert "quiet_until" not in held()                   # what nobody changed stays out of the file
+    clean(page)
+
+
+def test_the_export_picker_downloads_the_mail_as_a_zip_in_the_format_chosen(page, world):
+    opened(page)
+    page.locator("#settingsBtn").click()
+    block = page.locator("#exportBlock")
+    expect(block.get_by_role("button", name=".eml files")).to_have_attribute("aria-pressed", "true")
+    with page.pw.expect_download() as got:
+        block.get_by_role("link", name="Export (.zip)").click()
+    assert re.fullmatch(r"mailmind-eml-\d{8}T\d{6}Z\.zip", got.value.suggested_filename)
+    with zipfile.ZipFile(got.value.path()) as z:
+        assert z.namelist() and all(name.endswith(".eml") for name in z.namelist())
+    block.get_by_role("button", name="mbox").click()
+    with page.pw.expect_download() as got:
+        block.get_by_role("link", name="Export (.zip)").click()
+    assert re.fullmatch(r"mailmind-mbox-\d{8}T\d{6}Z\.zip", got.value.suggested_filename)
+    with zipfile.ZipFile(got.value.path()) as z:
+        assert z.namelist() and all(name.endswith(".mbox") for name in z.namelist())
     clean(page)
 

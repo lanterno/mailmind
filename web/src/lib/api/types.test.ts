@@ -4,7 +4,7 @@ import type { AnyOf, BlockScope, ComposeMode, DocumentKind, DraftTone, FilingVer
 
 describe("the API's types", () => {
   it("give a file, a document or a stream no JSON to read", () => {
-    expectTypeOf<"/api/events" | "/api/export" | "/api/message/body.html" | "/api/message/attachment">().not.toExtend<keyof GetAnswers>();
+    expectTypeOf<"/api/events" | "/api/export" | "/api/export/archive" | "/api/message/body.html" | "/api/message/attachment">().not.toExtend<keyof GetAnswers>();
     expectTypeOf<"/api/message/body">().toExtend<keyof GetAnswers>();
   });
 
