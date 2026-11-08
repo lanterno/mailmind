@@ -84,6 +84,50 @@ def test_a_rows_snooze_button_asks_when_and_snoozes_that_row(page, world):
     clean(page)
 
 
+def test_a_rows_star_and_read_buttons_change_that_row_where_it_stands(page, world):
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    receipt.hover()
+    star = receipt.locator('[data-racts="star"]')
+    expect(star).to_have_attribute("title", "Star (s)")
+    star.click()
+    expect(page.locator("#toast")).to_have_text("Starred")
+    until(page, lambda: "\\Flagged" in world.where(RECEIPT)["server"][0][3], "the star never reached the server")
+    receipt.hover()
+    expect(star).to_have_attribute("title", "Unstar (s)")
+    star.click()
+    expect(page.locator("#toast")).to_have_text("Unstarred")
+    until(page, lambda: "\\Flagged" not in world.where(RECEIPT)["server"][0][3], "the unstar never reached the server")
+    seen = receipt.locator('[data-racts="seen"]')
+    receipt.hover()
+    expect(seen).to_have_attribute("title", "Mark read")
+    seen.click()
+    expect(page.locator("#toast")).to_have_text("Marked read")
+    expect(receipt).not_to_have_class(re.compile(r"\bunread\b"))
+    until(page, lambda: "\\Seen" in world.where(RECEIPT)["server"][0][3], "the read mark never reached the server")
+    receipt.hover()
+    expect(seen).to_have_attribute("title", "Mark unread (u)")
+    seen.click()
+    expect(page.locator("#toast")).to_have_text("Marked unread")
+    expect(receipt).to_have_class(re.compile(r"\bunread\b"))
+    until(page, lambda: "\\Seen" not in world.where(RECEIPT)["server"][0][3], "the unread mark never reached the server")
+    expect(page.locator("iframe.rd-iframe")).to_have_count(0)    # none of that opened it
+    clean(page)
+
+
+def test_a_conversations_read_button_marks_every_member_it_is_unread_for(page, world):
+    opened(page)
+    lunch = page.locator("#rows .row[data-key]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first
+    lunch.hover()
+    expect(lunch.locator('[data-racts="seen"]')).to_have_attribute("title", "Mark conversation read")
+    lunch.locator('[data-racts="seen"]').click()
+    expect(page.locator("#toast")).to_have_text("Marked read")
+    expect(lunch).not_to_have_class(re.compile(r"\bunread\b"))
+    both = ("ada-inbox-01-lunch.eml", "ada-inbox-02-lunch-confirm.eml")
+    until(page, lambda: all("\\Seen" in world.where(n)["server"][0][3] for n in both), "a member stayed unread on the server")
+    clean(page)
+
+
 def test_a_double_click_on_a_row_reads_it_in_focus(page, world):
     opened(page)
     receipt = row(page, world, RECEIPT)
