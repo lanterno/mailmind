@@ -149,12 +149,14 @@
  },
  {
   "body": {
-   "msg": "invalid token (need a domain or an address)",
-   "ok": false
+   "detail": "invalid token (need a domain or an address)",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -163,16 +165,18 @@
    "x-frame-options": "DENY"
   },
   "request": "a token that is neither address nor domain",
-  "status": 200
+  "status": 400
  },
  {
   "body": {
-   "msg": "verdict must be keep|block|remove",
-   "ok": false
+   "detail": "verdict must be keep|block|remove",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -181,7 +185,7 @@
    "x-frame-options": "DENY"
   },
   "request": "an unknown verdict",
-  "status": 200
+  "status": 400
  },
  {
   "note": "mailmind_rules.json",

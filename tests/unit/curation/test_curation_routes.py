@@ -86,9 +86,9 @@ def test_a_sweep_that_answers_an_account_by_account_failure_fits(app, world):
                                         ({"verdict": "keep"}, "invalid token (need a domain or an address)"),
                                         ({"token": LOOM}, "verdict must be keep|block|remove"),
                                         ({"token": LOOM, "verdict": "maybe"}, "verdict must be keep|block|remove")])
-def test_a_rule_that_wont_do_is_still_a_200(app, body, said):
+def test_a_rule_that_wont_do_is_refused_in_its_own_words(app, body, said):
     r = app.post("/api/rules", body)
-    assert (r.status, r.json) == (200, {"ok": False, "msg": said})
+    assert (r.status, r.json) == (400, problems.refused(said))
 
 
 def test_a_rule_removed_places_nothing(app):
@@ -97,11 +97,12 @@ def test_a_rule_removed_places_nothing(app):
     assert (r.status, r.json["placed_in"], r.json["rules"]["keep_senders"]) == (200, None, [])
 
 
-@pytest.mark.parametrize("query, said", [("", "bad address"), ("?addr=", "bad address"), ("?addr=loom", "bad address"),
-                                         ("?addr=nobody@example.test", "no such sender")])
-def test_a_sender_that_wont_do_is_still_a_200(app, query, said):
+@pytest.mark.parametrize("query, said", [("", problems.refused("bad address")), ("?addr=", problems.refused("bad address")),
+                                         ("?addr=loom", problems.refused("bad address")),
+                                         ("?addr=nobody@example.test", problems.not_found("no such sender"))])
+def test_a_sender_that_wont_do_says_why(app, query, said):
     r = app.get("/api/cleanup/sender" + query)
-    assert (r.status, r.json) == (200, {"ok": False, "error": said})
+    assert (r.status, r.json) == (said["status"], said)
 
 
 def test_a_cleanup_refused_says_so_in_its_own_words(app):
