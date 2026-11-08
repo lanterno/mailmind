@@ -16,6 +16,8 @@ from mailmind.http.schemas.compose import (
     NothingToSave,
     Outbox,
     OutboxArgs,
+    Preview,
+    PreviewBody,
     Queued,
     ResumeBody,
     Retried,
@@ -86,6 +88,10 @@ def router(compose, mailbox):
             return compose.drafts.save(composed(body))
         except ValueError as ve:
             raise Refused(str(ve)) from ve
+
+    @r.post("/api/compose/preview", responses=answers(Preview))       # read-only: what you typed, as it would go out
+    def compose_preview(body: PreviewBody):
+        return compose.composing.preview(body.text or "")
 
     @r.post("/api/draft/resume", responses=answers(DraftOpened))      # read-only: a saved draft, back into the composer
     def draft_resume(body: ResumeBody):

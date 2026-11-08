@@ -22,6 +22,11 @@ class Composing:
     def __init__(self, uow: UnitOfWork, book: Book, accounts: Accounts, mail: Messages, screen: Screen):
         self._uow, self._book, self._accounts, self._mail, self._screen = uow, book, accounts, mail, screen
 
+    def preview(self, text: str) -> dict[str, Any]:
+        """What you typed as it would go out, for the composer's Preview. Your own words, so it reads and writes nothing."""
+        html, formatted = composition.preview(text)
+        return {"ok": True, "html": html, "formatted": formatted}
+
     def spec(self, body: Mapping[str, Any]) -> tuple[Composed, int | None, Account]:
         """Shared by send + save-draft: resolve account, decode attachments, assemble
         reply/forward bodies + threading. Returns (spec, in_reply_to_pk, acct)."""

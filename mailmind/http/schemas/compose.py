@@ -44,6 +44,10 @@ class DraftBody(Composition):
     base_version: Number | None = None        # none overwrites, and 0 is a version
 
 
+class PreviewBody(RequestBody):
+    text: str | None = None
+
+
 class ResumeBody(NamesAMessage):
     """A draft MailMind saved, by its id, or a copy of one in Drafts by its key and folder."""
     draft_id: Number | None = None
@@ -137,6 +141,12 @@ class NothingToSave(Answer):
 class DraftDiscarded(Answer):
     ok: Literal[True]
     deleted: Literal[True]
+
+
+class Preview(Answer):
+    ok: Literal[True]
+    html: str                                 # what the frame shows of what you typed
+    formatted: bool                           # false: there is no Markdown in it, and it goes out as plain text
 
 
 class DraftChanged(Failure):
