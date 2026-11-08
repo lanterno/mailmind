@@ -27,6 +27,7 @@ from mailmind.assistant.application.brief import Briefs
 from mailmind.assistant.application.bulk import BulkCommands
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.context import ContextAssembler
+from mailmind.assistant.application.extract import Extractor
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor, allowing_over
 from mailmind.assistant.application.prepared_replies import PreparedReplies
@@ -42,7 +43,7 @@ from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "status", "threads", "transport", "use"]
+__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "replies", "reviews", "rewriter", "status", "threads", "transport", "use"]
 
 CONFIG = "mailmind.config.json"
 ENV = environment.ANTHROPIC_API_KEY.name
@@ -225,6 +226,7 @@ briefs = Briefs(calls, answers, _uow, _mail)
 reviews = Reviews(calls, answers, _uow, _mail)
 replies = ReplyDrafts(calls, context, _uow, _mail)
 rewriter = Rewriter(calls)
+extractor = Extractor(calls, context, _uow, _mail)
 asker = Asker(calls, _mail)
 asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)
 drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, curation.looks_human)

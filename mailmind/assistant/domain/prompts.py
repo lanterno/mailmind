@@ -182,4 +182,23 @@ PLAN = Template("plan", 2,
     "  \"what did Stripe send me?\" -> {\"intent\":\"search\",\"filter\":\"from:stripe\"}\n\n"
     "COMMAND: <<<{cmd}>>>\n")
 
-BOOK = (TRIAGE, THREAD, BRIEF, DELTA, REVIEW, REPLY, REWRITE, ASK, PLAN)
+EXTRACT = Template("extract", 1, """You are reading ONE email for the person who owns the mailbox, to find what its text \
+proposes that could go in their calendar or on their to-do list. They look over what you find, and nothing happens unless they \
+confirm it. Reply with ONLY a JSON object with these keys:
+- "events": the meetings, calls and appointments the text proposes, each {"title": "...", "start": "...", "end": "...", \
+"place": "..."}: a short name for it, when it starts, when it ends ("" if the text doesn't say), and where ("" if it doesn't say).
+- "tasks": what the text asks of the owner, each {"title": "...", "due": "..."}: a short imperative, and the day it is due \
+("" if the text names none).
+
+Write every date in ISO 8601: YYYY-MM-DDTHH:MM for a time, adding a UTC offset only if the text names a time zone, and \
+YYYY-MM-DD for a whole day. Today is {today}. The email was sent {sent}, so work out words like "next Tuesday" from that. \
+Leave out an event whose day the text doesn't settle, and keep to what the text says: if it proposes nothing, both lists are empty.
+
+Email:
+From: {frm}
+Subject: {subject}
+Body:
+{body}
+""")
+
+BOOK = (TRIAGE, THREAD, BRIEF, DELTA, REVIEW, REPLY, REWRITE, ASK, PLAN, EXTRACT)

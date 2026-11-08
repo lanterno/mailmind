@@ -50,6 +50,17 @@ class ContextAssembler:
             out.append(r)
         return out
 
+    def body_of(self, r: Row) -> str:
+        """A message's text, asked of the server only if it has none stored and none has come down yet."""
+        body = r["body_text"] or r["snippet"] or ""
+        if not body and not r["body_fetched"]:
+            try:
+                parsed = gates.run(r["account"], lambda: self._mail.fetch_body(r["pk"]), priority=gates.Priority.INTERACTIVE)
+                body = (parsed["text"] if parsed else None) or ""
+            except Exception:
+                body = ""
+        return body
+
     def gather(self, rows: list[Row]) -> tuple[list[str], int]:
         omitted = 0
         if len(rows) > CAP_MSGS:                       # keep the first (context) + the most recent
@@ -58,15 +69,7 @@ class ContextAssembler:
         blocks: list[str] = []
         total = 0
         for i, r in enumerate(rows, 1):
-            body = r["body_text"] or r["snippet"] or ""
-            if not body and not r["body_fetched"]:     # only hit IMAP for body-less members
-                try:
-                    parsed = gates.run(r["account"], lambda: self._mail.fetch_body(r["pk"]),
-                                       priority=gates.Priority.INTERACTIVE)
-                    body = (parsed["text"] if parsed else None) or ""
-                except Exception:
-                    body = ""
-            body = _trim(body)
+            body = _trim(self.body_of(r))
             if total + len(body) > CAP_TOTAL:
                 body = body[:max(0, CAP_TOTAL - total)]
             total += len(body)

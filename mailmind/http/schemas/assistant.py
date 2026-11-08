@@ -60,6 +60,27 @@ class DraftAheadArgs(QueryArgs):
     peek: str | None = None
 
 
+class SuggestedEvent(Answer):
+    """A meeting the text proposes, its `start` and `end` a day or a time (`kernel.proposed`)."""
+    title: str
+    start: str
+    end: str | None
+    place: str
+    all_day: bool
+
+
+class SuggestedTask(Answer):
+    title: str
+    due: str | None                         # a day, YYYY-MM-DD
+
+
+class Extracted(Answer):
+    ok: Literal[True]
+    events: list[SuggestedEvent]
+    tasks: list[SuggestedTask]
+    model: str
+
+
 class Unavailable(Failure):
     """The model didn't answer (`Unreachable`), and `retry` says asking again can help."""
     retry: Literal[True] | None = None

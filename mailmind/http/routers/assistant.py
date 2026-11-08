@@ -24,6 +24,7 @@ from mailmind.http.schemas.assistant import (
     DraftedReply,
     DraftReplyBody,
     Expired,
+    Extracted,
     PlanBody,
     PlanCarriedOut,
     PlanIsASearch,
@@ -36,7 +37,7 @@ from mailmind.http.schemas.assistant import (
     Summary,
     Unavailable,
 )
-from mailmind.http.schemas.common import Failure, NoBody, answers
+from mailmind.http.schemas.common import Failure, NamesAMessage, NoBody, answers
 from mailmind.kernel.errors import Problem
 from mailmind.platform import perimeter
 from mailmind.platform.logging import get_logger
@@ -102,6 +103,11 @@ def router(assistant, mailbox):
     @_scrubbed("rewrite error", "rewrite failed")
     def rewrite(body: RewriteBody):
         return assistant.asking.rewrite(body.model_dump(exclude_unset=True))
+
+    @r.post("/api/ai/extract", responses=answers(Extracted, _MAY_FAIL))     # what a message proposes: suggestions, nothing made
+    @_scrubbed("extract error", "extract failed")
+    def extract(body: NamesAMessage):
+        return assistant.extractor.read(named.with_message(mailbox, body.model_dump(exclude_unset=True))["pk"])
 
     @r.post("/api/ai/ask", responses=answers(Answered, _MAY_FAIL))
     @_scrubbed("ask error", "ask failed")
