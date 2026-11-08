@@ -5,6 +5,7 @@ import pytest
 from axe_playwright_python.sync_playwright import Axe
 from playwright.sync_api import expect
 
+from fakes import anthropic_api as fa
 from fixtures import world as w
 
 pytestmark = pytest.mark.browser
@@ -117,6 +118,33 @@ def opened_receipt(page, world):
     page.goto(f"/m/{w.ADA}/INBOX?key={world.key(RECEIPT)}&folder=INBOX&uid={world.uid(RECEIPT)}")
     expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
     return page
+
+
+def test_summarizing_a_sender_waits_for_the_click_and_shows_what_came_back(page, world, ai):
+    opened_receipt(page, world)
+    page.locator("button.rd-sender").click()
+    card = page.get_by_role("dialog", name="About this sender")
+    button = card.get_by_role("button", name="Summarize this sender")
+    expect(button).to_be_visible()
+    asked = lambda: [r for r in ai.requests if "what one sender has been writing" in r.prompt]
+    assert asked() == []
+    ai.queue(fa.answer({"summary": "A shop you buy thread from.", "topics": ["orders"], "open": "Confirm the address."}))
+    button.click()
+    expect(card.locator(".cc-sum p").first).to_have_text("A shop you buy thread from.")
+    expect(card.locator(".cc-topics")).to_have_text("orders")
+    expect(card.locator(".cc-open")).to_contain_text("Confirm the address.")
+    expect(button).to_have_count(0)
+    assert len(asked()) == 1
+    clean(page)
+
+
+def test_with_ai_off_a_sender_summary_says_so(page, world):
+    opened_receipt(page, world)
+    page.locator("button.rd-sender").click()
+    card = page.get_by_role("dialog", name="About this sender")
+    card.get_by_role("button", name="Summarize this sender").click()
+    expect(card.locator(".cc-sum")).to_contain_text("AI is off.")
+    expect(card.get_by_role("button", name="Summarize this sender")).to_have_count(0)
 
 
 def test_the_sender_opens_a_card_that_says_who_they_are(page, world):
