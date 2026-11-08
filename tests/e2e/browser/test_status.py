@@ -120,7 +120,7 @@ def test_the_help_overlay_lists_the_keys_and_can_turn_single_keys_off(page, worl
     opened(page)
     page.keyboard.press("?")
     dialog = page.get_by_role("dialog", name="Keyboard")
-    expect(dialog).to_contain_text("next / prev unread")
+    expect(dialog).to_contain_text("Next unread")
     dialog.get_by_label(re.compile("Disable single-key shortcuts")).check()
     page.keyboard.press("Escape")
     expect(dialog).to_be_hidden()
@@ -132,6 +132,34 @@ def test_the_help_overlay_lists_the_keys_and_can_turn_single_keys_off(page, worl
     expect(page.locator("#cmpBody")).to_have_count(0)
     page.keyboard.press("?")                           # how you find the setting again, as on the page
     dialog.get_by_label(re.compile("Disable single-key shortcuts")).uncheck()
+    clean(page)
+
+
+LEGEND_ROWS = """gs => gs.flatMap(g => {
+    const cells = [...g.children], rows = [];
+    for (let i = 0; i < cells.length; i += 2) rows.push([[...cells[i].querySelectorAll('kbd')].map(k => k.textContent), cells[i + 1].textContent.trim()]);
+    return rows;
+})"""
+
+
+def test_the_legend_comes_from_the_commands_and_names_keys_nothing_open_would_offer(page, world):
+    opened(page)                                                 # the Inbox: no message open, nothing marked
+    page.keyboard.press("?")
+    dialog = page.get_by_role("dialog", name="Keyboard")
+    expect(dialog).to_be_visible()
+    keys = {words: k for k, words in dialog.locator(".g").evaluate_all(LEGEND_ROWS)}
+    assert keys["Reply later"] == ["l"]                          # the key it never had
+    assert keys["Archive"] == ["e"] and keys["Reply"] == ["r"]   # these need a message open
+    assert keys["Delete"] == ["d", "#", "⌦", "⌫"]                 # every key the command takes
+    assert keys["Next message"] == ["j", "↓"]
+    assert keys["Save this search as a view"] == ["v"]           # only a search offers it
+    assert keys["Commands"] == ["⌘K"]                            # no command owns this one
+    go_to = next(words for k, words in dialog.locator(".g").evaluate_all(LEGEND_ROWS) if k[0] == "g")
+    assert go_to.startswith("Go to folder") and "l reply later" in go_to and "i inbox" in go_to and "w waiting" in go_to
+    page.keyboard.press("Escape")
+    page.keyboard.press("g")
+    expect(page.locator("#toast")).to_have_text(re.compile(r"Go to folder:.*i·.*·l$"))
+    page.keyboard.press("Escape")
     clean(page)
 
 
