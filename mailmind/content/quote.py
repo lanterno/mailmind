@@ -16,7 +16,7 @@ def own_html(new_text: str | None) -> str:
 
 def quoted_text_html(tail: str) -> str:
     """A quote with no HTML of its own, for a message whose own words have some: line for line, its `>` lines as a quote."""
-    out = []
+    out: list[str] = []
     for quoted, lines in groupby(tail.strip("\n").split("\n"), lambda line: line.startswith(">")):
         inner = "<br>".join(html_escape(line[2:] if line.startswith("> ") else line[1:] if quoted else line) for line in lines)
         out.append(f"{BLOCKQUOTE}{inner}</blockquote>" if quoted else f"<div>{inner}</div>")
