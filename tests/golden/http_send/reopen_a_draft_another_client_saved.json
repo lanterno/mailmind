@@ -15,6 +15,7 @@
    },
    "ok": true,
    "orig_pk": null,
+   "original_key": null,
    "participants": [],
    "references": "",
    "split": "whole",
@@ -62,6 +63,7 @@
    },
    "ok": true,
    "orig_pk": 18,
+   "original_key": 18,
    "participants": [
     "ivo@harbor.example.test",
     "bea@example.test"
