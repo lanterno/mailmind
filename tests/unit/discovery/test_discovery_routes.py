@@ -1,5 +1,5 @@
 """Discovery's routes on their router: a query string of any text answers, what the schemas refuse and let by, and the one route's own catch."""
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import problems
 from fixtures import world as w
@@ -10,6 +10,7 @@ from mailmind.kernel.errors import Refused
 BAD_REQUEST = problems.BAD_REQUEST
 NOTHING_ASKED = {"ok": True, "query": "", "items": [], "total": 0, "has_more": False}
 SECRET = "hunter2-secret-token"
+RECEIPT = "ada-inbox-05-receipt.eml"
 
 
 # ── a search ─────────────────────────────────────────────────────────────────────────────────────
@@ -97,6 +98,18 @@ def test_a_card_for_what_cant_be_an_address(app):
 def test_a_card_for_who_you_know(app):
     r = app.get("/api/contact?addr=lin@example.test")
     assert (r.status, r.json["ok"], r.json["addr"]) == (200, True, "lin@example.test")
+
+
+def test_opening_a_message_says_who_its_sender_is(app, world):
+    """The card's first facts come with the body, so the reader asks nothing more of the page."""
+    r = app.get("/api/message/body?" + urlencode(world.copy(RECEIPT)))
+    card = app.get("/api/contact?addr=orders@thimble.example.test").json
+    assert r.json["sender"] == {"count": card["count"], "replied": card["replied"], "first_ago": card["first_ago"]}, r.json
+
+
+def test_a_prefetch_asks_nothing_about_the_sender(app, world):
+    r = app.get("/api/message/body?" + urlencode({**world.copy(RECEIPT), "prefetch": "1"}))
+    assert "sender" not in r.json, r.json
 
 
 def test_a_message_in_two_folders_counts_once_on_the_card(app, world):

@@ -20,6 +20,11 @@
    "ok": true,
    "references": "",
    "reply_to": "",
+   "sender": {
+    "count": 4,
+    "first_ago": "12d",
+    "replied": 1
+   },
    "subject": "Lunch on Thursday?",
    "text": "Hi Ada,\r\n\r\nAre you free for lunch on Thursday? The noodle place by the station reopened.\r\n\r\nLin\r\n",
    "thread_id": "rf:ada@example.test:f55e4e75612a3def",
@@ -97,6 +102,11 @@
    "ok": true,
    "references": "",
    "reply_to": "",
+   "sender": {
+    "count": 2,
+    "first_ago": "3d",
+    "replied": 0
+   },
    "subject": "Design review",
    "text": "Let's walk through the new layouts.\r\n",
    "thread_id": "rf:ada@example.test:9f2993fccfd8ca64",
@@ -147,6 +157,11 @@
    "ok": true,
    "references": "",
    "reply_to": "",
+   "sender": {
+    "count": 2,
+    "first_ago": "3d",
+    "replied": 0
+   },
    "subject": "Fwd: Fabric samples",
    "text": "Forwarding Lin's note, see attached.\r\n",
    "thread_id": "rf:ada@example.test:46cc6a37490f7358",
@@ -187,6 +202,11 @@
    "ok": true,
    "references": "<atelier-oct@atelier.example.test>\r  <atelier-sep@atelier.example.test>",
    "reply_to": "",
+   "sender": {
+    "count": 1,
+    "first_ago": "2d",
+    "replied": 0
+   },
    "subject": "Projet d’atelier — planning de novembre",
    "text": "Bonjour Ada, voici le planning de novembre pour l’atelier.\r\n",
    "thread_id": "rf:ada@example.test:b56ed2a0fc20ba1c",
@@ -237,6 +257,11 @@
    "ok": true,
    "references": "",
    "reply_to": "",
+   "sender": {
+    "count": 4,
+    "first_ago": "12d",
+    "replied": 1
+   },
    "subject": "The finished quilt",
    "text": null,
    "thread_id": "rf:ada@example.test:d6e7bd3a63a67d5a",
@@ -290,6 +315,11 @@
    "ok": true,
    "references": "<contract-v2@harbor.example.test>",
    "reply_to": "",
+   "sender": {
+    "count": 1,
+    "first_ago": "16h",
+    "replied": 0
+   },
    "subject": "Re: Contract draft v2",
    "text": "Hi Ivo, my comments are in the attached file. Two points stand out.\r\n",
    "thread_id": "rf:bea@example.test:1f7815dd634a2ba6",
@@ -330,6 +360,11 @@
    "ok": true,
    "references": "",
    "reply_to": "",
+   "sender": {
+    "count": 1,
+    "first_ago": "4h",
+    "replied": 0
+   },
    "subject": "Your parcel is out for delivery",
    "text": "Parcel 77 will arrive today between 10:00 and 14:00.\r\n",
    "thread_id": "gm:cy@example.test:1800000000000000004",
