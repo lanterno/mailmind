@@ -34,6 +34,13 @@ def brief_ahead_round():
         assistant.asking.write_brief_ahead()
 
 
+def tidy_round():
+    """Tidy on its own, for someone who turned it on: it reads what the AI said, so not with AI off or held back."""
+    if accounts.config.preferences()["auto_tidy"] and assistant.calls.engine() != "none" \
+            and not assistant.gateway().held_back("auto-tidy", assistant.calls.MODEL):
+        mailbox.tidying.round()
+
+
 def nosync():
     """Whether this process runs read-only (mailmind.platform.profile: MAILMIND_PROFILE, or the
     older MAILMIND_NOSYNC), with no background sync, reconcile or expiry."""
@@ -70,3 +77,4 @@ def schedule(jobs):
         jobs.add("expire", curation.expiry.round, every=_EXPIRE_INTERVAL, first=min(180, _EXPIRE_INTERVAL))
     jobs.add("forget", forget_round, every=86400, first=600)               # keys with no copy left
     jobs.add("brief-ahead", brief_ahead_round, every=600, first=90)        # opt-in: the morning's brief
+    jobs.add("tidy", tidy_round, every=900, first=120)                     # opt-in: Tidy once a day

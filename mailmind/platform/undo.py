@@ -73,6 +73,16 @@ def pop(c: Connection) -> Entry | None:
     return json.loads(top["entry"])
 
 
+def pop_group(c: Connection, group: str) -> Entry | None:
+    """Take one group off the stack, wherever it stands: its entry, or None when it has gone."""
+    _expire(c)
+    held = c.execute("SELECT id, entry FROM undo_entries WHERE grp=? ORDER BY id DESC LIMIT 1", (group,)).fetchone()
+    if held is None:
+        return None
+    c.execute("DELETE FROM undo_entries WHERE id=?", (held["id"],))
+    return json.loads(held["entry"])
+
+
 def forget(c: Connection, names: Callable[[Entry], bool]) -> None:
     """There is nothing to reverse any more: take the newest entry `names(entry)` is true of off the stack, or out of
     its group."""
@@ -158,7 +168,13 @@ class Undo:
         """Pop the last undoable action and reverse it, and say what went back: a group says how many of it did and how
         many didn't. Raises NotFound (`empty`) when there is nothing to undo, and Conflict when none of it went back. What
         didn't go back is on the stack again for another try, and so is all of it when a reversal raised, which goes on up."""
-        entry = self._undo_db(pop)                # off the stack before any server is asked
+        return self._reverse(self._undo_db(pop))  # off the stack before any server is asked
+
+    def undo_group(self, group: str) -> dict[str, Any]:
+        """As undo_last, for one group wherever it stands on the stack: what was done after it stays done, and stays undoable."""
+        return self._reverse(self._undo_db(lambda c: pop_group(c, group)))
+
+    def _reverse(self, entry: Entry | None) -> dict[str, Any]:
         if entry is None:
             raise NotFound(empty=True)
         kept = False                              # what couldn't be reversed is back on the stack

@@ -145,7 +145,7 @@ class MailCommands:
             push_undo(c, {"kind": "gmail_archive" if where.drop_inbox_label else "move", "command": id_,
                           "account": email, "src_folder": row["folder"], "dest_folder": where.folder or "",
                           "message_id": mid, "label": _UNDO_LABEL.get(kind, "Updated"),
-                          "subject": row["subject"], "thread_id": row["thread_id"]})
+                          "subject": row["subject"], "who": row["from_name"] or row["from_addr"], "thread_id": row["thread_id"]})
         claimed = self._claim(c, id_)
         return command.Accepted(id_, email, True, undoable, claimed)
 

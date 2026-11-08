@@ -38,6 +38,7 @@ from mailmind.mailbox.application.reversal import Reversals
 from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.syncing import Syncing
+from mailmind.mailbox.application.tidying import Tidying
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import MailSession, ReadOnlySession
 from mailmind.platform import bus, profile
@@ -336,6 +337,7 @@ def _after_undo():
 undo = Undo(_uow, {"move": reversals.move, "gmail_archive": reversals.gmail_archive, "snooze": _reverse_snooze,
                          "mute": _reverse_mute, "unblock": _reverse_block}, _after_undo, _directory.quiet_error)
 filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
+tidying = Tidying(_uow, store, filing, undo)
 
 
 def _kick(job):

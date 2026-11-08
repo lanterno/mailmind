@@ -139,6 +139,18 @@ def command_forget_finished(c, now_ts, days=30):
     return c.execute("DELETE FROM mail_commands WHERE state='done' AND done_at < ?", (cutoff,)).rowcount
 
 
+def command_ran_under(c, mutation_id):
+    """Whether any command was accepted under this mutation id."""
+    return c.execute("SELECT 1 FROM mail_commands WHERE idempotency_key GLOB ? LIMIT 1", (f"*:{mutation_id}",)).fetchone() is not None
+
+
+def archives_undone(c):
+    """Each message whose archive an Undo took back, as (account, Message-ID), for as long as the log keeps it: that message
+    stays where a person put it."""
+    return {(r["account"], r["message_id"]) for r in c.execute(
+        "SELECT account, message_id FROM mail_commands WHERE kind='archive' AND json_extract(params, '$.undone') IS NOT NULL")}
+
+
 def command_mark_reversed(c, mid):
     """An Undo took this move back: it was asked and it happened, so its row stays as it is but for saying so."""
     c.execute("UPDATE mail_commands SET params=json_set(COALESCE(params, '{}'), '$.undone', 1) WHERE id=?", (mid,))
@@ -701,11 +713,13 @@ def delta_rows(c, accounts, since_ts, n):
 
 
 def handled_since(c, accounts, since_iso):
-    """How many messages went to Archive since then, by the command log, which keeps each for a month. One an Undo took back
-    doesn't count (command_mark_reversed)."""
+    """How many messages a person sent to Archive since then, by the command log, which keeps each for a month. One an Undo took
+    back doesn't count (command_mark_reversed), and nor does what Tidy filed on its own."""
     ac, ap = _among(accounts, "account")
     return c.execute("SELECT COUNT(*) FROM mail_commands WHERE kind='archive' AND applied=1 AND done_at>=? "
-                     "AND json_extract(params, '$.undone') IS NULL" + ac, [since_iso, *ap]).fetchone()[0]
+                     "AND json_extract(params, '$.undone') IS NULL "
+                     "AND idempotency_key NOT GLOB '*:tidy-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'" + ac,
+                     [since_iso, *ap]).fetchone()[0]
 
 
 def sent_since(c, accounts, since_ts):

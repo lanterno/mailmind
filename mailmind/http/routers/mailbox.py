@@ -50,6 +50,8 @@ from mailmind.http.schemas.mailbox import (
     SyncStarted,
     Thread,
     ThreadArgs,
+    TidyRun,
+    TidyUndoBody,
     Undone,
     ViewCounts,
     WaitingListing,
@@ -215,6 +217,19 @@ def router(mailbox):
     def undo(body: NoBody):
         try:
             return mailbox.undo.undo_last()
+        except Problem:
+            raise
+        except Exception:                   # Undo logged it, and put it back for another try
+            return route.problem(500, "couldn’t undo")
+
+    @r.get("/api/tidy", responses=answers(TidyRun))
+    def tidy():
+        return mailbox.tidying.latest()
+
+    @r.post("/api/tidy/undo", responses=answers(Undone, {404: NothingToUndo}))
+    def tidy_undo(body: TidyUndoBody):
+        try:
+            return mailbox.tidying.undo(body.group)
         except Problem:
             raise
         except Exception:                   # Undo logged it, and put it back for another try

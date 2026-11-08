@@ -518,6 +518,23 @@ class RowsFiled(ManyFiled):
     partial: bool
 
 
+class TidyUndoBody(RequestBody):
+    group: str | None = None                # names one run: anything else is the use case's `bad request`
+
+
+class TidyItem(Answer):
+    subject: str | None
+    who: str | None
+
+
+class TidyRun(Answer):
+    """The newest run of Tidy that can still be taken back, or no group at all."""
+    ok: Literal[True]
+    group: str | None
+    filed: int
+    items: list[TidyItem]
+
+
 class Undone(Answer):
     ok: Literal[True]
     label: str | None
