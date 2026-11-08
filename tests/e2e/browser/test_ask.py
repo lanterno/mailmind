@@ -140,10 +140,10 @@ def test_do_confirmed_archives_and_one_undo_brings_it_all_back(page, world, ai):
 def test_a_destructive_plan_takes_a_second_press(page, world, ai):
     plan = do_plan_for(page, ai, "from:lin", verb="trash")
     since = world.mark()
-    plan.locator(".do-confirm").click()
-    expect(plan.locator(".do-confirm")).to_have_text("Click again to confirm")
+    plan.locator(".btn-retry.strong").click()
+    expect(plan.locator(".btn-retry.strong")).to_have_text("Click again to confirm")
     assert world.writes(since) == []
-    plan.locator(".do-confirm").click()
+    plan.locator(".btn-retry.strong").click()
     until(page, lambda: mailboxes(world, LUNCH) == ["Trash", "Trash"], "both trashed on the server")
     clean(page)
 

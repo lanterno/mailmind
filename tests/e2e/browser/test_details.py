@@ -863,7 +863,7 @@ def test_a_list_or_a_search_that_fails_says_so(page, app, world):
     archive.click()
     expect(page.locator("#rows")).to_contain_text("Couldn\u2019t load messages.")
     page.unroute("**/api/messages*")
-    page.locator("#rows .ai-rerun").click()
+    page.locator("#rows .btn-retry").click()
     expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     page.route("**/api/search*", lambda route: route.abort())
     page.locator("#search").fill("lunch")
