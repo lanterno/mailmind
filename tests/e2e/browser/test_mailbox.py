@@ -36,9 +36,8 @@ def opened(page):
 
 
 def row(page, world, name):
-    pk = world.pk(name)
-    assert pk is not None, f"{name} has no row in the database"
-    return page.locator(f'#rows .row[data-pk="{pk}"]')
+    assert world.pk(name) is not None, f"{name} has no row in the database"
+    return page.locator('#rows .row[data-key="{key}"][data-folder="{folder}"]'.format(**world.copy(name)))
 
 
 def mailbox(world, name):
@@ -46,11 +45,11 @@ def mailbox(world, name):
 
 
 def test_a_link_from_when_the_app_lived_at_next_opens_the_same_place(page, world):
-    pk = world.pk(RECEIPT)
-    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
+    key = world.key(RECEIPT)
+    page.goto(f"/next/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX")
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     expect(page.locator("iframe.rd-iframe")).to_have_count(1)
-    assert page.url.endswith(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}") and "/next" not in page.url
+    assert page.url.endswith(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX") and "/next" not in page.url
     clean(page)
 
 
@@ -74,10 +73,39 @@ def test_a_folder_is_a_link_and_back_comes_back(page, world):
 
 
 def test_a_deep_link_opens_the_message(page, world):
-    pk = world.pk(RECEIPT)
-    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
-    expect(page.locator(".rd-subj")).to_be_visible()
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX")
+    expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
     expect(page.locator("iframe.rd-iframe")).to_have_count(1)
+    clean(page)
+
+
+def test_a_kept_link_still_opens_its_message_after_a_renumber(page, world):
+    from mailmind.bootstrap import accounts
+    from mailmind.bootstrap.mailbox import ingest, store
+
+    def inbox_pks():
+        c = store.conn()
+        try:
+            return {r["pk"] for r in c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX'", (w.ADA,))}
+        finally:
+            c.close()
+    link = f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX"
+    before = inbox_pks()
+    world.server.renumber(w.ADA, "INBOX")                 # UIDVALIDITY changes: every row the Inbox had goes, and comes back anew
+    ingest.sync_new(accounts.get(w.ADA))
+    assert inbox_pks() and before.isdisjoint(inbox_pks())
+    page.goto(link)
+    expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
+    expect(page.locator("iframe.rd-iframe")).to_have_count(1)
+    clean(page)
+
+
+def test_a_link_from_before_keys_opens_nothing(page, world):
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={world.pk(RECEIPT)}")
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    page.wait_for_timeout(300)
+    expect(page.locator(".rd-subj")).to_have_count(0)
+    expect(page.locator("iframe.rd-iframe")).to_have_count(0)
     clean(page)
 
 
@@ -129,7 +157,7 @@ def test_archive_files_it_opens_the_next_and_undo_brings_it_back(page, world):
     expect(page.locator("#undoFloat")).to_be_visible()
     page.keyboard.press("z")
     until(page, lambda: mailbox(world, RECEIPT) == "INBOX", "Undo never reached the server")
-    expect(page.locator("#rows .row[data-pk]").filter(has_text=subject)).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]").filter(has_text=subject)).to_have_count(1)
     expect(page.locator("#toast")).to_have_text(re.compile("undone"))
     clean(page)
 
@@ -181,7 +209,7 @@ def test_j_and_k_walk_the_list_and_the_listbox_says_where_you_are(page, world):
 
 def test_a_conversation_opens_whole_with_its_latest_open_and_files_whole(page, world):
     opened(page)
-    r = page.locator("#rows .row[data-pk]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first
+    r = page.locator("#rows .row[data-key]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first
     r.click()
     expect(page.locator("#thread .tmsg")).to_have_count(3)
     expect(page.locator("#thread .tmsg").last).to_have_class(re.compile(r"\bopen\b"))
@@ -196,7 +224,7 @@ def test_a_conversation_opens_whole_with_its_latest_open_and_files_whole(page, w
 
 def test_e_on_a_conversations_row_files_every_message_its_sent_copy_stays_and_z_brings_them_back(page, world):
     opened(page)
-    convo = page.locator("#rows .row[data-pk]").filter(has_text="Lunch on Thursday?")
+    convo = page.locator("#rows .row[data-key]").filter(has_text="Lunch on Thursday?")
     expect(convo).to_have_count(1)                        # one row for the two inbox messages
     expect(convo.locator(".thr-count")).to_have_text("2")
     convo.click()
@@ -213,7 +241,7 @@ def test_e_on_a_conversations_row_files_every_message_its_sent_copy_stays_and_z_
 
 def test_an_undo_that_restores_only_part_says_so_and_z_tries_the_rest(page, world):
     opened(page)
-    convo = page.locator("#rows .row[data-pk]").filter(has_text="Lunch on Thursday?")
+    convo = page.locator("#rows .row[data-key]").filter(has_text="Lunch on Thursday?")
     convo.click()
     page.keyboard.press("e")
     until(page, lambda: all(mailbox(world, n) == "Archive" for n in LUNCH), "the conversation wasn't filed whole")
@@ -244,11 +272,11 @@ def test_a_search_shows_what_it_finds_and_escape_leaves_it(page, world):
 
 def test_new_mail_comes_into_the_list_by_itself(page, world):
     opened(page)
-    before = page.locator("#rows .row[data-pk]").count()
+    before = page.locator("#rows .row[data-key]").count()
     world.deliver(w.ADA, "INBOX", w.variant(RECEIPT, Message_ID="<fresh@example.test>", Subject="Fresh off the press"))
     sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
-    until(page, lambda: page.locator("#rows .row[data-pk]").count() > before, "the new mail never showed")
-    expect(page.locator("#rows .row[data-pk]").filter(has_text="Fresh off the press")).to_have_count(1)
+    until(page, lambda: page.locator("#rows .row[data-key]").count() > before, "the new mail never showed")
+    expect(page.locator("#rows .row[data-key]").filter(has_text="Fresh off the press")).to_have_count(1)
     clean(page)
 
 
@@ -290,7 +318,7 @@ def test_what_changes_elsewhere_shows_on_an_open_list(page, app, world):
     until(page, lambda: mailbox(world, RECEIPT) == "Archive", "the server never filed it")
     expect(page.locator("#toast")).to_have_text("Archived")
     assert app.post("/api/undo", {}).json["ok"]           # another tab's Undo
-    expect(page.locator("#rows .row[data-pk]").filter(has_text="Your receipt for order 1042")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]").filter(has_text="Your receipt for order 1042")).to_have_count(1)
     clean(page)
 
 
@@ -393,22 +421,22 @@ def test_snooze_takes_it_off_the_list_by_preset_digit_and_undo_brings_it_back(pa
     expect(page.locator("#toast")).to_have_text("Snoozed")
     page.locator('#folderrail .frow[data-folder="__snoozed__"]').click()
     expect(page.locator("#listTitle")).to_have_text("Snoozed")
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     page.keyboard.press("z")
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(0)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(0)
     clean(page)
 
 
 def test_mute_files_the_thread_away_and_tells_the_server_it_was_read(page, world):
     opened(page)
-    r = page.locator("#rows .row[data-pk]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first
+    r = page.locator("#rows .row[data-key]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first
     r.click()
     expect(page.locator("#thread .tmsg")).to_have_count(3)
     page.keyboard.press("w")
     expect(page.locator("#toast")).to_have_text("Muted")
     expect(r).to_have_count(0)
     page.locator('#folderrail .frow[data-folder="__muted__"]').click()
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     clean(page)
 
 
@@ -423,7 +451,7 @@ def test_reply_later_keeps_the_row_moves_on_and_done_takes_it_out_of_the_stack(p
     until(page, lambda: page.url != first, "it didn't move on")
     expect(r).to_be_visible()
     page.locator('#folderrail .frow[data-folder="__replylater__"]').click()
-    later = page.locator("#rows .row[data-pk]")
+    later = page.locator("#rows .row[data-key]")
     expect(later).to_have_count(1)
     later.click()
     expect(page.get_by_role("button", name="Done").first).to_be_visible()
@@ -434,7 +462,7 @@ def test_reply_later_keeps_the_row_moves_on_and_done_takes_it_out_of_the_stack(p
 
 def test_marked_rows_file_together_and_one_undo_brings_them_all_back(page, world):
     opened(page)
-    rows = page.locator("#rows .row[data-pk]")
+    rows = page.locator("#rows .row[data-key]")
     before = rows.count()
     names = (RECEIPT, "ada-inbox-03-newsletter.eml")
     for name in names:

@@ -58,16 +58,16 @@ def message(body, kind="html", mid="<hostile@example.test>"):
 def delivered(world, raw, mid="<hostile@example.test>"):
     world.deliver(w.ADA, "INBOX", raw)
     c = store.conn()
-    pk = c.execute("SELECT pk FROM messages WHERE message_id=?", (mid,)).fetchone()["pk"]
+    key = c.execute("SELECT message_key FROM messages WHERE message_id=?", (mid,)).fetchone()["message_key"]
     c.close()
-    return pk
+    return key
 
 
-OWN_DOCUMENT = re.compile(r"/api/message/\d+/body\.html\?key=\d+&images=0$")
+OWN_DOCUMENT = re.compile(r"/api/message/body\.html\?key=\d+&folder=INBOX&images=0$")
 
 
-def opening(page, pk):
-    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
+def opening(page, key):
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX")
 
 
 @pytest.fixture(params=["sanitized", "no sanitizer"])

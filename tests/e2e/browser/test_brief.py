@@ -64,7 +64,7 @@ def spent_the_daily_limit():
 
 
 def card(page, world, name):
-    return page.locator(f'.bf-need[data-pk="{world.pk(name)}"]')
+    return page.locator(f'.bf-need[data-key="{world.key(name)}"]')
 
 
 def box(world, name):
@@ -143,7 +143,7 @@ def test_a_card_answers_snoozes_and_files_without_opening_the_message(page, worl
     until(page, lambda: box(world, RECEIPT) != "INBOX", "the server never archived it")
     expect(page.locator(".bf-tally[data-brief='needs']")).to_contain_text("1 needs you")
     page.locator("#ufUndo").click()
-    expect(page.locator(".bf-need").filter(has_text="Your receipt")).to_be_visible()   # a new row, so a new pk
+    expect(receipt).to_be_visible()   # a new row, and the same key
     until(page, lambda: box(world, RECEIPT) == "INBOX", "the server never put it back")
 
     lunch.get_by_role("button", name=re.compile("^Snooze")).click()
@@ -168,7 +168,7 @@ def test_k_above_the_first_row_comes_back_to_the_brief(page, world, ai):
     lunch_needs_a_reply(world)
     brief_replies(ai)
     page.goto("/")
-    expect(page.locator("#rows .row[data-pk]").first).to_be_visible()
+    expect(page.locator("#rows .row[data-key]").first).to_be_visible()
     page.locator("body").press("j")
     expect(page.locator("#reader")).not_to_have_class(re.compile("brief-pane"))
     page.locator("body").press("k")
@@ -183,11 +183,11 @@ def test_needs_you_opens_a_list_of_its_own_with_a_way_back(page, world, ai):
     page.locator(".bf-tally[data-brief='needs']").click()
     expect(page.locator("#listTitle")).to_have_text("Needs you")
     expect(page.locator("#clientCtx")).to_contain_text("from today’s brief")
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(2)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(2)
     expect(page.locator("#count")).to_have_text("2 messages")
     assert "/brief/needs" in page.url
     page.reload()                                      # the URL says where you are
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(2)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(2)
     page.get_by_role("button", name="‹ Inbox").click()
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     clean(page)
@@ -200,9 +200,9 @@ def test_a_topic_from_the_brief_lists_its_mail(page, world, ai):
     page.locator(".bf-topic").click()
     expect(page.locator("#listTitle")).to_have_text("Lunch")
     expect(page.locator("#clientCtx")).to_contain_text("from today’s brief")
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     page.reload()                                      # the stored brief still names it
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     clean(page)
 
 

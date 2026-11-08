@@ -47,7 +47,7 @@ def until(page, check, what):
 
 
 def arrives(world, body, ctype="text/html", subject="A message"):
-    """A message that just landed in Ada's Inbox: its pk and key."""
+    """A message that just landed in Ada's Inbox: its row's pk, and its key, which the page names it by."""
     raw = (f"From: Mallory <mallory@evil.example.test>\r\nTo: Ada Park <ada@example.test>\r\nSubject: {subject}\r\n"
            f"Date: Sun, 01 Nov 2026 09:00:00 +0000\r\nMessage-ID: <{abs(hash(body))}@evil.example.test>\r\nMIME-Version: 1.0\r\n"
            f"Content-Type: {ctype}; charset=utf-8\r\n\r\n{body}").encode()
@@ -58,9 +58,9 @@ def arrives(world, body, ctype="text/html", subject="A message"):
     return r["pk"], r["message_key"]
 
 
-def reading(page, pk):
-    """The reader on message `pk`, its frame's document dressed."""
-    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={pk}")
+def reading(page, key):
+    """The reader on the Inbox's copy of message `key`, its frame's document dressed."""
+    page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX")
     frame = page.locator("iframe.rd-iframe")
     expect(frame).to_be_visible()
     until(page, lambda: frame.evaluate("f => !!f.contentDocument?.head?.querySelector('style')"), "the frame was never dressed")
@@ -94,8 +94,8 @@ def test_it_loads_from_its_own_url_with_its_own_policy(page, world):
     pk, key = arrives(world, "<p>Hello</p>")
     documents = []
     page.pw.on("response", lambda r: documents.append(r) if "/body.html" in r.url else None)
-    frame = reading(page, pk)
-    assert frame.get_attribute("src") == f"/api/message/{pk}/body.html?key={key}&images=0"
+    frame = reading(page, key)
+    assert frame.get_attribute("src") == f"/api/message/body.html?key={key}&folder=INBOX&images=0"
     assert frame.get_attribute("srcdoc") is None
     assert frame.get_attribute("sandbox") == "allow-same-origin"
     assert frame.evaluate("f => f.contentDocument.body.textContent") == "Hello"
@@ -106,8 +106,8 @@ def test_it_loads_from_its_own_url_with_its_own_policy(page, world):
 
 def test_a_hostile_body_runs_nothing_and_reaches_nothing(page, world, monkeypatch):
     unsanitized(monkeypatch)
-    pk, _ = arrives(world, HOSTILE)
-    frame = reading(page, pk)
+    pk, key = arrives(world, HOSTILE)
+    frame = reading(page, key)
     assert frame.evaluate("f => f.contentDocument.querySelectorAll('script').length") > 0     # it did get here
     page.wait_for_timeout(300)
     nothing_got_out(page)
@@ -117,8 +117,8 @@ def test_a_hostile_body_runs_nothing_and_reaches_nothing(page, world, monkeypatc
 
 def test_what_a_hostile_body_can_be_clicked_into_stops_too(page, world, monkeypatch):
     unsanitized(monkeypatch)
-    pk, _ = arrives(world, HOSTILE)
-    frame = reading(page, pk)
+    pk, key = arrives(world, HOSTILE)
+    frame = reading(page, key)
     url = frame.evaluate("f => f.contentDocument.URL")
     frame.evaluate("f => f.contentDocument.getElementById('go').click()")
     frame.evaluate("f => f.contentDocument.getElementById('js').click()")
@@ -130,8 +130,8 @@ def test_what_a_hostile_body_can_be_clicked_into_stops_too(page, world, monkeypa
 
 def test_with_images_asked_for_a_hostile_body_still_runs_nothing(page, world, monkeypatch):
     unsanitized(monkeypatch)
-    pk, _ = arrives(world, HOSTILE)
-    reading(page, pk)
+    pk, key = arrives(world, HOSTILE)
+    reading(page, key)
     page.get_by_role("button", name="Load images").click()
     until(page, lambda: TRACKER in page.blocked, "the image was never asked for")
     frame = page.locator("iframe.rd-iframe")
@@ -145,13 +145,13 @@ def test_with_images_asked_for_a_hostile_body_still_runs_nothing(page, world, mo
 def test_the_documents_own_sandbox_holds_with_no_attribute_on_the_frame(page, world, monkeypatch):
     unsanitized(monkeypatch)
     pk, key = arrives(world, HOSTILE)
-    reading(page, arrives(world, "<p>Something else</p>")[0])
+    reading(page, arrives(world, "<p>Something else</p>")[1])
     page.evaluate("""url => {
         const f = document.createElement("iframe");
         f.id = "bare";
         f.src = url;
         document.body.append(f);
-    }""", f"/api/message/{pk}/body.html?key={key}&images=0")
+    }""", f"/api/message/body.html?key={key}&folder=INBOX&images=0")
     bare = page.locator("#bare")
     assert bare.get_attribute("sandbox") is None
     until(page, lambda: bare.evaluate("f => f.contentDocument?.getElementById('said')?.textContent") == "Hello", "it never loaded")
@@ -163,12 +163,13 @@ def test_the_documents_own_sandbox_holds_with_no_attribute_on_the_frame(page, wo
 
 
 def test_no_remote_image_loads_until_asked_and_then_it_does(page, world):
-    pk, _ = arrives(world, f'<p>Hello</p><img src="{TRACKER}" alt="tracker">')
-    documents, answers = asked(page, "/body.html"), asked(page, f"/api/message/{pk}/body?")
+    pk, key = arrives(world, f'<p>Hello</p><img src="{TRACKER}" alt="tracker">')
+    documents, answers = asked(page, "/body.html"), asked(page, f"/api/message/body?key={key}&")
     referrers = []
     page.pw.on("request", lambda r: referrers.append(r.headers.get("referer")) if r.url == TRACKER else None)
-    frame = reading(page, pk)
+    frame = reading(page, key)
     page.wait_for_timeout(200)
+    read = len(answers)
     clean(page)                                     # nothing has gone to the tracker
     assert frame.evaluate("f => f.contentDocument.images[0].getAttribute('src')") is None
     expect(page.locator(".rd-imgbar")).to_contain_text("1 remote image hidden")
@@ -178,7 +179,7 @@ def test_no_remote_image_loads_until_asked_and_then_it_does(page, world):
     expect(page.locator(".rd-imgbar")).to_have_count(0)
     expect(page.locator(".rd-extbar")).to_contain_text("no active content")
     assert [u.rsplit("images=")[1] for u in documents] == ["0", "1"]
-    assert answers == []                            # only the frame went back for it
+    assert len(answers) == read                     # only the frame went back for it
     assert referrers == [None]                      # and what it asked of the sender's server names no page of this app
     page.blocked.clear()
     clean(page)
@@ -186,8 +187,8 @@ def test_no_remote_image_loads_until_asked_and_then_it_does(page, world):
 
 def test_the_documents_own_policy_stops_a_remote_image_the_sanitizer_let_through(page, world, monkeypatch):
     unsanitized(monkeypatch)
-    pk, _ = arrives(world, f'<img src="{TRACKER}" alt="tracker">')
-    frame = reading(page, pk)
+    pk, key = arrives(world, f'<img src="{TRACKER}" alt="tracker">')
+    frame = reading(page, key)
     assert frame.evaluate("f => f.contentDocument.images.length") == 1
     page.wait_for_timeout(200)
     assert page.blocked == []
@@ -195,8 +196,8 @@ def test_the_documents_own_policy_stops_a_remote_image_the_sanitizer_let_through
 
 
 def test_load_images_adds_nothing_to_the_tabs_history(page, world):
-    pk, _ = arrives(world, f'<img src="{TRACKER}" alt="tracker">')
-    frame = reading(page, pk)
+    pk, key = arrives(world, f'<img src="{TRACKER}" alt="tracker">')
+    frame = reading(page, key)
     before = page.evaluate("history.length")
     page.get_by_role("button", name="Load images").click()
     until(page, lambda: "images=1" in frame.evaluate("f => f.contentDocument?.URL ?? ''"), "the frame kept its URL")
@@ -218,8 +219,8 @@ def catching_opens(page):
 
 @pytest.mark.parametrize("button", ["left", "middle"])
 def test_a_links_click_is_the_pages_to_take(page, world, button):
-    pk, _ = arrives(world, '<p><a href="https://ok.example.test/page">Read it</a></p>')
-    frame = reading(page, pk)
+    pk, key = arrives(world, '<p><a href="https://ok.example.test/page">Read it</a></p>')
+    frame = reading(page, key)
     url = frame.evaluate("f => f.contentDocument.URL")
     catching_opens(page)
     at = link_at(frame, "a")
@@ -231,8 +232,8 @@ def test_a_links_click_is_the_pages_to_take(page, world, button):
 
 
 def test_a_link_that_says_one_place_and_goes_to_another_asks_first(page, world):
-    pk, _ = arrives(world, '<p><a href="https://evil.example.test/">https://bank.example.test/</a></p>')
-    frame = reading(page, pk)
+    pk, key = arrives(world, '<p><a href="https://evil.example.test/">https://bank.example.test/</a></p>')
+    frame = reading(page, key)
     catching_opens(page)
     asks = []
     page.pw.on("dialog", lambda d: (asks.append(d.message), d.dismiss()))
@@ -245,8 +246,8 @@ def test_a_link_that_says_one_place_and_goes_to_another_asks_first(page, world):
 
 
 def test_a_links_click_is_taken_again_after_images_are_loaded(page, world):
-    pk, _ = arrives(world, f'<p><a href="https://ok.example.test/page">Read it</a></p><img src="{TRACKER}" alt="tracker">')
-    frame = reading(page, pk)
+    pk, key = arrives(world, f'<p><a href="https://ok.example.test/page">Read it</a></p><img src="{TRACKER}" alt="tracker">')
+    frame = reading(page, key)
     page.get_by_role("button", name="Load images").click()
     until(page, lambda: "images=1" in frame.evaluate("f => f.contentDocument?.URL ?? ''") and frame.evaluate(
         "f => !!f.contentDocument?.head?.querySelector('style')"), "the frame kept its URL")
@@ -259,9 +260,9 @@ def test_a_links_click_is_taken_again_after_images_are_loaded(page, world):
 
 
 def test_a_reading_setting_changes_a_plain_mail_without_fetching_it(page, world):
-    pk, _ = arrives(world, "Plain words.", "text/plain")
-    documents, answers = asked(page, "/body.html"), asked(page, f"/api/message/{pk}/body")
-    frame = reading(page, pk)
+    pk, key = arrives(world, "Plain words.", "text/plain")
+    documents, answers = asked(page, "/body.html"), asked(page, f"/api/message/body?key={key}&")
+    frame = reading(page, key)
     fetched, read = len(documents), len(answers)
     assert fetched == 1
     style = "getComputedStyle(f.contentDocument.querySelector('pre'))"
@@ -279,9 +280,9 @@ def test_a_reading_setting_changes_a_plain_mail_without_fetching_it(page, world)
 
 
 def test_a_reading_setting_darkens_rich_mail_without_fetching_it(page, world):
-    pk, _ = arrives(world, "<p>Rich words.</p>")
+    pk, key = arrives(world, "<p>Rich words.</p>")
     documents = asked(page, "/body.html")
-    frame = reading(page, pk)
+    frame = reading(page, key)
     fetched = len(documents)
     page.get_by_role("button", name="Reading settings").click()
     menu = page.get_by_role("dialog", name="Reading settings")
@@ -294,8 +295,8 @@ def test_a_reading_setting_darkens_rich_mail_without_fetching_it(page, world):
 
 
 def test_the_frame_fits_what_a_reading_setting_makes_of_it(page, world):
-    pk, _ = arrives(world, "\r\n".join(f"Line {n}" for n in range(60)), "text/plain")
-    frame = reading(page, pk)
+    pk, key = arrives(world, "\r\n".join(f"Line {n}" for n in range(60)), "text/plain")
+    frame = reading(page, key)
     until(page, lambda: frame.evaluate("f => parseInt(f.style.height) > 0"), "the frame was never sized")
     small = frame.evaluate("f => parseInt(f.style.height)")
     page.get_by_role("button", name="Reading settings").click()
@@ -306,8 +307,8 @@ def test_the_frame_fits_what_a_reading_setting_makes_of_it(page, world):
 
 def test_a_mail_as_tall_as_its_frame_doesnt_keep_growing_it(page, world, monkeypatch):
     unsanitized(monkeypatch)
-    pk, _ = arrives(world, "<style>html,body{height:100%}</style><p>Hello</p>")
-    frame = reading(page, pk)
+    pk, key = arrives(world, "<style>html,body{height:100%}</style><p>Hello</p>")
+    frame = reading(page, key)
     until(page, lambda: frame.evaluate("f => f.contentDocument.readyState") == "complete", "it never loaded")
     page.wait_for_timeout(200)
     settled = frame.evaluate("f => parseInt(f.style.height)")
@@ -317,8 +318,8 @@ def test_a_mail_as_tall_as_its_frame_doesnt_keep_growing_it(page, world, monkeyp
 
 
 def test_a_narrower_column_fits_the_frame_again(page, world):
-    pk, _ = arrives(world, "Words and more words. " * 200, "text/plain")
-    frame = reading(page, pk)
+    pk, key = arrives(world, "Words and more words. " * 200, "text/plain")
+    frame = reading(page, key)
     until(page, lambda: frame.evaluate("f => parseInt(f.style.height) > 0"), "the frame was never sized")
     wide = frame.evaluate("f => parseInt(f.style.height)")
     page.get_by_role("button", name="Reading settings").click()
@@ -329,8 +330,8 @@ def test_a_narrower_column_fits_the_frame_again(page, world):
 
 def test_the_new_frame_images_load_into_starts_at_the_olds_height(page, world):
     tall = "".join(f"<p>Line {n}</p>" for n in range(40))
-    pk, _ = arrives(world, f'{tall}<img src="{TRACKER}" alt="tracker">')
-    frame = reading(page, pk)
+    pk, key = arrives(world, f'{tall}<img src="{TRACKER}" alt="tracker">')
+    frame = reading(page, key)
     until(page, lambda: frame.evaluate("f => parseInt(f.style.height) > 500"), "the frame was never sized")
     height = frame.evaluate("f => f.style.height")
     page.evaluate("""() => {
@@ -347,8 +348,8 @@ def test_the_new_frame_images_load_into_starts_at_the_olds_height(page, world):
 
 
 def test_a_plain_reply_folds_its_quote_and_keeps_every_word(page, world):
-    pk, _ = arrives(world, "Yes, Thursday works.\r\n\r\nOn Monday Ada wrote:\r\n> Are you free <then>?\r\n", "text/plain")
-    frame = reading(page, pk)
+    pk, key = arrives(world, "Yes, Thursday works.\r\n\r\nOn Monday Ada wrote:\r\n> Are you free <then>?\r\n", "text/plain")
+    frame = reading(page, key)
     until(page, lambda: frame.evaluate("f => !!f.contentDocument.querySelector('details.mm-quote')"), "it never folded")
     assert frame.evaluate("f => f.contentDocument.querySelector('pre').textContent") == "Yes, Thursday works.\n"
     assert frame.evaluate("f => f.contentDocument.querySelector('details pre').textContent") == "On Monday Ada wrote:\n> Are you free <then>?\n"
@@ -358,8 +359,8 @@ def test_a_plain_reply_folds_its_quote_and_keeps_every_word(page, world):
 
 
 def test_a_message_gone_by_the_time_its_frame_asks_says_so_in_the_frame(page, world):
-    pk, _ = arrives(world, f'<p>Hello</p><img src="{TRACKER}" alt="tracker">')
-    frame = reading(page, pk)
+    pk, key = arrives(world, f'<p>Hello</p><img src="{TRACKER}" alt="tracker">')
+    frame = reading(page, key)
     c = store.conn()
     store.delete_message(c, pk)
     c.commit()
@@ -382,8 +383,8 @@ def test_the_page_lets_no_remote_image_in_though_a_frame_may_ask_for_one(page, w
     until(page, lambda: any("img-src" in p for p in page.problems), "the policy said nothing")
     assert page.blocked == []
     page.problems.clear()
-    pk, _ = arrives(world, f'<img src="{TRACKER}" alt="tracker">')
-    reading(page, pk)
+    pk, key = arrives(world, f'<img src="{TRACKER}" alt="tracker">')
+    reading(page, key)
     page.get_by_role("button", name="Load images").click()
     until(page, lambda: page.blocked == [TRACKER], "the frame's own policy didn't let it through")
     page.blocked.clear()
@@ -393,7 +394,7 @@ def test_the_page_lets_no_remote_image_in_though_a_frame_may_ask_for_one(page, w
 def test_a_conversation_gives_each_message_its_own_frame(page, world):
     page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
-    page.locator("#rows .row[data-pk]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first.click()
+    page.locator("#rows .row[data-key]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first.click()
     expect(page.locator("#thread .tmsg")).to_have_count(3)
     page.locator("#thread .tmsg-hd").first.click()
     frames = page.locator("iframe.rd-iframe")

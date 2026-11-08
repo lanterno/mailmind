@@ -97,7 +97,7 @@ def test_the_last_decision_leaves_the_all_clear(page, world):
 
 
 def opened_receipt(page, world):
-    page.goto(f"/m/{w.ADA}/INBOX?m={world.pk(RECEIPT)}")
+    page.goto(f"/m/{w.ADA}/INBOX?key={world.key(RECEIPT)}&folder=INBOX")
     expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
     return page
 

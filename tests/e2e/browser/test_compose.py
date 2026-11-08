@@ -42,9 +42,8 @@ def opened(page):
 
 
 def row(page, world, name):
-    pk = world.pk(name)
-    assert pk is not None, f"{name} has no row in the database"
-    return page.locator(f'#rows .row[data-pk="{pk}"]')
+    assert world.pk(name) is not None, f"{name} has no row in the database"
+    return page.locator('#rows .row[data-key="{key}"][data-folder="{folder}"]'.format(**world.copy(name)))
 
 
 def body(page):
@@ -186,7 +185,7 @@ def test_a_reply_answers_the_sender_and_threads(page, app, world):
 
 def test_keys_reply_reply_all_and_forward(page, world):
     opened(page)
-    page.locator(f'#rows .row[data-pk="{world.pk(LUNCH[1])}"]').click()
+    row(page, world, LUNCH[1]).click()
     expect(page.locator(".rd-subj")).to_be_visible()
     page.keyboard.press("r")
     expect(page.get_by_role("heading", name="Reply", exact=True)).to_be_visible()
@@ -842,7 +841,7 @@ def lunch_needs_a_reply(world):
 def test_a_draft_written_ahead_shows_on_the_reply_button_and_opens_for_review(page, world, ai):
     lunch_needs_a_reply(world)
     ai.responder = lambda req: fa.answer({"body": "Written ahead: Thursday works."})
-    page.goto(f"/m/{w.ADA}/INBOX?m={world.pk(LUNCH[1])}")
+    page.goto(f"/m/{w.ADA}/INBOX?key={world.key(LUNCH[1])}&folder=INBOX")
     expect(page.locator(".rd-subj")).to_be_visible()
     page.clock.run_for(1500)
     ready = page.locator('#reader [data-ca="draftready"]')

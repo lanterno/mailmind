@@ -76,7 +76,7 @@ def test_ask_answers_cites_and_changes_nothing(page, world, ai):
     page.get_by_role("textbox", name="Search").click()
     page.get_by_role("textbox", name="Search").press("Escape")
     expect(page.locator(".ask-answer")).to_have_count(0)
-    expect(page.locator("#rows .row[data-pk]").first).to_be_visible()
+    expect(page.locator("#rows .row[data-key]").first).to_be_visible()
     clean(page)
 
 

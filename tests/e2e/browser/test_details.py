@@ -54,9 +54,8 @@ def curate_drawer(page):
 
 
 def row(page, world, name):
-    pk = world.pk(name)
-    assert pk is not None, f"{name} has no row in the database"
-    return page.locator(f'#rows .row[data-pk="{pk}"]')
+    assert world.pk(name) is not None, f"{name} has no row in the database"
+    return page.locator('#rows .row[data-key="{key}"][data-folder="{folder}"]'.format(**world.copy(name)))
 
 
 def test_read_only_says_what_it_files_waits_for(page, world, monkeypatch):
@@ -318,7 +317,7 @@ def test_escape_in_settings_steps_back_one_thing_at_a_time(page, world):
 
 def test_a_message_slow_to_come_shows_what_is_known_and_says_so(page, world):
     opened(page)
-    page.pw.route(re.compile(r"/api/message/\d+/body"), lambda route: None)    # no answer yet
+    page.pw.route(re.compile(r"/api/message/body"), lambda route: None)    # no answer yet
     receipt = row(page, world, RECEIPT)
     receipt.click()
     expect(page.locator("#reader .rd-subj")).to_have_text(receipt.locator(".sj").inner_text())
@@ -328,10 +327,10 @@ def test_a_message_slow_to_come_shows_what_is_known_and_says_so(page, world):
 
 def test_a_message_that_wont_load_offers_retry(page, world):
     opened(page)
-    page.pw.route(re.compile(r"/api/message/\d+/body"), lambda route: route.fulfill(status=500, body="{}"))
+    page.pw.route(re.compile(r"/api/message/body"), lambda route: route.fulfill(status=500, body="{}"))
     row(page, world, RECEIPT).click()
     expect(page.locator("#reader .nores")).to_contain_text("Couldn’t load.", timeout=7000)
-    page.pw.unroute(re.compile(r"/api/message/\d+/body"))
+    page.pw.unroute(re.compile(r"/api/message/body"))
     page.locator("#reader").get_by_role("button", name="Retry").click()
     expect(page.locator("#reader .rd-frame, #reader iframe").first).to_be_visible()
     page.problems[:] = [p for p in page.problems if "500" not in p]
@@ -389,7 +388,7 @@ def test_a_folder_on_a_desktop_opens_on_its_first_message_and_closing_it_stays_c
     opened(page)
     expect(page.locator("#reader .rd-subj")).to_have_count(0)    # the Inbox opens on the brief
     page.locator('#folderrail [data-folder="Archive"]').click()
-    first = page.locator("#rows .row[data-pk]").first
+    first = page.locator("#rows .row[data-key]").first
     expect(first).to_have_class(re.compile(r"\bsel\b"))
     expect(page.locator("#reader .rd-subj")).to_be_visible()
     page.keyboard.press("Escape")
@@ -412,10 +411,10 @@ def test_reconcile_says_how_many_stand(page, world):
 
 
 def test_a_meeting_about_to_start_notifies_with_where_and_a_click_opens_the_invite(page, world):
-    pk = world.pk(RECEIPT)
+    key = world.key(RECEIPT)
     page.pw.add_init_script(AWAY + "window.away = true;")
     page.pw.route("**/api/upcoming", lambda route: route.fulfill(json={"ok": True, "items": [
-        {"pk": pk, "account": w.ADA, "start": "2026-11-02T12:05:00+00:00", "end": "2026-11-02T12:35:00+00:00", "summary": "Standup", "location": "Room 1", "organizer": "", "all_day": False}]}))
+        {"key": key, "folder": "INBOX", "account": w.ADA, "start": "2026-11-02T12:05:00+00:00", "end": "2026-11-02T12:35:00+00:00", "summary": "Standup", "location": "Room 1", "organizer": "", "all_day": False}]}))
     opened(page)
     expect(page.locator("#soonPill")).to_be_visible()
     until(page, lambda: page.pw.evaluate("notes.filter((n) => n.tag.startsWith('mailmind-soon-')).length") == 1, "the reminder went out")
@@ -567,10 +566,10 @@ def test_a_card_on_the_brief_says_where_it_filed_the_mail(page, app, world, ai):
     ai.responder = lambda req: (fa.answer({"narrative": "Lin is waiting.", "groups": []})
                                 if "narrative" in ((req.schema or {}).get("properties") or {}) else None)
     page.goto("/")
-    page.locator(f'.bf-need[data-pk="{world.pk(receipt)}"]').get_by_role("button", name=re.compile("^Archive")).click()
+    page.locator(f'.bf-need[data-key="{world.key(receipt)}"]').get_by_role("button", name=re.compile("^Archive")).click()
     expect(page.locator("#toast")).to_have_text("Archived \u00b7 in the mailbox's Archive")
     expect(page.locator("#undoFloat")).to_contain_text("Archived")
-    page.locator(f'.bf-need[data-pk="{world.pk(lunch)}"]').get_by_role("button", name=re.compile("^Delete")).click()
+    page.locator(f'.bf-need[data-key="{world.key(lunch)}"]').get_by_role("button", name=re.compile("^Delete")).click()
     expect(page.locator("#toast")).to_have_text("Deleted \u00b7 in the mailbox's Trash")
     expect(page.locator("#undoFloat")).to_contain_text("Deleted")
     clean(page)
@@ -581,7 +580,7 @@ def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, 
     monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
     page.goto(f"/m/{w.ADA}/INBOX")
     folder = lambda name: page.locator("#folderrail .frow", has_text=re.compile(f"^{name}"))
-    rows = page.locator("#rows .row[data-pk]")
+    rows = page.locator("#rows .row[data-key]")
     folder("Archive").click()
     expect(rows).to_have_count(1)
     folder("Inbox").click()
@@ -601,7 +600,7 @@ def test_a_catch_up_that_fails_stops_saying_its_reading_and_keeps_the_list(page,
     from mailmind.bootstrap import mailbox
     monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
     opened(page)
-    rows = page.locator("#rows .row[data-pk]")
+    rows = page.locator("#rows .row[data-key]")
     page.locator('#folderrail .frow[data-folder="Archive"]').click()
     expect(rows).to_have_count(1)
     page.locator('#folderrail .frow[data-folder="INBOX"]').click()
@@ -623,7 +622,7 @@ def test_a_folder_still_on_its_first_read_says_so_then_fills_in_by_itself(page, 
     monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
-    rows = page.locator("#rows .row[data-pk]")
+    rows = page.locator("#rows .row[data-key]")
     with held_elsewhere(w.ADA):
         page.locator('#folderrail .frow[data-folder="Junk"]').click()
         expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…")
@@ -641,7 +640,7 @@ def test_a_folder_whose_first_read_fails_says_so_and_retry_reads_it(page, world)
     expect(page.locator("#rows")).to_contain_text("Couldn’t sync this folder.")
     world.server.clear_faults()
     page.locator("#rows").get_by_role("button", name="Retry").click()
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     expect(page.locator("#rows")).not_to_contain_text("Couldn’t sync this folder.")
     clean(page)
 
@@ -661,7 +660,7 @@ def test_a_first_read_that_fails_after_saying_its_reading_says_so_and_only_a_per
     assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "Junk"]) == 1
     world.server.clear_faults()
     page.locator("#rows").get_by_role("button", name="Retry").click()
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     clean(page)
 
 
@@ -682,7 +681,7 @@ def test_an_inbox_whose_first_read_fails_stops_all_inboxes_saying_its_reading_an
     page.wait_for_timeout(500)                            # a read that went round again would have logged in many times by now
     assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "INBOX"]) == 1
     page.get_by_role("tab", name=re.compile("^Everything")).click()
-    expect(page.locator("#rows .row[data-pk]").first).to_be_visible()   # what is stored stays
+    expect(page.locator("#rows .row[data-key]").first).to_be_visible()   # what is stored stays
     clean(page)
 
 
@@ -692,7 +691,7 @@ def test_a_browser_gone_offline_still_reaches_its_own_server(page, app, world):
     expect(archive).to_be_visible()
     page.evaluate("window.dispatchEvent(new Event('offline'))")  # the Wi-Fi went; the server is on this machine
     archive.click()
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     clean(page)
 
 def test_a_tab_nobody_is_looking_at_counts_as_no_one_and_reads_what_it_missed_on_return(page, app, world, ai):
@@ -749,7 +748,7 @@ def test_a_list_or_a_search_that_fails_says_so(page, app, world):
     expect(page.locator("#rows")).to_contain_text("Couldn\u2019t load messages.")
     page.unroute("**/api/messages*")
     page.locator("#rows .ai-rerun").click()
-    expect(page.locator("#rows .row[data-pk]")).to_have_count(1)
+    expect(page.locator("#rows .row[data-key]")).to_have_count(1)
     page.route("**/api/search*", lambda route: route.abort())
     page.locator("#search").fill("lunch")
     page.keyboard.press("Enter")
@@ -797,7 +796,7 @@ def test_marked_search_results_mute_their_threads(page, world):
     box = page.get_by_role("textbox", name="search")
     box.fill("from:lin")
     box.press("Enter")
-    one = page.locator("#rows .row[data-pk]").first
+    one = page.locator("#rows .row[data-key]").first
     expect(one).to_be_visible()
     one.hover()
     one.locator(".cbx").click()

@@ -140,9 +140,9 @@ def test_back_on_a_message_returns_to_the_list(page, world):
     inbox(page)
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     page.get_by_role("option").first.click()
-    expect(page.pw).to_have_url(re.compile(r"m=\d+"))
+    expect(page.pw).to_have_url(re.compile(r"key=\d+&folder="))
     page.pw.go_back()
-    expect(page.pw).not_to_have_url(re.compile(r"m=\d+"))
+    expect(page.pw).not_to_have_url(re.compile(r"key=\d+"))
     clean(page)
 
 
@@ -158,7 +158,7 @@ SWIPE = """([sel, dx]) => {
 
 
 def row_sel(world, name):
-    return f'#rows .row.cmsg[data-pk="{world.pk(name)}"]'
+    return '#rows .row.cmsg[data-key="{key}"][data-folder="{folder}"]'.format(**world.copy(name))
 
 
 def swipeable(page):
@@ -223,11 +223,11 @@ def test_opening_a_message_makes_the_next_two_ready_once(page, world):
     asked = []
     page.pw.on("request", lambda r: asked.append(r.url) if "prefetch=1" in r.url else None)
     swipeable(page)
-    pks = [int(x) for x in page.locator("#rows .row.cmsg").evaluate_all("rows => rows.map(r => r.dataset.pk)")]
-    page.locator(f'#rows .row.cmsg[data-pk="{pks[0]}"]').click()
+    keys = [int(x) for x in page.locator("#rows .row.cmsg").evaluate_all("rows => rows.map(r => r.dataset.key)")]
+    page.locator(f'#rows .row.cmsg[data-key="{keys[0]}"]').click()
     until(page, lambda: len(asked) == 2, "two were made ready")
-    assert [re.search(r"/message/(\d+)/", u).group(1) for u in asked] == [str(pks[1]), str(pks[2])]
+    assert [re.search(r"[?&]key=(\d+)&", u).group(1) for u in asked] == [str(keys[1]), str(keys[2])]
     page.keyboard.press("j")
     until(page, lambda: len(asked) == 3, "one more")
-    assert f"/message/{pks[3]}/" in asked[2]
+    assert f"?key={keys[3]}&" in asked[2]
     clean(page)
