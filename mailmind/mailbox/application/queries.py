@@ -20,7 +20,7 @@ def _attention(r: Row) -> dict[str, bool]:
 def _listed_item(r: Row, group: bool) -> dict[str, Any]:
     """A row of a list of a folder or of the Inboxes, one conversation's latest message if `group`."""
     it: dict[str, Any] = {
-        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
+        "key": r["message_key"], "folder": r["folder"], "from_name": r["from_name"] or r["from_addr"],
         "from_addr": r["from_addr"],
         "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
         "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
@@ -41,7 +41,7 @@ def _waiting_item(r: Row) -> dict[str, Any]:
     else:
         label = "Awaiting your reply · " + rel_time(r["date_iso"])
     return {
-        "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+        "key": r["message_key"], "folder": r["folder"],
         "from_name": r["from_name"] or r["from_addr"],
         "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
         "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
@@ -82,7 +82,7 @@ class Queries:
             rows = self._store.snoozed_rows(c, account, limit, offset)
             total = self._store.snoozed_count(c, account)
         items = [{
-            "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+            "key": r["message_key"], "folder": r["folder"],
             "from_name": r["from_name"] or r["from_addr"],
             "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
             "when": "wakes " + rel_time_future(r["snoozed_until"]), "snoozed_until": r["snoozed_until"],
@@ -102,7 +102,7 @@ class Queries:
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [{
-            "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+            "key": r["message_key"], "folder": r["folder"],
             "from_name": r["from_name"] or r["from_addr"],
             "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
             "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
@@ -140,7 +140,7 @@ class Queries:
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
         items = [{
-            "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+            "key": r["message_key"], "folder": r["folder"],
             "from_name": r["from_name"] or r["from_addr"],
             "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
             "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
@@ -207,13 +207,12 @@ class Queries:
                 continue
             seen_ids.add(key)
             items.append({
-                "pk": r["pk"], "key": r["message_key"], "folder": r["folder"],
+                "key": r["message_key"], "folder": r["folder"],
             "from_name": r["from_name"] or r["from_addr"],
                 "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
                 "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
                 "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "answered": bool(r["answered"]),
                 "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]),
             })
-        reply_pk = items[-1]["pk"] if items else None
         return {"ok": True, "account": account, "thread_id": thread_id,
-                "items": items, "count": len(items), "reply_pk": reply_pk, "reply_key": items[-1]["key"] if items else None}
+                "items": items, "count": len(items), "reply_key": items[-1]["key"] if items else None}

@@ -90,7 +90,7 @@ class Bodies:
         safe_html, info = self._safe_html(pk, parsed, False)
         invite, invite_part = self._reader.invite_of(pk, parsed)
         return {
-            "ok": True, "pk": pk, "key": row["message_key"], "folder": row["folder"], "html": safe_html, "text": parsed.get("text"),
+            "ok": True, "key": row["message_key"], "folder": row["folder"], "html": safe_html, "text": parsed.get("text"),
             "has_html": bool(parsed.get("html")), "attachments": parsed["attachments"],
             "invite": invite, "invite_part": invite_part,
             "blocked_images": info.get("blocked_images", 0),

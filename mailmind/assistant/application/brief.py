@@ -67,7 +67,6 @@ class GroupNow(TypedDict):
     """A brief's group as the page reads it."""
     label: str
     count: int
-    pks: list[int]
     messages: list[dict[str, Any]]
 
 
@@ -105,13 +104,13 @@ class Briefs:
         return [{"label": g["label"], "messages": [where[p] for p in g["pks"]]} for g in groups]
 
     def _groups_now(self, groups_json: str) -> list[GroupNow]:
-        """A stored brief's groups, as the page reads them: each message by its key and the folder its copy is in now, and
-        the pk that copy has. One whose message has gone is left out."""
+        """A stored brief's groups, as the page reads them: each message by its key and the folder its copy is in now. One
+        whose message has gone is left out."""
         with self._uow.read() as c:
             groups: list[GroupNow] = []
             for g in json.loads(groups_json):
                 there = [(key, now) for key, folder in g["messages"] if (now := self._mail.copy_now(c, key, folder)) is not None]
-                groups.append({"label": g["label"], "count": len(there), "pks": [now["pk"] for _, now in there],
+                groups.append({"label": g["label"], "count": len(there),
                                "messages": [{"key": key, "folder": now["folder"]} for key, now in there]})
         return groups
 

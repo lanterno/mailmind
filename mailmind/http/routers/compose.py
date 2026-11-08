@@ -37,6 +37,7 @@ def router(compose, mailbox):
         has gone stops a reply or forward from being written, but not a reopened draft's save or send, which carries its own
         quote and threading."""
         asked = body.model_dump(exclude_unset=True)
+        asked["in_reply_to_pk"] = None
         if body.original_key is not None:
             pk = mailbox.queries.pk_of_message(body.original_key)
             if pk is None and body.resume is None and body.mode in ("reply", "replyall", "forward"):

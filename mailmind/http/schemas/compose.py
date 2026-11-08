@@ -27,7 +27,6 @@ class Composition(RequestBody):
     text: str | None = None
     attachments: list[Any] | None = None      # each file is `attachments.decode`'s to judge, in its own words
     resume: dict[str, Any] | None = None      # its fields are `composition.as_drafted`'s, which reads what's there as text
-    in_reply_to_pk: Number | None = None
     original_key: Number | None = None        # what a reply or forward answers, by its key (`mailmind.http.named`)
     forward_attachments: Flag | None = None
     draft_id: Number | None = None
@@ -47,7 +46,6 @@ class DraftBody(Composition):
 class ResumeBody(NamesAMessage):
     """A draft MailMind saved, by its id, or a copy of one in Drafts by its key and folder."""
     draft_id: Number | None = None
-    pk: Number | None = None
 
 
 class OutboxItem(Answer):
@@ -165,7 +163,6 @@ class DraftOpened(Answer):
     tail_text: str
     in_reply_to: str
     references: str
-    orig_pk: int | None
     original_key: int | None                  # what it replies to, if MailMind has it
     participants: list[str]
     files: list[DraftFile]

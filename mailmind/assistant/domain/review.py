@@ -18,7 +18,6 @@ class Stats(TypedDict):
 
 class Needed(TypedDict):
     """A message that still needs you."""
-    pk: int
     key: int | None
     folder: str
     account: str
@@ -33,7 +32,6 @@ class Awaited(TypedDict):
     """A thread you're waiting on. One whose thread has no row names no message."""
     account: str
     thread_id: str
-    pk: int | None
     key: int | None
     folder: str | None
     subject: str

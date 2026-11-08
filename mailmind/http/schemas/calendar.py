@@ -1,11 +1,13 @@
 """What the page asks of Calendar, and what it answers."""
 from typing import Literal
 
-from mailmind.http.schemas.common import Answer, NamesAMessage, Number
+from mailmind.http.schemas.common import Answer, Number, RequestBody
 
 
-class RsvpBody(NamesAMessage):
-    pk: Number | None = None
+class RsvpBody(RequestBody):
+    """The invite, by its message's key, and the folder of the copy the page has (`mailmind.http.named`)."""
+    key: Number
+    folder: str | None = None
     decision: str | None = None
 
 
@@ -19,7 +21,6 @@ class RsvpQueued(Answer):
 
 
 class UpcomingEvent(Answer):
-    pk: int
     key: int
     folder: str
     account: str

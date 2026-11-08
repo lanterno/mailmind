@@ -30,6 +30,6 @@ def card(a: str, agg: Row, accounts: list[str], recent: Iterable[Row], ago: Call
             "last_ago": (ago(agg["last"]) if agg["last"] else None),
             "first_ago": (ago(agg["first"]) if agg["first"] else None),
             "accounts": accounts,                      # raw emails; client renders via nameOf()
-            "recent": [{"pk": r["pk"], "key": r["message_key"], "folder": r["folder"], "account": r["account"], "subject": r["subject"] or "(no subject)",
+            "recent": [{"key": r["message_key"], "folder": r["folder"], "account": r["account"], "subject": r["subject"] or "(no subject)",
                         "thread_id": r["thread_id"], "when": when(r["date_iso"]), "seen": bool(r["seen"])}
                        for r in recent]}

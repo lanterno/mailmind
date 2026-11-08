@@ -1,7 +1,7 @@
 """What the page asks of the Mailbox, and what it answers."""
 from typing import Literal
 
-from mailmind.http.schemas.common import Answer, Copy, Failure, Flag, NamesAMessage, Number, QueryArgs, RequestBody
+from mailmind.http.schemas.common import ACopy, Answer, Copy, Failure, Flag, Number, QueryArgs, RequestBody
 
 # ── what a request says ──────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -26,10 +26,6 @@ class ThreadArgs(QueryArgs):
     thread_id: str | None = None
 
 
-class BodyArgs(QueryArgs):
-    prefetch: str | None = None             # "1" warms the store and shows nothing
-
-
 class CopyArgs(QueryArgs):
     """A copy of a message, by its key and the folder it is in (`mailmind.http.named`)."""
     key: Number
@@ -44,13 +40,6 @@ class PartArgs(CopyArgs):
     part_id: str
 
 
-class BodyDocumentArgs(QueryArgs):
-    """Text and nothing but, so nothing here is ever refused: a frame shows what it's sent, and a JSON 400 isn't a document. The
-    use case asks whether `key` is this row's."""
-    key: str = ""
-    images: str = "0"
-
-
 class CopyDocumentArgs(QueryArgs):
     """Text and nothing but, so nothing here is ever refused: a frame shows what it's sent, and a JSON 400 isn't a document. A
     key and folder that name no copy are the use case's document saying so."""
@@ -63,27 +52,23 @@ class NamesAPending(RequestBody):
     id: Number                              # going without one is already `bad request`
 
 
-class MoveBody(NamesAMessage):
-    pk: Number | None = None                # left out is each use case's own: `bad pk`, or for a trash `bad request`
+class MoveBody(ACopy):
     undo_group: str | None = None
     mutation_id: str | None = None
 
 
-class FlagBody(NamesAMessage):
-    pk: Number | None = None
+class FlagBody(ACopy):
     flag: str | None = None                 # left out it's `flagged`; one of no use is the use case's `unknown flag`
     on: Flag | None = None                  # left out, it sets
     mutation_id: str | None = None
 
 
-class SeenBody(NamesAMessage):
-    pk: Number | None = None
+class SeenBody(ACopy):
     seen: Flag | None = None                # left out, it marks read
     mutation_id: str | None = None
 
 
-class BulkRow(NamesAMessage):
-    pk: Number | None = None
+class BulkRow(ACopy):
     whole: Flag | None = None               # the row stands for its conversation in its folder
 
 
@@ -108,7 +93,6 @@ class SyncRetryBody(RequestBody):
 
 
 class MessageRow(Answer):
-    pk: int
     key: int
     folder: str
     from_name: str | None
@@ -239,7 +223,6 @@ class Thread(Answer):
     thread_id: str
     items: list[ThreadMessage]
     count: int
-    reply_pk: int | None
     reply_key: int | None                   # the message a reply answers: its newest
 
 
@@ -289,7 +272,6 @@ class Pending(Answer):
 
 
 class DigestItem(_Verdict):
-    pk: int
     key: int
     account: str
     kind: str
@@ -429,7 +411,6 @@ class Invite(Answer):
 
 class MessageOpened(Answer):
     ok: Literal[True]
-    pk: int
     key: int
     folder: str
     html: str | None
@@ -475,7 +456,6 @@ class Filed(Answer):
 class ManyFiled(Answer):
     ok: Literal[True]                       # some of them were: none is a 404 or a 409
     msg: str
-    pks: list[int]
     filed: list[Copy]                       # what left the lists
     count: int
     failed: int

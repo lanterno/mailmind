@@ -86,7 +86,7 @@ class Asker:
         if not rows:
             return {"ok": True, "account": account, "question": question,
                     "answer": "I couldn’t find any messages matching that in your mail.",
-                    "cited_pks": [], "sources": [], "model": self._calls.model_label(),
+                    "sources": [], "model": self._calls.model_label(),
                     "generated": datetime.now(timezone.utc).isoformat()}
 
         # body-coverage cascade + bounded packing; only packed pks are citable
@@ -111,7 +111,7 @@ class Asker:
         if not blocks:
             return {"ok": True, "account": account, "question": question,
                     "answer": "I found related messages but none have readable text indexed yet.",
-                    "cited_pks": [], "sources": [], "model": self._calls.model_label(),
+                    "sources": [], "model": self._calls.model_label(),
                     "generated": datetime.now(timezone.utc).isoformat()}
 
         prompt = prompts.ASK.fill(question=question, blocks="\n\n".join(blocks))
@@ -128,7 +128,7 @@ class Asker:
 
         cited = citations.in_answer(obj.get("cited_pks"), set(by_pk))     # what was account-scoped AND shown to the model
         sources = [{
-            "pk": pk, "key": by_pk[pk]["message_key"], "folder": by_pk[pk]["folder"],
+            "key": by_pk[pk]["message_key"], "folder": by_pk[pk]["folder"],
             "from": by_pk[pk]["from_name"] or by_pk[pk]["from_addr"],
             "subject": by_pk[pk]["subject"] or "(no subject)",
             "snippet": (by_pk[pk]["snippet"] or "")[:160],
@@ -136,5 +136,5 @@ class Asker:
         } for pk in cited]
 
         return {"ok": True, "account": account, "question": question, "answer": answer,
-                "cited_pks": cited, "sources": sources, "model": self._calls.model_label(),
+                "sources": sources, "model": self._calls.model_label(),
                 "generated": datetime.now(timezone.utc).isoformat()}

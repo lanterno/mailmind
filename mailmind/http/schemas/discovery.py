@@ -45,7 +45,6 @@ class KnownBody(RequestBody):
 
 
 class SearchHit(Answer):
-    pk: int
     key: int                                # every row has one: `store.init` gives one to a row an older commit wrote
     account: str
     folder: str
@@ -102,7 +101,6 @@ class Views(Answer):
 
 
 class Document(Answer):
-    pk: int
     key: int
     folder: str
     part_id: str
@@ -137,7 +135,6 @@ class Suggestions(Answer):
 
 
 class RecentMail(Answer):
-    pk: int
     key: int
     folder: str
     account: str

@@ -27,20 +27,17 @@ def message_pk(mailbox, key, folder=None, gone="not found"):
 
 
 def with_copy(mailbox, body, gone: str | None = "not found"):
-    """A request's fields, as its use case reads them, with `pk` for the copy its `key` and `folder` name. One that names no
-    key is left as it is. With `gone` None, a copy that isn't there is a `pk` of None, for the use case to word."""
-    if body.get("key") is not None:
-        pk = mailbox.queries.pk_of_copy(body["key"], body.get("folder") or "")
-        body["pk"] = _there(pk, gone)
+    """A request's fields, as its use case reads them, with `pk` for the copy its `key` and `folder` name: None where it names
+    no key, for the use case to word. With `gone` None, a copy that isn't there is a `pk` of None too."""
+    body["pk"] = None if body.get("key") is None else _there(mailbox.queries.pk_of_copy(body["key"], body.get("folder") or ""), gone)
     return body
 
 
 def with_message(mailbox, body, gone: str | None = "not found"):
     """A request's fields, as its use case reads them, with `pk` for a copy of the message its `key` names, the one in its
-    `folder` where there is one. One that names no key is left as it is. With `gone` None, a message with no copy left is a
-    `pk` of None, for the use case to word."""
-    if body.get("key") is not None:
-        body["pk"] = _there(mailbox.queries.pk_of_message(body["key"], body.get("folder")), gone)
+    `folder` where there is one: None where it names no key, for the use case to word. With `gone` None, a message with no
+    copy left is a `pk` of None too."""
+    body["pk"] = None if body.get("key") is None else _there(mailbox.queries.pk_of_message(body["key"], body.get("folder")), gone)
     return body
 
 

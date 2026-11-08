@@ -10,7 +10,6 @@ class RuleBody(NamesAMessage):
     """A block trashes the copy `key` and `folder` name too, if it is still there."""
     token: str | None = None
     verdict: str | None = None              # anything but keep, block or remove is the use case's `msg`
-    pk: Number | None = None
 
 
 class CleanupBody(RequestBody):

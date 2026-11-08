@@ -31,7 +31,7 @@ class Digest:
             amap = self._accounts.alias_map()
             wmap = self._accounts.webmail_map()
             items = [{
-                "pk": r["pk"], "key": r["message_key"], "account": r["account"], "kind": r["kind"],
+                "key": r["message_key"], "account": r["account"], "kind": r["kind"],
                 "alias": amap.get(r["account"]),
                 "from_name": r["from_name"] or r["from_addr"], "from_addr": r["from_addr"],
                 "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),

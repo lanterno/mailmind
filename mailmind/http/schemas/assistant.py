@@ -8,7 +8,6 @@ from mailmind.http.schemas.common import Answer, Copy, Failure, Flag, NamesAMess
 
 class SummarizeBody(NamesAMessage):
     """A message by its key, or a thread by its account and id."""
-    pk: Number | None = None
     account: str | None = None
     thread_id: str | None = None
     force: Flag | None = None
@@ -16,7 +15,6 @@ class SummarizeBody(NamesAMessage):
 
 class DraftReplyBody(NamesAMessage):
     """What to reply to as a summary names it, and `account` says who replies, which may not be whose mail it is."""
-    pk: Number | None = None
     account: str | None = None
     thread_id: str | None = None
     tone: str | None = None
@@ -54,8 +52,7 @@ class DeltaArgs(QueryArgs):
 
 
 class DraftAheadArgs(QueryArgs):
-    pk: str | None = None                   # what won't read as a number is the use case's `bad pk`
-    key: Number | None = None               # a message, the one in `folder` where it has a copy there
+    key: Number                             # a message, the one in `folder` where it has a copy there
     folder: str | None = None
     peek: str | None = None
 
@@ -73,7 +70,6 @@ class Expired(Failure):
 class BriefGroup(Answer):
     label: str
     count: int
-    pks: list[int]
     messages: list[Copy]                    # each as its copy is now
 
 
@@ -138,8 +134,7 @@ class ReviewStats(Answer):
 
 
 class ReviewNeeded(Answer):
-    """A message that still needs you. A stored one names the pk it has now, and one that named no message none."""
-    pk: int | None
+    """A message that still needs you, by its key and the folder its copy is in now."""
     key: int | None
     folder: str
     account: str
@@ -152,7 +147,6 @@ class ReviewNeeded(Answer):
 
 class ReviewAwaited(Answer):
     """A thread you're waiting on. One whose thread has no row names no message."""
-    pk: int | None
     key: int | None
     folder: str | None
     account: str
@@ -224,7 +218,6 @@ class Rewritten(Answer):
 
 
 class AskSource(Answer):
-    pk: int
     key: int
     folder: str
     sender: str | None = Field(alias="from")
@@ -239,7 +232,6 @@ class Answered(Answer):
     account: str
     question: str
     answer: str
-    cited_pks: list[int]
     sources: list[AskSource]
     model: str
     generated: str

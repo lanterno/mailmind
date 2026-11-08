@@ -21,8 +21,7 @@ def router(attention, mailbox):
         """What a snooze names, with `pks` for the copies it names that are still there, and `pk` for the one `key` and
         `folder` name. A thread named by its account and id goes before them, as it always did."""
         asked = body.model_dump(exclude_unset=True)
-        if body.copies is not None:
-            asked["pks"] = named.copies_pks(mailbox, asked["copies"])
+        asked["pks"] = None if body.copies is None else named.copies_pks(mailbox, asked["copies"])
         return named.with_copy(mailbox, asked, gone=None)
 
     def thread(body):

@@ -92,7 +92,7 @@ def page(rows: Iterable[Row], want: Asked, when: Callable[[str | None], str]) ->
         matched += 1
         if matched <= want.offset or len(docs) >= want.limit:
             continue
-        docs.append({"pk": r["pk"], "key": r["message_key"], "folder": r["folder"], "part_id": r["part_id"], "filename": r["filename"], "kind": kind,
+        docs.append({"key": r["message_key"], "folder": r["folder"], "part_id": r["part_id"], "filename": r["filename"], "kind": kind,
                      "size": r["size"] or 0, "account": r["account"],
                      "from": r["from_name"] or r["from_addr"] or "", "subject": r["subject"] or "(no subject)",
                      "when": when(r["date_iso"]),

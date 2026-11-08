@@ -5,15 +5,12 @@ import urllib.parse
 from typing import Annotated
 
 from fastapi import Query
-from starlette.convertors import Convertor, register_url_convertor
 from starlette.responses import Response
 
 from mailmind.compose.api import MAX_ATTACH_BYTES
 from mailmind.http import named, route
-from mailmind.http.schemas.common import NoBody, NotJson, Number, answers
+from mailmind.http.schemas.common import NoBody, NotJson, answers
 from mailmind.http.schemas.mailbox import (
-    BodyArgs,
-    BodyDocumentArgs,
     BulkFileBody,
     CopyBodyArgs,
     CopyDocumentArgs,
@@ -56,19 +53,6 @@ from mailmind.http.schemas.mailbox import (
 from mailmind.kernel.errors import NotFound, Problem, Refused
 from mailmind.platform import perimeter
 
-
-class _FramePk(Convertor[int]):
-    """A pk as a frame's document takes one. What's anything else isn't that route, which could only answer it as a document."""
-    regex = "[0-9]{1,18}"
-
-    def convert(self, value):
-        return int(value)
-
-    def to_string(self, value):
-        return str(value)
-
-
-register_url_convertor("frame_pk", _FramePk())
 
 _FILED = answers(Filed)
 _THREAD_FILED = answers(ManyFiled)
@@ -154,19 +138,6 @@ def router(mailbox):
     def copy_document(args: Annotated[CopyDocumentArgs, Query()]):
         load_images = args.images == "1"
         return _document(mailbox.bodies.copy_document(args.key, args.folder, load_images), load_images)
-
-    @r.get("/api/message/{pk}/attachment/{part_id}", responses=answers(NotJson))
-    def attachment(pk: Number, part_id: str):
-        return _part(pk, part_id)
-
-    @r.get("/api/message/{pk}/body", responses=answers(MessageOpened | Prefetched))
-    def body(pk: Number, args: Annotated[BodyArgs, Query()]):
-        return mailbox.bodies.message_body(pk, prefetch=(args.prefetch == "1"))
-
-    @r.get("/api/message/{pk:frame_pk}/body.html", responses=answers(NotJson))
-    def body_document(pk: int, args: Annotated[BodyDocumentArgs, Query()]):
-        load_images = args.images == "1"
-        return _document(mailbox.bodies.as_document(pk, args.key, load_images), load_images)
 
     @r.post("/api/pending/retry", responses=answers(Done))
     def pending_retry(body: NamesAPending):

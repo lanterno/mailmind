@@ -9,13 +9,11 @@ class NamesAThread(NamesAMessage):
     page has."""
     account: str | None = None
     thread_id: str | None = None
-    pk: Number | None = None
 
 
 class NamesThreadOrMessages(NamesAThread):
     """A whole thread, by its account and id, else the copies named by key and folder (`snooze.named_thread`, `named_pks`):
     `copies`, or the one `key` and `folder` name."""
-    pks: list[Number] | None = None
     copies: list[ACopy] | None = None
 
 

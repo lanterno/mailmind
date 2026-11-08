@@ -84,7 +84,7 @@ def failure_answer(e, method, path):
     if isinstance(e, _PROBLEMS):
         return problem_answer(e)
     if method == "POST":
-        if isinstance(e, TypeError | ValueError):      # malformed request input (bad/missing int id/pk) → clean 400
+        if isinstance(e, TypeError | ValueError):      # malformed request input (a bad or missing id or key) → clean 400
             return BAD_REQUEST
         if isinstance(e, profile.ReadOnlyError):       # a write this process may not make (and nothing queued it)
             log.info("POST %(path)s refused, read-only: %(what)s", {"path": path, "what": str(e)})

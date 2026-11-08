@@ -81,11 +81,10 @@ def router(assistant, mailbox):
     @r.get("/api/ai/draft-ahead", responses=answers(DraftAheadStatus | DraftAheadReady))    # serve/peek; the KICK needs the CSRF token
     def draft_ahead(request: Request, args: Annotated[DraftAheadArgs, Query()]):
         asked = args.as_query()
-        if args.key is not None:
-            pk = mailbox.queries.pk_of_message(args.key, args.folder)
-            if pk is None:                  # nothing of it left to draft a reply to
-                return {"ok": True, "status": "none"}
-            asked["pk"] = [str(pk)]
+        pk = mailbox.queries.pk_of_message(args.key, args.folder)
+        if pk is None:                      # nothing of it left to draft a reply to
+            return {"ok": True, "status": "none"}
+        asked["pk"] = [str(pk)]
         return assistant.drafting.get(asked, kick_ok=perimeter.token_matches(request.headers, perimeter.CSRF))
 
     @r.post("/api/ai/summarize", responses=answers(Summary, {**_MAY_FAIL, 504: Failure}))

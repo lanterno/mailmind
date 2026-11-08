@@ -149,7 +149,7 @@ class Filing:
         """Per-message mailbox writes (flags/seen/archive/junk)."""
         pk = as_int(body.get("pk"))
         if pk is None:
-            raise Refused("bad pk")
+            raise Refused("bad request")
         if path == "/api/flag" and body.get("flag", "flagged") not in ("flagged", "seen"):
             # \Deleted, \Draft and \Answered are the app's to set (trash, drafts, sends), never a
             # request's: \Deleted from here would bypass Trash and undo.
@@ -194,7 +194,7 @@ class Filing:
         one did."""
         pk = as_int(body.get("pk"))
         if pk is None:
-            raise Refused("bad pk")
+            raise Refused("bad request")
         kind = "archive" if path == "/api/thread/archive" else "trash"
         push = self._pushing(body.get("undo_group") or "thread:" + secrets.token_hex(6))
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
@@ -304,7 +304,7 @@ class Filing:
             raise next((no for p, _ in accepted if isinstance(no := results[p], Problem)), NotFound(_GONE))
         queued = sum(said.get("status") == "queued" for said in filed.values())
         return {"ok": True, "msg": "queued" if queued else "filed",
-                "pks": list(filed), "filed": [{"key": names[p][0], "folder": names[p][1]} for p in filed if p in names],
+                "filed": [{"key": names[p][0], "folder": names[p][1]} for p in filed if p in names],
                 "count": len(filed), "failed": len(accepted) - len(filed),
                 "queued": queued, "undoable": any(said.get("undoable") for said in filed.values())}
 

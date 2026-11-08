@@ -101,7 +101,7 @@ class PreparedReplies:
                                                                   # no orphan sweeps — a reset_folder reingest may be mid-flight
                 ok = True
                 try:
-                    sse.publish("draft-ready", {"account": acct, "pk": int(pk), "key": message_key})
+                    sse.publish("draft-ready", {"account": acct, "key": message_key})
                 except Exception:
                     pass
             except NotSent:
@@ -130,7 +130,7 @@ class PreparedReplies:
         surfaced."""
         asked = as_int((qs.get("pk") or ["0"])[0])
         if asked is None:
-            raise Refused("bad pk")
+            raise Refused("bad request")
         pk = Pk(asked)
         peek = (qs.get("peek") or ["0"])[0] == "1" or not kick_ok
         if not pk:
