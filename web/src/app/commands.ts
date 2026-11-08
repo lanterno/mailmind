@@ -3,7 +3,7 @@
 import { panel } from "../features/assistant/Panels";
 import { doing } from "../features/assistant/ask";
 import { composing } from "../features/compose/compose";
-import { curateOpen } from "../features/curation/open";
+import { curateOpen, filterForm, newFilter } from "../features/curation/open";
 import { docsOpen } from "../features/discovery/open";
 import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
@@ -54,7 +54,7 @@ export const goKeys = (): Legend["go"] => [
 // A saved view is saved already: nothing offers to save it again.
 export const onSavedView = (m: Pick<Mailbox, "source" | "views">) => m.source?.kind === "search" && m.views.some((v) => viewQuery(v) === (m.source as { q: string }).q);
 
-interface Ui { toggleRail: () => void; saveSearch: () => void; openSearchBar: () => void }
+interface Ui { toggleRail: () => void; saveSearch: () => void; createFilter: () => void; openSearchBar: () => void }
 
 // `whatever`: every command there is, whatever is open or marked now, for the legend, which never runs one.
 export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
@@ -142,6 +142,7 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   add({ id: "do", group: "Commands", label: "Do… — natural-language bulk action", run: () => doing.set({ state: "intro" }) });
   add({ id: "curate", group: "Commands", label: "Curate — rules and audit", run: () => curateOpen.set(true) });
   add({ id: "cleanup", group: "Commands", label: "Clean up senders (unsubscribe)", run: () => curateOpen.set(true) });
+  add({ id: "new-filter", group: "Commands", label: "New filter — star or mark read new mail", run: () => filterForm.set(newFilter()) });
   for (const v of m.views) {
     const lane = v.id === "__lane_feed__" ? "feed" : v.id === "__lane_papertrail__" ? "papertrail" : undefined;
     add({ id: `view:${v.id}`, group: "Views", label: `${v.name}${lane ? " (lane)" : ""}`, run: () => go({ source: { kind: "search", q: viewQuery(v), account: m.account ?? "", ...(lane ? { lane } : {}) }, opened: null }) });
@@ -150,6 +151,7 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", legend: "Folders: icons ⇄ names · drag the list edge to resize", keys: ["["], hint: "[", run: ui.toggleRail });
   add({ id: "search", group: "Commands", label: "Search", legend: "Search · ?question asks your inbox · !command plans a bulk action", keys: ["/"], hint: "/", run: ui.openSearchBar });
   if (whatever || (m.searching && !onSavedView(m))) add({ id: "save-view", group: "Commands", label: "Save this search as a view", keys: ["v"], hint: "v", run: ui.saveSearch });
+  if (whatever || (m.source?.kind === "search" && !m.source.lane && !m.source.thread)) add({ id: "create-filter", group: "Commands", label: "Create a filter from this search", run: ui.createFilter });
   for (const t of (["day", "dusk", "night"] as const).filter((x) => x !== theme.get())) {
     add({ id: `theme:${t}`, group: "Commands", label: `Theme → ${THEME_LABEL[t]}`, run: () => { setTheme(t); toast(`${THEME_LABEL[t]} theme`); } });
   }

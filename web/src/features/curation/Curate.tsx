@@ -1,5 +1,5 @@
 // The drawer for looking after the mailbox itself: senders flooding you, what each inbox holds, the rules MailMind has
-// learned, and what it has done. Sweeping and cleaning up both show what they would do before they do it.
+// learned, your filters, and what it has done. Sweeping and cleaning up both show what they would do before they do it.
 import { useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
@@ -13,6 +13,7 @@ import { shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { offerUndo, readAgain, undoGroup, useDigest } from "../mailbox";
+import { FilterDialog, Filters } from "./Filters";
 import { curateOpen } from "./open";
 
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };
@@ -286,12 +287,15 @@ export function Curate() {
             <div id="railAccounts"><Inboxes /></div>
             <h3>Learned rules</h3>
             <Rules />
+            <h3>Filters</h3>
+            <Filters />
             <h3>Audit</h3>
             <Audit />
           </Dialog>
         </Modal>
       </ModalOverlay>
       <CleanupPanel />
+      <FilterDialog />
     </>
   );
 }

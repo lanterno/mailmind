@@ -466,6 +466,20 @@
   .do-scopetoggle button.on{background:var(--primary);color:var(--on-primary);font-weight:600}
   .do-unsubopt{display:flex;align-items:center;gap:7px;margin:4px 0 0 21px;font-size:11.5px;color:var(--mute);cursor:pointer}
   .do-unsubopt input{accent-color:var(--ai)}
+  .flt{display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid var(--line);font-size:12px}
+  .flt:first-child{border-top:none}
+  .flt-q{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .flt-q code{font-family:var(--font-mono);font-size:11.5px;color:var(--soft);overflow-wrap:anywhere}
+  .flt-q span{font-size:10.5px;color:var(--faint)}
+  .flt button{background:none;border:none;color:var(--mute);font:inherit;font-size:11px;padding:2px 4px;cursor:pointer}
+  .flt button:hover{color:var(--primary-ink)}
+  .flt-lbl{display:block;font-size:11.5px;font-weight:500;color:var(--faint);margin-top:12px}
+  .flt-in{width:100%;margin-top:5px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--ink);font-family:var(--font-mono);font-size:12.5px;padding:8px 10px}
+  .flt-in:focus{outline:none;border-color:var(--focus)}
+  .flt-does{display:flex;gap:16px;margin-top:10px;font-size:13px;color:var(--soft)}
+  .flt-does label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .flt-does input{accent-color:var(--ai)}
+  .flt-note{margin-top:10px;font-size:12px;line-height:1.5;color:var(--faint)}
   .lst{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
   .rchip{font-size:11px;padding:3px 8px;border-radius:var(--r-xs);background:var(--sel);border:none;color:var(--mute);cursor:pointer}
   .rchip.keep{color:var(--keep)} .rchip.block{color:var(--block)} .rchip:hover{color:var(--ember);background:color-mix(in srgb,var(--ember) 10%,transparent)}

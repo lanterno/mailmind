@@ -22,6 +22,7 @@ import { snoozeAsk, SnoozeMenu } from "../features/attention/SnoozeMenu";
 import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";
 import { useSwipe } from "../features/mailbox/swipe";
 import { Curate } from "../features/curation/Curate";
+import { filterForm, newFilter } from "../features/curation/open";
 import { Docs } from "../features/discovery/Docs";
 import { FeedRiver, PaperTrail } from "../features/discovery/Lanes";
 import { ScreenerPane, useScreener } from "../features/curation/Screener";
@@ -138,6 +139,13 @@ async function saveSearch(m: Mailbox) {
   }
 }
 
+// A search as a filter: where it is held to one account, the filter is too.
+function createFilter(m: Mailbox) {
+  if (m.source?.kind !== "search") return;
+  const { q, account } = m.source;
+  filterForm.set(newFilter(account && searchScope.get() === "account" ? `${q} account:${account}` : q));
+}
+
 // The keys. Nothing here fires while you type or while a menu or dialog has the focus, and a browser's own chords are left
 // alone, but ⌘K. The help overlay's setting (mm_nokeys) turns single keys off, as WCAG 2.1.4 asks.
 function useKeys(m: Mailbox, commands: Command[]) {
@@ -249,7 +257,7 @@ export function App() {
     (copy) => m.file(all.find((r) => r.id === copyId(copy)) ?? copy, "archive"),
     (copy) => m.snooze(copy, { preset: "tomorrow" }, [copyId(copy)]),
   );
-  const ui = { toggleRail, openSearchBar, saveSearch: () => void saveSearch(m) };
+  const ui = { toggleRail, openSearchBar, saveSearch: () => void saveSearch(m), createFilter: () => createFilter(m) };
   const commands = buildCommands(m, ui);
   useKeys(m, commands);
 
@@ -311,6 +319,7 @@ export function App() {
               <div className="client-ctx" id="clientCtx">
                 <Icon name="search" /> <b>{source.q}</b> · {all.length} {!source.thread && <ScopeToggle account={source.account} />}<ConversationScope m={m} source={source} /> <TranslatedChip source={source} />
                 {!onSavedView(m) && <> · <button className="ctx-save" title="Save as a view (v)" onClick={() => void saveSearch(m)}>+ Save view</button></>}
+                {!source.thread && <> · <button className="ctx-save" id="createFilter" title="Star or mark read new mail that fits this search" onClick={() => createFilter(m)}>+ Create filter</button></>}
               </div>
             )}
             {m.source?.kind === "digest" && (
