@@ -344,7 +344,7 @@ class Ingest:
             return None
         if not fetched or not raw:
             acct = self._accounts.get(row["account"])
-            # READ-ONLY borrow: pooled when MAILMIND_POOL enables this account, else a fresh session,
+            # READ-ONLY borrow: pooled when this account is asked for (pool.py), else a fresh session,
             # logged out after. Mutations never use the pool.
             with self._pool.borrow(acct) as s:
                 s.select(row["folder"])

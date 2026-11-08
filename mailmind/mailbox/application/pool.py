@@ -1,5 +1,5 @@
 """Optional persistent IMAP connection pool for the READ hot path (cold body fetch ~37s on
-Proton → ~2s warm). Default OFF: with MAILMIND_POOL unset, borrow() is byte-for-byte today's
+Proton → ~2s warm). Default OFF: with MAILMIND_POOL unset and no account asking, borrow() is byte-for-byte today's
 behavior (fresh connect + logout per op), so landing this changes nothing until explicitly enabled.
 
 A borrow yields a MailSession (mailmind.mailbox.application.session), opened through
@@ -20,10 +20,11 @@ SAFETY (load-bearing):
     IMAP gate (mailmind.platform.workers.gates; canonical order → no new deadlock). imaplib is not
     thread-safe per connection; the lock guarantees a pooled connection is never shared concurrently.
   • Proton Bridge (loopback/STARTTLS) has a low per-account connection cap; one pooled conn per
-    account satisfies it, and we validate every borrow. Enable per-account via the env list.
+    account satisfies it, and we validate every borrow. Enable per-account, by the env list or its own "pool" key.
 
 Enable:  MAILMIND_POOL=1            → all accounts
          MAILMIND_POOL=a@x.com,b@y → only those accounts (Phase-1: one Gmail)
+         "pool": true on an account in mailmind.config.json, for when MAILMIND_POOL is unset: it lasts between runs
 """
 import contextlib
 from collections.abc import Generator
@@ -57,10 +58,12 @@ class Pool(KeptConnections[MailSession]):
         self._open_session = open_session
 
     def _enabled(self, acct: Account) -> bool:
-        which = environment.POOL.value()
-        if which.every:
-            return not self._accounts.profile(acct).bridge   # "all" = every account EXCEPT the fragile Bridge
-        return acct["email"] in which.listed                 # explicit list honored verbatim
+        if environment.POOL.given():                         # the variable, when set, decides for this run
+            which = environment.POOL.value()
+            if which.every:
+                return not self._accounts.profile(acct).bridge   # "all" = every account EXCEPT the fragile Bridge
+            return acct["email"] in which.listed                 # explicit list honored verbatim
+        return bool(acct.get("pool"))                        # and the file for every other: an account asks, by name
 
 
     def _policy(self, acct: Account) -> ConnectionPolicy:
@@ -73,7 +76,7 @@ class Pool(KeptConnections[MailSession]):
 
     @contextlib.contextmanager
     def borrow(self, acct: Account) -> Generator[MailSession]:
-        """Yield a MailSession for a READ-ONLY operation. Dormant (env unset) → a fresh session, logged
+        """Yield a MailSession for a READ-ONLY operation. Dormant (not asked for) → a fresh session, logged
         out after. Enabled → a validated pooled session that is repooled on a clean exit and discarded
         on any error."""
         if not self._enabled(acct):
@@ -90,6 +93,9 @@ class Pool(KeptConnections[MailSession]):
     def stats(self) -> dict[str, Any]:
         """How the pool stands, in counts: whether it serves every account or a list of them, never which, and how each
         connection kept stands, with no account named."""
-        which = environment.POOL.value()
-        return {"enabled": bool(which), "target": "all" if which.every else "listed" if which.listed else "",
-                "counters": self.counters(), "slots": list(self.slots().values())}
+        if environment.POOL.given():
+            which = environment.POOL.value()
+            target = "all" if which.every else "listed" if which.listed else ""
+        else:
+            target = "listed" if any(a.get("pool") for a in self._accounts.accounts()) else ""
+        return {"enabled": bool(target), "target": target, "counters": self.counters(), "slots": list(self.slots().values())}

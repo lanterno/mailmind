@@ -156,7 +156,7 @@ class Syncing:
         self._sync["last"] = now_iso()
         log.info("%d new", new)
         try:
-            self._warm.warm_tick(emails)        # optional background folder warming (OFF unless MAILMIND_WARM_FOLDERS)
+            self._warm.warm_tick(emails)        # optional background folder warming (OFF unless asked for: warm.py)
         except Exception as e:
             warm_log.warning("tick error", exc_info=e)
 

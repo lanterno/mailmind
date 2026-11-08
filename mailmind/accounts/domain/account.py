@@ -100,6 +100,8 @@ def normalized(a: Entry) -> Entry | None:
         "credential": a.get("credential", {}),
         # "imapclient" asks for IMAPClient (mailmind.bootstrap.mailbox)
         "imap_adapter": a.get("imap_adapter"),
+        # true asks for what MAILMIND_POOL and MAILMIND_WARM_FOLDERS give it, when neither is set
+        "pool": a.get("pool") is True, "warm_folders": a.get("warm_folders") is True,
     }
 
 

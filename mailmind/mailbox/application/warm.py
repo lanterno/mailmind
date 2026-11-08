@@ -1,5 +1,5 @@
 """Optional background multi-folder warming. Default OFF: with MAILMIND_WARM_FOLDERS unset
-nothing runs, so search/threading stay INBOX-only exactly as before.
+and no account asking nothing runs, so search/threading stay INBOX-only exactly as before.
 
 When enabled per-account, the always-on sync tick also pulls a per-account ROLE SET — Drafts,
 Archive/All-Mail, Sent — so search and conversation threading cover more than just INBOX. It
@@ -16,6 +16,7 @@ Politeness/safety:
 
 Enable:  MAILMIND_WARM_FOLDERS=1            → all accounts, Proton Bridge included
          MAILMIND_WARM_FOLDERS=a@x,b@y      → only those accounts
+         "warm_folders": true on an account in mailmind.config.json, for when the variable is unset: it lasts between runs
 """
 import threading
 import time
@@ -43,8 +44,10 @@ class SyncFolder(Protocol):
 
 
 def _enabled(acct: Account) -> bool:
-    which = environment.WARM_FOLDERS.value()
-    return which.every or acct["email"] in which.listed
+    if environment.WARM_FOLDERS.given():                 # the variable, when set, decides for this run
+        which = environment.WARM_FOLDERS.value()
+        return which.every or acct["email"] in which.listed
+    return bool(acct.get("warm_folders"))                # and the file for every other
 
 
 class Warming:
@@ -85,11 +88,12 @@ class Warming:
 
     def warm_tick(self, emails: Collection[str] | None = None) -> None:
         """One warming pass over the enabled accounts' due role folders. Called from sync_guarded
-        after the INBOX sync. No-op unless MAILMIND_WARM_FOLDERS enables the account."""
-        if not environment.WARM_FOLDERS.value():
+        after the INBOX sync. No-op unless MAILMIND_WARM_FOLDERS or the file enables the account."""
+        accounts = self._accounts.accounts()
+        if not any(_enabled(a) for a in accounts):
             return
         self._tick += 1
-        for a in self._accounts.accounts():
+        for a in accounts:
             if emails is not None and a["email"] not in emails:
                 continue
             if not _enabled(a):

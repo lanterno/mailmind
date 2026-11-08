@@ -186,9 +186,11 @@ NOSYNC = Switch("MAILMIND_NOSYNC", "The older switch for the read-only profile, 
 WORKERS = Choice("MAILMIND_WORKERS", "One gate for every account's IMAP work (global), or one each (account) (gates).",
                  choices=("global", "account"), unset="global", unknown="global")
 POOL = Accounts("MAILMIND_POOL", "Keep an IMAP connection for each account named, for reads (mailbox.pool). "
-                                 "Every account leaves out Proton Bridge, which only a list names.")
+                                 "Every account leaves out Proton Bridge, which only a list names. Unset, an account "
+                                 "asks for itself in the file (\"pool\": true).")
 WARM_FOLDERS = Accounts("MAILMIND_WARM_FOLDERS", "Sync each named account's Drafts, Archive and Sent with its INBOX "
-                                                 "(mailbox.warm).")
+                                                 "(mailbox.warm). Unset, an account asks for itself in the file "
+                                                 "(\"warm_folders\": true).")
 LOG_LEVEL = Choice("MAILMIND_LOG_LEVEL", "debug shows debug lines and each error's text at the terminal, never in "
                                          "the file (logging).",
                    choices=("info", "debug"), unset="info", unknown="info")

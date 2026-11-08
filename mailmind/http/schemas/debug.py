@@ -92,8 +92,8 @@ class PoolSlot(Answer):
 
 
 class PoolStats(Answer):
-    """`Pool.stats`, in counts and with no address: `target` says whether MAILMIND_POOL names every account (`all`), a list of
-    them (`listed`) or none, and `slots` holds each connection kept, with no account named."""
+    """`Pool.stats`, in counts and with no address: `target` says whether it serves every account (`all`), a list of them or
+    those that ask for it (`listed`) or none, and `slots` holds each connection kept, with no account named."""
     ok: Literal[True]
     enabled: bool
     target: Literal["all", "listed", ""]
