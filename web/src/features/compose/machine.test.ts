@@ -196,7 +196,7 @@ describe("saving", () => {
     const { m, answer, posted } = setup();
     const file = { filename: "a.pdf", content_type: "application/pdf", size: 3, b64: "AAA" };
     answer("/api/draft", () => ({ ok: true, draft_id: 5, resume: { in_reply_to: "<x@y>", references: "<x@y>", tail_text: "\n\nquoted" }, files: [file] }));
-    const c = m.open({ mode: "forward", fwdAttach: 1, origPk: 3, subject: "Fwd: x" })!;
+    const c = m.open({ mode: "forward", fwdAttach: 1, origKey: 3, subject: "Fwd: x" })!;
     m.edit("body", "see this");
     await m.save(true);
     expect(c.fwdAttach).toBe(0);
@@ -619,13 +619,15 @@ describe("from the mail", () => {
   const mail = { ok: true, account: FROM, subject: "Lunch", from_addr: "bea@example.test", from_name: "Bea", to: "ada@example.test, cy@example.test", cc: "", text: "soon?", date: "today" };
 
   it("replies to the sender, and reply all copies the rest but you", async () => {
-    const { m } = setup({ get: async () => mail });
-    const c = (await m.reply(5))!;
+    const asked: string[] = [];
+    const { m } = setup({ get: async (p: string) => { asked.push(p); return mail; } });
+    const c = (await m.reply({ key: 5, folder: "INBOX" }))!;
     expect(c.to.map((x) => x.v)).toEqual(["bea@example.test"]);
     expect(c.cc).toEqual([]);
     expect(c.subject).toBe("Re: Lunch");
-    expect(c.origPk).toBe(5);
-    const d = (await m.reply(5, true))!;
+    expect(c.origKey).toBe(5);
+    expect(asked).toEqual(["/api/message/body?key=5&folder=INBOX"]);
+    const d = (await m.reply({ key: 5, folder: "INBOX" }, true))!;
     expect(d.cc.map((x) => x.v)).toEqual(["cy@example.test"]);
     expect(d.autoCc).toEqual(["cy@example.test"]);
   });
@@ -633,7 +635,7 @@ describe("from the mail", () => {
   it("refuses to reopen a draft while one is open, and says so", async () => {
     const { m, toasts, posted } = setup();
     m.open();
-    await m.editDraft(3);
+    await m.editDraft({ key: 3, folder: "Drafts" });
     expect(toasts).toEqual(["Close the message you’re writing first"]);
     expect(posted("/api/draft/resume")).toEqual([]);
   });
@@ -649,10 +651,12 @@ describe("from the mail", () => {
   });
 
   it("reopens a draft with its text and files, and saves nothing until an edit", async () => {
-    const { m, answer } = setup();
-    answer("/api/draft/resume", () => ({ ok: true, draft_id: 4, account: FROM, mode: "reply", subject: "Re: x", to: ["bea@example.test"], cc: [], bcc: ["cy@example.test"], text: "mine", tail_text: "\n\nquoted", in_reply_to: "<a@b>", references: "<a@b>", orig_pk: 2, participants: [], files: [{ filename: "f", content_type: "x", size: 1, b64: "" }], notes: { plain: true } }));
-    await m.editDraft(3);
+    const { m, answer, posted } = setup();
+    answer("/api/draft/resume", () => ({ ok: true, draft_id: 4, account: FROM, mode: "reply", subject: "Re: x", to: ["bea@example.test"], cc: [], bcc: ["cy@example.test"], text: "mine", tail_text: "\n\nquoted", in_reply_to: "<a@b>", references: "<a@b>", original_key: 2, participants: [], files: [{ filename: "f", content_type: "x", size: 1, b64: "" }], notes: { plain: true } }));
+    await m.editDraft({ key: 3, folder: "Drafts/Old & new" });
+    expect(posted("/api/draft/resume")).toEqual([{ key: 3, folder: "Drafts/Old & new" }]);
     const c = m.view.get()!;
+    expect(c.origKey).toBe(2);
     expect(c.body).toBe("mine");
     expect(c.dirty).toBe(false);
     expect(c.draftId).toBe(4);
@@ -666,14 +670,14 @@ describe("from the mail", () => {
     const gone = vi.fn();
     const { m, answer } = setup({ draftGone: gone });
     answer("/api/draft/resume", () => { throw Object.assign(new Error("gone"), { status: 409 }); });
-    await m.editDraft(3);
-    expect(gone).toHaveBeenCalledWith(3);
+    await m.editDraft({ key: 3, folder: "Drafts" });
+    expect(gone).toHaveBeenCalledWith({ key: 3, folder: "Drafts" });
     expect(m.view.get()).toBeNull();
   });
 });
 
 describe("the AI's words", () => {
-  const seed = { mode: "reply" as const, origPk: 4, to: ["bea@example.test"], subject: "Re: x" };
+  const seed = { mode: "reply" as const, origKey: 4, to: ["bea@example.test"], subject: "Re: x" };
 
   it("keeps the signature below a draft, and what you wrote one Undo away", async () => {
     const { m, answer } = setup({ signature: () => "Ada" });
@@ -715,7 +719,7 @@ describe("the AI's words", () => {
     const { m, env } = setup({ get: async () => ({ ok: true, account: FROM, from_addr: "bea@example.test", subject: "x", text: "" }) });
     const gate = deferred<Json>();
     vi.mocked(env.post).mockImplementation(async (path: string) => (path === "/api/ai/draft-reply" ? gate.promise : { ok: true, items: {} }));
-    await m.quickReply(4, "yes");
+    await m.quickReply({ key: 4, folder: "INBOX" }, "yes");
     expect(m.view.get()!.body).toBe("Yes, that works for me.");
     expect(m.view.get()!.dirty).toBe(false);
     m.edit("body", "Yes, but later.");
@@ -726,16 +730,16 @@ describe("the AI's words", () => {
 
   it("offers a draft only on a reply that still has the original to read", () => {
     const { m } = setup();
-    expect(m.aiOffered({ mode: "reply", origPk: 3, resume: null, quote: null })).toBe(true);
-    expect(m.aiOffered({ mode: "new", origPk: null, resume: null, quote: null })).toBe(false);
-    expect(m.aiOffered({ mode: "reply", origPk: 3, resume: { tail_text: "" }, quote: null })).toBe(false);
+    expect(m.aiOffered({ mode: "reply", origKey: 3, resume: null, quote: null })).toBe(true);
+    expect(m.aiOffered({ mode: "new", origKey: null, resume: null, quote: null })).toBe(false);
+    expect(m.aiOffered({ mode: "reply", origKey: 3, resume: { tail_text: "" }, quote: null })).toBe(false);
   });
 
   it("a stale draft ahead is never put in the box", async () => {
     const forget = vi.fn();
     const { m, toasts, answer } = setup({ get: async (p: string) => (p.includes("draft-ahead") ? { ok: true, status: "none" } : { ok: true, account: FROM, from_addr: "bea@example.test", subject: "x" }) });
     answer("/api/ai/draft-reply", () => ({ ok: true, body: "fresh" }));
-    await m.openDraftAhead(4, forget);
+    await m.openDraftAhead({ key: 4, folder: "INBOX" }, forget);
     await flush();
     expect(forget).toHaveBeenCalled();
     expect(toasts[0]).toMatch(/moved on/);

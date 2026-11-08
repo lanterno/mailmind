@@ -5,22 +5,22 @@ const folderRow = (o: Partial<FolderRow> = {}): FolderRow => ({
   pk: 1, key: 1, folder: "INBOX", bucket: "PERSONAL", flagged: false, from_addr: "bo@example.test", from_name: "Bo", has_attach: false,
   is_junk: false, seen: false, snippet: "s", subject: "Hi", thread_id: "t1", when: "Mon", ...o,
 });
-const row = (o: Partial<Row> = {}): Row => ({ ...fromFolder(folderRow(), "a@example.test", "INBOX"), ...o });
+const row = (o: Partial<Row> = {}): Row => ({ ...fromFolder(folderRow(), "a@example.test"), ...o });
 
 describe("a row", () => {
-  it("takes the account and folder it was asked for, unless it says its own", () => {
-    expect(fromFolder(folderRow(), "a@example.test", "INBOX")).toMatchObject({ account: "a@example.test", folder: "INBOX", count: 1, action: "", ts: null });
-    expect(fromFolder(folderRow({ account: "b@example.test", folder: "Later" }), "a@example.test", "__waiting__")).toMatchObject({ account: "b@example.test", folder: "Later" });
+  it("takes the account it was asked for, unless it says its own, and is named by its copy", () => {
+    expect(fromFolder(folderRow(), "a@example.test")).toMatchObject({ id: "1:INBOX", key: 1, account: "a@example.test", folder: "INBOX", count: 1, action: "", ts: null });
+    expect(fromFolder(folderRow({ account: "b@example.test", folder: "Later" }), "a@example.test")).toMatchObject({ id: "1:Later", account: "b@example.test", folder: "Later" });
   });
   it("says how long it has waited in place of when it came", () => {
-    expect(fromFolder(folderRow({ waiting_label: "3 days" }), "a", "__waiting__").when).toBe("3 days");
+    expect(fromFolder(folderRow({ waiting_label: "3 days" }), "a").when).toBe("3 days");
   });
   it("trims an action that is only space, so it asks nothing of you", () => {
-    expect(fromFolder(folderRow({ action: "  " }), "a", "INBOX").action).toBe("");
+    expect(fromFolder(folderRow({ action: "  " }), "a").action).toBe("");
   });
   it("comes from a search as a single message", () => {
     const hit = { ...folderRow(), account: "a", alias: "a", commitment_worthy: false, date: "", folder: "Later", importance: null, needs_you: true, reply_worthy: false, safe_to_file: false } as SearchRow;
-    expect(fromSearch(hit)).toMatchObject({ folder: "Later", threadId: folderRow().thread_id, count: 1, needsYou: true });
+    expect(fromSearch(hit)).toMatchObject({ id: "1:Later", key: 1, folder: "Later", threadId: folderRow().thread_id, count: 1, needsYou: true });
   });
 });
 
@@ -37,15 +37,18 @@ describe("a conversation row", () => {
 });
 
 describe("the Inbox's tabs", () => {
-  const rows = [row({ pk: 1, needsYou: true, seen: true }), row({ pk: 2, seen: false }), row({ pk: 3, seen: true })];
+  const rows = [row({ id: "1:INBOX", key: 1, needsYou: true, seen: true }), row({ id: "2:INBOX", key: 2, seen: false }), row({ id: "3:INBOX", key: 3, seen: true })];
   it("filters by what each asks", () => {
-    expect(inTab(rows, "needs", null).map((r) => r.pk)).toEqual([1]);
-    expect(inTab(rows, "unread", null).map((r) => r.pk)).toEqual([2]);
-    expect(inTab(rows, "all", null).map((r) => r.pk)).toEqual([1, 2, 3]);
+    expect(inTab(rows, "needs", null).map((r) => r.key)).toEqual([1]);
+    expect(inTab(rows, "unread", null).map((r) => r.key)).toEqual([2]);
+    expect(inTab(rows, "all", null).map((r) => r.key)).toEqual([1, 2, 3]);
   });
   it("keeps the open message in place", () => {
-    expect(inTab(rows, "needs", 3).map((r) => r.pk)).toEqual([1, 3]);
-    expect(inTab(rows, "unread", 3).map((r) => r.pk)).toEqual([2, 3]);
+    expect(inTab(rows, "needs", "3:INBOX").map((r) => r.key)).toEqual([1, 3]);
+    expect(inTab(rows, "unread", "3:INBOX").map((r) => r.key)).toEqual([2, 3]);
+  });
+  it("keeps only the open copy, not another copy of its message", () => {
+    expect(inTab(rows, "needs", "3:Archive").map((r) => r.key)).toEqual([1]);
   });
 });
 

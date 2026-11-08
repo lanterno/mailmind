@@ -4,9 +4,9 @@ import { parseRoute, pathOf, sourceKey, type Route } from "./route";
 const routes: Route[] = [
   { source: null, opened: null },
   { source: { kind: "folder", account: "ada@example.test", folder: "INBOX" }, opened: null },
-  { source: { kind: "folder", account: "ada@example.test", folder: "Lists/Yarn & Wool" }, opened: { kind: "message", pk: 12 } },
-  { source: { kind: "folder", account: "ada@example.test", folder: "__waiting__" }, opened: { kind: "thread", id: "rf:<a b@example.test>", pk: 3, account: "ada@example.test" } },
-  { source: { kind: "allInboxes" }, opened: { kind: "message", pk: 9 } },
+  { source: { kind: "folder", account: "ada@example.test", folder: "Lists/Yarn & Wool" }, opened: { kind: "message", key: 12, folder: "Lists/Yarn & Wool" } },
+  { source: { kind: "folder", account: "ada@example.test", folder: "__waiting__" }, opened: { kind: "thread", id: "rf:<a b@example.test>", account: "ada@example.test", key: 3, folder: "Sent Items" } },
+  { source: { kind: "allInboxes" }, opened: { kind: "message", key: 9, folder: "INBOX" } },
   { source: { kind: "search", q: "from:lin is:unread & more", account: "ada@example.test" }, opened: null },
 ];
 
@@ -15,9 +15,16 @@ describe("the URL", () => {
     const u = new URL(path, "http://127.0.0.1");
     expect(parseRoute(u.pathname, u.search)).toEqual(route);
   });
-  it("ignores an open that isn't a message", () => {
-    expect(parseRoute("/all", "?m=abc").opened).toBeNull();
-    expect(parseRoute("/all", "?m=-2").opened).toBeNull();
+  it("ignores an open that isn't a copy", () => {
+    expect(parseRoute("/all", "?key=abc&folder=INBOX").opened).toBeNull();
+    expect(parseRoute("/all", "?key=-2&folder=INBOX").opened).toBeNull();
+    expect(parseRoute("/all", "?key=1.5&folder=INBOX").opened).toBeNull();
+    expect(parseRoute("/all", "?key=9").opened).toBeNull();
+    expect(parseRoute("/all", "?key=9&folder=").opened).toBeNull();
+  });
+  it("opens nothing from a link that named a row by its number", () => {
+    expect(parseRoute("/all", "?m=12").opened).toBeNull();
+    expect(parseRoute("/m/a%40example.test/INBOX", "?c=rf%3Ax&m=12&ca=a%40example.test").opened).toBeNull();
   });
   it("takes a path it doesn't know as nowhere", () => {
     expect(parseRoute("/m/only-account", "").source).toBeNull();

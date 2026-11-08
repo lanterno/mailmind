@@ -5,12 +5,12 @@ import { resumeFields, resumeHidesAi, resumeNotice, resumeOpts, resumeSig } from
 const TAIL = "\n\nOn Mon, 02 Feb 2026, Bo Park <bo@example.test> wrote:\n> Shall we meet Saturday?\n";
 const D = { draft_id: 12, mode: "reply", account: "ada@example.test", subject: "Re: Plans", to: ["Bo Park <bo@example.test>"],
   cc: [], bcc: ["dee@example.test"], tail_text: TAIL, in_reply_to: "<orig1@example.test>",
-  references: "<a@example.test> <orig1@example.test>", orig_pk: 7, participants: ["bo@example.test"] };
+  references: "<a@example.test> <orig1@example.test>", original_key: 7, participants: ["bo@example.test"] };
 
 describe("resumeOpts", () => {
   it("opens a reopened reply like a fresh one", () => {
     const o = resumeOpts(D);
-    expect([o.mode, o.from, o.draftId, o.origPk, o.noSig]).toEqual(["reply", "ada@example.test", 12, 7, true]);
+    expect([o.mode, o.from, o.draftId, o.origKey, o.noSig]).toEqual(["reply", "ada@example.test", 12, 7, true]);
     expect([o.to, o.cc, o.bcc]).toEqual([["Bo Park <bo@example.test>"], [], ["dee@example.test"]]);
     expect([o.subject, o.subject0, o.participants]).toEqual(["Re: Plans", "Re: Plans", ["bo@example.test"]]);
     expect(o.quote).toEqual({ html: null, text: TAIL.replace(/^\n+/, "") });
@@ -18,22 +18,22 @@ describe("resumeOpts", () => {
     expect(o.resume).toEqual({ in_reply_to: "<orig1@example.test>", references: "<a@example.test> <orig1@example.test>", tail_text: TAIL });
   });
   it("gives a whole draft no quote to fold", () => {
-    const o = resumeOpts({ ...D, tail_text: "", orig_pk: null });
-    expect([o.quote, o.origPk, o.resume.tail_text]).toEqual([null, null, ""]);
+    const o = resumeOpts({ ...D, tail_text: "", original_key: null });
+    expect([o.quote, o.origKey, o.resume.tail_text]).toEqual([null, null, ""]);
   });
   it("keeps a forward's section and no thread", () => {
     const o = resumeOpts({ ...D, mode: "forward", tail_text: "\n\n---------- Forwarded message ----------\nFrom: Bo",
-      in_reply_to: "", references: "", orig_pk: null, participants: [] });
+      in_reply_to: "", references: "", original_key: null, participants: [] });
     expect(o.mode).toBe("forward");
     expect(o.quote?.text.startsWith("---------- Forwarded message")).toBe(true);
-    expect([o.resume.in_reply_to, o.origPk]).toEqual(["", null]);
+    expect([o.resume.in_reply_to, o.origKey]).toEqual(["", null]);
   });
   it("carries the draft's version", () => {
     expect(resumeOpts({ ...D, version: 4 }).version).toBe(4);
   });
   it("has defaults for a bare answer", () => {
     const o = resumeOpts({ draft_id: 3, account: "ada@example.test" });
-    expect([o.mode, o.to, o.subject, o.quote, o.origPk, o.version]).toEqual(["new", [], "", null, null, null]);
+    expect([o.mode, o.to, o.subject, o.quote, o.origKey, o.version]).toEqual(["new", [], "", null, null, null]);
     expect(o.resume).toEqual({ in_reply_to: "", references: "", tail_text: "" });
   });
 });
