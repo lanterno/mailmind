@@ -45,6 +45,7 @@ class KnownContacts:
         facts = self._mail.known_facts(list(question.want), min_history)
         yours = ({o.lower() for o in own} if own is not None
                  else known.own_addresses(self._accounts.emails(), self._accounts.aliases(), facts.accounts))
+        yours |= known.sent_from(facts, self._folders.role_by_name)
         wanted = set(question.want)
         hit = known.vouched(facts, wanted, yours, self._folders.role_by_name)
         hit |= self._rules.kept() & wanted
