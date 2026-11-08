@@ -15,9 +15,11 @@ function mailPrefs(p: ReadPrefs): MailPrefs {
   return { colors: p.colors, font: FONTS[p.font], lineHeight: p.font === "mono" ? 1.55 : 1.62, sizePx: SIZES[p.size] };
 }
 
+// :root holds the night palette and only the body's classes change it, so the root element reads as night under every theme.
 function frameTheme(name: ThemeName): FrameTheme {
-  const css = getComputedStyle(document.body), tk = (t: string) => css.getPropertyValue(t).trim();
-  return { light: name !== "night", bg: tk("--bg"), panel: tk("--panel"), ink: tk("--ink"), primaryInk: tk("--primary-ink"), lineHi: tk("--line-hi"), mute: tk("--mute") };
+  const body = getComputedStyle(document.body), root = getComputedStyle(document.documentElement);
+  const tk = (css: CSSStyleDeclaration, t: string) => css.getPropertyValue(t).trim();
+  return { light: name !== "night", panel: tk(body, "--panel"), night: { bg: tk(root, "--bg"), ink: tk(root, "--ink"), primaryInk: tk(root, "--primary-ink"), lineHi: tk(root, "--line-hi"), mute: tk(root, "--mute") } };
 }
 
 export interface MailBody { key: number; folder: string; uid: number; has_html?: boolean; from_addr?: string; from_name?: string; subject?: string }

@@ -3,7 +3,9 @@
 // nothing. Pure, given the theme's colors.
 import { copyQuery, type Copy } from "../../lib/copy";
 
-export interface FrameTheme { light: boolean; bg: string; panel: string; ink: string; primaryInk: string; lineHi: string; mute: string }
+// Dark mail's colors, the night theme's whichever theme the app is in.
+export interface NightColors { bg: string; ink: string; primaryInk: string; lineHi: string; mute: string }
+export interface FrameTheme { light: boolean; panel: string; night: NightColors }
 export interface MailPrefs { colors: "auto" | "dark" | "original"; font: string; lineHeight: number; sizePx: number }
 // What a frame's document is given: a stylesheet, and whether the mail is inverted to darken it.
 export interface Look { css: string; inverted: boolean }
@@ -37,10 +39,11 @@ const isDark = (isHtml: boolean, p: MailPrefs, t: FrameTheme) =>
 export function lookOf(isHtml: boolean, prefs: MailPrefs, theme: FrameTheme): Look {
   const dark = isDark(isHtml, prefs, theme);
   // Invert the mail to darken its usually light backgrounds, and invert media back so photos stay true.
-  if (isHtml && dark) return { inverted: true, css: `html{background:${theme.bg}}body{margin:14px;overflow-wrap:break-word}.mm-dark{filter:invert(.92) hue-rotate(180deg)}.mm-dark img,.mm-dark picture,.mm-dark video,.mm-dark svg,.mm-dark [style*=background-image]{filter:invert(1) hue-rotate(180deg)}img{max-width:100%;height:auto;max-height:8000px}table{max-width:100%}${QUOTE}` };
+  if (isHtml && dark) return { inverted: true, css: `html{background:${theme.night.bg}}body{margin:14px;overflow-wrap:break-word}.mm-dark{filter:invert(.92) hue-rotate(180deg)}.mm-dark img,.mm-dark picture,.mm-dark video,.mm-dark svg,.mm-dark [style*=background-image]{filter:invert(1) hue-rotate(180deg)}img{max-width:100%;height:auto;max-height:8000px}table{max-width:100%}${QUOTE}` };
   if (isHtml) return { inverted: false, css: `body{font:15px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;background:${theme.light ? theme.panel : "#ffffff"};margin:14px;overflow-wrap:break-word}a{color:#0b66c3}img{max-width:100%;height:auto;max-height:8000px}blockquote{border-left:3px solid #ccc;margin:0 0 0 4px;padding-left:12px;color:#555}table{max-width:100%}${QUOTE}` };
-  const ink = dark ? theme.ink : "#24221E", bg = dark ? theme.bg : "#FFFDF8", link = dark ? theme.primaryInk : "#2D4B70";
-  return { inverted: false, css: `body{margin:14px;color:${ink};background:${bg};overflow-wrap:break-word}a{color:${link}}pre{white-space:pre-wrap;font:${prefs.sizePx}px/${prefs.lineHeight} ${prefs.font};margin:0}blockquote{border-left:3px solid ${dark ? theme.lineHi : "#D5C9B1"};margin:0 0 0 4px;padding-left:12px;color:${dark ? theme.mute : "#625B4D"}}${QUOTE}` };
+  const { night } = theme;
+  const ink = dark ? night.ink : "#24221E", bg = dark ? night.bg : "#FFFDF8", link = dark ? night.primaryInk : "#2D4B70";
+  return { inverted: false, css: `body{margin:14px;color:${ink};background:${bg};overflow-wrap:break-word}a{color:${link}}pre{white-space:pre-wrap;font:${prefs.sizePx}px/${prefs.lineHeight} ${prefs.font};margin:0}blockquote{border-left:3px solid ${dark ? night.lineHi : "#D5C9B1"};margin:0 0 0 4px;padding-left:12px;color:${dark ? night.mute : "#625B4D"}}${QUOTE}` };
 }
 
 // The sanitized message a reply quotes, as a srcdoc. It holds no remote image, and the page's policy, which this inherits, would refuse one.
