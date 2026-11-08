@@ -11,7 +11,7 @@ from mailmind.kernel.parsed import as_int
 # word for it, Any on purpose. `normalized` says which keys the rest of the app may count on.
 type Entry = dict[str, Any]
 
-_PORT_SAID = {"port": "port must be 1–65535", "smtp_port": "SMTP port must be 1–65535"}
+PORT_SAID = {"port": "port must be 1–65535", "smtp_port": "SMTP port must be 1–65535"}
 
 
 class TypeDefaults(TypedDict):
@@ -174,7 +174,7 @@ def apply_fields(entry: Entry, p: Mapping[str, Any]) -> None:
 def _port(key: str, given: object) -> int:
     number = as_int(given)
     if number is None:
-        raise ValueError(_PORT_SAID[key])
+        raise ValueError(PORT_SAID[key])
     return number
 
 
@@ -188,7 +188,7 @@ def validate_new(entry: Entry) -> None:
     if t == "imap" and not str(entry.get("host") or "").strip():
         raise ValueError("a host is required for a generic IMAP account")
     if "port" in entry and not (1 <= _port("port", entry["port"]) <= 65535):
-        raise ValueError(_PORT_SAID["port"])
+        raise ValueError(PORT_SAID["port"])
 
 
 def _names_a_host(held: object) -> bool:
@@ -206,7 +206,7 @@ def refuse_bad_endpoints(entry: Entry, before: Mapping[str, Any]) -> None:
     if changed("smtp_host") and not _names_a_host(entry["smtp_host"]):
         raise ValueError("SMTP host must be a host name")
     if changed("smtp_port") and not (1 <= _port("smtp_port", entry["smtp_port"]) <= 65535):
-        raise ValueError(_PORT_SAID["smtp_port"])
+        raise ValueError(PORT_SAID["smtp_port"])
 
 
 def strip_for(entry: Entry) -> bool:

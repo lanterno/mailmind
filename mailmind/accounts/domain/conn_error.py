@@ -1,12 +1,15 @@
 """A connection's trouble in words that are safe to show: what went wrong, never what the server or the error said."""
 from mailmind.accounts.domain import tls_pin
+from mailmind.accounts.domain.draft import BadPort
 
 
 def quiet(e: BaseException) -> str:
     if isinstance(e, tls_pin.TLSPinMismatch):
         return "certificate changed"
+    if isinstance(e, BadPort):
+        return str(e)
     s = f"{type(e).__name__}: {e}".lower()
-    if any(w in s for w in ("auth", "credential", "invalid", "login", "password")):
+    if any(w in s for w in ("auth", "credential", "login", "password")):
         return "AUTHENTICATIONFAILED"
     if "refused" in s:
         return "connection refused"

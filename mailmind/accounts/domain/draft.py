@@ -8,11 +8,23 @@ the use case's to see to: it never reads an endpoint out of the request.
 from collections.abc import Mapping
 from typing import Any
 
-from mailmind.accounts.domain.account import TYPE_DEFAULTS, Entry
+from mailmind.accounts.domain.account import PORT_SAID, TYPE_DEFAULTS, Entry
+from mailmind.kernel.parsed import as_int
 
 
 class DraftRefused(Exception):
     """A draft that can't be tried. Its text is one of the fixed sentences below: it is shown, and holds nothing typed."""
+
+
+class BadPort(ValueError):
+    """A draft's port no connection could reach: a failed test, in the sentence the edit of an account says it in."""
+
+
+def _port_of(draft: Mapping[str, Any], default: int) -> int:
+    number = as_int(draft.get("port") or default)
+    if number is None or not 1 <= number <= 65535:
+        raise BadPort(PORT_SAID["port"])
+    return number
 
 
 def throwaway_account(draft: Mapping[str, Any]) -> Entry:
@@ -21,7 +33,7 @@ def throwaway_account(draft: Mapping[str, Any]) -> Entry:
     td = TYPE_DEFAULTS.get(ty, TYPE_DEFAULTS["imap"])
     cs: Entry = draft.get("credential") or {}
     acct: Entry = {"email": draft.get("email"), "kind": ty,
-                   "host": draft.get("host") or td["host"], "port": int(draft.get("port") or td["port"]),
+                   "host": draft.get("host") or td["host"], "port": _port_of(draft, td["port"]),
                    "starttls": bool(draft.get("starttls", td["starttls"])),
                    "strip_spaces": bool(draft.get("strip_spaces", td["strip_spaces"])),
                    "trash": td["trash"], "credential": {"plain": cs.get("value")}}
