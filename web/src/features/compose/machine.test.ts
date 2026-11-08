@@ -583,6 +583,24 @@ describe("new to you", () => {
     expect(m.isNew(m.view.get()!, "new@example.test")).toBe(false);
   });
 
+  it("never asks about a tag of your own address, and doesn't call it new", async () => {
+    const { m, posted } = setup();
+    m.open();
+    m.commitChip("to", "ada+news@example.test");
+    await vi.advanceTimersByTimeAsync(200);
+    expect(posted("/api/contacts/known")).toEqual([]);
+    expect(m.isNew(m.view.get()!, "ada+news@example.test")).toBe(false);
+  });
+
+  it("takes a tag the server calls yours as yours", async () => {
+    const { m, answer } = setup({ mine: () => new Set(["bea@example.test"]) });
+    answer("/api/contacts/known", () => ({ ok: true, thin: false, items: { "x+y@alias.example.test": { known: true, self: true } } }));
+    m.open();
+    m.commitChip("to", "x+y@alias.example.test");
+    await vi.advanceTimersByTimeAsync(200);
+    expect(m.isNew(m.view.get()!, "x+y@alias.example.test")).toBe(false);
+  });
+
   it("never asks about the thread's own people", async () => {
     const { m, posted } = setup();
     m.open({ participants: ["Bea@example.test"], to: ["bea@example.test"] });

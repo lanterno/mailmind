@@ -1,7 +1,7 @@
 // The send-time checks, on their word lists (tests/fixtures/send_guard_words.json) and the exact copy.
 import { describe, expect, it } from "vitest";
 import WORDS from "../../../../tests/fixtures/send_guard_words.json";
-import { guardAttachWord as W, guardBlocks, guardCheck, guardHard, guardLine, guardList, guardSubjectEmpty, guardTypedText,
+import { guardAttachWord as W, guardBlocks, guardCheck, guardFanout, guardHard, guardLine, guardList, guardSubjectEmpty, guardTypedText, isMine, mineSet, untagged,
   type GuardSnapshot, type GuardWarning } from "./sendGuard";
 
 const S = (o: Partial<GuardSnapshot> = {}): GuardSnapshot => ({ mode: "new", subject: "Plans", subject0: "", body: "", sigBlock: "", nAttach: 0,
@@ -115,6 +115,27 @@ describe("reply all", () => {
     const f = fanout({ ...all, to: ["mira@example.test"], cc: [...ppl(4), "own1@example.test", "own2@example.test"], autoCc: [...ppl(6), "ada@example.test"] });
     expect(f).toMatchObject({ removable: 4 });
     expect(fanout({ ...all, to: ppl(1), cc: ppl(7).slice(1) })).toMatchObject({ removable: 0 });
+  });
+});
+
+describe("your own address, however it is tagged", () => {
+  const mine = mineSet(["Ada@example.test"]);
+  it("is yours as the mailbox and as any tag of it, and no other", () => {
+    expect([isMine("ada@example.test", mine), isMine("ada+news@example.test", mine), isMine("adam@example.test", mine), isMine("bo+ada@example.test", mine)])
+      .toEqual([true, true, false, false]);
+    expect([untagged("ada+news@example.test"), untagged("ada@example.test"), untagged("+only@example.test"), untagged("no-at")])
+      .toEqual(["ada@example.test", "ada@example.test", "+only@example.test", "no-at"]);
+  });
+  it("takes the plain mailbox of an account that is itself tagged", () => {
+    const tagged = mineSet(["ada+work@example.test"]);
+    expect([isMine("ada@example.test", tagged), isMine("ada+other@example.test", tagged)]).toEqual([true, true]);
+  });
+  it("counts for no one in a reply-all's head count", () => {
+    expect(guardFanout(["bo@example.test", "ada+news@example.test"], [], ["ada@example.test"])).toBe(1);
+  });
+  it("is left out of what a reply-all offers to remove", () => {
+    const f = fanout({ mode: "replyall", to: ["bo@example.test"], cc: [...ppl(5), "ada+news@example.test"], autoCc: [...ppl(5), "ada+news@example.test"] });
+    expect(f).toMatchObject({ n: 6, removable: 5 });
   });
 });
 

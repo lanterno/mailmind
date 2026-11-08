@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardView, isDraftTone, looksLikeAddr, parseAddrs, quoteLabel, rcptAddr, rePrefix, sendLaterPresets, splitChips } from "./model";
+import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardView, isDraftTone, looksLikeAddr, parseAddrs, quoteLabel, rcptAddr, rePrefix, replySeed, sendLaterPresets, splitChips } from "./model";
 
 describe("addresses", () => {
   it("finds addresses in a header, and the one a chip's mail goes to", () => {
@@ -32,6 +32,13 @@ describe("subjects", () => {
   });
 });
 
+describe("replying", () => {
+  it("leaves your tags out of a reply-all as it does your address", () => {
+    const seed = replySeed({ account: "ada@example.test", from_addr: "bo@example.test", to: "ada+news@example.test, cy@example.test", cc: "ada@example.test" }, true, new Set(["ada@example.test"]));
+    expect(seed.cc).toEqual(["cy@example.test"]);
+  });
+});
+
 describe("forwarding", () => {
   it("counts the files the server says travel, not what stays with the text", () => {
     const seed = forwardSeed({ account: "a", subject: "x", attachments: [{ travels: true, size: 3 }, { travels: false, size: 9 }, { travels: true, size: 2 }] }, 1000);
@@ -61,6 +68,7 @@ describe("quick replies", () => {
   it("are for people you could answer", () => {
     expect(canQuickReply("bea@example.test", mine)).toBe(true);
     expect(canQuickReply("ada@example.test", mine)).toBe(false);
+    expect(canQuickReply("ada+news@example.test", mine)).toBe(false);
     expect(canQuickReply("no-reply@example.test", mine)).toBe(false);
     expect(canQuickReply("notifications@example.test", mine)).toBe(false);
     expect(canQuickReply("bea@example.test", mine, { isJunk: true })).toBe(false);
