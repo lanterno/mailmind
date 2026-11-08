@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardSnapshot, guardView, isDraftTone, isPicture, pictureMark, pictureParts, withoutMark, withPictures, looksLikeAddr, nearMisses, parseAddrs, quoteLabel, rcptAddr, redirectOf, rePrefix, replySeed, sendLaterPresets, splitChips, type Composer, type Person } from "./model";
+import { addrOf, canQuickReply, chip, draftHash, DRAFT_TONES, fmtWhen, forwardSeed, guardSnapshot, guardView, isDraftTone, isPicture, placeholderAfter, placeholderBefore, snippetOffered, wordBefore, pictureMark, pictureParts, withoutMark, withPictures, looksLikeAddr, nearMisses, parseAddrs, quoteLabel, rcptAddr, redirectOf, rePrefix, replySeed, sendLaterPresets, splitChips, type Composer, type Person } from "./model";
 
 describe("addresses", () => {
   it("finds addresses in a header, and the one a chip's mail goes to", () => {
@@ -194,6 +194,56 @@ describe("a picture's mark", () => {
   it("shows a preview's picture as the data this composer holds, and no other", () => {
     const files = [{ filename: "a", content_type: "image/png", size: 1, b64: "QQ==", cid: "tok" }, { filename: "b", content_type: "text/plain", size: 1, b64: "Qg==" }];
     expect(withPictures('<img src="cid:tok@mailmind"><img src="cid:other@mailmind">', files)).toBe('<img src="data:image/png;base64,QQ=="><img src="cid:other@mailmind">');
+  });
+});
+
+describe("a snippet's word", () => {
+  it("is a word that opens with a semicolon, up to the cursor", () => {
+    expect(wordBefore(";sig", 4)).toEqual({ from: 0, word: "sig" });
+    expect(wordBefore("a\n;sig b", 6)).toEqual({ from: 2, word: "sig" });
+    expect(wordBefore("a ;sig", 4)).toEqual({ from: 2, word: "s" });
+    expect(wordBefore(";", 1)).toEqual({ from: 0, word: "" });
+  });
+
+  it("isn't one in the middle of a word, or with no word there", () => {
+    expect(wordBefore("a;sig", 5)).toBeNull();
+    expect(wordBefore("sig", 3)).toBeNull();
+    expect(wordBefore("; x", 3)).toBeNull();
+    expect(wordBefore("", 0)).toBeNull();
+    expect(wordBefore(";sig", 0)).toBeNull();
+  });
+
+  it("offers the very name first, then the only one it starts", () => {
+    const a = { trigger: "ab", text: "1" }, b = { trigger: "abc", text: "2" }, c = { trigger: "x", text: "3" };
+    expect(snippetOffered([b, a, c], "AB")).toBe(a);
+    expect(snippetOffered([a, b, c], "a")).toBeNull();
+    expect(snippetOffered([a, b, c], "abc")).toBe(b);
+    expect(snippetOffered([a, c], "a")).toBe(a);
+    expect(snippetOffered([a], "")).toBeNull();
+    expect(snippetOffered([a], "b")).toBeNull();
+  });
+});
+
+describe("a placeholder", () => {
+  const text = "a {{one}} b {{two words}} c";
+
+  it("is found after a place, its start counting as after", () => {
+    expect(placeholderAfter(text, 0)).toEqual([2, 9]);
+    expect(placeholderAfter(text, 2)).toEqual([2, 9]);
+    expect(placeholderAfter(text, 3)).toEqual([12, 25]);
+    expect(placeholderAfter(text, 13)).toBeNull();
+  });
+
+  it("is found before a place, its end counting as before", () => {
+    expect(placeholderBefore(text, 27)).toEqual([12, 25]);
+    expect(placeholderBefore(text, 25)).toEqual([12, 25]);
+    expect(placeholderBefore(text, 24)).toEqual([2, 9]);
+    expect(placeholderBefore(text, 8)).toBeNull();
+  });
+
+  it("is in two braces, on one line, and holds something", () => {
+    for (const none of ["{{}}", "{one}", "{{a\nb}}", "{{{a}", "{{a}b}}", `{{${"x".repeat(65)}}}`]) expect(placeholderAfter(none, 0)).toBeNull();
+    expect(placeholderAfter(`{{${"x".repeat(64)}}}`, 0)).toEqual([0, 68]);
   });
 });
 

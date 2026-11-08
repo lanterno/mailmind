@@ -822,7 +822,7 @@ describe("from the mail", () => {
     expect(c.cc).toEqual([]);
     expect(c.subject).toBe("Re: Lunch");
     expect(c.origKey).toBe(5);
-    expect(asked).toEqual(["/api/message/body?key=5&folder=INBOX&uid=2"]);
+    expect(asked.filter((p) => p !== "/api/snippets")).toEqual(["/api/message/body?key=5&folder=INBOX&uid=2"]);
     const d = (await m.reply({ key: 5, folder: "INBOX", uid: 2 }, true))!;
     expect(d.cc.map((x) => x.v)).toEqual(["cy@example.test"]);
     expect(d.autoCc).toEqual(["cy@example.test"]);
@@ -938,7 +938,7 @@ describe("the AI's words", () => {
     answer("/api/ai/draft-reply", () => ({ ok: true, body: "fresh" }));
     await m.openDraftAhead({ key: 4, folder: "INBOX", uid: 6 }, forget);
     await flush();
-    expect(asked).toEqual(["/api/message/body?key=4&folder=INBOX&uid=6", "/api/ai/draft-ahead?key=4&folder=INBOX&uid=6&peek=1"]);
+    expect(asked.filter((p) => p !== "/api/snippets")).toEqual(["/api/message/body?key=4&folder=INBOX&uid=6", "/api/ai/draft-ahead?key=4&folder=INBOX&uid=6&peek=1"]);
     expect(forget).toHaveBeenCalled();
     expect(toasts[0]).toMatch(/moved on/);
     expect(m.view.get()!.body).toBe("fresh");
@@ -1120,6 +1120,226 @@ describe("a picture in the text", () => {
     m.send();
     await flush();
     expect(posted("/api/send")[0].attachments[0].cid).toBe("tok");
+  });
+});
+
+describe("snippets", () => {
+  const SIG = { trigger: "sig", text: "Thanks,\nAda" };
+  const NOTE = { trigger: "note", text: "Hi {{name}}, see {{what}} by {{when}}." };
+
+  // A composer with these snippets and a cursor the test moves, as the text box would have it.
+  async function writing(list: { trigger: string; text: string }[] = [SIG, NOTE], over: Partial<Env> = {}) {
+    const caret = { at: 0, end: 0 }, selected: number[][] = [];
+    const t = setup({
+      get: vi.fn(async (path: string) => (path === "/api/snippets" ? { ok: true, snippets: list } : { ok: true })),
+      selection: () => [caret.at, caret.end],
+      select: (a, b) => { caret.at = a; caret.end = b; selected.push([a, b]); },
+      ...over,
+    });
+    t.m.open();
+    await flush();
+    const type = (body: string, at = body.length, end = at) => { caret.at = at; caret.end = end; t.m.edit("body", body); };
+    return { ...t, caret, selected, type, body: () => t.m.view.get()!.body, c: () => t.m.view.get()! };
+  }
+
+  it("reads them as a composer opens, and goes on without them if it can't", async () => {
+    const { m, env } = await writing();
+    expect(env.get).toHaveBeenCalledWith("/api/snippets");
+    expect(m.snippets.get()).toEqual([SIG, NOTE]);
+    const off = setup({ get: vi.fn(async () => { throw new Error("no"); }) });
+    expect(off.m.open()).not.toBeNull();
+    await flush();
+    expect(off.m.snippets.get()).toEqual([]);
+    expect(off.toasts).toEqual([]);
+  });
+
+  it("brings in what the word before the cursor names, and leaves the cursor after it", async () => {
+    const { m, type, body, caret, c, focused } = await writing();
+    type("Bye ;sig there", 8);
+    expect(m.tabInBody(false)).toBe(true);
+    expect(body()).toBe("Bye Thanks,\nAda there");
+    expect([caret.at, caret.end]).toEqual([15, 15]);
+    expect(c().dirty).toBe(true);
+    expect(focused.at(-1)).toBe("body");
+  });
+
+  it("goes back to writing if it was showing a preview", async () => {
+    const { m, c } = await writing();
+    await m.preview();
+    m.insertSnippet(SIG);
+    expect(c().previewing).toBe(false);
+  });
+
+  it("takes back the check that was waiting, since the message has changed", async () => {
+    const { m, c } = await writing();
+    m.commitChip("to", "bea@example.test");
+    m.send();
+    expect(c().guard).not.toBeNull();
+    m.insertSnippet(SIG);
+    expect(c().guard).toBeNull();
+  });
+
+  it("holds to a list when the answer has none", async () => {
+    const { m, type, env } = await writing();
+    vi.mocked(env.get).mockResolvedValue({ ok: true });
+    m.close();
+    m.open();
+    await flush();
+    expect(m.snippets.get()).toEqual([SIG, NOTE]);
+    type(";sig");
+    expect(m.view.get()!.offer).toEqual(SIG);
+  });
+
+  it("takes a name in any case, and the start of one only if nothing else starts so", async () => {
+    const { m, type, body } = await writing([SIG, { trigger: "sign", text: "Sign here" }, NOTE]);
+    type(";SIG");
+    expect(m.tabInBody(false)).toBe(true);                       // the very name, though another starts with it
+    expect(body()).toBe(SIG.text);
+    type(";si");
+    expect(m.tabInBody(false)).toBe(false);                      // two start so
+    expect(body()).toBe(";si");
+    type(";no");
+    expect(m.tabInBody(false)).toBe(true);
+    expect(body()).toBe(NOTE.text);
+  });
+
+  it.each([
+    ["no semicolon", "sig", 3, 3],
+    ["the middle of a word", "a;sig", 5, 5],
+    ["a name it doesn't know", ";other", 6, 6],
+    ["a bare semicolon", ";", 1, 1],
+    ["some text selected", ";sig b", 4, 6],
+    ["the cursor before it", ";sig", 0, 0],
+  ])("leaves Tab as Tab at %s", async (_what, text, at, end) => {
+    const { m, type, body } = await writing();
+    type(text, at, end);
+    expect(m.tabInBody(false)).toBe(false);
+    expect(body()).toBe(text);
+  });
+
+  it("doesn't bring one in going backwards", async () => {
+    const { m, type, body } = await writing();
+    type(";sig");
+    expect(m.tabInBody(true)).toBe(false);
+    expect(body()).toBe(";sig");
+  });
+
+  it("selects the first placeholder, and Tab and Shift Tab go through the rest and out at either end", async () => {
+    const { m, type, body, selected, c } = await writing();
+    type(";note");
+    expect(m.tabInBody(false)).toBe(true);
+    const text = body(), span = (p: string) => [text.indexOf(p), text.indexOf(p) + p.length];
+    expect(selected.at(-1)).toEqual(span("{{name}}"));
+    expect(m.tabInBody(false)).toBe(true);
+    expect(selected.at(-1)).toEqual(span("{{what}}"));
+    expect(m.tabInBody(false)).toBe(true);
+    expect(selected.at(-1)).toEqual(span("{{when}}"));
+    expect(m.tabInBody(true)).toBe(true);
+    expect(selected.at(-1)).toEqual(span("{{what}}"));
+    expect(m.tabInBody(true)).toBe(true);
+    expect(selected.at(-1)).toEqual(span("{{name}}"));
+    expect(m.tabInBody(true)).toBe(false);                       // out through the top, still going through them
+    expect(c().filling).toBe(false);
+  });
+
+  it("finds the next one after what was typed over this one, and is done past the last", async () => {
+    const { m, type, body, selected, c } = await writing([{ trigger: "n", text: "{{a}} and {{b}}" }]);
+    type(";n");
+    m.tabInBody(false);
+    type("Lin and {{b}}", 3);
+    expect(m.tabInBody(false)).toBe(true);
+    expect(selected.at(-1)).toEqual([8, 13]);
+    type("Lin and Bea");
+    expect(m.tabInBody(false)).toBe(false);
+    expect(c().filling).toBe(false);
+    expect(body()).toBe("Lin and Bea");
+  });
+
+  it("goes through only what a snippet brought in the way of placeholders", async () => {
+    const { m, type, selected } = await writing();
+    type("a {{literal}} b", 0);
+    expect(m.tabInBody(false)).toBe(false);
+    expect(selected).toEqual([]);
+    type(";sig {{after}}", 4);
+    m.tabInBody(false);
+    expect(m.view.get()!.filling).toBe(false);                   // this one's text holds none
+    expect(m.tabInBody(false)).toBe(false);
+  });
+
+  it("selects none outside what it brought in", async () => {
+    const { m, type, caret } = await writing();
+    type(";sig {{later}}", 4);
+    m.tabInBody(false);
+    expect([caret.at, caret.end]).toEqual([SIG.text.length, SIG.text.length]);
+  });
+
+  it("offers what Tab would bring in, for as long as the cursor is there", async () => {
+    const { m, type, c, caret } = await writing();
+    expect(c().offer).toBeNull();
+    type(";si");
+    expect(c().offer).toEqual(SIG);
+    caret.at = caret.end = 1;
+    m.caretMoved();
+    expect(c().offer).toBeNull();
+    caret.at = caret.end = 3;
+    m.caretMoved();
+    expect(c().offer).toEqual(SIG);
+    m.tabInBody(false);
+    expect(c().offer).toBeNull();
+  });
+
+  it("offers nothing over a selection", async () => {
+    const { type, c } = await writing();
+    type(";sig b", 4, 6);
+    expect(c().offer).toBeNull();
+  });
+
+  it("counts as an edit, so it gets saved", async () => {
+    const { m, c } = await writing();
+    expect(c().dirty).toBe(false);
+    m.insertSnippet(SIG);
+    expect(c().dirty).toBe(true);
+    expect(c().edits).toBe(1);
+  });
+
+  it("publishes only when the offer changes", async () => {
+    const { m, type } = await writing();
+    type("plain");
+    const before = m.view.get();
+    m.caretMoved();
+    expect(m.view.get()).toBe(before);
+  });
+
+  it("puts one picked from the list in place of what's selected", async () => {
+    const { m, type, body, focused } = await writing();
+    type("a XX b", 2, 4);
+    m.insertSnippet(SIG);
+    expect(body()).toBe(`a ${SIG.text} b`);
+    expect(focused.at(-1)).toBe("body");
+  });
+
+  it("offers what's selected as a new snippet's text", async () => {
+    const { m, type } = await writing();
+    type("a XX b", 2, 4);
+    expect(m.selectedText()).toBe("XX");
+    m.close();
+    expect(m.selectedText()).toBe("");
+  });
+
+  it("saves and deletes, and shows the list the server answers", async () => {
+    const { m, posted, answer } = await writing();
+    answer("/api/snippets", () => ({ ok: true, snippets: [SIG] }));
+    await expect(m.changeSnippets({ verb: "save", trigger: "sig", text: "x" })).resolves.toBe(true);
+    expect(posted("/api/snippets")).toEqual([{ verb: "save", trigger: "sig", text: "x" }]);
+    expect(m.snippets.get()).toEqual([SIG]);
+  });
+
+  it("says why it couldn't, and keeps the list it had", async () => {
+    const { m, answer, toasts } = await writing();
+    answer("/api/snippets", () => { throw new Error("a snippet needs some text"); });
+    await expect(m.changeSnippets({ verb: "save", trigger: "s", text: "" })).resolves.toBe(false);
+    expect(toasts.at(-1)).toBe("Couldn’t save that snippet: a snippet needs some text");
+    expect(m.snippets.get()).toEqual([SIG, NOTE]);
   });
 });
 

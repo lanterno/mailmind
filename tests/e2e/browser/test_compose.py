@@ -1034,6 +1034,117 @@ def test_a_picture_pasted_goes_into_the_text(page, app, world):
     clean(page)
 
 
+def is_selected(page, text):
+    read = "() => { const b = document.querySelector('#cmpBody'); return b.value.slice(b.selectionStart, b.selectionEnd); }"
+    until(page, lambda: page.evaluate(read) == text, f"{text} isn't selected")
+
+
+def keep_snippet(page, name, text):
+    page.locator("#snTrigger").fill(name)
+    page.locator("#snText").fill(text)
+    page.locator("#snSave").click()
+    expect(page.locator("#snippetsMenu .sn-row", has_text=f";{name}")).to_be_visible()
+
+
+def test_a_snippet_kept_comes_in_by_its_name_and_tab_goes_through_its_placeholders(page, app, world):
+    opened(page)
+    writing(page, LIN, "Fabric", "")
+    page.locator("#cmpSnippetsBtn").click()
+    expect(page.locator(".sn-empty")).to_be_visible()
+    keep_snippet(page, "Note", "Hi {{name}}, see {{what}}.")
+    page.keyboard.press("Escape")
+    expect(page.locator("#snippetsMenu")).to_have_count(0)
+    body(page).click()
+    body(page).press_sequentially(";not")
+    expect(page.locator("#cmpOffer")).to_have_text("Tab brings in ;note")
+    body(page).press("ArrowLeft")
+    body(page).press("ArrowLeft")
+    body(page).press("ArrowLeft")
+    body(page).press("ArrowLeft")
+    expect(page.locator("#cmpOffer")).to_have_text("")                # the cursor has left the word
+    body(page).press("End")
+    expect(page.locator("#cmpOffer")).to_have_text("Tab brings in ;note")
+    body(page).press("Tab")
+    expect(body(page)).to_have_value("Hi {{name}}, see {{what}}.")
+    expect(body(page)).to_be_focused()
+    is_selected(page, "{{name}}")
+    expect(page.locator("#cmpOffer")).to_have_text("")
+    page.keyboard.type("Lin")
+    expect(body(page)).to_have_value("Hi Lin, see {{what}}.")
+    body(page).press("Tab")
+    is_selected(page, "{{what}}")
+    page.keyboard.type("the plan")
+    expect(body(page)).to_have_value("Hi Lin, see the plan.")
+    body(page).press("Tab")
+    expect(body(page)).not_to_be_focused()                            # past the last, it moves on
+    clean(page)
+
+
+def test_tab_in_a_message_with_no_snippet_moves_on(page, app, world):
+    opened(page)
+    writing(page, LIN, "Fabric", "hello {{there}}")
+    body(page).press("Tab")
+    expect(body(page)).not_to_be_focused()
+    expect(body(page)).to_have_value("hello {{there}}")
+    clean(page)
+
+
+def test_a_snippet_picked_from_the_list_goes_in_where_the_cursor_was_and_one_can_go(page, app, world):
+    opened(page)
+    writing(page, LIN, "Fabric", "ab")
+    body(page).press("Home")
+    body(page).press("ArrowRight")
+    page.locator("#cmpSnippetsBtn").click()
+    keep_snippet(page, "x", "-kept-")
+    keep_snippet(page, "y", "other")
+    page.locator(".sn-use", has_text=";x").click()
+    expect(body(page)).to_have_value("a-kept-b")
+    expect(body(page)).to_be_focused()
+    page.locator("#cmpSnippetsBtn").click()
+    page.get_by_role("button", name="Delete ;y").click()
+    expect(page.locator(".sn-row")).to_have_count(1)
+    page.keyboard.press("Escape")                                     # the list closes, and only the list
+    expect(page.locator("#snippetsMenu")).to_have_count(0)
+    expect(body(page)).to_be_visible()
+    page.locator("#cmpSnippetsBtn").click()
+    page.get_by_role("button", name="Edit ;x").click()
+    expect(page.locator("#snText")).to_have_value("-kept-")
+    expect(page.locator("#snTrigger")).to_have_value("x")
+    clean(page)
+
+
+def test_what_is_selected_is_offered_as_a_snippet_and_saving_takes_a_key_and_sends_nothing(page, app, world):
+    opened(page)
+    writing(page, LIN, "Fabric", "Kept words")
+    body(page).press("ControlOrMeta+a")
+    page.locator("#cmpSnippetsBtn").click()
+    expect(page.locator("#snText")).to_have_value("Kept words")
+    expect(page.locator("#snSave")).to_be_disabled()
+    page.locator("#snTrigger").fill("kept")
+    page.locator("#snTrigger").press("Enter")
+    expect(page.locator(".sn-row")).to_have_count(1)
+    page.locator("#snTrigger").fill("two")
+    page.locator("#snText").fill("Second")
+    page.locator("#snText").press("ControlOrMeta+Enter")
+    expect(page.locator(".sn-row")).to_have_count(2)
+    expect(body(page)).to_be_visible()                                # still writing: that was no send
+    assert world.smtp.messages == []
+    clean(page)
+
+
+def test_saving_a_snippet_it_cant_keep_says_why_and_keeps_the_form(page, app, world):
+    opened(page)
+    writing(page, LIN, "Fabric", "")
+    page.locator("#cmpSnippetsBtn").click()
+    page.locator("#snTrigger").fill("two words")
+    page.locator("#snText").fill("Words I would rather not type again")
+    page.locator("#snSave").click()
+    expect(page.locator("#toast")).to_contain_text("a trigger is up to 32 letters")
+    expect(page.locator("#snText")).to_have_value("Words I would rather not type again")
+    page.problems.clear()                                             # the 400 above, in the console
+    clean(page)
+
+
 def test_a_markdown_message_goes_out_as_text_and_html_and_reopens_as_typed(page, app, world):
     opened(page)
     writing(page, LIN, "Fabric notes", "**Linen** came in")
