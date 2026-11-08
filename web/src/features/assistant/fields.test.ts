@@ -19,6 +19,7 @@ describe("toField", () => {
   });
   it("shows a day as a day", () => {
     expect(toField("2026-11-12", true)).toBe("2026-11-12");
+    expect(toField("2026-11-12T15:00", true)).toBe("2026-11-12");
   });
   it("shows nothing for nothing, or for what won't read", () => {
     expect(toField(null, false)).toBe("");
