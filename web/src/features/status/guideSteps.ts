@@ -17,7 +17,7 @@ export function guideSteps({ ai, singleKeys }: { ai: boolean; singleKeys: boolea
         ? "Your accounts and folders are here. Open a message and press ↵, or Focus reading above it, to hide all this and just read."
         : "Your accounts and folders are here. Open a message and use Focus reading above it to hide all this and just read.",
     },
-    { id: "palette", at: [], title: "⌘K opens every command", text: "Folders, filing, settings and more, by name. Press ⌘K (Ctrl K on Windows and Linux) and start typing." },
+    { id: "palette", at: [], title: "⌘K opens every command", text: "Folders, filing, settings and more, by name. Press ⌘K (Ctrl K on Windows and Linux) any time, and start typing." },
     ...(ai
       ? [{ id: "ask", at: ["#search"], title: "Ask, or tell it what to do", text: "Start the search box with ? to ask your mail a question, or with ! to say what you want done. A ! shows you what it would do, and nothing happens until you confirm." }]
       : []),
