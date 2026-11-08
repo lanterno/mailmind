@@ -55,6 +55,23 @@ def test_the_rail_counts_senders_to_screen_and_the_list_names_them(page, world):
     clean(page)
 
 
+def test_the_ai_suggests_on_a_click_and_only_a_click_on_a_row_decides(page, world, ai):
+    screener(page)
+    assert ai.requests == []
+    before = rules_now()
+    first = page.locator(".scr-row").first
+    addr = first.get_attribute("data-scr")
+    page.get_by_role("button", name=re.compile("Suggest")).click()
+    expect(first.locator(".scr-hint")).to_contain_text("Allow? stub why")
+    expect(first.locator(".scr-allow")).to_have_class(re.compile("suggested"))
+    assert (rules_now(), len(ai.requests)) == (before, 1)
+    expect(page.locator(".scr-bar")).to_contain_text("for 1 of these")
+    first.locator(".scr-allow").click()
+    expect(page.locator(f'.scr-row[data-scr="{addr}"]')).to_have_count(0)
+    until(page, lambda: addr in rules_now()["keep_senders"], "the click wrote the rule")
+    clean(page)
+
+
 def test_allowing_a_sender_keeps_them_and_takes_them_off_the_list(page, world):
     screener(page)
     n = page.locator(".scr-row").count()
