@@ -9,6 +9,7 @@ const routes: Route[] = [
   { source: { kind: "allInboxes" }, opened: { kind: "message", key: 9, folder: "INBOX", uid: 1 } },
   { source: { kind: "search", q: "from:lin is:unread & more", account: "ada@example.test" }, opened: null },
   { source: { kind: "search", q: "noodle", account: "ada@example.test", thread: "rf:ada@example.test:49f7" }, opened: null },
+  { source: { kind: "search", q: "from:lin subject:lunch", account: "", asked: "emails from lin about lunch" }, opened: null },
 ];
 
 describe("the URL", () => {
