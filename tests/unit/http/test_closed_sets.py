@@ -12,12 +12,13 @@ import problems
 from mailmind.accounts.domain import preferences
 from mailmind.assistant.application.bulk import DO_PLAN_SCHEMA
 from mailmind.assistant.domain import action_plan, prompts
+from mailmind.assistant.domain import limits as limits_of_ai
 from mailmind.attention.domain import snooze
 from mailmind.calendar.domain import rsvp
 from mailmind.compose.domain import limits, outbox_item, resume
 from mailmind.curation.domain import cleanup_plan, rulebook
 from mailmind.discovery.domain import documents, views
-from mailmind.http.page_limits import PAGE_LIMITS
+from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
 from mailmind.kernel import snoozed
 from mailmind.mailbox.application.filing import Filing
 from mailmind.mailbox.domain import filing
@@ -123,7 +124,8 @@ def test_one_left_out_is_still_the_use_cases_to_word(app, path, body, said):
 
 
 def test_each_limit_the_page_has_is_the_one_its_use_case_holds_to():
-    assert PAGE_LIMITS == {"attach_bytes": limits.MAX_ATTACH_BYTES, "bulk_rows": Filing.BULK_MAX,
+    assert PAGE_LIMITS == {"ai_daily_limit_usd": preferences.AI_DAILY_LIMIT_MAX,
+                           "attach_bytes": limits.MAX_ATTACH_BYTES, "bulk_rows": Filing.BULK_MAX,
                            "instruction_chars": prompts.INSTRUCTION_MAX, "snooze_copies": snooze.BULK_CAP,
                            "undo_send_seconds": outbox_item.SEND_DELAY}
 
@@ -133,3 +135,9 @@ def test_the_limits_module_says_each_as_a_number():
     assert said.startswith("// Written by `just gen-api`") and said.endswith("} as const;\n")
     for name, value in PAGE_LIMITS.items():
         assert f"\n  {name}: {value},\n" in said
+
+
+def test_the_page_starts_from_each_preference_default_as_the_server_has_it():
+    assert PAGE_PREFERENCE_DEFAULTS == {**preferences.DEFAULTS, "ai_daily_limit_usd": limits_of_ai.DEFAULT_DAILY_LIMIT_USD}
+    said = openapi_doc.limits_module()
+    assert '\n  density: "comfortable",\n' in said and "\n  high_contrast: false,\n" in said and "\n  undo_send_seconds: 10,\n" in said
