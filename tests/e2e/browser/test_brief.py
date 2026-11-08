@@ -255,6 +255,52 @@ def test_the_week_says_what_went_to_archive_and_what_the_invites_hold(page, app,
     clean(page)
 
 
+def test_the_brief_says_what_tidy_filed_shows_it_and_takes_it_all_back(page, app, world, ai):
+    from mailmind.bootstrap import mailbox
+    judge(world, (LUNCH[0], 1, "info", ""), (LUNCH[1], 1, "info", ""))
+    mailbox.tidying.round()
+    app.settle()
+    assert not any(box == "INBOX" for _, box, *_ in world.where(LUNCH[0])["server"])
+    page.goto("/")
+    run = page.locator("[data-tidy-run]")
+    expect(run).to_contain_text("We filed 2 low-priority messages")
+    run.get_by_role("button", name="Review").click()
+    expect(run.locator("li").first).to_contain_text("Lunch on Thursday?")
+    run.get_by_role("button", name="Undo").click()
+    until(page, lambda: any(box == "INBOX" for _, box, *_ in world.where(LUNCH[0])["server"]), "it went back")
+    expect(run).to_have_count(0)
+    clean(page)
+
+
+def test_the_keys_undo_of_a_run_of_tidy_clears_the_strip(page, app, world, ai):
+    from mailmind.bootstrap import mailbox
+    judge(world, (LUNCH[0], 1, "info", ""))
+    mailbox.tidying.round()
+    app.settle()
+    page.goto("/")
+    run = page.locator("[data-tidy-run]")
+    expect(run).to_be_visible()
+    page.keyboard.press("z")
+    until(page, lambda: any(box == "INBOX" for _, box, *_ in world.where(LUNCH[0])["server"]), "it went back")
+    expect(run).to_have_count(0)
+    clean(page)
+
+
+def test_a_dismissed_run_of_tidy_stays_dismissed(page, app, world, ai):
+    from mailmind.bootstrap import mailbox
+    judge(world, (LUNCH[0], 1, "info", ""))
+    mailbox.tidying.round()
+    app.settle()
+    page.goto("/")
+    run = page.locator("[data-tidy-run]")
+    run.get_by_role("button", name="Dismiss").click()
+    expect(run).to_have_count(0)
+    page.reload()
+    expect(page.locator(".bf-card")).to_be_visible()
+    expect(run).to_have_count(0)
+    clean(page)
+
+
 def test_your_week_is_written_when_you_open_it_and_an_item_opens(page, world, ai):
     lunch_needs_a_reply(world)
     page.goto("/")
