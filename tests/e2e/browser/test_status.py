@@ -286,3 +286,67 @@ def test_the_undo_send_window_is_set_in_preferences_and_held_to_its_bounds(page,
     until(page, lambda: file_of(world)["preferences"]["undo_send_seconds"] == 60, "the bound is what's kept")
     clean(page)
 
+
+def padding_of(page):
+    return page.locator("#rows .row.cmsg").first.evaluate("e => parseFloat(getComputedStyle(e).paddingTop)")
+
+
+def test_density_tightens_the_list_and_is_there_from_the_first_paint(page, world):
+    dialog = preferences_open(page)
+    comfortable = padding_of(page)
+    assert page.locator("body").get_attribute("data-density") == "comfortable"
+    dialog.get_by_role("button", name="Compact").click()
+    expect(page.locator("body")).to_have_attribute("data-density", "compact")
+    tight = padding_of(page)
+    assert tight < comfortable
+    dialog.get_by_role("button", name="Cozy").click()
+    expect(page.locator("body")).to_have_attribute("data-density", "cozy")
+    assert tight < padding_of(page) < comfortable
+    until(page, lambda: file_of(world).get("preferences", {}).get("density") == "cozy", "the file holds the density")
+    page.pw.route(re.compile(r"/assets/.*\.js"), lambda route: route.abort() if "theme" not in route.request.url else route.continue_())
+    page.reload()                                        # with only theme.js running, the first paint is still cozy
+    expect(page.locator("body")).to_have_attribute("data-density", "cozy")
+
+
+def test_compact_clamps_the_gist_to_a_line_and_hides_the_chip(page, world):
+    from mailmind.bootstrap import accounts
+    accounts.config.set_preferences({"density": "compact"})
+    opened(page)
+    probe = page.locator("#rows .row.cmsg").first.evaluate("""row => {
+      const gist = document.createElement('div'), chip = document.createElement('div');
+      gist.className = 'gist'; chip.className = 'r4'; row.append(gist, chip);
+      return [getComputedStyle(gist).webkitLineClamp, getComputedStyle(chip).display];
+    }""")
+    assert probe == ["1", "none"]
+    clean(page)
+
+
+def test_high_contrast_changes_every_theme_and_is_kept(page, world):
+    dialog = preferences_open(page)
+    ink = lambda: page.pw.evaluate("getComputedStyle(document.body).getPropertyValue('--ink').trim().toLowerCase()")
+    for theme, plain, strong in (("Day", "#24221e", "#000000"), ("Dusk", "#27211c", "#000000"), ("Night", "#ede7d7", "#ffffff")):
+        dialog.get_by_role("button", name=theme).click()
+        assert ink() == plain
+        dialog.get_by_label("High contrast").check()
+        expect(page.locator("body")).to_have_class(re.compile(r"\bhc\b"))
+        assert ink() == strong
+        dialog.get_by_label("High contrast").uncheck()
+        expect(page.locator("body")).not_to_have_class(re.compile(r"\bhc\b"))
+    dialog.get_by_label("High contrast").check()
+    until(page, lambda: file_of(world).get("preferences", {}).get("high_contrast") is True, "the file holds it")
+    page.pw.evaluate("localStorage.clear()")
+    page.reload()
+    expect(page.locator("body")).to_have_class(re.compile(r"\bhc\b"))
+    clean(page)
+
+
+def test_axe_finds_nothing_on_high_contrast(page, world, every_theme):
+    from axe_playwright_python.sync_playwright import Axe
+    found = lambda: {v["id"]: [n["target"] for n in v["nodes"]] for v in Axe().run(page.pw, options={"iframes": False}).response["violations"]}
+    from mailmind.bootstrap import accounts
+    accounts.config.set_preferences({"high_contrast": True})
+    opened(page)
+    expect(page.locator("body")).to_have_class(re.compile(r"\bhc\b"))
+    assert found() == {}
+    clean(page)
+
