@@ -133,6 +133,8 @@ and the Claude API.
 - **An email attached to an email stays one file.** Its chip shows its real size, the download
   is the whole message as an `.eml`, and a forward carries it intact. Its text and its files
   aren't taken for the outer message's.
+- **Who wrote this, at a glance.** Opening a message shows who the sender is and how much you've written, and warns
+  when Reply-To leaves their organisation. The warning sits outside the mail, where a message can't forge or hide it.
 - **Click any sender for a relationship card** — how many emails they've sent, how
   often you replied, first and last contact, which of your accounts they write to,
   and their recent threads, with quick Compose and search actions. Pure local SQL,
@@ -488,6 +490,8 @@ automatically.
   reader frame.
 - **Nothing is ever sent or deleted behind your back.** AI drafts wait for you, bulk
   actions require a preview and a confirm, and every destructive action is reversible.
+- **A 60-second guided first run,** offered once and always available from `?`.
+- **Snoozed mail that wakes out of sight** stays said in the new-mail pill.
 - **You always know what's happening** — a first-run welcome with a Connect-account
   button, an explicit "Claude not reachable" message rather than an endless spinner,
   and an inline Retry on every error panel.

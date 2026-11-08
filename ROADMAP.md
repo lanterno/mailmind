@@ -100,28 +100,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   runs and that part of `wire` go. The same step lets the command line take IMAPClient once its soak ends, and imaplib's
   adapter go after it.
 
-## The reading room and the visual system
-
-- **Sender identity inline, with a From/Reply-To spoof hint** · medium value · effort M — `ContactCard` delivers most
-  of the data (monogram, "N emails · replied N× · first X ago"), but it is a
-  click-through popover from `SenderButton`; the key facts should appear inline in `.rd-from`. And there is no spoof
-  warning at all: `replySeed` reads `reply_to` to pick the recipient but nothing ever compares it
-  to `from_addr`.
-## Setup, first run and housekeeping
-
-- **60-second guided first run** · medium value · effort M — `.firstrun`, in `App`'s `empty`, is a static empty state
-  shown only when no accounts are connected; there are no coach-marks and no flag
-  gating a walkthrough. The surfaces worth explaining have multiplied since this was first proposed
-  — today's brief, the folder rail and focus reading, ⌘K, `?ask` / `!do` prefixes, the
-  Screener — so it is worth more now, not less. Gate on one flag.
-- **Consistency sweep: buttons, empty-state strings, toast vs. persistent** · low value · effort M —
-  Three concrete, checkable changes rather than a vibe: (1) one `.btn-retry` replacing `.ai-rerun`,
-  `.frail-retry`, `.ob-retry` and `.do-confirm`; (2) one string table replacing the
-  inlined phrasings (`App`'s `empty`: "No matches." / "Nothing left here."; `Reader`'s "No message selected."); (3) a stated
-  rule for toast-vs-persistent — **persistent iff the event happened while
-  the user was not looking** — then apply it, since a snooze waking where no list shows it (`snooze-wake` in `app/realtime.ts`)
-  only toasts.
-
 ## The desktop app
 
 - **Proton Mail goes with the desktop app** — decided on 2026-11-08. Proton offers IMAP only through its Bridge, which has
