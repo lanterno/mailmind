@@ -188,3 +188,16 @@ def test_changes_are_judged_whole_before_anything_is_read():
     with pytest.raises(Refused):
         preferences.changes({"density": "compact", "theme": "noon"})
     assert preferences.changes({"density": "compact", "made_up": 1}) == {"density": "compact"}
+
+
+def test_the_first_run_guide_is_offered_once_and_the_file_remembers(app, world):
+    """It lives on the server so that clearing a browser's data doesn't offer it again."""
+    assert app.get("/api/preferences").json["preferences"]["guide_offered"] is False
+    assert app.post("/api/preferences", {"guide_offered": True}).json["preferences"]["guide_offered"] is True
+    assert file_of(world)["preferences"]["guide_offered"] is True
+    assert app.get("/api/preferences").json["preferences"]["guide_offered"] is True
+
+
+@pytest.mark.parametrize("value", ["yes", 1, "true"])
+def test_the_first_run_guide_is_a_yes_or_no(app, value):
+    assert app.post("/api/preferences", {"guide_offered": value}).status == 400
