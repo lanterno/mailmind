@@ -172,6 +172,9 @@ class ImapClientSession:
         self._c.noop()
         return True
 
+    def set_timeout(self, seconds):
+        self._c.socket().settimeout(seconds)
+
     def idle(self, seconds):
         # Through the imaplib connection underneath: IMAPClient's idle_check reads an EOF as "nothing
         # yet", so a connection the server dropped, or interrupt() shut down, would spin until the

@@ -175,6 +175,9 @@ class ImaplibSession:
         typ, _ = self._M.noop()
         return typ == "OK"
 
+    def set_timeout(self, seconds):
+        self._M.sock.settimeout(seconds)
+
     def idle(self, seconds):
         with self._M.idle(duration=seconds) as idler:
             for typ, _ in idler:

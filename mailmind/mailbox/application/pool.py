@@ -8,7 +8,7 @@ mailmind.platform.workers.account_worker's. This says which accounts are pooled,
 check and a LOGOUT the close, and that each account's provider gives the numbers.
 
 SAFETY (load-bearing):
-  • Only read-only paths (ingest.fetch_body, the folder rail's counts, a sweep's plan) borrow.
+  • Only read-only paths (ingest.fetch_body, the folder rail's counts, a sweep's plan, reconcile's list of UIDs) borrow.
     MUTATIONS NEVER touch the pool — they keep opening a fresh session — so a pooled session can
     never carry a stale selected folder into a UID STORE/MOVE/EXPUNGE. All mutation invariants
     (UIDVALIDITY, never-bulk-EXPUNGE, etc.) are untouched.
@@ -43,15 +43,19 @@ def _logout(M: MailSession) -> None:
         pass
 
 
-def _valid(M: MailSession) -> bool:
-    """A cached session is reusable only if it answers NOOP OK."""
+def _valid(M: MailSession, within: int | None = None) -> bool:
+    """A cached session is reusable only if it answers NOOP OK, and in `within` seconds where a borrower says."""
     try:
+        if within:
+            M.set_timeout(within)
         return M.noop()
     except Exception:
         return False
 
 
 class Pool(KeptConnections[MailSession]):
+    KEPT_TIMEOUT = 60                # what a session waits for an answer when opened with none named
+
     def __init__(self, accounts: Accounts, open_session: OpenSession):
         super().__init__(_valid, _logout)
         self._accounts = accounts
@@ -75,19 +79,25 @@ class Pool(KeptConnections[MailSession]):
 
 
     @contextlib.contextmanager
-    def borrow(self, acct: Account) -> Generator[MailSession]:
+    def borrow(self, acct: Account, timeout: int | None = None) -> Generator[MailSession]:
         """Yield a MailSession for a READ-ONLY operation. Dormant (not asked for) → a fresh session, logged
         out after. Enabled → a validated pooled session that is repooled on a clean exit and discarded
-        on any error."""
+        on any error. `timeout` is for a caller that can't wait the usual minute for an answer: it holds from the connect
+        or the check on, and a kept session goes back to the usual minute after."""
+        def opened() -> MailSession:
+            return self._open_session(acct, timeout=timeout) if timeout else self._open_session(acct)
+
         if not self._enabled(acct):
-            fresh = self._open_session(acct)
+            fresh = opened()
             try:
                 yield fresh
             finally:
                 _logout(fresh)
             return
-        with self.lend(acct["email"], self._policy(acct), lambda: self._open_session(acct)) as pooled:
+        with self.lend(acct["email"], self._policy(acct), opened, lambda M: _valid(M, timeout)) as pooled:
             yield pooled
+            if timeout:
+                pooled.set_timeout(self.KEPT_TIMEOUT)
 
 
     def stats(self) -> dict[str, Any]:

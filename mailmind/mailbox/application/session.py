@@ -73,6 +73,7 @@ class MailSession(Protocol):
     def append(self, folder: str, raw: bytes, *, flags: Collection[str] = (),
                when: datetime | None = None) -> int | None: ...             # its UID
     def noop(self) -> bool: ...
+    def set_timeout(self, seconds: float) -> None: ...   # how long any one answer may take from now on; sends nothing
     def idle(self, seconds: float) -> bool: ...     # IDLE on the selected folder: True once it changed
     def interrupt(self) -> None: ...                # from another thread: end an idle() now; the session is spent
     def logout(self) -> None: ...
@@ -153,6 +154,9 @@ class ReadOnlySession:
 
     def noop(self) -> bool:
         return self._session.noop()
+
+    def set_timeout(self, seconds: float) -> None:
+        self._session.set_timeout(seconds)
 
     def idle(self, seconds: float) -> bool:
         return self._session.idle(seconds)

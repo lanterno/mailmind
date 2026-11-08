@@ -334,7 +334,7 @@ def _kick(job):
 
 
 syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick)
-reconciler = Reconciler(_uow, store, _directory, _open, folders, stats)
+reconciler = Reconciler(_uow, store, _directory, pool, folders, stats)
 
 
 def _ai_status():

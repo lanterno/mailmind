@@ -148,13 +148,13 @@ class KeptConnections[C]:
                 self._slots[key] = s
             return s
 
-    def _take(self, slot: _Slot[C], policy: ConnectionPolicy, open_new: Callable[[], C]) -> C:
+    def _take(self, slot: _Slot[C], policy: ConnectionPolicy, open_new: Callable[[], C], check: Callable[[C], bool]) -> C:
         """A ready connection: the kept one if it may serve and still answers, else a new one. The
         caller holds the slot's lock."""
         held = slot.conn
         if held is not None:
             spent = policy.spent(time.time() - slot.born, slot.uses)
-            if not spent and self._check(held):
+            if not spent and check(held):
                 slot.uses += 1
                 self._stats["reused"] += 1
                 return held
@@ -169,11 +169,13 @@ class KeptConnections[C]:
         return fresh
 
     @contextlib.contextmanager
-    def lend(self, key: str, policy: ConnectionPolicy, open_new: Callable[[], C]) -> Generator[C]:
-        """Yield `key`'s connection. It stays kept on a clean exit, and is closed on any error."""
+    def lend(self, key: str, policy: ConnectionPolicy, open_new: Callable[[], C],
+             check: Callable[[C], bool] | None = None) -> Generator[C]:
+        """Yield `key`'s connection. It stays kept on a clean exit, and is closed on any error. `check`, where given,
+        stands in for the usual one for this borrow."""
         slot = self._slot(key)
         with slot.lock:
-            conn = self._take(slot, policy, open_new)
+            conn = self._take(slot, policy, open_new, check or self._check)
             try:
                 yield conn
             except BaseException:

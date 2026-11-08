@@ -14,7 +14,8 @@ from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import INBOX, AccountId, FolderName
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.folders import Folders
-from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, OpenSession, Pruned, StoredMail
+from mailmind.mailbox.application.pool import Pool
+from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, Pruned, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.platform import environment, settings, sse
 from mailmind.platform.db.uow import UnitOfWork
@@ -26,13 +27,13 @@ reconcile_log = get_logger("reconcile")
 
 class Reconciler:
     _RECONCILE_INTERVAL = environment.RECONCILE_SECS.value()    # full-cycle target; 0 disables
+    READ_TIMEOUT = 15        # a background path: a hung account must not pin the IMAP gate for the interactive minute
 
-    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, open_session: OpenSession, folders: Folders,
-                 stats: LiveStats):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, pool: Pool, folders: Folders, stats: LiveStats):
         self._uow = uow
         self._store = store
         self._accounts = accounts
-        self._open_session = open_session
+        self._pool = pool
         self._folders = folders
         self._stats = stats
 
@@ -58,15 +59,9 @@ class Reconciler:
             stored_uids = self._store.stored_uids(c, acct["email"], folder)
         res["stored"] = len(stored_uids)
         try:
-            s = self._open_session(acct, timeout=15)   # background/maintenance path: a hung account must
-            try:                                          # not pin the IMAP gate for the interactive 60s
+            with self._pool.borrow(acct, timeout=self.READ_TIMEOUT) as s:
                 uidv = s.select(folder).uidvalidity
                 live = set(s.uids("ALL"))                 # a refused SEARCH raises: nothing is pruned
-            finally:
-                try:
-                    s.logout()                            # ALWAYS close the socket (no leak on select/SEARCH error)
-                except Exception:
-                    pass
         except Exception as e:
             reconcile_log.warning("an account failed", exc_info=e)
             res["error"] = type(e).__name__      # what a server said stays out of the answer
