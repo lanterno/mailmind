@@ -4,10 +4,11 @@ mailmind.config.json*
 # === Learned rules (personal keep/block lists; regenerated at runtime) ===
 mailmind_rules.json
 
-# === Temp files a crash can leave mid-write (copies of the files above) ===
+# === Temp files a crash can leave mid-write (copies of the files above), and the rules' lock ===
 .cfg-*.tmp
 .rules-*.tmp
 .views-*.tmp
+.rules.lock
 
 # === Local data & caches (regenerated) ===
 mailmind.db

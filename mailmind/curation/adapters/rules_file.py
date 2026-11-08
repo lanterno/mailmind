@@ -3,15 +3,18 @@
 The file holds the keep and block lists and each sender's shelf life. It's read again only when it
 changed; one that won't parse leaves the last rules read well, so a bad edit never stops a sync, and the
 next save moves it to backups/ first. A save writes the whole file or nothing, and a change reads, changes and
-saves as one step, so two at once don't lose either. That holds within this process.
+saves as one step under a lock the command line and the server share, so two at once don't lose either.
 
 `python -m mailmind rules` lists and changes them.
 """
+import contextlib
 import copy
+import fcntl
 import os
 import json
 import tempfile
 import threading
+from collections.abc import Generator
 from datetime import datetime, timezone
 
 from mailmind.curation.domain import rulebook
@@ -24,7 +27,6 @@ log = get_logger("rules")
 __all__ = ["EXPIRE", "KEYS", "add", "load", "remove", "save", "set_expiry", "sets"]
 
 _lock = threading.Lock()
-_changing = threading.Lock()   # one change at a time: each reads the whole file and writes the whole file back
 _good = {}     # path -> (stamp, rules, sets): the last rules read well from that file
 _bad = {}      # path -> the stamp of the copy that couldn't be read, so it's said once
 
@@ -122,11 +124,24 @@ def save(rules):
         raise
 
 
+@contextlib.contextmanager
+def _one_change() -> Generator[None]:
+    """One change at a time, whichever thread or process makes it: each reads the whole file and writes the whole file back.
+    The lock is a file of its own, since a save puts a new file in the rules' place, and the kernel lets it go when
+    whoever holds it dies. flock locks by open file, so a thread of this process waits as another process does."""
+    fd = os.open(settings.current().rules_lock, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)                     # which lets it go
+
+
 def add(token, verdict):
     """verdict in {'keep','block'}. Routes a sender/domain into the right list
     and removes it from the opposite verdict to avoid contradictions."""
     token = rulebook.token_of(token)
-    with _changing:
+    with _one_change():
         rules = load()
         placed = rulebook.add(rules, token, verdict)
         save(rules)
@@ -136,7 +151,7 @@ def add(token, verdict):
 def remove(token):
     """Drop a keep/block entry. Leaves any expiry rule alone."""
     token = rulebook.token_of(token)
-    with _changing:
+    with _one_change():
         rules = load()
         rulebook.remove(rules, token)
         save(rules)
@@ -146,7 +161,7 @@ def set_expiry(token, hours):
     """Expire INBOX mail from `token` (sender or domain) after `hours`; 0 clears."""
     token = rulebook.token_of(token)
     hours = int(hours)
-    with _changing:
+    with _one_change():
         rules = load()
         rulebook.set_expiry(rules, token, hours)
         save(rules)

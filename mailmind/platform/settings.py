@@ -44,6 +44,10 @@ class Settings:
         return os.path.join(self.home, "mailmind_rules.json")
 
     @property
+    def rules_lock(self) -> str:
+        return os.path.join(self.home, ".rules.lock")
+
+    @property
     def views(self) -> str:
         return os.path.join(self.home, "mailmind_views.json")
 
