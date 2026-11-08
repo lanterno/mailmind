@@ -171,7 +171,7 @@ def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], 
     body = next((p for i, p in enumerate(leaves, 1) if i not in listed and p.get_content_type() == "text/plain"), None)
     covered: set[int] = set()                            # HTML that the text parse() read is the alternative to
     for p in walk(msg):
-        if p.get_content_type() == "multipart/alternative" and any(x is body for x in p.iter_parts()):
+        if isinstance(p, EmailMessage) and p.get_content_type() == "multipart/alternative" and any(x is body for x in p.iter_parts()):
             covered |= {id(x) for x in walk(p) if x.get_content_type() == "text/html"}
     bodies: set[str] = set()
     for i, p in enumerate(leaves, 1):                    # every part must come back as text or a file
