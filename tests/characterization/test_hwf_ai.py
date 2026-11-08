@@ -601,7 +601,8 @@ def test_hwf_do_plan_refuses_a_filter_that_matches_most_of_the_mailbox(app, worl
     assert r == {"ok": True, "intent": "search", "filter": "after:2020-01-01"}
 
 
-def test_hwf_snooze_caps_a_bulk_list_server_side(app, world):
+def test_hwf_snooze_refuses_a_bulk_list_past_its_cap_server_side(app, world):
+    """It once snoozed the first 500 and said nothing of the rest, which the page had already taken off the list."""
     from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:                                                # 600 copies that are all there, more than one request may snooze
@@ -616,7 +617,9 @@ def test_hwf_snooze_caps_a_bulk_list_server_side(app, world):
         c.close()
     copies = q("SELECT message_key AS key, folder FROM messages WHERE subject='Bulk'")
     assert len(copies) == 600
-    r = app.post("/api/snooze", {"copies": copies, "preset": "tomorrow"})
+    assert app.post("/api/snooze", {"copies": copies, "preset": "tomorrow"}).status == 400
+    assert q("SELECT COUNT(*) AS n FROM snoozes")[0]["n"] == 0
+    r = app.post("/api/snooze", {"copies": copies[:500], "preset": "tomorrow"})
     assert r.status == 200 and r.json["count"] == 500
 
 
