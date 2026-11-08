@@ -166,6 +166,18 @@ def test_debug_shows_the_detail_at_the_terminal_and_never_in_the_file(tmp_path, 
     assert "Lunch" not in capsys.readouterr().out
 
 
+def test_a_level_it_doesnt_take_shows_no_detail_and_is_said_in_the_file_too(tmp_path, capsys, monkeypatch):
+    from mailmind.platform import environment
+    environment.forget()
+    monkeypatch.setenv("MAILMIND_LOG_LEVEL", "verbose")
+    with settings.use(settings.Settings(home=str(tmp_path))):
+        logs.setup()
+    log.debug("%(what)s", {"what": "a detail"})
+    assert capsys.readouterr().out == "[env] MAILMIND_LOG_LEVEL is set to a value it doesn't take, so it reads as info\n"
+    [line] = written(tmp_path)
+    assert (line["logger"], line["what"], line["why"]) == ("env", "MAILMIND_LOG_LEVEL", "info")
+
+
 # -- the two places a line goes -----------------------------------------------------------
 
 def test_the_terminal_gets_a_line_a_person_reads(home, capsys):

@@ -115,6 +115,14 @@ def test_with_one_gate_for_all_another_account_waits_too(kind):
         t.join(5)
 
 
+def test_a_kind_it_doesnt_take_shares_the_one_lock_and_says_so(monkeypatch, capsys):
+    from mailmind.platform import environment
+    environment.forget()
+    monkeypatch.setenv("MAILMIND_WORKERS", "acount")
+    assert not gates.per_account() and not gates.per_account()
+    assert capsys.readouterr().out == "[env] MAILMIND_WORKERS is set to a value it doesn't take, so it reads as global\n"
+
+
 def test_left_unset_every_account_shares_the_one_lock(monkeypatch):
     """Which is the default until the owner has soaked a gate for each account."""
     monkeypatch.delenv("MAILMIND_WORKERS")

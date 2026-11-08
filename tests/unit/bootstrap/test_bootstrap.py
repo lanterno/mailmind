@@ -195,6 +195,11 @@ def test_a_job_switched_off_is_left_out(monkeypatch):
                                                                                       "backfill", "forget"]
 
 
+@pytest.mark.parametrize("value", ["0", "false", "off"])
+def test_no_draft_tick_set_to_an_off_word_leaves_drafting_ahead_on(monkeypatch, value):
+    assert "draft-ahead" in [n for n, *_ in scheduled(monkeypatch, MAILMIND_NO_DRAFT_TICK=value)]
+
+
 def test_a_short_reconcile_cycle_still_waits_30_seconds_between_rounds(monkeypatch):
     monkeypatch.setattr(mailbox.reconciler, "_RECONCILE_INTERVAL", 10)
     assert ("reconcile", 30, 10) in scheduled(monkeypatch)

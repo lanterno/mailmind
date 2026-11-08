@@ -113,27 +113,48 @@ def test_a_choice_is_a_name_in_any_case(value, want):
     assert environment.WORKERS.named(env) == want
 
 
-def test_a_name_that_is_no_choice_reads_as_its_fallback_and_named_says_none():
-    assert environment.PROFILE.named({"MAILMIND_PROFILE": "readonly"}) is None
-    assert environment.PROFILE.value({"MAILMIND_PROFILE": "readonly"}) == "read-only"
-    assert environment.WORKERS.value({"MAILMIND_WORKERS": "acount"}) == "global"
+@pytest.mark.parametrize("choice, value, want", [(environment.PROFILE, "readonly", "read-only"),
+                                                  (environment.WORKERS, "acount", "global"),
+                                                  (environment.LOG_LEVEL, "verbose", "info")], ids=repr)
+def test_a_name_that_is_no_choice_reads_as_its_fallback_and_the_log_says_so(choice, value, want, capsys):
+    assert choice.named({choice.name: value}) is None
+    assert capsys.readouterr().out == ""
+    assert choice.value({choice.name: value}) == want
+    assert capsys.readouterr().out == f"[env] {choice.name} is set to a value it doesn't take, so it reads as {want}\n"
+
+
+def test_a_known_choice_says_nothing(capsys):
     assert environment.LOG_LEVEL.value({"MAILMIND_LOG_LEVEL": "DEBUG"}) == "debug"
+    assert environment.WORKERS.value({}) == "global"
+    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.parametrize("value, want", [
-    (None, Which()), ("", Which()), ("  ", Which()), ("1", Which(every=True)), ("All", Which(every=True)),
-    (" yes ", Which(every=True)), ("ada@example.test", Which(listed=frozenset({"ada@example.test"}))),
+    (None, Which()), ("", Which()), ("  ", Which()), ("0", Which()), (" Off ", Which()), ("false", Which()), ("no", Which()),
+    ("1", Which(every=True)), ("All", Which(every=True)), (" yes ", Which(every=True)), ("ON", Which(every=True)),
+    ("ada@example.test", Which(listed=frozenset({"ada@example.test"}))),
     ("ada@example.test, bo@example.test,", Which(listed=frozenset({"ada@example.test", "bo@example.test"})))])
-def test_accounts_are_every_one_or_a_list(value, want):
+def test_accounts_are_every_one_none_or_a_list(value, want, capsys):
     env = {} if value is None else {"MAILMIND_POOL": value}
     assert environment.POOL.value(env) == want
     assert bool(environment.POOL.value(env)) is bool(want.every or want.listed)
+    assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("value, want", [(None, 1800), ("60", 60), (" 60 ", 60), ("0", 0), ("-5", -5)])
-def test_seconds_are_a_whole_number(value, want):
+@pytest.mark.parametrize("value, want, reads_as", [
+    ("ture", Which(), "off"), ("2", Which(), "off"), ("ada@example.test, al", Which(listed=frozenset({"ada@example.test"})),
+                                                       "the addresses it lists")])
+def test_an_entry_that_is_no_address_names_no_account_so_a_typo_turns_nothing_on(value, want, reads_as, capsys):
+    assert environment.WARM_FOLDERS.value({"MAILMIND_WARM_FOLDERS": value}) == want
+    out = capsys.readouterr().out
+    assert out == f"[env] MAILMIND_WARM_FOLDERS is set to a value it doesn't take, so it reads as {reads_as}\n"
+
+
+@pytest.mark.parametrize("value, want", [(None, 1800), ("", 1800), (" ", 1800), ("60", 60), (" 60 ", 60), ("0", 0), ("-5", -5)])
+def test_seconds_are_a_whole_number_and_empty_is_unset(value, want, capsys):
     env = {} if value is None else {"MAILMIND_RECONCILE_SECS": value}
     assert environment.RECONCILE_SECS.value(env) == want
+    assert capsys.readouterr().out == ""
 
 
 def test_seconds_that_are_no_number_read_as_the_default_and_the_log_names_the_variable_not_the_value(capsys):
@@ -176,16 +197,49 @@ def test_a_directory_is_as_set_for_settings_to_resolve(value, want):
     assert environment.HOME.value(env) == want
 
 
-# -- a switch, as each reads today ----------------------------------------------------------
+# -- a switch: one rule ---------------------------------------------------------------------
 
-@pytest.mark.parametrize("value, want", [(None, False), ("", False), ("1", True), ("0", True), ("false", True), (" ", True)])
-@pytest.mark.parametrize("switch", [environment.NO_DRAFT_TICK, environment.NO_BATCHES, environment.NO_SCHEMA], ids=repr)
-def test_a_no_switch_is_on_for_any_value(switch, value, want):
+SWITCHES = [v for v in environment.VARIABLES if isinstance(v, environment.Switch)]
+
+
+@pytest.mark.parametrize("value, want", [(None, False), ("", False), (" ", False), ("0", False), ("false", False),
+                                         (" No ", False), ("OFF", False), ("1", True), ("true", True), (" Yes ", True),
+                                         ("on", True), ("TRUE", True)])
+@pytest.mark.parametrize("switch", SWITCHES, ids=repr)
+def test_every_switch_reads_one_rule(switch, value, want, capsys):
     env = {} if value is None else {switch.name: value}
     assert switch.on(env) is want
+    assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("value, want", [(None, False), ("", False), ("0", False), (" Off ", False), ("1", True), ("anything", True)])
-def test_nosync_is_on_for_anything_but_off(value, want):
-    env = {} if value is None else {"MAILMIND_NOSYNC": value}
-    assert environment.NOSYNC.on(env) is want
+def test_each_switch_says_which_way_a_value_it_doesnt_take_goes():
+    """Toward writing, sending or spending less, and where neither does, toward off: a new switch says which."""
+    assert {s.name: s.typo for s in SWITCHES} == {
+        "MAILMIND_NOSYNC": True,            # read-only
+        "MAILMIND_NO_DRAFT_TICK": True,     # no replies drafted ahead, which spends on a guess
+        "MAILMIND_NO_BATCHES": False,       # a backlog as a batch, at half price
+        "MAILMIND_NO_SCHEMA": False,        # structured output, as unset
+    }
+
+
+@pytest.mark.parametrize("value", ["ture", "y", "2", "enabled", "-1"])
+@pytest.mark.parametrize("switch", SWITCHES, ids=repr)
+def test_a_value_it_doesnt_take_reads_as_its_side_and_the_log_says_so_without_the_value(switch, value, capsys):
+    assert switch.on({switch.name: value}) is switch.typo
+    side = "on" if switch.typo else "off"
+    out = capsys.readouterr().out
+    assert out == f"[env] {switch.name} is set to a value it doesn't take, so it reads as {side}\n"
+
+
+def test_a_typo_in_the_older_read_only_switch_still_fails_toward_read_only(capsys):
+    from mailmind.platform import profile
+    assert profile.current({"MAILMIND_NOSYNC": "ture"}) is Profile.READ_ONLY
+    assert profile.current({"MAILMIND_NOSYNC": "ture", "MAILMIND_PROFILE": "full"}) is Profile.READ_ONLY
+    assert "MAILMIND_NOSYNC is set to a value it doesn't take, so it reads as on" in capsys.readouterr().out
+
+
+def test_a_name_that_is_no_profile_still_reads_as_read_only_and_says_so_once(capsys):
+    from mailmind.platform import profile
+    for _ in range(3):
+        assert profile.current({"MAILMIND_PROFILE": "readonly"}) is Profile.READ_ONLY
+    assert capsys.readouterr().out == "[env] MAILMIND_PROFILE is set to a value it doesn't take, so it reads as read-only\n"

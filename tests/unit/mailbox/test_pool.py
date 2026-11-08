@@ -85,6 +85,13 @@ def test_which_accounts_it_keeps_a_connection_for(pool, monkeypatch, setting, ad
     assert (borrow(pool, ADA) is borrow(pool, ADA), borrow(pool, BRIDGE) is borrow(pool, BRIDGE)) == (ada, bridge)
 
 
+@pytest.mark.parametrize("setting", ["0", "off", "False", "ture"])
+def test_an_off_word_or_a_typo_keeps_nothing_and_says_it_is_off(pool, opened, monkeypatch, setting):
+    monkeypatch.setenv("MAILMIND_POOL", setting)
+    assert borrow(pool, ADA) is not borrow(pool, ADA) and borrow(pool, BRIDGE) is not borrow(pool, BRIDGE)
+    assert (pool.stats()["enabled"], pool.stats()["target"], pool.stats()["slots"]) == (False, setting, {})
+
+
 def test_a_kept_session_is_checked_before_each_reuse_and_stays_logged_in(pool, opened, monkeypatch):
     monkeypatch.setenv("MAILMIND_POOL", ADA)
     first = borrow(pool)
