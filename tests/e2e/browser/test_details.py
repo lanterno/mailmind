@@ -1,5 +1,6 @@
 """The small things across the app that no feature's own suite says, each found by an audit: what it says when something fails
 or is slow, where a key or a click leaves you, and what the rail, the palette and help name."""
+import json
 import re
 
 import pytest
@@ -447,11 +448,13 @@ def test_a_week_with_nothing_unanswered_says_so(page, world, ai):
 
 
 def test_a_review_that_cant_be_written_says_why(page, world, ai):
-    page.pw.route("**/api/review", lambda route: route.fulfill(json={"ok": False, "error": "The mail couldn't be read"}))
+    refused = {"type": "/problems/unreadable", "title": "Unreadable", "status": 422, "detail": "The mail couldn't be read"}
+    page.pw.route("**/api/review", lambda route: route.fulfill(status=422, content_type="application/problem+json", body=json.dumps(refused)))
     page.goto("/")
     page.get_by_role("button", name="Your week").click()
     panel = page.get_by_role("dialog", name="Weekly review")
     expect(panel.locator(".rv-err")).to_contain_text("The mail couldn't be read")
+    page.problems[:] = [p for p in page.problems if "422" not in p]
     clean(page)
 
 

@@ -23,10 +23,15 @@ describe("request", () => {
   });
 
   it("raises the server's error with what kind it is", async () => {
-    fetchMock.mockResolvedValue(answer(409, { error: "AI is off", ai_off: true }));
+    fetchMock.mockResolvedValue(problem(409, { type: "/problems/ai-off", title: "AI is off", detail: "AI is off", ai_off: true }));
     const e = await request("/api/x").catch((x: unknown) => x);
     expect(e).toBeInstanceOf(ApiError);
-    expect(e).toMatchObject({ message: "AI is off", status: 409, aiOff: true, overLimit: false });
+    expect(e).toMatchObject({ message: "AI is off", status: 409, type: "/problems/ai-off", aiOff: true, overLimit: false });
+  });
+
+  it("takes no words from an answer that isn't a problem document", async () => {
+    fetchMock.mockResolvedValue(answer(409, { ok: false, error: "the old shape" }));
+    await expect(request("/api/x")).rejects.toMatchObject({ message: "HTTP 409", detail: "", type: "about:blank" });
   });
 
   it("reads a problem document: its detail as the message, its type, and what the page acts on", async () => {
@@ -56,7 +61,7 @@ describe("request", () => {
   });
 
   it("at the limit, a request nobody asked about gets the error", async () => {
-    fetchMock.mockResolvedValue(answer(402, { error: "over", over_limit: true }));
+    fetchMock.mockResolvedValue(problem(402, { type: "/problems/over-limit", detail: "over", over_limit: true }));
     await expect(request("/api/x")).rejects.toMatchObject({ status: 402, overLimit: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

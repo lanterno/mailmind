@@ -315,7 +315,7 @@ describe("closing and discarding", () => {
 
   it("keeps the words a click away when the closing save fails", async () => {
     const { m, answer } = setup();
-    answer("/api/draft", () => ({ ok: false, error: "no" }));
+    answer("/api/draft", () => { throw new Error("no"); });
     m.open({ subject: "keep me" });
     m.edit("body", "my words");
     m.close();
@@ -352,7 +352,7 @@ describe("closing and discarding", () => {
     const { m, answer } = setup();
     const c = m.open()!;
     m.edit("body", "hello");
-    answer("/api/draft", () => ({ ok: false, error: "no" }));
+    answer("/api/draft", () => { throw new Error("no"); });
     let opened = false;
     expect(await m.makeRoom(() => { opened = true; })).toBe(false);
     expect(opened).toBe(false);
@@ -509,20 +509,6 @@ describe("sending", () => {
     expect(c.to.map((x) => x.v)).toEqual([person]);
     expect(c.dirty).toBe(true);
     expect(toasts).toContain("Send undone");
-  });
-
-  it("says Sent when the countdown ends, and too late if Undo lost the race", async () => {
-    const { m, answer } = setup();
-    ready(m);
-    m.send();
-    await flush();
-    const f = m.float.get();
-    if (f?.kind !== "countdown") throw new Error("no countdown");
-    answer("/api/outbox/cancel", () => ({ ok: false }));
-    f.undo();
-    await flush();
-    expect(m.float.get()).toMatchObject({ kind: "done", text: "✓ Sent — too late to undo" });
-    expect(m.view.get()).toBeNull();
   });
 
   it("says too late when the server refuses the Undo with a 409, and Sent when it doesn't answer", async () => {

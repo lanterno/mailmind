@@ -15,7 +15,13 @@ describe("the API's types", () => {
   });
 
   it("say what an answer that varies by branch may be", () => {
-    expectTypeOf<GetAnswers["/api/thread"]>().toExtend<{ ok: true; reply_pk: number | null } | { ok: false; error: string }>();
+    expectTypeOf<GetAnswers["/api/search"]>().toExtend<{ ok: true; query: string; has_more: boolean }>();
+    expectTypeOf<GetAnswers["/api/thread"]>().toExtend<{ ok: true; reply_pk: number | null }>();
+  });
+
+  it("hold no refusal: a failure is a problem document at a status of its own, never a 200", () => {
+    type Any<A> = A[keyof A];
+    expectTypeOf<Extract<Any<GetAnswers> | Any<PostAnswers>, { ok: false }>>().toBeNever();
   });
 
   it("give a POST's body what its model reads", () => {
@@ -25,11 +31,11 @@ describe("the API's types", () => {
 });
 
 describe("AnyOf", () => {
-  type Either = AnyOf<{ ok: true; n: number } | { ok: false; error: string }>;
+  type Either = AnyOf<{ syncing: true; n: number } | { syncing: false; why: string }>;
 
   it("keeps what every member has, and makes the rest optional", () => {
-    expectTypeOf<Either["ok"]>().toEqualTypeOf<boolean>();
+    expectTypeOf<Either["syncing"]>().toEqualTypeOf<boolean>();
     expectTypeOf<Either["n"]>().toEqualTypeOf<number | undefined>();
-    expectTypeOf<{ ok: false; error: string }>().toExtend<Either>();
+    expectTypeOf<{ syncing: false; why: string }>().toExtend<Either>();
   });
 });
