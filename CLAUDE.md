@@ -139,8 +139,8 @@ are missing. First it writes the API's types and the page's limits afresh and fa
 and `limits.gen.ts`, saying to run `just gen-api`. That takes a second or two: `tests/openapi_doc.py` writes the OpenAPI document of the
 app the routers make (no data directory read, nothing sent, and out of the command line's reach), and openapi-typescript writes
 `schema.gen.ts` from it. The same program writes `limits.gen.ts`, `LIMITS`, from `mailmind/http/page_limits.py`'s `PAGE_LIMITS`: each
-limit the page holds a person to before it asks (what one message's files may come to, the rows one `/api/bulk/file` names, the length of
-an instruction for a drafted reply, Undo Send's window), as the constant its use case enforces. They are a build's, as the types are, so nothing serves them
+limit the page holds a person to before it asks (what one message's files may come to, the rows one `/api/bulk/file` names, the copies one
+`/api/snooze` names, the length of an instruction for a drafted reply, Undo Send's window), as the constant its use case enforces. They are a build's, as the types are, so nothing serves them
 and nothing waits for them to load. Run it when a schema in `mailmind/http/schemas/`, a route or a limit changes, and review the diff, in a
 commit of its own. `lib/api/types.ts` reads the types by path: `GetAnswers` and `PostAnswers`, each a route's JSON answer at 200 (a
 file, a document or a stream has none), `PostBodies`, and `AnyOf`, a union read field by field for code that takes each of its shapes as
@@ -820,7 +820,9 @@ refuses to start on a profile name it doesn't know. `background.nosync()` asks t
 - Marked rows go as one request (`/api/bulk/file` → `filing.file_many`, up to `BULK_MAX`; each client sends more as more requests
   under one undo group): one transaction accepts every row, a `whole` one as its conversation, and then each is tried on its
   own. A click on many waits about as long as on one, there and for a conversation: past `FILE_WAIT` the rest go to the worker
-  (`commands.leave_to_worker`), and every row has left the lists by then.
+  (`commands.leave_to_worker`), and every row has left the lists by then. A snooze of marked rows goes the same way, up to
+  `snooze.BULK_CAP` copies a request. One naming more is the `bad request`, never cut short, since the page has already taken
+  every marked row off the list.
 - Every account's Inbox is one list and one query (`/api/inboxes`, `queries.all_inboxes`), read from what is stored: an account
   on its first scan starts one and holds up no one (`syncing: true`). So is who you wait on (`/api/waiting-on-others`).
 - Send-time checks: the composer's `send` (`features/compose/machine.ts`) runs `runChecks` synchronously, before `close(true)`,
