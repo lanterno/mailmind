@@ -241,7 +241,11 @@ def test_a_preference_is_saved_to_the_file_and_outlives_a_browser_data_clear(pag
 
 
 def test_a_page_opened_with_no_block_and_nothing_held_writes_no_block(page, world):
-    opened(page)
+    held = file_of(world)
+    del held["preferences"]                         # the page fixture's, which keeps the guide off every other page
+    (world.dir / "mailmind.config.json").write_text(json.dumps(held))
+    page.goto(f"/m/{w.ADA}/Sent")                   # the Inbox would offer the guide, and having offered it is a write
+    expect(page.locator("#rows")).to_be_visible()
     until(page, lambda: page.pw.evaluate("Boolean(localStorage.getItem('mm_prefs'))"), "the page read its preferences")
     assert "preferences" not in file_of(world)
     clean(page)
@@ -258,7 +262,7 @@ def test_what_a_browser_already_held_comes_into_the_file_once_and_is_then_gone(p
     opened(page)
     until(page, lambda: page.pw.evaluate("localStorage.getItem('mm_nokeys') === null"), "the old key let go")
     held = file_of(world)["preferences"]
-    assert held == {"theme": "dusk", "single_keys": False, "read_width": "wide", "read_size": "xl", "read_font": "mono", "conversations": False}
+    assert held == {"guide_offered": True, "theme": "dusk", "single_keys": False, "read_width": "wide", "read_size": "xl", "read_font": "mono", "conversations": False}
     assert page.pw.evaluate("['mm_theme','mm_read','mm_threadview'].map(k => localStorage.getItem(k))") == [None, None, None]
     expect(page.locator("body")).to_have_class(re.compile("theme-dusk"))
     world_before = (world.dir / "mailmind.config.json").read_bytes()
