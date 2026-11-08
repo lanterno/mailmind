@@ -1,8 +1,9 @@
 """A route on a router: FastAPI's `APIRoute`, with what every route goes through.
 
 `Route` does that around a handler, so the handler holds none of it: the request id for the log, the leave to go over the AI limit,
-who counts as someone here, and what a failure answers (`shared.failure_answer`). It reads a query string and a body its own way
-(`handle`), writes an answer in `json.dumps`' bytes, and answers a value a schema refuses with the `bad request` 400.
+who counts as someone here, and what a failure answers (`shared.failure_answer`, a problem document). It reads a query string and a
+body its own way (`handle`), writes an answer in `json.dumps`' bytes, and answers a value a schema refuses with the `bad request`
+400.
 
     r = router()
 
@@ -51,6 +52,16 @@ def router():
 def json_answer(obj, code=200):
     """An answer in `json.dumps`' bytes: Starlette's JSONResponse writes others, and refuses NaN."""
     return Response(json.dumps(obj).encode(), code, media_type="application/json")
+
+
+def _problem_answer(doc, code):
+    return Response(json.dumps(doc).encode(), code, media_type=shared.PROBLEM_JSON)
+
+
+def problem(status, detail, /, **more):
+    """A failure that is none of the kernel's, as a route answers it: a problem document of `about:blank`, whose title is the
+    status's own. The 410 for a plan expired, say, or a route's own worded 500."""
+    return _problem_answer(*shared.problem(status, detail, **more))
 
 
 def _rendered(answer):
@@ -146,7 +157,7 @@ class Route(APIRoute):
                 try:
                     return await run(request)
                 except (RequestValidationError, HTTPException):     # a value a schema refuses, or a body that won't parse
-                    return json_answer(shared.BAD_REQUEST, 400)
+                    return _problem_answer(*shared.BAD_REQUEST)
                 except Exception as e:
-                    return json_answer(*shared.failure_answer(e, request.method, request.scope["path"]))
+                    return _problem_answer(*shared.failure_answer(e, request.method, request.scope["path"]))
         return answering

@@ -1,10 +1,12 @@
 """The perimeter as ASGI middleware: the checks in mailmind.platform.perimeter, run on every
 request before any route, so no route can forget one, and before a body is read; and the headers
-every answer carries, added to any answer that didn't set them."""
+every answer carries, added to any answer that didn't set them. A refusal answers a problem
+document, as any failure does."""
 import json
 
 from starlette.datastructures import Headers
 
+from mailmind.http import shared
 from mailmind.platform import perimeter, settings
 
 
@@ -35,11 +37,8 @@ class Perimeter:
             # The ASGI server decodes `path`, so /%61pi/digest would pass here as no part of the API and match a route as
             # /api/digest. Whatever runs next goes by the path as judged, and as sent.
             return await self.app({**scope, "path": path}, receive, send)
-        body = json.dumps(refusal.answer()).encode()
-        await send({"type": "http.response.start", "status": refusal.status,
-                    "headers": [(b"content-type", b"application/json"),
-                                (b"content-length", str(len(body)).encode())]})
-        await send({"type": "http.response.body", "body": body})
+        doc, status = shared.problem(refusal.status, refusal.error)
+        await shared.send_whole(send, status, [(b"content-type", shared.PROBLEM_JSON.encode())], json.dumps(doc).encode())
 
 
 def _adding(send, headers):

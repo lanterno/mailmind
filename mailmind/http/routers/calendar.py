@@ -23,6 +23,6 @@ def router(calendar):
             raise
         except Exception as ex:            # never leak a raw exception on a send route
             log.error("error", exc_info=ex)
-            return {"ok": False, "error": "RSVP failed"}, 500
+            return route.problem(500, "RSVP failed")
 
     return r

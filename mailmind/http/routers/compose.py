@@ -46,7 +46,7 @@ def router(compose):
             raise Refused(str(ve)) from ve
         except Exception as ex:            # never leak a raw exception on the send route
             log.error("error", exc_info=ex)
-            return {"ok": False, "error": "send failed"}, 500
+            return route.problem(500, "send failed")
 
     @r.post("/api/outbox/retry", responses=answers(Retried))
     def outbox_retry(body: NamesASend):
@@ -80,6 +80,6 @@ def router(compose):
             raise
         except Exception as ex:
             resume_log.error("error", exc_info=ex)
-            return {"ok": False, "error": "Couldn’t open this draft."}, 500
+            return route.problem(500, "Couldn’t open this draft.")
 
     return r

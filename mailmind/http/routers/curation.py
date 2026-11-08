@@ -64,7 +64,7 @@ def router(curation):
             raise
         except Exception as ex:
             log.error("error", exc_info=ex)
-            return {"ok": False, "error": "cleanup failed"}, 500
+            return route.problem(500, "cleanup failed")
 
     @r.post("/api/sweep", responses=answers(Swept))
     def sweep(body: SweepBody):

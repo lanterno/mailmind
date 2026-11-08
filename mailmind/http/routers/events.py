@@ -24,7 +24,7 @@ class _Stream(StreamingResponse):
     async def __call__(self, scope, receive, send):
         tab = sse.HUB.listen(self._last_event_id)
         if tab is None:
-            return await route.json_answer({"ok": False, "error": "too many listeners"}, 503)(scope, receive, send)
+            return await route.problem(503, "too many listeners")(scope, receive, send)
         self.body_iterator = self._frames(tab)
         try:
             await super().__call__(scope, receive, send)

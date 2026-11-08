@@ -63,6 +63,6 @@ def router(discovery):
             raise
         except Exception as ex:             # class only: the payload is a list of addresses
             log.error("known error", exc_info=ex)
-            return {"ok": False, "error": "lookup failed"}, 500
+            return route.problem(500, "lookup failed")
 
     return r

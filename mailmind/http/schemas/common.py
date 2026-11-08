@@ -61,10 +61,14 @@ class NotJson(Answer):
 
 
 class Failure(Answer):
-    """What any route may answer when it can't (`shared.failure_answer`), or the perimeter when it won't. A route that says more
-    (a Problem's `more`) names a subclass of its own for that status, through `answers`."""
-    ok: Literal[False]
-    error: str | None = None
+    """What any route may answer when it can't (`shared.failure_answer`), or the perimeter when it won't: a problem document
+    (RFC 9457), as application/problem+json. `type` names the kind of problem, `/problems/<kind>` or `about:blank`, and `detail`
+    is what a person is told, left out where the page words it. The rest is what the page acts on. A route that says more (a
+    Problem's `more`) names a subclass of its own for that status, through `answers`."""
+    type: str
+    title: str
+    status: int
+    detail: str | None = None
     busy: Literal[True] | None = None
     read_only: Literal[True] | None = None
     ai_off: Literal[True] | None = None

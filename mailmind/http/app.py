@@ -1,4 +1,5 @@
 """The ASGI app: FastAPI. Every request passes the perimeter, then goes to a route on one of its routers, or else to `_no_route`."""
+import json
 from contextlib import asynccontextmanager
 
 from anyio import to_thread
@@ -22,13 +23,17 @@ async def _enough_threads(_app):
 async def _no_route(scope, _receive, send):
     """What no route matches, on a path or an absolute-form request line alike: GET and POST are all the app answers, so any other
     method is one it doesn't implement. It reads no body, which the perimeter has judged already and nothing here wants. A GET or
-    a POST of the API still says someone is here, as any that gets past the perimeter does."""
-    plain = [(b"content-type", b"text/plain")]
-    if scope["method"] in ("GET", "POST"):
-        shared.touched(scope["path"])
-        await shared.send_whole(send, 404, plain, b"not found")
+    a POST of the API still says someone is here, as any that gets past the perimeter does. Under /api/ it answers a problem
+    document, as any failure there does, and elsewhere a line of text."""
+    path = scope["path"]
+    status, said = (404, "not found") if scope["method"] in ("GET", "POST") else (501, "not implemented")
+    if status == 404:
+        shared.touched(path)
+    if path == "/api" or path.startswith("/api/"):
+        doc, _ = shared.problem(status, said)
+        await shared.send_whole(send, status, [(b"content-type", shared.PROBLEM_JSON.encode())], json.dumps(doc).encode())
     else:
-        await shared.send_whole(send, 501, plain, b"not implemented")
+        await shared.send_whole(send, status, [(b"content-type", b"text/plain")], said.encode())
 
 
 def create_app(*, token, body_cap, routers=()):

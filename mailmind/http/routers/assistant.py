@@ -58,7 +58,7 @@ def _scrubbed(what, failed):
                 raise
             except Exception as ex:
                 log.error("%(what)s", {"what": what}, exc_info=ex)
-                return {"ok": False, "error": failed}, 500
+                return route.problem(500, failed)
         return answering
     return scrubbing
 
@@ -85,7 +85,8 @@ def router(assistant, mailbox):
     @r.post("/api/ai/summarize", responses=answers(Summary, {**_MAY_FAIL, 504: Failure}))
     @_scrubbed("error", "summary failed")
     def summarize(body: SummarizeBody):
-        return assistant.asking.summarize(body.model_dump(exclude_unset=True))
+        summary = assistant.asking.summarize(body.model_dump(exclude_unset=True))
+        return route.problem(504, "still summarizing") if summary is None else summary
 
     @r.post("/api/ai/draft-reply", responses=answers(DraftedReply, _MAY_FAIL))
     @_scrubbed("draft error", "draft failed")
@@ -106,7 +107,7 @@ def router(assistant, mailbox):
     def do_confirm(body: ConfirmBody):
         plan = assistant.bulk.take(str(body.plan or ""))
         if plan is None:
-            return {"ok": False, "error": "this plan has expired", "expired": True}, 410
+            return route.problem(410, "this plan has expired", expired=True)
         return mailbox.filing.carry_out(plan.verb, plan.preset, plan.messages, body.undo_group)
 
     # read-only: NL command → validated, capped action PREVIEW

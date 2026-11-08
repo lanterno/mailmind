@@ -49,7 +49,8 @@ class ThreadDigest:
                 "participants": _j(row["participants"]), "message_count": row["message_count"],
                 "model": row["model"], "created_at": row["created_at"]}
 
-    def summarize(self, account: AccountId, thread_id: ThreadRef, scope: str = "thread", force: bool = False) -> Result | tuple[Result, int]:
+    def summarize(self, account: AccountId, thread_id: ThreadRef, scope: str = "thread", force: bool = False) -> Result | None:
+        """The thread's summary, or None when another request is still writing it past the wait."""
         with self._uow.read() as c:
             rows = self._context.rows(c, account, thread_id)
         if not rows:
@@ -102,5 +103,4 @@ class ThreadDigest:
                     "action": parsed["action"], "participants": parsed["participants"],
                     "message_count": len(rows), "model": model, "created_at": row["created_at"]}
 
-        return (self._FLIGHTS.run((account, thread_id, scope), make, read, wait=60, recheck=not force)
-                or ({"ok": False, "error": "still summarizing"}, 504))
+        return self._FLIGHTS.run((account, thread_id, scope), make, read, wait=60, recheck=not force)

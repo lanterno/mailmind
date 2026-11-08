@@ -28,8 +28,8 @@ class Asking:
         self._uow = uow
         self._mail = mail
 
-    def summarize(self, body: Mapping[str, Any]) -> Result | tuple[Result, int]:
-        """On-demand thread/message summary via claude."""
+    def summarize(self, body: Mapping[str, Any]) -> Result | None:
+        """On-demand thread/message summary via claude, or None while another request is still writing it."""
         scope = "thread"
         account = body.get("account")
         thread_id = body.get("thread_id")

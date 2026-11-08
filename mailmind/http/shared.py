@@ -1,6 +1,9 @@
 """What a request to a route goes through (mailmind.http.route): what a failure answers, who counts as someone here, how far a
 body may run. It imports nothing of FastAPI.
 """
+import json
+from http import HTTPStatus
+
 from mailmind.assistant.api import AIOff, OverLimit
 from mailmind.compose.api import MAX_SEND_POST
 from mailmind.kernel.errors import Busy, Conflict, Locked, NotFound, Refused, Unreachable, Unreadable
@@ -19,13 +22,42 @@ UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api/
                                      # or the tick's own events would hold the vacation gate open forever
             "/api/debug/health"}     # asking how the app is doing changes nothing, this included
 
-# The status each answers with. 502 says asking again can help, and 422 that it won't.
-STATUS = {NotFound: 404, Conflict: 409, Locked: 423, Refused: 400, Unreachable: 502, Unreadable: 422, Busy: 409}
-_PROBLEMS = tuple(STATUS)
+# Each of the kernel's, the status it answers with and the kind of problem it is. 502 says asking again can help, and 422 that it
+# won't.
+KINDS = {NotFound: (404, "not-found"), Conflict: (409, "conflict"), Locked: (423, "locked"), Refused: (400, "refused"),
+         Unreachable: (502, "unreachable"), Unreadable: (422, "unreadable"), Busy: (409, "busy")}
+STATUS = {kind: status for kind, (status, _) in KINDS.items()}
+_PROBLEMS = tuple(KINDS)
 
-BAD_REQUEST = {"ok": False, "error": "bad request"}
+# A failure answers a problem document (RFC 9457). Its `type` is `/problems/<kind>`, a URI relative to the app that names the kind
+# and that no client fetches, or `about:blank` where the status says all there is: a literal that means none of the kinds, the
+# perimeter's refusals among them.
+PROBLEM_JSON = "application/problem+json"
+_TITLES = {"not-found": "Not found", "conflict": "Conflict", "locked": "Locked", "refused": "Refused",
+           "unreachable": "Unreachable", "unreadable": "Unreadable", "busy": "Busy",
+           "over-limit": "Over the daily AI limit", "ai-off": "AI is off", "read-only": "Read-only"}
+_MEMBERS = ("type", "title", "status", "detail")
 
-TOO_LARGE = (413, [(b"content-type", b"text/plain; charset=utf-8")], b"payload too large")
+
+def problem(status, detail="", kind=None, /, **more):
+    """A problem document and its status. `detail` is what a person is told, left out where the page words it; `more` is what
+    else the page acts on, as members of its own beside the four."""
+    doc = {"type": f"/problems/{kind}", "title": _TITLES[kind]} if kind else {"type": "about:blank", "title": HTTPStatus(status).phrase}
+    doc["status"] = status
+    if detail:
+        doc["detail"] = detail
+    return {**doc, **{name: value for name, value in more.items() if name not in _MEMBERS}}, status
+
+
+def problem_answer(e):
+    """A Problem as its problem document, and its status: what it said as the detail, and its `more` beside it."""
+    status, kind = next(answer for k, answer in KINDS.items() if isinstance(e, k))
+    return problem(status, e.said, kind, **e.more)
+
+
+BAD_REQUEST = problem_answer(Refused())
+
+TOO_LARGE = (413, [(b"content-type", PROBLEM_JSON.encode())], json.dumps(problem(413, "payload too large")[0]).encode())
 
 
 def post_body_cap(path):
@@ -34,22 +66,16 @@ def post_body_cap(path):
     return MAX_SEND_POST if path in ("/api/send", "/api/draft") else MAX_POST
 
 
-def problem_answer(e):
-    """A Problem as the app reads one, {ok: false, error}, and its status."""
-    said = {"error": e.said} if e.said else {}
-    return {"ok": False, **said, **e.more}, next(code for kind, code in STATUS.items() if isinstance(e, kind))
-
-
 def _over_limit_answer(e):
     """The 402 an interactive AI request gets at the daily limit. The page asks the user, then
     sends the request again with AI_OVER_HEADER."""
-    return {"ok": False, "error": "today's AI spending has reached the daily limit", "over_limit": True,
-            "spent_micros": e.spent_micros, "limit_micros": e.limit_micros}, 402
+    return problem(402, "today's AI spending has reached the daily limit", "over-limit", over_limit=True,
+                   spent_micros=e.spent_micros, limit_micros=e.limit_micros)
 
 
 def _ai_off_answer():
     """The 409 an AI request gets with AI off. Nothing was sent, and asking again won't help."""
-    return {"ok": False, "error": "AI is off: MailMind has no Claude API key", "ai_off": True}, 409
+    return problem(409, "AI is off: MailMind has no Claude API key", "ai-off", ai_off=True)
 
 
 def failure_answer(e, method, path):
@@ -59,16 +85,16 @@ def failure_answer(e, method, path):
         return problem_answer(e)
     if method == "POST":
         if isinstance(e, TypeError | ValueError):      # malformed request input (bad/missing int id/pk) → clean 400
-            return BAD_REQUEST, 400
+            return BAD_REQUEST
         if isinstance(e, profile.ReadOnlyError):       # a write this process may not make (and nothing queued it)
             log.info("POST %(path)s refused, read-only: %(what)s", {"path": path, "what": str(e)})
-            return {"ok": False, "error": "MailMind is running read-only", "read_only": True}, 409
+            return problem(409, "MailMind is running read-only", "read-only", read_only=True)
     if isinstance(e, OverLimit):                       # the page asks before it goes over
         return _over_limit_answer(e)
     if isinstance(e, AIOff):                           # no key: nothing was sent, and nothing will be until one is set
         return _ai_off_answer()
     log.error("%(method)s %(path)s failed", {"method": method, "path": path}, exc_info=e)
-    return {"ok": False, "error": "request failed"}, 500
+    return problem(500, "request failed")
 
 
 def _no_one():

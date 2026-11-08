@@ -129,7 +129,7 @@ def router(mailbox):
             raise NotFound(found["error"])
         data = found["data"]
         if len(data) > MAX_ATTACH_BYTES:
-            return {"ok": False, "error": "too large"}, 413
+            return route.problem(413, "too large")
         ctype = (found["content_type"] or "application/octet-stream").split(";")[0].strip()
         # never inline-render active types from the top frame; force download regardless
         fn = _safe_filename(found["filename"])

@@ -25,7 +25,20 @@ def document():
     from mailmind.bootstrap import web
     from mailmind.http.app import create_app
     app = create_app(routers=web.ROUTERS, token=lambda: "", body_cap=lambda method, path: 0)
-    return get_openapi(title="MailMind", version="1", routes=app.routes, separate_input_output_schemas=False)
+    return _problems(get_openapi(title="MailMind", version="1", routes=app.routes, separate_input_output_schemas=False))
+
+
+def _problems(doc):
+    """A failure answers a problem document, application/problem+json. FastAPI writes every answer a route declares in the route's
+    own media type, so here each 4xx and 5xx says what it is."""
+    from mailmind.http.shared import PROBLEM_JSON
+    for operations in doc["paths"].values():
+        for operation in operations.values():
+            for status, answer in operation["responses"].items():
+                content = answer.get("content", {})
+                if status[:1] in ("4", "5") and "application/json" in content:
+                    content[PROBLEM_JSON] = content.pop("application/json")
+    return doc
 
 
 def main(out):
