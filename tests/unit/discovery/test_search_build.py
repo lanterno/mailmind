@@ -8,6 +8,7 @@ import string
 
 import pytest
 
+import problems
 from fixtures import world as w
 
 FROM = "{from_name from_addr}"
@@ -95,7 +96,7 @@ def test_no_query_raises_and_every_match_is_one_fts_accepts(data_dir):
 def test_a_nul_in_the_query_is_a_bad_query_not_a_server_error(app):
     # FTS5 reads the bound MATCH string only up to the NUL, so it sees an unterminated quote
     r = app.get("/api/search?scope=all&q=lunch%00quilt")
-    assert (r.status, r.json) == (200, {"ok": False, "error": "bad query"})
+    assert (r.status, r.json) == (400, problems.refused("bad query"))
 
 
 def senders(app, q):

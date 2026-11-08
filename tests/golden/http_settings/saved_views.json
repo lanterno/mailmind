@@ -167,81 +167,14 @@
  },
  {
   "body": {
-   "msg": "need a name and a query",
-   "ok": false,
-   "views": [
-    {
-     "builtin": true,
-     "id": "__unread__",
-     "name": "Unread",
-     "q": "is:unread"
-    },
-    {
-     "builtin": true,
-     "id": "__flagged__",
-     "name": "Flagged",
-     "q": "is:flagged"
-    },
-    {
-     "builtin": true,
-     "id": "__attach__",
-     "name": "Has attachments",
-     "q": "has:attachment"
-    },
-    {
-     "builtin": true,
-     "dynamic": "last7",
-     "id": "__last7__",
-     "name": "Last 7 days",
-     "q": "__LAST7__"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_feed__",
-     "name": "Feed",
-     "q": "is:newsletter"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_papertrail__",
-     "name": "Paper trail",
-     "q": "is:receipt"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_notifications__",
-     "name": "Notifications",
-     "q": "is:notification"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_action__",
-     "name": "Action needed",
-     "q": "category:action-needed"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_finance__",
-     "name": "Finance",
-     "q": "category:finance"
-    },
-    {
-     "builtin": false,
-     "id": "<view From Lin>",
-     "name": "From Lin",
-     "q": "from:lin"
-    },
-    {
-     "builtin": false,
-     "id": "<view Receipts>",
-     "name": "Receipts",
-     "q": "is:receipt"
-    }
-   ]
+   "detail": "need a name and a query",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -250,7 +183,7 @@
    "x-frame-options": "DENY"
   },
   "request": "create one with no query",
-  "status": 200
+  "status": 400
  },
  {
   "body": {
@@ -414,75 +347,14 @@
  },
  {
   "body": {
-   "msg": "verb must be create|delete",
-   "ok": false,
-   "views": [
-    {
-     "builtin": true,
-     "id": "__unread__",
-     "name": "Unread",
-     "q": "is:unread"
-    },
-    {
-     "builtin": true,
-     "id": "__flagged__",
-     "name": "Flagged",
-     "q": "is:flagged"
-    },
-    {
-     "builtin": true,
-     "id": "__attach__",
-     "name": "Has attachments",
-     "q": "has:attachment"
-    },
-    {
-     "builtin": true,
-     "dynamic": "last7",
-     "id": "__last7__",
-     "name": "Last 7 days",
-     "q": "__LAST7__"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_feed__",
-     "name": "Feed",
-     "q": "is:newsletter"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_papertrail__",
-     "name": "Paper trail",
-     "q": "is:receipt"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_notifications__",
-     "name": "Notifications",
-     "q": "is:notification"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_action__",
-     "name": "Action needed",
-     "q": "category:action-needed"
-    },
-    {
-     "builtin": true,
-     "id": "__lane_finance__",
-     "name": "Finance",
-     "q": "category:finance"
-    },
-    {
-     "builtin": false,
-     "id": "<view Receipts>",
-     "name": "Receipts",
-     "q": "is:receipt"
-    }
-   ]
+   "detail": "verb must be create|delete",
+   "status": 400,
+   "title": "Refused",
+   "type": "/problems/refused"
   },
   "headers": {
    "cache-control": "no-store",
-   "content-type": "application/json",
+   "content-type": "application/problem+json",
    "cross-origin-opener-policy": "same-origin",
    "cross-origin-resource-policy": "same-origin",
    "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
@@ -491,7 +363,7 @@
    "x-frame-options": "DENY"
   },
   "request": "an unknown verb",
-  "status": 200
+  "status": 400
  },
  {
   "note": "mailmind_views.json",

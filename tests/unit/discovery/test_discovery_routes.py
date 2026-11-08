@@ -19,15 +19,13 @@ def test_a_search_for_any_text_answers(app):
               "has:", "before:", "after:never", "before:99999-99-99", "folder:\"", "category:", "lunch AND", "lunch OR (", "{}", "[]", "^", "'; DROP TABLE messages; --",
               "é", "日本語", "\U0001f600", "a\tb", "a\nb", "\x00", "a\x00b", "\x7f", "‮", "﻿", "%", "%%", "%00", "+", "&", ";", "=", "#", "?", "\\", "x" * 4000):
         r = app.get(f"/api/search?q={quote(q)}&scope=all")
-        assert r.status == 200, (q, r.body)
-        assert r.json["ok"] is True or r.json == {"ok": False, "error": "bad query"}, q
+        assert (r.status, r.json.get("ok")) == (200, True) or (r.status, r.json) == (400, problems.refused("bad query")), (q, r.body)
 
 
 def test_a_query_string_of_any_shape_answers(app):
     for query in ("q=%", "q=%zz", "q=%ff%fe", "q=%00", "q=%ED%A0%80", "q=a;b", "q=a+b", "q=%2B", "q=a=b", "q==", "=", "&", "&&&", ";", "q", "%71=lunch", "q[]=lunch"):
         r = app.get(f"/api/search?{query}")
-        assert r.status == 200, (query, r.body)
-        assert r.json["ok"] is True or r.json == {"ok": False, "error": "bad query"}, query
+        assert (r.status, r.json.get("ok")) == (200, True) or (r.status, r.json) == (400, problems.refused("bad query")), (query, r.body)
 
 
 def test_a_search_finds_what_it_finds(app):
@@ -111,12 +109,12 @@ def test_a_view_named_by_anything_but_text_is_the_400(app):
     assert app.get("/api/views").json == before
 
 
-def test_a_change_it_cant_make_says_so_with_a_200(app):
+def test_a_change_it_cant_make_is_refused_in_its_own_words(app):
     for body, msg in (({}, "verb must be create|delete"), ({"verb": None}, "verb must be create|delete"), ({"verb": "rename"}, "verb must be create|delete"),
                       ({"verb": "create"}, "need a name and a query"), ({"verb": "create", "name": "Lunch"}, "need a name and a query"),
                       ({"verb": "create", "name": " ", "q": "lunch"}, "need a name and a query")):
         r = app.post("/api/views", body)
-        assert r.status == 200 and r.json["ok"] is False and r.json["msg"] == msg and r.json["views"], body
+        assert (r.status, r.json) == (400, problems.refused(msg)), body
 
 
 def test_a_field_nothing_here_reads_is_nothing_to_refuse(app):
