@@ -1,4 +1,4 @@
-"""Migration 48 (2026-11-08): the labels on each copy of a Gmail message.
+"""Migration 47 (2026-11-08): the labels on each copy of a Gmail message.
 
 A Gmail message can be under many labels, and its labels were read only to write them (archive drops \\Inbox). Now a sync's header
 fetch reads X-GM-LABELS for Gmail accounts, and this holds one row for each label on each copy, going with the copy. It is no part

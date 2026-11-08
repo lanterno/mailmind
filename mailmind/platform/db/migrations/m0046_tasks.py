@@ -1,4 +1,4 @@
-"""Migration 47 (2026-11-08): the tasks a person confirmed from their mail.
+"""Migration 46 (2026-11-08): the tasks a person confirmed from their mail.
 
 A task is theirs, and outlives the message: a filing, a renumber or the message leaving the server only changes what a task
 links to. It keys on the message's key (a pk isn't stable, and a key is never used again) and keeps the folder the message was
