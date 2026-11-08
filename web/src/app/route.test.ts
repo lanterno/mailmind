@@ -7,6 +7,8 @@ const routes: Route[] = [
   { source: { kind: "folder", account: "ada@example.test", folder: "Lists/Yarn & Wool" }, opened: { kind: "message", key: 12, folder: "Lists/Yarn & Wool", uid: 40 } },
   { source: { kind: "folder", account: "ada@example.test", folder: "__waiting__" }, opened: { kind: "thread", id: "rf:<a b@example.test>", account: "ada@example.test", key: 3, folder: "Sent Items", uid: 7 } },
   { source: { kind: "allInboxes" }, opened: { kind: "message", key: 9, folder: "INBOX", uid: 1 } },
+  { source: { kind: "across", folder: "__snoozed__" }, opened: null },
+  { source: { kind: "across", folder: "__muted__" }, opened: { kind: "thread", id: "rf:<a@example.test>", account: "bea@example.test", key: 4, folder: "INBOX", uid: 2 } },
   { source: { kind: "search", q: "from:lin is:unread & more", account: "ada@example.test" }, opened: null },
   { source: { kind: "search", q: "noodle", account: "ada@example.test", thread: "rf:ada@example.test:49f7" }, opened: null },
   { source: { kind: "search", q: "from:lin subject:lunch", account: "", asked: "emails from lin about lunch" }, opened: null },
@@ -33,6 +35,11 @@ describe("the URL", () => {
   it("opens nothing from a link that named a row by its number", () => {
     expect(parseRoute("/all", "?m=12").opened).toBeNull();
     expect(parseRoute("/m/a%40example.test/INBOX", "?c=rf%3Ax&m=12&ca=a%40example.test").opened).toBeNull();
+  });
+  it("takes only the views that aren't folders under /all", () => {
+    expect(parseRoute("/all/__waiting__", "").source).toEqual({ kind: "across", folder: "__waiting__" });
+    expect(parseRoute("/all/__screener__", "").source).toEqual({ kind: "allInboxes" });
+    expect(parseRoute("/all/INBOX", "").source).toEqual({ kind: "allInboxes" });
   });
   it("takes a path it doesn't know as nowhere", () => {
     expect(parseRoute("/m/only-account", "").source).toBeNull();

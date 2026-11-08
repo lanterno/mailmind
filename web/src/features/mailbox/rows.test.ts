@@ -2,22 +2,22 @@ import { describe, expect, it } from "vitest";
 import { filedWords, folderTitle, fromFolder, fromSearch, inDaySections, inTab, isConversation, roleLabel, type FolderRow, type Row, type SearchRow } from "./rows";
 
 const folderRow = (o: Partial<FolderRow> = {}): FolderRow => ({
-  key: 1, folder: "INBOX", uid: 1, bucket: "PERSONAL", flagged: false, from_addr: "bo@example.test", from_name: "Bo", has_attach: false,
+  key: 1, folder: "INBOX", uid: 1, account: "a@example.test", bucket: "PERSONAL", flagged: false, from_addr: "bo@example.test", from_name: "Bo", has_attach: false,
   is_junk: false, seen: false, snippet: "s", subject: "Hi", thread_id: "t1", when: "Mon", ...o,
 });
-const row = (o: Partial<Row> = {}): Row => ({ ...fromFolder(folderRow(), "a@example.test"), ...o });
+const row = (o: Partial<Row> = {}): Row => ({ ...fromFolder(folderRow()), ...o });
 
 describe("a row", () => {
-  it("takes the account it was asked for, unless it says its own, and is named by its copy", () => {
-    expect(fromFolder(folderRow(), "a@example.test")).toMatchObject({ id: "1:1:INBOX", key: 1, account: "a@example.test", folder: "INBOX", uid: 1, count: 1, action: "", ts: null });
-    expect(fromFolder(folderRow({ account: "b@example.test", folder: "Later" }), "a@example.test")).toMatchObject({ id: "1:1:Later", account: "b@example.test", folder: "Later" });
-    expect(fromFolder(folderRow({ uid: 2 }), "a").id).not.toBe(fromFolder(folderRow(), "a").id);
+  it("says its own account, and is named by its copy", () => {
+    expect(fromFolder(folderRow())).toMatchObject({ id: "1:1:INBOX", key: 1, account: "a@example.test", folder: "INBOX", uid: 1, count: 1, action: "", ts: null });
+    expect(fromFolder(folderRow({ account: "b@example.test", folder: "Later" }))).toMatchObject({ id: "1:1:Later", account: "b@example.test", folder: "Later" });
+    expect(fromFolder(folderRow({ uid: 2 })).id).not.toBe(fromFolder(folderRow()).id);
   });
   it("says how long it has waited in place of when it came", () => {
-    expect(fromFolder(folderRow({ waiting_label: "3 days" }), "a").when).toBe("3 days");
+    expect(fromFolder(folderRow({ waiting_label: "3 days" })).when).toBe("3 days");
   });
   it("trims an action that is only space, so it asks nothing of you", () => {
-    expect(fromFolder(folderRow({ action: "  " }), "a").action).toBe("");
+    expect(fromFolder(folderRow({ action: "  " })).action).toBe("");
   });
   it("comes from a search as a single message", () => {
     const hit = { ...folderRow(), account: "a", alias: "a", commitment_worthy: false, date: "", folder: "Later", importance: null, needs_you: true, reply_worthy: false, safe_to_file: false } as SearchRow;
@@ -36,11 +36,11 @@ describe("a conversation row", () => {
     expect(isConversation(row({ count: 3, folder: "Drafts" }), true)).toBe(false);
   });
   it("counts what opening it shows, apart from what filing it takes", () => {
-    expect(fromFolder(folderRow({ count: 2, thread_count: 3 }), "a")).toMatchObject({ count: 2, threadCount: 3 });
+    expect(fromFolder(folderRow({ count: 2, thread_count: 3 }))).toMatchObject({ count: 2, threadCount: 3 });
   });
   it("counts what a list that says one number holds", () => {
-    expect(fromFolder(folderRow({ count: 4 }), "a")).toMatchObject({ count: 4, threadCount: 4 });
-    expect(fromFolder(folderRow(), "a")).toMatchObject({ count: 1, threadCount: 1 });
+    expect(fromFolder(folderRow({ count: 4 }))).toMatchObject({ count: 4, threadCount: 4 });
+    expect(fromFolder(folderRow())).toMatchObject({ count: 1, threadCount: 1 });
   });
 });
 

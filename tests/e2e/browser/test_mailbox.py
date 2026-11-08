@@ -446,6 +446,47 @@ def test_the_account_menu_changes_account_and_offers_all_inboxes(page, world):
     clean(page)
 
 
+def test_all_inboxes_shows_the_views_that_arent_folders_over_every_account(page, app, world):
+    until_ = {"preset": "tomorrow"}
+    for name in (RECEIPT, "bea-inbox-01-client.eml"):
+        assert app.post("/api/snooze", {**world.copy(name), **until_}).json["ok"]
+    page.goto("/all")
+    snoozed = page.locator('#folderrail .frow[data-folder="__snoozed__"]')
+    expect(snoozed.locator(".unread")).to_have_text("2")
+    snoozed.click()
+    expect(page.locator("#listTitle")).to_have_text("Snoozed")
+    assert page.url.endswith("/all/__snoozed__") or "/all/__snoozed__?" in page.url
+    rows = page.locator("#rows .row[data-key]")
+    expect(rows).to_have_count(2)
+    expect(rows.locator(".acctchip")).to_have_count(2)
+    expect(snoozed).to_have_class(re.compile(r"\bon\b"))
+    page.reload()
+    expect(page.locator("#rows .row[data-key]")).to_have_count(2)
+    expect(page.locator(".acct-sw")).to_contain_text("All inboxes")
+    page.locator('#folderrail .frow:has-text("Inbox")').first.click()
+    expect(page.locator("#listTitle")).to_have_text("Inbox")
+    assert page.url.endswith("/all")
+    page.keyboard.press("g")
+    page.keyboard.press("z")
+    expect(page.locator("#listTitle")).to_have_text("Snoozed")
+    assert "/all/__snoozed__" in page.url
+    clean(page)
+
+
+def test_a_view_over_every_account_unsnoozes_a_row_on_its_own_account(page, app, world):
+    name = "bea-inbox-01-client.eml"
+    assert app.post("/api/snooze", {**world.copy(name), "preset": "tomorrow"}).json["ok"]
+    page.goto("/all/__snoozed__")
+    expect(page.locator(".rd-subj")).to_be_visible()
+    page.keyboard.press("h")
+    expect(page.get_by_role("dialog", name="Snooze until")).to_be_visible()
+    page.get_by_role("button", name=re.compile("nsnooze")).click()
+    expect(page.locator("#toast")).to_have_text("Unsnoozed")
+    expect(page.locator("#rows .row[data-key]")).to_have_count(0)
+    assert app.get(f"/api/messages?account={w.BEA}&folder=__snoozed__").json["total"] == 0
+    clean(page)
+
+
 def test_a_tab_on_an_older_build_offers_a_reload_and_a_current_one_doesnt(page, world):
     opened(page)
     float_ = page.locator("#buildFloat")
