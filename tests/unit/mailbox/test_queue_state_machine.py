@@ -154,7 +154,7 @@ class Machine(RuleBasedStateMachine):
         from mailmind.bootstrap.mailbox import server_ops
 
         def effect(_real):
-            def die(_row, _first_try=False):
+            def die(_row, _first_try=False, **kw):
                 raise Crash
             return die
         self.crash_during_a_conversation(name, op, server_ops, "apply", effect)
@@ -260,7 +260,7 @@ class Machine(RuleBasedStateMachine):
         from mailmind.bootstrap.mailbox import server_ops
 
         def effect(_real):
-            def die(_row, _first_try=False):
+            def die(_row, _first_try=False, **kw):
                 raise Crash
             return die
         self.crash_during(which, server_ops, "apply", effect)
@@ -271,8 +271,8 @@ class Machine(RuleBasedStateMachine):
         from mailmind.bootstrap.mailbox import server_ops
 
         def effect(real):
-            def die(row, first_try=False):
-                real(row, first_try)
+            def die(row, first_try=False, **kw):
+                real(row, first_try, **kw)
                 raise Crash
             return die
         self.crash_during(which, server_ops, "apply", effect)
@@ -307,7 +307,7 @@ class Machine(RuleBasedStateMachine):
     @rule(name=st.sampled_from(NAMES), op=st.sampled_from(sorted(OPS)))
     def crash_in_a_click_before_the_server_is_asked(self, name, op):
         def effect(_real):
-            def die(_row, _first_try=False):
+            def die(_row, _first_try=False, **kw):
                 raise Crash
             return die
         self.crash_during_a_click(name, op, effect)
@@ -315,8 +315,8 @@ class Machine(RuleBasedStateMachine):
     @rule(name=st.sampled_from(NAMES), op=st.sampled_from(sorted(OPS)))
     def crash_in_a_click_after_the_server_answered(self, name, op):
         def effect(real):
-            def die(row, first_try=False):
-                real(row, first_try)
+            def die(row, first_try=False, **kw):
+                real(row, first_try, **kw)
                 raise Crash
             return die
         self.crash_during_a_click(name, op, effect)

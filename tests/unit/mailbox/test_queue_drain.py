@@ -221,8 +221,8 @@ def test_a_landed_move_drops_its_own_row_not_the_copy_a_sync_stored(app, world, 
     queue(app, world)
     apply = server_ops.apply
 
-    def archive_synced_first(row, first_try=False):
-        answer = apply(row, first_try)
+    def archive_synced_first(row, first_try=False, **kw):
+        answer = apply(row, first_try, **kw)
         ingest.sync_new(accounts.get(w.ADA), "Archive")                # the moved copy is stored before the settling
         return answer
     monkeypatch.setattr(server_ops, "apply", archive_synced_first)

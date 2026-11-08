@@ -162,7 +162,7 @@ class Fault:
     answer: str | None = None   # the tagged reply instead of running it, e.g. "NO [UNAVAILABLE] busy"
     drop: bool = False          # close the connection instead of answering
     after: bool = False         # run the command, then drop before the tagged reply
-    stall: bool = False         # answer nothing until release_stalls(), then drop: a black hole
+    stall: bool = False         # answer nothing until release_stalls(), then drop: a black hole (after: once it ran)
     times: int | None = 1       # how many matching commands it hits; None = every one
     when: object = None         # optional predicate on the command's arguments (a list of tokens)
     user: str | None = None     # only this account's connections
@@ -342,7 +342,7 @@ class Session:
             self.srv._record(self, tag, cmd, args, text)
             fault = self.srv._fault_for(self, cmd, args)
             try:
-                if fault and fault.stall:
+                if fault and fault.stall and not fault.after:
                     self.srv._unstalled.wait()
                     raise _Drop()
                 if fault and fault.drop and not fault.after:
@@ -353,6 +353,8 @@ class Session:
                 self.mute_tagged = bool(fault and fault.after)
                 done = self.dispatch(tag, cmd, args)
                 if fault and fault.after:
+                    if fault.stall:
+                        self.srv._unstalled.wait()
                     raise _Drop()
                 if done is False:
                     return
@@ -953,11 +955,12 @@ class FakeIMAPServer:
         can't tell whether it happened."""
         self._faults.append(Fault(command.upper(), after=True, times=times, when=when, user=user))
 
-    def stall(self, command, *, times=None, when=None, user=None):
+    def stall(self, command, *, times=None, when=None, user=None, after=False):
         """Answer nothing to a matching command, as a black-holed server would, until
-        release_stalls() (or stop()), then close the connection. Every match, by default."""
+        release_stalls() (or stop()), then close the connection. Every match, by default. With
+        `after`, the command runs first: the client hears nothing of what it did."""
         self._unstalled.clear()
-        self._faults.append(Fault(command.upper(), stall=True, times=times, when=when, user=user))
+        self._faults.append(Fault(command.upper(), stall=True, after=after, times=times, when=when, user=user))
 
     def release_stalls(self):
         self._faults[:] = [f for f in self._faults if not f.stall]

@@ -54,7 +54,7 @@ def boxes(world, name):
     return [box for _, box, _, _ in world.where(name)["server"]]
 
 
-def dies_before(row, first_try=False):
+def dies_before(row, first_try=False, **kw):
     raise Crash
 
 
@@ -102,9 +102,9 @@ def test_while_the_server_is_asked_the_message_is_hidden_and_undo_already_knows_
     pk, seen = world.pk(RECEIPT), {}
     apply = server_ops.apply
 
-    def spy(row, first_try=False):
+    def spy(row, first_try=False, **kw):
         seen.update(hidden=hidden(pk), stack=undo_stack(), first_try=first_try)
-        return apply(row, first_try)
+        return apply(row, first_try, **kw)
     monkeypatch.setattr(server_ops, "apply", spy)
     assert app.post("/api/trash", w.copy_of(pk)).json["ok"]
     assert seen["hidden"] is True and seen["first_try"] is True
@@ -139,8 +139,8 @@ def test_a_crash_in_a_click_after_the_server_answered_never_moves_it_twice(app, 
     from mailmind.bootstrap.mailbox import commands, server_ops
     apply, pk = server_ops.apply, world.pk(RECEIPT)
 
-    def dies_after(row, first_try=False):
-        apply(row, first_try)
+    def dies_after(row, first_try=False, **kw):
+        apply(row, first_try, **kw)
         raise Crash
     with monkeypatch.context() as m:
         m.setattr(server_ops, "apply", dies_after)
@@ -195,9 +195,9 @@ def test_a_flag_change_shows_before_the_server_is_asked(app, world, monkeypatch)
     from mailmind.bootstrap.mailbox import server_ops
     pk, seen, apply = world.pk(RECEIPT), [], server_ops.apply
 
-    def spy(row, first_try=False):
+    def spy(row, first_try=False, **kw):
         seen.append(world.row(RECEIPT)["flagged"])
-        return apply(row, first_try)
+        return apply(row, first_try, **kw)
     monkeypatch.setattr(server_ops, "apply", spy)
     assert app.post("/api/flag", {**w.copy_of(pk), "flag": "flagged", "on": True}).json["msg"] == "ok"
     assert seen == [1] and world.row(RECEIPT)["flagged"] == 1
@@ -234,7 +234,7 @@ def test_a_try_that_raises_something_unforeseen_doesnt_leave_its_message_hidden_
     world.server.drop("SELECT", user=w.ADA)
     assert app.post("/api/archive", w.copy_of(pk)).json["status"] == "queued"
 
-    def broken(row, first_try=False):
+    def broken(row, first_try=False, **kw):
         raise ValueError("a bug")
     monkeypatch.setattr(server_ops, "apply", broken)
     commands.drain()

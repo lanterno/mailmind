@@ -165,9 +165,9 @@ def test_the_whole_conversation_leaves_the_lists_before_the_first_try(app, world
     from mailmind.bootstrap.mailbox import server_ops
     real, listed = server_ops.apply, []
 
-    def looks(row, first_try=False):
+    def looks(row, first_try=False, **kw):
         listed.append([world.where(n)["db"] for n in (LUNCH, CONFIRM)])
-        return real(row, first_try)
+        return real(row, first_try, **kw)
     monkeypatch.setattr(server_ops, "apply", looks)
     assert app.post("/api/thread/archive", world.copy(CONFIRM)).json["count"] == 2
     assert listed[0] == [[], []]
@@ -194,7 +194,7 @@ def test_a_crash_while_accepting_leaves_all_of_it_as_it_was(world, monkeypatch):
 def test_a_crash_in_the_first_try_leaves_the_rest_for_the_next_start(world, monkeypatch):
     from mailmind.bootstrap import mailbox
 
-    def dies(row, first_try=False):
+    def dies(row, first_try=False, **kw):
         raise Crash
     with monkeypatch.context() as m:
         m.setattr(mailbox.server_ops, "apply", dies)
@@ -213,11 +213,11 @@ def test_a_try_that_raises_leaves_it_queued_and_the_rest_still_go(world, monkeyp
     from mailmind.bootstrap import mailbox
     real, tried = mailbox.server_ops.apply, []
 
-    def first_breaks(row, first_try=False):
+    def first_breaks(row, first_try=False, **kw):
         tried.append(row["message_id"])
         if len(tried) == 1:
             raise RuntimeError("something nobody expected")
-        return real(row, first_try)
+        return real(row, first_try, **kw)
     monkeypatch.setattr(mailbox.server_ops, "apply", first_breaks)
     r = mailbox.filing.do_thread_file("/api/thread/archive", {"pk": world.pk(CONFIRM)})
     assert (r["ok"], r["count"], r["failed"], r["queued"], r["undoable"]) == (True, 2, 0, 1, True)

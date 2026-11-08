@@ -549,7 +549,7 @@ def trash_probe(monkeypatch):
     """Stands in for a command's try: the list of whether the IMAP gate was held at each call."""
     held = []
 
-    def probe(row, first_try=False):
+    def probe(row, first_try=False, **kw):
         held.append(gates.held())
         return ServerAnswer(dest="Trash")
     monkeypatch.setattr(server_ops, "apply", probe)
