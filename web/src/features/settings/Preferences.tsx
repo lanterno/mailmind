@@ -88,6 +88,8 @@ export function PreferencesForm() {
           <Input className="pref-num" id="prefAiLimit" />
         </NumberField>
         <div className="set-help">Once a day’s AI has cost this much, background work stops and MailMind asks before spending more.</div>
+        <Check checked={p.morning_brief} onChange={(morning_brief) => setPrefs({ morning_brief })}>Have today’s brief ready each morning</Check>
+        <div className="set-help">Written before you open your Inbox, within the daily limit, and only if you’ve used MailMind in the last two days.</div>
       </div>
       <div className="set-form">
         <div className="lbl">Keyboard</div>
