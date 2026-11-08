@@ -293,3 +293,31 @@ def test_a_request_counts_as_someone_here_unless_the_tray_polled(app, monkeypatc
     assert seen == []
     assert app.post("/api/draft", new(autosave=True)).status == 200
     assert seen == [1]
+
+
+# ── the preview ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+def test_the_preview_of_markdown_is_its_sanitized_html(app):
+    r = app.post("/api/compose/preview", {"text": "**a**\n\n<script>x</script>"})
+    assert (r.status, r.json) == (200, {"ok": True, "html": "<p><strong>a</strong></p>\n<p>&lt;script&gt;x&lt;/script&gt;</p>", "formatted": True})
+
+
+def test_the_preview_of_plain_text_says_it_goes_as_text(app):
+    r = app.post("/api/compose/preview", {"text": "a <b>"})
+    assert (r.status, r.json) == (200, {"ok": True, "html": "<div>a &lt;b&gt;</div><br>", "formatted": False})
+
+
+def test_the_preview_of_nothing_is_nothing_to_show(app):
+    r = app.post("/api/compose/preview", {})
+    assert (r.status, r.json["formatted"]) == (200, False)
+
+
+def test_a_preview_is_a_look_and_keeps_nothing(app):
+    assert app.post("/api/compose/preview", {"text": "*a*"}).status == 200
+    answer = app.get("/api/outbox").json
+    assert not answer["items"] and not answer["drafts"]
+
+
+def test_a_preview_of_more_than_a_control_route_takes_is_refused_before_it_is_read(app):
+    r = app.post("/api/compose/preview", {"text": "x" * (MAX_POST + 1)})
+    assert r.status == 413
