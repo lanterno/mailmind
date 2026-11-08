@@ -220,8 +220,9 @@ def test_a_star_says_so_either_way(page, world):
 
 
 def test_with_single_keys_off_help_still_opens(page, world):
+    from mailmind.bootstrap import accounts
+    accounts.config.set_preferences({"single_keys": False})
     opened(page)
-    page.pw.evaluate("localStorage.setItem('mm_nokeys', '1')")
     receipt = row(page, world, RECEIPT)
     receipt.click()
     page.keyboard.press("e")

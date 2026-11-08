@@ -1,4 +1,5 @@
 """The status pill, the help overlay and Settings."""
+import json
 import re
 import time
 
@@ -180,6 +181,10 @@ def test_axe_finds_nothing_on_status_help_or_settings(page, world, every_theme):
     assert found() == {}
     page.get_by_role("button", name="+ Add a connection").click()
     assert found() == {}
+    page.get_by_role("button", name="Cancel").click()
+    page.get_by_role("tab", name="Preferences").click()
+    expect(page.locator("#prefsBody")).to_be_visible()
+    assert found() == {}
     clean(page)
 
 
@@ -189,4 +194,76 @@ def test_with_no_accounts_the_welcome_offers_settings(page, world):
     expect(page.locator(".firstrun .fr-h")).to_have_text("Welcome to MailMind")
     page.locator("#frAdd").click()
     expect(page.locator("#setClose")).to_be_visible()
+    clean(page)
+
+
+# ── the Settings home and its Preferences ───────────────────────────────────────────────────────────────────────────
+
+
+def file_of(world):
+    return json.loads((world.dir / "mailmind.config.json").read_text())
+
+
+def preferences_open(page):
+    opened(page)
+    page.locator("#settingsBtn").click()
+    page.get_by_role("tab", name="Preferences").click()
+    dialog = page.get_by_role("dialog", name="Preferences")
+    expect(dialog).to_be_visible()
+    return dialog
+
+
+def test_settings_has_a_preferences_tab_beside_connections_that_steps_back_on_esc(page, world):
+    opened(page)
+    page.locator("#settingsBtn").click()
+    dialog = page.get_by_role("dialog", name="Email connections")
+    expect(dialog.locator(".set-row")).to_have_count(3)
+    page.get_by_role("tab", name="Preferences").click()
+    expect(page.get_by_role("dialog", name="Preferences")).to_be_visible()
+    expect(page.locator("#prefsBody")).to_contain_text("Theme")
+    page.get_by_role("tab", name="Connections").click()
+    expect(dialog.locator(".set-row")).to_have_count(3)
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    clean(page)
+
+
+def test_a_preference_is_saved_to_the_file_and_outlives_a_browser_data_clear(page, world):
+    dialog = preferences_open(page)
+    dialog.get_by_role("button", name="Dusk").click()
+    expect(page.locator("body")).to_have_class(re.compile("theme-dusk"))
+    until(page, lambda: file_of(world).get("preferences", {}).get("theme") == "dusk", "the file holds the theme")
+    page.pw.evaluate("localStorage.clear()")
+    page.reload()
+    expect(page.locator("body")).to_have_class(re.compile("theme-dusk"))
+    clean(page)
+
+
+def test_a_page_opened_with_no_block_and_nothing_held_writes_no_block(page, world):
+    opened(page)
+    until(page, lambda: page.pw.evaluate("Boolean(localStorage.getItem('mm_prefs'))"), "the page read its preferences")
+    assert "preferences" not in file_of(world)
+    clean(page)
+
+
+def test_what_a_browser_already_held_comes_into_the_file_once_and_is_then_gone(page, world):
+    page.pw.add_init_script("""if (!sessionStorage.getItem('seeded')) {
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('mm_theme', 'dusk');
+      localStorage.setItem('mm_nokeys', '1');
+      localStorage.setItem('mm_read', '{"width":"wide","size":"xl","font":"mono"}');
+      localStorage.setItem('mm_threadview', '0');
+    }""")
+    opened(page)
+    until(page, lambda: page.pw.evaluate("localStorage.getItem('mm_nokeys') === null"), "the old key let go")
+    held = file_of(world)["preferences"]
+    assert held == {"theme": "dusk", "single_keys": False, "read_width": "wide", "read_size": "xl", "read_font": "mono", "conversations": False}
+    assert page.pw.evaluate("['mm_theme','mm_read','mm_threadview'].map(k => localStorage.getItem(k))") == [None, None, None]
+    expect(page.locator("body")).to_have_class(re.compile("theme-dusk"))
+    world_before = (world.dir / "mailmind.config.json").read_bytes()
+    page.reload()
+    expect(page.locator("body")).to_have_class(re.compile("theme-dusk"))
+    page.keyboard.press("c")                     # still off
+    expect(page.locator("#cmpBody")).to_have_count(0)
+    assert (world.dir / "mailmind.config.json").read_bytes() == world_before
     clean(page)
