@@ -4,7 +4,7 @@ import re
 from typing import TypedDict
 
 from mailmind.content import sanitize
-from mailmind.content.quote import html_escape, own_html
+from mailmind.content.quote import BLOCKQUOTE, html_escape, own_html
 
 
 class Original(TypedDict, total=False):
@@ -50,8 +50,6 @@ def reply_bodies(new_text: str | None, orig: Original) -> tuple[str, str | None]
     if html:
         safe, _ = sanitize.sanitize(html, load_images=False, fold=False)
         html_body = (
-            own_html(new_text) + f"<div>{html_escape(attr)}</div>"
-            f'<blockquote type="cite" style="margin:0 0 0 .8ex;'
-            f'border-left:2px solid #ccc;padding-left:1ex">{safe}</blockquote>')
+            own_html(new_text) + f"<div>{html_escape(attr)}</div>{BLOCKQUOTE}{safe}</blockquote>")
         return text, html_body
     return text, None

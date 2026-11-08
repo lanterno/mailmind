@@ -1,6 +1,8 @@
 """The part of a reply or forward you typed, and the quote that comes after it."""
 import html as _html
 
+BLOCKQUOTE = '<blockquote type="cite" style="margin:0 0 0 .8ex;border-left:2px solid #ccc;padding-left:1ex">'
+
 
 def html_escape(s: str | None) -> str:
     return _html.escape(s or "")
