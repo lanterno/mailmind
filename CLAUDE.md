@@ -44,12 +44,12 @@ uv run pytest tests/unit/curation/test_classifier.py        # classifier behavio
 uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24 attack classes, expects 0 leaks (68)
 uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests (45)
 uv run pytest tests/unit/curation/test_expire.py            # expiry rules (23)
-uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (70)
-uv run pytest tests/unit/calendar/test_invite_text.py       # what an invite's text comes to: who an RSVP goes to, its dates, what's left of a broken one (203)
-uv run pytest tests/contract/test_ics_reader_contract.py    # the reader of invites: never raises, plain data, bounded (165)
-uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (18)
+uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (77)
+uv run pytest tests/unit/calendar/test_invite_text.py       # what an invite's text comes to: who an RSVP goes to, its dates, what's left of a broken one (222)
+uv run pytest tests/contract/test_ics_reader_contract.py    # the reader of invites: never raises, plain data, bounded (180)
+uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (44)
 uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
-uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (146)
+uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (153)
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (101)
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (52)
 uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (198)
@@ -155,7 +155,7 @@ line with a reason. Three rules are our own:
 
 - Only `features/mailbox/MailFrame.tsx` may write HTML into the DOM (`innerHTML`, `srcDoc`, `dangerouslySetInnerHTML` and their like).
 - A feature imports another only through its `index.ts`, which holds what the others use (`lint/slices.js`). `app/` and `main.tsx` compose the features and may import any file. A barrel that grows can close a cycle: nothing at a module's top level may read another feature's binding.
-- `machine.ts`, `model.ts`, `sendGuard.ts`, `draftResume.ts`, `linkRisk.ts` and any `*.machine.ts` are pure: no DOM, no fetch, and only each other and types as imports. The machine gets its stores through `Env`.
+- `machine.ts`, `model.ts`, `sendGuard.ts`, `draftResume.ts`, `linkClean.ts`, `linkRisk.ts` and any `*.machine.ts` are pure: no DOM, no fetch, and only each other and types as imports. The machine gets its stores through `Env`.
 
 Never disable `react-hooks/exhaustive-deps` or `rules-of-hooks`: the React Compiler quietly skips a component that does (`react-hooks/rule-suppression` refuses it). What an effect reads but doesn't run for goes through `useEffectEvent`. typescript-eslint needs a TypeScript with a JavaScript API and `tsc` is on 7, which has none, so it and a TypeScript 6 live in the `web/lint` workspace until it supports 7. openapi-typescript needs one too, and takes only a TypeScript 5, which npm can't give it beside that 6, so it and a TypeScript 5 live in the `web/gen-api` workspace.
 
@@ -182,7 +182,7 @@ an inline `<script>` in `web/index.html` or raw control bytes in the app's sourc
   restart changes. A tab that loaded another offers a reload (`newBuild` in `app/realtime.ts`). `web/src` is strict TypeScript, and its API client
   is `lib/api/client.ts`, typed by `lib/api/types.ts` from the routes' schemas. Where you are lives in the URL
   (`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
-  and filing, and `app/commands.ts` the one list of commands that the keys and the palette (⌘K) both read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
+  and filing, and `app/commands.ts` the one list of commands that the keys, the palette (⌘K) and the keyboard help all read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
   `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
   Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder and the keyboard help, and `features/settings` the connections.
   `features/discovery` is the Feed and the Paper Trail, the contact card and the Document Hub, `features/curation` the Screener, the drawer and a sender's cleanup, and `features/attention` the snooze menu. `lib/backTrap.ts` makes Back close the top layer (`useLayer`), and `features/mailbox/swipe.ts` is a phone's swipe. `tests/e2e/browser/test_details.py` holds what an audit found the app has to do, and ROADMAP says what is left. A modal makes everything outside it inert, and a click goes straight through that, so what must stay in reach over one carries `data-react-aria-top-layer`, as the floats do. The
@@ -470,7 +470,7 @@ The app lives in `mailmind/`.
   with at most `_MAX_EVENTS`, expands nothing finer than a day and gives each call a budget of its thread's time (`_within`: a tracer
   raises at the next plain call of the reading, since a rule that never comes to a date walks to year 9999 inside one `next()`
   of dateutil's). `Agenda.upcoming` has an allowance for one list on top (`_EXPAND_SECONDS`), past which a series shows its first date.
-  One rule says what a TZID means, `invite.zone`: a name the zone database doesn't know floats, so a VTIMEZONE counts for
+  One rule says what a TZID means, `invite.zone`: a name neither the zone database nor Windows' list of zones knows floats, so a VTIMEZONE counts for
   nothing, and `icalendar_acl` lets the library keep none and look up no TZID. It keeps what isn't text as its line said it (`_AS_SAID`),
   since an RSVP echoes a UID and writes to an organizer. `Invite.rdates` is there only where the text has some.
   `tests/contract/test_ics_reader_contract.py` holds what the reader must do whatever the text says, and

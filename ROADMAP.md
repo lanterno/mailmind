@@ -9,18 +9,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
 ## Reply, compose and send
 
-- **Send-time checks, second pass** · medium value · effort S — `guardCheck` in
-  `features/compose/sendGuard.ts`, which `runChecks` calls and `Guard` in `Composer.tsx` shows, covers
-  subject, attachment wording and reply-all size, and chips carry a "new" mark from `KnownContacts`.
-  Still missing:
-  - a near-miss line for an address one edit away from someone you write to;
-  - a line when a Reply-To sends the reply somewhere other than the sender. `replySeed` takes
-    `reply_to` for the To and says nothing, so a stranger there gets only the "new" mark on its chip;
-  - plus-addresses and unconfigured aliases (`you+tag@`) counted as yours rather than new, which
-    `myAddresses` and `isNewToYou` match only exactly;
-  - the forward count. `forwardSeed`'s `fwdAttach` counts named inline parts without a
-    Content-ID, and Outlook's synthetic `invite.ics`, but `attachments.extract` re-attaches
-    neither, so "see attached" on such a forward stays quiet when nothing goes out attached.
 - **Markdown body → clean HTML + text multipart** · high value · effort L — New messages still go
   out text/plain only: `builder.build_message` adds an alternative only when `spec["html"]` is set,
   and `mailmind.compose.domain.composition` sets it only for replies and forwards whose original had HTML. Needs a
@@ -37,10 +25,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   `discovery.adapters.views_file` and `curation.adapters.rules_file` both do atomic JSON-file persistence with a GET/POST pair and a UI — so
   this is a snippets store plus an expander in `features/compose/machine.ts`, which stays free of the
   DOM, and `{{placeholder}}` tab-through in `#cmpBody`.
-- **Smart-paste link cleaning** · low value · effort S — No `paste` handler exists in
-  `web/src` and no tracking-parameter stripper exists in any module. A client-side handler on
-  `#cmpBody` that drops `utm_*`/`fbclid` and unwraps redirect wrappers before insertion. Independent of the
-  markdown work.
 - **Configurable Undo-Send delay** · low value · effort S — The feature ships; only "configurable"
   is unmet. `outbox_item.SEND_DELAY = 10` has no config key and no env override, and `UNDO_SECONDS`
   in `machine.ts` is a 10 of its own. Keep 10s as the default and expose it in the Settings home below.
@@ -56,15 +40,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   - *The durable-task half needs a new table*, and per the original design constraint it must key on
     `(account, message_id/thread_id)` and **never** on `pk`, which is not stable across re-ingest.
   The AI `action` string in `Commitments` (`features/assistant/Panels.tsx`) is read-only and parses no dates.
-- **Today & next's remaining blind spots** · low value · effort S — A zone only the invite's own VTIMEZONE
-  explains (Outlook's `W. Europe Standard Time`, a vendor's prefix) floats, so such an invite shows
-  the hour it says, whatever zone you're in; `invite.zone` is the one place to teach them. A later SEQUENCE is not
-  weighed, only which message is newest, and RANGE=THISANDFUTURE moves one occurrence. A rule finer than a
-  day shows only its first date. Ingest keeps an invite's body only for the
-  Inbox (`Ingest._process` with `with_body`), so an invite filed elsewhere by a server rule is
-  listed once opened. Bodies stored before `mime.parse` recorded inline-only calendar parts
-  keep attachment rows without one; a one-off re-parse of stored bodies containing
-  `text/calendar` would list them.
 - **AI pre-fills the Screener's verdict** · medium value · effort M — Rescope of the old
   "auto-triage the ambiguous residual": `ScreenerPane` already is a learning Imbox that writes
   `mailmind_rules.json` one sender at a time, so do not rebuild it. What is missing is a
@@ -139,11 +114,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   never built. `X-GM-LABELS` is used for **writes** only (archive drops `\Inbox`; the relabel path
   adds one), but labels are never FETCHed and there is no `labels` / `message_labels` junction, so a
   Gmail message cannot be seen under all the labels it actually carries.
-- **Honest thread counts** · low value · effort S — The list badge (`thr-count` in `RowItem`) is `_conversation_rows`'s
-  `COUNT(*) OVER (PARTITION BY m.thread_id)` within one folder (`folder_conversation_rows`), while
-  `Queries.thread_json`, whose `count` `ConversationView` shows, selects across all folders — so a thread with a reply in Sent shows "2" and
-  opens 3. Either count account-wide or relabel the tooltip from "N messages" to "N in this folder".
-
 ## Speed and the connection layer
 
 - **Make a gate for each account the default** · high value · effort S — `MAILMIND_WORKERS=account`
@@ -193,24 +163,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   runs and that part of `wire` go. The same step lets the command line take IMAPClient once its soak ends, and imaplib's
   adapter go after it.
 
-## Keyboard, screen readers and reversibility
-
-- **Finish the row hover cluster, and hover-to-prefetch** · medium value · effort S — `.racts` in `RowItem` offers
-  Archive, Delete and Snooze; Star and Mark-read are still key- or toolbar-only. Separately, a debounced
-  hover on a row calling the body route with `prefetch=1` would make the first open of a hovered row instant.
-  Today `prefetchNext` in `useMailbox.ts` warms only the next two, and `Member` in `Reader.tsx` fetches a conversation's
-  message only once it is opened, so opening a thread warms none of its members.
-- **Live regions on the send float and undo float** · medium value · effort S — `toast()` and `announce()` reach
-  `#srLive`; `SendFloatView` and `#undoFloat` carry no `aria-live` or `role="status"`, so send status and the Undo
-  countdown are silent. Pair this with a contrast check of Dusk and Night: axe runs only in Day.
-- **One toast-with-action primitive with a draining bar** · medium value · effort M — `toast()` (2600ms
-  in `lib/toast.tsx`) and `offerUndo` (8000ms in `features/mailbox/actions.ts`) are two independent primitives with two
-  lifetimes, and nothing makes the undo window legible. Collapse them and `SendFloatView`'s countdown into one
-  with a CSS width-transition bar; `SendFloatView` already proves the pattern, but only for sends.
-- **Emit the keys legend from the commands** · low value · effort S — `buildCommands` in `app/commands.ts` already
-  drives the keys and the palette, but `Keys` in `features/status/Help.tsx` is hand-written `<kbd>` markup and has already
-  drifted: it has no `l` (reply later) and no `g l`. Group the legend from the commands, as the palette does.
-
 ## The reading room and the visual system
 
 - **Sender identity inline, with a From/Reply-To spoof hint** · medium value · effort M — `ContactCard` delivers most
@@ -218,10 +170,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   click-through popover from `SenderButton`; the key facts should appear inline in `.rd-from`. And there is no spoof
   warning at all: `replySeed` reads `reply_to` to pick the recipient but nothing ever compares it
   to `from_addr`.
-- **Dark mail colors under the Day theme** · low value · effort S — `frameTheme` in `MailFrame.tsx` themes dark mail
-  from the live tokens, which are the light ones under Day and Dusk, and `lookOf` in `mailDoc.ts` applies them. Choosing
-  Dark under Aa there leaves plain text on light paper and inverts rich mail onto a light page. Dark needs its own night
-  palette that doesn't follow the app theme.
 - **Density modes (Comfortable / Cozy / Compact)** · low value · effort M — Zero matches for
   `density` or `data-density`; Mailbox row metrics are hardcoded in the `.row.cmsg` rules. Worth more
   now that rows carry a two-line summary and a next-step chip: a `--row-pad` / `--row-lh` pair under `body[data-density]`, with Compact clamping the gist to one
@@ -229,20 +177,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **High-contrast toggle** · low value · effort S — Unbuilt: no `body.hc`, no preference, and `lib/theme.ts` knows only
   the three themes. Lower priority now that the base palette passes AA, but the light theme proved the pattern — one
   body-class override of the `:root` token block is the whole feature.
-- **Reopen a draft that holds an attached email** · low value · effort S — An attached email is one
-  part now (`mime.walk`, `mime.part_bytes`) and goes out as a parsed message (`build_message`), but
-  `resume.resume_files` still refuses such a draft ("which MailMind can't reattach yet"). To lift it:
-  walk with `mime.walk` rather than `msg.walk()`, so its part indexes match `parse()`'s, and read the
-  file's bytes with `part_bytes`, since `decoded` gives none for such a part.
-- **format=flowed is read as hard breaks** · low value · effort S — Nothing reads the `format` or
-  `DelSp` parameters. A text-only flowed message shows in the `<pre>` of `Bodies.as_document` hard-wrapped at
-  about 72 columns, with a stray space on each space-stuffed line, and DelSp=yes splits words.
-  Search and summaries are barely touched. Another app's flowed draft reopens whole with its soft
-  breaks fixed in, then goes out without `format=flowed`. The fix is an RFC 3676 decoder in
-  `mime`'s `_decode` and `content.text.text_body`. Per line: count the quote depth, then drop one
-  stuffing space, then join a line ending in a space to the next one at the same depth (deleting
-  the space when `delsp=yes`). Never join the `-- ` signature line.
-
 ## Setup, first run and housekeeping
 
 - **A real Settings home with a Preferences tab** · high value · effort M — `Connections` in `features/settings/Settings.tsx`
@@ -275,6 +209,12 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   rule for toast-vs-persistent — **persistent iff the event happened while
   the user was not looking** — then apply it, since a snooze waking where no list shows it (`snooze-wake` in `app/realtime.ts`)
   only toasts.
+
+## The desktop app
+
+- **Proton Mail goes with the desktop app** — decided on 2026-11-08. Proton offers IMAP only through its Bridge, which has
+  to run on the same computer as the app, so only a desktop app can count on it. The `proton` account type, the
+  `proton_bridge` credential and the loopback handling stay as they are until that app exists; add no new Bridge special cases.
 
 ## Open decisions
 

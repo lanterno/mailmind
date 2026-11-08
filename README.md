@@ -138,6 +138,13 @@ and the Claude API.
   and their recent threads, with quick Compose and search actions. Pure local SQL,
   no enrichment API.
 
+- **Flowed mail reads as written.** `format=flowed` mail shows its paragraphs, in the reader,
+  in search and in a reopened draft, not lines broken at 72 columns.
+- **Today & next understands Outlook.** Its zone names read as the zones they are, a later
+  SEQUENCE of an invite wins, and a change to all future occurrences reaches them all.
+- **Dark mail colors stay night** under every theme, and a conversation's badge matches what
+  opening it shows.
+
 ### Triage & organization
 
 - **One-key triage with real undo.** `e` archives *everywhere* (it never trashes),
@@ -368,6 +375,13 @@ automatically.
   A copy that was replaced after the list loaded is caught before it can overwrite the newer one,
   and a draft whose send is still waiting in the outbox stays shut until you cancel that send.
 
+- **A last look before it goes.** MailMind catches an address one typo from someone you write
+  to, says when Reply-To sends a reply elsewhere, counts your plus-addresses and send-as
+  addresses as yours, and shows a forward's true file count.
+- **Pasted links arrive clean.** Links pasted into the composer lose tracking parameters and
+  redirect wrappers, and Undo still takes the paste back.
+- **A draft holding an attached email reopens** with that email as one of its files.
+
 ### Sync, reliability & performance
 
 - **Live updates without a refresh.** An SSE stream tells the app of new mail, snooze wake-ups,
@@ -488,6 +502,12 @@ automatically.
   new mail and AI results, WCAG AA contrast for secondary text in every theme, a
   reduced-motion mode, and a "disable single-key shortcuts" toggle for voice and
   switch users.
+
+- **Rows work on hover.** Star and Mark read join Archive, Delete and Snooze, and resting on a
+  row or opening a conversation readies its mail ahead.
+- **Time you can see.** Undo offers and send countdowns show a draining bar of the time left,
+  and both floats are announced to screen readers. Accessibility checks cover Day, Dusk and Night.
+- **The `?` legend is generated from the commands**, so it can't drift from what the keys do.
 
 ## Prerequisites
 
