@@ -3,6 +3,7 @@
   "body": {
    "docs": [],
    "facets": {},
+   "groups": [],
    "matched": 0,
    "ok": true,
    "shown": 0,
@@ -29,6 +30,7 @@
      "filename": "comments.pdf",
      "folder": "Drafts",
      "from": "Bea Novak",
+     "group": "",
      "key": 21,
      "kind": "pdf",
      "part_id": "3",
@@ -43,6 +45,7 @@
    "facets": {
     "pdf": 1
    },
+   "groups": [],
    "matched": 1,
    "ok": true,
    "shown": 1,
@@ -69,6 +72,7 @@
      "filename": "comments.pdf",
      "folder": "Drafts",
      "from": "Bea Novak",
+     "group": "",
      "key": 21,
      "kind": "pdf",
      "part_id": "3",
@@ -83,6 +87,7 @@
    "facets": {
     "pdf": 1
    },
+   "groups": [],
    "matched": 1,
    "ok": true,
    "shown": 1,

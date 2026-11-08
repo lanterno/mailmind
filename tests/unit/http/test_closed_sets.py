@@ -31,7 +31,7 @@ SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "R
         "ComposeMode": resume.ComposeMode, "ViewVerb": views.ViewVerb, "DocumentKind": documents.DocumentKind,
         "Density": preferences.Density, "Theme": preferences.Theme, "ReadWidth": preferences.ReadWidth, "ReadSize": preferences.ReadSize,
         "ReadFont": preferences.ReadFont, "MailColors": preferences.MailColors, "SearchScope": preferences.SearchScope,
-        "ArchiveFormat": export.ArchiveFormat, "PictureType": attachments.PictureType, "SnippetVerb": snippets.SnippetVerb}
+        "ArchiveFormat": export.ArchiveFormat, "PictureType": attachments.PictureType, "SnippetVerb": snippets.SnippetVerb, "DocumentGrouping": documents.DocumentGrouping}
 
 
 def members(alias):
