@@ -1,6 +1,6 @@
 """The rule book's one reader and writer: mailmind_rules.json, in the data directory.
 
-The file holds the keep and block lists and each sender's shelf life. It's read again only when it
+The file holds the keep and block lists, each sender's shelf life and the filters. It's read again only when it
 changed; one that won't parse leaves the last rules read well, so a bad edit never stops a sync, and the
 next save moves it to backups/ first. A save writes the whole file or nothing, and a change reads, changes and
 saves as one step under a lock the command line and the server share, so two at once don't lose either.
@@ -24,7 +24,7 @@ from mailmind.platform.logging import get_logger
 
 log = get_logger("rules")
 
-__all__ = ["EXPIRE", "KEYS", "add", "load", "remove", "save", "set_expiry", "sets"]
+__all__ = ["EXPIRE", "KEYS", "add", "change", "load", "remove", "save", "set_expiry", "sets"]
 
 _lock = threading.Lock()
 _good = {}     # path -> (stamp, rules, sets): the last rules read well from that file
@@ -155,6 +155,16 @@ def remove(token):
         rules = load()
         rulebook.remove(rules, token)
         save(rules)
+
+
+def change(apply):
+    """One change to the rules, as one step: `apply` changes a copy, and what it returns comes back. If it raises, nothing is
+    saved."""
+    with _changing:
+        rules = load()
+        out = apply(rules)
+        save(rules)
+    return out
 
 
 def set_expiry(token, hours):

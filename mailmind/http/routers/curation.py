@@ -10,6 +10,8 @@ from mailmind.http.schemas.curation import (
     AuditTrail,
     CleanedUp,
     CleanupBody,
+    FilterChange,
+    Filters,
     NoisySenders,
     RuleBody,
     RuleBook,
@@ -37,6 +39,10 @@ def router(curation, mailbox):
     @r.post("/api/rules", responses=answers(RuleChanged))
     def rule(body: RuleBody):
         return curation.screener.rule(named.with_copy(mailbox, body.model_dump(exclude_unset=True), gone=None))
+
+    @r.post("/api/filters", responses=answers(Filters))
+    def filters(body: FilterChange):
+        return curation.filters.post(body.model_dump(exclude_unset=True))
 
     @r.get("/api/audit", responses=answers(AuditTrail))
     def audit(args: Annotated[AuditArgs, Query()]):

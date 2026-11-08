@@ -5,6 +5,7 @@ from mailmind.discovery.adapters import fts, views_file
 from mailmind.discovery.adapters.fts import BM25, forget_message, index_message, to_sql, visible
 from mailmind.discovery.adapters.sqlite import StoredMail
 from mailmind.discovery.api import QuerySpec
+from mailmind.discovery.application.conditions import Conditions
 from mailmind.discovery.application.contacts import Contacts, KnownContacts
 from mailmind.discovery.application.documents import DocumentHub
 from mailmind.discovery.application.search import Search
@@ -13,7 +14,7 @@ from mailmind.discovery.application.views import SavedViews
 from mailmind.mailbox.domain import roles
 from mailmind.bootstrap import mailbox
 
-__all__ = ["BM25", "build", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "suggesting",
+__all__ = ["BM25", "build", "conditions", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "suggesting",
            "views", "visible"]
 
 def build(q):
@@ -51,6 +52,7 @@ class _KeptSenders:
 _mail = StoredMail(_Folders())
 views = SavedViews(views_file)
 search = Search(_mail, _Accounts())
+conditions = Conditions(_mail)
 documents = DocumentHub(_mail, _Accounts())
 contacts = Contacts(_mail)
 suggesting = Suggesting(_mail)

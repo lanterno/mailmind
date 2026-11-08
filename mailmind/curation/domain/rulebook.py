@@ -8,6 +8,8 @@ classifier shows, expiry how long it stays.
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import Any, Final, Literal, TypedDict, get_args
 
+from mailmind.curation.domain import filters as filters_of_file
+from mailmind.curation.domain.filters import Filter
 from mailmind.kernel.row import Row
 
 type ListKey = Literal["keep_senders", "block_senders", "keep_domains", "block_domains"]
@@ -28,10 +30,11 @@ class Rules(TypedDict):
     keep_domains: list[str]
     block_domains: list[str]
     expire_hours: dict[str, int]
+    filters: list[Filter]
 
 
 def empty() -> Rules:
-    return {"keep_senders": [], "block_senders": [], "keep_domains": [], "block_domains": [], "expire_hours": {}}
+    return {"keep_senders": [], "block_senders": [], "keep_domains": [], "block_domains": [], "expire_hours": {}, "filters": []}
 
 
 def no_sets() -> RuleSets:
@@ -46,6 +49,7 @@ def normalized(raw: Any) -> Rules:
         out[k] = list(dict.fromkeys(x.lower() for x in raw.get(k, [])))
     shelf_lives: dict[str, Any] = raw.get(EXPIRE) or {}
     out[EXPIRE] = {t.lower(): int(h) for t, h in shelf_lives.items() if int(h) > 0}
+    out["filters"] = filters_of_file.normalized(raw.get("filters"))
     return out
 
 
@@ -59,6 +63,7 @@ def for_saving(rules: Rules) -> Rules:
     for k in KEYS:
         data[k] = sorted(set(rules.get(k, [])))
     data[EXPIRE] = dict(sorted((rules.get(EXPIRE) or {}).items()))
+    data["filters"] = list(rules.get("filters") or [])
     return data
 
 

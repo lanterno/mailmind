@@ -116,6 +116,23 @@ class StoredMail:
                 return None
         return count, rows, matched
 
+    def fits(self, c, pk, spec):
+        """Whether the row `pk` is one this query finds, as `search` finds them, on the caller's connection: ingest asks inside the
+        write that stored it. A query the index rejects finds nothing."""
+        match, where, params = fts.to_sql(spec)
+        where_sql = " AND ".join(["m.pk = ?", *where])
+        try:
+            if match is None:
+                sql, args = (f"SELECT 1 FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key WHERE {where_sql} LIMIT 1",
+                             [pk, *params])
+            else:
+                sql, args = ("SELECT 1 FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid "
+                             "LEFT JOIN assessments s ON s.message_key=m.message_key "
+                             f"WHERE msg_fts MATCH ? AND {where_sql} LIMIT 1", [match, pk, *params])
+            return c.execute(sql, args).fetchone() is not None
+        except sqlite3.OperationalError:
+            return False
+
     def total(self):
         with _uow.read() as c:
             try:

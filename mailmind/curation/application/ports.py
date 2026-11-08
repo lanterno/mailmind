@@ -1,5 +1,5 @@
 """What Curation needs from outside it. Each is bound in mailmind.bootstrap.curation."""
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Any, Protocol, TypedDict
@@ -41,6 +41,13 @@ class RuleBookRepository(Protocol):
     def sets(self) -> RuleSets: ...
     def add(self, token: str, verdict: str) -> tuple[str, str]: ...
     def remove(self, token: str) -> None: ...
+    def change[T](self, apply: Callable[[Rules], T]) -> T: ...
+
+
+class Conditions(Protocol):
+    """A search read as a condition on one message: Discovery's grammar and its index."""
+    def refusal(self, q: str) -> str | None: ...
+    def holds(self, c: object, pk: int, q: str) -> bool: ...
 
 
 class SafeHttp(Protocol):

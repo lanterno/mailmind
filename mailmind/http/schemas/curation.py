@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from mailmind.curation.api import BlockScope, RuleChange
+from mailmind.curation.api import BlockScope, FilterVerb, RuleChange
 from mailmind.http.schemas.common import Answer, Flag, NamesAMessage, Number, QueryArgs, RequestBody
 
 
@@ -11,6 +11,14 @@ class RuleBody(NamesAMessage):
     """A block trashes the copy `key` and `folder` name too, if it is still there."""
     token: str | None = None
     verdict: RuleChange | None = None       # left out is the use case's `verdict must be keep|block|remove`
+
+
+class FilterChange(RequestBody):
+    verb: FilterVerb | None = None          # left out is the use case's `verb must be create|update|delete`
+    id: str | None = None
+    q: str | None = None
+    star: Flag | None = None
+    read: Flag | None = None
 
 
 class CleanupBody(RequestBody):
@@ -38,16 +46,30 @@ class SenderArgs(QueryArgs):
     addr: str | None = None
 
 
+class MailFilter(Answer):
+    """What to do with new mail that fits a search."""
+    id: str
+    q: str
+    star: bool
+    read: bool
+
+
 class Rules(Answer):
     keep_senders: list[str]
     block_senders: list[str]
     keep_domains: list[str]
     block_domains: list[str]
     expire_hours: dict[str, int]
+    filters: list[MailFilter]
 
 
 class RuleBook(Answer):
     rules: Rules
+
+
+class Filters(Answer):
+    ok: Literal[True]
+    filters: list[MailFilter]
 
 
 class RuleChanged(Answer):

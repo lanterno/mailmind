@@ -10,6 +10,7 @@ from mailmind.curation.api import (BLOCKED, EXPIRE, JUNK_BUCKETS, KEYS, MKT, NOT
                                    select_expired)
 from mailmind.curation.application.cleanup import Cleanup
 from mailmind.curation.application.expiry import Expiry
+from mailmind.curation.application.filters import Filters
 from mailmind.curation.application.screener import Screener
 from mailmind.curation.application.sweep import Sweeps
 from mailmind.curation.application.unsubscribe import Unsubscribing
@@ -21,7 +22,7 @@ from mailmind.platform.workers import gates
 
 __all__ = ["AUDIT", "BLOCKED", "EXPIRE", "JUNK_BUCKETS", "KEYS", "MKT", "NOTIF", "PERSONAL", "PROTECTED", "RECEIPT",
            "SPAM", "arrival_ts", "by_rule", "classify", "cleanup", "decided", "domain_listed", "expiry",
-           "expiry_hours", "is_junk", "looks_human", "rules", "safe_http", "screener", "select_expired", "sqlite",
+           "expiry_hours", "filters", "is_junk", "looks_human", "rules", "safe_http", "screener", "select_expired", "sqlite",
            "sweeps"]
 
 log = get_logger("unsub")
@@ -50,6 +51,16 @@ class _MessageRows:
     def delete_by_uids(self, c, account, folder, uids):
         from mailmind.bootstrap.mailbox import store
         store.delete_by_uids(c, account, folder, uids)
+
+
+class _Conditions:
+    def refusal(self, q):
+        from mailmind.bootstrap import discovery
+        return discovery.conditions.refusal(q)
+
+    def holds(self, c, pk, q):
+        from mailmind.bootstrap import discovery
+        return discovery.conditions.holds(c, pk, q)
 
 
 class _Filing:
@@ -159,3 +170,4 @@ cleanup = Cleanup(rules, _mail, Unsubscribing(_mail, _ListHeaders(), _SafeHttp()
 screener = Screener(rules, _mail, _boxes, _filing)
 sweeps = Sweeps(rules, _mail, _boxes, AUDIT, _filing)
 expiry = Expiry(rules, _mail, _boxes, AUDIT, _filing)
+filters = Filters(rules, _Conditions())
