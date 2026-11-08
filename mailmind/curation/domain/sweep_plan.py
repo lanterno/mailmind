@@ -56,8 +56,8 @@ def junk(rows: Iterable[Classified]) -> list[Classified]:
     return [r for r in rows if r["bucket"] in classifier.JUNK_BUCKETS]
 
 
-def ai_targets(live: Iterable[Read], junk_ids: Collection[str], rules: RuleSets) -> tuple[list[Read], int]:
-    """(what sweep-ai takes of the live inbox, how many a keep rule held back). It matches by Message-ID, so a UID is
+def stored_targets(live: Iterable[Read], junk_ids: Collection[str], rules: RuleSets) -> tuple[list[Read], int]:
+    """(what sweep-stored takes of the live inbox, how many a keep rule held back). It matches by Message-ID, so a UID is
     always current, and mail with none is out of its reach."""
     targets: list[Read] = []
     kept = 0
@@ -70,7 +70,7 @@ def ai_targets(live: Iterable[Read], junk_ids: Collection[str], rules: RuleSets)
     return targets, kept
 
 
-def ai_audited(targets: Iterable[Read]) -> list[Audited]:
-    """The audit's line for each message an AI sweep takes."""
-    return [{"uid": t["uid"], "from": t["from"], "subject": t["subject"], "bucket": "ai-junk", "reason": "is_junk (AI verdict)"}
+def stored_audited(targets: Iterable[Read]) -> list[Audited]:
+    """The audit's line for each message a sweep of stored junk takes."""
+    return [{"uid": t["uid"], "from": t["from"], "subject": t["subject"], "bucket": "stored-junk", "reason": "is_junk (the classifier, at ingest)"}
             for t in targets]

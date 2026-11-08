@@ -11,7 +11,7 @@
   status | inventory [WHO]     each INBOX and Trash count | every folder's counts
   plan [WHO]                   classify the live Inbox and show what a sweep would trash
   sweep [WHO] [--dry]          move junk to Trash, verified and audited; --dry only says what
-  sweep-ai [WHO] [--dry]       the same, for all the mail stored as junk
+  sweep-stored [WHO] [--dry]   the same, for all the mail stored as junk
   expire [WHO] [--dry]         move Inbox mail past its expiry rule to Trash
   empty-trash [WHO]            empty Trash (not on Proton Bridge)
   rules [list]                 the learned keep and block lists, and expiry
@@ -39,7 +39,7 @@ import sys
 MAILBOX_COMMANDS = {"status": "INBOX and Trash counts", "inventory": "every folder's counts",
                     "plan": "classify the live Inbox and show what a sweep would trash",
                     "empty-trash": "empty Trash (not on Proton Bridge)"}
-DRY_COMMANDS = {"sweep": "move junk to Trash, verified and audited", "sweep-ai": "the same, for all the mail stored as junk",
+DRY_COMMANDS = {"sweep": "move junk to Trash, verified and audited", "sweep-stored": "the same, for all the mail stored as junk",
                 "expire": "move Inbox mail past its expiry rule to Trash"}
 
 

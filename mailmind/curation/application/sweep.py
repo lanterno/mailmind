@@ -86,13 +86,13 @@ class Sweeps:
         self._mail.forget_moved(acct["email"], junk_rows, stragglers)        # don't re-ghost swept mail
         return out
 
-    def sweep_ai(self, acct: dict[str, Any], dry: bool = False) -> dict[str, Any]:
+    def sweep_stored(self, acct: dict[str, Any], dry: bool = False) -> dict[str, Any]:
         """Trash the INBOX mail stored as is_junk=1, which is the classifier's verdict at ingest, whatever its rules say
-        of the headers now (the name is older than that: no AI is asked). Matched to the LIVE inbox by Message-ID so UIDs are always
+        of the headers now. Matched to the LIVE inbox by Message-ID so UIDs are always
         current (no UIDVALIDITY risk), minus any keep-ruled sender/domain. Move to Trash
         (reversible), verified + audited; prune the local DB by Message-ID."""
         r = self._rules.sets()
-        junk_mids = self._mail.ai_junk_ids(acct["email"])
+        junk_mids = self._mail.stored_junk_ids(acct["email"])
         out: dict[str, Any] = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [],
                                "kept_by_rule": 0, "error": None}
         if not junk_mids:
@@ -104,11 +104,11 @@ class Sweeps:
             out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out
         try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
-            targets, kept = sweep_plan.ai_targets(fetch_headers(s), junk_mids, r)
+            targets, kept = sweep_plan.stored_targets(fetch_headers(s), junk_mids, r)
             out["planned"], out["kept_by_rule"] = len(targets), kept
             if dry or not targets:
                 return out
-            self._audit.swept(acct["email"], sweep_plan.ai_audited(targets))
+            self._audit.swept(acct["email"], sweep_plan.stored_audited(targets))
             moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
                                                           self._boxes.trash_folder(acct))
         except Exception as e:

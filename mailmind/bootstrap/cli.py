@@ -140,10 +140,10 @@ def _expire(accts, dry=False):
     print(f"\nTOTAL: expired {grand_p}" + ("" if dry else f" · moved {grand_m}"))
 
 
-def _sweep_ai(accts, dry=False):
+def _sweep_stored(accts, dry=False):
     grand_p = grand_m = grand_k = 0
     for a in accts:
-        r = curation.sweeps.sweep_ai(a, dry=dry)
+        r = curation.sweeps.sweep_stored(a, dry=dry)
         if r["error"]:
             print(f"{a['email']:38} ERROR: {r['error']}")
             continue
@@ -211,7 +211,7 @@ def _empty_trash(accts):
 
 
 def mailboxes(command, who, dry=False):
-    """`status`, `inventory`, `plan`, `sweep`, `sweep-ai`, `expire` or `empty-trash` over `who`."""
+    """`status`, `inventory`, `plan`, `sweep`, `sweep-stored`, `expire` or `empty-trash` over `who`."""
     from mailmind.bootstrap import accounts
     accts = accounts.accounts() if who == "all" else [accounts.get(who)]
     accounts.preload_creds()            # one Touch ID up front for all Gmail accounts
@@ -223,8 +223,8 @@ def mailboxes(command, who, dry=False):
         _plan(accts, do_sweep=False)
     elif command == "sweep":
         _plan(accts, do_sweep=True, dry=dry)
-    elif command == "sweep-ai":
-        _sweep_ai(accts, dry=dry)
+    elif command == "sweep-stored":
+        _sweep_stored(accts, dry=dry)
     elif command == "expire":
         _expire(accts, dry=dry)
     elif command == "empty-trash":
