@@ -4,8 +4,8 @@ import type { AnyOf, GetAnswers, PostAnswers, PostBodies } from "./types";
 
 describe("the API's types", () => {
   it("give a file, a document or a stream no JSON to read", () => {
-    expectTypeOf<"/api/events" | "/api/export" | "/api/message/{pk}/body.html" | "/api/message/{pk}/attachment/{part_id}">().not.toExtend<keyof GetAnswers>();
-    expectTypeOf<"/api/message/{pk}/body">().toExtend<keyof GetAnswers>();
+    expectTypeOf<"/api/events" | "/api/export" | "/api/message/body.html" | "/api/message/attachment">().not.toExtend<keyof GetAnswers>();
+    expectTypeOf<"/api/message/body">().toExtend<keyof GetAnswers>();
   });
 
   it("hold only the API's paths, each by its method", () => {
@@ -16,7 +16,7 @@ describe("the API's types", () => {
 
   it("say what an answer that varies by branch may be", () => {
     expectTypeOf<GetAnswers["/api/search"]>().toExtend<{ ok: true; query: string; has_more: boolean }>();
-    expectTypeOf<GetAnswers["/api/thread"]>().toExtend<{ ok: true; reply_pk: number | null }>();
+    expectTypeOf<GetAnswers["/api/thread"]>().toExtend<{ ok: true; reply_key: number | null }>();
   });
 
   it("hold no refusal: a failure is a problem document at a status of its own, never a 200", () => {
@@ -25,8 +25,15 @@ describe("the API's types", () => {
   });
 
   it("give a POST's body what its model reads", () => {
-    expectTypeOf<PostBodies["/api/snooze"]>().toExtend<{ pk?: number | null; until?: number | string | null }>();
-    expectTypeOf<{ pk: 1; preset: "tomorrow" }>().toExtend<PostBodies["/api/snooze"]>();
+    expectTypeOf<PostBodies["/api/snooze"]>().toExtend<{ key?: number | null; folder?: string | null; until?: number | string | null }>();
+    expectTypeOf<{ key: 1; folder: "INBOX"; preset: "tomorrow" }>().toExtend<PostBodies["/api/snooze"]>();
+  });
+
+  it("name a message by its key and a copy by its key and folder, and nothing by a pk", () => {
+    expectTypeOf<PostBodies["/api/archive"]>().toExtend<{ key: number; folder: string }>();
+    expectTypeOf<{ pk: 1 }>().not.toExtend<PostBodies["/api/archive"]>();
+    expectTypeOf<"/api/message/{pk}/body">().not.toExtend<keyof GetAnswers>();
+    expectTypeOf<"pk">().not.toExtend<keyof GetAnswers["/api/message/body"]>();
   });
 });
 
