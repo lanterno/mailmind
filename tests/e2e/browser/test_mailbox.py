@@ -361,7 +361,7 @@ def test_an_undo_that_restores_only_part_says_so_and_z_tries_the_rest(page, worl
 def test_a_search_shows_what_it_finds_and_escape_leaves_it(page, world):
     opened(page)
     page.keyboard.press("/")
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     expect(box).to_be_focused()
     box.fill("from:lin")
     box.press("Enter")
@@ -484,7 +484,7 @@ def test_a_narrow_window_shows_one_pane_with_a_way_back_and_a_folder_drawer(page
 def test_a_narrow_window_folds_search_away_until_asked(page, world):
     page.set_viewport_size({"width": 420, "height": 800})
     page.goto("/")
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     expect(box).to_be_hidden()
     page.locator(".search-tog").click()
     expect(box).to_be_focused()
@@ -633,7 +633,7 @@ def test_g_then_a_letter_goes_to_that_folder_by_its_role(page, world):
 def test_a_search_saves_as_a_view_in_the_rail_and_the_view_runs_it(page, world):
     opened(page)
     page.pw.on("dialog", lambda d: d.accept("From Lin"))
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     box.fill("from:lin")
     box.press("Enter")
     page.locator(".ctx-save").click()

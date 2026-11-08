@@ -51,7 +51,7 @@ def spent_the_daily_limit():
 
 def type_in_search(page, words):
     page.keyboard.press("/")
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     box.fill(words)
     box.press("Enter")
 
@@ -73,8 +73,8 @@ def test_ask_answers_cites_and_changes_nothing(page, world, ai):
     page.locator(".ask-src").click()
     expect(page.locator(".ask-src")).to_have_class(re.compile("reading"))
     expect(page.locator(".ask-answer")).to_be_visible()   # the answer stays beside what you opened
-    page.get_by_role("textbox", name="Search").click()
-    page.get_by_role("textbox", name="Search").press("Escape")
+    page.get_by_role("combobox", name="Search").click()
+    page.get_by_role("combobox", name="Search").press("Escape")
     expect(page.locator(".ask-answer")).to_have_count(0)
     expect(page.locator("#rows .row[data-key]").first).to_be_visible()
     clean(page)
@@ -93,7 +93,7 @@ def test_at_the_daily_limit_an_ask_goes_only_when_you_say_so(page, world, ai):
     expect(page.locator("#rows")).to_contain_text("ask failed")
     asks = lambda: [r for r in ai.requests if "narrative" not in ((r.schema or {}).get("properties") or {})]
     assert asks() == []
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     box.fill("?When is lunch with Lin, again?")
     box.press("Enter")
     dialog.get_by_role("button", name="Go over the limit").click()
@@ -131,7 +131,7 @@ def test_do_confirmed_archives_and_one_undo_brings_it_all_back(page, world, ai):
     plan.get_by_role("button", name=re.compile("^Archive")).click()
     expect(plan).to_have_count(0)
     until(page, lambda: mailboxes(world, LUNCH) == ["Archive", "Archive"], "both archived on the server")
-    expect(page.get_by_role("textbox", name="Search")).to_have_value("")
+    expect(page.get_by_role("combobox", name="Search")).to_have_value("")
     page.locator("#ufUndo").click()
     until(page, lambda: mailboxes(world, LUNCH) == ["INBOX", "INBOX"], "both back on the server")
     clean(page)

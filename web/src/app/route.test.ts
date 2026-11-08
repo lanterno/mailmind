@@ -8,6 +8,7 @@ const routes: Route[] = [
   { source: { kind: "folder", account: "ada@example.test", folder: "__waiting__" }, opened: { kind: "thread", id: "rf:<a b@example.test>", account: "ada@example.test", key: 3, folder: "Sent Items", uid: 7 } },
   { source: { kind: "allInboxes" }, opened: { kind: "message", key: 9, folder: "INBOX", uid: 1 } },
   { source: { kind: "search", q: "from:lin is:unread & more", account: "ada@example.test" }, opened: null },
+  { source: { kind: "search", q: "noodle", account: "ada@example.test", thread: "rf:ada@example.test:49f7" }, opened: null },
 ];
 
 describe("the URL", () => {
@@ -70,5 +71,6 @@ describe("lists from the digest, and the brief", () => {
   it("gives each list its own key", () => {
     expect(sourceKey({ kind: "digest", list: "needs" })).not.toEqual(sourceKey({ kind: "digest", list: "tidy" }));
     expect(sourceKey({ kind: "digest", list: "topic", label: "A" })).not.toEqual(sourceKey({ kind: "digest", list: "topic", label: "B" }));
+    expect(sourceKey({ kind: "search", q: "x", account: "a", thread: "t" })).not.toEqual(sourceKey({ kind: "search", q: "x", account: "a" }));
   });
 });

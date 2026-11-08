@@ -565,7 +565,7 @@ def test_search_scope_narrows_to_this_account_and_is_remembered(page, world, ai)
 
 def test_closing_a_bulk_action_takes_the_command_out_of_the_search_box(page, world, ai):
     opened(page)
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     page.keyboard.press("/")
     box.fill("!")
     box.press("Enter")
@@ -623,7 +623,7 @@ def test_a_view_that_wont_go_says_so(page, app, world):
     opened(page)
     page.pw.on("dialog", lambda d: d.accept("Lunch"))
     page.keyboard.press("/")
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     box.fill("from:lin")
     box.press("Enter")
     page.locator("#clientCtx .ctx-save").click()
@@ -944,7 +944,7 @@ def test_a_saved_view_can_be_removed_from_the_keyboard(page):
 
 def test_escape_closes_a_message_before_it_leaves_the_search_it_was_opened_from(page, world):
     opened(page)
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     box.fill("lunch")
     box.press("Enter")
     expect(page.pw).to_have_url(re.compile("search"))
@@ -973,7 +973,7 @@ def test_escape_closes_a_message_on_a_desktop(page, world):
 
 def test_escape_in_the_search_box_clears_the_search_and_goes_home(page, world):
     opened(page)
-    box = page.get_by_role("textbox", name="Search")
+    box = page.get_by_role("combobox", name="Search")
     box.fill("lunch")
     box.press("Enter")
     expect(page.pw).to_have_url(re.compile("search"))
