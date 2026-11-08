@@ -16,6 +16,7 @@ from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, Accounts, Attention, StoredMail
 from mailmind.mailbox.application.sync import Ingest
+from mailmind.mailbox.domain import destination
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
@@ -47,6 +48,7 @@ class Folders:
     FIRST_SYNC_WAIT = 8.0      # seconds a list request waits for a folder's first scan before it answers
     CATCH_UP_WAIT = 1.5        # ... and for a catch-up of a folder read before
     CATCH_UP_EVERY = 60.0      # seconds between catch-ups of one folder as it is opened
+    MOVE_CHECK_WAIT = 2.5      # seconds a move to a folder neither the last LIST nor the database knows waits for a LIST
     _FOLDER_LIST_TTL = 25.0    # folder unread/total badges may be this stale (ambient counts)
 
     def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, pool: Pool, ingest: Ingest, attention: Attention):
@@ -117,7 +119,7 @@ class Folders:
                              "total": counts[n][1] or 0} for n in names])
 
 
-    def _folders_list_cached(self, account: str, acct: Account) -> list[RailFolder]:
+    def _folders_list_cached(self, account: str, acct: Account, deadline: float | None = None) -> list[RailFolder]:
         """Folder list from the TTL cache, refreshed via live IMAP when stale. On a
         live-refresh failure, serve the last cached list (even if expired) so a
         transient IMAP hiccup doesn't 500 the rail."""
@@ -138,7 +140,7 @@ class Folders:
                 self._folder_list_cache[account] = {"folders": folders, "ts": time.time()}
             return folders
         try:
-            return gates.run(account, refresh, priority=gates.Priority.INTERACTIVE)
+            return gates.run(account, refresh, priority=gates.Priority.INTERACTIVE, deadline=deadline)
         except Exception as e:
             if hit:
                 log.warning("%(account)s: live refresh failed, serving cached", {"account": account}, exc_info=e)
@@ -167,7 +169,8 @@ class Folders:
         except KeyError:
             raise Refused("unknown account")
         out = self._folders_list_cached(account, acct)
-        return {"ok": True, "account": account, "folders": out, **self._view_counts(account)}
+        return {"ok": True, "account": account, "folders": [{**f, "takes_filing": destination.takes_filing(f["role"])} for f in out],
+                **self._view_counts(account)}
 
 
     def _view_counts(self, accounts: str | list[str]) -> dict[str, int]:
@@ -181,6 +184,28 @@ class Folders:
     def across_accounts(self) -> dict[str, Any]:
         """The views that aren't folders, counted over every account, for the rail on All inboxes. Pure-local."""
         return {"ok": True, **self._view_counts([str(a["email"]) for a in self._accounts.accounts()])}
+
+
+    def ensure_takes_filing(self, account: str, folder: str) -> None:
+        """Refuse a move a person asked for into anything but a folder of this account's own that takes filing. What the last
+        LIST said is enough, however old, then what is stored; only a folder neither knows (made since, on another client) waits
+        for a LIST, and only a moment. A folder gone by then is the server's to refuse, and the message stays where it was."""
+        with self._folder_list_lock:
+            hit = self._folder_list_cache.get(account)
+        if hit:
+            found = next((f for f in hit["folders"] if f["name"] == folder), None)
+        else:
+            found = next((f for f in self._stored_folder_list(account) if f["name"] == folder), None)
+        if found is None:
+            try:
+                acct = self._accounts.get(account)
+            except KeyError:
+                raise Refused("unknown account")
+            found = next((f for f in self._folders_list_cached(account, acct, deadline=self.MOVE_CHECK_WAIT) if f["name"] == folder), None)
+        if found is None:
+            raise Refused("no such folder on this account")
+        if not destination.takes_filing(found["role"]):
+            raise Refused("mail can't be moved into that folder")
 
 
     def _folder_sync(self, account: AccountId, folder: FolderName, full: bool) -> threading.Event:

@@ -24,7 +24,7 @@ from mailmind.platform.workers import gates
 
 pending_log = get_logger("pending")
 do_log = get_logger("do")
-_FILED = {"trash": "trashed", "archive": "archived", "junk": "junked"}
+_FILED = {"trash": "trashed", "archive": "archived", "junk": "junked", "move": "moved"}
 _REFUSED = {"archive": "the server refused the archive"}
 _NO_FOLDER = {"archive": "no archive folder on this account", "junk": "no junk folder on this account"}
 _GONE = "not found"
@@ -60,9 +60,10 @@ class Filing:
         return push
 
 
-    def _file(self, kind: str, pk: int, undo_group: str | None, mutation_id: object, undo: bool = True) -> dict[str, Any]:
+    def _file(self, kind: str, pk: int, undo_group: str | None, mutation_id: object, undo: bool = True,
+              to: str | None = None) -> dict[str, Any]:
         """A move, through the command path: what the person hears of it."""
-        accepted = self._commands.accept_move(kind, pk, mutation_id, self._pushing(undo_group) if undo else None)
+        accepted = self._commands.accept_move(kind, pk, mutation_id, self._pushing(undo_group) if undo else None, to)
         return self._submit_move(kind, accepted)
 
 
@@ -170,6 +171,31 @@ class Filing:
         return self._file("trash", pk, body.get("undo_group"), body.get("mutation_id"))
 
 
+    def _into_folder(self, pk: object, to: object) -> tuple[int, str, str]:
+        """The message a move to a picked folder names and where it goes, as (pk, its account, the folder), once it's a folder
+        the message's own account may file into. Reads and lets go, and may ask the server what folders it has: no
+        transaction is open."""
+        number = as_int(pk)
+        if number is None or not isinstance(to, str) or not to:
+            raise Refused("bad request")
+        with self._uow.read() as c:
+            row = self._store.get_message(c, number)
+        if not row:
+            raise NotFound(_GONE)
+        if row["folder"] == to:
+            raise Refused("it's in that folder already")
+        self._folders.ensure_takes_filing(row["account"], to)
+        return number, row["account"], to
+
+
+    def do_move(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Move one message to a folder of its account's that a person picked."""
+        pk, account, to = self._into_folder(body.get("pk"), body.get("to"))
+        said = self._file("move", pk, body.get("undo_group"), body.get("mutation_id"), to=to)
+        self._folders.touched(account, to)
+        return said
+
+
     def trash_now(self, pk: int) -> bool:
         """Trash with nothing for Undo to reverse, as blocking a sender does: whether it went or will go."""
         try:
@@ -180,7 +206,7 @@ class Filing:
 
 
     def do_thread_file(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Archive or trash a whole conversation: every message sharing the anchor's thread_id in the
+        """Archive, trash or move a whole conversation: every message sharing the anchor's thread_id in the
         anchor's folder, which is what a conversation row stands for. Members are resolved here, never
         sent by the client (pk isn't stable, and a list row only knows its newest message). A message
         without a thread_id is a conversation of one, never the folder's unthreaded pool.
@@ -193,13 +219,19 @@ class Filing:
         pk = as_int(body.get("pk"))
         if pk is None:
             raise Refused("bad request")
-        kind = "archive" if path == "/api/thread/archive" else "trash"
+        kind = {"/api/thread/archive": "archive", "/api/thread/move": "move"}.get(path, "trash")
+        account, to = None, None
+        if kind == "move":
+            pk, account, to = self._into_folder(pk, body.get("to"))
         push = self._pushing(body.get("undo_group") or "thread:" + secrets.token_hex(6))
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
             pks = self._conversation_of(c, pk)
             names = self._store.names_of(c, pks)
-            accepted = [(p, self._commands.accept_move_within(c, kind, p, body.get("mutation_id"), push)) for p in pks]
-        return self._heard(accepted, self._try_each(kind, accepted), names)
+            accepted = [(p, self._commands.accept_move_within(c, kind, p, body.get("mutation_id"), push, to)) for p in pks]
+        said = self._heard(accepted, self._try_each(kind, accepted), names)
+        if account and to:
+            self._folders.touched(account, to)
+        return said
 
 
     def file_many(self, body: Mapping[str, Any]) -> dict[str, Any]:
@@ -208,14 +240,49 @@ class Filing:
         all under one undo group and then each is tried on its own. A row counts as failed if none of its messages was filed,
         a copy that is no longer there among them, and is `partial` if some were. When no row was, it raises what the first
         message did."""
-        verb, rows = body.get("verb"), body.get("rows")
-        if verb not in filing.FILING_VERBS or not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
+        verb = body.get("verb")
+        if verb not in filing.FILING_VERBS:
+            raise Refused()
+        return self._file_rows(verb, self._rows_wanted(body, whole_allowed=verb != "junk"), body)
+
+
+    def move_many(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Move the marked rows to a folder a person picked, as file_many files them. A folder is one account's, so rows of two
+        accounts are refused whole, before any leaves a list."""
+        wanted = self._rows_wanted(body, whole_allowed=True)
+        with self._uow.read() as c:
+            rows = [self._store.get_message(c, pk) for pk in (self._store.copy_pk(c, *named) for named, _ in wanted) if pk is not None]
+        accounts = {r["account"] for r in rows if r}
+        if not accounts:
+            raise NotFound(_GONE)
+        if len(accounts) > 1:
+            raise Refused("those are in different accounts")
+        to = body.get("to")
+        if not isinstance(to, str) or not to:
+            raise Refused()
+        account = accounts.pop()
+        self._folders.ensure_takes_filing(account, to)
+        said = self._file_rows("move", wanted, body, to)
+        self._folders.touched(account, to)
+        return said
+
+
+    def _rows_wanted(self, body: Mapping[str, Any], whole_allowed: bool) -> list[tuple[tuple[MessageKey, FolderName, int | None], bool]]:
+        """The copies a request's marked `rows` name, each with whether it stands for its conversation."""
+        rows = body.get("rows")
+        if not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
             raise Refused()
         wanted: list[tuple[tuple[MessageKey, FolderName, int | None], bool]] = []
         for one in rows:
             if not is_object(one):
                 raise Refused()
-            wanted.append((self._row_named(one), one.get("whole") is True and verb != "junk"))
+            wanted.append((self._row_named(one), one.get("whole") is True and whole_allowed))
+        return wanted
+
+
+    def _file_rows(self, verb: str, wanted: Sequence[tuple[tuple[MessageKey, FolderName, int | None], bool]], body: Mapping[str, Any],
+                   to: str | None = None) -> dict[str, Any]:
+        """One transaction accepts every row named, under one undo group; then each is tried on its own."""
         push = self._pushing(body.get("undo_group") or "bulk:" + secrets.token_hex(6))
         accepted: list[tuple[int, command.Accepted | None]] = []
         taken: set[int] = set()
@@ -226,7 +293,7 @@ class Filing:
                 for p in pks:
                     if p not in taken:               # two rows of one conversation
                         taken.add(p)
-                        accepted.append((p, self._commands.accept_move_within(c, verb, p, body.get("mutation_id"), push)))
+                        accepted.append((p, self._commands.accept_move_within(c, verb, p, body.get("mutation_id"), push, to)))
         results = self._try_each(verb, accepted)
         heard = self._heard(accepted, results, names)
         each = [sum(not isinstance(results[p], Problem) for p in pks) for pks in members]

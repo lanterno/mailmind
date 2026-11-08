@@ -30,7 +30,7 @@ from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
 log = get_logger("commands")
-_UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk"}
+_UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
 
 
 def _now() -> int:
@@ -111,23 +111,26 @@ class MailCommands:
 
 
     def accept_move(self, kind: str, pk: int, mutation_id: object,
-                    push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
+                    push_undo: Callable[[Connection, dict[str, Any]], object] | None = None,
+                    to: str | None = None) -> command.Accepted | None:
         """Accept a move of message `pk` in a transaction of its own: see accept_move_within."""
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
-            return self.accept_move_within(c, kind, pk, mutation_id, push_undo)
+            return self.accept_move_within(c, kind, pk, mutation_id, push_undo, to)
 
 
     def accept_move_within(self, c: Connection, kind: str, pk: int, mutation_id: object,
-                           push_undo: Callable[[Connection, dict[str, Any]], object] | None = None) -> command.Accepted | None:
+                           push_undo: Callable[[Connection, dict[str, Any]], object] | None = None,
+                           to: str | None = None) -> command.Accepted | None:
         """Accept a move of message `pk` in the caller's write block, which commits it with whatever else it accepts: an
-        Accepted, or None when there is no such message, or it is on its way out already. `push_undo(c, entry)`, on the
-        same connection, keeps what reverses it; without one, nothing will. Submit only once the block has committed:
-        until then no other connection can see the command, and a try would find it cancelled."""
+        Accepted, or None when there is no such message, it is on its way out already or it is in the folder `to` names
+        already. `to` is a folder a person picked, for a `move`. `push_undo(c, entry)`, on the same connection, keeps what
+        reverses it; without one, nothing will. Submit only once the block has committed: until then no other connection can
+        see the command, and a try would find it cancelled."""
         row = self._store.get_message(c, pk)
-        if not row or row["pending_removal"] is not None:
+        if not row or row["pending_removal"] is not None or row["folder"] == to:
             return None
         email, mid = row["account"], (row["message_id"] or "").strip()
-        where = self._known_destination(kind, email)
+        where = destination.Destination(to) if to else self._known_destination(kind, email)
         params = {"pk": pk, "uid": row["uid"], "epoch": self._store.get_uidvalidity(c, email, row["folder"]),
                   "seen": bool(row["seen"]), "subject": row["subject"], "thread_id": row["thread_id"]}
         id_, created = self._store.command_insert(c, {

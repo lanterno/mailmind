@@ -16,10 +16,20 @@ class Destination:
     drop_inbox_label: bool = False
 
 
+# The parts a folder may play and a person still not file mail into. A message in Drafts counts as a draft, which Discard and a
+# save remove, one in Sent counts as sent, and Gmail's All Mail is where mail already is: archive is how it gets there alone.
+CLOSED_TO_FILING = frozenset({"drafts", "sent", "all"})
+
+
+def takes_filing(role: str) -> bool:
+    """Whether a person may move mail into a folder that plays `role`."""
+    return role not in CLOSED_TO_FILING
+
+
 def resolve(kind: str, *, named: str | None, archive_is_label_removal: bool, trash: str | None,
             junk_fallback: str | None, find: FindRole) -> Destination:
-    """The Destination of a `kind` of filing. `named` is where the command's row already says it goes, which is how a
-    `move` row from before /api/move went still lands: no new one is accepted, but one may be queued, or in the tray."""
+    """The Destination of a `kind` of filing. `named` is where the command's row already says it goes: a folder a person
+    picked, for a `move`."""
     if kind == "archive" and archive_is_label_removal:
         return Destination(drop_inbox_label=True)
     if named:

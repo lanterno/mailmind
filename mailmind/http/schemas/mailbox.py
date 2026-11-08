@@ -61,6 +61,10 @@ class MoveBody(ACopy):
     mutation_id: str | None = None
 
 
+class MoveToBody(MoveBody):
+    to: str                                 # a folder of the message's own account, as /api/folders names it
+
+
 class FlagBody(ACopy):
     flag: FlagName | None = None            # left out it's `flagged`
     on: Flag | None = None                  # left out, it sets
@@ -78,6 +82,13 @@ class BulkRow(ACopy):
 
 class BulkFileBody(RequestBody):
     verb: FilingVerb | None = None
+    rows: list[BulkRow] | None = None
+    undo_group: str | None = None
+    mutation_id: str | None = None
+
+
+class BulkMoveBody(RequestBody):
+    to: str                                 # as MoveToBody's: the rows are all of one account
     rows: list[BulkRow] | None = None
     undo_group: str | None = None
     mutation_id: str | None = None
@@ -234,6 +245,7 @@ class RailFolder(Answer):
     role: str
     unseen: int
     total: int
+    takes_filing: bool                      # whether a person may move mail into it
 
 
 class ViewCounts(Answer):

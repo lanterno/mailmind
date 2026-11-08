@@ -12,6 +12,7 @@ from mailmind.http import named, route
 from mailmind.http.schemas.common import NoBody, NotJson, answers
 from mailmind.http.schemas.mailbox import (
     BulkFileBody,
+    BulkMoveBody,
     CopyBodyArgs,
     CopyDocumentArgs,
     Digest,
@@ -28,6 +29,7 @@ from mailmind.http.schemas.mailbox import (
     ManyFiled,
     MessageOpened,
     MoveBody,
+    MoveToBody,
     MutedListing,
     NamesAPending,
     NothingToUndo,
@@ -157,6 +159,14 @@ def router(mailbox):
     def trash(body: MoveBody):
         return mailbox.filing.do_trash(named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
 
+    @r.post("/api/move", responses=_FILED)
+    def move(body: MoveToBody):
+        return mailbox.filing.do_move(named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
+
+    @r.post("/api/thread/move", responses=_THREAD_FILED)
+    def thread_move(body: MoveToBody):
+        return mailbox.filing.do_thread_file("/api/thread/move", named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
+
     @r.post("/api/thread/archive", responses=_THREAD_FILED)
     def thread_archive(body: MoveBody):
         return mailbox.filing.do_thread_file("/api/thread/archive", named.with_copy(mailbox, body.model_dump(exclude_unset=True)))
@@ -168,6 +178,10 @@ def router(mailbox):
     @r.post("/api/bulk/file", responses=answers(RowsFiled))
     def bulk_file(body: BulkFileBody):
         return mailbox.filing.file_many(body.model_dump(exclude_unset=True))
+
+    @r.post("/api/bulk/move", responses=answers(RowsFiled))
+    def bulk_move(body: BulkMoveBody):
+        return mailbox.filing.move_many(body.model_dump(exclude_unset=True))
 
     @r.post("/api/flag", responses=_FILED)
     def flag(body: FlagBody):
