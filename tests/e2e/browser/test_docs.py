@@ -51,7 +51,7 @@ def docs(page):
     page.goto(f"/m/{w.ADA}/INBOX")
     expect(page.locator("#monos")).not_to_be_empty()
     page.keyboard.press("ControlOrMeta+k")
-    page.get_by_role("combobox").fill("Documents")
+    page.get_by_role("combobox", name="Command").fill("Documents")
     page.keyboard.press("Enter")
     expect(page.get_by_role("dialog", name="Documents")).to_be_visible()
     return page
@@ -184,7 +184,7 @@ def test_opening_the_hub_again_reads_it_again(page, world):
     expect(page.get_by_role("dialog", name="Documents")).to_have_count(0)
     one_file(world, RECEIPT, "later.pdf")
     page.keyboard.press("ControlOrMeta+k")
-    page.get_by_role("combobox").fill("Documents")
+    page.get_by_role("combobox", name="Command").fill("Documents")
     page.keyboard.press("Enter")
     expect(page.locator("#docList .doc-fn").filter(has_text="later.pdf")).to_have_count(1)
     clean(page)

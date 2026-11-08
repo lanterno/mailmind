@@ -909,7 +909,7 @@ def test_a_hidden_tab_still_reads_what_its_meeting_reminder_needs(page):
 
 def test_marked_search_results_mute_their_threads(page, world):
     opened(page)
-    box = page.get_by_role("textbox", name="search")
+    box = page.get_by_role("combobox", name="Search")
     box.fill("from:lin")
     box.press("Enter")
     one = page.locator("#rows .row[data-key]").first
@@ -924,7 +924,7 @@ def test_marked_search_results_mute_their_threads(page, world):
 def test_a_saved_view_can_be_removed_from_the_keyboard(page):
     page.pw.on("dialog", lambda d: d.accept("Lunch"))           # it asks what to call the view
     opened(page)
-    box = page.get_by_role("textbox", name="search")
+    box = page.get_by_role("combobox", name="Search")
     box.fill("from:lin")
     box.press("Enter")
     page.locator("#clientCtx .ctx-save").click()

@@ -105,7 +105,7 @@ def test_back_closes_stacked_layers_one_at_a_time(page, world):
 def test_going_somewhere_from_a_dialog_leaves_one_back_to_the_page_before(page, world):
     two_pages(page)
     page.keyboard.press("ControlOrMeta+k")
-    page.get_by_role("combobox").fill("All inboxes")
+    page.get_by_role("combobox", name="Command").fill("All inboxes")
     page.keyboard.press("Enter")
     expect(page.pw).to_have_url(re.compile("/all"))
     page.pw.go_back()

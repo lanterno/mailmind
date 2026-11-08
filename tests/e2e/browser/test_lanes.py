@@ -129,7 +129,7 @@ def test_a_lane_in_the_palette_opens_as_a_lane(page, world):
     page.goto(f"/m/{w.ADA}/INBOX")
     expect(page.locator("#monos")).not_to_be_empty()
     page.keyboard.press("ControlOrMeta+k")
-    page.get_by_role("combobox").fill("Feed (lane)")
+    page.get_by_role("combobox", name="Command").fill("Feed (lane)")
     page.keyboard.press("Enter")
     expect(page.locator(".feed-river")).to_be_visible()
     clean(page)

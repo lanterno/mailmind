@@ -207,7 +207,7 @@ def test_the_palette_offers_compose_and_reply(page, world):
     row(page, world, RECEIPT).click()
     expect(page.locator(".rd-subj")).to_be_visible()
     page.keyboard.press("ControlOrMeta+k")
-    page.get_by_role("combobox").fill("reply all")
+    page.get_by_role("combobox", name="Command").fill("reply all")
     page.keyboard.press("Enter")
     expect(page.get_by_role("heading", name="Reply all")).to_be_visible()
     clean(page)
