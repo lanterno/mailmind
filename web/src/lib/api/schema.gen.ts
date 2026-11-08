@@ -832,57 +832,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/message/{pk}/attachment/{part_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Attachment */
-        get: operations["attachment_api_message__pk__attachment__part_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/message/{pk}/body": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Body */
-        get: operations["body_api_message__pk__body_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/message/{pk}/body.html": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Body Document */
-        get: operations["body_document_api_message__pk__body_html_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/messages": {
         parameters: {
             query?: never;
@@ -1815,8 +1764,6 @@ export interface components {
             account: string;
             /** Answer */
             answer: string;
-            /** Cited Pks */
-            cited_pks: number[];
             /** Generated */
             generated: string;
             /** Model */
@@ -1850,8 +1797,6 @@ export interface components {
             from: string | null;
             /** Key */
             key: number;
-            /** Pk */
-            pk: number;
             /** Snippet */
             snippet: string;
             /** Subject */
@@ -1972,8 +1917,6 @@ export interface components {
             label: string;
             /** Messages */
             messages: components["schemas"]["Copy"][];
-            /** Pks */
-            pks: number[];
         };
         /**
          * BriefMissing
@@ -2020,11 +1963,9 @@ export interface components {
         /** BulkRow */
         BulkRow: {
             /** Folder */
-            folder?: string | null;
+            folder: string;
             /** Key */
-            key?: number | null;
-            /** Pk */
-            pk?: number | null;
+            key: number;
             /** Whole */
             whole?: boolean | null;
         };
@@ -2335,8 +2276,6 @@ export interface components {
             link: string;
             /** Needs You */
             needs_you: boolean;
-            /** Pk */
-            pk: number;
             /** Reply Worthy */
             reply_worthy: boolean;
             /** Safe To File */
@@ -2383,8 +2322,6 @@ export interface components {
             kind: string;
             /** Part Id */
             part_id: string;
-            /** Pk */
-            pk: number;
             /** Size */
             size: number;
             /** Subject */
@@ -2474,8 +2411,6 @@ export interface components {
             forward_attachments?: boolean | null;
             /** Idempotency Key */
             idempotency_key?: string | null;
-            /** In Reply To Pk */
-            in_reply_to_pk?: number | null;
             /** Mode */
             mode?: string | null;
             /** Original Key */
@@ -2576,8 +2511,6 @@ export interface components {
              * @constant
              */
             ok: true;
-            /** Orig Pk */
-            orig_pk: number | null;
             /** Original Key */
             original_key: number | null;
             /** Participants */
@@ -2610,8 +2543,6 @@ export interface components {
             instruction?: string | null;
             /** Key */
             key?: number | null;
-            /** Pk */
-            pk?: number | null;
             /** Thread Id */
             thread_id?: string | null;
             /** Tone */
@@ -2766,15 +2697,13 @@ export interface components {
             /** Flag */
             flag?: string | null;
             /** Folder */
-            folder?: string | null;
+            folder: string;
             /** Key */
-            key?: number | null;
+            key: number;
             /** Mutation Id */
             mutation_id?: string | null;
             /** On */
             on?: boolean | null;
-            /** Pk */
-            pk?: number | null;
         };
         /** FolderListing */
         FolderListing: {
@@ -2836,8 +2765,6 @@ export interface components {
             key: number;
             /** Needs You */
             needs_you: boolean;
-            /** Pk */
-            pk: number;
             /** Reply Worthy */
             reply_worthy: boolean;
             /** Safe To File */
@@ -3125,8 +3052,6 @@ export interface components {
              * @constant
              */
             ok: true;
-            /** Pks */
-            pks: number[];
             /** Queued */
             queued: number;
             /** Undoable */
@@ -3176,8 +3101,6 @@ export interface components {
              * @constant
              */
             ok: true;
-            /** Pk */
-            pk: number;
             /** References */
             references: string | null;
             /** Reply To */
@@ -3194,13 +3117,11 @@ export interface components {
         /** MoveBody */
         MoveBody: {
             /** Folder */
-            folder?: string | null;
+            folder: string;
             /** Key */
-            key?: number | null;
+            key: number;
             /** Mutation Id */
             mutation_id?: string | null;
-            /** Pk */
-            pk?: number | null;
             /** Undo Group */
             undo_group?: string | null;
         };
@@ -3212,8 +3133,6 @@ export interface components {
             folder?: string | null;
             /** Key */
             key?: number | null;
-            /** Pk */
-            pk?: number | null;
             /** Thread Id */
             thread_id?: string | null;
             /** Undo Group */
@@ -3269,8 +3188,6 @@ export interface components {
              * @constant
              */
             muted: true;
-            /** Pk */
-            pk: number;
             /** Seen */
             seen: boolean;
             /** Snippet */
@@ -3306,8 +3223,6 @@ export interface components {
             folder?: string | null;
             /** Key */
             key?: number | null;
-            /** Pk */
-            pk?: number | null;
             /** Thread Id */
             thread_id?: string | null;
         };
@@ -3330,10 +3245,6 @@ export interface components {
             folder?: string | null;
             /** Key */
             key?: number | null;
-            /** Pk */
-            pk?: number | null;
-            /** Pks */
-            pks?: number[] | null;
             /** Thread Id */
             thread_id?: string | null;
         };
@@ -3725,8 +3636,6 @@ export interface components {
             folder: string;
             /** Key */
             key: number;
-            /** Pk */
-            pk: number;
             /** Seen */
             seen: boolean;
             /** Subject */
@@ -3804,8 +3713,6 @@ export interface components {
             key?: number | null;
             /** On */
             on?: boolean | null;
-            /** Pk */
-            pk?: number | null;
             /** Thread Id */
             thread_id?: string | null;
         };
@@ -3854,8 +3761,6 @@ export interface components {
             is_junk: boolean;
             /** Key */
             key: number;
-            /** Pk */
-            pk: number;
             /**
              * Replylater
              * @constant
@@ -3887,8 +3792,6 @@ export interface components {
             folder?: string | null;
             /** Key */
             key?: number | null;
-            /** Pk */
-            pk?: number | null;
         };
         /** Retried */
         Retried: {
@@ -3947,8 +3850,6 @@ export interface components {
             folder: string | null;
             /** Key */
             key: number | null;
-            /** Pk */
-            pk: number | null;
             /** Sent Ts */
             sent_ts: number;
             /** Subject */
@@ -3976,7 +3877,7 @@ export interface components {
         };
         /**
          * ReviewNeeded
-         * @description A message that still needs you. A stored one names the pk it has now, and one that named no message none.
+         * @description A message that still needs you, by its key and the folder its copy is in now.
          */
         ReviewNeeded: {
             /** Account */
@@ -3989,8 +3890,6 @@ export interface components {
             importance: number;
             /** Key */
             key: number | null;
-            /** Pk */
-            pk: number | null;
             /** Subject */
             subject: string;
             /** Thread Id */
@@ -4055,8 +3954,6 @@ export interface components {
             ok: true;
             /** Partial */
             partial: boolean;
-            /** Pks */
-            pks: number[];
             /** Queued */
             queued: number;
             /** Rows Failed */
@@ -4064,16 +3961,17 @@ export interface components {
             /** Undoable */
             undoable: boolean;
         };
-        /** RsvpBody */
+        /**
+         * RsvpBody
+         * @description The invite, by its message's key, and the folder of the copy the page has (`mailmind.http.named`).
+         */
         RsvpBody: {
             /** Decision */
             decision?: string | null;
             /** Folder */
             folder?: string | null;
             /** Key */
-            key?: number | null;
-            /** Pk */
-            pk?: number | null;
+            key: number;
         };
         /** RsvpQueued */
         RsvpQueued: {
@@ -4102,8 +4000,6 @@ export interface components {
             folder?: string | null;
             /** Key */
             key?: number | null;
-            /** Pk */
-            pk?: number | null;
             /** Token */
             token?: string | null;
             /** Verdict */
@@ -4213,8 +4109,6 @@ export interface components {
             key: number;
             /** Needs You */
             needs_you: boolean;
-            /** Pk */
-            pk: number;
             /** Reply Worthy */
             reply_worthy: boolean;
             /** Safe To File */
@@ -4253,13 +4147,11 @@ export interface components {
         /** SeenBody */
         SeenBody: {
             /** Folder */
-            folder?: string | null;
+            folder: string;
             /** Key */
-            key?: number | null;
+            key: number;
             /** Mutation Id */
             mutation_id?: string | null;
-            /** Pk */
-            pk?: number | null;
             /** Seen */
             seen?: boolean | null;
         };
@@ -4279,8 +4171,6 @@ export interface components {
             forward_attachments?: boolean | null;
             /** Idempotency Key */
             idempotency_key?: string | null;
-            /** In Reply To Pk */
-            in_reply_to_pk?: number | null;
             /** Mode */
             mode?: string | null;
             /** Original Key */
@@ -4349,10 +4239,6 @@ export interface components {
             folder?: string | null;
             /** Key */
             key?: number | null;
-            /** Pk */
-            pk?: number | null;
-            /** Pks */
-            pks?: number[] | null;
             /** Preset */
             preset?: string | null;
             /** Thread Id */
@@ -4423,8 +4309,6 @@ export interface components {
             key: number;
             /** Needs You */
             needs_you: boolean;
-            /** Pk */
-            pk: number;
             /** Reply Worthy */
             reply_worthy: boolean;
             /** Safe To File */
@@ -4496,8 +4380,6 @@ export interface components {
             force?: boolean | null;
             /** Key */
             key?: number | null;
-            /** Pk */
-            pk?: number | null;
             /** Thread Id */
             thread_id?: string | null;
         };
@@ -4606,8 +4488,6 @@ export interface components {
             ok: true;
             /** Reply Key */
             reply_key: number | null;
-            /** Reply Pk */
-            reply_pk: number | null;
             /** Thread Id */
             thread_id: string;
         };
@@ -4629,8 +4509,6 @@ export interface components {
             is_junk: boolean;
             /** Key */
             key: number;
-            /** Pk */
-            pk: number;
             /** Seen */
             seen: boolean;
             /** Snippet */
@@ -4755,8 +4633,6 @@ export interface components {
             location: string;
             /** Organizer */
             organizer: string;
-            /** Pk */
-            pk: number;
             /** Recurrence */
             recurrence: string;
             /** Start */
@@ -4861,8 +4737,6 @@ export interface components {
             key: number;
             /** Kind */
             kind: string;
-            /** Pk */
-            pk: number;
             /** Seen */
             seen: boolean;
             /** Snippet */
@@ -4907,8 +4781,6 @@ export interface components {
             key: number;
             /** Kind */
             kind: string;
-            /** Pk */
-            pk: number;
             /** Seen */
             seen: boolean;
             /** Snippet */
@@ -6311,9 +6183,8 @@ export interface operations {
     };
     draft_ahead_api_ai_draft_ahead_get: {
         parameters: {
-            query?: {
-                pk?: string | null;
-                key?: number | null;
+            query: {
+                key: number;
                 folder?: string | null;
                 peek?: string | null;
             };
@@ -10501,344 +10372,6 @@ export interface operations {
             };
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description A file, a document or a stream, which is what its route says it is. Nothing holds an answer that isn't JSON to a model. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Payment Required */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Content Too Large */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Unprocessable Content */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Locked */
-            423: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Bad Gateway */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-        };
-    };
-    attachment_api_message__pk__attachment__part_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                pk: number;
-                part_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description A file, a document or a stream, which is what its route says it is. Nothing holds an answer that isn't JSON to a model. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Payment Required */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Content Too Large */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Unprocessable Content */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Locked */
-            423: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Bad Gateway */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-        };
-    };
-    body_api_message__pk__body_get: {
-        parameters: {
-            query?: {
-                prefetch?: string | null;
-            };
-            header?: never;
-            path: {
-                pk: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageOpened"] | components["schemas"]["Prefetched"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Payment Required */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Content Too Large */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Unprocessable Content */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Locked */
-            423: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-            /** @description Bad Gateway */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Failure"];
-                };
-            };
-        };
-    };
-    body_document_api_message__pk__body_html_get: {
-        parameters: {
-            query?: {
-                key?: string;
-                images?: string;
-            };
-            header?: never;
-            path: {
-                pk: number;
-            };
             cookie?: never;
         };
         requestBody?: never;
