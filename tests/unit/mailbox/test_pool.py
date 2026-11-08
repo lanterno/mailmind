@@ -29,6 +29,9 @@ class Session:
 
 
 class Accounts:
+    def accounts(self):
+        return []
+
     def profile(self, acct):
         if acct["email"] == BRIDGE:
             return SimpleNamespace(bridge=True, recycle_seconds=90, recycle_uses=40)
