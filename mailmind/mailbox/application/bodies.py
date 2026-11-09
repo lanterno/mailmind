@@ -1,6 +1,4 @@
 """A message opened: its body from the server if it isn't stored, sanitized for the reader's sandboxed frame."""
-import base64
-import re
 from typing import Any
 
 from mailmind.content import frame, mime, sanitize
@@ -10,15 +8,13 @@ from mailmind.kernel.ids import FolderName, MessageKey
 from mailmind.kernel.parsed import as_int
 from mailmind.mailbox.application.ports import Reader, StoredMail
 from mailmind.mailbox.application.sync import Ingest
+from mailmind.mailbox.domain import inline_images
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
 
 log = get_logger("mailbox")
 
-_CID_IMG = re.compile(r"""src\s*=\s*(['"])cid:([^'"]+)\1""", re.I)
-_RASTER = {"image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"}
-_CID_BUDGET = 3 << 20   # cap total inline-image bytes embedded into the iframe
 _GONE = "This message isn’t here any more."
 _NO_PREVIEW = "This file can’t be previewed. Download it to see it."
 PREVIEW_MAX_BYTES = 10 << 20   # what a preview holds of one image, as its document carries the bytes
@@ -37,30 +33,13 @@ class Bodies:
         self._reader = reader
 
     def _resolve_cids(self, pk: int, safe_html: str) -> str:
-        """Rewrite src="cid:<id>" -> a data: URI for embedded RASTER images only, so the
-        sandboxed iframe (CSP img-src allows data:) renders logos without any network.
-        Active types (svg/html) are never embedded; oversized sets are left as cid (broken)."""
+        """The inline images of the message `pk`, as far as `domain.inline_images` may embed them."""
         with self._uow.read() as c:
             raw = self._store.get_body(c, pk)
         if not raw:
             return safe_html
-        parts = mime.inline_parts(raw)        # {content_id: (content_type, bytes)}
-        if not parts:
-            return safe_html
-        used = [0]
-
-        def sub(m: re.Match[str]) -> str:
-            cid = m.group(2).strip().strip("<>")
-            ent = parts.get(cid)
-            if not ent:
-                return m.group(0)
-            ctype, data = ent
-            if ctype not in _RASTER or used[0] + len(data) > _CID_BUDGET:
-                return m.group(0)
-            used[0] += len(data)
-            b64 = base64.b64encode(data).decode("ascii")
-            return f'src={m.group(1)}data:{ctype};base64,{b64}{m.group(1)}'
-        return _CID_IMG.sub(sub, safe_html)
+        parts = mime.inline_parts(raw)
+        return inline_images.embed(safe_html, parts) if parts else safe_html
 
     def _safe_html(self, pk: int, parsed: Parsed, load_images: bool) -> tuple[str | None, dict[str, int]]:
         """A parsed message's HTML as its frame may show it, None if it has none, and what was left out."""
