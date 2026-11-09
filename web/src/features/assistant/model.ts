@@ -3,9 +3,6 @@
 import type { GetAnswers } from "../../lib/api/types";
 import type { DigestItem } from "../mailbox";
 
-// Until the digest's tests have moved beside what they test.
-export { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../mailbox";
-
 export type Upcoming = GetAnswers["/api/upcoming"]["items"][number];
 export type Brief = GetAnswers["/api/briefing"];
 
