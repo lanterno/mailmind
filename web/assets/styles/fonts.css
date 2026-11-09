@@ -1,6 +1,6 @@
 /* The interface's fonts, served from here so the page asks no other host for anything. Nunito Sans carries
    the interface and the mail, Shippori Mincho the headings, Klee One the brief. Each is under the SIL Open
-   Font License (fonts/LICENSES). Japanese glyphs come from the system fonts named in app.css. */
+   Font License (fonts/LICENSES). Japanese glyphs come from the system fonts named in tokens.css. */
 
 @font-face {
   font-family: 'Nunito Sans';
