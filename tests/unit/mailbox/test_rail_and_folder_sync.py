@@ -20,7 +20,7 @@ def test_the_rail_puts_each_part_in_its_place_and_a_persons_folders_between():
 
 
 def test_a_persons_folders_go_by_name_whatever_the_case():
-    assert names(roles.rail_order(rail(("zebra", "custom"), ("Apple", "custom")))) == ["Apple", "zebra"]
+    assert names(roles.rail_order(rail(("Zebra", "custom"), ("apple", "custom")))) == ["apple", "Zebra"]
 
 
 def test_one_folder_plays_a_role_and_a_second_named_for_it_is_a_persons_own():
