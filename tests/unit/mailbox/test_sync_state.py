@@ -197,8 +197,9 @@ def test_a_flag_change_still_queued_keeps_its_own_flags_through_a_sync(app, worl
 def test_a_click_while_the_sync_reads_keeps_its_own_flags(world, monkeypatch):
     from mailmind.bootstrap.mailbox import ingest
     from mailmind.bootstrap.mailbox import store
+    from mailmind.mailbox.domain import flags as mail_flags
     server_flags(world, RECEIPT, add=(w.SEEN,))
-    real = ingest._flags_of
+    real = mail_flags.columns_of
 
     def click_lands_first(flags):
         c = store.conn()
@@ -206,7 +207,7 @@ def test_a_click_while_the_sync_reads_keeps_its_own_flags(world, monkeypatch):
         c.commit()
         c.close()
         return real(flags)
-    monkeypatch.setattr(ingest, "_flags_of", click_lands_first)
+    monkeypatch.setattr(mail_flags, "columns_of", click_lands_first)
     ingest.sync_new(acct())
     assert local_flags(world, RECEIPT) == {"seen": 0, "flagged": 1, "answered": 0}
 
