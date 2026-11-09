@@ -11,15 +11,11 @@ import { copyId, copyOf, copyQuery, eachCopyOnce, type Copy } from "../../lib/co
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
-import { armDwell, cancelDwell, markSeen } from "./actions";
+import { armDwell, cancelDwell, leavesOrganisation, MailFrame, markSeen, useBody, useThread, warmMembers, type MailBody, type Mailbox, type Opened } from "../mailbox";
 import { AiCard, summarize } from "./AiCard";
-import { useBody, useThread, warmMembers, type Opened } from "./data";
-import { MailFrame, type MailBody } from "./MailFrame";
-import { leavesOrganisation } from "./linkRisk";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
 import { snoozeAsk } from "../attention";
-import type { Mailbox } from "./useMailbox";
 import { SenderButton } from "../discovery";
 
 type Body = Extract<Opened, { ok: true }>;

@@ -6,7 +6,7 @@ import { readsAsProse } from "../features/assistant/prose";
 import { composing } from "../features/compose/compose";
 import { OutboxButton } from "../features/compose/Outbox";
 import { searchScope } from "../features/mailbox/data";
-import { setReadFocus } from "../features/mailbox/Reader";
+import { setReadFocus } from "../features/reader/Reader";
 import type { Mailbox } from "../features/mailbox/useMailbox";
 import { helpOpen } from "../features/status/Help";
 import { SoonPill, StatusPill } from "../features/status/Status";

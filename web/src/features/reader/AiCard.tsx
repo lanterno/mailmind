@@ -4,8 +4,7 @@ import type { PostAnswers } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
 import { askOverLimit } from "../../lib/overLimit";
 import { Icon } from "../../lib/ui/Icon";
-import type { OneTarget } from "./actions";
-import type { Row } from "./rows";
+import type { OneTarget, Row } from "../mailbox";
 
 type Summary = PostAnswers["/api/ai/summarize"];
 type Card = { kind: "loading" } | { kind: "error"; error: string } | { kind: "done"; d: Summary };

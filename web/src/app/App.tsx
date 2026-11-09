@@ -17,7 +17,7 @@ import { FirstRead } from "../features/mailbox/FirstRead";
 import { FolderRail } from "./FolderRail";
 import { MessageList } from "../features/mailbox/MessageList";
 import { WIDTHS, readPrefs } from "../features/mailbox/readPrefs";
-import { Reader, readFocus, setReadFocus } from "../features/mailbox/Reader";
+import { Reader, readFocus, setReadFocus } from "../features/reader/Reader";
 import type { InboxTab } from "../features/mailbox/rows";
 import { snoozeAsk, SnoozeMenu } from "../features/attention/SnoozeMenu";
 import { setGrouping, setInboxTab, useMailbox, type Mailbox } from "../features/mailbox/useMailbox";

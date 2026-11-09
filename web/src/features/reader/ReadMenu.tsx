@@ -1,5 +1,5 @@
 import { Button, Dialog, DialogTrigger, Popover } from "react-aria-components";
-import { FONTS, readPrefs, setReadPref, type ReadPrefs } from "./readPrefs";
+import { FONTS, readPrefs, setReadPref, type ReadPrefs } from "../mailbox";
 
 type Choice<K extends keyof ReadPrefs> = [ReadPrefs[K], string, string?];
 
