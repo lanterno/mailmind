@@ -6,7 +6,7 @@ schema. `python -m mailmind serve` runs against them as it would against real se
 it stops, and with the suite's tripwire on: it refuses the real data files, any host off this machine and the programs that
 hold your credentials. What a send sends lands in the fake SMTP server, and what a filing moves moves on the fake IMAP server.
 
-    python tests/demo.py [port]     # Ctrl-C ends it
+    python tests/support/demo.py [port]     # Ctrl-C ends it
 """
 import email.utils
 import os
@@ -18,8 +18,9 @@ import tempfile
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
-sys.path[:0] = [HERE, ROOT]
+TESTS = os.path.dirname(HERE)
+ROOT = os.path.dirname(TESTS)
+sys.path[:0] = [HERE, TESTS, ROOT]
 
 from fakes.anthropic_api import FakeAnthropic      # noqa: E402
 from fakes.imap_server import FakeIMAPServer       # noqa: E402
@@ -28,7 +29,7 @@ from fixtures import world as w                    # noqa: E402
 
 CORPUS_NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)     # conftest.NOW, which conftest can't lend without pytest
 DATE = re.compile(rb"^Date:[ \t]*([^\r\n]+)", re.I | re.M)
-SERVE = ("import sys; sys.path[:0] = [{tests!r}, {root!r}]; import guard; guard.install(); "
+SERVE = ("import sys; sys.path[:0] = [{support!r}, {root!r}]; import guard; guard.install(); "
          "import runpy; sys.argv = {argv!r}; runpy.run_module('mailmind', run_name='__main__')")
 
 
@@ -57,7 +58,7 @@ def main():
         env = {**os.environ, "MAILMIND_HOME": home, "ANTHROPIC_API_KEY": FakeAnthropic.KEY, "ANTHROPIC_BASE_URL": claude.url,
                "PYTHONUNBUFFERED": "1"}
         print("Fictional mail only: a temp data directory, fake servers on loopback and the fake Claude API.", flush=True)
-        code = SERVE.format(tests=HERE, root=ROOT, argv=argv)
+        code = SERVE.format(support=HERE, root=ROOT, argv=argv)
         with subprocess.Popen([sys.executable, "-c", code], cwd=ROOT, env=env) as serving:
             try:
                 serving.wait()

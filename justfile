@@ -25,7 +25,7 @@ run port="": build-web
 
 # The whole app on fictional mail, with fake servers and a temp data directory: nothing of yours is read or changed
 demo port="": build-web
-    {{py}} tests/demo.py {{port}}
+    {{py}} tests/support/demo.py {{port}}
 
 # Run read-only: nothing written to a mail server (sends and moves wait), no background sync or AI
 dev port="": build-web
@@ -132,14 +132,14 @@ build-web: _web-deps
 gen-api: _web-deps
     {{just_executable()}} _api-types web/src/lib/api
 
-# The API's types and the page's limits, written into `dir`: tests/openapi_doc.py writes the document and limits.gen.ts, and
+# The API's types and the page's limits, written into `dir`: tests/support/openapi_doc.py writes the document and limits.gen.ts, and
 # openapi-typescript (web/gen-api) reads the document
 _api-types dir:
     #!/usr/bin/env bash
     set -euo pipefail
     doc="$(mktemp -d)"
     trap 'rm -rf "$doc"' EXIT
-    uv run python tests/openapi_doc.py "$doc/openapi.json" "{{dir}}/limits.gen.ts"
+    uv run python tests/support/openapi_doc.py "$doc/openapi.json" "{{dir}}/limits.gen.ts"
     web/gen-api/node_modules/.bin/openapi-typescript "$doc/openapi.json" -o "{{dir}}/schema.gen.ts" --default-non-nullable false
 
 # ── mail ──────────────────────────────────────────────────────────────────────

@@ -1,12 +1,12 @@
 """`just gen-api`'s first step: the OpenAPI document of the app the routers make, which openapi-typescript turns into the page's types,
 and the page's limits (`mailmind.http.page_limits`) as a module of its own, web/src/lib/api/limits.gen.ts.
 
-It lives in tests/, beside what holds the routes to their schemas, and not in the package: the served app has no OpenAPI page, and
+It lives in tests/support/, beside what holds the routes to their schemas, and not in the package: the served app has no OpenAPI page, and
 the command line (`python -m mailmind`) must never load FastAPI. It builds the app as `front.build` does, over `web.ROUTERS`, but
 picks no SDK and starts nothing. Nothing it loads reads the data directory, and to be sure of that it points the settings at an
 empty one of its own. It sends nothing: an attempt to connect anywhere or run a program stops it.
 
-    python tests/openapi_doc.py <out.json> [<limits.gen.ts>]
+    python tests/support/openapi_doc.py <out.json> [<limits.gen.ts>]
 """
 import json
 import os
@@ -73,5 +73,5 @@ def main(out, limits_out=None):
 
 
 if __name__ == "__main__":
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))     # the repo root, where the package is
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))     # the repo root, where the package is
     main(*sys.argv[1:3])

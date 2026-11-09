@@ -582,7 +582,7 @@ def test_an_answer_that_isnt_json_says_so(data_dir):
     schema = get_openapi(title="MailMind", version="0", routes=create_app(routers=[r], token=lambda: "", body_cap=lambda m, p: 0).routes)
     said = schema["paths"]["/api/file"]["get"]["responses"]
     assert "content" not in said["200"] and "NotJson" not in schema["components"]["schemas"]
-    assert said["404"]["content"]["application/json"]["schema"]["$ref"].endswith("/Failure")     # tests/openapi_doc.py says what it is
+    assert said["404"]["content"]["application/json"]["schema"]["$ref"].endswith("/Failure")     # tests/support/openapi_doc.py says what it is
 
 
 def test_a_failure_says_nothing_it_doesnt_name():

@@ -39,8 +39,8 @@ select = ["F"]
 
 [tool.pytest]
 testpaths = ["tests"]
-# The app's flat modules, and the helpers beside the tests (guard, fakes, fixtures).
-pythonpath = [".", "tests"]
+# The app's flat modules, the fakes and fixtures beside the tests, and the helpers in tests/support (guard, gate, golden).
+pythonpath = [".", "tests", "tests/support"]
 # importlib mode: test modules are imported by path, so a folder like tests/unit/calendar never shadows a module.
 addopts = ["--import-mode=importlib", "-ra"]
 markers = [

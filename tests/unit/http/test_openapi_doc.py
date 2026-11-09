@@ -1,4 +1,4 @@
-"""tests/openapi_doc.py, the OpenAPI document `just gen-api` turns into the page's types: every route in it, in the words the page
+"""tests/support/openapi_doc.py, the OpenAPI document `just gen-api` turns into the page's types: every route in it, in the words the page
 reads, and written with nothing read of the data directory and nothing sent.
 """
 import json
@@ -60,7 +60,7 @@ def test_every_failure_a_route_declares_is_a_problem_document_and_no_success_is(
 
 def test_it_writes_the_document_as_a_program_reading_nothing_and_sending_nothing(tmp_path):
     out = tmp_path / "openapi.json"
-    run = subprocess.run([sys.executable, str(ROOT / "tests" / "openapi_doc.py"), str(out)], cwd=tmp_path, capture_output=True, text=True,
+    run = subprocess.run([sys.executable, str(ROOT / "tests" / "support" / "openapi_doc.py"), str(out)], cwd=tmp_path, capture_output=True, text=True,
                          timeout=120)
     assert run.returncode == 0, run.stderr
     assert json.loads(out.read_text(encoding="utf-8")) == json.loads(json.dumps(openapi_doc.document()))
@@ -68,7 +68,7 @@ def test_it_writes_the_document_as_a_program_reading_nothing_and_sending_nothing
 
 def test_given_a_second_path_it_writes_the_pages_limits_there_too(tmp_path):
     out, limits = tmp_path / "openapi.json", tmp_path / "limits.gen.ts"
-    run = subprocess.run([sys.executable, str(ROOT / "tests" / "openapi_doc.py"), str(out), str(limits)], cwd=tmp_path,
+    run = subprocess.run([sys.executable, str(ROOT / "tests" / "support" / "openapi_doc.py"), str(out), str(limits)], cwd=tmp_path,
                          capture_output=True, text=True, timeout=120)
     assert run.returncode == 0, run.stderr
     assert limits.read_text(encoding="utf-8") == openapi_doc.limits_module()

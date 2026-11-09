@@ -1,7 +1,7 @@
 """Shared setup for the pytest-native tests in this directory.
 
 Before any MailMind module loads, this takes any Claude key out of the environment and installs
-the tripwire in guard.py. It takes every variable `mailmind.platform.environment` declares out but
+the tripwire in support/guard.py. It takes every variable `mailmind.platform.environment` declares out but
 the three modes the suite passes under either way (MAILMIND_WORKERS, MAILMIND_POOL and
 MAILMIND_WARM_FOLDERS), so every test starts in the full profile and one that wants another sets it. With MAILMIND_HOME gone, a test that forgets data_dir lands on the repo root, and the
 tripwire guards the directory it named as it guards the repo root. Every test then fails if the tripwire refused anything during

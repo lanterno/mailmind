@@ -18,7 +18,7 @@ import re
 import sys
 import threading
 
-ROOT = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+ROOT = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 # Where the owner's data may live: the repo root, and any directory MAILMIND_HOME named when the
 # tests started (protect() adds it; conftest takes the variable out of the environment).
 _data_dirs = {ROOT.lower()}

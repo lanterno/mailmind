@@ -46,7 +46,7 @@ def wait_for_mail(port, proc):
 def test_the_demo_runs_on_the_fictional_world_and_leaves_nothing(tmp_path):
     port = free_port()
     env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "MAILMIND_HOME")}
-    proc = subprocess.Popen([sys.executable, "tests/demo.py", str(port)], cwd=ROOT, stdout=subprocess.PIPE,
+    proc = subprocess.Popen([sys.executable, "tests/support/demo.py", str(port)], cwd=ROOT, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, env={**env, "TMPDIR": str(tmp_path)})
     try:
         items = wait_for_mail(port, proc)

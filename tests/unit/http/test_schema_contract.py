@@ -1,4 +1,4 @@
-"""tests/schema_contract.py, which holds the schemas to what the routes do, and a walk of every route. A check that never fires says
+"""tests/support/schema_contract.py, which holds the schemas to what the routes do, and a walk of every route. A check that never fires says
 nothing, so here each is made to.
 """
 import pytest

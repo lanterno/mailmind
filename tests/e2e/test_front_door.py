@@ -19,10 +19,10 @@ import guard
 from mailmind.http import serving as serving_module
 
 ROOT = guard.ROOT
-TESTS = os.path.join(ROOT, "tests")
+SUPPORT = os.path.join(ROOT, "tests", "support")
 
 # The child: the tripwire first, then which build it serves, then the program.
-GUARDED = ("import sys; sys.path[:0] = [{tests!r}, {root!r}]; import guard; guard.install(); "
+GUARDED = ("import sys; sys.path[:0] = [{support!r}, {root!r}]; import guard; guard.install(); "
            "from mailmind.platform import webroot; webroot.DIST = {dist!r}; "
            "import runpy; sys.argv = {argv!r}; runpy.run_module('mailmind', run_name='__main__')")
 
@@ -49,7 +49,7 @@ def get(port, path, timeout=2):
 
 
 def serve_code(port, dist):
-    return GUARDED.format(tests=TESTS, root=ROOT, dist=dist, argv=["mailmind", "serve", str(port)])
+    return GUARDED.format(support=SUPPORT, root=ROOT, dist=dist, argv=["mailmind", "serve", str(port)])
 
 
 # In the child, before the program: Today & next says it has been asked, then waits as a call to a dead server would.
