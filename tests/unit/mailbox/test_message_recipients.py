@@ -125,7 +125,8 @@ def test_a_search_reaches_the_end_of_a_long_list(app, world):
 
 def test_the_text_kept_for_search_is_bounded(app, world, monkeypatch):
     from mailmind.bootstrap.mailbox import store
-    monkeypatch.setattr(store, "RECIPIENTS_CHARS", 100)
+    from mailmind.mailbox.domain import ingested
+    monkeypatch.setattr(ingested, "RECIPIENTS_CHARS", 100)
     world.deliver(w.ADA, "Sent", _mail(", ".join(LONG)), (w.SEEN,))
     c = store.conn()
     try:
