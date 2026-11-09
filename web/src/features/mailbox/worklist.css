@@ -45,3 +45,7 @@
   }
   .thr-count{flex:none;font-size:10.5px;font-weight:600;color:var(--on-primary);background:var(--primary);
     border-radius:var(--r-pill);padding:0 6px;min-width:16px;text-align:center;font-variant-numeric:tabular-nums}
+.rows-box:focus{outline:none}
+.rows-box:focus-visible .row.sel{outline:2px solid var(--primary);outline-offset:-2px}
+.racts .ract{width:30px;height:30px;display:grid;place-items:center;border:none;background:none;border-radius:var(--r-sm); color:var(--mute);font-size:14px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+.racts .ract:hover{background:var(--panel-hi);color:var(--ink)}

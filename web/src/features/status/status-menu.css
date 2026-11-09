@@ -17,3 +17,4 @@
   .status-menu .sm-acts button:disabled{opacity:.5;cursor:default}
   .status-menu .sm-acts small{margin-left:auto;font-size:11px;color:var(--faint)}
   .status-menu .mi-ic{display:inline-block;width:20px;text-align:center}
+.status-menu.rac{position:fixed}

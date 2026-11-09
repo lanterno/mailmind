@@ -11,3 +11,4 @@
   .read-menu .rs-sz-l{font-size:15px!important}   .read-menu .rs-sz-xl{font-size:17px!important}
   .read-menu .rs-note{margin:0;font-size:12px;line-height:1.45;color:var(--mute)}
   .cab .rs-aa{font-weight:700;letter-spacing:-.02em}
+button.tmsg-hd{width:100%;background:none;border:none;font:inherit;font-size:12px;text-align:left;color:var(--mute)}

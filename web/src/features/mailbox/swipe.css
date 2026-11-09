@@ -6,3 +6,5 @@
   #swipeBadge.show{display:flex}
   #swipeBadge.archive{background:var(--primary);color:var(--on-primary)}
   #swipeBadge.snooze{background:var(--notif);color:var(--notif-ink)}
+#swipeBadge span{display:inline-flex;align-items:center;gap:7px}
+#swipeBadge.archive .sw-snooze,#swipeBadge.snooze .sw-archive{display:none}

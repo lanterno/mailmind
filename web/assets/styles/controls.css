@@ -36,3 +36,4 @@
   .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
   .spin{display:inline-block;animation:spin 1s linear infinite}
   .acctchip{flex:none;font-size:10.5px;color:var(--faint);background:var(--panel-hi);border:none;border-radius:var(--r-xs);padding:0 6px}
+.modal-through{display:contents}

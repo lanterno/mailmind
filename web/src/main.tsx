@@ -2,7 +2,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./app/App";
-import "./app/app.css";
 import { bindComposer } from "./features/compose/compose";
 import { refusalOf } from "./lib/api/client";
 import { guardFrames } from "./features/mailbox/MailFrame";

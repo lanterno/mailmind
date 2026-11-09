@@ -16,3 +16,4 @@
   .scr-suggest:disabled{cursor:default;opacity:.65}
   .scr-hint{margin-top:3px;font-size:12px;color:var(--soft)}
   .scr-hint b{font-weight:600;color:var(--ink)}
+.curate-body{outline:none}

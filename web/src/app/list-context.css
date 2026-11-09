@@ -11,3 +11,6 @@
   .ctx-chip{display:inline-flex;align-items:center;gap:4px;background:var(--sel);border-radius:var(--r-xs);color:var(--mute);font-size:11px;padding:2px 6px;margin-left:4px}
   .ctx-chip button{background:none;border:none;color:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0 1px}
   .ctx-chip button:hover{color:var(--primary-ink)}
+button.scopetog{background:none;border:none;border-radius:0;border-bottom:1px dotted var(--primary-ink);padding:0;font:inherit}
+/* The stylesheet hides the title under a context line; the page still needs its one heading. */
+.listhead:has(>.client-ctx:not(:empty)) .lh1.lh1{display:block;position:absolute;width:1px;height:1px;min-height:0;overflow:hidden;clip-path:inset(50%)}
