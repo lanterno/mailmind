@@ -8,14 +8,15 @@ from typing import Any
 
 from mailmind.kernel.errors import Conflict, NotFound, Problem, Refused
 from mailmind.kernel.ids import FolderName, MessageKey
-from mailmind.kernel.parsed import as_int, is_list, is_object
+from mailmind.kernel.parsed import as_int
 from mailmind.kernel.row import Connection
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
-from mailmind.mailbox.domain import command, filing
+from mailmind.mailbox.domain import command, filing, filing_answer
+from mailmind.mailbox.domain.filing import NamedCopy
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -24,10 +25,6 @@ from mailmind.platform.workers import gates
 
 pending_log = get_logger("pending")
 do_log = get_logger("do")
-_FILED = {"trash": "trashed", "archive": "archived", "junk": "junked", "move": "moved"}
-_REFUSED = {"archive": "the server refused the archive"}
-_NO_FOLDER = {"archive": "no archive folder on this account", "junk": "no junk folder on this account"}
-_GONE = "not found"
 _NOT_FILED = (NotFound, Conflict)    # what filing one message raises: it is where it was
 
 
@@ -70,28 +67,27 @@ class Filing:
     def _submit_move(self, kind: str, accepted: command.Accepted | None) -> dict[str, Any]:
         """A move accepted and committed: a try at it, and what the person hears of it."""
         if accepted is None:
-            raise NotFound(_GONE)
+            raise NotFound(filing_answer.GONE)
         if not accepted.created:
             return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
         outcome = self._commands.submit(accepted)
         if outcome == command.APPLIED:
             self._stats.invalidate()
             self._folders.invalidate()      # the move changed IMAP UNSEEN/MESSAGES: drop stale rail badges
-            return {"ok": True, "msg": _FILED[kind], "undoable": accepted.undoable}
+            return {"ok": True, "msg": filing_answer.FILED[kind], "undoable": accepted.undoable}
         if outcome in (command.QUEUED, command.WAITING):
             return self._waiting(outcome, accepted.undoable)
         if outcome == command.CANCELLED:
             return {"ok": True, "msg": "cancelled", "undoable": False}
         self._stats.invalidate()            # the message is listed again
-        raise Conflict((_NO_FOLDER.get(kind) if outcome == command.NO_FOLDER else None)
-                       or _REFUSED.get(kind, "the server refused the move"))
+        raise Conflict(filing_answer.refusal(kind, outcome))
 
 
     def _set_flags(self, pk: int, flags: Mapping[str, bool], mutation_id: object) -> dict[str, Any]:
         """A flag change, through the command path: what the person hears of it."""
         accepted = self._commands.accept_flags(pk, flags, mutation_id)
         if accepted is None:
-            raise NotFound(_GONE)
+            raise NotFound(filing_answer.GONE)
         if not accepted.created:
             return {"ok": True, "msg": "queued", "status": "queued", "undoable": False}
         outcome = self._commands.submit(accepted)
@@ -181,7 +177,7 @@ class Filing:
         with self._uow.read() as c:
             row = self._store.get_message(c, number)
         if not row:
-            raise NotFound(_GONE)
+            raise NotFound(filing_answer.GONE)
         if row["folder"] == to:
             raise Refused("it's in that folder already")
         self._folders.ensure_takes_filing(row["account"], to)
@@ -228,7 +224,7 @@ class Filing:
             pks = self._conversation_of(c, pk)
             names = self._store.names_of(c, pks)
             accepted = [(p, self._commands.accept_move_within(c, kind, p, body.get("mutation_id"), push, to)) for p in pks]
-        said = self._heard(accepted, self._try_each(kind, accepted), names)
+        said = filing_answer.of_many(accepted, self._try_each(kind, accepted), names)
         if account and to:
             self._folders.touched(account, to)
         return said
@@ -243,18 +239,18 @@ class Filing:
         verb = body.get("verb")
         if verb not in filing.FILING_VERBS:
             raise Refused()
-        return self._file_rows(verb, self._rows_wanted(body, whole_allowed=verb != "junk"), body)
+        return self._file_rows(verb, filing.marked_rows(body.get("rows"), self.BULK_MAX, filing.takes_conversations(verb)), body)
 
 
     def move_many(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Move the marked rows to a folder a person picked, as file_many files them. A folder is one account's, so rows of two
         accounts are refused whole, before any leaves a list."""
-        wanted = self._rows_wanted(body, whole_allowed=True)
+        wanted = filing.marked_rows(body.get("rows"), self.BULK_MAX, True)
         with self._uow.read() as c:
             rows = [self._store.get_message(c, pk) for pk in (self._store.copy_pk(c, *named) for named, _ in wanted) if pk is not None]
         accounts = {r["account"] for r in rows if r}
         if not accounts:
-            raise NotFound(_GONE)
+            raise NotFound(filing_answer.GONE)
         if len(accounts) > 1:
             raise Refused("those are in different accounts")
         to = body.get("to")
@@ -267,20 +263,7 @@ class Filing:
         return said
 
 
-    def _rows_wanted(self, body: Mapping[str, Any], whole_allowed: bool) -> list[tuple[tuple[MessageKey, FolderName, int | None], bool]]:
-        """The copies a request's marked `rows` name, each with whether it stands for its conversation."""
-        rows = body.get("rows")
-        if not is_list(rows) or not rows or len(rows) > self.BULK_MAX:
-            raise Refused()
-        wanted: list[tuple[tuple[MessageKey, FolderName, int | None], bool]] = []
-        for one in rows:
-            if not is_object(one):
-                raise Refused()
-            wanted.append((self._row_named(one), one.get("whole") is True and whole_allowed))
-        return wanted
-
-
-    def _file_rows(self, verb: str, wanted: Sequence[tuple[tuple[MessageKey, FolderName, int | None], bool]], body: Mapping[str, Any],
+    def _file_rows(self, verb: str, wanted: Sequence[tuple[NamedCopy, bool]], body: Mapping[str, Any],
                    to: str | None = None) -> dict[str, Any]:
         """One transaction accepts every row named, under one undo group; then each is tried on its own."""
         push = self._pushing(body.get("undo_group") or "bulk:" + secrets.token_hex(6))
@@ -295,21 +278,10 @@ class Filing:
                         taken.add(p)
                         accepted.append((p, self._commands.accept_move_within(c, verb, p, body.get("mutation_id"), push, to)))
         results = self._try_each(verb, accepted)
-        heard = self._heard(accepted, results, names)
-        each = [sum(not isinstance(results[p], Problem) for p in pks) for pks in members]
-        return {**heard, "rows_failed": each.count(0),
-                "partial": any(0 < n < len(pks) for n, pks in zip(each, members))}
+        return {**filing_answer.of_many(accepted, results, names), **filing_answer.rows_tally(results, members)}
 
 
-    @staticmethod
-    def _row_named(one: Mapping[str, Any]) -> tuple[MessageKey, FolderName, int | None]:
-        """The copy a marked row names, by its key and folder, and its uid there where the row says it."""
-        key, folder, uid = as_int(one.get("key")), one.get("folder"), one.get("uid")
-        if key is None or not isinstance(folder, str) or (uid is not None and as_int(uid) is None):
-            raise Refused()
-        return MessageKey(key), FolderName(folder), None if uid is None else as_int(uid)
-
-    def _row_members(self, c: Connection, named: tuple[MessageKey, FolderName, int | None], whole: bool) -> list[int]:
+    def _row_members(self, c: Connection, named: NamedCopy, whole: bool) -> list[int]:
         """The messages a marked row stands for, none if its copy has gone."""
         pk = self._store.copy_pk(c, *named)
         if pk is None:
@@ -322,7 +294,7 @@ class Filing:
         row = self._store.get_message(c, pk)
         if not row:
             return []
-        if (row["thread_id"] or "").strip():
+        if filing.has_thread(row):
             return self._store.thread_pks_in(c, row["account"], row["folder"], row["thread_id"])
         return [pk]
 
@@ -352,21 +324,6 @@ class Filing:
         if left:
             self.flags_queued()
         return out
-
-
-    def _heard(self, accepted: Sequence[tuple[int, command.Accepted | None]],
-               results: Mapping[int, Mapping[str, Any] | Problem],
-               names: Mapping[int, tuple[MessageKey, FolderName, int]]) -> dict[str, Any]:
-        """What the person hears of many moves: one the server refused went back alone, and the rest stay filed, named by
-        their key, folder and uid as they were. With none filed, what the first raised, or NotFound when there was none to file."""
-        filed = {p: said for p, _ in accepted if not isinstance(said := results[p], Problem)}
-        if not filed:
-            raise next((no for p, _ in accepted if isinstance(no := results[p], Problem)), NotFound(_GONE))
-        queued = sum(said.get("status") == "queued" for said in filed.values())
-        return {"ok": True, "msg": "queued" if queued else "filed",
-                "filed": [{"key": names[p][0], "folder": names[p][1], "uid": names[p][2]} for p in filed if p in names],
-                "count": len(filed), "failed": len(accepted) - len(filed),
-                "queued": queued, "undoable": any(said.get("undoable") for said in filed.values())}
 
 
     def settled(self, _event: object = None) -> None:
