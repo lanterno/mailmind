@@ -42,13 +42,13 @@ def snooze(body: SnoozeBody):
   so too (`PlanPreview.verb`). Accounts' `type` and credential stay `Any`, since Accounts words its own refusals of them.
 - An answer's model (`schemas.common.Answer`) is documentation: `responses=answers(Ok, {409: MoreSaid})`, never `response_model`,
   which would filter and refuse. `Ok` may be a union of what a route answers when it can, and is never a refusal. `answers` gives
-  each failure status `Failure`, the problem document, which `tests/openapi_doc.py` gives as `application/problem+json`; a route
+  each failure status `Failure`, the problem document, which `tests/support/openapi_doc.py` gives as `application/problem+json`; a route
   whose `Problem` says more names a subclass of `Failure`.
-- Under test (`tests/schema_contract.py`, through the `app` fixture) each JSON answer of a route must fit its model,
+- Under test (`tests/support/schema_contract.py`, through the `app` fixture) each JSON answer of a route must fit its model,
   with no field it doesn't name, and a use case reading a name its model doesn't declare fails the test. So the suite is what says
   a model is true, and a golden that changes is a question, not an update. The page's types come from the models
   (`just gen-api`), so a model that says less than its route answers is one the page can't read. A file, a document or a stream
-  answers `answers(NotJson)`: `Route` gives its 200 no model and no media type, so OpenAPI gives it no JSON. What walks the routes (`tests/route_tables.py`: the perimeter matrix, the error scrubbing, the
+  answers `answers(NotJson)`: `Route` gives its 200 no model and no media type, so OpenAPI gives it no JSON. What walks the routes (`tests/support/route_tables.py`: the perimeter matrix, the error scrubbing, the
   malformed-input walk) reads the routers, so a new route needs no edit there, and a stand-in for a handler is `route.work`.
 
 A route or a use case that can't do what was asked raises one of `mailmind.kernel.errors`, carrying what a person is told, and

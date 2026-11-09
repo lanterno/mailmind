@@ -31,7 +31,7 @@ again for it as it ends.
   A job that waits on a gate from inside a job raises `RuntimeError` instead of hanging; one that
   takes another account's gate with `wait=False` may.
 - Tests ask `gates.held(account)`, and hold the gate with `held_elsewhere()` from
-  `tests/gate.py`, which runs a job like any caller. `tests/e2e/test_chaos.py` holds what one
+  `tests/support/gate.py`, which runs a job like any caller. `tests/e2e/test_chaos.py` holds what one
   account's trouble may do to the rest; `FakeIMAPServer.stall` black-holes a command.
 
 `mailbox.pool` (persistent per-account IMAP sessions) and `mailbox.warm` (multi-folder sync)

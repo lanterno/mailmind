@@ -33,15 +33,15 @@ and `state` references, with Vitest suites beside them. The send guard's reads `
 ## The pytest suite in `tests/`
 
 `tests/unit/<context>/` holds each context's tests, `contract/` one promise through every adapter (and the fakes against
-themselves), `security/` what must never get through, `characterization/` the app as it answers (goldens and the hard-won
-fixes) and `e2e/` the whole program. `tests/MAPPING.md` says where each of the old root suites' tests now lives.
+themselves), `security/` what must never get through, `characterization/` the app as it answers (goldens and, in a folder per context, the
+hard-won fixes by subject) and `e2e/` the whole program. `support/` holds the helpers, on pytest's path, so a test says `import problems`.
 
 They pin today's behaviour ahead of the refactor. Each test sees only fictional
 data (`example.test` addresses) in a temp directory. `tests/conftest.py` sets that up before any
 MailMind module loads:
 
 - It removes any Claude key and any `MAILMIND_HOME` from the environment and sets `TZ=UTC`.
-- It installs the tripwire in `tests/guard.py`. The tripwire refuses the real data files (at the
+- It installs the tripwire in `tests/support/guard.py`. The tripwire refuses the real data files (at the
   repo root, and in the directory `MAILMIND_HOME` named), any non-loopback host, and the
   `claude`, `op` and `security` programs. A test that trips it fails.
 
@@ -69,7 +69,6 @@ The fixtures, from the bottom up:
 
 A known bug is a `xfail(strict=True)` test that states the right behaviour, so fixing the bug
 fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows where each fails.
-`test_hwf_*.py` hold the hard-won fixes, one file per layer.
 
 `tests/unit/mailbox/test_queue_state_machine.py` runs Hypothesis over the command path and Undo: random moves, flag
 changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;

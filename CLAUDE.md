@@ -72,7 +72,7 @@ other: `bootstrap/` binds them, and a context says what it needs in its `applica
 | `assistant` | Everything asked of Claude |
 
 The page is `web/src`: `app/` composes the features, `features/<x>/` each hold one area and offer what others use through an `index.ts`,
-and `lib/` is what they share.
+and `lib/` is what they share. The features stand in one order (`ORDER` in `web/lint/slices.js`) and a feature imports only those before it.
 
 ## Rules that hold everywhere
 

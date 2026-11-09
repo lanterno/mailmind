@@ -1,7 +1,7 @@
 # The page
 
 `web/index.html` and `web/src/main.tsx` are the React app (React 19 with the React Compiler, TanStack Query,
-React Aria Components), `web/assets/styles/` its CSS (`fonts.css` the self-hosted fonts, Latin, Cyrillic and Greek; Japanese glyphs come from
+React Aria Components), `web/assets/styles/app.css` its CSS, a list of `@import`s whose order is the cascade (what is shared stands beside it, a feature's rules beside the feature, and `fonts.css` is the self-hosted fonts, Latin, Cyrillic and Greek; Japanese glyphs come from
 system fonts), and `web/assets/theme.js` the one classic script, a file since the page's policy forbids an inline one. A new top-level script
 joins `CLASSIC` in `web/vite.config.js`. `just build-web` (Vite, Node) writes it all, named by content, to `mailmind/http/dist` (gitignored),
 and `just run` builds it first. `mailmind.platform.webroot` serves only that folder, with gzip and an ETag, so an edit reaches the app through a
@@ -10,7 +10,7 @@ build. `/assets/` serves only `.css`, `.js` and `.woff2`, each kept for good. Wi
 places only. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
 restart changes. A tab that loaded another offers a reload (`newBuild` in `app/realtime.ts`). `web/src` is strict TypeScript, and its API client
 is `lib/api/client.ts`, typed by `lib/api/types.ts` from the routes' schemas. Where you are lives in the URL
-(`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `features/mailbox` holds the rail, the list, the reader
+(`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `app/FolderRail.tsx` is the rail, `features/reader` the reader, `features/mailbox` holds the list, the mail frame
 and filing, and `app/commands.ts` the one list of commands that the keys, the palette (⌘K) and the keyboard help all read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
 `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
 Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder, the keyboard help and the first-run guide, and `features/settings` the connections and the Preferences tab, which reads and writes `/api/preferences` (`accounts.domain.preferences`, a `"preferences"` block in `mailmind.config.json`; the page's `lib/prefs.ts` holds them and brings in once what a browser kept under its old keys).
@@ -22,7 +22,7 @@ doesn't take a method named `use` for a hook. The compiler also keeps what a cal
 
 `just check-web` (part of `just verify`) type-checks `web/src` with `tsc`, lints it with ESLint and runs its Vitest suites; it installs `web/node_modules` from the lockfile if they
 are missing. First it writes the API's types and the page's limits afresh and fails if they differ from `web/src/lib/api/schema.gen.ts`
-and `limits.gen.ts`, saying to run `just gen-api`. That takes a second or two: `tests/openapi_doc.py` writes the OpenAPI document of the
+and `limits.gen.ts`, saying to run `just gen-api`. That takes a second or two: `tests/support/openapi_doc.py` writes the OpenAPI document of the
 app the routers make (no data directory read, nothing sent, and out of the command line's reach), and openapi-typescript writes
 `schema.gen.ts` from it. The same program writes `limits.gen.ts`, `LIMITS`, from `mailmind/http/page_limits.py`'s `PAGE_LIMITS`: each
 limit the page holds a person to before it asks (what one message's files may come to, the rows one `/api/bulk/file` names, the copies one
@@ -39,10 +39,11 @@ times, a page's size) stays the page's.
 ## ESLint
 
 `web/eslint.config.js` covers `web/src` only: typescript-eslint, `react-hooks` and `jsx-a11y`, each finding an error. A disable sits on its
-line with a reason. Three rules are our own:
+line with a reason. Four rules are our own:
 
 - Only `features/mailbox/MailFrame.tsx` may write HTML into the DOM (`innerHTML`, `srcDoc`, `dangerouslySetInnerHTML` and their like).
-- A feature imports another only through its `index.ts`, which holds what the others use (`lint/slices.js`). `app/` and `main.tsx` compose the features and may import any file. A barrel that grows can close a cycle: nothing at a module's top level may read another feature's binding.
+- A feature imports another only through its `index.ts`, which holds what the others use (`lint/slices.js`). `app/` and `main.tsx` compose the features and may import any file. A barrel that grows can close a cycle, which the next rule stops: nothing at a module's top level may read another feature's binding.
+- The features stand in one order, `ORDER` in `lint/slices.js`, and a feature imports only those before it, types included. A new feature has to be placed there. `settingsOpen` is in `lib/`, since features on both sides of Settings read it.
 - `machine.ts`, `model.ts`, `sendGuard.ts`, `draftResume.ts`, `linkClean.ts`, `linkRisk.ts` and any `*.machine.ts` are pure: no DOM, no fetch, and only each other and types as imports. The machine gets its stores through `Env`.
 
 Never disable `react-hooks/exhaustive-deps` or `rules-of-hooks`: the React Compiler quietly skips a component that does (`react-hooks/rule-suppression` refuses it). What an effect reads but doesn't run for goes through `useEffectEvent`. typescript-eslint needs a TypeScript with a JavaScript API and `tsc` is on 7, which has none, so it and a TypeScript 6 live in the `web/lint` workspace until it supports 7. openapi-typescript needs one too, and takes only a TypeScript 5, which npm can't give it beside that 6, so it and a TypeScript 5 live in the `web/gen-api` workspace.
