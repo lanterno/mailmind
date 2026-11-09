@@ -58,7 +58,7 @@ python3 -m mailmind assess --batch     # send what has no summary as a batch; br
 `mailmind/` runs in layers, each importing only those below it: `bootstrap`, `http`, the eight contexts, `platform`, `content`, `kernel`.
 A context is `api.py`, `domain/`, `application/` and `adapters/`, with adapters over application over domain. Contexts never import each
 other: `bootstrap/` binds them, and a context says what it needs in its `application/ports.py`. import-linter's contracts in
-`pyproject.toml` hold this in `just lint`, and `tests/unit/test_architecture.py` holds what the import graph can't.
+`pyproject.toml` hold this in `just lint`, and `tests/unit/test_architecture.py` holds what the import graph can't, among it that other contexts' wiring reaches the Mailbox's store only through `stored_mail`.
 
 | Context | What it is |
 | --- | --- |

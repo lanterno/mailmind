@@ -142,7 +142,7 @@ The app lives in `mailmind/`.
   the Mailbox's `StoredMail` and Compose's ports that take an account and a folder or thread together. A pk stays an `int` in the
   Mailbox, where naming it costs far more than it would catch. What a row holds is `Any` and goes in as it is, so a swap of two
   values read straight off rows isn't caught.
-- Two checks hold the shape. `tests/unit/test_architecture.py` holds every use case to no SQL, which goes through a port to an adapter, and each table to its owner. import-linter's contracts in `pyproject.toml` run in `just lint`:
+- Two checks hold the shape. `tests/unit/test_architecture.py` holds every use case to no SQL, which goes through a port to an adapter, each table to its owner, and other contexts' wiring to the `stored_mail` surface of the Mailbox's store. import-linter's contracts in `pyproject.toml` run in `just lint`:
   bootstrap, then http, then the contexts, then platform, then content, then kernel; within each context,
   adapters over application over domain; no adapter imported outside bootstrap; and the
   `anthropic`, `imapclient`, `icalendar` and `recurring_ical_events` packages each reached only through its adapter.

@@ -58,6 +58,7 @@ See [Architecture](architecture.md) for the layers around them.
   `interrupt()` from another thread. Names are as LIST gave them, and the errors are imaplib's
   classes through either adapter: a refusal raises `IMAP4.error`, a lost connection
   `IMAP4.abort` or `OSError`. `move_by_copy` is the move a server without MOVE gets.
+  `domain` also holds `flags` (a server's flags as columns, and what a read of them may write), `prune` (what a reconcile may take away), `try_target` (which message a try acts on), `filing_answer` (what a person hears of filing), `listing` (what a row of a list says), `inline_images` and `ingested` (what a message's headers come to as it is stored).
   `domain.destination` says where a filing goes (`resolve` on a try, `known_without_server` what holds as a command is accepted), and `domain.move_strategy.choose` which way, as a value (`MoveStrategy`):
   `Way.LABELS`, `Way.MOVE` or `Way.COPY`, and whether to read `\Seen` first because the server will set it. It goes by the
   verb, not a folder's role, and takes what the profile says and the session's capabilities as plain values. No way sends a
@@ -66,7 +67,7 @@ See [Architecture](architecture.md) for the layers around them.
   are `adapters.imap.imaplib_session` (what an account runs on unless it asks otherwise) and `adapters.imap.imapclient_session`
   (only it imports `imapclient`). `adapters.imap.imap_names` holds `mailbox_arg` and `imap_quote`,
   which `accounts` re-exports, and `gmail_labels`, the one form both send Gmail.
-  `adapters.sqlite` holds what is stored of the mail, the command log's rows and the undo stack: the app calls it `store` (`from mailmind.bootstrap.mailbox import store`), and it asks `domain.threading` for thread ids.
+  `adapters.sqlite` is a package with a module for each concern, holding what is stored of the mail, the command log's rows and the undo stack: the app calls it `store` (`from mailmind.bootstrap.mailbox import store`), and what the other contexts' wiring may call of it is `mailbox.stored_mail`, the list `tests/unit/test_architecture.py` pins. It asks `domain.threading` for thread ids.
   `mailmind.bootstrap.mailbox` picks each account's adapter: imaplib, unless the account asks for
   IMAPClient (`"imap_adapter": "imapclient"`) and the process offers it, which only
   `front.build` does (`offer`). The command line ignores the ask and never imports `imapclient`.
@@ -104,7 +105,7 @@ See [Architecture](architecture.md) for the layers around them.
   `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_file`; `application` holds
   `ports.py` and the use cases `Cleanup`, `Unsubscribing`, `Screener`, `Sweeps`, `Expiry` and `Filters` (a search that stars or marks read new Inbox mail). `mailmind.bootstrap.curation`
   binds them, and it's how the routers and the command line reach Curation (`curation.cleanup.execute(body)`,
-  `curation.sweeps.sweep(acct)`). Filing goes through the Mailbox (`mailbox.filing`), and a message's rows through `store`. The CSRF token comes
+  `curation.sweeps.sweep(acct)`). Filing goes through the Mailbox (`mailbox.filing`), and a message's rows through `stored_mail`. The CSRF token comes
   from the perimeter (`perimeter.CSRF`). A sweep's
   `move_verified` is `mailbox.application.bulk_moves`. It is standard library only.
 - `mailmind.attention` is what asks for you later: snooze, mute, reply later and follow-ups. `domain` holds `snooze` (a
@@ -119,7 +120,7 @@ See [Architecture](architecture.md) for the layers around them.
   `application` holds `ports.py` and the use cases `Snoozing`, `Muting`, `FollowUps`, `Tasks` (what a person confirmed from their mail, migration 46, by message key and never by pk) and `Clocked`, the every-minute job. They publish
   what happened once it has committed (`SnoozeSet`, `ThreadMuted`, `FollowUpsChanged` and the like), and `wiring.wire` does what that
   makes stale and tells the tabs. `mailmind.bootstrap.attention` binds them, and it's how the routers reach Attention
-  (`attention.muting.mute(body)`, `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `store`, and
+  (`attention.muting.mute(body)`, `attention.book.list_waiting(c, account)`). A message's row and `queue_flags` go through `stored_mail`, and
   undo through the Mailbox (`mailbox.undo`).
   `mailmind.kernel.attention` is a different module, what a verdict asks of you, which the modules that need both import as `verdict`.
   It is standard library only.
@@ -130,7 +131,7 @@ See [Architecture](architecture.md) for the layers around them.
   card shows, `events`, every event the text holds, and `next_occurrence`), and `sqlite` (reads stored bodies and the outbox's keys, and
   writes nothing); `application` holds `ports.py` and the use cases `Agenda`, `Invites`, `Publishing` and `Rsvp`. `mailmind.bootstrap.calendar`
   binds them, and it's how the routers reach Calendar (`calendar.agenda.upcoming()`, `calendar.rsvp.respond(body)`). An
-  RSVP goes through Compose's outbox, and a message through `store` and `ingest` until the Mailbox holds it.
+  RSVP goes through Compose's outbox, and a message through `stored_mail` and `ingest` until the Mailbox holds it.
   `icalendar_acl` is the only module that imports `icalendar` and `recurring_ical_events`, and nothing of either leaves it. So Calendar is
   standard library only but for that module. `mailmind.bootstrap.calendar` binds it as it loads, so nothing the command line loads imports
   that at its top: the command line reads no invite, and runs on Python alone (`tests/e2e/test_cli.py`). An invite is a
@@ -154,4 +155,4 @@ See [Architecture](architecture.md) for the layers around them.
   and `Outbox`, the queue and its worker. `mailmind.bootstrap.compose` binds them, and it's how the routers, the other contexts and the tests reach
   Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
   what others use without its wiring (`build_message`, the events). The copies on the server go through the Mailbox's `application.copies.Copies`
-  (`mailbox.copies`). A message's row through `store`, and what's kept about folders through `mailbox.folders`. It is standard library only.
+  (`mailbox.copies`). A message's row through `stored_mail`, and what's kept about folders through `mailbox.folders`. It is standard library only.
