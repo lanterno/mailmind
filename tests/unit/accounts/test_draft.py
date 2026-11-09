@@ -1,5 +1,5 @@
 """mailmind.accounts.domain.draft: an unsaved account may only try a password typed with it, only against the host typed
-with it. No server is needed to say so. test_hwf_http's route test holds that nothing reaches a server, too."""
+with it. No server is needed to say so. characterization/accounts/test_new_accounts.py's route test holds that nothing reaches a server, too."""
 import pytest
 
 from mailmind.accounts.domain.draft import DraftRefused, throwaway_account

@@ -28,7 +28,7 @@ def subscribers():
 
 
 def test_the_server_hears_what_the_workers_publish(unwired):
-    """That they hold the IMAP lock for their mail commands, test_hwf_http checks at the fake
+    """That they hold the IMAP lock for their mail commands, characterization/mailbox/test_imap_gate.py checks at the fake
     server."""
     wiring.wire()
     assert subscribers() == [(wiring._after_send,), (mailbox.filing.settled,), (wiring._after_idle,)]

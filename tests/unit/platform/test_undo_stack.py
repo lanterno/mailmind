@@ -1,7 +1,7 @@
 """The undo stack, which lives in the database (undo_entries, migration 25) so Undo outlives the
 process: what a push adds, how an undo group gathers its members, and what the stack keeps.
 tests/e2e/test_front_door.py undoes across a restart; the routes' undo is in test_http_mail.py and
-test_hwf_http.py."""
+characterization/mailbox/test_undo.py."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
