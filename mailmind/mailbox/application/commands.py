@@ -22,6 +22,7 @@ from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
 from mailmind.mailbox.domain import command, destination
+from mailmind.mailbox.domain import flags as mail_flags
 from mailmind.mailbox.domain.events import Applied, Restored
 from mailmind.platform import bus, profile, undo
 from mailmind.platform.db.uow import UnitOfWork
@@ -176,7 +177,7 @@ class MailCommands:
             if r is None:
                 return
             flags: dict[str, Any] = json.loads(row["params"] or "{}").get("flags") or {}
-            self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
+            self._store.set_local_flags(c, r["pk"], **mail_flags.as_columns(flags))
             return
         pks = self._store.pending_removal_pks(c, row["id"])
         if not pks and row["message_id"]:
@@ -292,7 +293,7 @@ class MailCommands:
             r = self._flagged_row(c, row)
             was: dict[str, Any] = json.loads(row["params"] or "{}").get("was") or {}
             if r is not None and was:
-                self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in was.items()})
+                self._store.set_local_flags(c, r["pk"], **mail_flags.as_columns(was))
 
 
     def _restore(self, c: Connection, row: Row, error: str) -> None:
@@ -312,9 +313,9 @@ class MailCommands:
             if r is None:
                 return
             flags: dict[str, Any] = params.get("flags") or {}
-            params["was"] = {k: bool(r[k]) for k in flags}
+            params["was"] = mail_flags.held_now(r, flags)
             self._store.command_set_params(c, row["id"], json.dumps(params))
-            self._store.set_local_flags(c, r["pk"], **{k: int(bool(v)) for k, v in flags.items()})
+            self._store.set_local_flags(c, r["pk"], **mail_flags.as_columns(flags))
             return
         if row["message_id"]:
             r = self._store.newest_copy_in(c, row["account"], row["src_folder"], row["message_id"])

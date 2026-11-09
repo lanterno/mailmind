@@ -13,6 +13,7 @@ from mailmind.mailbox.application import session as mail_session
 from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, StoredMail
 from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain import command, destination, move_strategy
+from mailmind.mailbox.domain import flags as mail_flags
 from mailmind.mailbox.domain.move_strategy import Way
 from mailmind.platform import profile
 from mailmind.platform.db.uow import UnitOfWork
@@ -23,9 +24,6 @@ from mailmind.platform.db.uow import UnitOfWork
 # A read-only process (profile.ReadOnlyError) queues its changes too, for a full run to apply.
 UNREACHABLE = (OSError, socket.timeout, socket.gaierror, ssl.SSLError, imaplib.IMAP4.abort,
                profile.ReadOnlyError)
-
-_FLAG = {"seen": "\\Seen", "flagged": "\\Flagged", "answered": "\\Answered",
-         "draft": "\\Draft", "deleted": "\\Deleted"}
 
 
 def _ignoring_refusal[*Ts](command: Callable[[*Ts], object], *args: *Ts) -> None:
@@ -61,7 +59,7 @@ def _seen_on_server(s: MailSession, uid: int, otherwise: bool) -> bool:
         raise
     except imaplib.IMAP4.error:
         return otherwise
-    return otherwise if flags is None else "\\seen" in {f.lower() for f in flags}
+    return otherwise if flags is None else mail_flags.has_seen(flags)
 
 
 class ServerOps:
@@ -162,8 +160,8 @@ class ServerOps:
             if kind == "flag":                       # a refusal raises IMAP4.error: refused, below
                 flags: dict[str, Any] = params.get("flags") or {}
                 for k, v in flags.items():
-                    if k in _FLAG:
-                        (s.add_flags if v else s.remove_flags)([uid], [_FLAG[k]])
+                    if k in mail_flags.IMAP_NAME:
+                        (s.add_flags if v else s.remove_flags)([uid], [mail_flags.IMAP_NAME[k]])
                 return command.ServerAnswer()
             trash = self._accounts.trash_folder(acct)
             where = destination.resolve(kind, named=row["dest"], archive_is_label_removal=server.archive_is_label_removal,
@@ -243,8 +241,8 @@ class ServerOps:
         try:
             s.select(row["folder"], readonly=False)
             for k, v in flags.items():
-                if k in _FLAG:
-                    (s.add_flags if v else s.remove_flags)([row["uid"]], [_FLAG[k]])
+                if k in mail_flags.IMAP_NAME:
+                    (s.add_flags if v else s.remove_flags)([row["uid"]], [mail_flags.IMAP_NAME[k]])
         except imaplib.IMAP4.abort:
             raise
         except imaplib.IMAP4.error:
@@ -255,7 +253,7 @@ class ServerOps:
             except Exception:
                 pass
         with self._uow.write() as c:
-            self._store.set_local_flags(c, pk, **{k: int(bool(v)) for k, v in flags.items() if k in _FLAG})
+            self._store.set_local_flags(c, pk, **mail_flags.as_columns(flags))
         return True, "ok"
 
 

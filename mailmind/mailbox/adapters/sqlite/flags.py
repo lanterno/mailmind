@@ -1,7 +1,7 @@
 """A message's flags as stored, and how it is classified."""
+from mailmind.mailbox.domain.flags import COLUMNS as _FLAG_COLS
 
 
-_FLAG_COLS = ("seen", "flagged", "answered", "draft", "deleted")
 _FLAG_ROW = ("SELECT pk, uid, message_id, pending_removal, " + ", ".join(_FLAG_COLS)
              + " FROM messages WHERE account=? AND folder=? ")
 

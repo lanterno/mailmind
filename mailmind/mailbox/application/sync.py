@@ -2,7 +2,7 @@
 isn't junk. A body read on demand is here too."""
 import email
 import imaplib
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from email.parser import BytesHeaderParser
 from email.utils import parsedate_to_datetime
@@ -18,6 +18,7 @@ from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Stored,
                                                 StoredMail)
 from mailmind.mailbox.application.session import MailSession
+from mailmind.mailbox.domain import flags as mail_flags
 from mailmind.mailbox.domain import sync_plan
 from mailmind.mailbox.domain.events import FlagsChanged
 from mailmind.platform import bus
@@ -28,7 +29,6 @@ log = get_logger("ingest")
 CUTOFF_DAYS = 90
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
                  "LIST-UNSUBSCRIBE", "LIST-UNSUBSCRIBE-POST", "LIST-ID")
-_FLAG_COLS = ("seen", "flagged", "answered", "draft", "deleted")
 
 
 class Ingest:
@@ -46,14 +46,6 @@ class Ingest:
         self._curation = curation
         self._attention = attention
         self._index = index
-
-    def _flags_of(self, flags: Iterable[str]) -> dict[str, int]:
-        """The local flag columns from a message's IMAP flags."""
-        f = {x.lower() for x in flags}
-        return {"seen": int("\\seen" in f), "flagged": int("\\flagged" in f),
-                "answered": int("\\answered" in f), "draft": int("\\draft" in f),
-                "deleted": int("\\deleted" in f)}
-
 
     def _flag_rows(self, c: Connection, email: AccountId, folder: FolderName, uids: Sequence[int] | None) -> list[Row]:
         """The stored rows to compare with the server's flags: those of `uids`, or with None the newest."""
@@ -100,15 +92,12 @@ class Ingest:
             raise
         except imaplib.IMAP4.error:                      # a refused FETCH changes nothing here
             return 0
-        held = [r for r in rows if r["pending_removal"] is not None or r["message_id"] in waiting]
-        skip = {r["pk"] for r in held}
-        moved = [(r, new) for r in rows if r["uid"] in now and r["pk"] not in skip
-                 for new in [self._flags_of(now[r["uid"]])] if any(new[k] != r[k] for k in _FLAG_COLS)]
+        read = mail_flags.read_against(rows, now, waiting)
         changed = 0
-        mark = plan.mark(held_back=bool(held), searched=uids is not None)
-        if moved or mark:                                # a server with no modseq and nothing new takes no lock
+        mark = plan.mark(held_back=read.held_back, searched=uids is not None)
+        if read.changed or mark:                         # a server with no modseq and nothing new takes no lock
             with self._uow.write() as c:
-                for r, new in moved:                     # each only if it still holds what was read
+                for r, new in read.changed:              # each only if it still holds what was read
                     changed += self._store.set_flags_if_still(c, r["pk"], new, r)
                 if mark:
                     self._store.set_modseq(c, email, folder, mark)
@@ -133,7 +122,7 @@ class Ingest:
             for h in session.headers(uids, HEADER_FIELDS, gmail_thread=gmail, gmail_labels=gmail):
                 uid = h.uid
                 max_uid = max(max_uid, uid)
-                flags = self._flags_of(h.flags)
+                flags = mail_flags.columns_of(h.flags)
                 msg = email.message_from_bytes(h.raw)
                 name, addr = mime.sender_of(msg)
                 has_lu = bool(msg.get("List-Unsubscribe") or msg.get("List-ID"))
@@ -219,7 +208,7 @@ class Ingest:
         row = self._store.get_message(c, pk) if wanted else None
         if row is None:
             return False
-        changes = {flag: on for flag, on in wanted.items() if bool(row[flag]) != on}     # what it came with needs saying to no one
+        changes = mail_flags.still_to_say(wanted, row)
         return bool(changes) and self._store.queue_flags(c, row, changes, "filter", now_iso())
 
 
