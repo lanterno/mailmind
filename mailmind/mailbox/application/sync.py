@@ -266,8 +266,8 @@ class Ingest:
                     self._store.set_uidvalidity(c, acct["email"], folder, uidv)
             uids, scan = plan.to_fetch(s.uids(*plan.search))    # scan: the scan_state this sync leaves
             stored: list[int] = []
-            arriving = not plan.whole and folder.upper() == "INBOX"     # a first or a whole scan reads what was already there
-            result = self._process(s, acct, uids, folder, with_body=(folder.upper() == "INBOX"), stored=stored, arriving=arriving)
+            result = self._process(s, acct, uids, folder, with_body=sync_plan.reads_bodies(folder), stored=stored,
+                                   arriving=plan.arrives_in(folder))
             if scan:
                 with self._uow.write() as c:
                     self._store.set_scan_state(c, acct["email"], folder, scan)
@@ -309,7 +309,7 @@ class Ingest:
             if uid is None:
                 return 0
             stored: list[int] = []
-            self._process(s, acct, [uid], folder, with_body=(folder.upper() == "INBOX"), advance=False, stored=stored)
+            self._process(s, acct, [uid], folder, with_body=sync_plan.reads_bodies(folder), advance=False, stored=stored)
             with self._uow.write() as c:
                 self._store.thread_stored(c, acct["email"], stored)
                 self._attention.on_ingest(c, acct["email"])

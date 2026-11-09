@@ -14,8 +14,9 @@ Never the server's order: Proton Bridge lists its folders in a new order each ti
 `archive`, and only where there is none to `all`.
 """
 import re
-from collections.abc import Collection
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
+from typing import TypedDict
 
 ROLES = ("inbox", "sent", "drafts", "archive", "all", "junk", "trash")
 
@@ -104,3 +105,34 @@ def find(folders: Collection[Folder], *roles: str) -> str | None:
         if found:
             return min(found)[2]
     return None
+
+
+class RailFolder(TypedDict):
+    name: str
+    role: str
+    unseen: int
+    total: int
+
+
+_RAIL_PLACE = {"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "all": 4, "junk": 8, "trash": 9}
+_ANY_OTHER = 5                  # between All Mail and Junk
+
+
+def rail_order(folders: Iterable[RailFolder]) -> list[RailFolder]:
+    """The rail's order: the folders that play a part, in theirs, with a person's own between them, by name."""
+    return sorted(folders, key=lambda f: (_RAIL_PLACE.get(f["role"], _ANY_OTHER), f["name"].lower()))
+
+
+def playing(folders: Collection[Folder]) -> dict[str | None, str]:
+    """{name: role} of the folders `find` gives a role: one folder a role, so a second with that name is `custom`."""
+    return {find(folders, r): r for r in ROLES}
+
+
+def stored_rail(counts: Mapping[str, tuple[int | None, int]]) -> list[RailFolder]:
+    """The rail from what is stored alone, with no server to ask, from {folder: (unseen, total)}. INBOX is always on it. Roles
+    go by name, and a stored name carries no delimiter, so of two that could play one the lower name does."""
+    held = dict(counts)
+    held.setdefault("INBOX", (0, 0))
+    names = sorted(held, key=lambda n: (len(re.findall(r"[/.]", n)), n.lower()))
+    plays = playing([Folder(n, frozenset(), None) for n in names])
+    return rail_order([{"name": n, "role": plays.get(n, "custom"), "unseen": held[n][0] or 0, "total": held[n][1] or 0} for n in names])

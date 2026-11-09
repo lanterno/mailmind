@@ -9,6 +9,7 @@ The flags of mail already stored go by the folder's HIGHESTMODSEQ where the serv
 mark the last read left, and nothing changed. Past it, the server names what changed, however old. With no mark to compare,
 no modseq, or a server that won't say, the FLAG_REFRESH newest stored are read.
 """
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 FLAG_REFRESH = 500              # the newest stored UIDs whose flags an incremental sync reads, with nothing better to go by
@@ -23,6 +24,11 @@ class FolderPlan:
     recent: int | None          # a whole scan keeps only the newest this many
     read_flags: bool            # stored mail is known, so its flags may have changed since
 
+    def arrives_in(self, folder: str) -> bool:
+        """Whether what this finds is new to the folder, so a person's filters speak for it. A first or a whole scan reads
+        what was already there."""
+        return not self.whole and reads_bodies(folder)
+
     @property
     def search(self) -> tuple[str, ...]:
         """The UID SEARCH that names the mail to fetch."""
@@ -35,6 +41,25 @@ class FolderPlan:
         if self.recent and len(found) > self.recent:
             return found[-self.recent:], CUT
         return found, WHOLE
+
+
+def reads_bodies(folder: str) -> bool:
+    """Whether a sync of this folder fetches bodies as it goes: the Inbox's, for the AI's snippet. Other folders fetch one as
+    it opens."""
+    return folder.upper() == "INBOX"
+
+
+def asked_again(asked: Sequence[frozenset[str] | None]) -> set[str] | None:
+    """What the next sync round covers, of the accounts each ask named while one ran; None, every account, wins."""
+    return None if None in asked else {e for one in asked if one is not None for e in one}
+
+
+def catch_up_due(folder: str, *, running: bool, last_started: float | None, now: float, every: float) -> bool:
+    """Whether opening a folder already read should catch it up: not INBOX, which the background sync keeps, and not again
+    within `every` seconds. An open while one runs waits for it too, or it would answer with what that one is about to change."""
+    if folder.upper() == "INBOX":
+        return False
+    return running or last_started is None or now - last_started >= every
 
 
 def plan_folder(*, uidvalidity: int | None, known_uidvalidity: int | None, watermark: int, full: bool,

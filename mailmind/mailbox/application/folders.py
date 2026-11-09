@@ -4,10 +4,8 @@ The live IMAP LIST and each folder's STATUS take a fresh round-trip, and the rai
 and after every triage action, so doing it live each time both lagged the page and churned connections (rapid connect
 and logout makes providers drop IDLE). So that part is cached per account for a few seconds over the connection pool;
 the counts from the database stay fresh."""
-import re
 import threading
 import time
-from collections.abc import Iterable
 from typing import Any, TypedDict
 
 from mailmind.kernel.errors import Refused
@@ -16,8 +14,9 @@ from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, Accounts, Attention, StoredMail
 from mailmind.mailbox.application.sync import Ingest
-from mailmind.mailbox.domain import destination
+from mailmind.mailbox.domain import destination, sync_plan
 from mailmind.mailbox.domain import roles as folder_roles
+from mailmind.mailbox.domain.roles import RailFolder
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -27,21 +26,9 @@ log = get_logger("folders")
 sync_log = get_logger("folder-sync")
 
 
-class RailFolder(TypedDict):
-    name: str
-    role: str
-    unseen: int
-    total: int
-
-
 class _Listed(TypedDict):
     folders: list[RailFolder]
     ts: float
-
-
-def _rail_order(folders: Iterable[RailFolder]) -> list[RailFolder]:
-    order = {"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "all": 4, "junk": 8, "trash": 9}
-    return sorted(folders, key=lambda f: (order.get(f["role"], 5), f["name"].lower()))
 
 
 class Folders:
@@ -94,7 +81,7 @@ class Folders:
         out: list[RailFolder] = []
         with self._pool.borrow(acct) as s:
             folders = [f for f in s.folders() if f.selectable]
-            playing = {folder_roles.find(folders, r): r for r in folder_roles.ROLES}   # one folder a role
+            playing = folder_roles.playing(folders)
             for f in folders:
                 name, role = f.name, playing.get(f.name, "custom")
                 try:
@@ -102,7 +89,7 @@ class Folders:
                 except Exception:
                     unseen = total = 0
                 out.append({"name": name, "role": role, "unseen": unseen, "total": total})
-        return _rail_order(out)
+        return folder_roles.rail_order(out)
 
 
     def _stored_folder_list(self, account: str) -> list[RailFolder]:
@@ -111,12 +98,7 @@ class Folders:
         certificate changed). Roles by name, the shallower folder first; counts as stored."""
         with self._uow.read() as c:
             counts = self._store.stored_folder_counts(c, account)
-        counts.setdefault("INBOX", (0, 0))
-        names = sorted(counts, key=lambda n: (len(re.findall(r"[/.]", n)), n.lower()))
-        folders = [folder_roles.Folder(n, frozenset(), None) for n in names]
-        playing = {folder_roles.find(folders, r): r for r in folder_roles.ROLES}
-        return _rail_order([{"name": n, "role": playing.get(n, "custom"), "unseen": counts[n][0] or 0,
-                             "total": counts[n][1] or 0} for n in names])
+        return folder_roles.stored_rail(counts)
 
 
     def _folders_list_cached(self, account: str, acct: Account, deadline: float | None = None) -> list[RailFolder]:
@@ -247,17 +229,11 @@ class Folders:
 
 
     def _catch_up_due(self, account: str, folder: str) -> bool:
-        """Whether opening a folder read before should catch it up: not INBOX, which the background
-        sync keeps, and not again within self.CATCH_UP_EVERY seconds, unless MailMind put mail in it since.
-        An open while one runs waits for it too, or it would answer with what that one is about to
-        change, and nothing would say so."""
-        if folder.upper() == "INBOX":
-            return False
+        """Whether opening a folder read before should catch it up (`sync_plan.catch_up_due`), unless MailMind put mail in it since."""
         with self._folder_syncs_lock:
-            if (account, folder) in self._folder_syncs:
-                return True
+            running = (account, folder) in self._folder_syncs
             last = self._caught_up.get((account, folder))
-        return last is None or time.monotonic() - last >= self.CATCH_UP_EVERY
+        return sync_plan.catch_up_due(folder, running=running, last_started=last, now=time.monotonic(), every=self.CATCH_UP_EVERY)
 
 
     def touched(self, account: str, folder: str) -> None:

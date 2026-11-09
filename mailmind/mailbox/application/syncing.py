@@ -12,7 +12,7 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
-from mailmind.mailbox.domain import body_backfill
+from mailmind.mailbox.domain import body_backfill, sync_plan
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -137,7 +137,7 @@ class Syncing:
                         return
                     asked = self._sync_asked[:]
                     self._sync_asked.clear()
-                emails = None if None in asked else {e for one in asked if one is not None for e in one}
+                emails = sync_plan.asked_again(asked)
         except BaseException:
             with self._sync_lock:
                 self._sync["running"] = False
