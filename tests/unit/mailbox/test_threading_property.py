@@ -156,13 +156,13 @@ def db(data_dir):
 @pytest.fixture
 def merges(monkeypatch):
     """Each ConversationsMerged heard, as (absorbed, survivor)."""
-    from mailmind.bootstrap.mailbox import store
-    real, heard = store._merged, []
+    from mailmind.mailbox.adapters.sqlite import bound
+    real, heard = bound._merged, []
 
     def spy(c, merged):
         heard.append((merged.absorbed, merged.survivor))
         real(c, merged)
-    monkeypatch.setattr(store, "_merged", spy)
+    monkeypatch.setattr(bound, "_merged", spy)
     return heard
 
 

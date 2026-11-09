@@ -106,8 +106,8 @@ def test_a_copy_that_goes_takes_its_rows(app, world):
 
 
 def test_a_forged_list_of_any_length_is_bounded(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import store
-    monkeypatch.setattr(store, "RECIPIENT_ROWS_MAX", 10)
+    from mailmind.mailbox.adapters.sqlite import contents
+    monkeypatch.setattr(contents, "RECIPIENT_ROWS_MAX", 10)
     world.deliver(w.ADA, "INBOX", _mail(", ".join(LONG), sender="stranger@b.example.test"))
     assert len(_rows(_pk("sent-long@example.test"))) == 10
 
