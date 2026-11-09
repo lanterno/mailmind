@@ -3,6 +3,7 @@ import json
 
 from mailmind.content.text import snippet_of
 from mailmind.mailbox.adapters.sqlite import bound
+from mailmind.mailbox.domain.ingested import recipients_text
 
 
 def store_body(c, pk, raw, when):
@@ -58,7 +59,6 @@ def mark_has_attachments(c, pk):
 
 RECIPIENT_ROWS_MAX = 5000
 LABEL_ROWS_MAX = 1000                           # a server is free to say as many as it likes
-RECIPIENTS_CHARS: int = 20000     # of the To and Cc text kept for search: a long list, not a forged one's whole length
 
 
 def set_recipients(c, pk, addrs):
@@ -100,7 +100,7 @@ def set_ingested_headers(c, pk, in_reply_to, refs, recipients):
 
 def recipients_of(parsed):
     """To + Cc as one searchable string (names + addresses), for the to:/cc: operators."""
-    return ((parsed.get("to") or "") + " " + (parsed.get("cc") or "")).strip()[:RECIPIENTS_CHARS]
+    return recipients_text(parsed.get("to"), parsed.get("cc"))
 
 
 def fts_set_body(c, pk, body_text):

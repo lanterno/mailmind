@@ -10,7 +10,7 @@ from mailmind.mailbox.adapters.sqlite.command_log import (archives_undone, comma
     command_open_counts, command_ran_under, command_record, command_set_params, flag_changes_waiting, flag_command,
     queue_flags)
 from mailmind.mailbox.adapters.sqlite.connection import conn, init
-from mailmind.mailbox.adapters.sqlite.contents import (RECIPIENTS_CHARS, attachment_of, bodies_to_fetch, delete_attachments,
+from mailmind.mailbox.adapters.sqlite.contents import (attachment_of, bodies_to_fetch, delete_attachments,
     fts_set_body, get_body, has_attachments, insert_attachments, labels_of_account, mark_has_attachments, recipients_of,
     set_ingested_headers, set_labels, set_recipients, set_recipients_text, still_without_body, store_body)
 from mailmind.mailbox.adapters.sqlite.flags import (classified_from_address, classified_from_domain, flag_rows_newest,
@@ -28,7 +28,7 @@ from mailmind.mailbox.adapters.sqlite.sync_state import (account_health, clear_s
 from mailmind.mailbox.adapters.sqlite.threads import needs_threading, recompute_threads, thread_stored
 
 __all__ = [
-    "RECIPIENTS_CHARS", "account_health", "account_of", "any_copy", "archives_undone", "attachment_of", "bind_index",
+    "account_health", "account_of", "any_copy", "archives_undone", "attachment_of", "bind_index",
     "bind_merges", "bodies_to_fetch", "brief_rows", "classified_from_address", "classified_from_domain", "clear_sync_error",
     "command_forget_finished", "command_get", "command_insert", "command_latest_move", "command_mark_begun",
     "command_mark_reversed", "command_never_begun", "command_open", "command_open_counts", "command_ran_under",

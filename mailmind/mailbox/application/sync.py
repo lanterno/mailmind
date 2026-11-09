@@ -5,7 +5,6 @@ import imaplib
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from email.parser import BytesHeaderParser
-from email.utils import parsedate_to_datetime
 from typing import Any
 
 from mailmind.content import mime
@@ -19,7 +18,7 @@ from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Cl
                                                 StoredMail)
 from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain import flags as mail_flags
-from mailmind.mailbox.domain import sync_plan
+from mailmind.mailbox.domain import ingested, sync_plan
 from mailmind.mailbox.domain.events import FlagsChanged
 from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
@@ -131,13 +130,7 @@ class Ingest:
                 isj = 1 if self._curation.is_junk(b) else 0
                 junk += isj
                 kept += (1 - isj)
-                try:
-                    dt = parsedate_to_datetime(msg.get("Date", ""))
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
-                    iso, ts = dt.isoformat(), int(dt.timestamp())
-                except Exception:
-                    iso, ts = None, 0
+                iso, ts = ingested.dated(msg.get("Date", ""))
                 rows.append({"uid": uid, "from_addr": addr.lower(), "from_name": dec(name),
                              "unsub": mime.list_unsub(dec(msg.get("List-Unsubscribe")),
                                                            dec(msg.get("List-Unsubscribe-Post"))),
@@ -147,9 +140,9 @@ class Ingest:
                              "gmail_thread": h.gmail_thread,
                              "gmail_labels": h.gmail_labels,
                              "in_reply_to": (msg.get("In-Reply-To") or "").strip(),
-                             "refs": (msg.get("References") or "").replace("\n", " ").strip(),
+                             "refs": ingested.references(msg.get("References")),
                              "recipient_addrs": mime.recipient_addrs(msg),
-                             "recipients": (dec(msg.get("To", "")) + " " + dec(msg.get("Cc", ""))).strip()[:self._store.RECIPIENTS_CHARS]})
+                             "recipients": ingested.recipients_text(dec(msg.get("To", "")), dec(msg.get("Cc", "")))})
         queued = False
         for r in rows:
             snippet, invite = "", None

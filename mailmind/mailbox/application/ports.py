@@ -130,8 +130,6 @@ class Listed(Row, Protocol):
 
 class StoredMail(Protocol):
     """mailmind.mailbox.adapters.sqlite: the rows of the mail, the folders and the queue."""
-    RECIPIENTS_CHARS: int
-
     def pk_in(self, c: Connection, key: MessageKey, folder: FolderName) -> Pk | None: ...
 
     def copy_pk(self, c: Connection, key: MessageKey, folder: FolderName, uid: int | None = None) -> Pk | None: ...
