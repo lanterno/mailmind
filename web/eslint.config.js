@@ -8,7 +8,7 @@ import { defineConfig } from "eslint/config";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "mailmind-typescript-eslint";
-import { onlyThroughIndex } from "./lint/slices.js";
+import { featureOrder, onlyThroughIndex } from "./lint/slices.js";
 
 // HTML put straight into the DOM. A mail body goes into MailFrame's sandboxed frame and nowhere else, so that frame is
 // the one module that may do this.
@@ -37,7 +37,7 @@ export default defineConfig([
   {
     files: ["src/**/*.{ts,tsx}"],
     extends: [js.configs.recommended, tseslint.configs.recommended, reactHooks.configs.flat.recommended, jsxA11y.flatConfigs.recommended],
-    plugins: { slices: { rules: { "only-through-index": onlyThroughIndex } } },
+    plugins: { slices: { rules: { "only-through-index": onlyThroughIndex, "feature-order": featureOrder } } },
     linterOptions: { reportUnusedDisableDirectives: "error" },
     rules: {
       // The plugin's recommended set only warns on these, and a warning here would pass the check.
@@ -51,6 +51,7 @@ export default defineConfig([
       "jsx-a11y/no-autofocus": ["error", { ignoreNonDOM: true }],
       "no-restricted-syntax": ["error", ...HTML_SINKS],
       "slices/only-through-index": "error",
+      "slices/feature-order": "error",
     },
   },
   { files: ["src/features/mailbox/MailFrame.tsx"], rules: { "no-restricted-syntax": "off" } },
