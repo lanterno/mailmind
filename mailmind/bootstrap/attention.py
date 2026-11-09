@@ -14,23 +14,23 @@ __all__ = ["book", "clocked", "followups", "muting", "snoozing", "tasks"]
 
 class _Messages:
     def get(self, c, pk):
-        from mailmind.bootstrap.mailbox import store
-        return store.get_message(c, pk)
+        from mailmind.bootstrap.mailbox import stored_mail
+        return stored_mail.get_message(c, pk)
 
     def queue_flags(self, c, row, flags, mutation_id, when):
-        from mailmind.bootstrap.mailbox import store
-        return store.queue_flags(c, row, flags, mutation_id, when)
+        from mailmind.bootstrap.mailbox import stored_mail
+        return stored_mail.queue_flags(c, row, flags, mutation_id, when)
 
     def flags_queued(self):
         mailbox.filing.flags_queued()
 
     def copy_in_folder(self, c, key, folder):
-        from mailmind.bootstrap.mailbox import store
-        return store.copy_in_folder(c, key, folder)
+        from mailmind.bootstrap.mailbox import stored_mail
+        return stored_mail.copy_in_folder(c, key, folder)
 
     def set_local_flags(self, c, pk, **flags):
-        from mailmind.bootstrap.mailbox import store
-        return store.set_local_flags(c, pk, **flags)
+        from mailmind.bootstrap.mailbox import stored_mail
+        return stored_mail.set_local_flags(c, pk, **flags)
 
     def index(self, c, pk):
         from mailmind.bootstrap import discovery

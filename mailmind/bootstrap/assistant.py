@@ -149,40 +149,40 @@ class _Mail:
         return mailbox.ingest.fetch_body(pk)
 
     def copy_now(self, c, key, folder):
-        return mailbox.store.copy_now(c, key, folder)
+        return mailbox.stored_mail.copy_now(c, key, folder)
 
     def accounts(self):
         return accounts.accounts()
 
     def get_message(self, c, pk):
-        return mailbox.store.get_message(c, pk)
+        return mailbox.stored_mail.get_message(c, pk)
 
     def for_asking(self, match, accounts, limit):
         return discovery.search.for_asking(match, accounts, limit)
 
     def brief_rows(self, c, accounts, n):
-        return mailbox.store.brief_rows(c, accounts, n)
+        return mailbox.stored_mail.brief_rows(c, accounts, n)
 
     def delta_rows(self, c, accounts, since_ts, n):
-        return mailbox.store.delta_rows(c, accounts, since_ts, n)
+        return mailbox.stored_mail.delta_rows(c, accounts, since_ts, n)
 
     def sent_since(self, c, accounts, since_ts):
-        return mailbox.store.sent_since(c, accounts, since_ts)
+        return mailbox.stored_mail.sent_since(c, accounts, since_ts)
 
     def received_since(self, c, accounts, since_ts):
-        return mailbox.store.received_since(c, accounts, since_ts)
+        return mailbox.stored_mail.received_since(c, accounts, since_ts)
 
     def received_by_bucket(self, c, accounts, since_ts):
-        return mailbox.store.received_by_bucket(c, accounts, since_ts)
+        return mailbox.stored_mail.received_by_bucket(c, accounts, since_ts)
 
     def needs_you_rows(self, c, accounts, n):
-        return mailbox.store.needs_you_rows(c, accounts, n)
+        return mailbox.stored_mail.needs_you_rows(c, accounts, n)
 
     def sender_recent(self, c, addr, n):
-        return mailbox.store.sender_recent(c, addr, n)
+        return mailbox.stored_mail.sender_recent(c, addr, n)
 
     def sender_stats(self, c, addrs):
-        return mailbox.store.sender_stats(c, addrs)
+        return mailbox.stored_mail.sender_stats(c, addrs)
 
     def screener_items(self, account):
         return curation.screener.queue(account)["items"]
@@ -197,32 +197,32 @@ class _Mail:
         return curation.sqlite.senders_cleaned(c, since_iso, accounts)
 
     def handled_since(self, c, accounts, since_iso):
-        return mailbox.store.handled_since(c, accounts, since_iso)
+        return mailbox.stored_mail.handled_since(c, accounts, since_iso)
 
     def events_from(self, when, limit):
         from mailmind.bootstrap import calendar                 # the reader of invites, which the command line never loads
         return calendar.agenda.upcoming(now=when, limit=limit)["items"]
 
     def draft_candidates(self, c, since_ts):
-        return mailbox.store.draft_candidates(c, since_ts)
+        return mailbox.stored_mail.draft_candidates(c, since_ts)
 
     def thread_stamps(self, c, account, thread_id):
-        return mailbox.store.thread_stamps(c, account, thread_id)
+        return mailbox.stored_mail.thread_stamps(c, account, thread_id)
 
     def message_stamp(self, c, pk):
-        return mailbox.store.message_stamp(c, pk)
+        return mailbox.stored_mail.message_stamp(c, pk)
 
     def thread_anchor_pk(self, c, account, thread_id):
-        return mailbox.store.thread_anchor_pk(c, account, thread_id)
+        return mailbox.stored_mail.thread_anchor_pk(c, account, thread_id)
 
     def conversation_rows(self, c, account, by, value):
-        return mailbox.store.conversation_rows(c, account, by, value)
+        return mailbox.stored_mail.conversation_rows(c, account, by, value)
 
     def message_to_reply_to(self, c, pk):
-        return mailbox.store.message_to_reply_to(c, pk)
+        return mailbox.stored_mail.message_to_reply_to(c, pk)
 
     def any_copy(self, c, message_key):
-        return mailbox.store.any_copy(c, message_key)
+        return mailbox.stored_mail.any_copy(c, message_key)
 
 
 class _Search:

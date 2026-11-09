@@ -26,9 +26,9 @@ class _Folders:
 class _Messages:
     """A message and its account, until the Mailbox and Accounts hold them."""
     def message(self, pk):
-        from mailmind.bootstrap.mailbox import store
+        from mailmind.bootstrap.mailbox import stored_mail
         with UnitOfWork().read() as c:
-            return store.get_message(c, pk)
+            return stored_mail.get_message(c, pk)
 
     def account(self, email):
         from mailmind.bootstrap import accounts

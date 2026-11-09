@@ -21,6 +21,7 @@ from mailmind.attention.adapters import sqlite as attention_store
 from mailmind.compose.adapters import sqlite as compose_store
 from mailmind.discovery.adapters import fts
 from mailmind.mailbox.adapters import sqlite as store
+from mailmind.mailbox.adapters.sqlite import stored_mail  # noqa: F401  (all the other contexts' wiring reaches of the store)
 from mailmind.mailbox.adapters.imap.imap_names import BadValue, imap_quote
 from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
 from mailmind.mailbox.application.bodies import Bodies

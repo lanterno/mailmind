@@ -61,43 +61,43 @@ class _Messages:
     def original(self, pk, account=None, message_id=None):
         """The row of the message a send replies to: by Message-ID, since a pk may have been renumbered,
         else by the pk it was queued with. None once mail has moved out of every folder stored."""
-        from mailmind.bootstrap.mailbox import store
+        from mailmind.bootstrap.mailbox import stored_mail
         with _uow.read() as c:
-            return store.get_message_by_msgid(c, account, message_id) or (store.get_message(c, pk) if pk else None)
+            return stored_mail.get_message_by_msgid(c, account, message_id) or (stored_mail.get_message(c, pk) if pk else None)
 
     def message(self, pk):
-        from mailmind.bootstrap.mailbox import store
+        from mailmind.bootstrap.mailbox import stored_mail
         with _uow.read() as c:
-            return store.get_message(c, pk)
+            return stored_mail.get_message(c, pk)
 
     def by_msgid(self, account, message_id):
-        from mailmind.bootstrap.mailbox import store
+        from mailmind.bootstrap.mailbox import stored_mail
         with _uow.read() as c:
-            return store.get_message_by_msgid(c, account, message_id)
+            return stored_mail.get_message_by_msgid(c, account, message_id)
 
     def by_key(self, account, key):
-        from mailmind.bootstrap.mailbox import store
+        from mailmind.bootstrap.mailbox import stored_mail
         with _uow.read() as c:
-            return store.get_message_by_key(c, account, key)
+            return stored_mail.get_message_by_key(c, account, key)
 
     def body(self, pk):
-        from mailmind.bootstrap.mailbox import store
+        from mailmind.bootstrap.mailbox import stored_mail
         with _uow.read() as c:
-            return store.get_body(c, pk)
+            return stored_mail.get_body(c, pk)
 
     def uidvalidity(self, account, folder):
-        from mailmind.bootstrap.mailbox import store
+        from mailmind.bootstrap.mailbox import stored_mail
         with _uow.read() as c:
-            return store.get_uidvalidity(c, account, folder)
+            return stored_mail.get_uidvalidity(c, account, folder)
 
     def remove(self, pk):
-        from mailmind.bootstrap.mailbox import store
+        from mailmind.bootstrap.mailbox import stored_mail
         with _uow.write() as c:
-            store.delete_message(c, pk)
+            stored_mail.delete_message(c, pk)
 
     def remove_copies(self, c, account, folder, uids):
-        from mailmind.bootstrap.mailbox import store
-        store.delete_by_uids(c, account, folder, uids)
+        from mailmind.bootstrap.mailbox import stored_mail
+        stored_mail.delete_by_uids(c, account, folder, uids)
 
     def fetch_body(self, pk):
         from mailmind.bootstrap.mailbox import ingest

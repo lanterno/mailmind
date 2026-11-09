@@ -39,18 +39,18 @@ def classify(from_addr, subject="", from_name="", has_list_unsub=False):
 
 
 class _MessageRows:
-    """What only the store may do to a message's row, until the Mailbox holds them."""
+    """What goes with a copy, on the row the Mailbox keeps of it."""
     def set_list_unsub(self, c, pk, raw, method):
-        from mailmind.bootstrap.mailbox import store
-        store.set_list_unsub(c, pk, raw, method)
+        from mailmind.bootstrap.mailbox import stored_mail
+        stored_mail.set_list_unsub(c, pk, raw, method)
 
     def delete_message(self, c, pk):
-        from mailmind.bootstrap.mailbox import store
-        store.delete_message(c, pk)
+        from mailmind.bootstrap.mailbox import stored_mail
+        stored_mail.delete_message(c, pk)
 
     def delete_by_uids(self, c, account, folder, uids):
-        from mailmind.bootstrap.mailbox import store
-        store.delete_by_uids(c, account, folder, uids)
+        from mailmind.bootstrap.mailbox import stored_mail
+        stored_mail.delete_by_uids(c, account, folder, uids)
 
 
 class _Conditions:
