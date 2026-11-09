@@ -27,7 +27,7 @@ import { filterForm, newFilter } from "../features/curation/open";
 import { Hub } from "../features/discovery/Docs";
 import { FeedRiver, PaperTrail } from "../features/discovery/Lanes";
 import { ScreenerPane, useScreener } from "../features/curation/Screener";
-import { settingsOpen } from "../features/settings";
+import { settingsOpen } from "../lib/settingsOpen";
 import { helpOpen } from "../features/status/Help";
 import { Guide, guideOpen } from "../features/status/Guide";
 import { Settings } from "../features/settings/Settings";

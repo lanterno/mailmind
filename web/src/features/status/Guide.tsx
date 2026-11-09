@@ -8,7 +8,7 @@ import { useFocusFirst } from "../../lib/ui/menuKeys";
 import { pref, prefsRead, setPrefs, singleKeys } from "../../lib/prefs";
 import { createStore } from "../../lib/store";
 import { composing } from "../compose";
-import { settingsOpen } from "../settings";
+import { settingsOpen } from "../../lib/settingsOpen";
 import type { Mailbox } from "../mailbox";
 import { coachPlace, guideOffers, guideSteps, type Box, type GuideStep } from "./guideSteps";
 import { helpOpen } from "./Help";

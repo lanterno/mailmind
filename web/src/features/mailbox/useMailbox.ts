@@ -8,7 +8,7 @@ import { pref } from "../../lib/prefs";
 import { createStore, store, stored } from "../../lib/store";
 import { copyId, copyOf, eachCopyOnce, sameCopy, type Copy } from "../../lib/copy";
 import { toast } from "../../lib/toast";
-import { settingsOpen } from "../settings";
+import { settingsOpen } from "../../lib/settingsOpen";
 import * as actions from "./actions";
 import { useDigest, useEveryAccountsFolders, useFolders, useMessages, useViews, warmBody } from "./data";
 import { folderTitle, inTab, isConversation, type InboxTab, type Row } from "./rows";

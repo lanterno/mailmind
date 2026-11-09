@@ -13,7 +13,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
 import { useDigest } from "../mailbox";
 import { syncNow } from "../status";
-import { settingsOpen } from "./open";
+import { settingsOpen } from "../../lib/settingsOpen";
 import { PreferencesForm } from "./Preferences";
 import { Seg } from "./Seg";
 import { useStepBack } from "./useStepBack";

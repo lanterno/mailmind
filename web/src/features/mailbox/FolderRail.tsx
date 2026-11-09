@@ -9,7 +9,7 @@ import { post } from "../../lib/api/client";
 import { toast } from "../../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useScreener } from "../curation";
-import { settingsOpen } from "../settings";
+import { settingsOpen } from "../../lib/settingsOpen";
 import { useFolders, useFoldersAcross, useLabels, useViews } from "./data";
 import { FOLDER_ICON, labelQuery, roleLabel, type FolderInfo } from "./rows";
 

@@ -1,3 +1,3 @@
-import { createStore } from "../../lib/store";
+import { createStore } from "./store";
 
 export const settingsOpen = createStore(false);
