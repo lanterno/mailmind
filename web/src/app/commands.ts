@@ -8,7 +8,7 @@ import { answer } from "../features/compose/draftAhead";
 import * as actions from "../features/mailbox/actions";
 import { summarize } from "../features/mailbox/AiCard";
 import { findSuggestions } from "../features/assistant/Suggestions";
-import { viewQuery } from "../features/mailbox/FolderRail";
+import { viewQuery } from "./FolderRail";
 import { readFocus, setReadFocus } from "../features/mailbox/Reader";
 import { roleLabel, VIRTUAL_TITLE } from "../features/mailbox/rows";
 import { snoozeAsk } from "../features/attention/SnoozeMenu";

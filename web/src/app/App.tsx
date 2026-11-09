@@ -14,7 +14,7 @@ import { ComposerModal, SendFloatView } from "../features/compose/Composer";
 import { clearMarks, readOnly, undo, undoFloat, type BulkVerb } from "../features/mailbox/actions";
 import { searchScope, setSearchScope } from "../features/mailbox/data";
 import { FirstRead } from "../features/mailbox/FirstRead";
-import { FolderRail } from "../features/mailbox/FolderRail";
+import { FolderRail } from "./FolderRail";
 import { MessageList } from "../features/mailbox/MessageList";
 import { WIDTHS, readPrefs } from "../features/mailbox/readPrefs";
 import { Reader, readFocus, setReadFocus } from "../features/mailbox/Reader";

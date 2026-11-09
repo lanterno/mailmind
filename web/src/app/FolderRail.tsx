@@ -2,16 +2,16 @@
 // tab and Back works.
 import { useEffect, useRef } from "react";
 import { Button, Menu, MenuItem, MenuTrigger, Popover, Separator } from "react-aria-components";
-import { go, pathOf, type ListSource, type VirtualFolder } from "../../app/route";
-import { shortAddress } from "../../lib/text";
-import { Icon } from "../../lib/ui/Icon";
-import { post } from "../../lib/api/client";
-import { toast } from "../../lib/toast";
+import { go, pathOf, type ListSource, type VirtualFolder } from "./route";
+import { shortAddress } from "../lib/text";
+import { Icon } from "../lib/ui/Icon";
+import { post } from "../lib/api/client";
+import { toast } from "../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { useScreener } from "../curation";
-import { settingsOpen } from "../../lib/settingsOpen";
-import { useFolders, useFoldersAcross, useLabels, useViews } from "./data";
-import { FOLDER_ICON, labelQuery, roleLabel, type FolderInfo } from "./rows";
+import { useScreener } from "../features/curation";
+import { settingsOpen } from "../lib/settingsOpen";
+import { useFolders, useFoldersAcross, useLabels, useViews } from "../features/mailbox/data";
+import { FOLDER_ICON, labelQuery, roleLabel, type FolderInfo } from "../features/mailbox/rows";
 
 const ALL = "__all__", MANAGE = "__manage__";
 
