@@ -1,6 +1,6 @@
 """The limits the page holds a person to before it asks, each the server's own constant, which its use case enforces.
 
-`just gen-api` writes them into web/src/lib/api/limits.gen.ts beside the API's types (tests/openapi_doc.py), and `just check-web`
+`just gen-api` writes them into web/src/lib/api/limits.gen.ts beside the API's types (tests/support/openapi_doc.py), and `just check-web`
 fails when that file no longer matches, so the page keeps no copy of one: a limit that changes here changes there with the next
 `just gen-api`. Nothing serves them: they are fixed for a build, as the API's types are, and a tab of another build offers a
 reload. A limit the page doesn't hold anyone to stays out.

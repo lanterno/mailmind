@@ -6,7 +6,7 @@ request didn't say. A field is optional unless going without one already answers
 the use case's to word. A field nobody declares goes nowhere: under test, a use case that reads one is a failure.
 
 An answer's model is never a gate, and a handler passes no `response_model`, which would filter and refuse. `answers` declares
-it for OpenAPI, and only under test is each JSON answer held to it (tests/schema_contract.py), which is what says the models are
+it for OpenAPI, and only under test is each JSON answer held to it (tests/support/schema_contract.py), which is what says the models are
 true. A route's answer that varies by branch is a union of models, each of something it did: a refusal is a problem document,
 `Failure`, at its own status.
 """
