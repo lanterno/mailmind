@@ -1,0 +1,25 @@
+/* The list's message rows. */
+  /* client message rows (layout: "the worklist" in the Mailbox shell block) */
+  .row.cmsg .tags{margin-left:6px;display:inline-flex;gap:4px}
+  .row.cmsg .jb{font-size:11px;font-weight:500;color:var(--faint);background:var(--bg3);border:none;border-radius:var(--r-xs);padding:1px 6px}
+  .row.cmsg .cmsg-body{min-width:0}
+  .row.cmsg.marked{background:color-mix(in srgb,var(--primary-wash) 60%,transparent)}
+  .cbx{flex:none;width:18px;height:18px;margin-top:2px;border:1px solid var(--line-hi);border-radius:var(--r-xs);background:var(--bg);
+    color:var(--on-primary);font-size:11px;line-height:1;display:grid;place-items:center;cursor:pointer;opacity:0;transition:opacity var(--t-fast),background var(--t-fast)}
+  .row.cmsg:hover .cbx,.row.cmsg .cbx.on{opacity:1}
+  .cbx.on{background:var(--primary);border-color:var(--primary);font-weight:700}
+  /* rows: the importance SPINE — a 3px heat-ramp tick down the left edge,
+     full-height + amber when selected. Read the inbox by color temperature. */
+  .row{display:block;position:relative;padding:11px 16px 11px 19px;border-bottom:1px solid var(--line);cursor:pointer;transition:background var(--t-fast)}
+  .row::before{content:"";position:absolute;left:6px;top:50%;transform:translateY(-50%);width:3px;height:calc(100% - 22px);
+    border-radius:var(--r-pill);background:transparent;transition:height var(--t-fast),background var(--t-fast)}
+  .row:hover{background:var(--hover)}
+  .row.sel{background:var(--sel)}
+  .row.sel::before{background:var(--primary);height:calc(100% - 10px)}
+  .r1{display:flex;align-items:baseline;gap:7px;font-size:12px;color:var(--mute)}
+  .r1 .from{color:var(--soft);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .r1 .when{margin-left:auto;color:var(--faint);font-size:11px;flex:none;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .r2sub{margin-top:3px;font-size:13.5px;line-height:1.4;color:var(--ink);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .r2sub .sj{font-weight:500;color:var(--ink)}
+  .nores-sub{font-variant-numeric:tabular-nums}

@@ -1,0 +1,59 @@
+/* The app's frame: its panes, the splitter and how they change with width. */
+  /* ---------- split ---------- */
+  .split{display:grid;grid-template-columns:minmax(330px,38%) 1fr;height:calc(100vh - var(--top))}
+  .splitter{display:none}
+  /* ═══════════ Mailbox shell ═══════════
+     Folders · list · reading pane as paper panels on the sky, all on one screen.
+     The rail is icons (64px) or icons + names (224px): ☰ or [ switches, persisted as
+     mm_rail. At <=1100px it becomes a drawer. The splitter sets the list width
+     (drag, ←/→, double-click resets; mm_list_w). Focus reading (↵, Esc leaves)
+     hides rail and list. The reading measure is set from Aa (mm_read).
+     The body prefix stays because these rules depend on its extra specificity over the base
+     rules. */
+  body{--gap:8px;--rail-w:64px;--list-w:372px;--measure:760px}
+  body.rail-wide{--rail-w:224px}
+  body .split{position:relative;gap:var(--gap);padding:0 var(--gap) var(--gap)}
+  body .folderrail,body .list,body .reader{min-width:0;min-height:0;
+    background:var(--grain),var(--panel);border:none;border-radius:var(--r-lg);box-shadow:var(--sh-panel)}
+  body .folderrail{background:var(--grain),color-mix(in srgb,var(--panel) 86%,transparent);backdrop-filter:blur(16px)}
+  body .listhead{background:var(--panel)}
+  body .rd-extbar{background:var(--panel)}
+  body .railtoggle{display:inline-flex;align-items:center;justify-content:center;
+    width:34px;height:34px;flex:none;background:none;border:none;
+    border-radius:var(--r-sm);color:var(--mute);cursor:pointer;font-size:14px;transition:background var(--t-fast)}
+  body .railtoggle:hover{background:var(--panel-hi);color:var(--ink)}
+  @media (min-width:1101px){
+    body .split{grid-template-columns:var(--rail-w) var(--list-w) minmax(0,1fr)}
+    /* icon rail: names stay in the accessibility tree (visually hidden), counts become a dot */
+    body:not(.rail-wide) .folderrail{padding:8px 6px;overflow-x:hidden}
+    body:not(.rail-wide) .frow{position:relative;justify-content:center;min-height:40px;padding:0}
+    body:not(.rail-wide) .frow .ic2{width:auto;font-size:16px;opacity:1}
+    body:not(.rail-wide) .frow .fn{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+    body:not(.rail-wide) .vrow>.vdel{display:none}
+    body:not(.rail-wide) .frow .unread{position:absolute;top:1px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;
+      display:grid;place-items:center;font-size:10px;color:var(--soft);background:var(--bg3);box-shadow:0 0 0 2px var(--panel)}
+    body:not(.rail-wide) .frail-acct{height:1px;padding:0;margin:8px 8px;overflow:hidden;font-size:0;background:var(--line)}
+    body:not(.rail-wide) .acct-sw{justify-content:center;padding:6px 0}
+    body:not(.rail-wide) .acct-sw .as-txt,body:not(.rail-wide) .acct-sw .as-chev{display:none}   /* its aria-label names the account */
+  }
+  /* <=1100: two panels; the rail leaves the flow and becomes a drawer (☰ / [ / g / ⌘K).
+     visibility:hidden when closed drops it from the tab order and the accessibility tree. */
+  @media (max-width:1100px){
+    body .split{grid-template-columns:var(--list-w) minmax(0,1fr)}
+    body .folderrail{position:fixed;left:0;top:var(--top);bottom:0;width:min(290px,86vw);z-index:38;
+      transform:translateX(-100%);visibility:hidden;border-radius:0 var(--r-lg) var(--r-lg) 0;box-shadow:var(--sh-pop);background:var(--grain),var(--panel);
+      transition:transform var(--t-med) var(--ease),visibility 0s var(--t-med)}
+    body.rail-open .folderrail{transform:none;visibility:visible;transition:transform var(--t-med) var(--ease),visibility 0s 0s}
+  }
+  @media (min-width:821px){
+    /* splitter: sits in the gap between list and reader; a keyboard-operable separator */
+    body .splitter{display:block;position:absolute;z-index:3;top:var(--gap);bottom:var(--gap);width:var(--gap);
+      left:calc(var(--gap) * 2 + var(--rail-w) + var(--list-w));cursor:col-resize;touch-action:none;border-radius:var(--r-xs)}
+    body .splitter::after{content:"";position:absolute;left:calc(50% - 1px);top:50%;width:2px;height:44px;margin-top:-22px;
+      border-radius:2px;background:var(--mute);opacity:0;transition:opacity var(--t-fast)}
+    body .splitter:hover::after,body .splitter:focus-visible::after,body .splitter.drag::after{opacity:.7}
+    /* focus reading: the pane takes the whole width */
+    body.read-focus .split{grid-template-columns:minmax(0,1fr)}
+    body.read-focus .folderrail,body.read-focus .list,body.read-focus .splitter{display:none}
+  }
+  @media (min-width:821px) and (max-width:1100px){ body .splitter{left:calc(var(--gap) + var(--list-w))} }   /* the rail is a drawer here */

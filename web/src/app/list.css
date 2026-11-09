@@ -1,0 +1,32 @@
+/* The list's head and tabs, the bulk bar and the first-run note. */
+  /* where you are: heads the list */
+  .client-ctx{font-size:13px;color:var(--soft);line-height:1.4}
+  .client-ctx b{color:var(--ink);font-weight:700}
+  .bulkbar{position:sticky;top:0;z-index:4;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding:8px 12px;background:var(--sel);border-bottom:1px solid var(--line-hi);box-shadow:var(--sh-1)}
+  .bulkbar .bcount{font-size:12px;color:var(--primary-ink);font-weight:600;margin-right:2px;font-variant-numeric:tabular-nums}
+  .bulkbar .bb{background:var(--panel);border:none;color:var(--soft);box-shadow:var(--sh-1);
+    border-radius:var(--r-sm);font:inherit;font-size:12px;font-weight:500;padding:6px 11px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+  .bulkbar .bb:hover{color:var(--ink);background:var(--raise-hi)}
+  .bulkbar .bb-del:hover{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
+  .bulkbar .bclear{margin-left:auto;color:var(--faint);font-size:12px;cursor:pointer;background:none;border:none}
+  .bulkbar .bclear:hover{color:var(--soft)}
+  .listhead{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);
+    padding:10px 16px 8px;font-size:11.5px;font-weight:500;color:var(--faint);display:flex;flex-direction:column;gap:4px;z-index:2;font-variant-numeric:tabular-nums}
+  .listhead .lh-row{display:flex;justify-content:space-between;align-items:center}
+  /* the folder's name in the display face; a context line (search, Ask, Do, Screener…) takes its place */
+  .listhead .lh1{display:flex;align-items:center;gap:8px;min-height:30px}
+  .lh-title{flex:1;min-width:0;margin:0;font:700 21px/1.1 var(--font-display);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .listhead:has(>.client-ctx:not(:empty)) :is(.lh1,.lh-tabs){display:none}
+  .lh1:has(>.lh-title:empty){display:none}
+  /* the Inbox's three tabs; their counts stand in for the count line */
+  .lh-tabs{display:flex;gap:2px;margin:2px -7px -8px}
+  .lh-tab{position:relative;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 9px;border:0;background:none;color:var(--mute);
+    font:700 13.5px/1 var(--font-ui);cursor:pointer}
+  .lh-tab:hover,.lh-tab[aria-selected="true"]{color:var(--ink)}
+  .lh-tab[aria-selected="true"]::after{content:"";position:absolute;left:7px;right:7px;bottom:-1px;height:2.5px;border-radius:2px;background:var(--primary)}
+  .lh-tab .n{font-variant-numeric:tabular-nums;color:var(--mute)}
+  .lh-tab .n.sun{color:var(--gold)}
+  .firstrun{text-align:center;padding:48px 20px}
+  .firstrun .fr-h{font-family:var(--font-display);font-weight:600;font-size:22px;letter-spacing:-.02em;color:var(--ink);margin-bottom:6px}
+  .firstrun .fr-b{color:var(--mute);font-size:13.5px;margin-bottom:18px}

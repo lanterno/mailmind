@@ -1,0 +1,95 @@
+/* The reading pane: its action bar, the message's head and frame, attachments, quick replies and what's up next. */
+  /* body reader (iframe) */
+  .rd-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+  .cab{display:inline-flex;align-items:center;gap:6px;background:none;border:none;
+    color:var(--mute);border-radius:var(--r-sm);font:inherit;font-size:12.5px;font-weight:500;padding:8px 12px;cursor:pointer;
+    transition:background var(--t-fast),color var(--t-fast)}
+  .cab span{font-size:13px;line-height:1}
+  .cab:hover{background:var(--panel-hi);color:var(--ink)}
+  .cab.on{background:var(--sel);color:var(--primary-ink)}
+  .rd-more{display:none}
+  .cab-del:hover{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
+  .cab-draft{color:var(--ai);background:color-mix(in srgb,var(--ai) 10%,transparent);transition:background var(--t-fast),color var(--t-fast)}   /* a pre-drafted reply waiting */
+  .cab-draft:hover{color:var(--ai);background:color-mix(in srgb,var(--ai) 18%,transparent)}
+  .cab-drafting span{animation:drpulse 2.4s ease-in-out infinite}
+  @keyframes drpulse{0%,100%{opacity:1}50%{opacity:.55}}
+  .rd-iframe{width:100%;border:1px solid var(--line-hi);background:var(--panel);color-scheme:light;border-radius:var(--r-md);
+    box-shadow:var(--sh-2);min-height:120px;transition:height .12s}  /* white "paper on the desk"; small floor: a short body can't claim a full-pane blank canvas (anti-spoof); load handler sets true height */
+  .rd-imgbar{background:var(--panel-hi);border:none;border-left:3px solid var(--line-hi);border-radius:var(--r-sm);
+    padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:var(--soft);display:flex;align-items:center;gap:10px}
+  .rd-imgbar button{background:var(--primary);color:var(--on-primary);border:none;border-radius:var(--r-xs);font:inherit;font-size:12px;font-weight:600;padding:5px 11px;cursor:pointer;flex:none}
+  /* drawn by the page, above the frame, so a message can neither forge this warning nor hide it */
+  .rd-replyto{background:var(--panel-hi);border-left:3px solid var(--err);border-radius:var(--r-sm);padding:10px 14px;margin-bottom:12px;
+    font-size:12.5px;color:var(--soft);display:flex;align-items:center;gap:10px;overflow-wrap:anywhere}
+  .rd-replyto .ico{color:var(--err);flex:none}
+  /* parent-rendered external-email delimiter + protection shield — sender content can't spoof/erase it.
+     The ONE uppercase element left in the app: scarcity makes the trust signal pop. */
+  .rd-extbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:9px;font-size:11px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:9px;padding:6px 0;flex-wrap:wrap;
+    background:var(--bg)}   /* sticky + solid so the 'External' frame never scrolls away or haloes */
+  .rd-extbar .ext{background:var(--sel);border:none;border-radius:var(--r-xs);padding:3px 8px;color:var(--mute);font-weight:600}
+  .rd-extbar .shield{color:var(--keep);display:flex;align-items:center;gap:5px;margin-left:auto;text-transform:none;letter-spacing:.01em;font-weight:500}
+  .rd-attach{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+  .rd-att{display:inline-flex;align-items:center;gap:7px;background:var(--sel);border:none;border-radius:var(--r-sm);padding:8px 12px;font-size:12.5px;color:var(--soft)}
+  .rd-att .sz{color:var(--faint);font-size:11px;font-family:var(--font-mono)}
+  /* ---------- reader ---------- */
+  .reader{overflow-y:auto;padding:32px 40px 80px;max-width:860px}
+  .reader.empty-pane{display:grid;place-items:center;color:var(--faint);font-size:13.5px;text-align:center;max-width:none}
+  .rd-top{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--mute);margin-bottom:14px;flex-wrap:wrap}
+  .rd-tag{font-size:11.5px;font-weight:500;padding:4px 10px;background:var(--sel);border:none;border-radius:var(--r-pill);color:var(--soft)}
+  .rd-when{margin-left:auto;color:var(--faint);font-family:var(--font-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+  .rd-subj{font-family:var(--font-display);font-weight:600;font-size:26px;line-height:1.2;letter-spacing:-.02em;color:var(--ink);margin:2px 0 10px}
+  .rd-from{font-size:12.5px;color:var(--mute);margin-bottom:22px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .rd-from .nm{color:var(--soft);font-weight:500}   .rd-from .ad{color:var(--faint);font-family:var(--font-mono);font-size:11.5px}
+  /* Back button + hamburger are desktop-hidden by default; the shell reveals the hamburger, <=820 the Back button */
+  .rd-back{display:none}
+  .rd-sp{display:none}
+  /* the reading pane at every width, phones included: one row of verbs pinned to the top, a centred measure below */
+  body .reader{max-width:none;padding:0 0 72px;container:pane / inline-size}
+  body .reader>:not(.rd-actions){width:min(var(--measure),calc(100% - 64px));margin-inline:auto}
+  body .reader>.rd-iframe{display:block}   /* an inline iframe ignores auto margins */
+  body .rd-actions{position:sticky;top:0;z-index:3;height:52px;margin:0 0 24px;padding:0 10px;gap:2px;
+    flex-wrap:nowrap;align-items:center;overflow:hidden;background:var(--grain),var(--panel);border-bottom:1px solid var(--line)}
+  body .rd-actions .cab{flex:none;padding:8px}
+  body .rd-actions .cab:disabled{opacity:.4;cursor:default;background:none}
+  body .rd-sp{display:block;flex:1 1 0;min-width:8px}
+  body .rd-extbar{top:52px}   /* the 'External' frame pins just under the action bar */
+  /* narrower panes: secondary verbs drop to icons, then leave the bar for ⋯ More (MoreMenu.tsx) */
+  @container pane (max-width:1180px){
+    .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk],[data-ca=star],[data-ca=unread]){font-size:0;gap:0}
+    .rd-pos{display:none}
+  }
+  @container pane (max-width:840px){
+    .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready],[data-ca=archive],[data-ca=trash],[data-tca=archive],[data-tca=trash],.rd-back){font-size:0;gap:0}
+    .rd-actions .cab:is([data-ca=replyall],[data-ca=forward],[data-tca=replyall],[data-tca=forward],[data-ca=unread]){display:none}
+    .rd-actions .rd-more{display:inline-flex}
+  }
+  @container pane (max-width:660px){
+    .rd-actions .cab:not([data-ca=reply],[data-ca=draftready],[data-tca=reply],[data-tca=draftready]){font-size:0;gap:0}
+    .rd-actions .cab:is([data-ca=mute],[data-ca=unmute],[data-tca=mute],[data-tca=unmute],[data-ca=replylater],[data-tca=replylater],[data-ca=junk],[data-ca=move],[data-tca=move]){display:none}
+  }
+  @container pane (max-width:460px){
+    body .rd-actions{padding:0 6px}
+    .rd-actions .cab:is([data-ca=summarize],[data-tca=summarize],[data-ca=star],[data-readset]){display:none}
+  }
+  @container pane (max-width:350px){ .rd-actions .cab{font-size:0;gap:0} }   /* Reply keeps its word down to here */
+  /* the summary sits on a moss wash at the head of the message; "Up next" closes the page */
+  body .reader .ai-card{background:var(--ai-wash);border-left:none;box-shadow:none;padding:14px 18px;margin-bottom:20px}
+  body .reader .ai-card .ai-tldr{font-size:15.5px}
+  .qr-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:20px}
+  .qr-k{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--faint);margin-right:4px}
+  .qr{background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-pill);color:var(--ink);font:inherit;font-size:13px;
+    padding:6px 14px;cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast),background var(--t-fast)}
+  .qr:hover{border-color:var(--primary);color:var(--primary-ink);background:var(--panel-hi)}
+  .rd-next{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:28px;padding:12px 12px 12px 16px;
+    border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel-hi)}
+  .rd-next.end{display:block;font-size:13px;color:var(--faint);text-align:center}
+  .rdn-t{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .rdn-k{font-size:12px;color:var(--faint)}
+  .rdn-who{font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rdn-sj{font-size:13.5px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rd-nav{display:inline-flex;align-items:center;gap:2px;flex:none}
+  .rd-focus{display:none}
+  @media (min-width:821px){ body .rd-focus{display:inline-flex} }
+  .cab[aria-pressed="true"]{background:var(--sel);color:var(--primary-ink)}
+  .rd-pos{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;margin:0 6px}

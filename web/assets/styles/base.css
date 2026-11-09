@@ -1,0 +1,8 @@
+/* Resets, the page's own elements, and reduced motion. */
+  *{box-sizing:border-box;margin:0;padding:0}
+  [hidden]{display:none!important}   /* author display rules (.acct-alert flex etc.) must never beat the hidden attribute */
+  body{background:var(--sky-3) linear-gradient(180deg,var(--sky-1) 0%,var(--sky-2) 34%,var(--sky-3) 100%) no-repeat;color:var(--ink);font-family:var(--font-ui);
+    -webkit-font-smoothing:antialiased;height:100vh;overflow:hidden;font-size:14px;line-height:1.5}
+  button,input,select,textarea{font-family:inherit}
+  ::selection{background:color-mix(in srgb,var(--sun) 32%,transparent)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

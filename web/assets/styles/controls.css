@@ -1,0 +1,38 @@
+/* Controls more than one feature draws: segments, icons, buttons, chips, the toast, scrollbars. */
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .seg{display:inline-flex;border:none;border-radius:var(--r-sm);overflow:hidden;background:var(--bg);padding:2px;gap:2px}
+  .seg button{background:none;border:none;border-radius:var(--r-xs);color:var(--mute);font-size:12px;font-weight:500;padding:5px 11px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+  .seg button:hover{color:var(--soft)}
+  .seg button.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:var(--sh-1)}
+  .ico{width:1.15em;height:1.15em;flex:none;vertical-align:-.2em;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+  .ico.fill{fill:currentColor}
+    .list{overflow-y:auto;background:var(--bg);scrollbar-color:var(--line-hi) transparent}
+  .list::-webkit-scrollbar,.reader::-webkit-scrollbar,.drawer::-webkit-scrollbar,
+  .feed-river::-webkit-scrollbar,.paper-trail::-webkit-scrollbar,.ask-wrap::-webkit-scrollbar,
+  .plist::-webkit-scrollbar,.folderrail::-webkit-scrollbar{width:10px}
+  .list::-webkit-scrollbar-thumb,.reader::-webkit-scrollbar-thumb,.drawer::-webkit-scrollbar-thumb,
+  .feed-river::-webkit-scrollbar-thumb,.paper-trail::-webkit-scrollbar-thumb,.ask-wrap::-webkit-scrollbar-thumb,
+  .plist::-webkit-scrollbar-thumb,.folderrail::-webkit-scrollbar-thumb{
+    background:var(--line-hi);border-radius:var(--r-pill);border:2px solid transparent;background-clip:padding-box}
+  .list::-webkit-scrollbar-thumb:hover,.reader::-webkit-scrollbar-thumb:hover,.drawer::-webkit-scrollbar-thumb:hover{background:var(--scroll-hi);border:2px solid transparent;background-clip:padding-box}
+  .reader,.drawer,.feed-river,.paper-trail,.ask-wrap,.plist,.folderrail{scrollbar-color:var(--line-hi) transparent}
+  .nores .linkbtn{background:none;border:none;padding:0;color:var(--primary-ink);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+  .abtn{background:none;border:none;border-radius:var(--r-sm);color:var(--mute);font-size:12.5px;font-weight:500;
+    padding:10px 14px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast);display:inline-flex;gap:7px;align-items:center}
+  .abtn:hover{color:var(--ink);background:var(--panel-hi)}
+  .abtn.prim{background:var(--primary);color:var(--on-primary);font-weight:600}
+  .abtn.prim:hover{background:var(--primary-hi);color:var(--on-primary)}
+  .abtn.ai{color:var(--ai);background:color-mix(in srgb,var(--ai) 10%,transparent)}
+  .abtn.ai:hover{background:color-mix(in srgb,var(--ai) 18%,transparent);color:var(--ai)}
+  .nores{padding:50px 20px;text-align:center;color:var(--faint);font-size:12.5px;line-height:1.9}
+  .rchip{font-size:11px;padding:3px 8px;border-radius:var(--r-xs);background:var(--sel);border:none;color:var(--mute);cursor:pointer}
+  .rchip.keep{color:var(--keep)}   .rchip.block{color:var(--block)}   .rchip:hover{color:var(--ember);background:color-mix(in srgb,var(--ember) 10%,transparent)}
+  .lbl{font-size:11.5px;font-weight:500;color:var(--faint);margin-top:6px}
+  /* toast: the one INVERTED object on screen — light pill on a dark app, unmissable for 2s */
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(14px);opacity:0;background:var(--ink);
+    color:var(--bg);font-size:13px;font-weight:500;padding:10px 20px;border-radius:var(--r-pill);transition:opacity var(--t-med),transform var(--t-med);z-index:60;pointer-events:none;box-shadow:var(--sh-3)}
+  .toast.show{opacity:1;transform:translateX(-50%)}
+  .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  .spin{display:inline-block;animation:spin 1s linear infinite}
+  .acctchip{flex:none;font-size:10.5px;color:var(--faint);background:var(--panel-hi);border:none;border-radius:var(--r-xs);padding:0 6px}

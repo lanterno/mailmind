@@ -1,0 +1,38 @@
+/* The Feed and the Paper Trail. */
+  /* Feed reading-river — a calm editorial river of newsletters (the Feed lane) */
+  .feed-river{max-width:740px;margin:0 auto;padding:14px 26px 70px;overflow-y:auto}
+  .fr-card{position:relative;padding:22px 96px 24px 22px;border-bottom:1px solid var(--line);cursor:pointer;transition:background var(--t-fast)}
+  .fr-card:hover{background:var(--hover)}
+  .fr-card::before{content:"";position:absolute;left:6px;top:25px;bottom:25px;width:3px;border-radius:var(--r-pill);background:transparent;transition:background var(--t-fast)}
+  .fr-card.unread::before{background:var(--primary)}
+  .fr-card.reading{background:var(--hover)}   .fr-card.reading::before{background:var(--primary)}
+  .fr-kicker{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:500;color:var(--faint);margin-bottom:9px}
+  .fr-pub{color:var(--soft);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%}
+  .fr-card.unread .fr-pub{color:var(--primary-ink)}
+  .fr-dot{color:var(--line-hi)}   .fr-acct{color:var(--faint);font-family:var(--font-mono);font-size:11px}
+  .fr-head{font-family:var(--font-display);font-size:19px;line-height:1.3;font-weight:600;letter-spacing:-.015em;color:var(--soft);margin:0 0 8px}
+  .fr-card.unread .fr-head{color:var(--ink)}
+  .fr-deck{font-family:var(--font-reading);font-size:15px;line-height:1.6;color:var(--mute);margin:0;max-width:62ch;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .fr-card.unread .fr-deck{color:var(--soft)}
+  .fr-arch{position:absolute;right:14px;top:21px;opacity:0;background:var(--sel);border:none;border-radius:var(--r-sm);color:var(--mute);font-size:11.5px;font-weight:500;padding:6px 12px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast),opacity var(--t-fast)}
+  .fr-card:hover .fr-arch,.fr-card.reading .fr-arch{opacity:1}
+  .fr-arch:hover{background:var(--raise-hi);color:var(--ink)}
+  .feed-river .load-more{margin:22px auto 0;display:block}
+  /* Paper Trail — a calm chronological ledger of receipts & invoices (the Paper-trail lane) */
+  .paper-trail{max-width:720px;margin:0 auto;padding:10px 24px 70px;overflow-y:auto}
+  .pt-month{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:24px 2px 6px;padding-bottom:7px;border-bottom:1px solid var(--line-hi)}
+  .pt-month:first-child{margin-top:6px}
+  .pt-mname{font-family:var(--font-display);font-size:14.5px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+  .pt-mtot{font-family:var(--font-mono);font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+  .pt-mtot b{color:var(--soft);font-weight:500}
+  .pt-row{display:grid;grid-template-columns:1fr auto;gap:4px 16px;align-items:baseline;padding:10px 8px 10px 4px;border-bottom:1px solid var(--line);cursor:pointer;transition:background var(--t-fast)}
+  .pt-row:hover{background:var(--hover)}
+  .pt-row.unread{box-shadow:inset 3px 0 0 var(--primary)}
+  .pt-row.reading{background:var(--hover);box-shadow:inset 3px 0 0 var(--primary)}
+  .pt-main{min-width:0}
+  .pt-merch{color:var(--ink);font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pt-desc{color:var(--mute);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+  .pt-amount{font-family:var(--font-mono);font-size:13.5px;font-weight:600;color:var(--ink);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .pt-amount.none{color:var(--line-hi);font-weight:400}
+  .pt-amount.refund{color:var(--keep)}
+  .pt-date{font-family:var(--font-mono);font-size:10.5px;color:var(--faint);text-align:right;margin-top:2px;font-variant-numeric:tabular-nums}

@@ -1,0 +1,120 @@
+/* Today's brief in the reading pane, and the sync menu's AI line, whose place in the cascade is between these. */
+  /* Today's brief: the Inbox's reading pane while no message is open (showBrief), and its pinned row */
+  /* the scene runs edge to edge under the action bar; the greeting sits in the reading column, the card overlaps the hills */
+  body .reader.brief-pane .rd-actions{margin-bottom:0}
+  body .reader.brief-pane>.bf-hero{position:relative;width:auto;height:220px;margin-inline:0;overflow:hidden}
+  .bf-hero>svg{position:absolute;inset:0;width:100%;height:100%}
+  .bf-hero .bf-ht{position:absolute;top:32px;left:50%;transform:translateX(-50%);width:min(var(--measure),calc(100% - 64px))}
+  .bf-date{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--soft)}
+  .bf-hero h1{margin:10px 0 0;font-family:var(--font-display);font-weight:700;font-size:40px;line-height:1.1;color:var(--ink)}
+  @container pane (max-width:700px){ .bf-hero .bf-ht{top:22px} .bf-hero h1{font-size:30px} }
+  body .reader .ai-card.bf-card{position:relative;margin-top:-84px;padding:20px 24px 18px;border-radius:18px;
+    background:var(--grain),var(--panel);box-shadow:var(--sh-pop)}
+  .bf-card .ai-hd{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+  body .reader .bf-card .bf-narr{font-family:var(--font-hand);font-weight:600;font-synthesis:none;font-size:18px;line-height:1.7;color:var(--ai);text-wrap:pretty}
+  .bf-card .bf-wait{color:var(--mute);font-size:15px}
+  .bf-card .bf-aioff{font-size:14.5px;line-height:1.55;color:var(--soft)}
+  .bf-card .bf-aioff b{color:var(--ink)}
+  .bf-card .bf-aioff p+p{margin-top:7px}
+  .bf-card .bf-aioff .m{font-size:13px;color:var(--mute)}
+  .bf-card .bf-aioff .pv{display:flex;gap:7px;align-items:flex-start}
+  .bf-card .bf-aioff .pv .ico{width:14px;height:14px;flex:none;margin-top:2px}
+  .bf-aioff code{font-family:var(--font-mono);font-size:.9em;background:var(--sel);padding:1px 5px;border-radius:4px}
+  .sm-ai{display:flex;gap:7px;align-items:flex-start}
+  .sm-ai .ico{width:14px;height:14px;flex:none;margin-top:1px}
+  .status-menu .sm-ai.err{color:var(--err)}
+  .status-menu .sm-ai.m{font-size:11.5px;color:var(--faint)}
+  .bf-tallies{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .bf-tally{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--line-hi);
+    background:var(--bg);color:var(--soft);font:inherit;font-size:13.5px;font-weight:700;cursor:pointer}
+  .bf-tally:hover{color:var(--ink);border-color:var(--mute)}
+  .bf-tally b{color:var(--ink);font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+  .bf-tally.sun{background:var(--gold-wash);border-color:color-mix(in srgb,var(--sun) 45%,transparent);color:var(--gold)}
+  .bf-tally.sun::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--sun)}
+  .bf-tally.sun b{color:var(--gold)}
+  .bf-h{margin:30px 0 12px;font-family:var(--font-display);font-weight:600;font-size:20px;color:var(--ink)}
+  .bf-needs{display:grid;gap:10px}
+  .bf-need{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--r-md)}
+  .bf-need:hover{border-color:var(--line-hi)}
+  .bf-n1{display:flex;align-items:center;gap:8px;min-width:0;font-size:13.5px}
+  .bf-n1 b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .bf-n1 time{margin-left:auto;flex:none;font-size:12.5px;color:var(--mute)}
+  .bf-subj{all:unset;display:block;margin-top:3px;font-size:15.5px;font-weight:700;line-height:1.35;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
+  .bf-subj:hover{text-decoration:underline;text-underline-offset:3px}
+  .bf-subj:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+  .bf-gist{margin:4px 0 0;font-size:14px;line-height:1.5;color:var(--soft)}
+  .bf-need .rchip{margin-top:9px}
+  /* a card's verbs, as the reader has them: reply (or the pre-written draft), read, snooze, archive, delete */
+  .bf-acts{display:flex;align-items:center;gap:4px;margin-top:10px;flex-wrap:wrap}
+  .bf-acts .sp{flex:1}
+  .bf-act{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 12px;border-radius:10px;border:1px solid var(--line-hi);
+    background:var(--panel);color:var(--ink);font:700 13px/1 var(--font-ui);cursor:pointer}
+  .bf-act:hover{border-color:var(--mute)}
+  .bf-act.ai{background:var(--ai-wash);border-color:color-mix(in srgb,var(--ai) 35%,transparent);color:var(--ai)}
+  .bf-act.quiet{border-color:transparent;background:none;color:var(--soft)}
+  .bf-act.quiet:hover{background:var(--hover);color:var(--ink)}
+  .bf-ic{display:inline-grid;place-items:center;width:32px;height:32px;border:none;border-radius:10px;background:none;color:var(--mute);cursor:pointer}
+  .bf-ic:hover{background:var(--hover);color:var(--ink)}
+  .bf-ic.del{color:var(--err)}
+  .bf-act .ico,.bf-ic .ico{width:16px;height:16px}
+  /* beside Needs you: Today & next (the invites in your mail) and Waiting on others. Below it on a
+     narrow pane; a column of its own from 940px, where the brief widens to make room */
+  .bf-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:28px}
+  .bf-side{display:grid;gap:14px;align-content:start}
+  .bs-card{padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--panel)}
+  .bs-card h3{display:flex;align-items:center;gap:8px;margin:0 0 8px;font:800 11px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+  .bs-card h3 .ico{width:15px;height:15px}
+  .bs-ev{display:grid;grid-template-columns:62px minmax(0,1fr);gap:12px;padding:6px 0}
+  .bs-ev time{font:800 13px/1.3 var(--font-ui);font-variant-numeric:tabular-nums;color:var(--ink)}
+  .bs-ev time small{display:block;font-weight:600;font-size:12px;color:var(--mute)}
+  .bs-t{all:unset;display:block;font-size:13.5px;font-weight:700;line-height:1.35;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
+  .bs-t:hover{text-decoration:underline;text-underline-offset:3px}
+  .bs-t:focus-visible,.bs-wt:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+  .bs-ev small.m,.bs-wt small{display:block;font-size:12.5px;line-height:1.4;color:var(--mute)}
+  .bs-wt{all:unset;box-sizing:border-box;display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:center;width:100%;padding:6px 0;cursor:pointer}
+  .bs-wt b{display:block;font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bs-wt:hover b{text-decoration:underline;text-underline-offset:3px}
+  .bs-more{all:unset;display:block;margin-top:6px;font-size:12.5px;font-weight:700;color:var(--primary-ink);cursor:pointer}
+  .bs-more:hover{text-decoration:underline}
+  @container pane (min-width:940px){
+    body .reader.brief-pane:has(.bf-side)>:not(.rd-actions,.bf-hero){width:min(1100px,calc(100% - 80px))}
+    body .reader.brief-pane:has(.bf-side)>.bf-card{max-width:800px;margin-left:max(40px,calc((100% - 1100px) / 2))}
+    .reader.brief-pane:has(.bf-side) .bf-hero .bf-ht{width:min(1100px,calc(100% - 80px))}
+    .bf-grid:has(>.bf-side){grid-template-columns:minmax(0,1fr) 320px}
+    .bf-grid>.bf-side{margin-top:30px}
+  }
+  /* the scene's motion: grass sways, clouds drift, birds cross; fireflies, stars and the moon by night (reduced motion stills it) */
+  .scene .sway{transform-box:fill-box;transform-origin:50% 100%;animation:sway 5.5s ease-in-out infinite alternate}
+  .scene .sway.b{animation-duration:6.5s;animation-delay:-2s}
+  .scene .sway.c{animation-duration:4.8s;animation-delay:-1s}
+  @keyframes sway{from{transform:skewX(-3deg)}to{transform:skewX(4deg)}}
+  .scene .cdrift{animation:cdrift 70s ease-in-out infinite alternate}
+  @keyframes cdrift{to{transform:translateX(-36px)}}
+  .scene .bird{animation:bird 26s linear infinite}
+  @keyframes bird{to{transform:translate(-260px,-24px)}}
+  .scene .stars{opacity:var(--stars)}
+  .scene .ff{opacity:var(--glow);animation:ff 3.8s ease-in-out infinite alternate}
+  @keyframes ff{0%{opacity:0}50%{opacity:var(--glow)}100%{opacity:.15;transform:translate(6px,-8px)}}
+  .scene .sunbody{opacity:var(--sunny)}
+  .scene .moonbody{opacity:var(--stars)}
+  .scene .winglow{opacity:var(--glow)}
+  .bf-calm{margin:0;color:var(--mute);font-size:14.5px}
+  .bf-topics{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .bf-topic{border:none;border-radius:var(--r-pill);background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;padding:5px 11px;cursor:pointer}
+  .bf-topic b{margin-left:6px;color:var(--mute);font-variant-numeric:tabular-nums}
+  .bf-topic:hover{background:var(--hover)}
+  .bf-needs+.bf-tally{margin-top:12px}
+  .bf-tidy{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:26px;padding:14px 16px;border-radius:var(--r-md);background:var(--bg2);font-size:14px;line-height:1.45;color:var(--soft)}
+  .bf-tidy>span{flex:1 1 240px}
+  .bf-tidied{flex:1 1 100%;list-style:none;margin:2px 0 0;padding:0;font-size:13px}
+  .bf-tidied li{padding:2px 0}   .bf-tidied b{color:var(--ink);font-weight:500}
+  .brief-row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:34px minmax(0,1fr);gap:11px;align-items:center;width:100%;
+    padding:10px;border-radius:var(--r-md);cursor:pointer}
+  .brief-row:hover{background:var(--hover)}
+  .brief-row.sel{background:var(--sel)}
+  .brief-row:focus-visible{box-shadow:inset 0 0 0 2px var(--focus)}
+  .brief-row .bthumb{width:34px;height:34px;border-radius:10px;overflow:hidden;display:block}
+  .brief-row .bthumb svg{width:100%;height:100%;display:block}
+  .brief-row b{display:block;font-size:14px;color:var(--ink)}
+  .brief-row small{display:block;margin-top:1px;font-size:13px;color:var(--mute)}
+  .brief-row small.sun{color:var(--gold)}

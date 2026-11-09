@@ -1,0 +1,12 @@
+/* The retry button and Load more, which several features draw. */
+  /* the one retry-and-confirm button: quiet by default, .strong for the step that carries out a plan */
+  .btn-retry{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:3px 9px;cursor:pointer}
+  .btn-retry:hover{color:var(--ai)}
+  .btn-retry.strong{background:var(--ai);color:var(--ai-ink);border-radius:var(--r-sm);font-size:13px;padding:9px 17px;transition:filter var(--t-fast)}
+  .btn-retry.strong:hover{filter:brightness(1.08);color:var(--ai-ink)}
+  .btn-retry.strong.danger{background:var(--err);color:var(--on-err)}   .btn-retry.strong.danger:hover{color:var(--on-err)}
+  .btn-retry.strong.armed{animation:pulse .9s ease-in-out infinite}
+  @keyframes pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.28)}}
+  .load-more{display:block;width:calc(100% - 26px);margin:10px 13px;background:var(--sel);
+    border:none;border-radius:var(--r-sm);color:var(--soft);font:inherit;font-size:12.5px;font-weight:500;padding:9px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+  .load-more:hover{background:var(--raise-hi);color:var(--ink)}

@@ -1,0 +1,19 @@
+/* What floats over the app: the send, undo and new-build floats, and the scrim. */
+  .scrim{position:fixed;inset:0;background:var(--scrim);backdrop-filter:blur(3px);z-index:35;opacity:0;pointer-events:none;transition:opacity var(--t-med)}
+  .scrim.on{opacity:1;pointer-events:auto}
+  .send-float{position:fixed;right:20px;bottom:20px;z-index:90;display:flex;align-items:center;gap:10px;
+    background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-md);padding:11px 15px;font-size:12.5px;
+    box-shadow:var(--sh-3)}
+  .build-float{right:auto;bottom:auto;top:12px;left:50%;transform:translateX(-50%)}
+  .send-float.sending{border-color:var(--syncing);color:var(--syncing)}
+  .send-float.sent{border-color:var(--ok);color:var(--ok)}
+  .send-float.failed{border-color:var(--err);color:var(--err)}
+  .send-float button{background:none;border:1px solid currentColor;border-radius:var(--r-xs);color:inherit;font:inherit;
+    font-size:11.5px;font-weight:600;padding:4px 9px;cursor:pointer}
+  .undo-float{right:auto;left:20px;border-color:var(--line-hi);animation:undoIn .16s ease}
+  .float-live{position:absolute;width:0;height:0}   /* out of the page's flow, and no stacking context: a float's z-index still counts */
+  .send-float{overflow:hidden}
+  .float-bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:currentColor;opacity:.55;transform-origin:left;animation:floatDrain linear forwards}
+  @keyframes floatDrain{to{transform:scaleX(0)}}
+  @media (prefers-reduced-motion:reduce){.float-bar{display:none}}   /* a bar that can't move says nothing */
+  @keyframes undoIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}

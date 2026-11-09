@@ -1,0 +1,146 @@
+/* The colours, type and measures everything reads: Night, Day, Dusk, high contrast and density. */
+  /* ═══════════════════ MEADOW ═══════════════════
+     Paper on sky. Night (below), Day (body.theme-light, the default) and Dusk (.theme-light.theme-dusk) share one set of
+     tokens. Aizome indigo (--primary) is every action, selection and focus ring. Sun gold
+     marks only what needs you: --gold is its text tone, --sun its fill. Moss (--ai) is only
+     ever the AI's voice. Rust (--err, --ember) marks Delete and errors. Nunito Sans carries
+     the interface and the mail; Shippori Mincho the headings. Washes are color-mix() of a
+     token, so both lights stay in step.
+     Z-ladder (do not reshuffle): header/docks 20 < scrim 35 < rail-drawer 38 <
+     curate 40 < swipe 50 < ask/commit/toast/do 60-64 < settings 80 < outbox 85 <
+     send-float 90 < snooze 95 < legend 120 < palette/contact/ac-menu 130. */
+  :root{
+    /* surfaces — night paper, four elevation steps */
+    --bg:#16213A; --bg2:#121B31; --panel:#1B2743; --panel-hi:#A9C2EC14;
+    --line:#26344F; --line-hi:#36466B;
+    /* text — all AA on --bg, --panel and --sel */
+    --ink:#EDE7D7; --soft:#CBC4B3; --mute:#ADA799; --faint:#A6A294;   /* faint: one visible step below mute */
+    /* actions — aizome indigo. --accent is kept as an alias for future edits */
+    --primary:#A9C2EC; --primary-hi:#C5D7F6; --on-primary:#0D1930; --primary-ink:#BDD0F2; --primary-wash:#24375C;
+    --accent:var(--primary); --focus:#C5D7F6;
+    /* sun — "needs you" and nothing else */
+    --gold:#F6CC86; --gold-hi:#FADDA8; --sun:#F2B65A; --gold-wash:#3A3121;
+    --ember:#F0957A;
+    --ai:#AED6A2; --ai-wash:#1D3229;   /* moss — the AI's voice, never plain chrome */
+    /* categories */
+    --keep:#7CC79A; --txn:#6CC2D1; --personal:#F0A8C4; --scam:#FF8577;
+    --block:#E48A73; --mkt:#E8A867; --notif:#8EA9DB;
+    /* sync */
+    --ok:#7CC79A; --err:#F0957A; --on-err:#2A0F08; --syncing:#F2B65A;
+    /* interaction */
+    --sel:#24375C; --hover:#1C2944; --bg3:#1F2C49;   /* bg3: the paper step for badges and hovers */
+    --top:56px;
+    /* type roles. Mail and summaries read in the UI face; mono is garnish (keycaps, code) */
+    --font-ui:"Nunito Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --font-display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",Georgia,serif;
+    --font-reading:var(--font-ui);
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --font-hand:"Klee One","Hiragino Maru Gothic ProN",ui-rounded,"Nunito Sans",sans-serif;   /* the brief, in the AI's hand */
+    /* on-fill text */
+    --gold-ink:#2A1A00; --ai-ink:#0F2016;
+    /* radius */
+    --r-xs:6px; --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px; --r-pill:999px;
+    /* shadows — elevation, never glow */
+    --sh-1:0 1px 2px rgba(0,0,0,.35);
+    --sh-2:0 4px 16px -4px rgba(0,0,0,.5);
+    --sh-3:0 30px 70px -28px rgba(0,0,0,.85);
+    /* motion */
+    --ease:cubic-bezier(.22,.8,.3,1); --t-fast:120ms; --t-med:220ms;
+    --dock-h:64px;                      /* scrollers under a dock pad by this + 24px */
+    /* theme-swappable extras (Day overrides all of these) */
+    --raise-hi:#2A3A5E;                 /* secondary-button hover */
+    --scroll-hi:#46587E;                /* scrollbar thumb hover */
+    --scrim:rgba(4,8,20,.55);           /* modal backdrop */
+    --notif-ink:#0C1620;                /* text on a --notif fill (swipe badge) */
+    --mono-s:45%; --mono-l:72%;         /* avatar monogram glyph S/L — flips darker on paper */
+    --acct-1:#8FB0E3; --acct-2:#9FCB8C; --acct-3:#E9AE62; --acct-4:#D3A2D0; --acct-5:#86CBC6; --acct-6:#E89FA6;   /* account dots, in config order */
+    /* the sky the panels sit on; panel and pop shadows; paper grain (an SVG noise tile); the search glyph */
+    --sky-1:#08122A; --sky-2:#122345; --sky-3:#26365A;
+    --sh-panel:0 1px 0 rgba(170,190,240,.06) inset,0 0 0 1px rgba(150,175,230,.10),0 18px 40px -22px rgba(0,0,0,.85);
+    --sh-pop:0 0 0 1px rgba(150,175,230,.14),0 30px 70px -28px rgba(0,0,0,.9);
+    --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .8 0 0 0 0 .85 0 0 0 0 1 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --search-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A7A193' stroke-width='1.75' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E");
+    /* the painted scene (lib/ui/Scene.tsx): its colors, and whether stars, glow and sun show */
+    --cloud-1:#4C5D84; --cloud-2:#33446A; --cloud-3:#18223F; --disc:#F1ECD4; --disc-glow:rgba(225,225,200,.35);
+    --mtn:#22325A; --hill-far:#1C3242; --hill-mid:#172C2C; --hill-near:#122420; --hill-lit:#2B4636; --meadow:#1D3A2B;
+    --leaf-1:#3F6448; --leaf-2:#23412E; --leaf-3:#12241A; --trunk:#2A221C; --roof:#59302A; --wall:#4A4A55; --window:#FFC468; --path:#3A4A52;
+    --stars:1; --glow:1; --sunny:0;
+    /* the message list's density (Preferences), comfortable here and tighter on body[data-density] */
+    --row-pad:10px 10px 11px; --row-lh:1.45; --row-gist-lines:2; --row-chip:flex;
+  }
+  /* ═══════ Day — the light Meadow (toggle in ? help or the palette) ═══════
+     Same identity on cream paper: the signal colours go DARKER so they read as text,
+     and --on-primary / --ai-ink flip to white so they still read on the darker fills. */
+  body.theme-light{
+    --bg:#FCF9F2; --bg2:#F6F1E6; --panel:#FFFDF8; --panel-hi:#2D4B7012; --line:#E8DFCE; --line-hi:#D5C9B1;
+    --ink:#24221E; --soft:#47423A; --mute:#625B4D; --faint:#665F51;
+    --primary:#2D4B70; --primary-hi:#223A58; --on-primary:#FFFFFF; --primary-ink:#2D4B70; --primary-wash:#E2E9F2; --focus:#2D4B70;
+    --gold:#7E4F06; --gold-hi:#5E3A04; --sun:#E3A136; --gold-wash:#FAEDD2;
+    --ember:#A3412A; --ai:#37633D; --ai-wash:#E7EFDF;
+    --keep:#3B7342; --txn:#7A6A2E; --personal:#8A6D10; --scam:#B3261E; --block:#8E3B1F; --mkt:#A0620F; --notif:#4E6E8E;
+    --ok:#3B7342; --err:#A3412A; --on-err:#FFFFFF; --syncing:#8B5E07;
+    --sel:#E2E9F2; --hover:#F6F1E6; --bg3:#EEE7D8;
+    --gold-ink:#2A1A00; --ai-ink:#FFFFFF;
+    --raise-hi:#EEE7D8; --scroll-hi:#B7A981; --scrim:rgba(40,56,82,.30); --notif-ink:#FFFFFF;
+    --mono-s:60%; --mono-l:32%;
+    --acct-1:#3D6596; --acct-2:#5C8F4D; --acct-3:#C47A28; --acct-4:#8A4F86; --acct-5:#2F7A78; --acct-6:#A8454F;
+    --sh-1:0 1px 2px rgba(38,64,104,.08);
+    --sh-2:0 4px 16px -4px rgba(38,64,104,.16);
+    --sh-3:0 28px 60px -28px rgba(30,52,90,.45);
+    --sky-1:#97BFDD; --sky-2:#C7DDEB; --sky-3:#EDE8DA;
+    --sh-panel:0 1px 0 rgba(255,255,255,.75) inset,0 0 0 1px rgba(104,86,52,.10),0 14px 34px -22px rgba(38,64,104,.55);
+    --sh-pop:0 0 0 1px rgba(104,86,52,.12),0 28px 60px -28px rgba(30,52,90,.55);
+    --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .3 0 0 0 0 .2 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --search-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23655E50' stroke-width='1.75' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E");
+    --cloud-1:#FFFFFF; --cloud-2:#F4F3EE; --cloud-3:#AFC2D8; --disc:#FFF6DC; --disc-glow:rgba(255,243,206,.85);
+    --mtn:#A3B9CB; --hill-far:#86AA8C; --hill-mid:#62915F; --hill-near:#4D7E4B; --hill-lit:#93BC6E; --meadow:#6E9C55;
+    --leaf-1:#A6CB72; --leaf-2:#5E9147; --leaf-3:#2F5A35; --trunk:#5C4737; --roof:#B1523A; --wall:#F5EBD8; --window:#5B7789; --path:#E8DDBF;
+    --stars:0; --glow:0; --sunny:1;
+  }
+  /* ═══════ Dusk — the evening Meadow (a light theme: it rides on .theme-light and swaps the tokens) ═══════ */
+  body.theme-light.theme-dusk{
+    --bg:#FCF7EE; --bg2:#F7EFE2; --panel:#FFFCF6; --panel-hi:#3A467012; --line:#EBDDC8; --line-hi:#DAC7AA;
+    --ink:#27211C; --soft:#4A4036; --mute:#685B4C; --faint:#6E6253;
+    --acct-1:#4A5E99; --acct-2:#6B8A3E; --acct-3:#C2702A; --acct-4:#84497F; --acct-5:#2F7370; --acct-6:#A3424C;
+    --primary:#3A4670; --primary-hi:#2C3759; --on-primary:#FFFFFF; --primary-ink:#3A4670; --primary-wash:#E8E6F0; --focus:#3A4670;
+    --gold:#7C4805; --gold-hi:#5D3604; --sun:#E39A3A; --gold-wash:#FBE9CF;
+    --ember:#A13D27; --ai:#45612F; --ai-wash:#EDF0DC; --err:#A13D27;
+    --sel:#E8E6F0; --hover:#F7EFE2; --bg3:#F0E5D3; --raise-hi:#F0E5D3; --scrim:rgba(80,46,40,.28);
+    --sh-1:0 1px 2px rgba(120,60,50,.08);
+    --sh-2:0 4px 16px -4px rgba(120,60,50,.16);
+    --sh-3:0 0 0 1px rgba(120,80,40,.13),0 28px 60px -28px rgba(110,50,40,.5);
+    --sky-1:#E59A6E; --sky-2:#F2C496; --sky-3:#F3E2C8;
+    --sh-panel:0 1px 0 rgba(255,255,255,.7) inset,0 0 0 1px rgba(120,80,40,.11),0 14px 34px -22px rgba(120,60,50,.5);
+    --sh-pop:0 0 0 1px rgba(120,80,40,.13),0 28px 60px -28px rgba(110,50,40,.5);
+    --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .4 0 0 0 0 .28 0 0 0 0 .18 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --search-ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23685B4C' stroke-width='1.75' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E");
+    --cloud-1:#FFE8CF; --cloud-2:#F9CFAE; --cloud-3:#B98A99; --disc:#FFE2A6; --disc-glow:rgba(255,206,140,.9);
+    --mtn:#A88C9E; --hill-far:#8D8B76; --hill-mid:#6E7C52; --hill-near:#56673F; --hill-lit:#B3A05C; --meadow:#7A8448;
+    --leaf-1:#C9B562; --leaf-2:#6F7E3F; --leaf-3:#3B4527; --trunk:#4E3A2D; --roof:#9E4532; --wall:#F3DFC4; --window:#F7C66C; --path:#EED3A8;
+    --stars:0; --glow:.75; --sunny:1;
+  }
+  /* ═══════ High contrast (Preferences): a class over the three themes. Text, lines and the fills under them, past AA ═══════ */
+  body.hc:not(.theme-light){
+    --bg:#101A30; --bg2:#0C1428; --panel:#141E36; --line:#55668C; --line-hi:#7689B4;
+    --ink:#FFFFFF; --soft:#F2EDDE; --mute:#E0DACA; --faint:#D8D2C2;
+    --primary:#C5D7F6; --primary-hi:#DCE7FA; --primary-ink:#D3E1FA; --focus:#FFFFFF;
+    --gold:#FFD896; --ai:#C8EBBC; --err:#FFB39C; --ok:#A8E6BE; --scam:#FFB0A6; --ember:#FFB39C;
+    --sel:#20325A; --hover:#1A2640; --bg3:#1A2640;
+  }
+  body.hc.theme-light{
+    --bg:#FFFFFF; --bg2:#F7F2E8; --panel:#FFFFFF; --line:#8C8270; --line-hi:#6E6554;
+    --ink:#000000; --soft:#201C16; --mute:#332E26; --faint:#3A352D;
+    --primary:#1E3A5F; --primary-hi:#152C49; --primary-ink:#1E3A5F; --focus:#000000;
+    --gold:#5A3703; --ai:#1F4726; --err:#7C2614; --ok:#1F4F2A; --scam:#7E1A14; --ember:#7C2614;
+    --sel:#DCE6F2; --hover:#F1EDE2; --bg3:#EDE7D8;
+  }
+  body.hc.theme-light.theme-dusk{
+    --bg:#FFFDF9; --bg2:#F7EFE2; --panel:#FFFFFF; --line:#8E7F66; --line-hi:#6F614B;
+    --ink:#000000; --soft:#231C15; --mute:#362D23; --faint:#3E352A;
+    --primary:#28325A; --primary-hi:#1C2444; --primary-ink:#28325A; --focus:#000000;
+    --gold:#583102; --ai:#2F4720; --err:#7A2614; --ok:#25502A; --scam:#7E1A14; --ember:#7A2614;
+    --sel:#E1DEEC; --hover:#F4EBDC; --bg3:#EDE2CF;
+  }
+  /* Density (Preferences): how tight the message list sits */
+  body[data-density="cozy"]{--row-pad:7px 10px 8px;--row-lh:1.35}
+  body[data-density="compact"]{--row-pad:4px 10px 5px;--row-lh:1.3;--row-gist-lines:1;--row-chip:none}

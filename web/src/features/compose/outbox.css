@@ -1,0 +1,14 @@
+/* The outbox. */
+  .outbox-fly{position:fixed;right:14px;top:54px;z-index:85;width:min(420px,94vw);max-height:70vh;overflow:auto;
+    background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-lg);box-shadow:var(--sh-3);padding:8px}
+  .outbox-fly h4{font-family:var(--font-display);font-size:14px;font-weight:600;color:var(--ink);padding:8px 10px 4px}
+  .ob-row{display:flex;align-items:center;gap:9px;padding:9px 10px;border-top:1px solid var(--line);font-size:12px}
+  .ob-row .ob-st{flex:none;font-size:10.5px;font-weight:600;letter-spacing:.02em;border-radius:var(--r-xs);padding:2px 7px}
+  .ob-st.queued,.ob-st.sending{color:var(--syncing);background:color-mix(in srgb,var(--syncing) 14%,transparent)}
+  .ob-st.sent{color:var(--ok);background:color-mix(in srgb,var(--keep) 14%,transparent)}
+  .ob-st.scheduled{color:var(--primary-ink);background:var(--primary-wash)}
+  .ob-st.error{color:var(--err);background:color-mix(in srgb,var(--err) 14%,transparent)}
+  .ob-row .ob-sub{flex:1;min-width:0;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ob-row .ob-to{color:var(--faint);font-size:10.5px;font-family:var(--font-mono)}
+  .ob-row .ob-why{white-space:normal}
+  .ob-row button.btn-retry{background:var(--primary-wash);color:var(--primary-ink);font-weight:600;padding:4px 9px}   .ob-row button.btn-retry:hover{color:var(--primary-ink)}

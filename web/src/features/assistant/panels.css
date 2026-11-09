@@ -1,0 +1,60 @@
+/* The new-mail pill, Commitments and Your week. */
+  .new-pill{display:block;width:calc(100% - 16px);margin:8px;background:var(--primary);color:var(--on-primary);border:none;
+    border-radius:var(--r-sm);font:inherit;font-size:12px;font-weight:600;padding:8px;cursor:pointer}
+  .new-pill:hover{background:var(--primary-hi)}
+  /* "since you last looked" AI delta — augments the count pill into a calm two-line card */
+  .new-pill--ai{background:var(--panel);color:var(--soft);border:none;border-left:3px solid var(--ai);box-shadow:var(--sh-1);
+    text-align:left;display:flex;flex-direction:column;gap:3px;padding:10px 13px}
+  .new-pill--ai:hover{background:var(--panel);filter:brightness(1.1)}
+  .new-pill--ai .np-head{font-size:11px;font-weight:600;color:var(--ai)}
+  .new-pill--ai .np-delta{font-family:var(--font-reading);font-size:13.5px;line-height:1.45;color:var(--soft);font-weight:400}
+  @keyframes fsFade{from{opacity:0}to{opacity:1}}   /* overlays fade in (Do, Commitments, Review, Documents) */
+  /* ── Commitments: the AI's extracted to-dos as one checkable agenda ── */
+  .commit-overlay{position:fixed;inset:0;z-index:60;display:none;align-items:flex-start;justify-content:center;background:var(--scrim);backdrop-filter:blur(4px)}
+  .commit-overlay.show{display:flex;animation:fsFade .2s ease both}
+  .commit-panel{max-width:700px;width:100%;margin-top:8vh;max-height:82vh;display:flex;flex-direction:column;padding:0 30px}
+  .commit-hd{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:var(--ai);margin-bottom:14px}
+  .commit-hd .n{color:var(--ink)}   .commit-hd .sub{margin-left:auto;color:var(--faint);font-weight:400;font-size:11px}
+  .commit-list{overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:2px}
+  .commit-row{display:flex;align-items:flex-start;gap:11px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:13px 15px;transition:border-color var(--t-fast);animation:fsIn .3s var(--ease) both}
+  .commit-row:hover{border-color:var(--line-hi)}
+  .cm-check{flex:none;width:19px;height:19px;border:1px solid var(--line-hi);border-radius:var(--r-xs);cursor:pointer;color:transparent;display:flex;align-items:center;justify-content:center;font-size:11px;margin-top:1px;background:none}
+  .cm-check:hover{border-color:var(--keep);color:var(--keep)}
+  .cm-main{flex:1;min-width:0;cursor:pointer}
+  .cm-action{font-family:var(--font-reading);font-size:15.5px;line-height:1.45;color:var(--ink)}
+  .cm-meta{font-size:11px;color:var(--faint);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cm-meta .who{color:var(--primary-ink);font-weight:500}
+  .cm-side{flex:none;display:flex;gap:6px}
+  .cm-side button{background:var(--sel);border:none;border-radius:var(--r-sm);color:var(--mute);font-size:12px;padding:6px 9px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+  .cm-side button:hover{background:var(--raise-hi);color:var(--ink)}
+  .commit-hd.task-hd{margin-top:2px}
+  .task-list{flex:none;max-height:32vh;margin-bottom:18px}
+  .commit-row.task .cm-meta .due{color:var(--mute)}
+  .commit-row.task .cm-meta .due.late{color:var(--err)}
+  .commit-row.task.done .cm-action{text-decoration:line-through;color:var(--faint)}
+  .commit-row.task.done .cm-check{color:var(--keep);border-color:var(--keep)}
+  .commit-row.task .cm-main:disabled{cursor:default}
+  .commit-empty{font-family:var(--font-reading);color:var(--mute);font-size:16.5px;text-align:center;padding:36px 0;font-style:italic}
+  .commit-hint{margin-top:13px;font-size:11.5px;color:var(--faint)}
+  /* ── Weekly Review overlay ── */
+  .rv-panel{max-width:720px}
+  .rv-scroll{overflow-y:auto;padding:2px;scrollbar-color:var(--line-hi) transparent}
+  .rv-narr{font-family:var(--font-reading);font-size:18px;line-height:1.6;color:var(--ink);border-left:3px solid var(--ai);padding-left:18px;margin-bottom:6px}   /* the AI-voice grammar */
+  .rv-eyebrow{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ai);margin-bottom:10px}
+  .rv-stats{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 6px}
+  .rv-stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:9px 13px;min-width:78px}
+  .rv-stat .n{font-family:var(--font-display);font-size:21px;font-weight:600;letter-spacing:-.02em;color:var(--ink);line-height:1}
+  .rv-stat.hot .n{color:var(--gold)}   .rv-stat .l{font-size:10.5px;color:var(--faint);margin-top:4px}
+  .rv-sec{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:20px 0 8px}
+  .rv-sec.next{display:flex;align-items:center;gap:6px;color:var(--ai)}
+  .rv-item{display:flex;align-items:flex-start;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:11px 13px;margin-bottom:7px;cursor:pointer;transition:border-color var(--t-fast),background var(--t-fast)}
+  .rv-item:hover{border-color:var(--line-hi);background:var(--panel-hi)}
+  .rv-item .ic{flex:none;font-size:13px;line-height:1.4;color:var(--ai)}
+  .rv-item.need .ic{color:var(--gold)}   .rv-item.wait .ic{color:var(--ai)}
+  .rv-item .body{flex:1;min-width:0}
+  .rv-item .t{font-size:13.5px;color:var(--ink);line-height:1.4}
+  .rv-item .m{font-size:11px;color:var(--faint);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rv-item .m .who{color:var(--primary-ink)}
+  .rv-load,.rv-err{font-family:var(--font-reading);color:var(--soft);font-size:16px;padding:30px 4px;display:flex;align-items:center;gap:10px}
+  .rv-empty{color:var(--faint);font-size:12.5px;padding:2px 2px 8px;font-style:italic}
+  .rv-foot{font-size:10.5px;color:var(--faint);margin-top:14px}

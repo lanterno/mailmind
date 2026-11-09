@@ -1,0 +1,13 @@
+/* The list's thread toggle, scope and context chips. */
+  /* ---------- Phase 4: threading + search + downloads ---------- */
+  .thread-toggle{background:none;border:none;border-radius:var(--r-xs);color:var(--mute);
+    font:inherit;font-size:11px;font-weight:500;padding:3px 9px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+  .thread-toggle:hover{background:var(--panel-hi);color:var(--ink)}
+  .thread-toggle.on{color:var(--primary-ink);background:var(--primary-wash)}
+  .scopetog{cursor:pointer;color:var(--primary-ink);border-bottom:1px dotted var(--primary-ink)}
+  .scopetog:hover{color:var(--primary-hi)}
+  .ctx-save,.ctx-filter{background:var(--sel);border:none;border-radius:var(--r-xs);color:var(--mute);font:inherit;font-size:11px;padding:2px 8px;cursor:pointer}
+  .ctx-save:hover,.ctx-filter:hover{color:var(--primary-ink)}
+  .ctx-chip{display:inline-flex;align-items:center;gap:4px;background:var(--sel);border-radius:var(--r-xs);color:var(--mute);font-size:11px;padding:2px 6px;margin-left:4px}
+  .ctx-chip button{background:none;border:none;color:inherit;font-size:13px;line-height:1;cursor:pointer;padding:0 1px}
+  .ctx-chip button:hover{color:var(--primary-ink)}

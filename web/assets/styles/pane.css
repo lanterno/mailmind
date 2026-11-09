@@ -1,0 +1,19 @@
+/* The AI card and the loading skeleton, which the reader and today's brief both draw. */
+  .rd-skel{margin-top:18px;display:flex;flex-direction:column;gap:11px}
+  .rd-skel .skb{height:13px;border-radius:var(--r-xs);background:linear-gradient(90deg,var(--line) 25%,var(--line-hi) 50%,var(--line) 75%);
+    background-size:200% 100%;animation:shimmer 1.4s ease-in-out infinite}
+  .rd-skel .skb.short{width:55%}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .rd-skelhint{margin-top:16px;font-size:12.5px;color:var(--faint)}
+  .qr-k .ico{width:14px;height:14px}
+  /* ---------- Phase 5: AI card · snooze menu · realtime pill ---------- */
+  .ai-card{border:none;border-left:3px solid var(--ai);background:var(--panel);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px;box-shadow:var(--sh-1)}
+  .ai-card .ai-hd{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:11.5px;color:var(--ai);margin-bottom:8px;font-weight:600}
+  .ai-mark{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ai)}
+  .ai-mark .ico{width:16px;height:16px}
+  .ai-card .ai-cached,.ai-card .ai-stale{font-weight:400;color:var(--faint)}
+  .ai-card .ai-tldr{font-family:var(--font-reading);font-size:16px;line-height:1.55;color:var(--ink)}
+  .ai-card .ai-points{margin:9px 0 0;padding-left:18px;font-size:13.5px;line-height:1.55;color:var(--soft)}
+  .ai-card .ai-action{margin-top:9px;font-size:13.5px;color:var(--gold);font-weight:600}
+  .ai-card .ai-foot{margin-top:10px;font-size:11.5px;color:var(--faint);display:flex;gap:10px;align-items:center}
+  .ai-card .ai-err{font-size:13.5px;color:var(--soft);display:flex;align-items:center;gap:10px}

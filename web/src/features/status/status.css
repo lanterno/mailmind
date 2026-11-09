@@ -1,0 +1,35 @@
+/* The account alert, keyboard help and first-run guide. */
+  .legend{position:fixed;inset:0;z-index:120;display:none;place-items:center;background:var(--scrim)}
+  .legend.show{display:grid}
+  .legend .box{background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-lg);padding:26px 30px;max-width:430px;box-shadow:var(--sh-3)}
+  .guide{position:fixed;inset:0;z-index:140}   .guide-dlg{position:fixed;inset:0;outline:none}
+  .guide-spot{position:fixed;border-radius:var(--r-md);box-shadow:0 0 0 200vmax var(--scrim);pointer-events:none}
+  .guide-spot.bare{inset:0;border-radius:0;background:var(--scrim);box-shadow:none}
+  .guide-card{position:fixed;background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-lg);box-shadow:var(--sh-3);padding:18px 20px;animation:fsFade var(--t-med) ease-out}
+  .guide-n{color:var(--faint);font-size:11.5px}
+  .guide-t{font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--ink);margin:2px 0 6px}
+  .guide-b{color:var(--soft);font-size:13px;line-height:1.5;margin:0}
+  .guide-foot{display:flex;align-items:center;gap:6px;margin-top:14px}   .guide-foot .sp{flex:1}
+  #legGuide{margin-top:12px}
+  .legend h3{font-family:var(--font-display);font-weight:600;font-size:17px;letter-spacing:-.01em;color:var(--ink);margin-bottom:14px}
+  .legend .g{display:grid;grid-template-columns:auto 1fr;gap:4px 15px;color:var(--soft);font-size:12.5px}
+  .legend kbd{background:var(--bg);border:1px solid var(--line-hi);border-bottom-width:2px;border-radius:var(--r-xs);padding:1px 6px;color:var(--soft);font-size:11px;font-family:var(--font-mono)}
+  .legend .box{max-width:680px;max-height:calc(100dvh - 32px);overflow-y:auto}
+  .legkeys{display:inline-flex;gap:3px;align-items:baseline}
+  .legcols{display:grid;grid-template-columns:1fr 1fr;gap:10px 26px}
+  .legh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--faint);margin:14px 0 6px}
+  .legcols .legh:first-child,.legcols>div>.legh{margin-top:0}
+  .legnote{margin:12px 0 4px;font-size:11.5px;color:var(--faint);line-height:1.5}
+  .legnote b{color:var(--soft);font-weight:600}
+  .legtoggle{display:flex;align-items:center;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--mute);cursor:pointer}
+  .legtoggle input{accent-color:var(--primary)}
+  .legtheme{cursor:default}
+  .legtheme button{padding:4px 10px;border:1px solid var(--line-hi);border-radius:var(--r-pill);background:none;color:var(--soft);font:inherit;font-weight:600;cursor:pointer}
+  .legtheme button[aria-pressed="true"]{background:var(--sel);border-color:transparent;color:var(--primary-ink)}
+  .legtheme span{color:var(--faint)}
+  .legsearch{font-size:12px;color:var(--soft);line-height:1.9}
+  .legsearch code{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-xs);padding:1px 5px;color:var(--primary-ink);font-size:11px;font-family:var(--font-mono)}
+  .acct-alert{display:flex;align-items:center;gap:10px;padding:9px 16px;background:color-mix(in srgb,var(--err) 12%,transparent);
+    border-bottom:1px solid color-mix(in srgb,var(--err) 40%,transparent);color:var(--err);font-size:12.5px}
+  .acct-alert .aa-fix{background:none;border:1px solid var(--err);border-radius:var(--r-xs);color:var(--err);font:inherit;font-size:12px;font-weight:600;padding:3px 9px;cursor:pointer}
+  .acct-alert .aa-x{margin-left:auto;background:none;border:none;color:var(--err);cursor:pointer;font-size:13px}

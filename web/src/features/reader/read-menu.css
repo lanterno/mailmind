@@ -1,0 +1,13 @@
+/* The Aa reading menu. */
+  .read-menu{position:fixed;z-index:95;width:300px;max-width:calc(100vw - 20px);background:var(--panel);border:1px solid var(--line-hi);
+    border-radius:var(--r-md);box-shadow:var(--sh-3);padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .read-menu h3{margin:0;font-size:13.5px;font-weight:700;color:var(--ink)}
+  .read-menu .rs-row{display:flex;flex-direction:column;gap:6px}
+  .read-menu .rs-lab{font-size:12px;color:var(--mute)}
+  .read-menu .seg{display:flex}
+  .read-menu .seg button{flex:1;padding:6px 4px;font-size:12.5px;line-height:1.2}
+  .read-menu .seg button.on{background:var(--sel);color:var(--primary-ink);box-shadow:none}
+  .read-menu .rs-sz-s{font-size:11px!important}   .read-menu .rs-sz-m{font-size:13px!important}
+  .read-menu .rs-sz-l{font-size:15px!important}   .read-menu .rs-sz-xl{font-size:17px!important}
+  .read-menu .rs-note{margin:0;font-size:12px;line-height:1.45;color:var(--mute)}
+  .cab .rs-aa{font-weight:700;letter-spacing:-.02em}

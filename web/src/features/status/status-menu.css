@@ -1,0 +1,19 @@
+/* The sync menu. */
+  /* Aa — reading settings: column width, plain-text face and size, mail colors */
+  .status-menu{position:fixed;z-index:95;width:320px;max-width:calc(100vw - 20px);background:var(--panel);border:1px solid var(--line-hi);
+    border-radius:var(--r-md);box-shadow:var(--sh-3);padding:14px 8px 8px;display:flex;flex-direction:column;gap:10px}
+  .status-menu .sm-info{padding:0 8px;display:flex;flex-direction:column;gap:5px}
+  .status-menu .sm-hd{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:700;color:var(--ink)}
+  .status-menu .sm-sub{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+  .status-menu .sm-sub b{color:var(--soft);font-weight:600}
+  .status-menu .sm-accts{display:flex;flex-direction:column;gap:4px;margin-top:4px;padding-top:8px;border-top:1px solid var(--line)}
+  .status-menu .sm-acct{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--soft)}
+  .status-menu .sm-acct small{margin-left:auto;font-size:11.5px;color:var(--faint)}
+  .status-menu .sm-acct small.err{color:var(--err)}
+  .status-menu .sm-acts{display:flex;flex-direction:column;border-top:1px solid var(--line);padding-top:6px}
+  .status-menu .sm-acts button{background:none;border:none;border-radius:var(--r-sm);text-align:left;color:var(--soft);font:inherit;
+    font-size:13px;padding:8px 10px;cursor:pointer;display:flex;align-items:center;gap:8px}
+  .status-menu .sm-acts button:hover:not(:disabled),.status-menu .sm-acts button:focus-visible{background:var(--sel);color:var(--ink)}
+  .status-menu .sm-acts button:disabled{opacity:.5;cursor:default}
+  .status-menu .sm-acts small{margin-left:auto;font-size:11px;color:var(--faint)}
+  .status-menu .mi-ic{display:inline-block;width:20px;text-align:center}

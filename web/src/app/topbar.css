@@ -1,0 +1,68 @@
+/* The top bar: brand, sync and starting-soon pills, search and tools. */
+  /* ---------- top bar: one row — rail toggle and name, search, sync status, help, settings, Compose ---------- */
+  .top{position:sticky;top:0;z-index:20;height:var(--top);background:none;
+    padding:0 16px 0 12px;display:flex;align-items:center}
+  .top .r1{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+  .brand{font-family:var(--font-display);font-weight:600;font-size:16.5px;color:var(--ink);letter-spacing:-.02em;white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
+  .brand svg{width:24px;height:24px;flex:none}
+  .brand b{color:var(--primary-ink);font-weight:600}
+  /* sync status: one quiet pill; Sync now, Reconcile and Curate live in its popover */
+  .status-pill{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;margin-right:4px;border:none;
+    border-radius:var(--r-pill);background:color-mix(in srgb,var(--panel) 62%,transparent);backdrop-filter:blur(8px);color:var(--soft);font:inherit;font-size:12.5px;font-weight:600;
+    white-space:nowrap;cursor:pointer;transition:background var(--t-fast),color var(--t-fast)}
+  .status-pill:hover,.status-pill[aria-expanded="true"]{background:var(--panel-hi);color:var(--ink)}
+  /* starting soon: the one timed event 10 minutes out, in sunlight */
+  .soon-pill{display:inline-flex;align-items:center;height:32px;margin-right:4px;border-radius:var(--r-pill);background:var(--gold-wash);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sun) 45%,transparent);color:var(--gold);font-size:12.5px;font-weight:600;animation:undoIn .16s ease}
+  .soon-pill button{background:none;border:none;color:inherit;font:inherit;cursor:pointer;height:100%;display:inline-flex;align-items:center}
+  .soon-pill .sp-open{gap:7px;padding:0 4px 0 12px;min-width:0}
+  .soon-pill .sp-open .ico{width:15px;height:15px;flex:none}
+  .soon-pill .sp-open b{font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .soon-pill .sp-open span{white-space:nowrap}
+  .soon-pill .sp-x{padding:0 11px 0 6px;font-size:15px;opacity:.7}
+  .soon-pill .sp-x:hover{opacity:1}
+  .soon-pill button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;border-radius:var(--r-pill)}
+  .sdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--mute)}
+  .sdot.ok{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
+  .sdot.busy{background:var(--syncing);animation:sdotPulse 1.4s ease-in-out infinite}
+  .sdot.err{background:var(--err);box-shadow:0 0 0 3px color-mix(in srgb,var(--err) 24%,transparent)}
+  @keyframes sdotPulse{50%{opacity:.35}}
+  .search{flex:1;min-width:120px;max-width:720px;height:40px;border:1px solid color-mix(in srgb,var(--line-hi) 70%,transparent);border-radius:var(--r-md);
+    background:var(--search-ic) no-repeat 13px 50% / 18px 18px,color-mix(in srgb,var(--panel) 90%,transparent);backdrop-filter:blur(10px);
+    color:var(--ink);font-size:14px;padding:0 14px 0 40px;transition:border-color var(--t-fast),box-shadow var(--t-fast)}
+  .search::placeholder{color:var(--faint)}
+  .search:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 22%,transparent)}
+  .tools{display:flex;gap:2px;align-items:center;margin-left:auto}
+  .tbtn{background:none;border:none;border-radius:var(--r-sm);color:var(--mute);
+    font-size:12.5px;font-weight:500;padding:8px 11px;cursor:pointer;transition:background var(--t-fast),color var(--t-fast);
+    white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
+  .tbtn:hover{background:var(--panel-hi);color:var(--ink)}
+  .tools .tbtn.icon{width:34px;height:34px;padding:0;justify-content:center;border-radius:10px;color:var(--soft);
+    background:color-mix(in srgb,var(--panel) 62%,transparent);backdrop-filter:blur(8px)}
+  .tools .tbtn.icon:hover{background:var(--panel);color:var(--ink)}
+  #composeBtn{min-height:34px;padding:0 12px;border-radius:10px;background:var(--primary);color:var(--on-primary);font-size:13.5px;font-weight:700;
+    box-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 8px 18px -10px var(--primary)}
+  #composeBtn:hover{background:var(--primary-hi)}
+  #composeBtn .tb-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;margin-left:2px;padding:0 4px;
+    border:1px solid color-mix(in srgb,var(--on-primary) 35%,transparent);border-bottom-width:2px;border-radius:5px;font:700 10.5px/1 var(--font-mono)}
+  .search-tog,.search-x{display:none}
+  /* <=760: the full row doesn't fit — search folds into an icon that opens it across the bar (body.search-open),
+     help leaves (no keyboard), Compose and the status pill keep only their glyphs */
+  @media (max-width:760px){
+    .top .r1{gap:6px}
+    .search{display:none}
+    .search-tog{display:inline-flex;margin-left:auto;flex:none}
+    .tools{margin-left:0}
+    #helpBtn,#themeBtn{display:none}
+    #composeBtn .tb-lbl,#composeBtn .tb-kbd{display:none}
+    #composeBtn,.tools .tbtn.icon{width:40px;height:40px;padding:0;justify-content:center;flex:none}
+    .status-pill{width:40px;height:40px;padding:0;margin:0;justify-content:center;flex:none} #statusTxt{display:none}
+    .soon-pill{height:40px;flex:none} #soonTitle{display:none}   /* the dot; its label says the rest */
+    body.search-open .top .r1>:not(.search):not(.search-x){display:none}
+    body.search-open .search{display:block;flex:1;min-width:0}
+    body.search-open .search-x{display:inline-flex;flex:none}
+  }
+  @media (max-width:340px){ .brand{display:none} }
+  #composeBtn:hover{background:var(--primary-hi);color:var(--on-primary)}
+  .tbtn.icon{padding:8px 10px;font-size:14px}
+  .railtoggle{display:none}

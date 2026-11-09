@@ -1,0 +1,14 @@
+/* The command palette, and Move to. */
+  /* command palette (⌘K) */
+  .palette{position:fixed;inset:0;z-index:130;display:none;justify-items:center;align-items:start;padding-top:12vh;background:var(--scrim)}
+  .palette.show{display:grid}
+  .palette .pbox{background:var(--panel);border:1px solid var(--line-hi);border-radius:var(--r-lg);width:min(560px,92vw);overflow:hidden;box-shadow:var(--sh-3)}
+  .palette .pq{width:100%;background:var(--bg);border:0;border-bottom:1px solid var(--line);color:var(--ink);font:inherit;font-size:14px;padding:14px 18px;outline:none}
+  .palette .pq::placeholder{color:var(--faint)}
+  .palette .plist{max-height:48vh;overflow:auto;padding:4px 0 6px}
+  .palette .pgrp{font-size:11.5px;font-weight:600;color:var(--faint);padding:10px 18px 3px}
+  .palette .pi{display:flex;gap:10px;align-items:center;padding:9px 18px;color:var(--soft);font-size:13.5px;cursor:pointer;border-left:2px solid transparent}
+  .palette .pi .pi-l{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .palette .pi.sel{background:var(--sel);color:var(--ink);border-left-color:var(--primary)}
+  .palette .pi kbd{background:var(--bg);border:1px solid var(--line-hi);border-bottom-width:2px;border-radius:var(--r-xs);padding:1px 6px;color:var(--soft);font-size:11px;font-family:var(--font-mono)}
+  .palette .pnone{padding:18px 18px;color:var(--faint);font-size:13px}

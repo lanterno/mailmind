@@ -1,0 +1,35 @@
+/* A conversation's messages, and an invite's card. */
+  .rd-att{cursor:pointer;text-decoration:none;transition:background var(--t-fast),color var(--t-fast)}
+  .rd-att:hover{background:var(--raise-hi);color:var(--ink)}
+  .rd-att .fn{color:var(--soft)}   .rd-att .dl{margin-left:3px;color:var(--faint)}
+  .rd-subj .thr-n{font-family:var(--font-mono);font-size:12px;font-weight:400;color:var(--faint);margin-left:8px}
+  .thread{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+  .tmsg{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--bg2)}
+  .tmsg-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:11px 14px;cursor:pointer;font-size:12px;color:var(--mute)}
+  .tmsg-hd:hover{background:var(--hover)}
+  .tmsg.open>.tmsg-hd{border-bottom:1px solid var(--line);background:var(--panel)}
+  .tmsg-hd .tnm{color:var(--soft);font-weight:600}
+  .tmsg-hd .tfolder{font-size:10.5px;color:var(--faint);background:var(--panel-hi);border:none;border-radius:var(--r-xs);padding:0 6px}
+  .tmsg-hd .twhen{margin-left:auto;color:var(--faint);font-size:11px;flex:none;font-family:var(--font-mono)}
+  .tmsg-hd .tans{color:var(--ok)}
+  .tmsg-hd .tsnip{flex-basis:100%;color:var(--faint);font-size:12.5px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tmsg.open .tmsg-hd .tsnip{display:none}
+  .tmsg-body{display:none;padding:12px 14px}   .tmsg.open>.tmsg-body{display:block}
+  .invite-card{border:none;border-left:3px solid var(--keep);background:var(--panel);
+    border-radius:var(--r-md);padding:12px 14px;margin-bottom:14px;box-shadow:var(--sh-1)}
+  .invite-card .inv-hd{font-size:11px;color:var(--keep);font-weight:600;margin-bottom:5px}
+  .invite-card .inv-title{font-family:var(--font-display);font-size:16px;font-weight:600;letter-spacing:-.01em;color:var(--ink);margin-bottom:6px}
+  .invite-card .inv-line{font-size:13px;color:var(--soft);line-height:1.6}
+  .invite-card .inv-sub{color:var(--faint);font-size:12px}
+  .invite-card .inv-actions{margin-top:9px}
+  .invite-card .inv-dl{display:inline-block;background:color-mix(in srgb,var(--keep) 14%,transparent);border:none;border-radius:var(--r-sm);
+    color:var(--keep);font-size:12px;font-weight:600;padding:6px 12px;text-decoration:none}
+  .invite-card .inv-dl:hover{background:color-mix(in srgb,var(--keep) 24%,transparent)}
+  .invite-card .inv-rsvp{display:flex;gap:7px;margin-top:10px}
+  .invite-card .inv-rsvp button{font:inherit;font-size:12px;font-weight:600;border-radius:var(--r-sm);padding:7px 14px;cursor:pointer;border:none;background:var(--sel);color:var(--soft);transition:background var(--t-fast),color var(--t-fast)}
+  .invite-card .inv-yes{color:var(--keep)}   .invite-card .inv-yes:hover{background:color-mix(in srgb,var(--keep) 16%,transparent)}
+  .invite-card .inv-maybe:hover{color:var(--primary-ink);background:var(--primary-wash)}
+  .invite-card .inv-no{color:var(--err)}   .invite-card .inv-no:hover{background:color-mix(in srgb,var(--err) 12%,transparent)}
+  .invite-card .inv-done{font-size:12.5px;color:var(--keep);font-weight:600}
+  .invite-card .inv-sending{font-size:12.5px;color:var(--faint)}

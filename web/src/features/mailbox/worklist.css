@@ -1,0 +1,47 @@
+/* The worklist's rounded rows and what shows on hover. */
+  /* the worklist: rounded rows on the paper. Avatar · sender and time · subject · the AI gist in moss
+     (or the plain preview) · a gold chip when the summary names a next step. No dividers, no spines:
+     unread is a dot, the open message is the wash. Hover shows Archive / Delete / Snooze (keys e d h). */
+  body #rows{padding:4px 6px 24px}
+  .row.cmsg{display:grid;grid-template-columns:34px minmax(0,1fr);gap:11px;align-items:start;
+    padding:var(--row-pad);border:none;border-radius:var(--r-md)}
+  .row.cmsg::before{left:1px;top:24px;width:6px;height:6px;transform:none;border-radius:50%;background:transparent}
+  .row.cmsg.unread::before{background:var(--primary)}
+  .row.cmsg.sel{background:var(--sel)}
+  .row.cmsg.sel::before{height:6px}
+  .row.cmsg.sel:not(.unread)::before{background:transparent}
+  .row.cmsg:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--focus)}
+  .avwrap{position:relative;width:34px;height:34px}
+  .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;letter-spacing:.02em;
+    background:hsl(var(--h) 24% 30%);color:hsl(var(--h) 50% 88%)}
+  body.theme-light .av{background:hsl(var(--h) 40% 86%);color:hsl(var(--h) 40% 25%)}
+  .avwrap .cbx{position:absolute;top:5px;left:5px;width:24px;height:24px;margin:0;border:2px solid var(--mute);border-radius:7px;
+    background:var(--panel);font-size:13px}
+  .avwrap .cbx.on{background:var(--primary);border-color:var(--primary)}
+  .avwrap .cbx:focus-visible{opacity:1}
+  .row.cmsg .r1{font-size:13.5px;gap:6px;color:var(--mute)}
+  .row.cmsg .r1 .from{font-weight:600;color:var(--soft)}
+  .row.cmsg.unread .r1 .from{font-weight:800;color:var(--ink)}
+  .row.cmsg .r1 .when{font-family:var(--font-ui);font-size:12px;padding-left:8px}
+  .row.cmsg.needs .r1 .when{color:var(--gold);font-weight:700}
+  .row.cmsg .r2sub{display:block;margin-top:2px;font-size:14px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row.cmsg .r2sub .sj{font-weight:500;color:var(--soft)}
+  .row.cmsg.unread .r2sub .sj{font-weight:700;color:var(--ink)}
+  .row.cmsg .gist{margin-top:4px;font-size:13.5px;line-height:var(--row-lh);color:var(--ai);
+    display:-webkit-box;-webkit-line-clamp:var(--row-gist-lines);-webkit-box-orient:vertical;overflow:hidden}
+  .row.cmsg .pv{margin-top:3px;font-size:13px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row.cmsg .r4{display:var(--row-chip);gap:6px;margin-top:7px;min-width:0}
+  .rchip{display:inline-block;max-width:100%;padding:3px 9px;border-radius:var(--r-pill);font-size:12px;font-weight:600;
+    background:var(--panel-hi);color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rchip.need{background:var(--gold-wash);color:var(--gold)}
+  .rgrp{padding:14px 10px 6px;font-size:12px;font-weight:700;color:var(--mute)}
+  .rgrp:first-child{padding-top:8px}
+  .racts{display:none}
+  .racts .del:hover{background:color-mix(in srgb,var(--err) 14%,transparent);color:var(--err)}
+  @media (hover:hover) and (min-width:821px){
+    .row.cmsg:hover .racts{display:flex;position:absolute;right:6px;top:6px;gap:1px;padding:2px 2px 2px 10px;border-radius:var(--r-sm);background:var(--hover)}
+    .row.cmsg.sel:hover .racts{background:var(--sel)}
+    .row.cmsg.marked:hover .racts{background:color-mix(in srgb,var(--primary-wash) 60%,var(--panel))}
+  }
+  .thr-count{flex:none;font-size:10.5px;font-weight:600;color:var(--on-primary);background:var(--primary);
+    border-radius:var(--r-pill);padding:0 6px;min-width:16px;text-align:center;font-variant-numeric:tabular-nums}
