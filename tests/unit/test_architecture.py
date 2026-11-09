@@ -30,6 +30,15 @@ CROSSINGS = {
 # What a domain may never ask the standard library for: it holds no I/O.
 IO = {"sqlite3", "smtplib", "imaplib", "socket", "ssl", "http", "subprocess", "urllib.request"}
 
+# All the other contexts' wiring may call of the Mailbox's store. A new crossing is an edit here and to the module, on purpose.
+STORED_MAIL = {
+    "any_copy", "brief_rows", "conversation_rows", "copy_in_folder", "copy_now", "delete_by_uids", "delete_message", "delta_rows",
+    "draft_candidates", "get_body", "get_message", "get_message_by_key", "get_message_by_msgid", "get_uidvalidity",
+    "handled_since", "message_stamp", "message_to_reply_to", "needs_you_rows", "queue_flags", "received_by_bucket",
+    "received_since", "sender_recent", "sender_stats", "sent_since", "set_list_unsub", "set_local_flags", "thread_anchor_pk",
+    "thread_stamps",
+}
+
 
 def modules():
     for path in sorted(PACKAGE.rglob("*.py")):
@@ -124,6 +133,36 @@ def test_the_package_opens_no_connection_outside_the_unit_of_work():
              for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
              if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in by_hand}
     assert found == set()
+
+
+def names_the_store(path):
+    """Each way the file reaches the Mailbox's store by name, its package included. A word in a docstring is no reach."""
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Name) and node.id == "store":
+            yield node.id
+        elif isinstance(node, ast.Attribute) and node.attr == "store":
+            yield f"….{node.attr}"
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = node.module if isinstance(node, ast.ImportFrom) else None
+            for alias in node.names:
+                said = f"{module}.{alias.name}" if module else alias.name
+                if alias.name == "store" or said.startswith("mailmind.mailbox.adapters.sqlite"):
+                    yield said
+
+
+def test_another_contexts_wiring_never_names_the_store():
+    """It takes what `stored_mail` offers, below. The Mailbox's own wiring, the command line and the startup may name it."""
+    wiring = [PACKAGE / "bootstrap" / f"{ctx}.py" for ctx in CONTEXTS if ctx != "mailbox"]
+    assert all(p.is_file() for p in wiring)
+    assert {(rel(p), said) for p in wiring for said in names_the_store(p)} == set()
+
+
+def test_what_the_mailbox_offers_of_its_stored_mail_is_the_list_pinned():
+    from mailmind.bootstrap import mailbox
+    from mailmind.mailbox.adapters.sqlite import stored_mail
+    assert mailbox.stored_mail is stored_mail
+    assert {n for n in vars(stored_mail) if not n.startswith("__")} == STORED_MAIL
+    assert sorted(stored_mail.__all__) == sorted(STORED_MAIL)
 
 
 def writers():
