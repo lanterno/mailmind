@@ -6,7 +6,7 @@ import type { AnyOf, GetAnswers, SearchScope } from "../../lib/api/types";
 import { sourceKey, type ListSource } from "../../app/route";
 import { pref } from "../../lib/prefs";
 import { copyId, copyQuery, type Copy } from "../../lib/copy";
-import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../assistant";
+import { fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "./digest";
 import { fromFolder, fromSearch, type Row } from "./rows";
 
 const PAGE = 200;

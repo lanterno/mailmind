@@ -14,11 +14,11 @@ import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { Scene } from "../../lib/ui/Scene";
 import { answer, peekCards, useDraftChip } from "../compose";
-import { filing, bulk } from "../mailbox";
+import { filing, bulk, fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../mailbox";
 import { snoozeAsk } from "../attention";
 import type { Mailbox } from "../mailbox";
 import { LIMIT, useBrief, useSide } from "./data";
-import { BRIEF_CAP, commitments, eventWhen, fromDigest, greeting, nameIn, needsYou, safeToFile, topicItems, waitAge, type DigestItem } from "./model";
+import { BRIEF_CAP, commitments, eventWhen, greeting, nameIn, waitAge } from "./model";
 import { panel } from "./Panels";
 import { useTasks } from "./tasks";
 
