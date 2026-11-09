@@ -95,7 +95,7 @@ class Folders:
     def _stored_folder_list(self, account: str) -> list[RailFolder]:
         """The folders MailMind holds this account's mail in, from the database alone: what the rail
         shows when the server can't be reached and no live list is cached (Bridge down, its
-        certificate changed). Roles by name, the shallower folder first; counts as stored."""
+        certificate changed), as `domain.roles.stored_rail` says it."""
         with self._uow.read() as c:
             counts = self._store.stored_folder_counts(c, account)
         return folder_roles.stored_rail(counts)
