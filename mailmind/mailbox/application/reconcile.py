@@ -17,6 +17,7 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, Pruned, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
+from mailmind.mailbox.domain import prune
 from mailmind.platform import environment, settings, sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -66,19 +67,15 @@ class Reconciler:
             reconcile_log.warning("an account failed", exc_info=e)
             res["error"] = type(e).__name__      # what a server said stays out of the answer
             return res  # never prune on error
-        # UIDVALIDITY guard: if the server renumbered UIDs (mailbox recreation / Bridge
-        # re-index), `live` is in a DIFFERENT uid space than the stored uids — comparing
-        # them would prune the ENTIRE real INBOX as "ghosts". Never prune here; sync_folder
-        # detects the change and does the reset + full re-sync on its own pass.
         with self._uow.read() as c:
             stored_uidv = self._store.get_uidvalidity(c, acct["email"], folder)
-        if uidv and stored_uidv and uidv != stored_uidv:
-            res["error"] = f"UIDVALIDITY changed ({stored_uidv}->{uidv}) — prune skipped"
+        if why := prune.renumbered(uidv, stored_uidv):    # sync_folder resets it on its own pass
+            res["error"] = why
             return res
         res["live"] = len(live)
-        res["ghosts"] = sum(1 for u in stored_uids if u not in live)
-        if not live and res["stored"] > 0 and not force:
-            res["error"] = "empty SEARCH against non-empty store — skipped"
+        res["ghosts"] = prune.ghosts(stored_uids, live)
+        if why := prune.empty_search(live, res["stored"], force):
+            res["error"] = why
             return res
         if dry_run:
             return res
@@ -146,14 +143,13 @@ class Reconciler:
         def reconcile_round() -> int:
             nonlocal rr
             accts = self._accounts.accounts()
-            n = len(accts) or 1
             if accts:
                 try:
                     self._auto_reconcile_one(accts[rr % len(accts)])
                 except Exception as e:
                     reconcile_log.warning("loop error", exc_info=e)
                 rr += 1
-            return max(30, self._RECONCILE_INTERVAL // n)       # spread the full cycle across accounts
+            return prune.next_round(self._RECONCILE_INTERVAL, len(accts))
         return reconcile_round
 
 

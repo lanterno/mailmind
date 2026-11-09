@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 
 from mailmind.mailbox.adapters.sqlite import bound
-from mailmind.mailbox.domain import identity
+from mailmind.mailbox.domain import identity, prune
 
 
 def set_list_unsub(c, pk, raw, method):
@@ -234,7 +234,7 @@ def reconcile(c, account, folder, live_uids, when, among=None):
     live = set(int(u) for u in live_uids)
     rows = c.execute("SELECT pk, uid FROM messages WHERE account=? AND folder=?",
                      (account, folder)).fetchall()
-    pruned_pks = [r["pk"] for r in rows if r["uid"] not in live and (among is None or r["uid"] in among)]
+    pruned_pks = [r["pk"] for r in rows if prune.goes(r["uid"], live, among)]
     for pk in pruned_pks:
         delete_message(c, pk)
     mark_verified(c, account, folder, live, when)
