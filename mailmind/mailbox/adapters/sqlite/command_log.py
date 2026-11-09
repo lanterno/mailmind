@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from mailmind.mailbox.adapters.sqlite.flags import set_local_flags
 from mailmind.mailbox.adapters.sqlite.sync_state import get_uidvalidity
+from mailmind.mailbox.domain.command import idempotency_key
 from mailmind.mailbox.domain.flags import as_columns, held_now
 
 
@@ -15,7 +16,7 @@ def flag_command(c, row, flags, mutation_id, when):
     acct, mid = row["account"], (row["message_id"] or "").strip()
     params = {"pk": row["pk"], "uid": row["uid"], "epoch": get_uidvalidity(c, acct, row["folder"]), "flags": flags,
               "was": held_now(row, flags)}
-    id_, created = command_insert(c, {"account": acct, "idempotency_key": f"flag:{acct}:{mid or row['pk']}:{mutation_id}",
+    id_, created = command_insert(c, {"account": acct, "idempotency_key": idempotency_key("flag", acct, mid, row["pk"], mutation_id),
                                       "kind": "flag", "message_id": mid, "src_folder": row["folder"],
                                       "dest": None, "params": json.dumps(params),
                                       "next_attempt_at": 0, "created_at": when})

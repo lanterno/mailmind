@@ -23,6 +23,7 @@ from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
 from mailmind.mailbox.domain import command, destination
 from mailmind.mailbox.domain import flags as mail_flags
+from mailmind.mailbox.domain import try_target
 from mailmind.mailbox.domain.events import Applied, Restored
 from mailmind.platform import bus, profile, undo
 from mailmind.platform.db.uow import UnitOfWork
@@ -31,7 +32,6 @@ from mailmind.platform.workers import gates
 from mailmind.platform.workers.durable_queue import DurableQueue
 
 log = get_logger("commands")
-_UNDO_LABEL = {"trash": "Trashed", "archive": "Archived", "junk": "Marked junk", "move": "Moved"}
 
 
 def _now() -> int:
@@ -42,17 +42,14 @@ def _forget_undo(c: Connection, row: Row) -> None:
     """The move `row` won't happen, so there is nothing to reverse: the newest entry for it goes."""
     if row["kind"] == "flag" or not row["message_id"]:
         return
-    undo.forget(c, lambda e: (e.get("kind") in ("move", "gmail_archive") and e.get("account") == row["account"]
-                              and e.get("message_id") == row["message_id"] and e.get("src_folder") == row["src_folder"]))
+    undo.forget(c, lambda e: command.reverses(e, row))
 
 
 def _request_id(mutation_id: object) -> str:
     """The client's mutation_id names one request, so a resubmit of it dedupes; without one, every request is its own.
     A key built from the message alone made a second trash of the same message, after the first had been applied and
     the message moved back, answer "queued" and do nothing."""
-    if isinstance(mutation_id, str) and 0 < len(mutation_id) <= 128:
-        return mutation_id
-    return secrets.token_hex(16)
+    return mutation_id if command.names_a_request(mutation_id) else secrets.token_hex(16)
 
 
 class MailCommands:
@@ -128,14 +125,13 @@ class MailCommands:
         reverses it; without one, nothing will. Submit only once the block has committed: until then no other connection can
         see the command, and a try would find it cancelled."""
         row = self._store.get_message(c, pk)
-        if not row or row["pending_removal"] is not None or row["folder"] == to:
+        if not command.takes_a_move(row, to):
             return None
         email, mid = row["account"], (row["message_id"] or "").strip()
         where = destination.Destination(to) if to else self._known_destination(kind, email)
-        params = {"pk": pk, "uid": row["uid"], "epoch": self._store.get_uidvalidity(c, email, row["folder"]),
-                  "seen": bool(row["seen"]), "subject": row["subject"], "thread_id": row["thread_id"]}
+        params = command.move_params(pk, row, self._store.get_uidvalidity(c, email, row["folder"]))
         id_, created = self._store.command_insert(c, {
-            "account": email, "idempotency_key": f"{kind}:{email}:{mid or pk}:{_request_id(mutation_id)}", "kind": kind,
+            "account": email, "idempotency_key": command.idempotency_key(kind, email, mid, pk, _request_id(mutation_id)), "kind": kind,
             "message_id": mid, "src_folder": row["folder"], "dest": where.folder, "params": json.dumps(params),
             "next_attempt_at": 0, "created_at": now_iso()})
         if not created or id_ is None:               # a resubmit of the same request
@@ -143,10 +139,7 @@ class MailCommands:
         self._store.mark_pending_removal(c, pk, id_)
         undoable = bool(mid) and push_undo is not None
         if mid and push_undo is not None:
-            push_undo(c, {"kind": "gmail_archive" if where.drop_inbox_label else "move", "command": id_,
-                          "account": email, "src_folder": row["folder"], "dest_folder": where.folder or "",
-                          "message_id": mid, "label": _UNDO_LABEL.get(kind, "Updated"),
-                          "subject": row["subject"], "who": row["from_name"] or row["from_addr"], "thread_id": row["thread_id"]})
+            push_undo(c, command.undo_entry(kind, id_, row, mid, where))
         claimed = self._claim(c, id_)
         return command.Accepted(id_, email, True, undoable, claimed)
 
@@ -212,7 +205,7 @@ class MailCommands:
                 self._accounts.get(fresh["account"])
             except KeyError:
                 return command.REMOVED
-            first_try = just_accepted or not fresh["begun"]
+            first_try = try_target.is_first_try(just_accepted, fresh["begun"])
             if not fresh["begun"]:
                 self._commit(lambda c: self._store.command_mark_begun(c, mid))
             answer = self._server.apply(fresh, first_try, timeout=self.TRY_TIMEOUT if just_accepted else None)
@@ -339,13 +332,9 @@ class MailCommands:
                     found = self._flagged_row(c, r)
                     found = self._store.get_message(c, found["pk"]) if found is not None else None
                     subject = found["subject"] if found is not None else ""
-                items.append({"id": r["id"], "account": r["account"], "op": r["kind"], "folder": r["src_folder"],
-                              "dest": r["dest"], "flags": params.get("flags"), "state": r["state"],
-                              "attempts": r["attempts"], "error": r["last_error"], "subject": subject,
-                              "next_attempt_at": r["next_attempt_at"], "created_at": r["created_at"]})
+                items.append(command.tray_item(r, params, subject))
             counts = self._store.command_open_counts(c)
-        return {"items": items, "waiting": counts.get("queued", 0) + counts.get("running", 0),
-                "stuck": counts.get("error", 0)}
+        return {"items": items, **command.tray_counts(counts)}
 
 
     def retry(self, mid: int) -> bool:
@@ -400,7 +389,7 @@ class MailCommands:
                         {"id": mid, "why": err, "what": "giving up" if terminal else f"retry {delay}s"})
             return
         if outcome in command.WONT_HAPPEN:               # no retry can make it happen
-            why = "account removed" if outcome == command.REMOVED else outcome
+            why = command.why_given_up(outcome)
             self._commit(lambda c: self._restore(c, row, why))
             bus.publish(Restored(mid, row["account"]))
             log.warning("#%(id)s won't apply (%(why)s); its message is listed again", {"id": mid, "why": why})

@@ -12,7 +12,7 @@ from mailmind.kernel.row import Row
 from mailmind.mailbox.application import session as mail_session
 from mailmind.mailbox.application.ports import Account, Accounts, OpenSession, StoredMail
 from mailmind.mailbox.application.session import MailSession
-from mailmind.mailbox.domain import command, destination, move_strategy
+from mailmind.mailbox.domain import command, destination, move_strategy, try_target
 from mailmind.mailbox.domain import flags as mail_flags
 from mailmind.mailbox.domain.move_strategy import Way
 from mailmind.platform import profile
@@ -123,22 +123,18 @@ class ServerOps:
 
 
     def _target(self, s: MailSession, src: str, mid: str, params: Mapping[str, Any], first_try: bool) -> int | None:
-        """Select `src` and name the UID a try acts on, or None when the message has left it. A UID is good only in
-        the epoch (UIDVALIDITY) it was seen in. On a first try the one seen as the command was accepted is it. A later
-        try may follow one that moved the message, or a renumbering, so the Message-ID says, and if the folder has none
-        by that id the message has left, whatever the UID now names."""
+        """Select `src` and name the UID a try acts on, or None when the message has left it, as domain.try_target says."""
         selected = s.select(src, readonly=False)
-        uid = int(params["uid"]) if params.get("uid") else None
-        epoch = params.get("epoch")
-        same_epoch = not epoch or not selected.uidvalidity or epoch == selected.uidvalidity
-        if not (first_try and uid and same_epoch) and mid:
+        target = try_target.of_try(uid=params.get("uid"), epoch=params.get("epoch"), uidvalidity=selected.uidvalidity,
+                                   first_try=first_try, has_message_id=bool(mid))
+        if target.by_message_id:
             try:
                 return s.by_message_id(mid)
             except imaplib.IMAP4.abort:
                 raise
             except imaplib.IMAP4.error:              # it won't search: only the UID can say
                 pass
-        return uid if same_epoch else None
+        return target.uid
 
 
     def apply(self, row: Row, first_try: bool = False, timeout: int | None = None) -> command.ServerAnswer:
