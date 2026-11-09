@@ -2,55 +2,13 @@
 Each read is of the database alone, but that a folder opening may start its sync."""
 from typing import Any
 
-from mailmind.kernel import attention as verdict
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import INBOX, AccountId, FolderName, MessageKey, ThreadRef
-from mailmind.kernel.row import Row
 from mailmind.kernel.when import ago, rel_time, rel_time_future
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, StoredMail
+from mailmind.mailbox.domain import listing
 from mailmind.platform.db.uow import UnitOfWork
-
-
-def _attention(r: Row) -> dict[str, bool]:
-    """What the verdict on row `r` asks of you. The page reads these and never works them out."""
-    return verdict.answers(r["importance"], r["category"], r["action"])
-
-
-def _listed_item(r: Row, group: bool) -> dict[str, Any]:
-    """A row of a list of a folder or of the Inboxes, one conversation's latest message if `group`."""
-    it: dict[str, Any] = {
-        "key": r["message_key"], "folder": r["folder"], "uid": r["uid"], "from_name": r["from_name"] or r["from_addr"],
-        "from_addr": r["from_addr"],
-        "subject": r["subject"] or "(no subject)", "when": rel_time(r["date_iso"]),
-        "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
-        "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-        "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"],
-        "summary": (r["summary"] or "")[:300], "action": r["action"] or "", "category": r["category"],
-        "ts": r["ts"], "account": r["account"],
-    }
-    if group:
-        it.update({"count": r["cnt"], "thread_count": r["thread_count"] or r["cnt"], "seen": not r["unread"],
-                   "flagged": bool(r["any_flagged"]), "has_attach": bool(r["any_attach"])})
-    return it
-
-
-def _waiting_item(r: Row) -> dict[str, Any]:
-    if r["f_kind"] == "sent":
-        label = "Sent " + ago(r["f_first_sent"]) + " ago · no reply"
-    else:
-        label = "Awaiting your reply · " + rel_time(r["date_iso"])
-    return {
-        "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
-        "from_name": r["from_name"] or r["from_addr"],
-        "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-        "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-        "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
-        "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-        "ts": r["ts"], "count": r["thread_count"], "waiting": True, "account": r["account"],
-        "waiting_label": label, "kind": r["f_kind"],
-        "to": (r["recipients"] or "").split(",")[0].strip(),   # who a sent thread waits on
-    }
 
 
 class Queries:
@@ -86,17 +44,9 @@ class Queries:
         with self._uow.read() as c:
             rows = self._store.snoozed_rows(c, accounts, limit, offset)
             total = self._store.snoozed_count(c, accounts)
-        items = [{
-            "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
-            "from_name": r["from_name"] or r["from_addr"],
-            "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-            "when": "wakes " + rel_time_future(r["snoozed_until"]), "snoozed_until": r["snoozed_until"],
-            "snippet": (r["snippet"] or "")[:200], "seen": bool(r["seen"]), "flagged": bool(r["flagged"]),
-            "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]), "bucket": r["bucket"],
-            "importance": r["importance"], **_attention(r), "thread_id": r["thread_id"], "account": r["account"],
-        } for r in rows]
+        items = [listing.snoozed_item(r, rel_time_future) for r in rows]
         return {"ok": True, "account": account, "folder": "__snoozed__", "items": items, "snoozed": True,
-                "total": total, "offset": offset, "has_more": offset + len(items) < total}
+                **listing.window(items, total, offset)}
 
 
     def muted_in(self, account: str | None, offset: int, limit: int) -> dict[str, Any]:
@@ -106,17 +56,9 @@ class Queries:
             all_rows = self._attention.list_muted(c, self._over(account))
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
-        items = [{
-            "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
-            "from_name": r["from_name"] or r["from_addr"],
-            "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-            "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-            "seen": True, "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
-            "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-            "ts": r["ts"], "count": r["thread_count"], "muted": True, "account": r["account"],
-        } for r in rows]
+        items = [listing.muted_item(r, rel_time) for r in rows]
         return {"ok": True, "account": account, "folder": "__muted__", "items": items, "muted": True,
-                "total": total, "offset": offset, "has_more": offset + len(items) < total}
+                **listing.window(items, total, offset)}
 
 
     def waiting_in(self, account: str | None, offset: int, limit: int) -> dict[str, Any]:
@@ -125,9 +67,9 @@ class Queries:
             all_rows = self._attention.list_waiting(c, self._over(account))
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
-        items = [_waiting_item(r) for r in rows]
+        items = [listing.waiting_item(r, rel_time, ago) for r in rows]
         return {"ok": True, "account": account, "folder": "__waiting__", "items": items, "waiting": True,
-                "total": total, "offset": offset, "has_more": offset + len(items) < total}
+                **listing.window(items, total, offset)}
 
 
     def waiting_on_others(self, limit: int = 100) -> dict[str, Any]:
@@ -135,7 +77,7 @@ class Queries:
         emails = self._emails()
         with self._uow.read() as c:
             rows = self._attention.waiting_on_others(c, emails, limit)
-        return {"ok": True, "items": [_waiting_item(r) for r in rows]}
+        return {"ok": True, "items": [listing.waiting_item(r, rel_time, ago) for r in rows]}
 
 
     def replylater_in(self, account: str | None, offset: int, limit: int) -> dict[str, Any]:
@@ -144,18 +86,9 @@ class Queries:
             all_rows = self._attention.list_replylater(c, self._over(account))
         total = len(all_rows)
         rows = all_rows[offset:offset + limit]
-        items = [{
-            "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
-            "from_name": r["from_name"] or r["from_addr"],
-            "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-            "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-            "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "has_attach": bool(r["has_attach"]),
-            "is_junk": bool(r["is_junk"]), "bucket": r["bucket"], "thread_id": r["thread_id"],
-            "ts": r["ts"], "count": r["thread_count"], "replylater": True, "account": r["account"],
-            "waiting_label": "Reply later",
-        } for r in rows]
+        items = [listing.replylater_item(r, rel_time) for r in rows]
         return {"ok": True, "account": account, "folder": "__replylater__", "items": items, "replylater": True,
-                "total": total, "offset": offset, "has_more": offset + len(items) < total}
+                **listing.window(items, total, offset)}
 
 
     def messages_in(self, account: AccountId | None, folder: FolderName, offset: int, limit: int, group: bool = False) -> dict[str, Any]:
@@ -179,9 +112,9 @@ class Queries:
             else:
                 rows = self._store.folder_rows(c, account, folder, limit, offset)
                 total = self._store.folder_count(c, account, folder)
-        items = [_listed_item(r, group) for r in rows]
+        items = [listing.listed_item(r, group, rel_time) for r in rows]
         return {"ok": True, "account": account, "folder": folder, "items": items, "grouped": group,
-                "total": total, "offset": offset, "has_more": offset + len(items) < total, **scan}
+                **listing.window(items, total, offset), **scan}
 
 
     def labels(self, account: str | None) -> dict[str, Any]:
@@ -204,9 +137,9 @@ class Queries:
             else:
                 rows = self._store.inboxes_rows(c, emails, limit, offset)
                 total = self._store.inboxes_count(c, emails)
-        items = [_listed_item(r, group) for r in rows]
-        return {"ok": True, "folder": INBOX, "items": items, "grouped": group, "total": total, "offset": offset,
-                "has_more": offset + len(items) < total, **({"syncing": True} if scanning else {})}
+        items = [listing.listed_item(r, group, rel_time) for r in rows]
+        return {"ok": True, "folder": INBOX, "items": items, "grouped": group, **listing.window(items, total, offset),
+                **({"syncing": True} if scanning else {})}
 
 
     def thread_json(self, account: AccountId, thread_id: ThreadRef) -> dict[str, Any]:
@@ -216,20 +149,6 @@ class Queries:
             raise Refused("missing account/thread")
         with self._uow.read() as c:
             rows = self._store.thread_rows(c, account, thread_id)
-        items: list[dict[str, Any]] = []
-        seen_ids: set[str] = set()
-        for r in rows:
-            key = (r["message_id"] or "").strip() or f"pk:{r['pk']}"
-            if key in seen_ids:
-                continue
-            seen_ids.add(key)
-            items.append({
-                "key": r["message_key"], "folder": r["folder"], "uid": r["uid"],
-            "from_name": r["from_name"] or r["from_addr"],
-                "from_addr": r["from_addr"], "subject": r["subject"] or "(no subject)",
-                "when": rel_time(r["date_iso"]), "snippet": (r["snippet"] or "")[:200],
-                "seen": bool(r["seen"]), "flagged": bool(r["flagged"]), "answered": bool(r["answered"]),
-                "has_attach": bool(r["has_attach"]), "is_junk": bool(r["is_junk"]),
-            })
+        items = listing.thread_items(rows, rel_time)
         return {"ok": True, "account": account, "thread_id": thread_id,
                 "items": items, "count": len(items), "reply_key": items[-1]["key"] if items else None}
