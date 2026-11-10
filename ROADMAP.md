@@ -1,6 +1,6 @@
 # MailMind — Roadmap
 
-Only outstanding work is listed, re-verified against the tree on 2026-11-08: shipped behaviour is
+Only outstanding work is listed, re-verified against the tree on 2026-11-10: shipped behaviour is
 described in the README and in the code itself, not here. The app is the React one in `web/src`, at `/`,
 served by `python -m mailmind serve`. Each item says what is still missing there or on the server.
 
@@ -17,6 +17,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **PDF preview in the Document Hub** · low value · effort M — The Hub previews images in a frame whose sandbox allows nothing
   (`perimeter.attachment_preview_headers`). Chromium won't show a PDF in a sandboxed frame, and a same-origin one would break the
   security model, so a PDF needs a renderer of its own (pdf.js, say), as a new dependency, running with no origin.
+
 ## Speed and the connection layer
 
 - **Make a gate for each account the default** · high value · effort S — `MAILMIND_WORKERS=account`
@@ -27,7 +28,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   give each account's worker the connection it owns (the pool dissolved into it), and split the
   jobs that still pass `gates.EVERY_ACCOUNT`, which wait for every gate: a draft save whose old
   copy is in another account (it needs just the two accounts' gates, which `gates.run` can't take
-  yet), an undo with no account, and a message whose account `server_ops.account_of` can't find.
+  yet), and an undo entry that names no account, as a snooze's does (`snooze.undo_entry`), though undoing a snooze asks
+  no server anything.
 - **Soak IMAPClient on real accounts, then make it the default** · high value · effort S — Waits on
   the owner. `python -m mailmind serve` reaches an account through IMAPClient when its config asks (`"imap_adapter":
   "imapclient"`; the startup line counts them). Both adapters pass the contract against the fake
@@ -41,12 +43,13 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 - **Turn the connection pool on by default** · high value · effort M — Waits on the owner's soak.
   `Pool` is complete, safety-reviewed and wired into four read call sites (`Ingest.fetch_body`,
   `Folders._live_folder_list` backing the folder rail, `Sweeps.plan` ahead of a sweep, and reconcile's read of UIDs), but
-  `_targets()` reads `MAILMIND_POOL`, then each account's `"pool"` key, both unset by default, so every read falls through to a
+  `Pool._enabled` reads `MAILMIND_POOL`, then each account's `"pool"` key, both unset by default, so every read falls through to a
   fresh session and a logout. Its docstring has a cold Proton body fetch at ~37s, against ~2s warm.
   Remaining: run it on real accounts for days; validate against Proton Bridge (`ProviderProfile`
   recycles a Bridge connection sooner, and `Pool._enabled` leaves Bridge out of the `MAILMIND_POOL=1`
   catch-all, so it has to be listed by address); extend borrowing to mutations (only reads borrow
   today); and default it on.
+
 ## The API, now that one client and one door read it
 
 - **Move the command line off `urllib_http.py`** · low value · effort S — `python3 -m mailmind` runs on Python alone, so
@@ -69,7 +72,7 @@ implementation.
 
 - **At-rest encryption for `mailmind.db`** — the DB now holds full bodies and attachments, which
   materially raises its value. Current posture is gitignored, with no encryption anywhere in the
-  tree; the database, config, rules, views, log and backups are owner-only. SQLCipher was postponed on 2026-11-03, and
+  tree; the database, config, rules, views, snippets, log and backups are owner-only. SQLCipher was postponed on 2026-11-03, and
   `python3 -m mailmind`, which runs on Python alone, would have to install it too. The question is whether that posture stays acceptable
   for a single-user localhost machine or becomes opt-in encryption.
 - **How aggressively to prefetch folders** — on-demand sync bounds disk and first-sync cost, but
