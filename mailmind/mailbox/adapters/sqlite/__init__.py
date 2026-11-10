@@ -18,7 +18,7 @@ from mailmind.mailbox.adapters.sqlite.flags import (classified_from_address, cla
 from mailmind.mailbox.adapters.sqlite.lists import (digest, folder_conversation_count, folder_conversation_rows, folder_count,
     folder_rows, inboxes_conversation_count, inboxes_conversation_rows, inboxes_count, inboxes_rows, snoozed_count,
     snoozed_rows, stats, stored_accounts, stored_folder_counts, thread_rows)
-from mailmind.mailbox.adapters.sqlite.messages import (account_of, copy_in_folder, copy_now, copy_pk, delete_by_uids,
+from mailmind.mailbox.adapters.sqlite.messages import (copy_in_folder, copy_now, copy_pk, delete_by_uids,
     delete_message, forget_gone_messages, get_message, get_message_by_key, get_message_by_msgid, has_copy_in, is_known,
     is_listed_in, mark_pending_removal, mark_verified, message_pk, mint_key, names_of, newest_copy_in, pending_removal_pks,
     pk_in, reconcile, repair_keys, restore_pending, set_list_unsub, stored_uids, thread_pks_in, upsert_message)
@@ -28,7 +28,7 @@ from mailmind.mailbox.adapters.sqlite.sync_state import (account_health, clear_s
 from mailmind.mailbox.adapters.sqlite.threads import needs_threading, recompute_threads, thread_stored
 
 __all__ = [
-    "account_health", "account_of", "any_copy", "archives_undone", "attachment_of", "bind_index",
+    "account_health", "any_copy", "archives_undone", "attachment_of", "bind_index",
     "bind_merges", "bodies_to_fetch", "brief_rows", "classified_from_address", "classified_from_domain", "clear_sync_error",
     "command_forget_finished", "command_get", "command_insert", "command_latest_move", "command_mark_begun",
     "command_mark_reversed", "command_never_begun", "command_open", "command_open_counts", "command_ran_under",

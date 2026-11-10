@@ -72,12 +72,6 @@ class ServerOps:
         self._open_session = open_session
         self._quote = quote
 
-    def account_of(self, pk: int | None) -> str | None:
-        """The account the message `pk` is in, or None when there's no such message."""
-        with self._uow.read() as c:
-            return self._store.account_of(c, pk)
-
-
     def _do_imap[T](self, acct: Account, fn: Callable[[MailSession], T], timeout: int | None = None) -> T:
         """Open a session, run fn(session), log out; `timeout` is seconds for each step, the session's own when None. A
         connection failure raises (a member of UNREACHABLE) so the caller can queue/retry, and hangs up with no LOGOUT: a
