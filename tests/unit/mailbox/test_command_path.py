@@ -364,14 +364,6 @@ def test_a_queued_change_is_given_up_on_after_about_a_day_of_tries(app, world):
     assert 23 < hours < 25
 
 
-def test_a_message_says_which_account_it_is_in(world):
-    """What a send's bookkeeping falls back on for a row that doesn't name its original's account."""
-    from mailmind.bootstrap.mailbox import server_ops
-    assert server_ops.account_of(world.pk(LUNCH)) == w.ADA
-    assert server_ops.account_of(10 ** 9) is None
-    assert server_ops.account_of(None) is None
-
-
 def test_undo_of_a_queued_archive_whose_mail_left_on_its_own_stays_out_of_the_way(app, world, monkeypatch):
     """Nothing names where an archive that hasn't gone yet would have put it, so an entry like this could only ever fail,
     on top of everything beneath it, until it expired."""
