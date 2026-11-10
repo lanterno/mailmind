@@ -50,6 +50,13 @@ def test_a_shallower_folder_wins_over_a_deeper_one_of_the_same_name():
     assert roles.find(fs, "archive") == "Archive"
 
 
+@pytest.mark.parametrize("deeper", ["Old/Trash", "Old.Trash", "A/Trash"])
+def test_with_no_delimiter_the_shallower_folder_still_wins(deeper):
+    """A server whose LIST says NIL names no delimiter, so "/" and "." mark the depth, as they do the role."""
+    fs = [Folder(deeper, frozenset(), None), Folder("Trash", frozenset(), None)]
+    assert roles.find(fs, "trash") == "Trash"
+
+
 def test_among_equals_the_name_decides_whatever_order_the_server_lists_them_in():
     for listed in ((("Spam",), ("Junk",)), (("Junk",), ("Spam",))):
         assert roles.find(folders(*listed), "junk") == "Junk"
