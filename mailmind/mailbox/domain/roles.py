@@ -49,7 +49,11 @@ class Folder:
 
     @property
     def depth(self) -> int:
-        return self.name.count(self.delimiter) if self.delimiter else 0
+        """How deep the folder sits: by the server's delimiter, or with none, by "/" and "." as `role_by_name` reads
+        the path, so of "Trash" and "Old/Trash" the shallower plays the part wherever the names came from."""
+        if self.delimiter:
+            return self.name.count(self.delimiter)
+        return len(re.findall(r"[/.]", self.name))
 
 
 def _last_segment(name: str, delimiter: str | None) -> str:
@@ -130,7 +134,8 @@ def playing(folders: Collection[Folder]) -> dict[str | None, str]:
 
 def stored_rail(counts: Mapping[str, tuple[int | None, int]]) -> list[RailFolder]:
     """The rail from what is stored alone, with no server to ask, from {folder: (unseen, total)}. INBOX is always on it. Roles
-    go by name, and a stored name carries no delimiter, so of two that could play one the lower name does."""
+    go by name, as a live list's do: a stored name carries no delimiter, so "/" and "." both mark its depth, and of two
+    that could play one the shallower does, then the lower name."""
     held = dict(counts)
     held.setdefault("INBOX", (0, 0))
     names = sorted(held, key=lambda n: (len(re.findall(r"[/.]", n)), n.lower()))
