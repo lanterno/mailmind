@@ -143,7 +143,9 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     from mailmind.bootstrap.mailbox import store
     from mailmind.bootstrap.compose import snippets
     from mailmind.bootstrap.discovery import views
+    from mailmind.mailbox.adapters import reconcile_trail
     from mailmind.platform import settings
+    from mailmind.platform.db.uow import UnitOfWork
     assert settings.current().home == str(data_dir)
     c = store.conn()
     try:
@@ -157,13 +159,14 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     snippets.post({"verb": "save", "trigger": "hi", "text": "Hello"})
     curation.AUDIT.swept("ada@example.test", [])
     curation.AUDIT.cleaned_up("lin@example.test", "lin@example.test", 0, "ok")
-    (data_dir / "reconcile_audit.jsonl").write_text(json.dumps({"kind": "reconcile", "ts": "t"}) + "\n")
+    with UnitOfWork().write() as c:
+        reconcile_trail.pruned(c, [{"account": "ada@example.test", "live": 1, "stored": 2, "ghosts": 1, "pruned": 1,
+                                    "error": None, "folders": 1}])
     assert curation.classify("lin@example.test", "hi")[0] == "personal/protected"     # the rules just written
     assert json.loads((data_dir / "mailmind.config.json").read_text()) == {"accounts": []}
     assert sorted(e["kind"] for e in curation.AUDIT.read()["events"]) == ["reconcile", "sender_cleanup"]
     assert sorted(p.name for p in data_dir.iterdir() if not p.name.startswith("mailmind.db")) == [
-        ".rules.lock", "mailmind.config.json", "mailmind_rules.json", "reconcile_audit.jsonl",
-        "sweep_audit.jsonl"]
+        ".rules.lock", "mailmind.config.json", "mailmind_rules.json"]
 
 
 def test_the_directory_mailmind_home_names_is_guarded_too(tmp_path, refused):

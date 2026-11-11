@@ -1,13 +1,12 @@
 """Curation's routes on their router: what the schemas refuse, what they let by, and the answers each route keeps."""
-import json
-
 import pytest
 
 import problems
 from fixtures import world as w
 from mailmind.bootstrap import curation
 from mailmind.bootstrap.curation import rules
-from mailmind.platform import settings
+from mailmind.platform import audit
+from mailmind.platform.db.uow import UnitOfWork
 
 BAD_REQUEST = problems.BAD_REQUEST
 LOOM = "news@loom.example.test"
@@ -126,16 +125,16 @@ def test_a_query_string_reads_as_it_did(app, world):
     assert app.get(f"/api/screener?account={w.ADA}&account=nobody@example.test").json["account"] == w.ADA
 
 
-def test_each_kind_of_audit_line_fits_its_model(app):
+def test_each_kind_of_audit_record_fits_its_model(app):
     """Written here as each writer writes it, since what the suite reaches of a real sweep or reconcile may leave one out."""
     now = "2026-11-02T12:00:00+00:00"
-    sweep_lines = [{"kind": "sweep", "ts": now, "account": w.ADA, "uid": "7", "from": LOOM, "subject": "Issue", "bucket": "MKT", "reason": "x"},
-                   {"kind": "sender_cleanup", "ts": now, "from": LOOM, "token": LOOM, "swept": 3, "status": "skipped"}]
-    reconcile_lines = [{"kind": "reconcile", "ts": now, "auto": True, "account": w.ADA, "pruned": 1, "live": 9},
-                       {"kind": "reconcile", "ts": now, "account": w.ADA, "pruned": 2, "live": 8}]
-    for path, lines in ((settings.current().sweep_audit, sweep_lines), (settings.current().reconcile_audit, reconcile_lines)):
-        with open(path, "w") as f:
-            f.writelines(json.dumps(line) + "\n" for line in lines)
+    sweep_records = [{"kind": "sweep", "ts": now, "account": w.ADA, "uid": "7", "from": LOOM, "subject": "Issue", "bucket": "MKT", "reason": "x"},
+                     {"kind": "sender_cleanup", "ts": now, "from": LOOM, "token": LOOM, "swept": 3, "status": "skipped"}]
+    reconcile_records = [{"kind": "reconcile", "ts": now, "auto": True, "account": w.ADA, "pruned": 1, "live": 9},
+                         {"kind": "reconcile", "ts": now, "account": w.ADA, "pruned": 2, "live": 8}]
+    with UnitOfWork().write() as c:
+        for trail, records in ((audit.SWEEP, sweep_records), (audit.RECONCILE, reconcile_records)):
+            audit.append(c, trail, records)
     r = app.get("/api/audit")
     assert (r.status, len(r.json["events"]), r.json["has_more"]) == (200, 4, False)
     assert r.json["events"][0]["from"] == LOOM

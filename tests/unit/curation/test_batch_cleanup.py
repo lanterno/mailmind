@@ -85,7 +85,7 @@ class World:
     def stats_changed(self):
         self.said.append(("stats",))
 
-    # AuditLog
+    # SweepTrail
     def cleaned_up(self, from_addr, token, swept, status):
         self.said.append(("audit", from_addr, swept, status))
 

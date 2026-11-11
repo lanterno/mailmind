@@ -39,9 +39,9 @@ JUNK_INBOX = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-1
 
 
 def audit(world):
+    """The sweep trail, in the order it was written."""
     import json
-    p = world.dir / "sweep_audit.jsonl"
-    return [json.loads(ln) for ln in p.read_text().splitlines()] if p.exists() else []
+    return [json.loads(r["body"]) for r in q("SELECT body FROM audit_events WHERE trail='sweep' ORDER BY id")]
 
 
 def test_hwf_a_sweep_retries_a_move_the_server_said_ok_to_but_didnt_do(world):

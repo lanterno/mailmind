@@ -19,7 +19,7 @@ OWNER = {
     "curation": ("sender_unsub", "unsub_log"),
     "discovery": ("msg_fts",),
     "mailbox": ("attachments", "bodies", "message_identity", "message_labels", "message_recipients", "messages", "mail_commands", "sync_state", "thread_links"),
-    "platform": ("documents", "undo_entries"),     # documents: each context's adapter names its own row
+    "platform": ("audit_events", "documents", "undo_entries"),     # documents: each context's adapter names its own row
 }
 
 # Where another context still writes a table, each for a reason this list names. It may only shrink.

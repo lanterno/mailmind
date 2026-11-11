@@ -10,7 +10,7 @@ ADA, BEA, CY = "ada@example.test", "bea@example.test", "cy@example.test"
 
 def reconciler(monkeypatch, emails, *, failing=(), interval=900):
     accounts = SimpleNamespace(accounts=lambda: [{"email": e} for e in emails])
-    r = Reconciler(None, None, accounts, None, None, None)
+    r = Reconciler(None, None, accounts, None, None, None, None)
     monkeypatch.setattr(r, "_RECONCILE_INTERVAL", interval)
     pruned = []
 

@@ -86,7 +86,7 @@ class World:
         self.said.append(("move", uids, dest))
         return len(uids) - len(self.stragglers), list(self.stragglers)
 
-    # AuditLog
+    # SweepTrail
     def swept(self, account, rows):
         self.said.append(("audit", account, [(r["uid"], r["reason"]) for r in rows]))
 

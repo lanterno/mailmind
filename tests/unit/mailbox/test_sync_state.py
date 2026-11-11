@@ -69,7 +69,7 @@ def stored():
 
 
 def reconcile(server, **kw):
-    reconciler = Reconciler(UnitOfWork(), store, None, server, None, None)
+    reconciler = Reconciler(UnitOfWork(), store, None, server, None, None, None)
     return reconciler.reconcile_account({"email": ADA}, **kw)
 
 
