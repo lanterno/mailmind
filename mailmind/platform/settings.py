@@ -40,14 +40,6 @@ class Settings:
         return os.path.join(self.home, "mailmind.config.json")
 
     @property
-    def rules(self) -> str:
-        return os.path.join(self.home, "mailmind_rules.json")
-
-    @property
-    def rules_lock(self) -> str:
-        return os.path.join(self.home, ".rules.lock")
-
-    @property
     def log(self) -> str:
         return os.path.join(self.home, "mailmind.log")
 
