@@ -117,7 +117,7 @@ describe("opening a message", () => {
   });
   // A known bug: a wait that comes due once you have moved off lets nothing go, and coming back neither drops "drafting" on a
   // peek that says "none" nor starts a wait again, so the chip says Drafting… until the page reloads.
-  it.fails("doesn’t still say Drafting… on coming back to a message whose reply failed while you were away", async () => {
+  it("doesn’t still say Drafting… on coming back to a message whose reply failed while you were away", async () => {
     server.read = ["generating"];
     const r = await reading(K);
     await later(1200);
