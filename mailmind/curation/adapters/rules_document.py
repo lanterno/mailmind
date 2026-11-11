@@ -1,4 +1,4 @@
-"""The rule book's one reader and writer: the `rules` document in the database (mailmind.platform.documents), which is
+"""The rule book's one reader and writer: the `rules` document in the database (mailmind.platform.db.documents), which is
 encrypted at rest.
 
 It holds the keep and block lists, each sender's shelf life and the filters, as JSON in the shape mailmind_rules.json held,
@@ -15,7 +15,8 @@ from collections.abc import Callable
 from mailmind.curation.domain import rulebook
 from mailmind.curation.domain.rulebook import EXPIRE, KEYS, RuleSets, Rules
 from mailmind.kernel.row import Connection
-from mailmind.platform import documents, settings
+from mailmind.platform import settings
+from mailmind.platform.db import documents
 from mailmind.platform.db.uow import UnitOfWork
 
 __all__ = ["EXPIRE", "KEYS", "NAME", "add", "change", "load", "remove", "save", "set_expiry", "sets"]
@@ -39,7 +40,7 @@ def _read() -> tuple[Rules, RuleSets]:
         last = _last
         if last is not None and last[:2] == (db, version):
             return last[2], last[3]
-        doc = documents.read(c, NAME) if version is not None else None
+        doc = documents.stored(c, NAME) if version is not None else None
     if doc is None:
         return rulebook.empty(), rulebook.no_sets()
     rules = _parsed(doc.body)
@@ -60,12 +61,12 @@ def sets() -> RuleSets:
 
 def _held(c: Connection) -> Rules:
     """The rules as they stand, read inside a change's transaction."""
-    doc = documents.read(c, NAME)
+    doc = documents.stored(c, NAME)
     return rulebook.empty() if doc is None else _parsed(doc.body)
 
 
 def _write(c: Connection, rules: Rules) -> None:
-    documents.write(c, NAME, json.dumps(rulebook.for_saving(rules), indent=2))
+    documents.write(c, NAME, rulebook.for_saving(rules))
 
 
 def save(rules: Rules) -> None:

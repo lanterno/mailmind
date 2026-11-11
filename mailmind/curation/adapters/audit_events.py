@@ -1,8 +1,8 @@
-"""Curation's audit trail, the sweep trail, among the audit trails in the database (mailmind.platform.audit): a record of
+"""Curation's audit trail, the sweep trail, among the audit trails in the database (mailmind.platform.db.audit): a record of
 each message a sweep or expiry trashes and of each sender's cleanup. It reads both trails as one, for the page. Each call
 is a write of its own, committed when it returns."""
 from mailmind.kernel.when import now_iso
-from mailmind.platform import audit
+from mailmind.platform.db import audit
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
