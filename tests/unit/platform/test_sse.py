@@ -7,7 +7,10 @@ import time
 import pytest
 
 from mailmind.platform import sse
-from mailmind.platform.sse import RESYNC, Event, Hub
+from mailmind.platform.sse import RESYNC, Event, Hub, Listener
+from waiting import blocked_in, wait_until
+
+LONG = 300      # a wait that ends before this ended for what woke it, not for its timeout
 
 
 def topics(events):
@@ -102,18 +105,23 @@ def test_every_listener_hears_each_event():
     assert topics(a.next(0)) == topics(b.next(0)) == [("r1-1", "mute", {"account": "cy@example.test"})]
 
 
+def waiting(tab):
+    """A thread that waits on `tab` for its next events, as a stream does; it has begun to wait once it returns."""
+    got = []
+    t = threading.Thread(target=lambda: got.append(tab.next(LONG)), daemon=True)
+    t.got = got
+    t.start()
+    assert wait_until(lambda: blocked_in(t, Listener.next))
+    return t
+
+
 def test_a_waiting_listener_wakes_when_an_event_comes():
     hub = Hub(run="r1")
-    tab = hub.listen()
-    got = []
-    t = threading.Thread(target=lambda: got.extend(tab.next(5)))
-    t.start()
-    time.sleep(0.05)
-    began = time.monotonic()
+    t = waiting(hub.listen())
     hub.publish("outbox", {})
-    t.join(5)
-    assert [e.topic for e in got] == ["outbox"]
-    assert time.monotonic() - began < 1
+    t.join(30)
+    assert not t.is_alive()
+    assert [[e.topic for e in events] for events in t.got] == [["outbox"]]
 
 
 def test_a_quiet_wait_ends_empty_at_its_timeout():
@@ -137,13 +145,10 @@ def test_listeners_past_the_cap_are_turned_away_until_one_closes():
 def test_closing_wakes_a_waiting_listener():
     hub = Hub(run="r1")
     tab = hub.listen()
-    got = []
-    t = threading.Thread(target=lambda: got.append(tab.next(5)))
-    t.start()
-    time.sleep(0.05)
+    t = waiting(tab)
     tab.close()
-    t.join(5)
-    assert got == [[]] and not t.is_alive()
+    t.join(30)
+    assert t.got == [[]] and not t.is_alive()
 
 
 def test_only_the_streams_topics_can_be_published():
@@ -186,16 +191,11 @@ def test_the_app_listens_for_every_topic_for_resync_and_hello_and_nothing_else()
 def test_ending_the_streams_wakes_each_and_closes_it():
     hub = Hub(run="r1")
     tabs = [hub.listen(), hub.listen()]
-    got = []
-    waiting = [threading.Thread(target=lambda tab=tab: got.append(tab.next(5))) for tab in tabs]
-    for t in waiting:
-        t.start()
-    time.sleep(0.05)
-    began = time.monotonic()
+    threads = [waiting(tab) for tab in tabs]
     hub.end_streams()
-    for t in waiting:
-        t.join(5)
-    assert got == [[], []] and time.monotonic() - began < 1
+    for t in threads:
+        t.join(30)
+    assert [t.got for t in threads] == [[[]], [[]]] and not any(t.is_alive() for t in threads)
     assert hub.listening() == 0 and all(tab.closed for tab in tabs)
     tabs[0].close()                                              # what the stream does as it ends
     assert hub.listening() == 0
