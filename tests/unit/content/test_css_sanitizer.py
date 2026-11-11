@@ -182,6 +182,21 @@ def test_a_sheet_is_read_to_its_cap_of_text():
     assert sheet("p{color:red}" + " " * S._CSS_SHEET_MAX + "q{color:blue}")[0] == "p{color:red}"
 
 
+@pytest.mark.xfail(strict=True, reason="a string's escaped quote is read, then written back bare, so it ends the string early")
+@pytest.mark.parametrize("value", [
+    pytest.param(r'font-family:"a\";position:fixed;inset:0;"', id="backslash_quote"),
+    pytest.param(r'font-family:"a\22;position:fixed;inset:0;\22"', id="hex_quote"),
+    pytest.param(r"font-family:'a\';position:fixed;inset:0;'", id="single_quote"),
+])
+def test_an_escaped_quote_cant_end_its_string_and_carry_a_dropped_property_in(value):
+    assert "position" not in inline(value)[0]
+
+
+@pytest.mark.xfail(strict=True, reason="a string's escaped quote is read, then written back bare, so it ends the string early")
+def test_an_escaped_quote_cant_end_its_string_and_carry_a_rule_into_the_sheet():
+    assert "position" not in sheet(r'p{font-family:"a\"}*{position:fixed;top:0}"}')[0]
+
+
 # ── DoS bounds ───────────────────────────────────────────────────────────────
 def test_oversized_inline_dropped_fast():
     out, _ = inline("color:red;" + "A" * 100_000)
