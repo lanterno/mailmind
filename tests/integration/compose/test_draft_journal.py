@@ -1,6 +1,8 @@
 """A draft is local first (decision D5). A save lands in the journal and answers at once; the server's copy follows it on
 close, on an explicit save and at most once a minute while someone types, and a server that's away costs nothing but
-waiting. The journal holds one row a draft, the newest save, and the copy a try may have left never stays behind."""
+waiting. The journal holds one row a draft, the newest save, and the copy a try may have left never stays behind. Here the
+server is the fake IMAP server and a send goes out through the fake SMTP server; what Drafts decides of each save is
+tests/unit/compose/test_draft_journal.py's."""
 import time
 from datetime import timedelta
 
@@ -61,37 +63,6 @@ def tray(app):
 
 
 # -- a save and its push ----------------------------------------------------------------
-
-def test_an_autosave_touches_no_server(app, world):
-    since = world.mark()
-    r = save(app, autosave=True)
-    assert r["pushed"] is False and r["version"] == 1
-    assert world.writes(since) == []
-    assert b"Two of each." in waiting(r["draft_id"])["raw"]
-
-
-def test_autosaves_make_one_push_a_minute_of_the_newest_text(app, world):
-    did = save(app, autosave=True, text="One.")["draft_id"]
-    assert save(app, autosave=True, draft_id=did, text="Two.")["version"] == 2
-    compose.drafts.push_round()
-    assert live_copies(world) == []
-    a_minute_on(app)
-    compose.drafts.push_round()
-    assert holds(world, "Two.") and waiting(did) is None
-    save(app, autosave=True, draft_id=did, text="Three.")
-    compose.drafts.push_round()                                    # the last push was only now
-    assert holds(world, "Two.")
-    a_minute_on(app)
-    compose.drafts.push_round()
-    assert holds(world, "Three.") and waiting(did) is None
-
-
-def test_a_save_someone_asked_for_goes_now_and_takes_what_autosave_left(app, world):
-    did = save(app, autosave=True, text="One.")["draft_id"]
-    r = save(app, draft_id=did, text="Two.")
-    assert r["pushed"] is True and row(did)["uid"] == r["uid"]
-    assert holds(world, "Two.") and waiting(did) is None
-
 
 def test_a_busy_gate_leaves_a_save_to_the_job(app, world, monkeypatch):
     monkeypatch.setattr("mailmind.compose.application.drafts.PUSH_WAIT", 0.01)
@@ -196,30 +167,6 @@ def test_a_crash_before_a_push_settles_goes_on_after_the_restart(app, world, mon
     assert holds(world, "Two of each.") and waiting(did) is None
 
 
-# -- two windows ---------------------------------------------------------------------------
-
-def test_a_save_that_never_saw_the_last_one_is_refused(app, world):
-    did = save(app, idempotency_key="tab-1")["draft_id"]
-    assert save(app, idempotency_key="tab-2", draft_id=did, base_version=1, text="From tab two.")["version"] == 2
-    r = app.post("/api/draft", new(idempotency_key="tab-1", draft_id=did, base_version=1, text="From tab one."))
-    assert r.status == 409 and r.json["conflict"] is True and r.json["version"] == 2
-    assert holds(world, "From tab two.")
-    assert save(app, idempotency_key="tab-1", draft_id=did, text="From tab one.")["version"] == 3   # asked for by name
-
-
-def test_a_save_that_names_no_composer_is_held_to_its_version(app, world):
-    did = save(app)["draft_id"]
-    body = new(draft_id=did, base_version=0)
-    del body["idempotency_key"]
-    assert app.post("/api/draft", body).status == 409
-
-
-def test_a_composer_whose_answer_was_lost_is_not_its_own_conflict(app, world):
-    did = save(app, autosave=True)["draft_id"]
-    save(app, autosave=True, draft_id=did, base_version=1, text="One.")
-    assert save(app, autosave=True, draft_id=did, base_version=1, text="Two.")["version"] == 3
-
-
 # -- reopening --------------------------------------------------------------------------------
 
 def opened_from_the_list(app, r):
@@ -257,25 +204,7 @@ def test_a_copy_another_app_changed_and_a_waiting_save_both_stay(app, world):
     assert texts == [False, True] and any(b"Mine, not pushed yet." in c for c in live_copies(world))
 
 
-def test_a_draft_only_the_journal_holds_opens_from_the_tray(app, world):
-    world.server.drop("APPEND", user=w.ADA)
-    r = save(app, bcc=["cy@example.test"])
-    opened = app.post("/api/draft/resume", {"draft_id": r["draft_id"]}).json
-    assert (opened["text"], opened["bcc"], opened["version"], opened["account"]) == (
-        "Two of each.", ["cy@example.test"], 1, w.ADA)
-    a_minute_on(app)
-    compose.drafts.push_round()
-    assert app.post("/api/draft/resume", {"draft_id": r["draft_id"]}).status == 409    # it's in Drafts now
-
-
 # -- discarding --------------------------------------------------------------------------------
-
-def test_discarding_what_never_reached_the_server_asks_nothing_of_it(app, world):
-    did = save(app, autosave=True)["draft_id"]
-    since = world.mark()
-    assert app.post("/api/draft", {"delete": True, "draft_id": did}).json["deleted"] is True
-    assert world.writes(since) == [] and row(did) is None and waiting(did) is None
-
 
 def test_a_discard_outlasts_a_server_that_is_away(app, world):
     r = save(app)
@@ -299,14 +228,6 @@ def test_a_discard_takes_the_copy_a_try_may_have_left(app, world):
     assert row(did) is None and live_copies(world) == []
 
 
-def test_a_save_after_a_discard_is_a_draft_of_its_own(app, world):
-    r = save(app)
-    world.server.drop("SELECT", user=w.ADA, times=2)
-    app.post("/api/draft", {"delete": True, "draft_id": r["draft_id"]})
-    again = save(app, draft_id=r["draft_id"], text="Changed my mind.", autosave=True)
-    assert again["draft_id"] != r["draft_id"]
-
-
 # -- a send --------------------------------------------------------------------------------------
 
 def test_a_draft_only_the_journal_holds_can_be_sent(app, world):
@@ -328,34 +249,6 @@ def test_a_send_takes_the_copy_a_try_may_have_left(app, world):
     assert len(world.smtp.messages) == 1 and row(did) is None and live_copies(world) == []
 
 
-def test_the_job_looks_again_when_the_next_save_comes_due(app, world):
-    from mailmind.compose.domain.draft_journal import PUSH_TICK
-    assert compose.drafts.push_round() == PUSH_TICK
-    did = save(app, autosave=True)["draft_id"]
-    assert compose.drafts.push_round() == PUSH_TICK                # a minute off
-    assert app.post("/api/send", new(draft_id=did)).json["ok"]
-    a_minute_on(app)
-    assert compose.drafts.push_round() == PUSH_TICK                # due, but held: nothing to look for sooner
-
-
-def test_a_held_draft_refuses_a_save_and_isnt_pushed(app, world):
-    did = save(app, autosave=True)["draft_id"]
-    assert app.post("/api/send", new(draft_id=did)).json["ok"]
-    assert app.post("/api/draft", new(draft_id=did, text="Too late.")).status == 423
-    assert tray(app) == []                                 # the outbox's row says it
-
-
-def test_a_send_about_to_go_keeps_its_draft_from_being_pushed(app, world):
-    did = save(app, autosave=True)["draft_id"]
-    assert app.post("/api/send", new(draft_id=did)).json["ok"]
-    c = store.conn()
-    book.journal_failed(c, did, 0, 0)                      # as good as due
-    c.commit()
-    c.close()
-    compose.drafts.push_round()
-    assert live_copies(world) == []
-
-
 def test_a_send_scheduled_for_later_lets_its_draft_catch_up(app, world):
     did = save(app, autosave=True)["draft_id"]
     later = int(time.time()) + 7200
@@ -368,10 +261,3 @@ def test_a_send_scheduled_for_later_lets_its_draft_catch_up(app, world):
     assert len(world.smtp.messages) == 1 and live_copies(world) == [] and row(did) is None
 
 
-def test_undo_send_leaves_the_journal_to_go_on(app, world):
-    did = save(app, autosave=True)["draft_id"]
-    sent = app.post("/api/send", new(draft_id=did)).json
-    assert app.post("/api/outbox/cancel", {"id": sent["outbox_id"]}).json["ok"]
-    a_minute_on(app)
-    compose.drafts.push_round()
-    assert holds(world, "Two of each.") and waiting(did) is None

@@ -56,17 +56,6 @@ def test_a_reopened_reply_answers_its_original(app, world):
     assert "\\Answered" in flags and "\\Answered" not in others
 
 
-def test_a_discard_leaves_what_the_row_says_of_the_composition(app, world):
-    r = save(app, world)
-    did = r["draft_id"]
-    before = row(did)
-    world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/draft", {"delete": True, "draft_id": did}).json["deleted"] is True
-    after = row(did)
-    assert after["version"] == before["version"] + 1
-    assert {k: after[k] for k in ("mode", "subject", "saved_by")} == {k: before[k] for k in ("mode", "subject", "saved_by")}
-
-
 def test_a_save_kept_apart_finds_its_original_by_its_bytes(app, world):
     r = save(app, world)
     copy = in_the_list(app)
