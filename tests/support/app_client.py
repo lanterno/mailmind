@@ -49,14 +49,16 @@ class AppClient:
                 and not t.name.startswith(("fake-", "app-http", "AnyIO worker"))]
 
     def settle(self, timeout=30):
-        """Wait for the background work requests started. Raises if any is still running, so a
-        test never ends with a thread that would write into the next test's data directory."""
+        """Wait for the background work requests started, and for any started while it waits. Raises if any is
+        still running, so a test never ends with a thread that would write into the next test's data directory."""
         deadline = time.monotonic() + timeout
-        for t in self.started_threads():
-            t.join(max(0.0, deadline - time.monotonic()))
-        left = [t.name for t in self.started_threads() if t.is_alive()]
-        if left:
-            raise AssertionError(f"background threads still running after {timeout}s: {left}")
+        while running := self.started_threads():
+            if time.monotonic() >= deadline:
+                raise AssertionError(f"background threads still running after {timeout}s: {[t.name for t in running]}")
+            for t in running:
+                # One a request is starting at this moment is listed before it has started, and can't be joined until then.
+                t._started.wait(max(0.0, deadline - time.monotonic()))
+                t.join(max(0.0, deadline - time.monotonic()))
 
     def request(self, method, path, body=None, headers=None):
         h = {"Host": f"127.0.0.1:{self.port}", "Sec-Fetch-Site": "same-origin", "X-CSRF-Token": CSRF}
