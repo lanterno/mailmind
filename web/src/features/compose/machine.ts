@@ -259,10 +259,20 @@ export function createComposing(env: Env) {
   }
 
   /* ---------- snippets ---------- */
+  // A read and a change each answer with the whole list, and the answers come back in any order: a read asked as the composer
+  // opened can answer after a save that followed it, with the list from before the save. An answer to what was asked before the
+  // one the list last came from is let go.
+  let snippetsAsked = 0, snippetsFrom = 0;
+  function showSnippets(asked: number, list: Snippet[]) {
+    if (asked < snippetsFrom) return;
+    snippetsFrom = asked;
+    snippets.set(list);
+  }
   async function loadSnippets() {
+    const asked = ++snippetsAsked;
     try {
       const d = await env.get("/api/snippets");
-      if (Array.isArray(d.snippets)) snippets.set(d.snippets as Snippet[]);
+      if (Array.isArray(d.snippets)) showSnippets(asked, d.snippets as Snippet[]);
     } catch {
       // the last list read stands: none of this stops a message being written
     }
@@ -319,9 +329,10 @@ export function createComposing(env: Env) {
     return c ? c.body.slice(at, end) : "";
   }
   async function changeSnippets(change: { verb: SnippetVerb; trigger: string; text?: string }) {
+    const asked = ++snippetsAsked;
     try {
       const d = await env.post("/api/snippets", change);
-      snippets.set(d.snippets as Snippet[]);
+      showSnippets(asked, d.snippets as Snippet[]);
       return true;
     } catch (e) {
       env.toast(`Couldn’t ${change.verb} that snippet: ${e instanceof Error ? e.message : ""}`);
