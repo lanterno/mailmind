@@ -1,6 +1,5 @@
 """What the characterization tests ask of the fictional world and its fake servers: the mail they name, one more message, where a
-message is, a body to send, and how long to wait for a worker."""
-import time
+message is and a body to send."""
 from datetime import timezone
 from urllib.parse import urlencode
 
@@ -59,15 +58,6 @@ def body_of(copy, **more):
 def new(**kw):
     return {"account": w.ADA, "mode": "new", "to": ["Lin Mori <lin@example.test>"], "subject": "Fabric order",
             "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda", **kw}
-
-
-def wait_until(cond, timeout=5.0):
-    deadline = time.monotonic() + timeout
-    while not cond():
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.01)
-    return True
 
 
 class _Stop(BaseException):

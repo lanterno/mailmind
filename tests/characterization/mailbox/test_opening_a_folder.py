@@ -2,7 +2,8 @@
 import gate
 from fixtures import world as w
 from mailmind.bootstrap import mailbox
-from world_helpers import acct, late, wait_until
+from waiting import wait_until
+from world_helpers import acct, late
 
 
 def test_hwf_a_folder_whose_first_sync_failed_is_synced_on_the_next_open(app, world):

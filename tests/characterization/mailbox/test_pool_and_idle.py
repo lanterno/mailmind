@@ -6,7 +6,8 @@ import time
 import pytest
 
 from fixtures import world as w
-from world_helpers import acct, count, late, wait_until
+from waiting import wait_until
+from world_helpers import acct, count, late
 
 
 @pytest.fixture

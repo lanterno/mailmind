@@ -8,7 +8,8 @@ from fixtures import world as w
 from mailmind.bootstrap.compose import sending
 from mailmind.compose.domain import outbox_item
 from stored_rows import q
-from world_helpers import _Stop, new, wait_until
+from waiting import wait_until
+from world_helpers import _Stop, new
 
 
 def outbox_row(oid):
