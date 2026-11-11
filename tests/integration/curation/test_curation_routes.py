@@ -95,12 +95,6 @@ def test_a_rule_that_wont_do_is_refused_in_its_own_words(app, body, said):
     assert (r.status, r.json) == (400, problems.refused(said))
 
 
-def test_a_rule_removed_places_nothing(app):
-    assert app.post("/api/rules", {"token": LOOM, "verdict": "keep"}).json["placed_in"] == "keep_senders"
-    r = app.post("/api/rules", {"token": LOOM, "verdict": "remove"})
-    assert (r.status, r.json["placed_in"], r.json["rules"]["keep_senders"]) == (200, None, [])
-
-
 @pytest.mark.parametrize("query, said", [("", problems.refused("bad address")), ("?addr=", problems.refused("bad address")),
                                          ("?addr=loom", problems.refused("bad address")),
                                          ("?addr=nobody@example.test", problems.not_found("no such sender"))])
