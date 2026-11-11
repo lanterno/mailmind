@@ -1,5 +1,5 @@
-"""The words a person keeps for the composer: what makes one, the file and the routes. What `;name` does in the text is the
-page's, in features/compose."""
+"""The words a person keeps for the composer, through their routes. What makes one, the file and the use case are
+tests/unit/compose/test_snippets.py's; what `;name` does in the text is the page's, in features/compose."""
 import json
 
 import pytest
@@ -20,10 +20,6 @@ def test_saved_it_is_listed_and_deleted_it_is_not(app, data_dir):
     assert json.loads((data_dir / "mailmind_snippets.json").read_text()) == [SIG]
     assert app.post("/api/snippets", {"verb": "delete", "trigger": "sig"}).json == {"ok": True, "snippets": []}
     assert app.get("/api/snippets").json["snippets"] == []
-
-
-def test_deleting_what_isnt_there_is_no_refusal(app):
-    assert app.post("/api/snippets", {"verb": "delete", "trigger": "gone"}).json == {"ok": True, "snippets": []}
 
 
 def test_one_that_cant_be_kept_answers_why_and_keeps_what_was_there(app):
