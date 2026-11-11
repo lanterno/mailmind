@@ -5,8 +5,9 @@
 // The browser keeps every URL a tab goes to in its history, in plaintext, and may sync it, so no URL names anything of a
 // person's. A route that holds an account, a folder, a search, a topic or an opened message is a place, `/p/<id>`: its id is
 // random and made here, so going somewhere waits for nothing, and the server keeps what it stands for in the encrypted database
-// and puts it back into a page opened there (`<meta name="mailmind-place">`). Only a route that holds none of that is written as
-// itself. Nothing goes into `history.state` either, which the browser keeps on disk too.
+// and puts it back into a page opened there (`<meta name="mailmind-place">`), or loaded again for one Back comes to that the
+// page doesn't know. Only a route that holds none of that is written as itself. Nothing goes into `history.state` either,
+// which the browser keeps on disk too.
 import { useSyncExternalStore } from "react";
 import { post, refusalOf } from "../lib/api/client";
 import { LIMITS } from "../lib/api/limits.gen";
@@ -174,6 +175,16 @@ function opening() {
   } catch { /* no route: the page opens at home */ }
 }
 opening();
+
+// Back or Forward in a page loaded again (a reload, a restored tab) can come to an entry made before it, at a place this page
+// never knew. The server does, so the page is loaded from it, and nothing else hears of the move: home would take its entry.
+function cameBack(e: Event) {
+  const id = PLACE.exec(location.pathname)?.[1];
+  if (id === undefined || routes.has(id)) return;
+  e.stopImmediatePropagation();
+  location.reload();
+}
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("popstate", cameBack);     // ahead of every other listener
 
 // A place reads as the route it holds, and one this page doesn't know as home. The readable forms of the others still read, as
 // a person may type one: `/m/<account>/<folder>`, `/search?q=`, `/brief/topic/<label>`, and `?key=&folder=&uid=` for what is open.
