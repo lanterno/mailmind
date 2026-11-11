@@ -1,10 +1,10 @@
 """The key MailMind's database is encrypted with.
 
 It is 32 random bytes, one for every MailMind database on this computer, kept in the login Keychain (the generic
-password whose service is `mailmind` and account `database-key`). It is made once: by the first start, which makes a
-new database, or by `db encrypt`, which encrypts one that was plaintext. SQLCipher takes it as a raw key, so opening a
-connection stretches no passphrase: the key is random, and there is nothing to stretch. A backup, the upgrade
-check's copy, an export of the database and a data directory moved elsewhere all open with the same key.
+password whose service is `mailmind` and account `database-key`). It is made once, by the first start, which makes a
+new database. SQLCipher takes it as a raw key, so opening a connection stretches no passphrase: the key is random,
+and there is nothing to stretch. A backup, the upgrade check's copy, an export of the database and a data directory
+moved elsewhere all open with the same key.
 
 MailMind never writes the key to a file, a log or the terminal. It reaches the Keychain through /usr/bin/security,
 and hands it a new key on its standard input, never on its command line, where another program could read it.

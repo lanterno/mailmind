@@ -1,7 +1,7 @@
 """Opening a connection to MailMind's SQLite database, which is encrypted (mailmind.platform.db.key).
 
-Every connection is keyed before anything else reads it. A file that is still plaintext is refused, never opened
-as it is: `db encrypt` encrypts it, with MailMind stopped.
+Every connection is keyed before anything else reads it. A plaintext file, a database from before MailMind encrypted
+its data, is refused and never opened as it is.
 """
 import os
 import pathlib
@@ -15,9 +15,8 @@ class NotEncrypted(RuntimeError):
     """The database is a plaintext file: MailMind opens it only encrypted."""
 
     def __init__(self, path):
-        super().__init__(f"The database at {path} isn't encrypted yet, and MailMind opens it only encrypted. Stop "
-                         "MailMind and run `uv run python -m mailmind db encrypt --dry` to try it on a copy, then "
-                         "`uv run python -m mailmind db encrypt`.")
+        super().__init__(f"The database at {path} isn't encrypted: it is from before MailMind encrypted its data, "
+                         "and MailMind opens a database only encrypted.")
 
 
 class KeyDoesNotFit(RuntimeError):
