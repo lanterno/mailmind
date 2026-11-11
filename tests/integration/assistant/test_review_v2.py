@@ -1,12 +1,11 @@
 """The week's review says what a person filed away, by the command log and true after an Undo, and what the invites in the mail
-say of their week."""
+say of their week. Here through the routes, the command log and the calendar; what Reviews makes of the week it is handed is
+tests/unit/assistant/test_review_v2.py's."""
 from datetime import datetime, timedelta
 
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
-from mailmind.bootstrap import assistant
-from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
 
 LUNCH, NEWS, CLIENT, GMAIL, INVITE = ("ada-inbox-01-lunch.eml", "ada-inbox-03-newsletter.eml", "bea-inbox-01-client.eml",
@@ -59,14 +58,6 @@ def test_an_undone_gmail_archive_is_taken_back_out_too(app, world, ai):
     assert stats(app, ai)["handled"] == 0
 
 
-def test_a_review_already_written_says_how_many_after_an_undo(app, world, ai):
-    archive(app, world, LUNCH)
-    assert stats(app, ai)["handled"] == 1
-    assert app.get("/api/review").json["stats"]["handled"] == 1
-    assert app.post("/api/undo", {}).status == 200
-    assert app.get("/api/review").json["stats"]["handled"] == 0
-
-
 def test_a_failure_marking_it_doesnt_put_the_undo_back(app, world, ai, monkeypatch):
     archive(app, world, LUNCH)
     monkeypatch.setattr(store, "command_mark_reversed", lambda c, mid: 1 / 0)
@@ -97,12 +88,6 @@ def test_another_accounts_mail_isnt_counted_for_this_one(app, world):
     c.close()
 
 
-def test_the_model_is_told_how_many(app, world, ai):
-    archive(app, world, LUNCH)
-    stats(app, ai)
-    assert "Filed away: 1" in ai.requests[-1].prompt
-
-
 def test_an_invite_in_the_mail_reaches_the_review_and_the_model(app, world, ai):
     ai.queue(fa.answer(ANSWER))
     r = app.post("/api/review", {}).json
@@ -125,27 +110,3 @@ def test_a_review_read_later_has_them_and_loses_one_whose_mail_has_gone(app, wor
     app.settle()
     world.deliver(w.ADA, "INBOX", w.variant(NEWS, Message_ID="<later@example.test>"), ())
     assert app.get("/api/review").json["meetings"] == []
-
-
-def test_a_calendar_that_cant_be_read_costs_only_its_mention(app, world, ai, monkeypatch):
-    monkeypatch.setattr(assistant.reviews._mail, "events_from", lambda when, limit: 1 / 0)
-    ai.queue(fa.answer(ANSWER))
-    r = app.post("/api/review", {})
-    assert (r.status, r.json["meetings"]) == (200, [])
-    assert "(none)" in ai.requests[-1].prompt
-
-
-def test_a_review_stored_before_this_still_reads(app, world):
-    c = store.conn()
-    day = datetime.now().astimezone().date().isoformat()
-    said = '{"sent": 1, "received": 2, "by_bucket": {}, "needs_you": 0, "waiting_on": 0, "reply_later": 0, "cleaned": 0}'
-    answers.save_review(c, ",".join(sorted(a["email"] for a in _enabled())), day, "fp", "Written earlier today.", "[]", said, "[]", "[]", "m", datetime.now().astimezone().isoformat())
-    c.commit()
-    c.close()
-    r = app.get("/api/review").json
-    assert (r["narrative"], r["meetings"], r["stats"]["handled"]) == ("Written earlier today.", [], 0)
-
-
-def _enabled():
-    from mailmind.bootstrap import accounts
-    return accounts.config.accounts()

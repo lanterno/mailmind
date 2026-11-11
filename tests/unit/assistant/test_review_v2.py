@@ -1,10 +1,13 @@
 """The week's review says what a person filed away, by the command log and true after an Undo, and what the invites in the mail
-say of their week."""
+say of their week. Its words and its meetings, with no I/O, and then Reviews on a week of its own and a model of its own."""
 from datetime import datetime, timedelta
 
 import pytest
+import time_machine
 
+from assistant_ports import Model, Said, Uow, Week, calls_on
 from fixtures import world as w
+from mailmind.assistant.application.review import Reviews
 from mailmind.assistant.domain import review
 
 
@@ -62,3 +65,64 @@ def test_the_model_is_told_which_are_gone_and_which_are_deadlines():
 
 def test_with_no_events_the_model_is_told_none():
     assert review.meeting_lines([]) == "(none)"
+
+
+# ── the use case, on a week of its own ────────────────────────────────────────────────────────────
+
+ANSWER = {"narrative": "A steady week: you kept up and little is left waiting on you.", "next": []}
+
+
+@pytest.fixture
+def at_noon():
+    with time_machine.travel(NOON, tick=False):
+        yield
+
+
+@pytest.fixture
+def week():
+    return Week()
+
+
+@pytest.fixture
+def said():
+    return Said()
+
+
+@pytest.fixture
+def model():
+    return Model(ANSWER)
+
+
+@pytest.fixture
+def reviews(at_noon, model, said, week):
+    return Reviews(calls_on(model), said, Uow(), week)
+
+
+def test_the_model_is_told_how_many(reviews, model, week):
+    week.handled = 1
+    assert reviews.build({w.ADA})["stats"]["handled"] == 1
+    assert "Filed away: 1" in model.prompt
+
+
+def test_a_calendar_that_cant_be_read_costs_only_its_mention(reviews, model, week):
+    week.calendar_down = True
+    r = reviews.build({w.ADA})
+    assert (r["narrative"], r["meetings"]) == (ANSWER["narrative"], [])
+    assert "(none)" in model.prompt
+
+
+def test_a_stored_review_says_how_many_as_it_stands_now(reviews, model, week):
+    week.handled = 1
+    assert reviews.build({w.ADA})["stats"]["handled"] == 1
+    week.handled = 0                                                  # an Undo took it back out
+    again = reviews.build({w.ADA}, generate=False)
+    assert (again["cached"], again["stats"]["handled"], len(model.sent)) == (True, 0, 1)
+
+
+def test_a_review_stored_before_this_still_reads(reviews, model, said):
+    said.save_review(None, w.ADA, NOON.date().isoformat(), "fp", "Written earlier today.", "[]",
+                     '{"sent": 1, "received": 2, "by_bucket": {}, "needs_you": 0, "waiting_on": 0, "reply_later": 0, "cleaned": 0}',
+                     "[]", "[]", "m", NOON.isoformat())
+    r = reviews.build({w.ADA}, generate=False)
+    assert (r["narrative"], r["meetings"], r["stats"]["handled"]) == ("Written earlier today.", [], 0)
+    assert model.sent == []
