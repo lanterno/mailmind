@@ -98,8 +98,11 @@ def _counts(path):
 
 def _rows_to_go(path, version, tables):
     """What the migrations still to run take from a table on purpose, by table."""
-    return {table: _query(path, count)[0][0] for table, (by, count) in migrations.TRIMMED.items()
-            if version < by and table in tables}
+    to_go = collections.Counter()
+    for table, by, count in migrations.TRIMMED:
+        if version < by and table in tables:
+            to_go[table] += _query(path, count)[0][0]
+    return to_go
 
 
 def _key_problems(path):

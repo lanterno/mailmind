@@ -67,6 +67,12 @@ BASE_UNTIL = _FROZEN[-1][0]     # a database at this version or later has all th
 RETIRED = {"notes": 18, "briefing_cache": 37, "read_mutations": 39, "summaries": 45}     # a table a migration ended, and that migration's version
 REBUILT = {"msg_fts": 38}                         # one a migration built afresh, so its count may change
 FILLED = {"assessments": 45, "snoozes": 45, "message_identity": 45}     # one a migration may add rows to, carrying over what it ends
-# One a migration takes rows from on purpose: that migration's version, and how to count what it will take, asked beforehand.
-TRIMMED = {"attachments": (28, "SELECT count(*) FROM attachments WHERE message_pk IN "
-                               "(SELECT message_pk FROM attachments WHERE lower(content_type) LIKE 'message/%')")}
+# One a migration takes rows from on purpose: the table, that migration's version, and how to count what it will take, asked
+# beforehand. A table may be taken from by more than one.
+TRIMMED = [
+    ("attachments", 28, "SELECT count(*) FROM attachments WHERE message_pk IN "
+                        "(SELECT message_pk FROM attachments WHERE lower(content_type) LIKE 'message/%')"),
+    # m50: each row of a table that goes with its message, naming one that is gone
+    *((table, 50, f"SELECT count(*) FROM {table} WHERE message_pk IS NOT NULL AND message_pk NOT IN (SELECT pk FROM messages)")
+      for table in ("attachments", "bodies", "message_labels", "message_recipients", "thread_links")),
+]
