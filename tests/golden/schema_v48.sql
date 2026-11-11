@@ -4,6 +4,9 @@ CREATE INDEX idx_ai_batch_items_batch ON ai_batch_items(batch_id);
 -- index idx_att_msg
 CREATE INDEX idx_att_msg ON attachments(message_pk);
 
+-- index idx_audit_events_ts
+CREATE INDEX idx_audit_events_ts ON audit_events(ts);
+
 -- index idx_commands_message
 CREATE INDEX idx_commands_message ON mail_commands(account, message_id);
 
@@ -76,6 +79,9 @@ CREATE TABLE assessments( message_key INTEGER PRIMARY KEY REFERENCES message_ide
 -- table attachments
 CREATE TABLE attachments ( id INTEGER PRIMARY KEY AUTOINCREMENT, message_pk INTEGER REFERENCES messages(pk) ON DELETE CASCADE, part_id TEXT, filename TEXT, content_type TEXT, size INTEGER, sha256 TEXT, -- content-addressed file under attachments/ is_inline INTEGER DEFAULT 0, content_id TEXT );
 
+-- table audit_events
+CREATE TABLE audit_events( id INTEGER PRIMARY KEY, trail TEXT NOT NULL, ts TEXT NOT NULL, body TEXT NOT NULL);
+
 -- table bodies
 CREATE TABLE bodies ( message_pk INTEGER PRIMARY KEY REFERENCES messages(pk) ON DELETE CASCADE, raw BLOB, -- raw RFC822 bytes (lossless; parse on read) fetched_at TEXT );
 
@@ -84,6 +90,9 @@ CREATE TABLE briefs( accounts TEXT NOT NULL, day TEXT NOT NULL, fingerprint TEXT
 
 -- table deltas
 CREATE TABLE deltas( accounts TEXT NOT NULL, since_ts INTEGER NOT NULL, fingerprint TEXT NOT NULL, headline TEXT NOT NULL, items_json TEXT NOT NULL, model TEXT, created_at TEXT NOT NULL, PRIMARY KEY(accounts, since_ts, fingerprint));
+
+-- table documents
+CREATE TABLE documents( name TEXT PRIMARY KEY, body TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, changed_at TEXT NOT NULL);
 
 -- table draft_ahead
 CREATE TABLE draft_ahead ( -- durable AI pre-draft cache; key (account,ref_key) NEVER pk account TEXT NOT NULL, ref_key TEXT NOT NULL, -- 't:<thread_id>' or 'm:<message_id>' fp TEXT NOT NULL DEFAULT '', -- thread-state hash captured BEFORE generation body TEXT, -- NULL => failure-only row, never servable tone TEXT, model TEXT, source TEXT NOT NULL DEFAULT 'dwell', -- 'dwell' | 'topk' | 'demand' src_message_id TEXT, created_ts INTEGER NOT NULL DEFAULT 0, last_hit_ts INTEGER, fail_ts INTEGER NOT NULL DEFAULT 0, fail_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(account, ref_key) );
@@ -160,4 +169,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=47;
+PRAGMA user_version=48;
