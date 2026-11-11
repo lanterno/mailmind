@@ -311,6 +311,10 @@ automatically.
   User-triggered unless you turn on **Tidy by itself** in Settings: once a day it files what Tidy offers, and says so
   with one click to take it all back.
 - **Morning brief (opt-in).** Today's brief is ready before you open the Inbox, within the daily AI limit.
+- **Last week's review, ready on Monday (opt-in).** Turned on in Settings, the Weekly Review of the week just ended is
+  written on Monday morning, within the daily AI limit, and kept in MailMind's own database: Your week opens on it all
+  week without waiting or spending, says which seven days it looked back on, and ↻ writes a fresh one. Nothing is ever
+  sent as mail.
 - **Find dates.** On your click, Claude finds the meetings and dated tasks a message proposes, and you confirm or edit
   each. An event saves as an `.ics` file for your calendar and invites nobody; a task joins your list beside Commitments.
 - **Commitments.** Every AI-extracted next-step across the inbox as one checkable

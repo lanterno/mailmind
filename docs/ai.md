@@ -20,8 +20,9 @@ means no key, never a fall-through to the environment's. With no key the model i
 `DisabledModel`: `assistant.calls.engine()` is `"none"`, and a call raises `AIOff` (from
 `application.ports`) before anything is sent.
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
-fire on their own — drafts wait, bulk commands require a preview and confirm. The two that do are opt-in and off by default: the morning's brief,
-written ahead of the first open, and Tidy's daily run, which files only what the brief's Tidy offers and reports it for one Undo.
+fire on their own — drafts wait, bulk commands require a preview and confirm. The three that do are opt-in and off by default: the morning's brief,
+written ahead of the first open, the week's review, written ahead on Monday morning and kept in the database, never sent as mail, and Tidy's
+daily run, which files only what the brief's Tidy offers and reports it for one Undo.
 
 An assessment keeps how it came to be (migration 43, `kernel.assessment`): `served_by`, the model `Reply.model` names, which
 a server-side fallback can make another; `prompt_version`; and `outcome`, which is `assessed`, or `unusable` or `refused` for
@@ -62,7 +63,7 @@ asked, model that served it and outcome: `ok`, `refused`, `rejected` (a permanen
 cost from Anthropic's list prices in integers, rounded up. It prices an unknown model as the
 dearest, and a server-side fallback at the dearer of the two models. `Gateway.ask` requires a
 `feature`: `triage`, `triage-batch`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`, `extract`,
-`screen`, `rationale`, `sender`, `brief-ahead`, `auto-tidy`, `ask` and `plan` so far, and a new AI call names its own. `call_claude` and `call_claude_json`
+`screen`, `rationale`, `sender`, `brief-ahead`, `review-ahead`, `auto-tidy`, `ask` and `plan` so far, and a new AI call names its own. `call_claude` and `call_claude_json`
 pass it on, `other` when the caller names none. With AI off nothing is counted. A ledger write
 that fails is logged by class name and never fails the call.
 
@@ -73,7 +74,7 @@ What the ledger holds is read back in three places:
 
 The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
 `assistant.governor()`) before every call it sends. `domain.features.kind` sorts each feature:
-`triage` is background, `draft-ahead` speculative, `brief-ahead` and `auto-tidy` scheduled (held to the background's bars, and what a person turned on), and every other feature interactive.
+`triage` is background, `draft-ahead` speculative, `brief-ahead`, `review-ahead` and `auto-tidy` scheduled (held to the background's bars, and what a person turned on), and every other feature interactive.
 - Slots. Two interactive calls at a time, and two background or speculative ones beside them.
 - Yielding. Background and speculative calls don't start while an interactive one runs, or for
   45 seconds after one ends (`YIELD_SECONDS`).
@@ -120,10 +121,16 @@ The brief, the delta and the review each have a table (migration 37): `briefs` a
 and local day, `deltas` by account set, watermark and fingerprint, so a window that changes is written once
 more however large it is. A review's lists and a brief's groups are stored by message key and read back as
 the copies those messages have now, by key, folder and uid, and a message that has gone leaves them. A delta's items are the model's own
-words, with no message behind them. Each table keeps a week. They are read and written apart:
+words, with no message behind them. Each table keeps a week, by `created_at`, and forgets what is older when it is next written. They are read
+and written apart:
 - A GET of `/api/briefing`, `/api/briefing/since` or `/api/review` reads only what is stored. When
   there is none it answers `missing: true` and calls nothing (the builders' `generate=False`).
 - A POST to the same path writes one, reading first, and its `/refresh` POST writes it again.
+- A review is read on the day it was written, unless the `weekly_review` preference is on. Then the `review-ahead` job
+  (`background.review_ahead_round`, `Reviews.write_ahead`) writes one at its first round on Monday from five until noon local time, once
+  triage has read the last day's mail and only if none is stored this week, and a read takes the newest stored since Monday
+  (`review.week_so_far`), so the one written ahead shows all week for nothing. One from an earlier day keeps what it said was filed away,
+  and its `week_start` is the week it looked back on. A review written on Monday morning is under a week old until the next Monday's.
 - The page GETs, and POSTs only on `missing`. What it writes on its own (the brief as the Inbox
   opens, the delta for the new-mail pill) passes no `askOverLimit`. At the limit it
   then gets the 402 as an `ApiError` (`overLimit`), and the brief offers "Write it" instead of asking

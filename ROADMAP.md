@@ -7,11 +7,6 @@ served by `uv run python -m mailmind serve`. Each item says what is still missin
 Items cite functions and symbols rather than line numbers, which drift. Value and effort are
 relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 
-## AI that acts, not just describes
-
-- **Scheduled delivery of the weekly review** · needs a decision first — it would be the first time the server sends mail with no
-  human in the loop.
-
 ## Search, rules and organization
 
 - **PDF preview in the Document Hub** · low value · effort M — The Hub previews images in a frame whose sandbox allows nothing

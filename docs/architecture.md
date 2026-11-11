@@ -87,7 +87,7 @@ The app lives in `mailmind/`.
   function doing one round of the work) on a lane of its own, a thread named `job:<name>`, so
   its rounds never overlap. A round may return the seconds until its next; one that raises is
   logged and counted, and the job goes on. `mailmind.bootstrap.background.schedule(jobs)` is the job table: `snooze` in
-  every profile, then `sync`, `draft-push`, `assess`, `backfill`, `draft-ahead`, `brief-ahead` and `tidy` (each only for a person who turned it on), `reconcile`, `expire` and `forget`
+  every profile, then `sync`, `draft-push`, `assess`, `backfill`, `draft-ahead`, `brief-ahead`, `review-ahead` and `tidy` (each only for a person who turned it on), `reconcile`, `expire` and `forget`
   in a full one. `assess` triages the mail that has no summary yet, outside the sync's single-flight,
   and a sync that brought new mail kicks it (`background._kick`). With AI off, or triage held back
   by the cost governor (see [AI calls](ai.md)), it tries nothing: `assistant.assessments.summarize_pending` returns 0
