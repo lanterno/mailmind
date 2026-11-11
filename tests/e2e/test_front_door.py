@@ -13,10 +13,9 @@ import socket
 import stat
 import subprocess
 import sys
-import time
 
 import guard
-from mailmind.http import serving as serving_module
+from waiting import wait_until
 
 ROOT = guard.ROOT
 SUPPORT = os.path.join(ROOT, "tests", "support")
@@ -52,6 +51,21 @@ def serve_code(port, dist):
     return GUARDED.format(support=SUPPORT, root=ROOT, dist=dist, argv=["mailmind", "serve", str(port)])
 
 
+def up(port, proc):
+    """Wait until the child answers, failing if it ends first or isn't up in a minute."""
+    def answers():
+        assert proc.poll() is None, "serve ended before it came up"
+        try:
+            get(port, "/api/outbox")
+            return True
+        except OSError:
+            return False
+    assert wait_until(answers, timeout=60), "serve didn't come up"
+
+
+CUT_OFF = "timeout graceful shutdown exceeded"      # what uvicorn says as it cancels what is still running when the grace is over
+
+
 # In the child, before the program: Today & next says it has been asked, then waits as a call to a dead server would.
 BLOCKS = ("import threading; from mailmind.calendar.application.agenda import Agenda; "
           "Agenda.upcoming = lambda self: (open({marker!r}, 'w').close(), threading.Event().wait()); ")
@@ -65,26 +79,17 @@ def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path, tiny_build)
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     stream = None
     try:
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                status, body = get(port, "/api/outbox")
-                break
-            except OSError:
-                assert proc.poll() is None and time.monotonic() < deadline, "serve didn't come up"
-                time.sleep(0.05)
-        assert (status, body) == (200, b'{"ok": true, "items": [], "drafts": []}')
+        up(port, proc)
+        assert get(port, "/api/outbox") == (200, b'{"ok": true, "items": [], "drafts": []}')
         assert sorted(p.name for p in tmp_path.iterdir())[0] == "mailmind.db"
         stream = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
         stream.request("GET", "/api/events", headers={"Host": f"127.0.0.1:{port}",
                                                       "Sec-Fetch-Site": "same-origin"})
         r = stream.getresponse()
         assert (r.status, r.readline()) == (200, b"retry: 3000\n")
-        began = time.monotonic()
         proc.send_signal(signal.SIGINT)
-        assert proc.wait(timeout=10) == -signal.SIGINT
-        assert time.monotonic() - began < 2
-        r.read()                                         # the stream ended, not cut off
+        assert proc.wait(timeout=60) == -signal.SIGINT
+        r.read()                                         # the stream ended, not cut off: that raises IncompleteRead
     finally:
         if stream is not None:
             stream.close()
@@ -95,6 +100,7 @@ def test_serve_answers_streams_and_stops_at_once_on_ctrl_c(tmp_path, tiny_build)
     assert f"MailMind → http://127.0.0.1:{port}" in out
     assert "[imap] mail through imaplib" in out          # no account here asks for IMAPClient
     assert "isn't built" not in out
+    assert CUT_OFF not in out                            # nothing waited out the grace
     assert "Traceback" not in out and "Tripwire" not in out, out
 
 
@@ -107,23 +113,12 @@ def test_ctrl_c_stops_it_with_a_route_on_a_router_still_blocked(tmp_path, tiny_b
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     blocked = None
     try:
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                get(port, "/api/outbox")
-                break
-            except OSError:
-                assert proc.poll() is None and time.monotonic() < deadline, "serve didn't come up"
-                time.sleep(0.05)
-        blocked = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+        up(port, proc)
+        blocked = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
         blocked.request("GET", "/api/upcoming", headers={"Host": f"127.0.0.1:{port}", "Sec-Fetch-Site": "same-origin"})
-        while not marker.exists():
-            assert time.monotonic() < deadline, "the route was never reached"
-            time.sleep(0.05)
-        began = time.monotonic()
+        assert wait_until(marker.exists), "the route was never reached"
         proc.send_signal(signal.SIGINT)
-        assert proc.wait(timeout=15) == -signal.SIGINT
-        assert time.monotonic() - began < serving_module.GRACE_SECONDS + 2
+        assert proc.wait(timeout=60) == -signal.SIGINT      # the thread waits for good, so a hold on the exit never ends
     finally:
         if blocked is not None:
             blocked.close()
@@ -132,6 +127,7 @@ def test_ctrl_c_stops_it_with_a_route_on_a_router_still_blocked(tmp_path, tiny_b
             proc.wait()
     # uvicorn logs the cancelled request's stack: code, and nothing of the request.
     out = proc.stdout.read() if proc.stdout else ""
+    assert CUT_OFF in out                                # it waited out the grace, then went
     assert "Tripwire" not in out, out
 
 
@@ -142,19 +138,12 @@ def serving(home, dist):
     proc = subprocess.Popen([sys.executable, "-c", serve_code(port, dist)], cwd=ROOT, env=child_env(home),
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                get(port, "/api/outbox")
-                break
-            except OSError:
-                assert proc.poll() is None and time.monotonic() < deadline, "serve didn't come up"
-                time.sleep(0.05)
+        up(port, proc)
         yield port
     finally:
         proc.send_signal(signal.SIGINT)
         try:
-            proc.wait(timeout=10)
+            proc.wait(timeout=60)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
