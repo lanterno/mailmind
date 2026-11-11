@@ -90,10 +90,6 @@ def reset():
     _offered.intersection_update({"imaplib"})
 
 
-def kind():
-    return _kind
-
-
 def kind_for(acct):
     """The adapter the account `acct` (an accounts.config.accounts() entry) goes through."""
     asked = acct.get("imap_adapter")
