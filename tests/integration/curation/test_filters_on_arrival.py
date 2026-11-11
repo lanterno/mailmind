@@ -1,7 +1,7 @@
-"""A filter at ingest: new Inbox mail that fits is starred or marked read through the command path, and nothing else is touched."""
+"""A filter at ingest: new Inbox mail that fits is starred or marked read through the command path, and nothing else is touched.
+What the filters ask of one message, and that one which can't be judged stops no sync, is tests/unit/curation/test_filters_on_arrival.py."""
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap import discovery
 from mailmind.bootstrap.mailbox import store
 from mailmind.bootstrap import mailbox
 
@@ -171,17 +171,6 @@ def test_read_only_marks_it_here_and_the_server_waits(app, world, monkeypatch):
     mailbox.commands.drain()
     assert world.writes(since) == []
     assert stored(uid)["flagged"] == 1 and len(waiting()) == 1
-
-
-def test_a_filter_that_cant_be_judged_stops_no_sync(app, world, monkeypatch):
-    filter_on(app, "from:lin@example.test", star=True)
-
-    def fails(c, pk, q):
-        raise RuntimeError("no")
-
-    monkeypatch.setattr(discovery.conditions, "holds", fails)
-    uid = world.deliver(w.ADA, "INBOX", a_lunch(1))
-    assert stored(uid)["flagged"] == 0 and waiting() == []
 
 
 def test_the_worker_is_woken(app, world, monkeypatch):
