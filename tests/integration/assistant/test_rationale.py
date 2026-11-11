@@ -2,7 +2,6 @@
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
-from mailmind.bootstrap import assistant
 from mailmind.bootstrap.curation import rules
 
 LOOM, THIMBLE = "news@loom.example.test", "orders@thimble.example.test"
@@ -25,16 +24,10 @@ def test_each_message_counts_once_however_many_folders_hold_it(app, world, ai):
     assert ", 0 of them never opened" in ai.requests[0].prompt      # read in one of its copies is read
 
 
-def test_it_changes_nothing_and_is_counted_under_its_own_feature(app, world, ai):
+def test_it_changes_nothing(app, world, ai):
     before, mark = rules.load(), world.mark()
-    app.post("/api/cleanup/rationale", {"senders": [LOOM]})
+    assert app.post("/api/cleanup/rationale", {"senders": [LOOM]}).status == 200
     assert (rules.load(), world.writes(mark)) == (before, [])
-    assert assistant.calls.usage(1)[0]["features"]["rationale"]["calls"] == 1
-
-
-def test_with_no_mail_from_any_of_them_nothing_is_sent(app, world, ai):
-    r = app.post("/api/cleanup/rationale", {"senders": ["nobody@example.test"]})
-    assert (r.status, r.json["rationales"], ai.requests) == (200, {}, [])
 
 
 def test_a_list_that_wont_read_is_the_400(app, world, ai):

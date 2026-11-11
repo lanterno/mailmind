@@ -1,6 +1,8 @@
 """Why a sender is worth cleaning up: the numbers are the mail's, and what comes back is the model's own words on them, held to what it was shown."""
 import pytest
 
+from assistant_ports import Ledger, Model, Uow, calls_on
+from mailmind.assistant.application.rationale import Rationales
 from mailmind.assistant.domain import rationale
 
 LOOM, THIMBLE = "news@loom.example.test", "orders@thimble.example.test"
@@ -60,3 +62,31 @@ def test_an_answer_that_wont_read_falls_back(told):
 def test_a_rationale_is_held_to_its_length():
     said = rationale.clean({"rationales": [{"id": 1, "text": "x" * 900}]}, [row(LOOM)], NOW)
     assert len(said[LOOM]) == rationale.TEXT_MAX
+
+
+# ── the use case, on fakes behind its ports ──────────────────────────────────────────────────────
+
+class Mail:
+    """The Mailbox's numbers on each sender, for those it has mail from."""
+
+    def __init__(self, *rows):
+        self.rows = {r["addr"]: r for r in rows}
+
+    def sender_stats(self, c, addrs):
+        return [self.rows[a] for a in addrs if a in self.rows]
+
+
+def rationales(model, ledger=None):
+    return Rationales(calls_on(model, ledger), Uow(), Mail(row(LOOM)))
+
+
+def test_a_rationale_is_counted_under_its_own_feature():
+    ledger = Ledger()
+    rationales(Model({"rationales": [{"id": 1, "text": "You have never opened these."}]}), ledger).explain([LOOM])
+    assert ledger.features == ["rationale"]
+
+
+def test_with_no_mail_from_any_of_them_nothing_is_sent():
+    model = Model()
+    assert rationales(model).explain(["nobody@example.test"]) == {"ok": True, "rationales": {}}
+    assert model.sent == []
