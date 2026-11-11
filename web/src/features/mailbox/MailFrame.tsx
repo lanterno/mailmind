@@ -112,6 +112,7 @@ export function MailFrame({ body, images, minHeight, pad }: { body: MailBody; im
       met.add(doc);
       if (!isHtml) foldQuote(doc);
       wireLinks(doc, body.from_addr?.split("@")[1]);
+      doc.addEventListener("toggle", fit, true);      // a folded quote opened or closed: the frame takes what it now needs
     }
     fit();
     return true;
