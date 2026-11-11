@@ -123,16 +123,20 @@ function newPlace(): string {
 }
 
 // A new place goes to the server once this turn of the page is over, with the others made in it, so a link drawn with one has
-// reached it long before anyone could open that link in a new tab. Places the server couldn't be reached for go again a little
-// later. One it refuses, or one too long to keep, lasts only as long as the page: a reload of it opens at home.
+// reached it long before anyone could open that link in a new tab. It goes as keepalive, so a batch on its way when the page
+// goes (a reload, Back to a place made before it) still arrives, as far as the browser carries that much that way. Places the
+// server couldn't be reached for go again a little later. One it refuses, or one too long to keep, lasts only as long as the
+// page: a reload of it opens at home.
 const unsent: { id: string; route: Fields }[] = [];
 let sending = false, again: ReturnType<typeof setTimeout> | undefined;
+const KEEPALIVE_BYTES = 16_384;     // the browser carries 64 KB at most in all, for every keepalive request on its way
 
 function send() {
   sending = false;
   while (unsent.length) {
     const batch = unsent.splice(0, LIMITS.places_at_once);
-    post("/api/places", { places: batch }).catch((e: unknown) => {
+    const keepalive = new TextEncoder().encode(JSON.stringify(batch)).length <= KEEPALIVE_BYTES;
+    post("/api/places", { places: batch }, { keepalive }).catch((e: unknown) => {
       if (refusalOf(e)) return;
       unsent.push(...batch);
       clearTimeout(again);
