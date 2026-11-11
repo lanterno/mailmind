@@ -366,7 +366,7 @@
   "status": 400
  },
  {
-  "note": "mailmind_views.json",
+  "note": "the views document",
   "value": [
    {
     "id": "<view Receipts>",

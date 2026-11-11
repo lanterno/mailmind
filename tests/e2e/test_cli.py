@@ -146,6 +146,18 @@ def test_views_add_list_and_remove(data_dir, capsys):
     assert capsys.readouterr().out == "removed\n"
 
 
+def test_views_bring_a_database_from_before_them_up_to_date_first(tmp_path, capsys):
+    """The views are in the database now, which a start brings to the newest schema: a view saved from the command line
+    before MailMind has started since is kept all the same."""
+    from mailmind.platform import settings
+    from mailmind.platform.db import migrate, migrations
+    with settings.use(settings.Settings(home=str(tmp_path))):
+        migrate.init(settings.current().db, [m for m in migrations.MIGRATIONS if m[0] < 48])
+        main(["views", "add", "Receipts", "is:receipt"])
+        main(["views"])
+    assert "Receipts" in capsys.readouterr().out
+
+
 def test_export_plans_and_writes(world, tmp_path, capsys):
     main(["export"])
     assert "messages," in capsys.readouterr().out

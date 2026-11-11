@@ -6,6 +6,7 @@ tests/golden/http_settings/.
 import json
 
 from fixtures import world as w
+from mailmind.platform.db.uow import UnitOfWork
 
 DEE = "dee@example.test"
 
@@ -13,6 +14,13 @@ DEE = "dee@example.test"
 def disk(world, name):
     p = world.dir / name
     return json.loads(p.read_text()) if p.exists() else None
+
+
+def kept(name):
+    """What the database keeps as the document `name`, its JSON parsed, or None."""
+    with UnitOfWork().read() as c:
+        row = c.execute("SELECT body FROM documents WHERE name=?", (name,)).fetchone()
+    return None if row is None else json.loads(row["body"])
 
 
 def post(app, golden, label, path, body):
@@ -47,7 +55,7 @@ def test_saved_views(app, golden, world):
     post(app, golden, "delete the first", "/api/views", {"verb": "delete", "id": lin})
     post(app, golden, "delete a builtin", "/api/views", {"verb": "delete", "id": "__unread__"})
     post(app, golden, "an unknown verb", "/api/views", {"verb": "rename"})
-    golden.note("mailmind_views.json", disk(world, "mailmind_views.json"))
+    golden.note("the views document", kept("views"))
 
 
 def test_accounts_add_test_edit_delete(app, golden, world):

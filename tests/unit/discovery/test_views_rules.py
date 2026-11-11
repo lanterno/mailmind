@@ -1,4 +1,4 @@
-"""What makes a saved view, and what may go, with no file."""
+"""What makes a saved view, and what may go, with no database."""
 import pytest
 
 from mailmind.discovery.domain import views
@@ -21,10 +21,10 @@ def test_a_new_view_is_held_to_what_fits_and_named_by_a_fresh_id():
     assert v["id"].startswith("v") and v["id"] != views.new("n", "q")["id"]
 
 
-# -- what a file holds ------------------------------------------------------------
+# -- what was saved --------------------------------------------------------------
 
 @pytest.mark.parametrize("raw", [None, 5, "views", {"id": "v1"}])
-def test_a_file_that_isnt_a_list_holds_no_views(raw):
+def test_what_was_saved_that_isnt_a_list_holds_no_views(raw):
     assert views.clean(raw) == []
 
 
@@ -38,7 +38,7 @@ def test_an_entry_that_cant_be_a_view_or_takes_a_builtins_id_is_dropped(entry):
     assert views.clean([entry, view("v2")]) == [view("v2")]
 
 
-def test_a_file_is_held_to_what_a_new_view_is():
+def test_what_was_saved_is_held_to_what_a_new_view_is():
     assert views.clean([{"id": 7, "name": " " + "n" * 80, "q": " " + "q" * 600}]) == [{"id": "7", "name": "n" * 60, "q": "q" * 512}]
 
 
@@ -62,7 +62,7 @@ def test_a_view_goes():
 
 
 @pytest.mark.parametrize("vid", ["__unread__", "__lane_feed__"])
-def test_a_builtin_cant_even_if_a_file_held_one(vid):
+def test_a_builtin_cant_even_if_one_was_saved(vid):
     assert views.without([view(vid), view("v2")], vid) is None
 
 
