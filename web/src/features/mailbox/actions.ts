@@ -4,7 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { get, post, refusalOf } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
 import type { FilingVerb, GetAnswers, PostAnswers, SnoozePreset } from "../../lib/api/types";
-import { go, parseRoute, pathOf, type Route } from "../../app/route";
+import { currentRoute, go, pathOf, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
 import { createFloat, OFFERS_MS, toast } from "../../lib/toast";
@@ -79,7 +79,7 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
   fail: (reason: string) => string;
 }) {
   hide(rows);
-  const was = parseRoute(location.pathname, location.search);
+  const was = currentRoute();
   if (after) go(after, { replace: true });
   inFlight++;
   try {

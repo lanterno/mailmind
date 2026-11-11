@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { get, post } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
 import type { DraftTone, GetAnswers, PostBodies } from "../../lib/api/types";
-import { go, parseRoute } from "../../app/route";
+import { currentRoute, go } from "../../app/route";
 import { askOverLimit } from "../../lib/overLimit";
 import { pref } from "../../lib/prefs";
 import { createStore } from "../../lib/store";
@@ -15,7 +15,7 @@ let qc: QueryClient | undefined;
 export const bindComposer = (client: QueryClient) => void (qc = client);
 
 const digest = () => qc?.getQueryData<GetAnswers["/api/digest"]>(["digest"]);
-const route = () => parseRoute(location.pathname, location.search);
+const route = currentRoute;
 const again = (...keys: string[]) => keys.forEach((key) => void qc?.invalidateQueries({ queryKey: [key] }));
 
 export function myAddresses(d = digest()): Set<string> {

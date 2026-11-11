@@ -8,7 +8,7 @@ import { onDraftReady } from "../features/compose/draftAhead";
 import type { ListData } from "../features/mailbox/data";
 import { createStore } from "../lib/store";
 import { shortAddress } from "../lib/text";
-import { parseRoute } from "./route";
+import { currentRoute } from "./route";
 
 export const newBuild = createStore(false);
 const LOADED = document.querySelector<HTMLMetaElement>('meta[name="mailmind-build"]')?.content ?? "";
@@ -43,9 +43,9 @@ export function useRealtime() {
     });
     es.addEventListener("new-mail", (e) => {
       const digest = qc.getQueryData<GetAnswers["/api/digest"]>(["digest"]);
-      onNewMail(JSON.parse((e as MessageEvent<string>).data) as object, parseRoute(location.pathname, location.search), Boolean(digest && digest.ai.engine !== "none"), (a) => digest?.aliases?.[a] || shortAddress(a));
+      onNewMail(JSON.parse((e as MessageEvent<string>).data) as object, currentRoute(), Boolean(digest && digest.ai.engine !== "none"), (a) => digest?.aliases?.[a] || shortAddress(a));
     });
-    es.addEventListener("snooze-wake", (e) => onSnoozeWake(JSON.parse((e as MessageEvent<string>).data) as { accounts?: string[]; count?: number }, parseRoute(location.pathname, location.search)));
+    es.addEventListener("snooze-wake", (e) => onSnoozeWake(JSON.parse((e as MessageEvent<string>).data) as { accounts?: string[]; count?: number }, currentRoute()));
     es.addEventListener("resync", () => again("digest"));
     // With the stream down nothing says what changed, so the counts and the tray are read on a timer until it reconnects.
     let up = false;

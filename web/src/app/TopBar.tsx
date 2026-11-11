@@ -14,7 +14,7 @@ import { createStore, store, stored } from "../lib/store";
 import { nextTheme, setTheme, theme, THEME_LABEL } from "../lib/theme";
 import { toast } from "../lib/toast";
 import { Icon } from "../lib/ui/Icon";
-import { go, parseRoute, type ListSource } from "./route";
+import { currentRoute, go, type ListSource } from "./route";
 import { useLayer } from "../lib/backTrap";
 import { SuggestMenu, useSuggestions, type Offer } from "./SearchSuggest";
 
@@ -118,7 +118,7 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
     go({ source: { kind: "search", q, account }, opened: null });
     if (!m.digest || m.digest.ai.engine === "none" || !readsAsProse(q)) return;
     void translateProse(q, (filter) => {
-      const now = parseRoute(location.pathname, location.search).source;
+      const now = currentRoute().source;
       if (now?.kind === "search" && now.q === q) go({ source: { kind: "search", q: filter, account, asked: q }, opened: null }, { replace: true });
     });
   };

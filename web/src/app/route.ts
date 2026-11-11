@@ -111,7 +111,9 @@ export function go(route: Route, { replace = false } = {}) {
 }
 
 let cached: Route = { source: null, opened: null };
-function snapshot(): Route {
+
+// Where you are now, for code outside React: what the URL names, read once for each URL.
+export function currentRoute(): Route {
   const now = read();
   if (now !== current) {
     current = now;
@@ -120,7 +122,7 @@ function snapshot(): Route {
   return cached;
 }
 
-export const useRoute = () => useSyncExternalStore(subscribe, snapshot);
+export const useRoute = () => useSyncExternalStore(subscribe, currentRoute);
 
 // The source a row, a query or a mutation is about, as a stable key.
 export function sourceKey(s: ListSource | null): readonly unknown[] {
