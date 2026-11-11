@@ -11,7 +11,6 @@ import re
 import socket
 import tempfile
 import threading
-import time
 import zipfile
 
 import pytest
@@ -117,10 +116,11 @@ def test_a_client_that_reads_slowly_holds_no_thread_of_the_pool(app, big_export,
     s = opened(app)
     try:
         assert s.recv(4096).startswith(b"HTTP/1.1 200")
-        time.sleep(0.2)                                  # the socket is full, and the response waits on it
         monkeypatch.setattr(schema_contract, "HOLDING", False)
         monkeypatch.setattr(schema_contract.route_for("GET", "/api/stats"), "work", lambda: {"tokens": limiter()})
-        assert app.get("/api/stats").json == {"tokens": 1}
+        # Once the socket is full the response waits on it with no thread, and the one borrowed is the stats' own. A
+        # response that held one while it waited would hold it for as long as the client doesn't read: this never.
+        assert wait_until(lambda: app.get("/api/stats").json == {"tokens": 1})
     finally:
         s.close()
 
