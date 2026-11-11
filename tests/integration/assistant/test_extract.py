@@ -29,22 +29,6 @@ def test_the_route_answers_suggestions_and_makes_nothing(app, world, ai):
     assert app.get("/api/tasks").json["items"] == []
 
 
-def test_the_call_goes_under_the_system_prompt_with_todays_date_and_the_mails_words(app, world, ai):
-    ai.queue(fa.answer({"events": [], "tasks": []}))
-    assert app.post("/api/ai/extract", world.copy(LUNCH)).status == 200
-    sent = ai.requests[-1]
-    assert "UNTRUSTED DATA" in str(sent.system)
-    assert "2026-11-02" in sent.prompt and "Monday" in sent.prompt
-    assert world.row(LUNCH)["subject"] in sent.prompt
-    assert sent.schema["required"] == ["events", "tasks"]
-
-
-def test_the_call_is_counted_as_extract(app, world, ai):
-    ai.queue(fa.answer({"events": [], "tasks": []}))
-    app.post("/api/ai/extract", world.copy(LUNCH))
-    assert [r["feature"] for r in q("SELECT feature FROM ai_usage")] == ["extract"]
-
-
 def test_a_renumber_leaves_what_the_key_names(app, world, ai):
     ai.queue(fa.answer({"events": [], "tasks": []}))
     copy = world.copy(LUNCH)
@@ -58,11 +42,6 @@ def test_a_key_with_no_copy_left_is_not_found_and_asks_nothing(app, ai):
     assert (r.status, r.json["detail"]) == (404, "not found") and not ai.requests
 
 
-def test_naming_no_message_is_refused_and_asks_nothing(app, ai):
-    r = app.post("/api/ai/extract", {})
-    assert r.status == 400 and not ai.requests
-
-
 def test_with_ai_off_it_says_so(app, world):
     r = app.post("/api/ai/extract", world.copy(LUNCH))
     assert (r.status, r.json["ai_off"]) == (409, True)
@@ -72,9 +51,3 @@ def test_a_call_that_fails_says_a_retry_can_help(app, world, ai):
     ai.responder = lambda req: fa.error(400, "invalid_request_error", "no")
     r = app.post("/api/ai/extract", world.copy(LUNCH))
     assert (r.status, r.json["retry"]) == (502, True)
-
-
-def test_a_reply_that_isnt_json_is_nothing_found(app, world, ai):
-    ai.queue(fa.answer("no json here"))
-    r = app.post("/api/ai/extract", world.copy(LUNCH))
-    assert (r.status, r.json["events"], r.json["tasks"]) == (200, [], [])

@@ -1,9 +1,14 @@
 """A message's proposals, read by Claude on a click: what the model answers is read with care, and nothing is created by it."""
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
+import time_machine
 
+from assistant_ports import Ledger, Model, Uow, calls_on
+from mailmind.assistant.application.context import ContextAssembler
+from mailmind.assistant.application.extract import Extractor
 from mailmind.assistant.domain import extraction
+from mailmind.kernel.errors import Refused
 TODAY = date(2026, 11, 2)
 MEETING = {"title": "Design review", "start": "2026-11-12T15:00", "end": "2026-11-12T16:00", "place": "Room 2"}
 
@@ -67,3 +72,56 @@ def test_quoted_lines_are_not_read_but_a_forward_is():
 
 def test_a_message_is_read_within_its_cap():
     assert len(extraction.readable("x" * (extraction.TEXT_MAX + 50))) == extraction.TEXT_MAX
+
+
+# ── the use case, on fakes behind its ports ──────────────────────────────────────────────────────
+
+LUNCH = {"pk": 7, "account": "ada@example.test", "subject": "Re: Lunch on Thursday?", "date_iso": "2026-11-01T09:00:00+00:00",
+         "from_name": "Lin", "from_addr": "lin@example.test", "body_text": "12:30 is perfect, see you then.", "snippet": "",
+         "body_fetched": 1}
+
+
+class Mail:
+    """The message a click names, as stored."""
+
+    def message_to_reply_to(self, c, pk):
+        return [LUNCH] if pk == LUNCH["pk"] else []
+
+
+def extract(model, pk=LUNCH["pk"], ledger=None):
+    mail = Mail()
+    return Extractor(calls_on(model, ledger), ContextAssembler(mail), Uow(), mail).read(pk)
+
+
+@pytest.fixture
+def monday():
+    with time_machine.travel(datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc), tick=False):
+        yield
+
+
+def test_the_call_goes_under_the_system_prompt_with_todays_date_and_the_mails_words(monday):
+    model = Model({"events": [], "tasks": []})
+    extract(model)
+    [sent] = model.sent
+    assert "UNTRUSTED DATA" in sent.system
+    assert "2026-11-02" in sent.text and "Monday" in sent.text
+    assert LUNCH["subject"] in sent.text and LUNCH["body_text"] in sent.text
+    assert sent.schema["required"] == ["events", "tasks"]
+
+
+def test_the_call_is_counted_as_extract():
+    ledger = Ledger()
+    extract(Model({"events": [], "tasks": []}), ledger=ledger)
+    assert ledger.features == ["extract"]
+
+
+def test_naming_no_message_is_refused_and_asks_nothing():
+    model = Model()
+    with pytest.raises(Refused, match="missing message"):
+        extract(model, pk=None)
+    assert model.sent == []
+
+
+def test_a_reply_that_isnt_json_is_nothing_found():
+    said = extract(Model("no json here"))
+    assert (said["ok"], said["events"], said["tasks"]) == (True, [], [])
