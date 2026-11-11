@@ -92,18 +92,13 @@ def test_an_open_smtp_session_sends_nothing(world, write):
         s.quit()
 
 
-@pytest.mark.parametrize("transport", ["sdk", "urllib"])
-def test_no_claude_api_request_is_made(world, ai, write, transport, monkeypatch):
+def test_no_claude_api_request_is_made(world, ai, write, monkeypatch):
     from mailmind.bootstrap import assistant
     monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})   # report() stays as it was
-    assistant.use(transport)
-    try:
-        write.open()
-        with pytest.raises(TxAcrossNetworkError, match="^a Claude API request while"):
-            assistant.calls.call_claude("Say hello to Ada.")
-        assert ai.requests == []
-        write.end()
-        assert assistant.calls.call_claude("Say hello to Ada.")
-        assert len(ai.requests) == 1
-    finally:
-        assistant.use("urllib")
+    write.open()
+    with pytest.raises(TxAcrossNetworkError, match="^a Claude API request while"):
+        assistant.calls.call_claude("Say hello to Ada.")
+    assert ai.requests == []
+    write.end()
+    assert assistant.calls.call_claude("Say hello to Ada.")
+    assert len(ai.requests) == 1

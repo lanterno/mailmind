@@ -18,10 +18,8 @@ def test_every_context_gets_new_objects():
 
 
 def test_what_front_build_chose_goes_back_to_how_a_process_starts():
-    assistant.use("sdk")
     mailbox.offer("imapclient")
     wiring.assemble()
-    assert assistant.transport() == "urllib"
     assert mailbox.kind_for({"imap_adapter": "imapclient"}) == "imaplib"
 
 

@@ -1,4 +1,4 @@
-"""A backlog of triage through the Message Batches API: what each transport sends and reads, what a batch
+"""A backlog of triage through the Message Batches API: what the SDK's adapter sends and reads, what a batch
 costs and how that counts against the daily limit, and the job that sends one and brings its answers in.
 Everything here is against the fake API; nothing real is sent."""
 import time
@@ -12,24 +12,20 @@ from mailmind.assistant.application.ports import ModelError
 from mailmind.assistant.domain import models, pricing
 from mailmind.assistant.domain.prompts import SYSTEM
 
-TRANSPORTS = ["sdk", "urllib"]
 SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
 
 
-@pytest.fixture(params=TRANSPORTS)
-def transport(request, data_dir, monkeypatch):
+@pytest.fixture
+def plain(data_dir, monkeypatch):
     from mailmind.bootstrap import assistant
     monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})
     monkeypatch.setattr(assistant.calls, "MODEL", None)
     monkeypatch.delenv("MAILMIND_NO_SCHEMA", raising=False)
     monkeypatch.delenv("MAILMIND_MODEL", raising=False)
-    assistant.use(request.param)
-    yield request.param
-    assistant.use("urllib")
 
 
 @pytest.fixture
-def gw(transport, ai):
+def gw(plain, ai):
     from mailmind.bootstrap import assistant
     return assistant.gateway()
 
@@ -38,7 +34,7 @@ def posts(ai):
     return [r for r in ai.requests if r.method == "POST" and r.path.startswith(fa.BATCHES)]
 
 
-# -- what each transport sends and reads ---------------------------------------
+# -- what the adapter sends and reads -------------------------------------------
 
 def test_a_batch_carries_each_request_and_never_the_fallback(gw, ai):
     batch_id = gw.submit_batch([("11", "first"), ("12", "second")], SCHEMA, feature="triage-batch", effort="low")

@@ -75,10 +75,10 @@ def test_only_the_tls_context_may_turn_a_certificates_checks_off():
     assert {rel(p) for p in modules() if skips.search(p.read_text(encoding="utf-8"))} == {"accounts/adapters/imap_connection.py"}
 
 
-def test_outbound_http_lives_in_the_ai_adapter_and_safe_http():
+def test_only_safe_http_makes_a_request_by_hand():
+    """The Claude API's go through the Anthropic SDK, which import-linter holds to its adapter."""
     calls = re.compile(r"\b(urlopen|HTTPSConnection|HTTPConnection)\(")
-    assert {rel(p) for p in modules() if calls.search(p.read_text(encoding="utf-8"))} == {
-        "assistant/adapters/urllib_http.py", "curation/adapters/safe_http.py"}
+    assert {rel(p) for p in modules() if calls.search(p.read_text(encoding="utf-8"))} == {"curation/adapters/safe_http.py"}
 
 
 def test_the_assistants_ports_only_read():

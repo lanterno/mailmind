@@ -83,14 +83,12 @@ def clock():
         yield traveller
 
 
-@pytest.fixture(params=["sdk", "urllib"])
-def gateway(request, data_dir, ai, clock, monkeypatch):
-    """The app's gateway, through each transport, with the ledger in this test's database."""
+@pytest.fixture
+def gateway(data_dir, ai, clock, monkeypatch):
+    """The app's gateway, with the ledger in this test's database."""
     from mailmind.bootstrap import assistant
     monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})
-    assistant.use(request.param)
-    yield assistant.gateway()
-    assistant.use("urllib")
+    return assistant.gateway()
 
 
 def test_each_call_adds_to_its_days_row(gateway, ai):
@@ -106,7 +104,7 @@ def test_each_call_adds_to_its_days_row(gateway, ai):
 
 def test_each_outcome_has_its_own_row_and_a_call_that_got_no_reply_costs_nothing(gateway, ai):
     from mailmind.assistant.application.ports import ModelError
-    retry_now = {"retry-after": "0", "retry-after-ms": "1"}
+    retry_now = {"retry-after-ms": "1"}
     busy = fa.error(529, "overloaded_error", "Overloaded", retry_now)
     ai.queue(answer("fine", 100, 10),
              (200, {"stop_reason": "refusal", "content": [], "usage": {"input_tokens": 50, "output_tokens": 0}}),

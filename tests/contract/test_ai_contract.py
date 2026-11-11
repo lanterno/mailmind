@@ -1,11 +1,7 @@
-"""The language model's contract, through each transport the app runs: the Anthropic SDK (what
-serving talks through) and the urllib client (the command line's). Each test runs once per
-transport against the fake Claude API (fakes/anthropic_api.py), through summarize's call_claude and
-call_claude_json or the Assistant's gateway: what a request carries, how replies, refusals and
-errors come back, when calls are retried, where the key comes from, and that with no key AI is off
-and nothing is sent. All addresses are fictional; the key is the fake's.
-
-Ported from test_claude_api.py, the root suite that tested the urllib client alone.
+"""The language model's contract, through the Anthropic SDK, which the server and every command talk through, against the
+fake Claude API (fakes/anthropic_api.py), through summarize's call_claude and call_claude_json or the Assistant's gateway:
+what a request carries, how replies, refusals and errors come back, when calls are retried, where the key comes from, and
+that with no key AI is off and nothing is sent. All addresses are fictional; the key is the fake's.
 """
 import json
 
@@ -16,31 +12,25 @@ from mailmind.assistant.application.ports import AIOff
 from mailmind.assistant.domain.prompts import SYSTEM, TRIAGE
 from mailmind.kernel.assessment import Assessment
 
-TRANSPORTS = ["sdk", "urllib"]
-
 ROW = {"pk": 7, "from_name": "Mira Okafor", "from_addr": "mira@example.test",
        "subject": "Saturday market", "date_iso": "2026-10-30T09:00:00+00:00",
        "snippet": "Could you bring the folding table on Saturday? Let me know by Friday."}
-NOW_RETRY = {"retry-after": "0", "retry-after-ms": "1"}    # retry at once, for either client
+NOW_RETRY = {"retry-after-ms": "1"}                        # retry at once
 
 
-@pytest.fixture(params=TRANSPORTS)
-def transport(request, data_dir, monkeypatch):
-    """AI through this transport, with no model override, structured output on and the key in
-    the environment only (no config file yet). The last call's outcome, which report() says,
-    is this test's own: the app's tests take the module's as it was at import."""
+@pytest.fixture
+def plain(data_dir, monkeypatch):
+    """AI with no model override, structured output on and the key in the environment only (no config file yet). The
+    last call's outcome, which report() says, is this test's own: the app's tests take the module's as it was at import."""
     from mailmind.bootstrap import assistant
     monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})
     monkeypatch.setattr(assistant.calls, "MODEL", None)
     monkeypatch.delenv("MAILMIND_NO_SCHEMA", raising=False)
     monkeypatch.delenv("MAILMIND_MODEL", raising=False)
-    assistant.use(request.param)
-    yield request.param
-    assistant.use("urllib")
 
 
 @pytest.fixture
-def api(transport, ai):
+def api(plain, ai):
     return ai
 
 
@@ -237,10 +227,10 @@ def test_a_persistent_overload_gives_up_after_two_retries(api):
     assert len(api.requests) == 3
 
 
-def test_an_unreachable_api_raises(transport):
+def test_an_unreachable_api_raises():
+    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
     from mailmind.assistant.application.ports import ModelError, Prompt
-    from mailmind.bootstrap import assistant
-    model = assistant.TRANSPORTS[transport](fa.KEY, "http://127.0.0.1:9", retries=0)   # discard port
+    model = AnthropicModel(fa.KEY, "http://127.0.0.1:9", retries=0)   # discard port
     with pytest.raises(ModelError, match="unreachable") as e:
         model.complete(Prompt("Triage this.", "claude-opus-5-5", 100))
     assert e.value.status is None and not e.value.permanent
@@ -257,14 +247,13 @@ def test_ai_is_on_with_a_key_and_off_without_one(api, monkeypatch):
     assert assistant.calls.engine() == "none"
 
 
-def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monkeypatch, transport):
+def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monkeypatch):
     from mailmind.bootstrap import assistant
     config(data_dir, anthropic_api_key="sk-ant-config-key")
     with pytest.raises(RuntimeError, match="401"):              # the fake knows only its own key
         assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     assert api.requests[0].key == "sk-ant-config-key"
-    via = {"sdk": "the Anthropic SDK", "urllib": "urllib"}[transport]
-    assert assistant.status.describe_engine() == f"Claude API through {via} · claude-opus-5-5 · key from mailmind.config.json"
+    assert assistant.status.describe_engine() == "Claude API · claude-opus-5-5 · key from mailmind.config.json"
     monkeypatch.setenv("MAILMIND_TEST_KEY", "sk-ant-env-ref-key")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_KEY"})
     assert assistant.key() == ("sk-ant-env-ref-key", "mailmind.config.json")
@@ -272,15 +261,14 @@ def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monke
     assert assistant.key() == (fa.KEY, "ANTHROPIC_API_KEY")
 
 
-def test_the_startup_line_says_when_there_is_no_key(transport, data_dir, monkeypatch):
+def test_the_startup_line_says_when_there_is_no_key(plain, data_dir, monkeypatch):
     from mailmind.bootstrap import assistant
-    via = {"sdk": "the Anthropic SDK", "urllib": "urllib"}[transport]
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    assert assistant.status.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
-                                           "set anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY")
+    assert assistant.status.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: "
+                                                  "set anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
-    assert assistant.status.describe_engine() == (f"Claude API through {via} · claude-opus-5-5 · no key, so AI is off: "
-                                           "the anthropic_api_key in mailmind.config.json can't be read")
+    assert assistant.status.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: "
+                                                  "the anthropic_api_key in mailmind.config.json can't be read")
 
 
 def test_a_config_key_that_cannot_be_read_is_no_key(api, data_dir):
@@ -309,7 +297,7 @@ def test_status_records_a_rejected_key_then_a_good_call(api):
     assert st["last_ok"] is True and st["last_error"] == ""
 
 
-def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(transport, anthropic_api):
+def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(plain, anthropic_api):
     from mailmind.bootstrap import assistant
     before = assistant.status.report()
     assert (before["engine"], before["model"], before["key_from"]) == ("none", "", "")
@@ -326,14 +314,11 @@ def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(transport, a
 
 # ── what the app talks through ────────────────────────────────────────────────
 
-def test_the_app_talks_through_the_sdk():
-    from mailmind.bootstrap import assistant, front
-    assistant.use("urllib")
-    try:
-        front.build()
-        assert assistant.transport() == "the Anthropic SDK"
-    finally:
-        assistant.use("urllib")
+def test_a_process_talks_through_the_sdk_without_front_build(api):
+    """The command line never comes through front.build, and reaches the API the way the server does."""
+    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
+    from mailmind.bootstrap import assistant
+    assert isinstance(assistant.gateway()._model(), AnthropicModel)
 
 
 def test_the_model_is_made_once_per_key(api, monkeypatch):

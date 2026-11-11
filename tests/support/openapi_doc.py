@@ -3,7 +3,7 @@ and the page's limits (`mailmind.http.page_limits`) as a module of its own, web/
 
 It lives in tests/support/, beside what holds the routes to their schemas, and not in the package: the served app has no OpenAPI page, and
 the command line (`python -m mailmind`) must never load FastAPI. It builds the app as `front.build` does, over `web.ROUTERS`, but
-picks no SDK and starts nothing. Nothing it loads reads the data directory, and to be sure of that it points the settings at an
+starts nothing. Nothing it loads reads the data directory, and to be sure of that it points the settings at an
 empty one of its own. It sends nothing: an attempt to connect anywhere or run a program stops it.
 
     python tests/support/openapi_doc.py <out.json> [<limits.gen.ts>]

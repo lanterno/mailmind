@@ -321,8 +321,7 @@ def gateway_on(model, ledger=None, governor=None, clock=time.time):
 
 def calls_over(gateway):
     """The Calls a use case asks through, over `gateway`."""
-    status = Status(lambda: gateway, lambda: ("", ""), lambda: "", lambda: None, lambda: {"waiting": 0, "state": None,
-                                                                                            "estimate_micros": 0},
+    status = Status(lambda: gateway, lambda: ("", ""), lambda: None, lambda: {"waiting": 0, "state": None, "estimate_micros": 0},
                     lambda: "")
     return Calls(lambda: gateway, status)
 

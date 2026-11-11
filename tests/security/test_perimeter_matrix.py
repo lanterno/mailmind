@@ -181,7 +181,6 @@ def test_what_no_route_matches_is_refused_just_the_same(app, table):
 def test_the_app_holds_only_its_routers_routes_and_runs_the_perimeter(monkeypatch):
     """A route on the FastAPI app itself wouldn't be in what this walks, or go through what a Route does. What no route matches is
     the app's own answer, which nothing but the perimeter runs ahead of."""
-    monkeypatch.setattr(front.assistant, "use", lambda kind: None)
     monkeypatch.setattr(front.mailbox, "offer", lambda kind: None)
     asgi = front.build()
     held = [context.original_route for context in iter_route_contexts(asgi.routes)]

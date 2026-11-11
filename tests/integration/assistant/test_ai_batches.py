@@ -1,5 +1,5 @@
-"""A backlog of triage through the Message Batches API: what each transport sends and reads, what a batch
-costs and how that counts against the daily limit, and the job that sends one and brings its answers in.
+"""A backlog of triage through the Message Batches API: what a batch costs and how that counts against the daily limit,
+and the job that sends one and brings its answers in.
 Everything here is against the fake API; nothing real is sent. What the job decides on its own is in
 tests/unit/assistant/test_ai_batches.py: what stays here is what the store, the ledger, a restart and the command line add."""
 import pytest
@@ -9,26 +9,6 @@ from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap import background
 from mailmind.bootstrap import wiring
-
-TRANSPORTS = ["sdk", "urllib"]
-
-
-@pytest.fixture(params=TRANSPORTS)
-def transport(request, data_dir, monkeypatch):
-    from mailmind.bootstrap import assistant
-    monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})
-    monkeypatch.setattr(assistant.calls, "MODEL", None)
-    monkeypatch.delenv("MAILMIND_NO_SCHEMA", raising=False)
-    monkeypatch.delenv("MAILMIND_MODEL", raising=False)
-    assistant.use(request.param)
-    yield request.param
-    assistant.use("urllib")
-
-
-@pytest.fixture
-def gw(transport, ai):
-    from mailmind.bootstrap import assistant
-    return assistant.gateway()
 
 
 def posts(ai):
@@ -129,16 +109,15 @@ def test_a_batch_that_wasnt_sent_gives_its_messages_back(backlog, ai):
     assert assistant.assessments.batch_submit() > 0         # the next round tries again
 
 
-def test_a_restart_finds_the_batch_it_left(backlog, ai):
-    """All of this is in the database, so a new process goes on from it, through either transport."""
+def test_a_restart_finds_the_batch_it_left(backlog, ai, monkeypatch):
+    """All of this is in the database, so a new process goes on from it."""
+    import app_client
     from mailmind.bootstrap import assistant
     assert assistant.assessments.batch_submit() > 0
     ai.end_batch()
-    assistant.use("sdk")
-    try:
-        assert assistant.assessments.batch_collect() > 0
-    finally:
-        assistant.use("urllib")
+    app_client.restart()
+    monkeypatch.setattr(assistant.assessments, "BATCH_POLL", 0)
+    assert assistant.assessments.batch_collect() > 0
 
 
 # -- within the daily limit ------------------------------------------------------
