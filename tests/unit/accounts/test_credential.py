@@ -190,3 +190,13 @@ def test_what_the_file_holds_is_read_as_it_stands_however_odd():
     """Refusing is for a write. An entry that says something no request could still reads, and nothing raises."""
     assert CredentialRef.parse({"plain": 123}).style == "plain"
     assert CredentialRef.parse({"op": ["op://V/I/A", 123]}).masked()["set"] is True
+
+
+def test_the_example_config_holds_no_secret_and_names_only_styles_mailmind_reads():
+    import json
+    import pathlib
+
+    import guard
+    raw = json.loads((pathlib.Path(guard.ROOT) / "mailmind.config.example.json").read_text(encoding="utf-8"))
+    assert plaintext(raw) == []
+    assert {CredentialRef.parse(a["credential"]).style for a in raw["accounts"]} == {"keychain", "op", "proton_bridge"}
