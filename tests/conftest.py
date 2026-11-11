@@ -2,7 +2,7 @@
 
 Before any MailMind module loads, this takes any Claude key out of the environment, sets the database key
 every test and every program it starts encrypts with (MAILMIND_DB_KEY, never the Keychain's), and installs
-the tripwire in support/guard.py. It takes every variable `mailmind.platform.environment` declares out but
+the tripwire in support/guard.py, which puts a stand-in in the login Keychain's place. It takes every variable `mailmind.platform.environment` declares out but
 the three modes the suite passes under either way (MAILMIND_WORKERS, MAILMIND_POOL and
 MAILMIND_WARM_FOLDERS), so every test starts in the full profile and one that wants another sets it. With MAILMIND_HOME gone, a test that forgets data_dir lands on the repo root, and the
 tripwire guards the directory it named as it guards the repo root. Every test then fails if the tripwire refused anything during
@@ -139,6 +139,15 @@ def _no_log_file():
     """A test that started the app, or asked for the log file, leaves the next test's lines out of it."""
     yield
     stop_logging()
+
+
+@pytest.fixture(autouse=True)
+def fake_keychain():
+    """The login Keychain as this test has it: the guard's stand-in (support/fake_keychain.py), empty as the test begins.
+    `fake_keychain.items()` is what it holds."""
+    guard.KEYCHAIN.clear()
+    yield guard.KEYCHAIN
+    guard.KEYCHAIN.clear()
 
 
 @pytest.fixture(autouse=True)

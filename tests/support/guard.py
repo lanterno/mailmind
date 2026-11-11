@@ -8,6 +8,9 @@ writing real mail. Each refusal raises, so the access never happens, and is reco
 that swallows the exception still fails the test (see the autouse fixture in conftest.py).
 A hook can't be removed, which is the point.
 
+It also puts a stand-in in the login Keychain's place (fake_keychain.py, `KEYCHAIN`), before any MailMind module asks
+it for a secret: a test, or a server a test starts, keeps and reads its secrets there, and never reaches the real one.
+
 One gap: socket.connect() given a host *name* resolves it in C before its audit event fires.
 imaplib, smtplib and urllib all resolve through socket.getaddrinfo first, which is checked.
 """
@@ -35,6 +38,7 @@ PROGRAMS = ("claude", "op", "security")
 
 violations = []
 _busy = threading.local()
+KEYCHAIN = None                                         # the stand-in for the login Keychain, once installed
 
 
 class Tripwire(PermissionError):
@@ -139,7 +143,17 @@ def install():
     if not _installed:
         sys.addaudithook(_hook)
         _guard_the_driver()
+        _stand_in_for_the_keychain()
         _installed = True
+
+
+def _stand_in_for_the_keychain():
+    """Every secret MailMind keeps or reads goes to the stand-in, in this process and in every one that installs this."""
+    global KEYCHAIN
+    from fake_keychain import FakeKeychain
+    from mailmind.platform import keychain
+    KEYCHAIN = FakeKeychain()
+    keychain.use(KEYCHAIN)
 
 
 def _guard_the_driver():

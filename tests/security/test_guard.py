@@ -196,3 +196,25 @@ def test_no_module_builds_a_data_path_beside_its_source():
             for attr in re.findall(r"^([A-Z_][A-Z_0-9]*) = os\.path\.join\(", src, re.M):
                 found.add((fn[:-3], attr))
     assert not found, sorted(found)
+
+
+def test_a_test_keeps_and_reads_its_secrets_in_the_stand_in_never_the_login_keychain(fake_keychain):
+    from mailmind.platform import keychain
+    assert keychain.use(fake_keychain) is fake_keychain is guard.KEYCHAIN
+    keychain.put("account:ada@example.test", "app-password")
+    assert fake_keychain.items() == {"account:ada@example.test": "app-password"}
+
+
+def test_a_program_started_with_the_guard_has_the_stand_in_and_shares_it_through_the_file_named(tmp_path, monkeypatch):
+    """As `serve` does in a test, and the demo's server: what one process keeps, another started with it reads."""
+    import fake_keychain
+    from mailmind.platform import keychain
+    monkeypatch.setenv(fake_keychain.VARIABLE, str(tmp_path / "keychain.json"))
+    keychain.put("account:ada@example.test", "app-password")
+    code = (f"import sys; sys.path[:0] = [{os.path.join(ROOT, 'tests', 'support')!r}, {ROOT!r}]; import guard; guard.install(); "
+            "from mailmind.platform import keychain; print(type(keychain._backend).__name__, keychain.find('account:ada@example.test')); "
+            "keychain.put('anthropic-api-key', 'sk-ant-from-the-child')")
+    done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=60)
+    assert (done.returncode, done.stdout) == (0, "FakeKeychain app-password\n"), done.stderr
+    assert keychain.find("anthropic-api-key") == "sk-ant-from-the-child"
+    assert (tmp_path / "keychain.json").stat().st_mode & 0o777 == 0o600
