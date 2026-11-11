@@ -265,12 +265,12 @@ def test_what_a_browser_already_held_comes_into_the_file_once_and_is_then_gone(p
     assert held == {"guide_offered": True, "theme": "dusk", "single_keys": False, "read_width": "wide", "read_size": "xl", "read_font": "mono", "conversations": False}
     assert page.pw.evaluate("['mm_theme','mm_read','mm_threadview'].map(k => localStorage.getItem(k))") == [None, None, None]
     expect(page.locator("body")).to_have_class(re.compile("theme-dusk"))
-    world_before = (world.dir / "mailmind.config.json").read_bytes()
+    before = file_of(world)["preferences"]
     page.reload()
     expect(page.locator("body")).to_have_class(re.compile("theme-dusk"))
     page.keyboard.press("c")                     # still off
     expect(page.locator("#cmpBody")).to_have_count(0)
-    assert (world.dir / "mailmind.config.json").read_bytes() == world_before
+    assert file_of(world)["preferences"] == before      # not the whole file: an account's first connection pins its certificate
     clean(page)
 
 
