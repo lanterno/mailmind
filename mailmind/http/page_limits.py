@@ -11,12 +11,15 @@ from mailmind.attention.api import BULK_CAP
 from mailmind.compose.api import MAX_ATTACH_BYTES
 from mailmind.kernel import send_window
 from mailmind.mailbox.api import BULK_MAX
+from mailmind.platform.db import places
 
 PAGE_LIMITS: dict[str, int] = {
     "ai_daily_limit_usd": AI_DAILY_LIMIT_MAX, # the most a person may set the AI's daily limit to, in dollars
     "attach_bytes": MAX_ATTACH_BYTES,        # what one message's files may come to, decoded
     "bulk_rows": BULK_MAX,                   # the rows one /api/bulk/file may name: the page sends more as more requests
     "instruction_chars": INSTRUCTION_MAX,    # what is read of a person's word on what a drafted reply should say
+    "place_bytes": places.MOST_BYTES,        # the most a place's route may come to as JSON: a longer one lasts only as long as the page
+    "places_at_once": places.MOST_AT_ONCE,   # the places one /api/places may name: the page sends more as more requests
     "snooze_copies": BULK_CAP,               # the copies one /api/snooze may name: the page sends more as more requests
     "undo_send_longest": send_window.LONGEST,    # the most seconds a person may set Undo Send's window to
     "undo_send_shortest": send_window.SHORTEST,  # the fewest: the window itself is read off each send's answer, not fixed for a build

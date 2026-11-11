@@ -20,7 +20,8 @@ UI_QUIET = {"/api/events", "/api/folders", "/api/outbox", "/api/pending", "/api/
             "/api/upcoming",         # the meeting reminder reads it every minute, from a hidden tab too
             "/api/ai/draft-ahead",   # fetched by hidden tabs via SSE — incl. the draft-ready echo itself,
                                      # or the tick's own events would hold the vacation gate open forever
-            "/api/debug/health"}     # asking how the app is doing changes nothing, this included
+            "/api/debug/health",     # asking how the app is doing changes nothing, this included
+            "/api/places"}           # a list a hidden tab draws again sends the places its links name
 
 # Each of the kernel's, the status it answers with and the kind of problem it is. 502 says asking again can help, and 422 that it
 # won't.

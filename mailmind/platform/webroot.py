@@ -7,6 +7,7 @@ import dataclasses
 import gzip
 import hashlib
 import os
+from html import escape
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DIST = os.path.join(REPO, "mailmind", "http", "dist")
@@ -71,12 +72,15 @@ def edition(csrf):
     return f"{build()}-{hashlib.sha256(csrf.encode()).hexdigest()[:8]}"
 
 
-def page(csrf):
-    """The app's page holding this run's token, or None when nothing has built it."""
+def page(csrf, place=None):
+    """The app's page holding this run's token, or None when nothing has built it. `place` is the route a place holds, as its
+    JSON text, which the page reads where it is from (`<meta name="mailmind-place">`, empty for none): escaped for an attribute,
+    and put in last, so nothing a person wrote in it is read as the token or the build."""
     if not is_built():
         return None
     with open(_index(), encoding="utf-8") as f:
-        return f.read().replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", edition(csrf))
+        return (f.read().replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", edition(csrf))
+                .replace("__PLACE__", escape(place or "", quote=True)))
 
 
 def asset(url_path):

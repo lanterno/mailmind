@@ -6,13 +6,23 @@ from starlette.responses import Response
 from mailmind.http import route
 from mailmind.http.schemas.common import NotJson, answers
 from mailmind.platform import perimeter, webroot
+from mailmind.platform.db import places
 
 _NOT_JSON = answers(NotJson)
 
 
 def _is_place(path):
-    """A place in the app, as `app/route.ts` writes one."""
-    return path in ("/all", "/search", "/documents") or path.startswith(("/m/", "/brief/", "/all/"))
+    """A place in the app, as `app/route.ts` writes one (`/p/<id>` for one that holds anything personal) or reads one typed."""
+    return path in ("/all", "/search", "/documents") or path.startswith(("/m/", "/brief/", "/all/", "/p/"))
+
+
+def _the_app(html):
+    """The app, or how to make one: only a build holds it."""
+    if html is None:
+        return Response(b"The app isn't built. Run: just build-web\n", 404, headers={"Content-Type": "text/plain; charset=utf-8"})
+    return Response(html.encode("utf-8"), headers={"Content-Type": "text/html; charset=utf-8",
+                                                   "Content-Security-Policy": perimeter.page_policy(),
+                                                   "Cache-Control": "no-store"})     # it holds this run's token, and a place's route
 
 
 def router():
@@ -27,12 +37,15 @@ def router():
     @r.get("/brief/{place:path}", responses=_NOT_JSON)
     def page():
         """The app, or how to make one: only a build holds it."""
-        html = webroot.page(perimeter.CSRF)
-        if html is None:
-            return Response(b"The app isn't built. Run: just build-web\n", 404, headers={"Content-Type": "text/plain; charset=utf-8"})
-        return Response(html.encode("utf-8"), headers={"Content-Type": "text/html; charset=utf-8",
-                                                       "Content-Security-Policy": perimeter.page_policy(),
-                                                       "Cache-Control": "no-store"})     # it holds this run's token
+        return _the_app(webroot.page(perimeter.CSRF))
+
+    @r.get("/p/{place}", responses=_NOT_JSON)
+    def place(place: str):
+        """The app at a place (`platform.db.places`), holding the route its id names, which opening it marks used. An id that
+        names none, or no longer does, is the app with no place, which opens at home."""
+        if not webroot.is_built():
+            return _the_app(None)
+        return _the_app(webroot.page(perimeter.CSRF, places.opened(place)))
 
     @r.get("/next", responses=_NOT_JSON)
     @r.get("/next/{rest:path}", responses=_NOT_JSON)

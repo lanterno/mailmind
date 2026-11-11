@@ -6,7 +6,7 @@ from mailmind.http.routers import attention as attention_routes
 from mailmind.http.routers import calendar as calendar_routes
 from mailmind.http.routers import compose as compose_routes
 from mailmind.http.routers import curation as curation_routes
-from mailmind.http.routers import debug, events, export, static
+from mailmind.http.routers import debug, events, export, places, static
 from mailmind.http.routers import discovery as discovery_routes
 from mailmind.http.routers import mailbox as mailbox_routes
 from mailmind.http.routers import preferences as preferences_routes
@@ -26,6 +26,7 @@ ROUTERS = [attention_routes.router(attention, mailbox),
            discovery_routes.router(discovery),
            events.router(),
            export.router(),
+           places.router(),
            static.router()]
 
 tell_of_someone(lambda: assistant.governor().saw_someone())
