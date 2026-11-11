@@ -1341,5 +1341,27 @@ describe("snippets", () => {
     expect(toasts.at(-1)).toBe("Couldn’t save that snippet: a snippet needs some text");
     expect(m.snippets.get()).toEqual([SIG, NOTE]);
   });
+
+  it("keeps the list a change answered with over a read asked before it that answers after it", async () => {
+    const read = deferred<Json>();
+    const { m, answer } = setup({ get: vi.fn(async (path: string) => (path === "/api/snippets" ? read.promise : { ok: true })) });
+    m.open();
+    answer("/api/snippets", () => ({ ok: true, snippets: [SIG] }));
+    await m.changeSnippets({ verb: "save", trigger: "sig", text: "Thanks,\nAda" });
+    read.resolve({ ok: true, snippets: [] });     // what was kept before the save
+    await flush();
+    expect(m.snippets.get()).toEqual([SIG]);
+  });
+
+  it("takes the list a read answers when the change asked after it was refused", async () => {
+    const read = deferred<Json>();
+    const { m, answer } = setup({ get: vi.fn(async (path: string) => (path === "/api/snippets" ? read.promise : { ok: true })) });
+    m.open();
+    answer("/api/snippets", () => { throw new Error("a trigger is up to 32 letters, digits, - or _"); });
+    await m.changeSnippets({ verb: "save", trigger: "two words", text: "x" });
+    read.resolve({ ok: true, snippets: [SIG, NOTE] });
+    await flush();
+    expect(m.snippets.get()).toEqual([SIG, NOTE]);
+  });
 });
 
