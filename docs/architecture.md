@@ -143,6 +143,10 @@ The app lives in `mailmind/`.
   trail. It is standard library only.
 - `mailmind.platform.private` opens a file that holds what is in someone's mail, an export, its owner's alone.
   It is standard library only.
+- `mailmind.platform.documents` keeps a document a context holds whole, so far the rule book, as one row of `documents`
+  (migration 48): its body the JSON its file held, and a version that goes up with each write, so a reader that keeps one in
+  memory asks only that. Each function takes its caller's connection, so a read, a change and its write are one transaction
+  when the caller makes them one. It is standard library only.
 - `mailmind.content` is the library every context reads mail through, standard library only, and it knows nothing of
   mailboxes or accounts: `mime` (a raw message as parts and header values), `sanitize` (the HTML sanitizer, verbatim),
   `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the

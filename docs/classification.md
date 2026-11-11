@@ -3,22 +3,24 @@
 `curation.domain.classifier` assigns one of seven buckets (`SPAM`, `BLOCKED`, `MKT`, `NOTIF`,
 `RECEIPT`, `PROTECTED`, `PERSONAL`); `JUNK_BUCKETS` decides what ingest drops. It's a pure function of a
 message's headers and the rule book's lists, and `bootstrap.curation.classify` calls it with the rules as they stand.
-`curation.domain.rulebook` is a learned per-sender/domain keep/block list on top, persisted to
-`mailmind_rules.json` — that file is personal data and stays gitignored. The same file
-holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
+`curation.domain.rulebook` is a learned per-sender/domain keep/block list on top, kept in the database, which is encrypted
+([At rest](security.md#at-rest)), as the `rules` document (`platform.documents`, migration 48). Its body is the JSON
+`mailmind_rules.json` held, so importing that file is an INSERT of its text; nothing reads or writes the file any more. The same
+document holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 `Expiry.account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
-The file also holds a person's filters (`curation.domain.filters`): a search that stars or marks read. `Ingest` runs them only on
+It also holds a person's filters (`curation.domain.filters`): a search that stars or marks read. `Ingest` runs them only on
 mail never seen before, on an incremental sync of the Inbox, and the server hears through the command path. A filter takes the search's
 grammar and its index (`discovery.Conditions`), and refuses what mail arriving can't answer yet (`body:`, `has:attachment`, `category:`, dates).
-`curation.adapters.rules_file` (`bootstrap.curation.rules`, the file's one reader) writes it whole (a temp file,
-owner-only, renamed over it), and a change reads, changes and saves as one step, under a file lock (`.rules.lock`), so the command line and the server can't lose each other's. A read parses it again only when it changed; one that won't parse leaves the last
-rules read well, so a bad edit never stops a sync, and the next save moves it to `backups/` first. The classifier
-reads through `rules.sets()`.
+`curation.adapters.rules_document` (`bootstrap.curation.rules`, the document's one reader and writer) writes it whole, a version on,
+and a change reads, changes and writes it in one write transaction, which takes the database's write lock before it reads, so the
+command line and the server, or two threads of either, can't lose each other's: the second waits, then reads what the first wrote.
+A read asks the document's version and parses it again only when that moved. The classifier reads through `rules.sets()`. The
+`rules` commands bring the database to the newest schema first, as a sync does.
 
 A rule change classifies again the stored mail it covers (`ingest.reclassify`, called by whatever calls
 `rules.add` or `rules.remove`): each row a rule decides now or decided before. A row no rule had a say in
-stays as ingest judged it, since not all it read then is kept. An edit of the file by hand reaches only new mail.
+stays as ingest judged it, since not all it read then is kept. A document written another way, as an import is, reaches only new mail.
 
 Ingest keeps a message's unsubscribe headers (`messages.list_unsub_raw` and `list_unsub_method`, through
 `mime.list_unsub`), `none` included. `Unsubscribing.resolve` answers for a sender from the newest message
