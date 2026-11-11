@@ -1,11 +1,10 @@
-"""Cleaning up many senders at once: what it may name, what it shows before anyone says yes, and that one Undo takes it all back."""
+"""Cleaning up many senders at once through its routes, over the fake server: what the preview shows, the moves and the block
+rules a batch leaves, and that one Undo takes it all back. What the use case decides is tests/unit/curation/test_batch_cleanup.py."""
 import pytest
 
 import problems
 from fixtures import world as w
-from mailmind.bootstrap import curation
 from mailmind.bootstrap.curation import rules
-from mailmind.curation.domain import cleanup_plan
 
 LOOM, THIMBLE = "news@loom.example.test", "orders@thimble.example.test"
 NEWSLETTER, RECEIPT = "ada-inbox-03-newsletter.eml", "ada-inbox-05-receipt.eml"
@@ -62,27 +61,6 @@ def test_one_undo_takes_back_the_whole_batch(app, world):
     assert app.post("/api/undo", {}).status == 404
 
 
-def test_a_batch_never_unsubscribes(app, world, monkeypatch):
-    monkeypatch.setattr(curation.cleanup._unsub, "attempt", lambda *a: pytest.fail("a batch sent an unsubscribe"))
-    assert app.post("/api/cleanup/batch", {"senders": [LOOM], "do_unsubscribe": True}).status == 200
-
-
-def test_the_audit_says_each_senders_own_sweep(app, world):
-    issues(world)
-    app.post("/api/cleanup/batch", {"senders": [LOOM, THIMBLE]})
-    said = {e["from"]: e for e in app.get("/api/audit").json["events"] if e["kind"] == "sender_cleanup"}
-    assert (said[LOOM]["swept"], said[THIMBLE]["swept"]) == (3, 1)
-    assert said[LOOM]["status"] == "skipped"
-
-
-def test_a_batch_stops_at_its_cap_and_says_so(app, world, monkeypatch):
-    issues(world, 3)
-    monkeypatch.setattr(cleanup_plan, "BATCH_SWEEP_CAP", 2)
-    r = app.post("/api/cleanup/batch", {"senders": [LOOM, THIMBLE]})
-    assert (r.json["swept"], r.json["sweep_capped"]) == (2, True)
-    assert in_box(world, RECEIPT) == [(w.ADA, "INBOX")]
-
-
 @pytest.mark.parametrize("path", ["/api/cleanup/batch", "/api/cleanup/batch/preview"])
 @pytest.mark.parametrize("body", [{}, {"senders": []}, {"senders": ["nobody"]}])
 def test_a_list_that_wont_read_is_the_400_and_nothing_is_decided(app, world, path, body):
@@ -90,12 +68,3 @@ def test_a_list_that_wont_read_is_the_400_and_nothing_is_decided(app, world, pat
     r = app.post(path, body)
     assert (r.status, r.json["detail"]) == (400, "bad senders")
     assert rules.load() == before
-
-
-def test_when_nothing_could_be_moved_the_blocks_stand_and_it_says_so(app, world, monkeypatch):
-    def refused(rows, group):
-        raise RuntimeError("no")
-    monkeypatch.setattr(curation._filing, "trash_many", refused)
-    r = app.post("/api/cleanup/batch", {"senders": [LOOM]})
-    assert (r.status, r.json["swept"], r.json["sweep_failed"]) == (200, 0, 1)
-    assert LOOM in rules.load()["block_senders"]
