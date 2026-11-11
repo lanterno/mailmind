@@ -1,7 +1,6 @@
 """A bulk command's confirm carries out what its preview froze: by message key, once, within ten minutes, and
-never what a request names. The preview's own guards are in characterization/assistant/test_do_plan.py and test_http_ai.py."""
-from datetime import timedelta
-
+never what a request names. The preview's own guards are in characterization/assistant/test_do_plan.py and test_http_ai.py,
+and the plan book's, once and within ten minutes, in tests/unit/assistant/test_do_plans.py."""
 import pytest
 
 from fakes import anthropic_api as fa
@@ -221,29 +220,6 @@ def test_all_mail_alone_can_be_trashed_but_is_already_archived(app, world, ai):
 
 
 # -- when it can't -----------------------------------------------------------------------------------
-
-def test_a_plan_can_be_confirmed_once(app, world, ai):
-    plan = preview(app, ai)
-    assert confirm(app, plan).json["count"] == plan["count"]
-    since = world.mark()
-    r = confirm(app, plan)
-    assert r.status == 410 and r.json["expired"] is True and world.writes(since) == []
-
-
-def test_a_plan_lasts_ten_minutes(app, world, ai):
-    plan = preview(app, ai)
-    app.clock.shift(timedelta(seconds=action_plan.TTL))
-    since = world.mark()
-    r = confirm(app, plan)
-    assert r.status == 410 and r.json["expired"] is True
-    assert world.writes(since) == [] and len(lin_in_inbox()) == plan["count"]
-
-
-def test_a_plan_is_good_up_to_then(app, world, ai):
-    plan = preview(app, ai)
-    app.clock.shift(timedelta(seconds=action_plan.TTL - 1))
-    assert confirm(app, plan).status == 200
-
 
 @pytest.mark.parametrize("body, status", [({}, 410), ({"plan": ""}, 410), ({"plan": "made-up"}, 410), ({"plan": None}, 410), ({"plan": ["x"]}, 400)])
 def test_a_plan_no_one_made_is_refused(app, world, body, status):
