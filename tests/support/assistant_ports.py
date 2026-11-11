@@ -1,15 +1,19 @@
 """Fakes behind the Assistant's ports, for a use case a unit test builds by hand: a LanguageModel that answers from a queue
-and keeps each Prompt it was sent, a UsageLedger in memory, and a unit of work with no database. `calls_on` makes the Calls
-every use case asks through, over the real Gateway (and a CostGovernor, when a test hands one), so what reaches the model and
-the feature each call is counted under are as the app's."""
+and keeps each Prompt it was sent, a UsageLedger in memory, a unit of work with no database, and `Triage`, the stored mail
+and the Answers port's triage half as the SQLite adapter keeps them. `calls_on` makes the Calls every use case asks
+through, over the real Gateway (and a CostGovernor, when a test hands one), so what reaches the model and the feature each
+call is counted under are as the app's."""
 import contextlib
+import itertools
 import json
 import time
 
+from mailmind.assistant.application.assessment import Assessments
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
-from mailmind.assistant.application.ports import Reply, Usage
+from mailmind.assistant.application.ports import BatchResult, ModelError, Reply, Usage
 from mailmind.assistant.application.status import Status
+from mailmind.kernel.assessment import Assessment
 
 
 def reply_of(said, model):
@@ -24,12 +28,17 @@ def reply_of(said, model):
 
 class Model:
     """A LanguageModel. Each reply a test queued answers one call in turn, as `reply_of` reads it; with none queued, an
-    empty object."""
+    empty object. A batch is answered once a test ends it, each request as `end_batch` says or else with an empty object.
+    An exception in `failing`, by the method's name, is raised by that method until it is taken out."""
     enabled = True
 
     def __init__(self, *replies):
         self.replies = list(replies)
         self.sent = []
+        self.batches = {}          # its id -> {"requests": [(custom id, Prompt)], "ended": bool, "results": {custom id: said}}
+        self.asked = []            # each batch method called, by name
+        self.discarded = []
+        self.failing = {}
 
     def answer(self, *replies):
         self.replies.extend(replies)
@@ -44,9 +53,50 @@ class Model:
         self.sent.append(prompt)
         return reply_of(self.replies.pop(0) if self.replies else {}, prompt.model)
 
+    def _ask(self, name, batch_id=None):
+        self.asked.append(name)
+        if name in self.failing:
+            raise self.failing[name]
+        if batch_id is not None and batch_id not in self.batches:
+            raise ModelError("no such batch", 404)
+
+    def submit_batch(self, requests):
+        self._ask("submit_batch")
+        batch_id = f"msgbatch_{len(self.batches) + 1}"
+        self.batches[batch_id] = {"requests": list(requests), "ended": False, "results": {}}
+        return batch_id
+
+    @property
+    def batched(self):
+        """The custom ids of every request sent in a batch."""
+        return [cid for b in self.batches.values() for cid, _ in b["requests"]]
+
+    def end_batch(self, results=None, batch_id=None):
+        """The batch (the last one sent unless named) has ended: each custom id in `results` answered as `reply_of` reads
+        it, None for no answer, "permanent" for no answer that sending again would change."""
+        self.batches[batch_id or list(self.batches)[-1]].update(ended=True, results=results or {})
+
+    def batch_ended(self, batch_id):
+        self._ask("batch_ended", batch_id)
+        return self.batches[batch_id]["ended"]
+
+    def batch_results(self, batch_id, asked):
+        self._ask("batch_results", batch_id)
+        batch, out = self.batches[batch_id], []
+        for cid, prompt in batch["requests"]:
+            said = batch["results"].get(cid, {})
+            out.append(BatchResult(cid, None, said == "permanent") if said in (None, "permanent")
+                       else BatchResult(cid, reply_of(said, prompt.model)))
+        return out
+
+    def discard_batch(self, batch_id):
+        self._ask("discard_batch", batch_id)
+        del self.batches[batch_id]
+        self.discarded.append(batch_id)
+
 
 class Ledger:
-    """A UsageLedger in memory: each Spend it was told of."""
+    """A UsageLedger in memory: each Spend it was told of, and what batches out have booked."""
 
     def __init__(self):
         self.spends = []
@@ -85,9 +135,124 @@ class Uow:
         yield None
 
 
-def calls_on(model, ledger=None, governor=None, clock=time.time):
-    """The Calls a use case asks through, over `model` and `ledger` by the real Gateway."""
-    gateway = Gateway(lambda: model, Ledger() if ledger is None else ledger, clock=clock, governor=governor)
-    status = Status(lambda: gateway, lambda: ("", ""), lambda: "", lambda: governor, lambda: {"waiting": 0},
+_OUT = ("submitting", "running")
+
+
+class Triage:
+    """The stored mail as triage reads it (the Mail port's `any_copy`) and the Answers port's triage half, in memory and as
+    the SQLite adapter keeps them: what was said of a message is kept under its key, a message waits for triage until then
+    unless a batch out holds it, one batch is out at a time, and dropping a batch or bringing its answers in lets its
+    messages go."""
+
+    def __init__(self, rows=()):
+        self.rows = {r["pk"]: dict(r) for r in rows}
+        self.said = {}             # message key -> Assessment
+        self.batches = {}          # id -> the batch's row
+        self.items = {}            # message key -> the id of the batch that holds it
+        self._ids = itertools.count(1)
+
+    def add(self, row):
+        self.rows[row["pk"]] = dict(row)
+
+    # Mail
+    def any_copy(self, c, key):
+        return next((r for r in self.rows.values() if r["message_key"] == key), None)
+
+    # Answers
+    def needs_summary(self, c, limit=200, newer_than=None):
+        floor, seen, out = -1 if newer_than is None else newer_than, set(), []
+        for r in sorted(self.rows.values(), key=lambda r: -(r["ts"] or 0)):
+            key = r["message_key"]
+            if key is None or key in self.said or key in self.items or key in seen or (r["ts"] or 0) <= floor:
+                continue
+            seen.add(key)
+            out.append(r)
+        return out[:limit]
+
+    def save_summary(self, c, pk, summary, importance, category, action, model, created_at, served_by=None,
+                     prompt_version=None, outcome=None):
+        key = self.rows[pk]["message_key"] if pk in self.rows else None
+        if key is not None:
+            self.save_assessment(c, key, summary, importance, category, action, model, created_at, served_by,
+                                 prompt_version, outcome)
+
+    def save_assessment(self, c, key, summary, importance, category, action, model, created_at, served_by=None,
+                        prompt_version=None, outcome=None):
+        self.said[key] = Assessment(summary, importance, category, action, model, served_by, prompt_version, outcome)
+
+    def assessment(self, c, key):
+        return self.said.get(key)
+
+    def batch_open(self, c):
+        out = [b for b in self.batches.values() if b["state"] in _OUT]
+        return out[-1] if out else None
+
+    def batch_begin(self, c, feature, model, keys, estimate_micros, cutoff_ts, now, prompt_version=None):
+        if self.batch_open(c):
+            return None
+        batch_id = next(self._ids)
+        self.batches[batch_id] = {"id": batch_id, "remote_id": None, "feature": feature, "model": model, "state": "submitting",
+                                  "requests": len(keys), "estimate_micros": estimate_micros, "cutoff_ts": cutoff_ts,
+                                  "created_at": now, "polled_at": 0, "ended_at": None, "prompt_version": prompt_version}
+        self.items.update((k, batch_id) for k in keys)
+        return batch_id
+
+    def batch_sent(self, c, batch_id, remote_id, now):
+        self.batches[batch_id].update(state="running", remote_id=remote_id, polled_at=now)
+
+    def _release(self, batch_id):
+        self.items = {k: b for k, b in self.items.items() if b != batch_id}
+
+    def batch_drop(self, c, batch_id):
+        del self.batches[batch_id]
+        self._release(batch_id)
+
+    def batch_polled(self, c, batch_id, now):
+        self.batches[batch_id]["polled_at"] = now
+
+    def batch_keys(self, c, batch_id):
+        return {k for k, b in self.items.items() if b == batch_id}
+
+    def batch_collected(self, c, batch_id, now):
+        self._release(batch_id)
+        self.batches[batch_id].update(state="collected", ended_at=now)
+
+    def batch_discarded(self, c, batch_id):
+        self.batches[batch_id]["state"] = "done"
+
+    def batches_in_state(self, c, state):
+        return [b for _, b in sorted(self.batches.items()) if b["state"] == state]
+
+    def batch_waiting(self, c):
+        return len(self.items)
+
+
+def gateway_on(model, ledger=None, governor=None, clock=time.time):
+    """The real Gateway, over `model` and `ledger`."""
+    return Gateway(lambda: model, Ledger() if ledger is None else ledger, clock=clock, governor=governor)
+
+
+def calls_over(gateway):
+    """The Calls a use case asks through, over `gateway`."""
+    status = Status(lambda: gateway, lambda: ("", ""), lambda: "", lambda: None, lambda: {"waiting": 0, "state": None,
+                                                                                            "estimate_micros": 0},
                     lambda: "")
     return Calls(lambda: gateway, status)
+
+
+def calls_on(model, ledger=None, governor=None, clock=time.time):
+    """The Calls a use case asks through, over `model` and `ledger` by the real Gateway."""
+    return calls_over(gateway_on(model, ledger, governor, clock))
+
+
+def message(n, **over):
+    """Message n as triage reads it: a later n is newer mail."""
+    return {"pk": n, "message_key": 1000 + n, "ts": 1_800_000_000 + 60 * n, "from_name": f"Sender {n}",
+            "from_addr": f"s{n}@example.test", "subject": f"Message {n}", "date_iso": "2026-11-02T09:00:00+00:00",
+            "snippet": f"What message {n} says.", **over}
+
+
+def triage_on(model, triage, ledger=None, governor=None):
+    """Assessments over `model` and `triage`, the stored mail and what was said of it."""
+    gateway = gateway_on(model, ledger, governor)
+    return Assessments(calls_over(gateway), lambda: gateway, triage, Uow(), triage)
