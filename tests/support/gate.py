@@ -2,7 +2,8 @@
 import contextlib
 import threading
 
-from mailmind.platform.workers import gates
+from mailmind.platform.workers import account_worker, gates
+from waiting import blocked_in
 
 
 @contextlib.contextmanager
@@ -23,3 +24,13 @@ def held_elsewhere(account=gates.EVERY_ACCOUNT):
     finally:
         release.set()
         t.join(10)
+
+
+def waits_for_a_gate(thread):
+    """Whether `thread` waits its turn for a gate now: an account's, or the one lock."""
+    return blocked_in(thread, account_worker.run if gates.per_account() else gates._run_global)
+
+
+def waiting_for_a_gate():
+    """How many threads wait their turn for a gate now."""
+    return sum(waits_for_a_gate(t) for t in threading.enumerate())

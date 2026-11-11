@@ -5,8 +5,9 @@ import time
 
 import pytest
 
-from mailmind.platform.workers import account_worker, gates
-from waiting import blocked_in, wait_until
+from gate import waits_for_a_gate
+from mailmind.platform.workers import gates
+from waiting import wait_until
 
 ADA, BEA = "ada@example.test", "bea@example.test"
 NOW = gates.Priority.INTERACTIVE
@@ -42,8 +43,7 @@ def queued(job):
     """Start `job` on a thread of its own, and return it once it waits for a gate: an account's, or the one lock."""
     t = threading.Thread(target=job, daemon=True)
     t.start()
-    takes_the_gate = account_worker.run if gates.per_account() else gates._run_global
-    assert wait_until(lambda: blocked_in(t, takes_the_gate))
+    assert wait_until(lambda: waits_for_a_gate(t))
     return t
 
 
