@@ -1,6 +1,7 @@
 """What a use case raises when it can't do what was asked, the status it already means, and the problem document (RFC 9457) the app
-answers it with: its kind as the type, what a person is told as the detail, and what else it says beside them. Anything else raised
-is still the fixed 500, with only its class in the log."""
+answers it with: its kind as the type and what a person is told as the detail, through the app's own routes. Anything else raised
+is still the fixed 500, with only its class in the log. What else a problem says beside the four, one that says nothing, and that
+a problem logs nothing are tests/unit/http/test_problems.py and test_route.py."""
 import json
 import logging
 
@@ -43,46 +44,6 @@ def test_each_answers_the_status_it_means_as_a_problem_of_its_kind_with_what_a_p
     assert r.status == STATUS[kind] and r.headers["content-type"] == CONTENT_TYPE
     assert {k: r.json[k] for k in ("type", "title", "status", "detail")} == {"type": f"/problems/{name}", "title": title,
                                                                            "status": STATUS[kind], "detail": SAID}
-
-
-@pytest.mark.parametrize("how", ["GET", "POST"])
-def test_what_else_it_says_goes_along_beside_the_four(app, monkeypatch, how):
-    raising(monkeypatch, Conflict(SAID, conflict=True, version=7))
-    assert asked(app, how).json == {"type": "/problems/conflict", "title": "Conflict", "status": 409, "detail": SAID,
-                                    "conflict": True, "version": 7}
-
-
-def test_what_else_it_says_never_stands_in_for_one_of_the_four(app, monkeypatch):
-    raising(monkeypatch, NotFound(SAID, type="elsewhere", title="x", status=200, detail="other words", gone=True))
-    assert asked(app, "POST").json == {"type": "/problems/not-found", "title": "Not found", "status": 404, "detail": SAID,
-                                       "gone": True}
-
-
-def test_one_that_says_nothing_answers_with_no_detail_at_all(app, monkeypatch):
-    raising(monkeypatch, NotFound())
-    r = asked(app, "POST")
-    assert (r.status, r.json) == (404, {"type": "/problems/not-found", "title": "Not found", "status": 404})
-
-
-def test_busy_says_so_with_nothing_else(app, monkeypatch):
-    raising(monkeypatch, Busy())
-    r = asked(app, "POST")
-    assert (r.status, r.json) == (409, {"type": "/problems/busy", "title": "Busy", "status": 409, "busy": True})
-
-
-def test_a_malformed_request_is_refused_in_the_words_it_gets_today(app, monkeypatch):
-    raising(monkeypatch, Refused())
-    r = asked(app, "GET")
-    assert (r.status, r.json) == (400, {"type": "/problems/refused", "title": "Refused", "status": 400, "detail": "bad request"})
-
-
-def test_a_refusal_is_no_trouble_of_the_apps_so_it_logs_nothing(app, monkeypatch, caplog):
-    raising(monkeypatch, Unreachable(SAID))
-    logger = logging.getLogger(get_logger("http").name)
-    monkeypatch.setattr(logger, "propagate", True)
-    with caplog.at_level(logging.DEBUG, logger=logger.name):
-        asked(app, "POST")
-    assert caplog.records == []
 
 
 @pytest.mark.parametrize("how", ["GET", "POST"])
