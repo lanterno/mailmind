@@ -146,6 +146,42 @@ def test_selector_with_angle_bracket_drops_rule():
     assert "color:red" not in out and "<" not in out
 
 
+# ── the stylesheet's reader: nothing desyncs it, and what won't end ends the sheet ──
+@pytest.mark.parametrize("css, out", [
+    pytest.param('p{font-family:"a}b";color:red}', 'p{font-family:"a}b";color:red}', id="brace_in_a_string"),
+    pytest.param('@import "x;{y";p{color:red}', "p{color:red}", id="at_rule_quoting_a_semicolon_and_a_brace"),
+    pytest.param("@page{margin:0}p{color:red}", "p{color:red}", id="dropped_at_rule_with_a_block"),
+    pytest.param("@foo bar;p{color:red}", "p{color:red}", id="unknown_at_rule"),
+    pytest.param("@media screen;p{color:red}", "p{color:red}", id="media_with_no_block"),
+    pytest.param("p{color:red}}q{color:blue}", "p{color:red}q{color:blue}", id="stray_close_brace"),
+    pytest.param("@supports (display:grid){p{color:red}}", "@supports (display:grid){p{color:red}}", id="supports"),
+    pytest.param("@media a{@media b{@media c{p{color:red}}}}", "@media a{@media b{@media c{p{color:red}}}}", id="nested_3"),
+    pytest.param("@media a{@media b{@media c{@media d{p{color:red}}}}}", "", id="nested_past_the_cap"),
+])
+def test_the_sheet_reads_each_rule_whole(css, out):
+    assert sheet(css)[0] == out
+
+
+@pytest.mark.parametrize("css", [
+    pytest.param('p{color:red}"abc q{color:blue}', id="string"),
+    pytest.param("p{color:red}/* x q{color:blue}", id="comment"),
+    pytest.param("p{color:red}@media screen", id="at_rule_that_never_opens"),
+    pytest.param("p{color:red}@media screen{q{color:blue}", id="at_rule_that_never_closes"),
+    pytest.param('p{color:red}q{content:"abc}r{color:blue}', id="string_in_a_block"),
+    pytest.param("p{color:red}q{color:blue;/* x", id="comment_in_a_block"),
+])
+def test_what_never_ends_ends_the_sheet_where_it_starts(css):
+    assert sheet(css)[0] == "p{color:red}"
+
+
+def test_a_sheet_is_read_to_its_cap_of_rules():
+    assert sheet("p{color:red}" * (S._CSS_SHEET_RULES + 1))[0] == "p{color:red}" * S._CSS_SHEET_RULES
+
+
+def test_a_sheet_is_read_to_its_cap_of_text():
+    assert sheet("p{color:red}" + " " * S._CSS_SHEET_MAX + "q{color:blue}")[0] == "p{color:red}"
+
+
 # ── DoS bounds ───────────────────────────────────────────────────────────────
 def test_oversized_inline_dropped_fast():
     out, _ = inline("color:red;" + "A" * 100_000)
