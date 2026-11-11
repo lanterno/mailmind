@@ -60,7 +60,7 @@ class Warming:
         self._tick = 0
 
     def _roles_for(self, acct: Account) -> dict[str, str | None]:
-        """Resolve (and cache) this account's Drafts/Archive/Sent folder names in one LIST."""
+        """Resolve (and cache) this account's Drafts/Archive/Sent folder names over one connection."""
         with self._lock:
             if acct["email"] in self._resolved:
                 return self._resolved[acct["email"]]
