@@ -10,7 +10,20 @@ build. `/assets/` serves only `.css`, `.js` and `.woff2`, each kept for good. Wi
 places only. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
 restart changes. A tab that loaded another offers a reload (`newBuild` in `app/realtime.ts`). `web/src` is strict TypeScript, and its API client
 is `lib/api/client.ts`, typed by `lib/api/types.ts` from the routes' schemas. Where you are lives in the URL
-(`app/route.ts`: a `ListSource` and what is open), the event stream invalidates queries (`app/realtime.ts`), `app/FolderRail.tsx` is the rail, `features/reader` the reader, `features/mailbox` holds the list, the mail frame
+(`app/route.ts`: a `ListSource` and what is open), and code outside React reads it through `currentRoute()`, never from
+`location` itself. A URL names nothing of a person's ([At rest](security.md#at-rest)): `pathOf` writes a route that holds an
+address, a folder, a search, a topic or an opened message as a place, `/p/<id>`, with a random id made in the page and kept
+for that route as long as the page lasts, so a navigation waits for nothing and the same route is the same URL. The places a
+turn of the page made go to `POST /api/places` together once it is over, before a link drawn with one can be opened in a new
+tab, in batches of `LIMITS.places_at_once`, as keepalive so a batch on its way when the page goes still arrives, and again a
+little later if the server couldn't be reached; one longer than `LIMITS.place_bytes` stays in the page. A page opened at
+`/p/<id>` reads the route from its `mailmind-place` meta, which the server fills in, held to a route's shape (`routeFrom`),
+and one it doesn't know is home. Back or Forward to a place the page doesn't know, an entry from before a reload, loads the
+page from the server again. The rest (`/`, `/all`,
+`/all/__snoozed__` and the other views over every account, `/documents`, `/brief/needs` and `tidy`) are written as
+themselves, and `parseRoute` still reads the readable forms a person may type (`/m/<account>/<folder>`, `/search?q=`,
+`/brief/topic/<label>`, `?key=&folder=&uid=`). Nothing goes into `history.state` but Back's own mark (`lib/backTrap.ts`).
+The event stream invalidates queries (`app/realtime.ts`), `app/FolderRail.tsx` is the rail, `features/reader` the reader, `features/mailbox` holds the list, the mail frame
 and filing, and `app/commands.ts` the one list of commands that the keys, the palette (⌘K) and the keyboard help all read. `features/compose` is the composer: `machine.ts` holds its rules with no DOM (`createComposing(env)`, what
 `machine.test.ts` drives), `compose.ts` binds that to the page, and `Composer.tsx` shows the copy the machine publishes. `features/assistant` is today's brief, the lists the digest answers (`/brief/needs`, `tidy`, `topic/<label>`),
 Commitments, Your week, the new-mail pill, and Ask and Do from the search box, `features/status` the sync pill, the account alert, the meeting reminder, the keyboard help and the first-run guide, and `features/settings` the connections and the Preferences tab, which reads and writes `/api/preferences` (`accounts.domain.preferences`, a `"preferences"` block in `mailmind.config.json`; the page's `lib/prefs.ts` holds them and brings in once what a browser kept under its old keys).

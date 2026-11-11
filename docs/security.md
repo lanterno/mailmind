@@ -103,6 +103,19 @@ What was once in plaintext files beside the database is in it: the rule book, th
 `documents`, and the audit trails as `audit_events` (migration 48). A person's data goes in the database, never in a
 new file beside it.
 
+The browser keeps nothing of a person's either. It writes every URL a tab goes to into its history, in plaintext, and may
+sync that to the account it is signed in to, so the page's URLs name no address, folder, search, question, topic or opened
+message. A route that holds any of those is a place, `/p/<id>`: its id is random and made in the page (`app/route.ts`), and
+the route it stands for is kept in `places` (migration 49, `platform.db.places`), sent in a batch (`POST /api/places`,
+which takes an id of the page's making and a route of at most 4 KB, and keeps the 10,000 used last), and put back into the
+page opened at `/p/<id>`, escaped, in its `mailmind-place` meta. An id that names none opens at home. Only `/`, `/all`, the
+views over every account, `/documents` and the brief's own two lists are written as themselves, nothing goes into
+`history.state`, which the browser's session file keeps too, and the readable forms still open when typed. The page's
+storage holds a width, the rail's state, an Inbox tab, a tidy run's day and the last preferences it was given; the new-mail
+pill keeps when each Inbox was looked at by the account's place in the list (`mm_looked`), and a browser's older copy kept
+by address goes as it is first read. What a browser wrote into its history before is out of reach: clearing its history for
+the app's address takes that away.
+
 What it protects: the mail wherever the file goes without the Keychain, in a copy of the disk or the data directory, a
 sync folder, a support bundle or a backup, from another user of the computer and from a disk taken out of it. What it
 doesn't: code running as you, which can ask the Keychain as MailMind does, or a login keychain whose password is

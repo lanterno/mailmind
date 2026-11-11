@@ -132,7 +132,11 @@ The app lives in `mailmind/`.
   (see [Schema migrations](migrations.md)), and holds `uow.UnitOfWork`, how a use case gets a connection. The database is
   encrypted ([At rest](security.md#at-rest)): `driver` is the only module that imports SQLCipher's `sqlcipher3`, `key` holds
   the key, which it keeps in the login Keychain through `platform.keychain`, and `database` keys each connection with it.
-  Two tables hold what was once kept in files beside it:
+  `places` keeps the places the page's URLs name (`/p/<id>`, migration 49), so that no URL holds anything of a person's
+  ([At rest](security.md#at-rest)): `places.keep` takes a batch the page sent, refusing it whole for an id the page couldn't
+  have made, a route that isn't an object or runs past 4 KB, or more than 64 at once, and prunes to the 10,000 used last;
+  `places.opened` gives the route back for the page served at the place, and marks it used. Two tables hold what was once
+  kept in files beside it:
   - `documents` keeps a document a context holds whole, as one row named for it (`rules`, `views`, `snippets`): its JSON in
     the shape its file held, and a version that goes up with each write, so a reader that keeps one in memory asks only
     that. `read` gives the parsed value, and `stored` the text and its version, for the rule book, to which a body that

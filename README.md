@@ -157,7 +157,7 @@ and the Claude API.
   couldn't be restored stays for the next `z`. Undo survives a restart, and reaches back 50 actions or 24 hours.
 - **Triage straight from the list.** Hovering a row offers Archive, Delete and Snooze
   without opening it.
-- **Links that keep their word.** What is open is in the URL by the message's key, the
+- **Links that keep their word.** What is open is named by the message's key, the
   folder its copy is in and the server's number for that copy, never a row's number. A link
   you kept, or a tab left open across a resync, opens the copy it named or nothing, never a
   message beside it that reuses its Message-ID, and every action names it the same way.
@@ -477,6 +477,10 @@ automatically.
   SQLCipher (AES-256), with a key MailMind makes once and keeps in your login Keychain, so a copy of the file, in a backup
   of the disk, a sync folder or anyone else's hands, can't be read without it. Your rules, saved views, snippets and the
   audit trails are in it too, never in a file beside it. Every file an export writes is readable by you only.
+- **Your browser keeps nothing of your mail.** The browser writes every address the app goes to into its history, in
+  plaintext, and may sync it, so no URL names an account, a folder, a search or a topic: a view that holds one is a
+  place, `/p/` and a random id, whose meaning stays in the encrypted database. Back, a reload and a link opened in a new
+  tab still come back to it, and the browser's storage holds no address either.
 - **Your passwords are in the Keychain, never in a file.** A password you type in Settings, or give
   `uv run python -m mailmind accounts password you@example.com`, and the Claude API key (`ai key`) go to your login
   Keychain; `mailmind.config.json` only says where each one is. A config that holds a password itself is refused.

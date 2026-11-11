@@ -206,9 +206,9 @@
   message (a summary, a reply drafted now or ahead, an RSVP, a send's `original_key`, mute, reply later, a follow-up's
   dismissal) takes the copy the uid names where it is there. Failing that, its copy in that folder, else another, a listed one
   first, then the newer (`store.message_pk`). One that isn't there is a 404, or for drafting ahead `none`, and nothing is done.
-  The page always sends the uid, and its URL names what is open the same way (`?key=<key>&folder=<folder>&uid=<uid>`, with
-  `&c=<thread>&ca=<account>` for a conversation). So a kept link opens the copy it named or nothing, never the one beside it,
-  and a link with no uid or an old `?m=<pk>` opens nothing.
+  The page always sends the uid, and the place its URL names holds what is open the same way, as does a link typed the
+  readable way (`?key=<key>&folder=<folder>&uid=<uid>`, with `&c=<thread>&ca=<account>` for a conversation). So a kept link
+  opens the copy it named or nothing, never the one beside it, and a link with no uid or an old `?m=<pk>` opens nothing.
 - **A message's key outlives its rows.** `store.mint_key` gives one key per account and Message-ID
   (`mailmind.mailbox.domain.identity`; a message with none goes by its envelope), and
   `messages.message_key` names it on each copy (migration 30). `store.save_summary` writes what the AI
