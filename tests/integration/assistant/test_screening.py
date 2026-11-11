@@ -3,8 +3,6 @@ import pytest
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
-from mailmind.assistant.domain import screening
-from mailmind.bootstrap import assistant
 from mailmind.bootstrap.curation import rules
 
 
@@ -33,19 +31,6 @@ def test_a_pass_never_writes_a_rule(app, world, ai):
     ai.queue(fa.answer({"verdicts": [said(1, "block", 1.0, "bulk mail"), said(2, "keep", 1.0, "known")]}))
     assert app.post("/api/screener/suggest", {"account": w.ADA}).status == 200
     assert rules.load() == before
-
-
-def test_a_pass_is_counted_under_its_own_feature(app, world, ai):
-    app.post("/api/screener/suggest", {"account": w.ADA})
-    assert assistant.calls.usage(1)[0]["features"]["screen"]["calls"] == 1
-
-
-def test_a_pass_reads_no_more_than_its_senders(app, world, ai, monkeypatch):
-    many = [{"from_addr": f"s{i}@example.test", "from_name": f"S{i}", "count": 1} for i in range(screening.MAX_SENDERS + 10)]
-    monkeypatch.setattr(assistant._mail, "screener_items", lambda account: many)
-    r = app.post("/api/screener/suggest", {"account": w.ADA})
-    assert r.json["asked"] == screening.MAX_SENDERS
-    assert f"[{screening.MAX_SENDERS + 1}]" not in ai.requests[0].prompt
 
 
 @pytest.mark.parametrize("body", [{}, {"account": "nobody@example.test"}])

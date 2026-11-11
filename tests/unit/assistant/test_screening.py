@@ -1,6 +1,8 @@
 """The AI's pass over the Screener: only what it is sure of is said, it names only who it was shown, and it writes no rule."""
 import pytest
 
+from assistant_ports import Ledger, Model, Uow, calls_on
+from mailmind.assistant.application.screening import Screening
 from mailmind.assistant.domain import screening
 
 ADDRS = ["orders@thimble.example.test", "lin@example.test"]
@@ -59,3 +61,34 @@ def test_a_senders_line_is_held_to_its_length():
     row = {"subject": "s" * 2000, "summary": None}
     text = screening.line(1, {"from_name": "N", "from_addr": ADDRS[0], "count": 1}, [row])
     assert len(text) <= 400 and text.startswith("[1] N <orders@thimble.example.test>")
+
+
+# ── the pass, on fakes behind its ports ──────────────────────────────────────────────────────────
+
+class Mail:
+    """The senders waiting in the Screener, and what is stored of each."""
+
+    def __init__(self, n=len(ADDRS)):
+        self.waiting = [{"from_addr": f"s{i}@example.test", "from_name": f"S{i}", "count": 1} for i in range(n)]
+
+    def screener_items(self, account):
+        return self.waiting
+
+    def sender_recent(self, c, addr, n):
+        return [{"subject": "Your order", "summary": None}]
+
+
+def suggest(model, ledger=None, mail=None):
+    return Screening(calls_on(model, ledger), Uow(), mail or Mail()).suggest("ada@example.test")
+
+
+def test_a_pass_is_counted_under_its_own_feature():
+    ledger = Ledger()
+    suggest(Model({"verdicts": []}), ledger)
+    assert ledger.features == ["screen"]
+
+
+def test_a_pass_reads_no_more_than_its_senders():
+    model = Model({"verdicts": []})
+    assert suggest(model, mail=Mail(screening.MAX_SENDERS + 10))["asked"] == screening.MAX_SENDERS
+    assert f"[{screening.MAX_SENDERS}] " in model.prompt and f"[{screening.MAX_SENDERS + 1}]" not in model.prompt
