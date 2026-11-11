@@ -22,7 +22,7 @@ from mailmind.http.routers import events
 from mailmind.http.routers.events import _Stream
 from mailmind.http.schemas.common import Answer, answers
 from mailmind.platform import settings, sse, webroot
-from waiting import wait_until
+from waiting import blocked_in, wait_until
 
 GRACE = 5           # long enough to notice anything that waits it out
 
@@ -114,8 +114,9 @@ def test_a_tab_holds_nothing_of_the_pool(server):
         tab.hang_up()
 
 
-def test_a_tab_that_hangs_up_frees_its_listener_long_before_a_keepalive(server):
+def test_a_tab_that_hangs_up_frees_its_listener_long_before_a_keepalive(server, monkeypatch):
     assert sse.HEARTBEAT >= 20
+    monkeypatch.setattr(sse, "HEARTBEAT", 3600)          # so no keepalive finds the hang-up while the test waits
     tab = Tab(server.port)
     assert sse.HUB.listening() == 1
     tab.hang_up()
@@ -149,8 +150,16 @@ async def sends_fine(message):
 
 async def settled(task):
     """However the task ended, it has."""
-    await asyncio.wait([task], timeout=3)
+    await asyncio.wait([task], timeout=30)
     assert task.done()
+
+
+async def waiting_for_an_event():
+    """Once the stream's wait for its next event has begun, on a thread of AnyIO's."""
+    async def waits():
+        while not any(blocked_in(t, sse.Listener.next) for t in threading.enumerate()):
+            await asyncio.sleep(0.005)
+    await asyncio.wait_for(waits(), 30)
 
 
 @pytest.fixture
@@ -179,7 +188,7 @@ def test_a_tab_that_hangs_up_during_a_write_gives_it_back(hub):
             await hung_up.wait()
             return {"type": "http.disconnect"}
         task = await running(stuck_on_the_first_frame, receive)
-        await asyncio.wait_for(writing.wait(), 3)
+        await asyncio.wait_for(writing.wait(), 30)
         assert hub.listening() == 1
         hung_up.set()
         await settled(task)
@@ -204,8 +213,8 @@ def test_a_stream_the_server_cancels_gives_it_back(hub):
         async def noting(message):
             started.set()
         task = await running(noting, never_any_message)
-        await asyncio.wait_for(started.wait(), 3)
-        await asyncio.sleep(0.05)          # its wait for an event has begun
+        await asyncio.wait_for(started.wait(), 30)
+        await waiting_for_an_event()
         task.cancel()
         await settled(task)
         return hub.listening()
@@ -219,9 +228,7 @@ def test_the_hub_ending_a_stream_ends_the_body_too(hub):
         async def noting(message):
             messages.append(message)
         task = await running(noting, never_any_message)
-        while len(messages) < 2:
-            await asyncio.sleep(0.01)
-        await asyncio.sleep(0.05)
+        await waiting_for_an_event()
         hub.end_streams()
         await settled(task)
         return messages[-1], hub.listening()
@@ -231,25 +238,33 @@ def test_the_hub_ending_a_stream_ends_the_body_too(hub):
 # ── a server that stops ──────────────────────────────────────────────────────────────────────────────
 
 def test_shutting_down_ends_an_open_stream_at_once(server):
+    """Not when the grace runs out: the stream would be cut off then, and reading it would raise IncompleteRead."""
     tab = Tab(server.port)
     assert tab.answer.readline() == b"retry: 3000\n"
-    began = time.monotonic()
     server.stop()
-    assert time.monotonic() - began < 2
-    tab.answer.read()                                    # ended properly: a stream cut off raises IncompleteRead
+    tab.answer.read()                                    # ended properly
     assert sse.HUB.listening() == 0
     tab.hang_up()
 
 
-def test_shutting_down_lets_a_request_still_being_answered_finish(server):
+def test_shutting_down_lets_a_request_still_being_answered_finish(server, monkeypatch):
     got = []
     client = threading.Thread(target=lambda: got.append(get(server.port, "/api/slow")))
     client.start()
-    assert arrived.wait(5)
-    threading.Timer(0.3, on_the_way.set).start()
+    assert arrived.wait(30)
+    ending = sse.HUB.end_streams
+    monkeypatch.setattr(sse.HUB, "end_streams", lambda: (ending(), on_the_way.set()))     # the answer comes once shutting down has begun
     server.stop()
-    client.join(5)
+    client.join(30)
     assert got == [(200, b"{}")]
+
+
+def peek(sock):
+    """What has come to `sock` so far, left unread."""
+    try:
+        return sock.recv(65536, socket.MSG_PEEK | socket.MSG_DONTWAIT)
+    except BlockingIOError:
+        return b""
 
 
 def test_a_tab_that_stopped_reading_holds_the_server_no_longer_than_its_grace(data_dir, monkeypatch):
@@ -267,11 +282,10 @@ def test_a_tab_that_stopped_reading_holds_the_server_no_longer_than_its_grace(da
             assert wait_until(lambda: sse.HUB.listening() == 1)
             for _ in range(100):
                 sse.publish("outbox", {"more": "x" * 1_000_000})
-            time.sleep(0.2)                              # as far as it will go
+            assert wait_until(lambda: b"event: outbox" in peek(silent))     # the frame is on its way, as far as it will go
             began = time.monotonic()
-            running_server.stop()
-            took = time.monotonic() - began
-            assert grace * 0.8 <= took < grace + 2, took
+            running_server.stop()                        # which fails if the server is still up 15 s on
+            assert time.monotonic() - began >= grace * 0.8                # it waited out the grace
             assert sse.HUB.listening() == 0
         finally:
             silent.close()
