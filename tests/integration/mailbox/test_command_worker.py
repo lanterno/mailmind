@@ -1,6 +1,6 @@
 """The command queue's worker (MailCommands.worker_loop), as the app starts it on a thread of its own: it puts back what a
-crash left running and applies it, and it drains through MailCommands.drain, so a read-only process applies nothing. Each
-test stops it when done, which the app's never is."""
+crash left running and applies it. That a read-only process applies nothing is the unit half's
+(tests/unit/mailbox/test_command_worker.py). Each test stops it when done, which the app's never is."""
 import threading
 
 import pytest
@@ -61,14 +61,3 @@ def test_what_a_crash_left_running_is_put_back_and_applied(world, worker):
     worker()
     assert wait_until(lambda: state(command_id) == ("done", 1))
     assert [s[:2] for s in world.where(NAME)["server"]] == [[w.BEA, "Folders/Clients"]]
-
-
-def test_a_read_only_process_applies_nothing(world, worker, monkeypatch):
-    from mailmind.bootstrap.mailbox import commands
-    monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
-    claimed = []
-    monkeypatch.setattr(commands.QUEUE, "drain", lambda *a: claimed.append(a))
-    command_id = world.queued_move(NAME, "Folders/Clients")
-    assert worker().wait(5)
-    assert claimed == [] and state(command_id) == ("queued", 0)
-    assert [s[:2] for s in world.where(NAME)["server"]] == [[w.BEA, "INBOX"]]
