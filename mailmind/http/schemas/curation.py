@@ -90,7 +90,7 @@ class RuleChanged(Answer):
 
 
 class AuditEvent(Answer):
-    """A line of an audit trail: a sweep's message, a sender's cleanup or a reconcile's count."""
+    """A record of an audit trail: a sweep's message, a sender's cleanup or a reconcile's count."""
     kind: str
     ts: str
     account: str | None = None
