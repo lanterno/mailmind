@@ -2,7 +2,7 @@
 import pytest
 
 from mailmind.accounts.adapters import secrets
-from mailmind.accounts.domain.credential import CredentialRef, credential_from
+from mailmind.accounts.domain.credential import CredentialRef, Typed, credential_from, keychain_credential
 
 
 @pytest.mark.parametrize("stored, style, mask", [
@@ -83,7 +83,7 @@ def test_evict_drops_each_of_a_credentials_reads_and_no_others(monkeypatch):
 
 
 @pytest.mark.parametrize("asked, stored", [
-    ({"style": "plain", "value": "hunter2"}, {"plain": "hunter2"}),
+    ({"style": "keychain", "value": "hunter2"}, Typed("hunter2")),
     ({"style": "op", "ref": "op://V/I/F"}, {"op": "op://V/I/F"}),
     ({"style": "op", "ref": ["op://V/I/A", "op://V/I/B"]}, {"op": ["op://V/I/A", "op://V/I/B"]}),
     ({"style": "env", "var": " DEE_PASSWORD "}, {"env": "DEE_PASSWORD"}),
@@ -93,14 +93,14 @@ def test_a_request_writes_the_style_it_names(asked, stored):
     assert credential_from(asked) == stored
 
 
-@pytest.mark.parametrize("asked", [None, {}, {"style": "keychain"}, {"value": "hunter2"}], ids=repr)
+@pytest.mark.parametrize("asked", [None, {}, {"value": "hunter2"}], ids=repr)
 def test_a_request_naming_no_style_keeps_what_is_there(asked):
     assert credential_from(asked) is None
 
 
 @pytest.mark.parametrize("asked, why", [
-    ({"style": "plain"}, "password required"),
-    ({"style": "plain", "value": ""}, "password required"),
+    ({"style": "keychain"}, "password required"),
+    ({"style": "keychain", "value": ""}, "password required"),
     ({"style": "op", "ref": "  "}, "1Password reference required"),
     ({"style": "op"}, "1Password reference required"),
     ({"style": "env", "var": " "}, "environment variable name required"),
@@ -112,8 +112,8 @@ def test_a_request_may_not_blank_a_credential(asked, why):
 
 @pytest.mark.parametrize("asked, why", [
     ("hunter2", "a credential names its style"),
-    ({"style": "plain", "value": 123}, "password required"),
-    ({"style": "plain", "value": {"op": "op://V/I/F"}}, "password required"),
+    ({"style": "keychain", "value": 123}, "password required"),
+    ({"style": "keychain", "value": {"op": "op://V/I/F"}}, "password required"),
     ({"style": "op", "ref": 123}, "1Password reference required"),
     ({"style": "op", "ref": []}, "1Password reference required"),
     ({"style": "op", "ref": ["op://V/I/A", 123]}, "1Password reference required"),
@@ -124,6 +124,27 @@ def test_a_request_may_only_write_what_a_login_could_read(asked, why):
     with pytest.raises(ValueError, match=why) as no:
         credential_from(asked)
     assert "hunter2" not in str(no.value)
+
+
+def test_a_typed_password_resolves_as_typed_and_never_shows():
+    typed = Typed("hunter2")
+    assert CredentialRef.parse(typed).style == "typed" and secrets.resolve(typed, who="dee") == "hunter2"
+    assert "hunter2" not in repr(typed) and "hunter2" not in repr(CredentialRef.parse(typed))
+    assert "hunter2" not in str(CredentialRef.parse(typed).masked())
+
+
+@pytest.mark.parametrize("before, version", [
+    (None, 1),
+    ({"op": "op://V/I/F"}, 1),
+    ({"keychain": "account:dee@example.test"}, 1),
+    ({"keychain": "account:dee@example.test", "version": 1}, 2),
+    ({"keychain": "account:dee@example.test", "version": "7"}, 8),
+    ({"keychain": "account:dee@example.test", "version": "not a number"}, 1),
+    ({"keychain": "account:dee@example.test", "version": -4}, 1),
+    ({"keychain": "shared-item", "version": 5}, 1),
+], ids=repr)
+def test_a_secret_kept_again_is_a_new_version_of_its_items_credential(before, version):
+    assert keychain_credential("account:dee@example.test", before) == {"keychain": "account:dee@example.test", "version": version}
 
 
 def test_what_the_file_holds_is_read_as_it_stands_however_odd():

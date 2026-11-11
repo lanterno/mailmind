@@ -18,11 +18,11 @@ def test_the_configuration_says_what_happened_to_each_account(data_dir):
     ends = [bus.subscribe(t, heard.append) for t in (events.AccountAdded, events.AccountChanged, events.AccountRemoved)]
     try:
         config.add_account({"email": DEE, "type": "imap", "host": "mail.example.test",
-                            "credential": {"style": "plain", "value": "app-password"}})
+                            "credential": {"style": "keychain", "value": "app-password"}})
         config.update_account(DEE, {"alias": "Dee"})
         assert config.remove_account(DEE)
         with pytest.raises(ValueError):
-            config.add_account({"email": "no-at-sign", "credential": {"style": "plain", "value": "x"}})
+            config.add_account({"email": "no-at-sign", "credential": {"style": "keychain", "value": "x"}})
         assert config.update_account(DEE, {"alias": "Dee"}) is None
         assert config.remove_account(DEE) is False
     finally:

@@ -81,7 +81,7 @@ def test_a_draft_for_a_new_address_pins_nothing(app, world):
     before = cfg(world)
     r = app.post("/api/accounts/test", {"draft": {"email": "dee@example.test", "type": "imap", "host": entry["host"],
                                                   "port": entry["port"], "starttls": True,
-                                                  "credential": {"style": "plain", "value": "app-password"}}})
+                                                  "credential": {"style": "keychain", "value": "app-password"}}})
     assert r.json["connect"] is True
     assert cfg(world) == before
 
@@ -139,7 +139,7 @@ def test_bridge_set_to_ssl_connects_and_is_pinned(world):
     from fakes.imap_server import FakeIMAPServer
     with FakeIMAPServer(kind="proton", implicit_tls=True) as srv:
         entry = srv.add_account("dee@example.test")
-        config.add_account({**entry, "credential": {"style": "plain", "value": "app-password"}})
+        config.add_account({**entry, "credential": {"style": "keychain", "value": "app-password"}})
         M = accounts.connect(accounts.get("dee@example.test"), timeout=10)
         M.logout()
         assert pins(world, "dee@example.test") == {f"127.0.0.1:{srv.port}": "sha256:" + srv.cert_sha256}

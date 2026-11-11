@@ -186,6 +186,27 @@ def test_evict_and_forget_drop_what_was_read_so_the_next_read_asks_again(fake_ke
     assert secrets.resolve({"keychain": "anthropic-api-key"}, who="anthropic_api_key") == "sk-ant-new"
 
 
+def test_a_new_version_of_an_item_is_read_again_as_another_process_kept_it(fake_keychain, counted):
+    fake_keychain.add(ADA, "old", replace=False)
+    assert secrets.resolve({"keychain": ADA, "version": 1}, who="ada") == "old"
+    fake_keychain.add(ADA, "new", replace=True)                  # as `accounts password` does, then the file says version 2
+    assert secrets.resolve({"keychain": ADA, "version": 1}, who="ada") == "old"
+    assert secrets.resolve({"keychain": ADA, "version": 2}, who="ada") == "new"
+    assert counted.asked == [ADA, ADA]
+
+
+def test_keep_and_discard_change_the_keychain_and_forget_what_was_read(fake_keychain, counted):
+    fake_keychain.add(ADA, "old", replace=False)
+    secrets.resolve({"keychain": ADA, "version": 1}, who="ada")
+    secrets.keep(ADA, "new")
+    assert fake_keychain.items() == {ADA: "new"}
+    assert secrets.resolve({"keychain": ADA, "version": 1}, who="ada") == "new"
+    assert secrets.discard(ADA) is True and fake_keychain.items() == {}
+    with pytest.raises(RuntimeError, match="holds no item"):
+        secrets.resolve({"keychain": ADA, "version": 1}, who="ada")
+    assert secrets.discard(ADA) is False
+
+
 def test_each_assembly_starts_with_no_secret_read(fake_keychain, counted):
     from mailmind.bootstrap import wiring
     fake_keychain.add(ADA, "app-password", replace=False)

@@ -109,7 +109,7 @@ def test_a_changed_password_gets_a_fresh_worker_that_logs_in_with_it(world, supe
     old, logins = worker_of(supervisor, w.ADA), count(world, "LOGIN")
     with world.server.lock:
         world.server.accounts[w.ADA].password = "a-new-app-password"
-    config.update_account(w.ADA, {"credential": {"style": "plain", "value": "a-new-app-password"}})
+    config.update_account(w.ADA, {"credential": {"style": "keychain", "value": "a-new-app-password"}})
     old.join(30)
     assert not old.is_alive()
     assert idling(world, w.ADA, 2)
@@ -132,7 +132,7 @@ def test_an_added_account_is_watched(world, supervisor):
     supervisor.start()
     entry = world.server.add_account(DEE)
     config.add_account({"email": DEE, "type": "imap", "host": entry["host"], "port": entry["port"],
-                        "starttls": entry["starttls"], "credential": {"style": "plain", "value": "app-password"}})
+                        "starttls": entry["starttls"], "credential": {"style": "keychain", "value": "app-password"}})
     assert idling(world, DEE)
     assert supervisor.watching()[DEE]
 
@@ -193,7 +193,7 @@ def test_a_worker_for_a_refused_login_starts_afresh_on_a_new_password(world, sup
     world.server.accounts[w.ADA].password = "the-new-password"
     supervisor.start()
     assert wait_until(lambda: count(world, "LOGIN") == 1)
-    config.update_account(w.ADA, {"credential": {"style": "plain", "value": "the-new-password"}})
+    config.update_account(w.ADA, {"credential": {"style": "keychain", "value": "the-new-password"}})
     assert idling(world, w.ADA)
     assert count(world, "LOGIN") == 2
 

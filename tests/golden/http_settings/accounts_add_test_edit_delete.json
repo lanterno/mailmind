@@ -4,8 +4,9 @@
    "account": {
     "alias": "Dee",
     "credential": {
+     "item": "account:dee@example.test",
      "set": true,
-     "style": "plain"
+     "style": "keychain"
     },
     "defaults_applied": {
      "host": false,
@@ -229,8 +230,9 @@
    "account": {
     "alias": "Dee Q.",
     "credential": {
+     "item": "account:dee@example.test",
      "set": true,
-     "style": "plain"
+     "style": "keychain"
     },
     "defaults_applied": {
      "host": false,
@@ -337,7 +339,8 @@
     {
      "alias": "Dee Q.",
      "credential": {
-      "plain": "dee-password"
+      "keychain": "account:dee@example.test",
+      "version": 1
      },
      "email": "dee@example.test",
      "host": "127.0.0.1",

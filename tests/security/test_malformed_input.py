@@ -195,7 +195,7 @@ def test_acting_on_an_account_there_is_no_such_of(app, path):
 @pytest.mark.parametrize("junk", ["x", 10 ** 30])
 def test_a_port_that_cant_be_a_number(app, field, said, junk):
     added = app.post("/api/accounts/add", {"email": "new@example.test", "type": "imap", "host": "mail.example.test",
-                                           "credential": {"style": "plain", "value": "p"}, field: junk})
+                                           "credential": {"style": "keychain", "value": "p"}, field: junk})
     assert (added.status, added.json) == (400, problems.refused(said))
     edited = app.post("/api/accounts/edit", {"email": w.ADA, field: junk})
     assert (edited.status, edited.json) == (400, problems.refused(said))

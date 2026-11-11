@@ -62,19 +62,19 @@ def test_saved_views(app, golden, world):
 def test_accounts_add_test_edit_delete(app, golden, world):
     entry = world.server.add_account(DEE, password="dee-password")
     add = {"email": DEE, "type": "imap", "host": entry["host"], "port": entry["port"],
-           "starttls": True, "alias": "Dee", "credential": {"style": "plain", "value": "dee-password"}}
+           "starttls": True, "alias": "Dee", "credential": {"style": "keychain", "value": "dee-password"}}
     post(app, golden, "add Dee", "/api/accounts/add", add)
     post(app, golden, "add Dee again", "/api/accounts/add", add)
     post(app, golden, "add one with no credential", "/api/accounts/add", {"email": "eve@example.test", "type": "imap",
                                                                          "host": "127.0.0.1"})
     post(app, golden, "add one with no host", "/api/accounts/add",
-         {"email": "eve@example.test", "type": "imap", "credential": {"style": "plain", "value": "x"}})
+         {"email": "eve@example.test", "type": "imap", "credential": {"style": "keychain", "value": "x"}})
     post(app, golden, "add one that isn't an address", "/api/accounts/add",
-         {"email": "eve", "type": "imap", "host": "127.0.0.1", "credential": {"style": "plain", "value": "x"}})
+         {"email": "eve", "type": "imap", "host": "127.0.0.1", "credential": {"style": "keychain", "value": "x"}})
     post(app, golden, "test Dee", "/api/accounts/test", {"email": DEE})
     post(app, golden, "test an unknown account", "/api/accounts/test", {"email": "zed@example.test"})
     post(app, golden, "test a draft with the wrong password", "/api/accounts/test",
-         {"draft": {**add, "credential": {"style": "plain", "value": "wrong"}}})
+         {"draft": {**add, "credential": {"style": "keychain", "value": "wrong"}}})
     post(app, golden, "test a draft whose server is down", "/api/accounts/test",
          {"draft": {**add, "port": 9}})
     post(app, golden, "test a draft with no host", "/api/accounts/test", {"draft": {"email": DEE, "type": "imap"}})

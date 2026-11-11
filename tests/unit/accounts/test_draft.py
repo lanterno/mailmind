@@ -1,10 +1,15 @@
 """mailmind.accounts.domain.draft: an unsaved account may only try a password typed with it, only against the host typed
-with it. No server is needed to say so. characterization/accounts/test_new_accounts.py's route test holds that nothing reaches a server, too."""
+with it, and keeps it nowhere. No server is needed to say so. characterization/accounts/test_new_accounts.py's route test
+holds that nothing reaches a server, too."""
+import json
+
 import pytest
 
+from mailmind.accounts.adapters import config_file
+from mailmind.accounts.domain.credential import Typed
 from mailmind.accounts.domain.draft import DraftRefused, throwaway_account
 
-TYPED = {"style": "plain", "value": "typed-password"}
+TYPED = {"style": "keychain", "value": "typed-password"}
 SAVE_FIRST = "save the account to test a stored secret; before then only a typed password is tried"
 
 
@@ -15,7 +20,17 @@ def draft(**fields):
 def test_a_draft_tries_what_was_typed_where_it_was_typed():
     assert throwaway_account(draft(port=143, starttls=True)) == {
         "email": "dee@example.test", "kind": "imap", "host": "imap.example.test", "port": 143, "starttls": True,
-        "strip_spaces": False, "trash": "Trash", "credential": {"plain": "typed-password"}}
+        "strip_spaces": False, "trash": "Trash", "credential": Typed("typed-password")}
+
+
+def test_what_a_draft_tries_can_never_be_written_to_a_file_or_the_keychain(data_dir, fake_keychain):
+    acct = throwaway_account(draft())
+    assert "typed-password" not in repr(acct)
+    with pytest.raises(TypeError):
+        json.dumps(acct)
+    with pytest.raises(TypeError):
+        config_file.ConfigFile().write({"accounts": [acct]})
+    assert not (data_dir / "mailmind.config.json").exists() and fake_keychain.items() == {}
 
 
 @pytest.mark.parametrize("credential", [
@@ -24,8 +39,10 @@ def test_a_draft_tries_what_was_typed_where_it_was_typed():
     {"style": "proton_bridge"},
     {"op": "op://Private/Dee/password"},
     {"plain": "stored-as-the-file-holds-it"},
-    {"style": "plain"},
-    {"style": "plain", "value": ""},
+    {"keychain": "account:dee@example.test"},
+    {"style": "keychain", "value": 123},
+    {"style": "keychain"},
+    {"style": "keychain", "value": ""},
     {},
     None,
 ], ids=str)
@@ -36,7 +53,7 @@ def test_a_draft_naming_anything_but_a_typed_password_is_refused(credential):
 
 def test_a_stored_secret_named_beside_a_typed_password_is_never_what_goes():
     acct = throwaway_account(draft(credential={**TYPED, "ref": "op://Private/Dee/password", "var": "HOME", "op": "x", "env": "HOME"}))
-    assert acct["credential"] == {"plain": "typed-password"}
+    assert acct["credential"] == Typed("typed-password")
 
 
 @pytest.mark.parametrize("host", [None, ""])

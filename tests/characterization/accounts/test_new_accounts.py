@@ -23,7 +23,7 @@ def test_hwf_send_accounts_come_from_config_before_any_sync(app, world):
     dee = "dee@example.test"
     entry = world.server.add_account(dee, password="dee-password")
     assert app.post("/api/accounts/add", {"email": dee, "type": "imap", "host": entry["host"], "port": entry["port"],
-                                          "starttls": True, "credential": {"style": "plain", "value": "dee-password"}
+                                          "starttls": True, "credential": {"style": "keychain", "value": "dee-password"}
                                           }).json["ok"]
     d = app.get("/api/digest").json
     assert dee in d["send_accounts"] and dee not in d["accounts"]

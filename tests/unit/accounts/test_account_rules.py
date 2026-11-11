@@ -11,7 +11,7 @@ from mailmind.accounts.domain import account
 from mailmind.accounts.domain.account import imap_endpoint, smtp_endpoint
 
 ADA = {"email": "ada@example.test", "type": "imap", "host": "imap.example.test", "credential": {"plain": "hunter2"}}
-TYPED = {"style": "plain", "value": "hunter2"}
+TYPED = {"style": "keychain", "value": "hunter2"}
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ def test_a_refused_edit_changes_nothing_in_the_file(directory, data_dir):
 
 def test_what_the_api_shows_of_an_account_holds_no_secret(directory):
     rows = [directory.masked_rows()[0], directory.add_account({"email": "bea@example.test", "type": "imap", "host": "h.example.test", "credential": TYPED}),
-            directory.update_account("ada@example.test", {"credential": {"style": "plain", "value": "hunter3"}})]
+            directory.update_account("ada@example.test", {"credential": {"style": "keychain", "value": "hunter3"}})]
     assert "hunter" not in str(rows)
 
 

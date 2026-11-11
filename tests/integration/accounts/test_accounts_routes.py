@@ -14,7 +14,7 @@ from mailmind.platform import settings
 
 BAD_REQUEST = problems.BAD_REQUEST
 SECRET = "hunter2-the-typed-password"
-TYPED = {"style": "plain", "value": SECRET}
+TYPED = {"style": "keychain", "value": SECRET}
 NEW = "dee@example.test"
 
 
@@ -26,7 +26,7 @@ def dee(world):
     """A draft that would log in, with the password that fake server takes."""
     entry = world.server.add_account(NEW, password="dee-password")
     return {"email": NEW, "type": "imap", "host": entry["host"], "port": entry["port"], "starttls": True,
-            "credential": {"style": "plain", "value": "dee-password"}}
+            "credential": {"style": "keychain", "value": "dee-password"}}
 
 
 # ── what the use case still words ────────────────────────────────────────────────────────────────────
@@ -44,8 +44,8 @@ def dee(world):
     ("type", "pop3", "type must be gmail, imap, or proton"),
     ("credential", SECRET, "a credential names its style"),
     ("credential", [1], "a credential names its style"),
-    ("credential", {"style": "plain"}, "password required"),
-    ("credential", {"style": "plain", "value": 123}, "password required"),
+    ("credential", {"style": "keychain"}, "password required"),
+    ("credential", {"style": "keychain", "value": 123}, "password required"),
     ("credential", {"style": "op", "ref": 123}, "1Password reference required"),
     ("credential", {"style": "env", "var": 123}, "environment variable name required"),
 ])
@@ -134,14 +134,44 @@ def test_a_flag_that_says_nothing_changes_nothing(app, world):
 def test_a_saved_account_goes_to_its_saved_server_with_its_saved_password_whatever_the_request_names(app, world):
     """The tripwire would fail this on any host but the fake's, and the fake takes only the saved password."""
     r = app.post("/api/accounts/test", {"email": w.ADA, "host": "evil.example.test", "port": 25, "starttls": False,
-                                        "credential": {"style": "plain", "value": "wrong"}, "draft": {}})
+                                        "credential": {"style": "keychain", "value": "wrong"}, "draft": {}})
     assert (r.status, r.json["connect"], r.json["email"]) == (200, True, w.ADA)
 
 
-def test_a_draft_tries_what_was_typed_and_keeps_none_of_it(app, world):
+def test_a_draft_tries_what_was_typed_and_keeps_none_of_it(app, world, fake_keychain):
+    draft = dee(world)
+    fake_keychain.clear()                       # what the fake server's own entry kept, as the world keeps one
     before = config(world)
-    r = app.post("/api/accounts/test", {"draft": dee(world)})
+    r = app.post("/api/accounts/test", {"draft": draft})
     assert (r.status, r.json["ok"], r.json["connect"], r.json["detail"]) == (200, True, True, "login ok")
+    assert config(world) == before and fake_keychain.items() == {}
+
+
+def test_a_password_saved_goes_to_the_keychain_and_never_to_the_file_or_an_answer(app, world, fake_keychain):
+    r = app.post("/api/accounts/add", {**dee(world), "credential": TYPED})
+    assert r.status == 200 and SECRET not in json.dumps(r.json)
+    assert r.json["account"]["credential"] == {"style": "keychain", "set": True, "item": f"account:{NEW}"}
+    assert fake_keychain.find(f"account:{NEW}") == SECRET
+    assert SECRET not in (world.dir / "mailmind.config.json").read_text()
+    assert next(a for a in config(world)["accounts"] if a["email"] == NEW)["credential"] == {"keychain": f"account:{NEW}", "version": 1}
+
+
+def test_a_keychain_that_wont_keep_a_password_is_unreachable_and_changes_nothing(app, world, fake_keychain):
+    from mailmind.platform import keychain
+
+    class Locked:
+        def find(self, name):
+            raise keychain.Refused(f"The Keychain didn't give MailMind its item {name}", 36)
+
+        def add(self, name, secret, *, replace):
+            pass
+    before = config(world)
+    keychain.use(Locked())
+    try:
+        r = app.post("/api/accounts/add", {"email": NEW, "type": "imap", "host": "mail.example.test", "credential": TYPED})
+    finally:
+        keychain.use(fake_keychain)
+    assert (r.status, r.json) == (502, problems.unreachable("The Keychain didn't keep the password. Is the login keychain locked?"))
     assert config(world) == before
 
 

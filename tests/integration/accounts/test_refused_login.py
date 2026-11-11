@@ -123,7 +123,7 @@ def test_a_new_password_goes_at_once(app, world, who):
     sync(who)
     assert health(app, who)["last_error_kind"] == "AUTH"
     before = logins(world, who)
-    assert app.post("/api/accounts/edit", {"email": who, "credential": {"style": "plain", "value": "the-new-password"}}).json["ok"]
+    assert app.post("/api/accounts/edit", {"email": who, "credential": {"style": "keychain", "value": "the-new-password"}}).json["ok"]
     sync(who)
     assert logins(world, who) == before + 1 and health(app, who)["healthy"]
 
@@ -207,7 +207,7 @@ def test_testing_a_saved_account_its_server_refuses_says_so_and_doesnt_lengthen_
 def test_a_refused_draft_holds_nothing_of_the_account_saved_under_its_address(app, world):
     acct = accounts.get(w.ADA)
     draft = {"email": w.ADA, "type": "imap", "host": acct["host"], "port": acct["port"], "starttls": True,
-             "credential": {"style": "plain", "value": "wrong"}}
+             "credential": {"style": "keychain", "value": "wrong"}}
     assert app.post("/api/accounts/test", {"draft": draft}).json["connect"] is False
     assert not accounts.logins.held(acct)
     sync()
@@ -219,7 +219,7 @@ def test_a_draft_that_logs_in_says_nothing_of_the_login_saved_under_its_address(
     world.server.fail("LOGIN", REFUSED, user=w.ADA)
     sync()
     draft = {"email": w.ADA, "type": "imap", "host": acct["host"], "port": acct["port"], "starttls": True,
-             "credential": {"style": "plain", "value": "app-password"}}
+             "credential": {"style": "keychain", "value": "app-password"}}
     assert app.post("/api/accounts/test", {"draft": draft}).json["connect"] is True
     assert accounts.logins.held(acct)
 

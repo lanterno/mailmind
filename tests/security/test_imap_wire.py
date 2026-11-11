@@ -256,7 +256,7 @@ def test_trying_an_account_typed_with_a_line_break_in_its_login(app, world, wire
     entry = world.server.config_entry(w.ADA)
     app.post("/api/accounts/test", {"draft": {
         "email": user, "type": "imap", "host": entry["host"], "port": entry["port"], "starttls": entry.get("starttls", True),
-        "credential": {"style": "plain", "value": password}}})
+        "credential": {"style": "keychain", "value": password}}})
     assert on_the_wire(wire) == []
 
 

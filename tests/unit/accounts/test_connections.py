@@ -3,6 +3,7 @@ account's credential goes only to its stored endpoint, whatever the request name
 import pytest
 
 from mailmind.accounts.application.connections import PROBE_TIMEOUT, Connections
+from mailmind.accounts.domain.credential import Typed
 from mailmind.accounts.domain.conn_error import quiet
 from mailmind.kernel.errors import NotFound, Refused
 
@@ -35,7 +36,7 @@ def connections(probe):
 def test_a_saved_account_goes_to_its_stored_endpoint_whatever_the_request_names():
     probe = Probe()
     r = connections(probe).test({"email": ADA["email"], "host": "evil.example.test", "port": 25, "starttls": False,
-                                 "credential": {"style": "plain", "value": "typed"}})
+                                 "credential": {"style": "keychain", "value": "typed"}})
     assert probe.calls == [("saved", ADA, PROBE_TIMEOUT)]
     assert (r["ok"], r["connect"], r["email"], r["detail"]) == (True, True, ADA["email"], "login ok")
 
@@ -43,9 +44,9 @@ def test_a_saved_account_goes_to_its_stored_endpoint_whatever_the_request_names(
 def test_a_draft_goes_as_a_draft_with_what_was_typed():
     probe = Probe()
     r = connections(probe).test({"draft": {"email": "dee@example.test", "type": "imap", "host": "imap.example.test",
-                                           "credential": {"style": "plain", "value": "typed"}}})
+                                           "credential": {"style": "keychain", "value": "typed"}}})
     [(how, acct, timeout)] = probe.calls
-    assert (how, acct["host"], acct["credential"], timeout) == ("draft", "imap.example.test", {"plain": "typed"}, PROBE_TIMEOUT)
+    assert (how, acct["host"], acct["credential"], timeout) == ("draft", "imap.example.test", Typed("typed"), PROBE_TIMEOUT)
     assert (r["connect"], r["email"]) == (True, "dee@example.test")
 
 
@@ -61,7 +62,7 @@ def test_a_draft_the_domain_refuses_reaches_no_server():
 def test_a_draft_whose_port_no_connection_could_reach_says_so(port):
     probe = Probe()
     r = connections(probe).test({"draft": {"email": "dee@example.test", "host": "h.example.test", "port": port,
-                                           "credential": {"style": "plain", "value": "typed"}}})
+                                           "credential": {"style": "keychain", "value": "typed"}}})
     assert r == {"ok": True, "connect": False, "email": "dee@example.test", "error": "port must be 1–65535"}
     assert probe.calls == []
 
@@ -69,7 +70,7 @@ def test_a_draft_whose_port_no_connection_could_reach_says_so(port):
 def test_a_draft_may_give_its_port_as_digits():
     probe = Probe()
     r = connections(probe).test({"draft": {"email": "dee@example.test", "host": "h.example.test", "port": "143",
-                                           "credential": {"style": "plain", "value": "typed"}}})
+                                           "credential": {"style": "keychain", "value": "typed"}}})
     assert (r["connect"], probe.calls[0][1]["port"]) == (True, 143)
 
 
