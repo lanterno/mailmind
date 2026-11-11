@@ -1,7 +1,6 @@
 """Every account's Inbox as one list and who you wait on across accounts: one query each, where the browser used to ask
 each account and merge what came back, a page of each with no way further."""
 import json
-import time
 from datetime import datetime, timedelta, timezone
 
 from fixtures import world as w
@@ -119,13 +118,11 @@ def test_with_no_account_it_is_empty(app):
 
 
 def test_an_account_on_its_first_scan_holds_up_no_one(app, world, monkeypatch):
-    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 30)
+    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 3600)        # a list that waited for it would never answer
     execute("DELETE FROM sync_state WHERE account=? AND folder='INBOX'", w.BEA)
-    world.server.stall("SELECT", user=w.BEA)
+    world.server.stall("SELECT", user=w.BEA)                             # and BEA's scan goes nowhere until the end
     try:
-        began = time.perf_counter()
         got = inboxes(app, "?limit=500")
-        assert time.perf_counter() - began < 10
         assert got["syncing"] is True
         assert {i["account"] for i in got["items"]} == set(EVERYONE)         # BEA's as they are stored
     finally:
