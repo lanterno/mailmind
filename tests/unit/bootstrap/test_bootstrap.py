@@ -1,7 +1,6 @@
 """mailmind.bootstrap.wiring: what `python -m mailmind serve` and the app fixture connect before anything
 runs, what serving starts, and the background jobs each profile schedules."""
 import threading
-import time
 
 import pytest
 
@@ -12,6 +11,7 @@ from mailmind.mailbox.domain.events import InboxChanged
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import background
 from mailmind.bootstrap import wiring
+from waiting import wait_until
 
 
 @pytest.fixture
@@ -84,12 +84,10 @@ def test_idles_dispatcher_publishes_one_change_for_a_burst(unwired, monkeypatch)
             realtime._trigger_sync(email)
         t = threading.Thread(target=realtime._dispatch_loop, daemon=True)
         t.start()
-        deadline = time.monotonic() + 5
-        while not heard and time.monotonic() < deadline:
-            time.sleep(0.01)
+        assert wait_until(lambda: heard)
         realtime._stop.set()
         realtime._kick.set()
-        t.join(5)
+        t.join(30)
     finally:
         stop()
     assert heard == [InboxChanged(frozenset({"ada@example.test", "cy@example.test"}))]
