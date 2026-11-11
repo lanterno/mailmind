@@ -124,7 +124,7 @@ def _inventory(accts):
 def _expire(accts, dry=False):
     expire = curation.rules.load()[curation.EXPIRE]
     if not expire:
-        print("no expiry rules — add one with: python -m mailmind rules expire <sender|domain> <hours>")
+        print("no expiry rules — add one with: uv run python -m mailmind rules expire <sender|domain> <hours>")
         return
     print("rules: " + ", ".join(f"{t} {h}h" for t, h in expire.items()))
     grand_p = grand_m = 0

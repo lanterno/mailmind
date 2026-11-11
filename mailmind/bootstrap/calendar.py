@@ -1,8 +1,8 @@
 """Calendar's wiring: the one place that binds its ports, to its own adapters and, until those contexts move, to the
 legacy modules behind them. The legacy modules reach Calendar through here.
 
-Loading this loads `icalendar`, through its adapter. The command line runs on Python alone and reads no invite, so nothing
-it loads imports this at the top: the Mailbox's `_Reader` asks for it as a message opens, which only a route does.
+Loading this loads `icalendar`, through its adapter. The command line reads no invite, so nothing it loads imports this
+at the top: the Mailbox's `_Reader` asks for it as a message opens, which only a route does.
 """
 from mailmind.calendar.adapters import icalendar_acl
 from mailmind.calendar.adapters.sqlite import StoredInvites

@@ -26,8 +26,7 @@ The types:
 - `Text` and `Secret`: as set. Nothing here logs a variable's value, and a secret's least of all.
 - `Directory`: a path, which `settings` resolves.
 
-The refactor proposal named pydantic-settings for this. The command line runs on Python alone
-(`tests/e2e/test_cli.py` runs it with no site-packages), so this is the standard library.
+This module uses the standard library alone, not the pydantic-settings the refactor proposal named.
 """
 import os
 import threading

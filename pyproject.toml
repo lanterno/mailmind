@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A local-first mail client with AI triage, served on 127.0.0.1."
 readme = "README.md"
 requires-python = ">=3.14"
-# What `python -m mailmind serve` runs on.
+# What the server and every command run on.
 dependencies = [
     "anthropic>=2.4.0",
     "fastapi>=0.162.0",
@@ -219,7 +219,7 @@ source_modules = ["mailmind.http", "mailmind.platform", "mailmind.content", "mai
 forbidden_modules = ["icalendar", "recurring_ical_events"]
 
 [[tool.importlinter.contracts]]
-# bootstrap.calendar binds that reader as it loads. The command line never loads it: test_cli.py runs it with nothing installed.
+# bootstrap.calendar binds that reader as it loads.
 name = "bootstrap imports icalendar and recurring-ical-events only through that reader"
 type = "forbidden"
 source_modules = ["mailmind.bootstrap"]

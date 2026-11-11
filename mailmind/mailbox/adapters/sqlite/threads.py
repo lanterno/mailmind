@@ -79,7 +79,7 @@ def thread_stored(c, account, pks=()):
 
 
 def recompute_threads(c, account):
-    """The repair (`python3 -m mailmind db rethread`): regroup every message of the account from what each names, and
+    """The repair (`python -m mailmind db rethread`): regroup every message of the account from what each names, and
     write what each names again. No sync comes this way (thread_stored), and nothing has to."""
     if not c.in_transaction:
         c.execute("BEGIN IMMEDIATE")

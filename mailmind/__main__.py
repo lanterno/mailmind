@@ -1,4 +1,4 @@
-"""`python -m mailmind <command>`, run from the repo root. WHO is an account's address or `all`.
+"""`uv run python -m mailmind <command>`, run from the repo root. WHO is an account's address or `all`.
 
   serve [port]                 serve the app on http://127.0.0.1:<port> (default 8721)
   check                        whether each account's credential resolves: ok or fail, never a secret
@@ -34,6 +34,7 @@
 """
 import argparse
 import os
+import shlex
 import signal
 import sys
 
@@ -46,7 +47,7 @@ DRY_COMMANDS = {"sweep": "move junk to Trash, verified and audited", "sweep-stor
 
 
 def parser():
-    top = argparse.ArgumentParser(prog="python -m mailmind", description=(__doc__ or "").split("\n", 1)[0])
+    top = argparse.ArgumentParser(prog="uv run python -m mailmind", description=(__doc__ or "").split("\n", 1)[0])
     commands = top.add_subparsers(dest="command", required=True)
     serve = commands.add_parser("serve", help="serve the app on 127.0.0.1 (FastAPI on uvicorn)")
     serve.add_argument("port", nargs="?", type=int, help="default 8721")
@@ -102,8 +103,18 @@ def parser():
 
 
 def main(argv=None):
+    """Run the command `argv` names (sys.argv's by default). Every command runs on the runtime packages, so one that
+    finds a package missing says how to run it with them, rather than ending in a traceback; and one that can't open
+    the database (still plaintext, a key that doesn't fit, a Keychain that won't answer) says what to do about it."""
+    argv = sys.argv[1:] if argv is None else argv
+    args = parser().parse_args(argv)
     try:
-        return _main(argv)
+        return _run(args)
+    except ModuleNotFoundError as e:
+        if not e.name or e.name.partition(".")[0] == "mailmind":
+            raise
+        sys.exit(f"MailMind needs its runtime packages, and {e.name} isn't installed. Run it as "
+                 f"`uv run python -m mailmind {shlex.join(argv)}`.")
     except RuntimeError as e:
         from mailmind.platform.db import database, key
         if isinstance(e, (database.NotEncrypted, database.KeyDoesNotFit, key.KeyProblem)):
@@ -111,8 +122,7 @@ def main(argv=None):
         raise
 
 
-def _main(argv=None):
-    args = parser().parse_args(argv)
+def _run(args):
     if args.command == "assess" and args.batch:
         from mailmind.bootstrap import wiring
         sys.exit(wiring.assess_batch())
@@ -163,11 +173,7 @@ def _main(argv=None):
         if args.command == "export":
             return cli.export(args.format, args.out, args.account, args.attachments)
     if args.command == "serve":
-        try:
-            from mailmind.bootstrap import front
-        except ModuleNotFoundError as e:
-            sys.exit(f"serve needs the runtime packages, and {e.name} isn't installed. Run it as "
-                     f"`uv run python -m mailmind serve`.")
+        from mailmind.bootstrap import front
         try:
             front.serve(args.port)
         except KeyboardInterrupt:
