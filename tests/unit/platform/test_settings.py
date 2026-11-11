@@ -30,13 +30,12 @@ def test_an_empty_home_counts_as_unset():
 
 
 def test_every_data_file_lives_in_the_home_under_its_usual_name(tmp_path):
-    """And there is no other: the audit trails, the saved views and the snippets are in the database."""
+    """And there is no other: the rule book, the saved views, the snippets and the audit trails are in the database."""
     s = settings.from_env({"MAILMIND_HOME": str(tmp_path)})
     assert s.home == str(tmp_path)
     paths = [k for k, v in vars(settings.Settings).items() if isinstance(v, property)]
     assert {k: os.path.relpath(getattr(s, k), tmp_path) for k in paths} == {
-        "db": "mailmind.db", "config": "mailmind.config.json", "rules": "mailmind_rules.json", "rules_lock": ".rules.lock",
-        "log": "mailmind.log"}
+        "db": "mailmind.db", "config": "mailmind.config.json", "log": "mailmind.log"}
 
 
 def test_a_relative_home_is_taken_from_the_current_directory(tmp_path, monkeypatch):
