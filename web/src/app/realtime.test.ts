@@ -107,14 +107,15 @@ describe("what the stream says changed", () => {
   });
   it("hands new mail to the pill with where you are, whether the AI is on and the account's own name", async () => {
     await open();
-    qc.setQueryData(["digest"], { ai: { engine: "api" }, aliases: { "a@example.test": "Ada" } });
+    qc.setQueryData(["digest"], { ai: { engine: "api" }, aliases: { "a@example.test": "Ada" }, accounts: ["bo@example.test", "a@example.test"] });
     await send("new-mail", { account: "a@example.test", count: 2 });
-    const [said, route, ai, nameOf] = heard.newMail.mock.calls[0]!;
+    const [said, route, ai, nameOf, listed] = heard.newMail.mock.calls[0]!;
     expect(said).toEqual({ account: "a@example.test", count: 2 });
     expect(route.source).toEqual({ kind: "allInboxes" });
     expect(ai).toBe(true);
     expect(nameOf("a@example.test")).toBe("Ada");
     expect(nameOf("bo@example.test")).toBe("bo");
+    expect(listed).toEqual(["bo@example.test", "a@example.test"]);     // whose place in it keys when each Inbox was looked at
   });
   it("says the AI is off when the digest says so, or hasn't come", async () => {
     await open();
@@ -127,7 +128,10 @@ describe("what the stream says changed", () => {
   it("passes woken snoozes and a written reply on by what they name", async () => {
     await open();
     await send("snooze-wake", { accounts: ["a@example.test"], count: 3 });
-    expect(heard.snoozeWake).toHaveBeenCalledWith({ accounts: ["a@example.test"], count: 3 }, expect.objectContaining({ source: { kind: "allInboxes" } }));
+    expect(heard.snoozeWake).toHaveBeenCalledWith({ accounts: ["a@example.test"], count: 3 }, expect.objectContaining({ source: { kind: "allInboxes" } }), []);
+    qc.setQueryData(["digest"], { ai: { engine: "none" }, accounts: ["a@example.test"] });
+    await send("snooze-wake", { accounts: ["a@example.test"], count: 1 });
+    expect(heard.snoozeWake).toHaveBeenLastCalledWith({ accounts: ["a@example.test"], count: 1 }, expect.objectContaining({ source: { kind: "allInboxes" } }), ["a@example.test"]);
     await send("draft-ready", { key: 42 });
     expect(heard.draftReady).toHaveBeenCalledWith(42);
   });
