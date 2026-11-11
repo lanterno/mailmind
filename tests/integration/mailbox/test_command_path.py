@@ -1,6 +1,7 @@
 """The one path a change to the mail takes, online or offline: accepted in one transaction, tried, settled in one
 transaction. What the routes answered before it came is pinned elsewhere; this is what it adds, on the
-fake IMAP server."""
+fake IMAP server. What a try finds as it starts, and what one that raises leaves, are the unit half's
+(tests/unit/mailbox/test_command_path.py)."""
 import dataclasses
 from datetime import datetime, timedelta, timezone
 
@@ -97,20 +98,6 @@ def test_a_gmail_archive_only_drops_the_label(app, world):
     assert change.startswith("UID STORE") and "-X-GM-LABELS" in change and "Inbox" in change
 
 
-def test_while_the_server_is_asked_the_message_is_hidden_and_undo_already_knows_it(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import server_ops
-    pk, seen = world.pk(RECEIPT), {}
-    apply = server_ops.apply
-
-    def spy(row, first_try=False, **kw):
-        seen.update(hidden=hidden(pk), stack=undo_stack(), first_try=first_try)
-        return apply(row, first_try, **kw)
-    monkeypatch.setattr(server_ops, "apply", spy)
-    assert app.post("/api/trash", w.copy_of(pk)).json["ok"]
-    assert seen["hidden"] is True and seen["first_try"] is True
-    assert [e["command"] for e in seen["stack"]] == [rows()[0]["id"]]
-
-
 def test_a_first_try_sends_no_search_of_its_own(app, world):
     since = world.mark()
     assert app.post("/api/archive", world.copy(RECEIPT)).json["ok"]
@@ -191,19 +178,6 @@ def test_a_refused_flag_change_in_a_click_puts_back_what_it_replaced(app, world)
     assert world.row(RECEIPT)["flagged"] == before and rows() == []
 
 
-def test_a_flag_change_shows_before_the_server_is_asked(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import server_ops
-    pk, seen, apply = world.pk(RECEIPT), [], server_ops.apply
-
-    def spy(row, first_try=False, **kw):
-        seen.append(world.row(RECEIPT)["flagged"])
-        return apply(row, first_try, **kw)
-    monkeypatch.setattr(server_ops, "apply", spy)
-    assert app.post("/api/flag", {**w.copy_of(pk), "flag": "flagged", "on": True}).json["msg"] == "ok"
-    assert seen == [1] and world.row(RECEIPT)["flagged"] == 1
-    assert rows()[0]["state"] == "done"
-
-
 def test_a_busy_gate_hands_a_click_to_the_worker(app, world, monkeypatch):
     from mailmind.bootstrap.mailbox import commands
     monkeypatch.setattr(commands, "FILE_WAIT", 0.05)
@@ -226,20 +200,6 @@ def test_a_message_on_its_way_out_cant_be_filed_again(app, world):
     r = app.post("/api/trash", w.copy_of(pk))
     assert (r.status, r.json) == (404, problems.not_found("not found"))
     assert [r["kind"] for r in rows()] == ["archive"]
-
-
-def test_a_try_that_raises_something_unforeseen_doesnt_leave_its_message_hidden_for_good(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import commands, server_ops
-    pk = world.pk(RECEIPT)
-    world.server.drop("SELECT", user=w.ADA)
-    assert app.post("/api/archive", w.copy_of(pk)).json["status"] == "queued"
-
-    def broken(row, first_try=False, **kw):
-        raise ValueError("a bug")
-    monkeypatch.setattr(server_ops, "apply", broken)
-    commands.drain()
-    [row] = rows()
-    assert (row["state"], row["attempts"], row["last_error"]) == ("queued", 1, "ValueError")
 
 
 def test_a_later_try_never_moves_what_another_message_now_holds_its_uid(app, world):
@@ -356,12 +316,6 @@ def test_an_outage_of_hours_leaves_a_move_waiting_and_its_message_hidden(app, wo
     world.server.clear_faults()
     commands.drain()
     assert boxes(world, RECEIPT) == ["Archive"] and rows()[0]["state"] == "done"
-
-
-def test_a_queued_change_is_given_up_on_after_about_a_day_of_tries(app, world):
-    from mailmind.bootstrap.mailbox import commands
-    hours = sum(commands.QUEUE.backoff(n) for n in range(1, commands.MAX_ATTEMPTS)) / 3600
-    assert 23 < hours < 25
 
 
 def test_undo_of_a_queued_archive_whose_mail_left_on_its_own_stays_out_of_the_way(app, world, monkeypatch):
