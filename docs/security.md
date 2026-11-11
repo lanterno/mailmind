@@ -106,8 +106,9 @@ new file beside it.
 The browser keeps nothing of a person's either. It writes every URL a tab goes to into its history, in plaintext, and may
 sync that to the account it is signed in to, so the page's URLs name no address, folder, search, question, topic or opened
 message. A route that holds any of those is a place, `/p/<id>`: its id is random and made in the page (`app/route.ts`), and
-the route it stands for is kept in `places` (migration 49, `platform.db.places`), sent in a batch (`POST /api/places`,
-which takes an id of the page's making and a route of at most 4 KB, and keeps the 10,000 used last), and put back into the
+the route it stands for is kept in `places` (migration 49, `platform.db.places`), sent once it is about to be used, gone to
+or a link to it pointed at, never for a link only drawn (`POST /api/places`, which takes a batch of ids of the page's
+making and routes of at most 4 KB, and keeps the 10,000 used last), and put back into the
 page opened at `/p/<id>`, escaped, in its `mailmind-place` meta. An id that names none opens at home. Only `/`, `/all`, the
 views over every account, `/documents` and the brief's own two lists are written as themselves, nothing goes into
 `history.state`, which the browser's session file keeps too, and the readable forms still open when typed. The page's

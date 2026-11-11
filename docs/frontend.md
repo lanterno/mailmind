@@ -13,10 +13,13 @@ is `lib/api/client.ts`, typed by `lib/api/types.ts` from the routes' schemas. Wh
 (`app/route.ts`: a `ListSource` and what is open), and code outside React reads it through `currentRoute()`, never from
 `location` itself. A URL names nothing of a person's ([At rest](security.md#at-rest)): `pathOf` writes a route that holds an
 address, a folder, a search, a topic or an opened message as a place, `/p/<id>`, with a random id made in the page and kept
-for that route as long as the page lasts, so a navigation waits for nothing and the same route is the same URL. The places a
-turn of the page made go to `POST /api/places` together once it is over, before a link drawn with one can be opened in a new
-tab, in batches of `LIMITS.places_at_once`, as keepalive so a batch on its way when the page goes still arrives, and again a
-little later if the server couldn't be reached; one longer than `LIMITS.place_bytes` stays in the page. A page opened at
+for that route as long as the page lasts, so a navigation waits for nothing and the same route is the same URL. A place
+reaches the server only when it is about to be used: `go()` sends the one it goes to, and a capturing listener on the
+document sends a link's (`a[href^="/p/"]`) on `pointerover`, `pointerdown`, `focusin`, `contextmenu` or `dragstart`, one of
+which comes before the link can be opened in a new tab, so a link drawn sends nothing and the rail's links add no rows. Each
+goes once, with the others sent in the same turn of the page, to `POST /api/places` once that turn is over, in batches of
+`LIMITS.places_at_once`, as keepalive so a batch on its way when the page goes still arrives, and again a little later if the
+server couldn't be reached; one longer than `LIMITS.place_bytes` stays in the page. A page opened at
 `/p/<id>` reads the route from its `mailmind-place` meta, which the server fills in, held to a route's shape (`routeFrom`),
 and one it doesn't know is home. Back or Forward to a place the page doesn't know, an entry from before a reload, loads the
 page from the server again. The rest (`/`, `/all`,
