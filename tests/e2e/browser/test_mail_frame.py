@@ -428,6 +428,21 @@ def test_a_plain_reply_folds_its_quote_and_keeps_every_word(page, world):
     clean(page)
 
 
+def test_opening_a_folded_quote_grows_the_frame_to_it_and_closing_it_gives_that_back(page, world):
+    quote = "\r\n".join(f"> line {n}" for n in range(30))
+    pk, key = arrives(world, f"Yes, Thursday works.\r\n\r\nOn Monday Ada wrote:\r\n{quote}\r\n", "text/plain")
+    frame = reading(page, key)
+    until(page, lambda: frame.evaluate("f => !!f.contentDocument.querySelector('details.mm-quote')"), "it never folded")
+    loaded(page, frame)
+    folded = drawn_height(page)
+    summary = page.frame_locator("iframe.rd-iframe").locator("summary")
+    summary.click()
+    until(page, lambda: frame.evaluate("f => parseInt(f.style.height)") > folded + 300, "the opened quote got no room")
+    summary.click()
+    until(page, lambda: frame.evaluate("f => parseInt(f.style.height)") == folded, "the closed quote kept its room")
+    clean(page)
+
+
 def test_a_message_gone_by_the_time_its_frame_asks_says_so_in_the_frame(page, world):
     pk, key = arrives(world, f'<p>Hello</p><img src="{TRACKER}" alt="tracker">')
     frame = reading(page, key)
