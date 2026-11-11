@@ -1,16 +1,18 @@
 """`just demo`: the whole app on fictional mail, with nothing of yours anywhere near it.
 
-The test suite's world runs for real: three made-up accounts on the fake IMAP and SMTP servers, on loopback, with the corpus
-in their folders (its dates moved up so its newest message is today), and the fake Claude API, which answers from each call's
-schema. `python -m mailmind serve` runs against them as it would against real servers, in a temp data directory that goes when
-it stops, and with the suite's tripwire on: it refuses the real data files, any host off this machine and the programs that
-hold your credentials. What a send sends lands in the fake SMTP server, and what a filing moves moves on the fake IMAP server.
+The test suite's world runs for real: three made-up accounts on the fake IMAP and SMTP servers, on loopback, with the
+corpus in their folders (its dates moved up so its newest message is today), and the fake Claude API, which answers from
+each call's schema. `python -m mailmind serve` runs against them as it would against real servers, in a temp data
+directory that goes when it stops, its database encrypted with a key made for the run (never the Keychain's), and with
+the suite's tripwire on: it refuses the real data files, any host off this machine and the programs that hold your
+credentials. What a send sends lands in the fake SMTP server, and what a filing moves moves on the fake IMAP server.
 
     python tests/support/demo.py [port]     # Ctrl-C ends it
 """
 import email.utils
 import os
 import re
+import secrets
 import signal
 import subprocess
 import sys
@@ -56,7 +58,7 @@ def main():
         w.connect_smtp(imap, smtp)
         w.write_config(imap, home, smtp)
         env = {**os.environ, "MAILMIND_HOME": home, "ANTHROPIC_API_KEY": FakeAnthropic.KEY, "ANTHROPIC_BASE_URL": claude.url,
-               "PYTHONUNBUFFERED": "1"}
+               "MAILMIND_DB_KEY": secrets.token_hex(32), "PYTHONUNBUFFERED": "1"}   # a key of its own: no Keychain
         print("Fictional mail only: a temp data directory, fake servers on loopback and the fake Claude API.", flush=True)
         code = SERVE.format(support=HERE, root=ROOT, argv=argv)
         with subprocess.Popen([sys.executable, "-c", code], cwd=ROOT, env=env) as serving:
