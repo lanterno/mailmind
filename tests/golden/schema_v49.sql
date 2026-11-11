@@ -58,6 +58,9 @@ CREATE INDEX idx_outbox_orig_thread ON outbox(orig_account, orig_thread_id) WHER
 -- index idx_outbox_state
 CREATE INDEX idx_outbox_state ON outbox(state, next_attempt_at);
 
+-- index idx_places_used_at
+CREATE INDEX idx_places_used_at ON places(used_at);
+
 -- index idx_thread_links_message
 CREATE INDEX idx_thread_links_message ON thread_links(message_pk);
 
@@ -142,6 +145,9 @@ CREATE TABLE muted ( -- silenced threads; keyed on (account,thread_id), NEVER pk
 -- table outbox
 CREATE TABLE outbox ( id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, -- the FROM account email (must exist in config) idempotency_key TEXT NOT NULL UNIQUE, -- one logical send per key (dedupes double-submit) message_id TEXT NOT NULL, -- minted at build; stable across retries envelope TEXT NOT NULL, -- JSON [addr-spec,...] full delivery set incl. Bcc (PRIVATE; never in raw) recipients TEXT NOT NULL, -- JSON {to,cc,bcc} for the outbox UI only subject TEXT, raw BLOB NOT NULL, -- Bcc-LESS RFC822 bytes: sent on the wire AND APPENDed to Sent state TEXT NOT NULL DEFAULT 'queued', -- queued | sending | sent | error attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL DEFAULT 0, -- unix secs; backoff gate delivered INTEGER NOT NULL DEFAULT 0, -- 1 once the wire send succeeded (never re-send) sent_appended INTEGER NOT NULL DEFAULT 0, -- done-once: Sent copy made answered_set INTEGER NOT NULL DEFAULT 0, -- done-once: \Answered set on original followup_recorded INTEGER NOT NULL DEFAULT 0, -- done-once: sent-no-reply followup seeded last_error TEXT, -- SCRUBBED code only draft_id INTEGER, -- supersede this draft after delivery draft_deleted INTEGER NOT NULL DEFAULT 0, -- done-once: draft removed post-send created_at TEXT NOT NULL, sent_at TEXT , orig_account TEXT, orig_message_id TEXT, orig_thread_id TEXT, wire_begun INTEGER NOT NULL DEFAULT 0, wait_kind TEXT NOT NULL DEFAULT 'grace', original_key INTEGER);
 
+-- table places
+CREATE TABLE places( id TEXT PRIMARY KEY, route TEXT NOT NULL, used_at TEXT NOT NULL);
+
 -- table reviews
 CREATE TABLE reviews( accounts TEXT NOT NULL, day TEXT NOT NULL, fingerprint TEXT NOT NULL, narrative TEXT NOT NULL, next_json TEXT NOT NULL, stats_json TEXT NOT NULL, needs_json TEXT NOT NULL, waiting_json TEXT NOT NULL, model TEXT, created_at TEXT NOT NULL, PRIMARY KEY(accounts, day));
 
@@ -169,4 +175,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=48;
+PRAGMA user_version=49;
