@@ -117,6 +117,20 @@ def test_a_write_of_the_wrong_shape_leaves_the_file(data_dir):
     assert f.read() == {"accounts": [ADA]}
 
 
+def test_a_write_that_fails_on_its_way_leaves_the_file_and_no_temporary_one(data_dir, monkeypatch):
+    put(data_dir, {"accounts": [ADA]})
+    f = config_file.ConfigFile()
+
+    def full(src, dst):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(os, "replace", full)
+    with pytest.raises(OSError, match="No space left"):
+        f.write({"accounts": [ADA, BEA]})
+    monkeypatch.undo()
+    assert f.read() == {"accounts": [ADA]}
+    assert [p.name for p in data_dir.iterdir() if p.name.startswith(".cfg-")] == []
+
+
 def test_a_request_parses_the_file_once_however_often_it_reads_it(app, parses, monkeypatch):
     from mailmind.bootstrap.accounts import config
     calls = []
