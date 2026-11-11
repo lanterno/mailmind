@@ -4,12 +4,14 @@ import threading
 import time
 
 import pytest
+import time_machine
 
 from mailmind.platform.db import database
 from mailmind.platform.workers.durable_queue import DurableQueue
 from waiting import wait_until
 
 NOW = 1_800_000_000
+POLL = 3600         # far past any wait of a test's, so a row taken at the poll never passes for one the worker woke for
 
 
 @pytest.fixture
@@ -28,7 +30,7 @@ def q(tmp_path):
 def laned(q):
     """The same table, its rows in lanes; the worker drains only when kicked."""
     return DurableQueue("jobs", "jobs", running="busy", finished="over", finished_at="finished_at", gate="done",
-                        connect=q._uow.connect, poll=30, lane="lane")
+                        connect=q._uow.connect, poll=POLL, lane="lane")
 
 
 def run(q, fn):
@@ -49,6 +51,19 @@ def add(q, what, **cols):
 
 def row(q, id_):
     return run(q, lambda c: dict(c.execute("SELECT * FROM jobs WHERE id=?", (id_,)).fetchone() or {}))
+
+
+def looks(queue):
+    """What the worker settles on each time round, as (when its last drain began to look, the seconds it then waits)."""
+    seen = []
+    until_due = queue.until_due
+
+    def recorded(c, now, looked=None):
+        wait = until_due(c, now, looked)
+        seen.append((looked, wait))
+        return wait
+    queue.until_due = recorded
+    return seen
 
 
 def test_the_rows_due_are_the_queued_ones_whose_time_has_come_oldest_first(q):
@@ -112,16 +127,16 @@ def test_only_a_row_in_error_can_be_retried_and_it_goes_at_once(q):
 
 
 def test_the_wait_until_the_next_row_comes_due_is_at_most_the_poll(laned):
-    assert run(laned, lambda c: laned.until_due(c, NOW)) == 30                  # nothing queued
+    assert run(laned, lambda c: laned.until_due(c, NOW)) == POLL                # nothing queued
     add(laned, "due already", next_attempt_at=NOW - 5)                          # a kick or the poll takes it
     add(laned, "failed", state="error", next_attempt_at=NOW + 1)
-    assert run(laned, lambda c: laned.until_due(c, NOW)) == 30
-    add(laned, "later", next_attempt_at=NOW + 600)
-    assert run(laned, lambda c: laned.until_due(c, NOW)) == 30
+    assert run(laned, lambda c: laned.until_due(c, NOW)) == POLL
+    add(laned, "later", next_attempt_at=NOW + POLL + 600)
+    assert run(laned, lambda c: laned.until_due(c, NOW)) == POLL
     add(laned, "soon", next_attempt_at=NOW + 8)
     assert run(laned, lambda c: laned.until_due(c, NOW)) == 8
     assert run(laned, lambda c: laned.until_due(c, NOW + 9, NOW)) == 0          # due since the drain began to look
-    assert run(laned, lambda c: laned.until_due(c, NOW + 9, NOW + 8)) == 30     # it looked at it then
+    assert run(laned, lambda c: laned.until_due(c, NOW + 9, NOW + 8)) == POLL   # it looked at it then
 
 
 def test_cancelling_before_the_claim_or_before_the_irreversible_step(q):
@@ -169,7 +184,7 @@ def test_a_lane_waiting_on_its_server_holds_up_no_other_lane(laned):
     def handle(id_):
         handled.append((id_, threading.current_thread().name))
         if id_ == a1:
-            release.wait(5)
+            release.wait(30)
     drain = threading.Thread(target=lambda: q.drain(handle, NOW), daemon=True)
     drain.start()
     try:
@@ -177,7 +192,7 @@ def test_a_lane_waiting_on_its_server_holds_up_no_other_lane(laned):
         assert a2 not in [i for i, _ in handled] and drain.is_alive()   # behind a1, and drain waits for both
     finally:
         release.set()
-        drain.join(5)
+        drain.join(30)
     assert not drain.is_alive()
     assert [i for i, _ in handled if i in (a1, a2)] == [a1, a2]
     assert {(i in (a1, a2), name) for i, name in handled} == {(True, "jobs:a"), (False, "jobs:b")}
@@ -192,7 +207,7 @@ def test_the_workers_drain_passes_a_busy_lane_by_and_the_lane_kicks_it_as_it_end
             return
         handled.append(id_)
         if id_ == a1:
-            release.wait(5)
+            release.wait(30)
         run(q, lambda c: q.finish(c, id_, "2026-11-02T12:00:00+00:00"))
     a1 = add(q, "a1", lane="a")
     worker = threading.Thread(target=lambda: q.run_forever(lambda: q.drain(handle, NOW), stop), daemon=True)
@@ -205,12 +220,12 @@ def test_the_workers_drain_passes_a_busy_lane_by_and_the_lane_kicks_it_as_it_end
         assert wait_until(lambda: b1 in handled), "the worker's drain waits on a's lane"
         assert a2 not in handled
         release.set()
-        assert wait_until(lambda: handled == [a1, b1, a2]), "a's next row waits for the 30 s poll"
+        assert wait_until(lambda: handled == [a1, b1, a2]), "a's next row waits for the poll"
     finally:
         release.set()
         stop.set()
         q.kick()
-        worker.join(5)
+        worker.join(30)
     assert not worker.is_alive()
 
 
@@ -219,73 +234,73 @@ def test_the_worker_wakes_when_a_row_comes_due_not_at_its_next_poll(laned):
     soon = add(laned, "soon", next_attempt_at=int(time.time()) + 1)
     worker = threading.Thread(target=lambda: laned.run_forever(
         lambda: laned.drain(handled.append, int(time.time())), stop), daemon=True)
-    worker.start()                                               # its poll is 30 s
+    worker.start()                                               # its poll is an hour
     try:
-        assert wait_until(lambda: handled == [soon], timeout=3)
+        assert wait_until(lambda: handled == [soon])
     finally:
         stop.set()
         laned.kick()
-        worker.join(5)
+        worker.join(30)
     assert not worker.is_alive()
 
 
 def test_a_row_that_comes_due_as_a_drain_ends_is_not_left_for_the_next_poll(laned):
     # The drain looks just before the row is due and is still going when it comes due. It didn't take
     # the row, and nothing will kick the queue for it.
-    due = int(time.time()) + 2
-    add(laned, "soon", next_attempt_at=due)
-    stop, drains = threading.Event(), []
+    with time_machine.travel(NOW, tick=False) as clock:
+        add(laned, "soon", next_attempt_at=NOW + 2)
+        stop, drains = threading.Event(), []
 
-    def drain():
-        now = int(time.time())
-        drains.append(now)
-        laned.drain(lambda id_: None, now)
-        while time.time() < due + 0.2 and len(drains) == 1:      # still busy as it comes due
-            time.sleep(0.01)
+        def drain():
+            drains.append(time.time())
+            laned.drain(lambda id_: None, time.time())
+            if len(drains) == 1:
+                clock.shift(3)                                   # still busy as it comes due
 
-    worker = threading.Thread(target=lambda: laned.run_forever(drain, stop), daemon=True)
-    worker.start()
-    laned.kick()
-    try:
-        assert wait_until(lambda: len(drains) >= 2, timeout=10), "the row waited for the 30 s poll"
-    finally:
-        stop.set()
+        worker = threading.Thread(target=lambda: laned.run_forever(drain, stop), daemon=True)
+        worker.start()
         laned.kick()
-        worker.join(5)
+        try:
+            assert wait_until(lambda: len(drains) >= 2), "the row waited for the poll"
+        finally:
+            stop.set()
+            laned.kick()
+            worker.join(30)
 
 
 def test_a_row_a_drain_wont_take_doesnt_spin_the_worker(laned):
     # Read-only's drain takes nothing, so a due row stays queued: the worker must not go round for it.
     add(laned, "due", next_attempt_at=int(time.time()) - 5)
-    stop, drains = threading.Event(), []
+    stop, drains, seen = threading.Event(), [], looks(laned)
     worker = threading.Thread(target=lambda: laned.run_forever(lambda: drains.append(1), stop), daemon=True)
     worker.start()
     laned.kick()
     try:
-        assert wait_until(lambda: drains)
-        time.sleep(0.3)
-        assert len(drains) == 1
+        assert wait_until(lambda: len(seen) == 2)                # it has drained and settled on its next wait
+        assert drains == [1] and seen[-1][1] == POLL
     finally:
         stop.set()
         laned.kick()
-        worker.join(5)
+        worker.join(30)
 
 
 def test_a_row_coming_due_just_after_a_drain_that_wont_take_it_gets_one_more_look_and_no_more(laned):
-    due = int(time.time()) + 1
-    add(laned, "soon", next_attempt_at=due)
-    stop, drains = threading.Event(), []
-    worker = threading.Thread(target=lambda: laned.run_forever(lambda: drains.append(time.time()), stop), daemon=True)
-    worker.start()
-    laned.kick()
-    try:
-        assert wait_until(lambda: drains and drains[-1] >= due, timeout=5)
-        time.sleep(0.3)
-        assert sum(1 for t in drains if t >= due) == 1
-    finally:
-        stop.set()
+    with time_machine.travel(NOW, tick=False) as clock:
+        add(laned, "soon", next_attempt_at=NOW + 1)
+        stop, seen = threading.Event(), looks(laned)
+        worker = threading.Thread(target=lambda: laned.run_forever(lambda: None, stop), daemon=True)
+        worker.start()
         laned.kick()
-        worker.join(5)
+        try:
+            assert wait_until(lambda: len(seen) >= 2)
+            assert seen[1] == (NOW, 1)                           # the drain looked before it was due, and waits until it is
+            clock.shift(1)
+            assert wait_until(lambda: any(looked >= NOW + 1 for looked, _ in seen))    # one more look as it comes due
+            assert [wait for looked, wait in seen if looked >= NOW + 1] == [POLL]        # and no more
+        finally:
+            stop.set()
+            laned.kick()
+            worker.join(30)
 
 
 def test_the_worker_puts_back_what_a_crash_left_then_drains_when_kicked(q):
@@ -299,13 +314,13 @@ def test_the_worker_puts_back_what_a_crash_left_then_drains_when_kicked(q):
     worker = threading.Thread(target=lambda: q.run_forever(lambda: q.drain(handle, NOW), stop), daemon=True)
     worker.start()
     try:
-        assert woke.wait(5) and handled == [stuck]
+        assert woke.wait(30) and handled == [stuck]
         woke.clear()
         fresh = add(q, "fresh")
         q.kick()
-        assert woke.wait(5) and handled[-1] == fresh
+        assert woke.wait(30) and handled[-1] == fresh
     finally:
         stop.set()
         q.kick()
-        worker.join(5)
+        worker.join(30)
     assert not worker.is_alive()
