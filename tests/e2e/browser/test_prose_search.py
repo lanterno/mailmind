@@ -29,7 +29,7 @@ def inbox(page):
     with page.pw.expect_response("**/api/digest"):
         page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX")
     expect(page.locator("#listTitle")).to_have_text("Inbox")
-    page.wait_for_timeout(100)
+    expect(page.locator("#statusTxt")).not_to_have_text("Connecting…")     # the page has drawn what it read
     return page
 
 
@@ -84,9 +84,10 @@ def test_a_translation_taken_back_is_not_made_again_on_enter(page, world, ai):
     expect(chip(page)).to_be_visible()
     chip(page).get_by_role("button").click()
     expect(box(page)).to_have_value(SENTENCE)
+    seen = planner_requests(page)
     box(page).press("Enter")
-    page.wait_for_timeout(300)
-    assert len(plans(ai)) == 1
+    page.heard_all_asked()                  # a translation is asked for as Enter is pressed
+    assert seen == [] and len(plans(ai)) == 1
     expect(chip(page)).to_have_count(0)
     expect(box(page)).to_have_value(SENTENCE)
     clean(page)
@@ -123,7 +124,8 @@ def test_typing_a_sentence_asks_nothing(page, world, ai):
     inbox(page)
     seen = planner_requests(page)
     box(page).fill(SENTENCE)
-    page.wait_for_timeout(400)
+    page.clock.run_for(400)                 # whatever typing set off on a timer has gone
+    page.heard_all_asked()
     assert seen == [] and plans(ai) == []
     clean(page)
 
@@ -134,7 +136,7 @@ def test_a_plain_search_asks_nothing(page, world, ai, words):
     inbox(page)
     seen = planner_requests(page)
     search(page, words)
-    page.wait_for_timeout(300)
+    page.heard_all_asked()
     assert seen == [] and plans(ai) == []
     expect(chip(page)).to_have_count(0)
     clean(page)
@@ -146,7 +148,7 @@ def test_with_ai_off_a_sentence_stays_literal(page, world):
     seen = planner_requests(page)
     search(page, SENTENCE)
     expect(page.pw).to_have_url(re.compile(r"/search\?q=emails"))
-    page.wait_for_timeout(300)
+    page.heard_all_asked()
     assert seen == []
     expect(box(page)).to_have_value(SENTENCE)
     expect(page.locator("#clientCtx .ctx-chip")).to_have_count(0)
@@ -220,7 +222,7 @@ def test_leaving_before_it_answers_leaves_you_where_you_went(page, world, ai):
     box(page).press("Enter")
     expect(page.pw).to_have_url(re.compile(r"/search\?q=lunch"))
     held[0].continue_()
-    page.wait_for_timeout(300)
+    page.wait_for_timeout(300)              # time for the late answer to be taken, if it would be: nothing on the page says it was
     expect(box(page)).to_have_value("lunch")
     expect(chip(page)).to_have_count(0)
     clean(page)
