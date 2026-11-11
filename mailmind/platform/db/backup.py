@@ -1,7 +1,7 @@
 """Copies of the database taken before its schema changes.
 
 Each is a consistent snapshot, taken online with SQLite's backup API, so a write-ahead log not yet
-checkpointed is in it. It goes to `backups/` beside the database, readable by its owner only, as
+checkpointed is in it, and encrypted with the database's key as the database is. It goes to `backups/` beside the database, readable by its owner only, as
 `mailmind-v{version}-{UTC time}.db`; only the newest KEEP are kept. To roll back, stop MailMind
 and copy one over the database (and delete the database's -wal and -shm files).
 """
@@ -9,7 +9,8 @@ import glob
 import os
 import re
 import time
-from mailmind.platform.db import driver
+
+from mailmind.platform.db import database
 
 KEEP = 3
 FOLDER = "backups"
@@ -22,7 +23,7 @@ def take(c, version):
     folder = os.path.join(os.path.dirname(path), FOLDER)
     os.makedirs(folder, mode=0o700, exist_ok=True)
     dest = _new_file(folder, f"mailmind-v{int(version)}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}")
-    copy = driver.connect(dest)
+    copy = database.keyed(dest)              # encrypted with the database's own key
     try:
         c.backup(copy)
     finally:

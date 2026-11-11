@@ -20,7 +20,6 @@ corrupt the live database. Grep this file for `accounts.connect` — there is no
 import os
 import re
 import shutil
-import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -54,8 +53,7 @@ def _ro_conn():
         c.commit()
     finally:
         c.close()
-    # A URI, so the path is escaped: a #, ? or % in the data directory's name would end or bend it.
-    ro = driver.connect(f"file:{urllib.request.pathname2url(settings.current().db)}?mode=ro", uri=True)
+    ro = database.keyed(settings.current().db, read_only=True)
     ro.row_factory = driver.Row
     return ro
 
@@ -208,13 +206,14 @@ def archive(out, form: ArchiveFormat):
 
 
 def export_db(out):
-    """A consistent on-disk snapshot via sqlite's online backup API (checkpoint first)."""
+    """A consistent on-disk snapshot via sqlite's online backup API (checkpoint first), encrypted with the database's
+    key: it opens on this computer, or wherever that key is given (MAILMIND_DB_KEY)."""
     os.makedirs(out, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     dest_path = os.path.join(out, f"mailmind-{stamp}.db")
     src = _ro_conn()
     try:
-        dest = driver.connect(dest_path)
+        dest = database.keyed(dest_path)        # encrypted with the database's key, as the database is
         try:
             src.backup(dest)
         finally:

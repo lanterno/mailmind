@@ -27,7 +27,7 @@ class Connection(driver.Connection):
 _local = threading.local()
 
 
-def track(conn: Connection) -> None:
+def track(conn: driver.Connection) -> None:
     """Count `conn` among this thread's connections."""
     conns = getattr(_local, "conns", None)
     if conns is None:

@@ -226,3 +226,12 @@ type = "forbidden"
 source_modules = ["mailmind.bootstrap"]
 forbidden_modules = ["icalendar", "recurring_ical_events"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+# The database is encrypted: every connection is opened and keyed by platform.db.database, through the driver.
+name = "only the database driver reaches SQLCipher"
+type = "forbidden"
+source_modules = ["mailmind"]
+forbidden_modules = ["sqlcipher3"]
+ignore_imports = ["mailmind.platform.db.driver -> sqlcipher3"]
+allow_indirect_imports = true

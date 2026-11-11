@@ -19,10 +19,9 @@ that one holds every message. Nor is the growth of a table a migration carries s
 """
 import collections
 import os
-import pathlib
 import tempfile
 
-from mailmind.platform.db import driver, migrate, migrations
+from mailmind.platform.db import database, driver, migrate, migrations
 
 OK, PROBLEM, CANNOT_RUN = 0, 1, 2
 
@@ -67,9 +66,9 @@ def check_upgrade(path, say=print):
 
 
 def _copy_read_only(path, dest):
-    source = driver.connect(pathlib.Path(path).resolve().as_uri() + "?mode=ro", uri=True)
+    source = database.keyed(path, read_only=True)
     try:
-        target = driver.connect(dest)
+        target = database.keyed(dest)
         try:
             source.backup(target)
         finally:
@@ -79,7 +78,7 @@ def _copy_read_only(path, dest):
 
 
 def _query(path, sql):
-    c = driver.connect(path)
+    c = database.keyed(path)
     try:
         return c.execute(sql).fetchall()
     finally:
@@ -134,7 +133,7 @@ def _checks(path, keys_before):
     else:
         verdict = f"{total} problem(s), {sum(added.values())} of them new ({_by_table(added)})"
     out.append(("foreign_key_check", verdict, not added))
-    c = driver.connect(path)
+    c = database.keyed(path)
     try:
         if c.execute("SELECT 1 FROM sqlite_master WHERE name='msg_fts'").fetchone():
             try:

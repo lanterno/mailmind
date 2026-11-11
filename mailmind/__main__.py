@@ -97,6 +97,16 @@ def parser():
 
 
 def main(argv=None):
+    try:
+        return _main(argv)
+    except RuntimeError as e:
+        from mailmind.platform.db import database, key
+        if isinstance(e, (database.NotEncrypted, database.KeyDoesNotFit, key.KeyProblem)):
+            sys.exit(str(e))            # what to do about it, without a traceback
+        raise
+
+
+def _main(argv=None):
     args = parser().parse_args(argv)
     if args.command == "assess" and args.batch:
         from mailmind.bootstrap import wiring

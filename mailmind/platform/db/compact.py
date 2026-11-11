@@ -23,7 +23,7 @@ def compact(path, say=print):
     c.isolation_level = None
     try:
         c.execute(f"PRAGMA busy_timeout={WAIT_SECONDS * 1000}")
-        page = c.execute("PRAGMA page_size").fetchone()[0]
+        page = int(c.execute("PRAGMA page_size").fetchone()[0])   # SQLCipher answers this one as text
         pages = c.execute("PRAGMA page_count").fetchone()[0]
         free = c.execute("PRAGMA freelist_count").fetchone()[0]
         kept = (pages - free) * page

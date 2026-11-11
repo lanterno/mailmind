@@ -699,6 +699,7 @@ python3 -m mailmind assess --batch         # what has no summary yet, as a batch
 | `MAILMIND_NO_SCHEMA=1` | Ask the model for free-form JSON instead of using structured-output schemas — a fallback for models without structured output. |
 | `MAILMIND_PROTON_BRIDGE_PASS` | Proton Bridge password (highest precedence) |
 | `MAILMIND_PROTON_OP_ITEM` | 1Password item id holding the Bridge password |
+| `MAILMIND_DB_KEY` | The key the database is encrypted with, as 64 hex digits, in place of the one in the Keychain. For the tests, the demo and a computer with no Keychain; set, the Keychain is never asked. Anyone who has it can read your database, so keep it out of shell profiles and history. |
 
 A switch (`MAILMIND_NOSYNC`, the `MAILMIND_NO_*` ones, and `MAILMIND_POOL` and `MAILMIND_WARM_FOLDERS` when
 they list no addresses) is on for `1`, `true`, `yes` or `on` and off for `0`, `false`, `no`, `off` or nothing,
