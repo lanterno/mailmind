@@ -129,8 +129,10 @@ def test_a_click_away_takes_the_list_away(page, world):
 
 def test_a_question_or_a_command_is_offered_nothing(page, world):
     inbox(page)
-    box(page).fill("? when is lin")
-    page.wait_for_timeout(400)
+    with page.pw.expect_response(re.compile(r"/api/suggest\?")) as answer:
+        box(page).fill("? when is lin")
+        page.clock.run_for(400)             # past the pause before what is typed is looked up
+    assert answer.value.json()["items"] == []
     expect(listed(page)).to_have_count(0)
     clean(page)
 
