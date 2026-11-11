@@ -50,8 +50,8 @@ MailMind module loads:
 
 The fixtures, from the bottom up:
 
-- `data_dir` makes a fresh temp directory the app's data directory (`settings.use`) and creates
-  the schema there.
+- `data_dir` makes a fresh temp directory the app's data directory (`settings.use`) and puts a new
+  database there: a copy of one `store.init` made once for the session, which is quicker than running every migration.
 - `world` is a fictional 25-message corpus (`tests/fixtures/corpus/`, three accounts) served by
   `tests/fakes/imap_server.py`. The app's own ingest synced it into the temp database.
   `tests/fakes/smtp_server.py` receives what the accounts send. Both fakes can refuse, drop or
