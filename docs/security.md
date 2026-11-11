@@ -38,7 +38,16 @@ An unsaved draft pins nothing. A new TLS connection calls `check_pin` too.
 A credential goes only to its own account's server. `/api/accounts/test` logs a saved account in
 at its saved endpoint, and tries a draft (an account not yet saved) only with a password typed
 into it, at the host typed with it (`domain.draft.throwaway_account`). A draft naming a stored
-secret (`op`, `env`, the Bridge password) is refused, since the request names the host.
+secret (`op`, `env`, the Bridge password) is refused, since the request names the host. A draft's typed password is
+`Typed`: held in memory for that one try, and kept nowhere.
+
+A secret MailMind is given, a password typed into Settings, `accounts password`, `ai key` or what `accounts materialize`
+moves, goes to the login Keychain (`platform.keychain`) before the file is written, and `mailmind.config.json` names the
+item and a version, never the secret: `{"keychain": "account:<address>", "version": n}`, `anthropic-api-key` for the
+Claude key. A new version tells IDLE to log in afresh and another process to read the item again. Removing an account,
+or moving it to another style, removes its item. A config that holds a secret itself, `{"plain": …}` or a bare string,
+is refused (`PlaintextSecret`): the app won't start, and `check` says which entry, never the secret. No credential may
+name the database's key.
 
 Folder names reach IMAP only through `accounts.mailbox_arg`. It wraps a name in the form LIST
 gave it and refuses one that isn't a valid quoted-string body (CR, LF, NUL, a bare quote, a
@@ -77,24 +86,28 @@ wrong. Backups, the upgrade check's copy and a database export are encrypted wit
 takes the standard library's `sqlite3` (`tests/unit/test_architecture.py`), which reads no encrypted file.
 
 The key (`platform.db.key`) is 32 random bytes, one for the computer, kept in the login Keychain as a generic password
-(service `mailmind`, account `database-key`). The first start that makes a database makes it, and so does `db encrypt`
-for a database from before. A connection takes it raw (`PRAGMA key = "x'…'"`), so no passphrase is stretched: the key
-is random, and opening one costs nothing. MailMind reaches the Keychain only through `/usr/bin/security`, hands it a new
-key on standard input, never on a command line another program can read, and never replaces one the Keychain holds,
-since a database made with that one could no longer be read. MailMind writes the key to no file, log or terminal.
+(service `mailmind`, account `database-key`). The first start that makes a database makes it. A connection takes it raw
+(`PRAGMA key = "x'…'"`), so no passphrase is stretched: the key is random, and opening one costs nothing. Every
+Keychain access goes through `platform.keychain` and `/usr/bin/security`: a secret goes in on standard input, in hex,
+never on a command line another program can read, and each write is read back, since `security -i` doesn't say when one
+failed. `add`, which the database's key takes, never replaces an item, since a database made with the one there could no
+longer be read; `put`, for passwords and the API key, does. MailMind writes no secret to a file, log or terminal.
 `MAILMIND_DB_KEY` (64 hex digits) stands in for the Keychain: for the tests, the demo, which makes a key for each run,
 and a computer with no Keychain.
 
-A database still plaintext is refused (`database.NotEncrypted`), never opened as it is, with what to run: `db encrypt
---dry`, which tries it on a copy and changes nothing, then `db encrypt` with MailMind stopped, which checks each
-encrypted copy (rows per table, integrity, foreign keys, the search index, the schema version) before it puts it in
-place of the database or a backup. A key that doesn't fit opens nothing (`database.KeyDoesNotFit`), and a Keychain that
-won't answer stops the start (`key.KeyProblem`), each with a line that says so and no traceback.
+A plaintext database, one from before MailMind encrypted its data, is refused (`database.NotEncrypted`) and never opened
+as it is. A key that doesn't fit opens nothing (`database.KeyDoesNotFit`), and a Keychain that won't answer stops the
+start (`key.KeyProblem`), each with a line that says so and no traceback.
+
+What was once in plaintext files beside the database is in it: the rule book, the saved views and the snippets as
+`documents`, and the audit trails as `audit_events` (migration 48). A person's data goes in the database, never in a
+new file beside it.
 
 What it protects: the mail wherever the file goes without the Keychain, in a copy of the disk or the data directory, a
 sync folder, a support bundle or a backup, from another user of the computer and from a disk taken out of it. What it
 doesn't: code running as you, which can ask the Keychain as MailMind does, or a login keychain whose password is
-known. The free blocks a plaintext database left on disk before `db encrypt` are out of its reach; FileVault covers
-those, and is worth turning on. The other files in the data directory are still plaintext and readable by you only:
-`mailmind.config.json`, whose passwords can live in 1Password or the environment instead, the rules, views and
-snippets files, the audit trails, and the log, which holds no address or subject.
+known. The free blocks a plaintext file left on disk before it was encrypted or removed are out of its reach; FileVault
+covers those, and is worth turning on. A copy of the data directory holds no password and no API key. What stays in
+plaintext, readable by you only: `mailmind.config.json` (accounts, preferences, and where each secret is), the log,
+which holds no address or subject, and the Bridge password file `~/.config/mailmind/proton_bridge_pass`, which Proton
+support, kept as it is for the desktop app, still reads.

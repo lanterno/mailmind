@@ -68,9 +68,5 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 - `msg_fts` keeps no copy of the mail (m38: `content=''`, `contentless_delete=1`, SQLite 3.43 or newer, which `init`
   checks). Read rowids and ranks from it and columns from `messages`; its own columns read as NULL, and `snippet()`
   and `highlight()` have nothing to work on. `uv run python -m mailmind db compact` (`just db-compact`) gives back freed room.
-- `uv run python -m mailmind db encrypt` (`just db-encrypt`) encrypts a database from before encryption, and its backups,
-  with MailMind stopped: it exports each into an encrypted file beside it, checks that file holds every table's rows and
-  passes the integrity, foreign key and search index checks at the same version, and only then puts it in place. `--dry`
-  does it on a copy with a key made for the copy, and asks no Keychain. The owner runs it on the real database; no agent does.
 - `tests/unit/platform/test_db_upgrade.py` upgrades a database seeded with data from every version. A
   migration that derives a column on purpose adds it to `DERIVED` there.

@@ -4,8 +4,8 @@
 `RECEIPT`, `PROTECTED`, `PERSONAL`); `JUNK_BUCKETS` decides what ingest drops. It's a pure function of a
 message's headers and the rule book's lists, and `bootstrap.curation.classify` calls it with the rules as they stand.
 `curation.domain.rulebook` is a learned per-sender/domain keep/block list on top, kept in the database, which is encrypted
-([At rest](security.md#at-rest)), as the `rules` document (`platform.documents`, migration 48). Its body is the JSON
-`mailmind_rules.json` held, so importing that file is an INSERT of its text; nothing reads or writes the file any more. The same
+([At rest](security.md#at-rest)), as the `rules` document (`platform.db.documents`, migration 48). Its body is the JSON
+the rule book's old file held; nothing reads or writes a file of it any more. The same
 document holds expiry rules (`expire_hours`: sender/domain → hours), enforced by
 `Expiry.account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.

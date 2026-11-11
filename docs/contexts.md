@@ -111,7 +111,7 @@ See [Architecture](architecture.md) for the layers around them.
   to the server, in what order, stays in the use cases: audit before a move, block before sweep before unsubscribe. A rule change's
   `reclassify` stays a direct call, since its count is in the answer, it runs after the sweep, and when it fails an Undo of a block
   says so, none of which a handler after the commit could do. `adapters` holds `rules_document` (the rule book, the `rules`
-  document in the database, through `platform.documents`),
+  document in the database, through `platform.db.documents`),
   `safe_http` (the one-click POST, the one request MailMind makes to an address a message named, vetted as hostile),
   `sqlite` (reads `messages` as a read model, owns `unsub_log` and `sender_unsub`) and `audit_events` (`AuditEvents`, the `SweepTrail`
   port: a record of each message a sweep or expiry trashes and of each sender's cleanup, in the database's audit trails, and both trails

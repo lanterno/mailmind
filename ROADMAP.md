@@ -68,7 +68,3 @@ implementation.
 
 1. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
-2. **Keep the rest of what is personal in the encrypted database** (high) — the database is encrypted, and the rules, views,
-   snippets and audit trails are still files beside it, readable by their owner only. Moved into tables, a copy of the data
-   directory holds nothing readable without the Keychain's key. Accounts' inline passwords in `mailmind.config.json` (the
-   `plain` credential) would go to the Keychain on the same road.

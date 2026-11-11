@@ -23,7 +23,7 @@ See [Features](#features) for what ships today and
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
-> **Heads-up:** summaries and the other AI features need a Claude API key, in `mailmind.config.json` (`"anthropic_api_key"`) or `ANTHROPIC_API_KEY`; calls are billed per token to that key's organization. Without one, AI is off: MailMind still ingests and curates mail, sends nothing to Anthropic, and the brief says AI is off and how to turn it on.
+> **Heads-up:** summaries and the other AI features need a Claude API key, kept in your login Keychain with `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`; calls are billed per token to that key's organization. Without one, AI is off: MailMind still ingests and curates mail, sends nothing to Anthropic, and the brief says AI is off and how to turn it on.
 
 ---
 
@@ -249,9 +249,9 @@ automatically.
   per-message triage runs at low effort, everything else at medium). Without a key, AI is off and
   nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
-  The key goes in `mailmind.config.json` as `"anthropic_api_key"` (inline, or
-  `{"op": …}` / `{"env": …}` like an account password), and that wins over
-  `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
+  `uv run python -m mailmind ai key` keeps the key in the login Keychain and points `"anthropic_api_key"` in
+  `mailmind.config.json` at it (or name it there with `{"op": …}` / `{"env": …}`, like an account password), and
+  that wins over `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
   accident. The server's startup line names the model and where the key came from.
   The sync menu names the model, and in red the reason ("the API key was rejected",
   "rate-limited for now") when the last call failed. With no key, the brief says
@@ -475,9 +475,11 @@ automatically.
 
 - **Your mail is encrypted on disk.** The database, its log, its backups and a database export are encrypted with
   SQLCipher (AES-256), with a key MailMind makes once and keeps in your login Keychain, so a copy of the file, in a backup
-  of the disk, a sync folder or anyone else's hands, can't be read without it. Every other file MailMind writes, an export
-  included, is readable by you only. A database from before encryption is refused until
-  `uv run python -m mailmind db encrypt` encrypts it (`--dry` tries it on a copy first).
+  of the disk, a sync folder or anyone else's hands, can't be read without it. Your rules, saved views, snippets and the
+  audit trails are in it too, never in a file beside it. Every file an export writes is readable by you only.
+- **Your passwords are in the Keychain, never in a file.** A password you type in Settings, or give
+  `uv run python -m mailmind accounts password you@example.com`, and the Claude API key (`ai key`) go to your login
+  Keychain; `mailmind.config.json` only says where each one is. A config that holds a password itself is refused.
 - **One-click local backup** of your whole mailbox as a consistent `.db` snapshot, encrypted as the database is, from
   Settings, or a zip of lossless per-message `.eml` files or standard `mbox` archives, there
   or from the command line (`uv run python -m mailmind export --format eml --out DIR`). Read-only — it never
@@ -552,21 +554,21 @@ automatically.
 ## Prerequisites
 
 - **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14.
-- **macOS**, whose login Keychain keeps the key the database is encrypted with. Elsewhere, set `MAILMIND_DB_KEY` to
-  64 hex digits of your own (`openssl rand -hex 32`) and keep them safe: they are the only way into the database.
+- **macOS**, whose login Keychain keeps the key the database is encrypted with, your account passwords and the Claude
+  API key. Elsewhere, set `MAILMIND_DB_KEY` to 64 hex digits of your own (`openssl rand -hex 32`) and keep them safe:
+  they are the only way into the database. Passwords can then come from 1Password or the environment.
 - **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the six packages the
   server and every command run on, FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and
   recurring-ical-events, from `pyproject.toml` on first run. Every command is
   `uv run python -m mailmind ...`.
 - **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
   builds it first.
-- **A Claude API key**, for summaries and the other AI features, as
-  `"anthropic_api_key"` in `mailmind.config.json` or in `ANTHROPIC_API_KEY`. Without one,
-  AI is off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
+- **A Claude API key**, for summaries and the other AI features, kept in the Keychain with
+  `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`. Without one, AI is off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
 - **Optional:** [`just`](https://just.systems), which wraps the commands below. Without it, build
   the app with `cd web && npm ci && npx vite build`, then run `uv run python -m mailmind serve`.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
-  CLI — only if you want to keep passwords in 1Password instead of inline.
+  CLI — only if you want to keep passwords in 1Password instead of the Keychain.
 - **Optional:** [Proton Mail Bridge](https://proton.me/mail/bridge) — only if you
   add a Proton account (it must be installed and running).
 
@@ -579,9 +581,11 @@ git clone https://github.com/<you>/mailmind.git && cd mailmind
 # Nothing of yours is read or changed, and Ctrl-C ends it. (Needs uv, just and Node.)
 just demo                         # http://127.0.0.1:8721   (custom port: just demo 9000)
 
-# 1. Configure ONE account to start (delete the others in the example)
+# 1. Configure ONE account to start (delete the others in the example), and keep its password in the Keychain
 cp mailmind.config.example.json mailmind.config.json
 $EDITOR mailmind.config.json
+uv run python -m mailmind accounts password you@example.com   # asks for it; or add the account in Settings
+uv run python -m mailmind ai key                                # the Claude API key, the same way
 
 # 2. Verify the credentials resolve (prints ok/fail per account and for the API key, no secrets)
 uv run python -m mailmind check
@@ -598,24 +602,20 @@ just run                          # builds the app, then http://127.0.0.1:8721  
 
 You can manage connections two ways: the dashboard's **⚙ Settings** panel
 (add / edit / remove accounts, set a friendly **alias** per mailbox, and test a
-connection — stored passwords are never sent back to the browser), or by editing
+connection — a password you type goes to your login Keychain, and is never sent back to the browser), or by editing
 `mailmind.config.json` directly as below.
 
-Each account has a `type` and a `credential`. There are **two ways** to supply
-the password — mix freely per account:
+Each account has a `type` and a `credential`, which says where its password is. The file never holds a password
+itself: one that does is refused, and MailMind won't start until it is in the Keychain.
 
 ```jsonc
 {
   "accounts": [
-    // Self-contained (no extra tools): put the password right in the file.
-    { "email": "you@gmail.com", "type": "gmail", "credential": "abcd efgh ijkl mnop" },
+    // In your login Keychain: `uv run python -m mailmind accounts password you@gmail.com` puts it there and writes this.
+    { "email": "you@gmail.com", "type": "gmail", "credential": { "keychain": "account:you@gmail.com", "version": 1 } },
 
-    // Generic hosted IMAP (set host/port; port 143 + "starttls": true for STARTTLS).
-    { "email": "you@company.com", "type": "imap", "host": "mail.yourhost.com",
-      "port": 993, "trash": "Trash", "credential": { "plain": "your-mailbox-password" } },
-
-    // Keep the secret out of the file — read it from 1Password or an env var.
-    { "email": "secure@company.com", "type": "imap", "host": "mail.yourhost.com",
+    // Generic hosted IMAP (set host/port; port 143 + "starttls": true for STARTTLS), its password in 1Password.
+    { "email": "secure@company.com", "type": "imap", "host": "mail.yourhost.com", "port": 993, "trash": "Trash",
       "credential": { "op": "op://Private/Your Mail Item/password" } },
 
     // Proton — via the local Bridge.
@@ -624,11 +624,13 @@ the password — mix freely per account:
 }
 ```
 
-Credential styles: `"a-string"` or `{"plain": "…"}` (inline) · `{"op": "op://Vault/Item/Field"}`
-(1Password) · `{"env": "VAR_NAME"}` (environment variable) · `{"proton_bridge": true}`.
+Credential styles: `{"keychain": "account:you@x"}` (the login Keychain, which Settings and `accounts password` write)
+· `{"op": "op://Vault/Item/Field"}` (1Password) · `{"env": "VAR_NAME"}` (environment variable) ·
+`{"proton_bridge": true}`. `uv run python -m mailmind accounts materialize` moves what an `op` or `env` credential
+names into the Keychain.
 
-Two top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` is the Claude API
-key, in any credential style. `"ai_daily_limit_usd"` is the most MailMind spends on it in a day,
+Two top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` says where the Claude API key is, in any
+of those styles (`ai key` keeps it in the Keychain as `anthropic-api-key`). `"ai_daily_limit_usd"` is the most MailMind spends on it in a day,
 in US dollars: `15` unless you set another positive number.
 
 An account may say `"pool": true` to keep a connection open between reads, and `"warm_folders": true` to sync its
@@ -681,12 +683,14 @@ uv run python -m mailmind rules block spammer.com # always trash (writes a rule)
 uv run python -m mailmind rules                  # show the learned lists
 uv run python -m mailmind rules expire github.com 72  # trash this domain's INBOX mail after 72h (0 clears)
 uv run python -m mailmind expire all --dry       # preview what the expiry rules would trash now
+uv run python -m mailmind accounts password you@x.com  # keep an account's password in the login Keychain
+uv run python -m mailmind ai key                  # keep the Claude API key there
 uv run python -m mailmind assess --batch         # what has no summary yet, as a batch at half price, within today's limit; again for the answers
 ```
 
 > ⚠️ **`sweep`, `sweep-stored`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
-> Always `--dry` first. Every sweep/reconcile is logged to `sweep_audit.jsonl` /
-> `reconcile_audit.jsonl`. Moves go to Trash and are recoverable; Gmail purges
+> Always `--dry` first. Every sweep and reconcile is recorded in the audit trail, in the database.
+> Moves go to Trash and are recoverable; Gmail purges
 > its Trash after 30 days.
 
 ## Environment variables
@@ -697,7 +701,7 @@ uv run python -m mailmind assess --batch         # what has no summary yet, as a
 | `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves, flag changes and a draft's copy on the server wait for a full run, sweeps and one-click unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |
-| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. `"anthropic_api_key"` in `mailmind.config.json` wins over it. Neither set: AI is off. |
+| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. Neither set: AI is off. |
 | `MAILMIND_LOG_LEVEL=DEBUG` | Show debug lines and each error's text and traceback on the terminal, for chasing a fault. They can hold addresses and subjects. `mailmind.log` never does. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5` |
 | `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). |
@@ -730,29 +734,21 @@ in `mailmind.config.json`; a variable that is set decides over the file.
 
 In the repo folder, or in the directory `MAILMIND_HOME` names:
 
-- `mailmind.db` — SQLite store of messages, bodies, attachments + summaries, encrypted with the key in your login
-  Keychain (the item `mailmind`). Keep a copy of that key somewhere safe, such as 1Password: without it neither the
-  database nor its backups can be read on another computer. `security find-generic-password -s mailmind -a
-  database-key -w` prints it.
-- `mailmind_snippets.json` — your saved snippets, written whole, readable by you only.
-- `mailmind_rules.json` — your learned keep/block lists, expiry rules and filters. It's written whole or
-  not at all, readable by you only. A hand edit that breaks it leaves the rules last read in
-  force, and the next save keeps the broken copy in `backups/`.
-- `mailmind_views.json` — your saved searches / smart-folder lanes.
-- `sweep_audit.jsonl` / `reconcile_audit.jsonl` — audit trails, readable by you only.
+- `mailmind.db` — messages, bodies, attachments, summaries, your learned keep/block lists, expiry rules and filters,
+  saved views, snippets and the audit trails, encrypted with the key in your login Keychain. Keep a copy of that key
+  somewhere safe, such as 1Password: without it neither the database nor its backups can be read on another computer.
+  `security find-generic-password -s mailmind -a database-key -w` prints it.
 - `mailmind.log` (and `.1` to `.3`, older) — what the app said of its own running, one JSON object a
   line, readable by you only. It holds ids, counts and the kinds of error, never an address or a subject.
-- `backups/` — the database as it stood before each upgrade (the newest three, encrypted and readable by you
-  only), and any rules file that wouldn't parse.
-- `mailmind.config.json` — your accounts + credentials.
+- `backups/` — the database as it stood before each upgrade (the newest three, encrypted and readable by you only).
+- `mailmind.config.json` — your accounts, your preferences, and where each password is (never a password itself),
+  readable by you only.
+
+The login Keychain's items under the service `mailmind` hold the rest: `database-key`, each account's password
+(`account:<address>`) and the Claude API key (`anthropic-api-key`).
 
 All of the above are in `.gitignore`, and a `MAILMIND_HOME` outside the repo keeps them out of
 it altogether. **Nothing personal is committed.**
-
-**Coming from a version before encryption?** MailMind won't open a plaintext database. Stop it, then run
-`uv run python -m mailmind db encrypt --dry` (it tries the encryption on a copy and shows only counts and checks), then
-`uv run python -m mailmind db encrypt`, which encrypts the database and its backups, each checked before it replaces
-one. Encryption doesn't reach what the plaintext file left in free space on the disk; FileVault does.
 
 ## Testing
 
@@ -785,10 +781,8 @@ tools from `pyproject.toml` on first use, as it does the app's own packages.
 
 ## Privacy & contributing
 
-This is a personal-data app. **Never commit** `mailmind.config.json`,
-`mailmind_rules.json` (it holds your personal keep/block entries), `mailmind.db`,
-the audit `*.jsonl` files, or screenshots of real mail — the `.gitignore` covers
-them; don't `git add -f` around it. PRs welcome. A package the server needs is declared in
+This is a personal-data app. **Never commit** `mailmind.config.json`, `mailmind.db`, its `backups/`, the log, or
+screenshots of real mail — the `.gitignore` covers them; don't `git add -f` around it. PRs welcome. A package the server needs is declared in
 `pyproject.toml`, and one the app needs in `web/package.json`.
 
 ## License

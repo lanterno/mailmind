@@ -31,7 +31,8 @@ uv run python -m mailmind sweep --dry   # what a junk sweep would trash; also st
 uv run python -m mailmind export        # what an export would hold; `--format eml|mbox|db --out DIR` writes it
 uv run python -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
 uv run python -m mailmind db compact         # owner only, MailMind stopped: give back the room freed in the file
-uv run python -m mailmind db encrypt --dry   # owner only: encrypting a plaintext database, tried on a copy; then without --dry
+uv run python -m mailmind accounts password WHO   # keep an account's password in the login Keychain (prompt, or stdin)
+uv run python -m mailmind ai key                  # keep the Claude API key there
 uv run python -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
 uv run python -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
@@ -49,8 +50,7 @@ test name; `just test -n0` runs them in one process.
 - **The app exists only as built.** `web/index.html` and `web/src/main.tsx` are the React app, and `just build-web` writes it to
   `mailmind/http/dist` (gitignored). `just run` builds it first, and an edit reaches the app only through a build. See
   [docs/frontend.md](docs/frontend.md).
-- **Nothing personal is committed.** `mailmind.db`, `mailmind.config.json`,
-  `mailmind_rules.json`, `mailmind_views.json`, `mailmind_snippets.json`, `mailmind.log*` and `*.jsonl` audit trails are gitignored.
+- **Nothing personal is committed.** `mailmind.db` and its `backups/`, `mailmind.config.json` and `mailmind.log*` are gitignored.
   They live in the data directory: the repo root, unless `MAILMIND_HOME` names another.
   The repo is public — treat any real address, employer or message count as a leak.
 
@@ -88,7 +88,12 @@ The docs below say why. These are the ones a change can break without noticing:
   call: commit first, and a new network path calls `txguard.refuse_network`.
 - **The database is encrypted.** Open a database file only through `platform.db.database` (`connect`, or `keyed` for a copy), and take
   SQLite's names from `platform.db.driver`, never the standard library's `sqlite3`, which reads no encrypted file and whose errors no
-  `except` of the driver's catches. A new file holding mail is a database keyed the same way, never a plaintext one beside it.
+  `except` of the driver's catches. A person's data goes in the database (a table, or a `documents` row), never in a new file
+  beside it.
+- **Secrets.** Only `mailmind.platform.keychain` touches the login Keychain, through `/usr/bin/security` with the secret on
+  standard input. A secret never goes on a command line, into a log line or into an error message. `mailmind.config.json`
+  never holds one: a credential names a Keychain item, an op reference, a variable or the Bridge password. Tests use the
+  `fake_keychain` stand-in, never the real Keychain.
 - **Migrations are append-only.** A schema change is a new file after the last. Never edit the frozen `migrations/m0001_m0020.py` and the
   copies beside it, never renumber or delete one. Rename `tests/golden/schema_v<N>.sql` in the commit that adds migration N.
 - **Identity.** `pk` is not stable. Durable state keys on the message key, and the API names no pk: a copy is key, folder and uid.
