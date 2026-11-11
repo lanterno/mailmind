@@ -65,7 +65,7 @@ class Status:
             return "key from " + source
         if source == "mailmind.config.json":
             return "no key, so AI is off: the anthropic_api_key in mailmind.config.json can't be read"
-        return "no key, so AI is off: set anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY"
+        return "no key, so AI is off: keep one with `uv run python -m mailmind ai key`, or set ANTHROPIC_API_KEY"
 
     def report(self) -> dict[str, Any]:
         """What the UI says about AI, with no call made: the engine ("api", or "none" with no key),

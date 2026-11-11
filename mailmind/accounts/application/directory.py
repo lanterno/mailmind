@@ -31,7 +31,8 @@ from typing import Any
 from mailmind.accounts.application.ports import AccountRepository, SecretStore
 from mailmind.accounts.domain import account, events, preferences
 from mailmind.accounts.domain.account import Entry, MaskedRow
-from mailmind.accounts.domain.credential import CredentialRef, Typed, account_item, credential_from, keychain_credential
+from mailmind.accounts.domain.credential import (API_KEY_ITEM, CredentialRef, Typed, account_item, credential_from,
+                                                 keychain_credential)
 from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.parsed import is_object
 from mailmind.platform import bus
@@ -241,6 +242,34 @@ class Directory:
             self.save(raw)
         bus.publish(events.AccountRemoved(entry["email"]))
         return True
+
+    def set_password(self, email: str | None, secret: str) -> str:
+        """Keep `secret` as the account's password, in its own Keychain item, and point the file at the item, whatever its
+        credential said before. The answer is the item's name. Raises KeyError for an account the file doesn't hold,
+        ValueError for a secret the Keychain can't hold, and Unreachable when the Keychain won't keep it."""
+        with self._write_lock:
+            raw = self._raw()
+            entry = account.find(raw, email)
+            if entry is None:
+                raise KeyError(email)
+            old = entry.get("credential")
+            entry["credential"] = self._kept(account_item(entry["email"]), Typed(secret), old)
+            self._secrets.evict(old)
+            self.save(raw)
+        bus.publish(events.AccountChanged(entry["email"]))
+        return entry["credential"]["keychain"]
+
+    def set_api_key(self, secret: str) -> str:
+        """Keep `secret` as the Claude API key, in its Keychain item, and point the file's anthropic_api_key at the item,
+        whatever it said before. The answer is the item's name. Raises as set_password does."""
+        with self._write_lock:
+            raw = self._raw()
+            raw.setdefault("accounts", [])
+            old = raw.get("anthropic_api_key")
+            raw["anthropic_api_key"] = self._kept(API_KEY_ITEM, Typed(secret), old)
+            self._secrets.evict(old)
+            self.save(raw)
+        return API_KEY_ITEM
 
     def materialize(self, only: str | None = None) -> None:
         """Keep each account's secret that lives elsewhere (1Password, a variable, the Bridge password) in

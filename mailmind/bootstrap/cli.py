@@ -1,7 +1,9 @@
 """What `python -m mailmind <command>` does for the commands that reach mail, rules, views or an
 export. Each imports what it needs when it runs, so `db` and `ai` load none of it.
 """
+import getpass
 import imaplib
+import sys
 
 from mailmind.accounts.api import CredentialRef, provider_of
 from mailmind.bootstrap import curation, discovery, mailbox
@@ -30,6 +32,53 @@ def list_accounts():
 def materialize(only):
     from mailmind.bootstrap.accounts import config
     config.materialize(only)
+
+
+def _secret(prompt):
+    """What the person types at a prompt that shows nothing, or the first line of standard input when it's no terminal.
+    Spaces around it go, as the settings page trims a password."""
+    if sys.stdin.isatty():
+        return getpass.getpass(prompt).strip()
+    return sys.stdin.readline().strip()
+
+
+def _keep(prompt, keep, said):
+    """Read a secret, keep it with `keep`, and say where: 0 when it was kept, 1 when nothing changed."""
+    from mailmind.kernel.errors import Problem
+    secret = _secret(prompt)
+    if not secret:
+        print("Nothing was given, so nothing changed.")
+        return 1
+    try:
+        item = keep(secret)
+    except (ValueError, Problem) as e:      # their words, which hold no secret
+        print(f"Nothing changed: {e}")
+        return 1
+    except KeyError as e:                   # gone from the file since it was asked
+        print(f"Nothing changed: mailmind.config.json has no account {e.args[0]}.")
+        return 1
+    print(said(item))
+    return 0
+
+
+def set_password(who):
+    """`accounts password WHO`: the account's password, kept in the login Keychain, and the config pointed at it."""
+    from mailmind.bootstrap.accounts import config
+    if not who:
+        print("Name the account: uv run python -m mailmind accounts password you@example.com")
+        return 1
+    if all((r["email"] or "").strip().lower() != who.strip().lower() for r in config.masked_rows()):
+        print(f"mailmind.config.json has no account {who}: add it in Settings, or to the file, first.")
+        return 1
+    return _keep(f"Password for {who} (nothing shows as you type): ", lambda secret: config.set_password(who, secret),
+                 lambda item: f"{who}'s password is in the login Keychain as {item}, and mailmind.config.json names it.")
+
+
+def set_api_key():
+    """`ai key`: the Claude API key, kept in the login Keychain, and the config pointed at it."""
+    from mailmind.bootstrap.accounts import config
+    return _keep("Claude API key (nothing shows as you type): ", config.set_api_key,
+                 lambda item: f"The Claude API key is in the login Keychain as {item}, and mailmind.config.json names it.")
 
 
 def sync(who, days):

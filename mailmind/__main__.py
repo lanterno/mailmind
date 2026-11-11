@@ -4,6 +4,8 @@
   check                        whether each account's credential resolves: ok or fail, never a secret
   accounts [materialize [WHO]] the connected accounts; `materialize` keeps each secret held elsewhere
                                (1Password, a variable, the Bridge password) in the Keychain
+  accounts password WHO        keep WHO's password in the login Keychain and point the config at it: it asks
+                               at a prompt that shows nothing, or reads the first line of standard input
   sync [WHO] [days]            pull mail from the servers into the database
   assess [limit] [workers]     summarize the mail with no summary yet, at full price
   assess --batch               send it as a batch at half price, within today's limit, and bring in
@@ -29,6 +31,8 @@
                                whole; no sync needs it, and what it changes moves as a merge does
   ai usage [--days N]          what the Claude API cost each local day of the last N (default 7), by
                                feature, from the usage ledger; it migrates nothing and calls nothing
+  ai key                       keep the Claude API key in the login Keychain and point the config at it, as
+                               `accounts password` does
 """
 import argparse
 import os
@@ -51,8 +55,8 @@ def parser():
     serve.add_argument("port", nargs="?", type=int, help="default 8721")
     commands.add_parser("check", help="whether each account's credential resolves")
     people = commands.add_parser("accounts", help="the connected accounts")
-    people.add_argument("action", nargs="?", choices=["list", "materialize"], default="list")
-    people.add_argument("who", nargs="?", help="with materialize, just this account")
+    people.add_argument("action", nargs="?", choices=["list", "materialize", "password"], default="list")
+    people.add_argument("who", nargs="?", help="with materialize, just this account; with password, the account")
     sync = commands.add_parser("sync", help="pull mail into the database")
     sync.add_argument("who", nargs="?", default="all", help="an account's address, or all")
     sync.add_argument("days", nargs="?", type=int, help="how far back")
@@ -94,6 +98,7 @@ def parser():
     ai = commands.add_parser("ai", help="the Claude API").add_subparsers(dest="ai_command", required=True)
     usage = ai.add_parser("usage", help="what AI cost each day, by feature")
     usage.add_argument("--days", type=int, default=7, help="how many days, today included (default 7)")
+    ai.add_parser("key", help="keep the Claude API key in the login Keychain")
     return top
 
 
@@ -121,6 +126,9 @@ def _run(args):
     if args.command == "assess" and args.batch:
         from mailmind.bootstrap import wiring
         sys.exit(wiring.assess_batch())
+    if args.command == "ai" and args.ai_command == "key":
+        from mailmind.bootstrap import cli
+        sys.exit(cli.set_api_key())
     if args.command == "ai":
         sys.exit(ai_usage(args.days))
     if args.command == "db" and args.db_command == "rethread":
@@ -138,6 +146,8 @@ def _run(args):
         from mailmind.bootstrap import cli
         if args.command == "check":
             return cli.check()
+        if args.command == "accounts" and args.action == "password":
+            sys.exit(cli.set_password(args.who))
         if args.command == "accounts":
             return cli.materialize(args.who) if args.action == "materialize" else cli.list_accounts()
         if args.command == "sync":
