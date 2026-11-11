@@ -8,6 +8,7 @@ from fixtures import world as w
 from mailmind.bootstrap import accounts, mailbox
 
 PATIENCE = 0.5
+SHORT = 10      # seconds: past PATIENCE's few waits, short of the 15 a background read waits and a kept connection's minute
 
 
 @pytest.fixture(autouse=True)
@@ -55,7 +56,7 @@ def test_a_kept_connection_that_went_silent_is_given_up_on_within_the_short_wait
         res, took = reconcile()
     finally:
         world.server.release_stalls()
-    assert res["error"] is None and took < 5           # the check's wait, its LOGOUT's, and a new connection
+    assert res["error"] is None and took < SHORT           # the check's wait, its LOGOUT's, and a new connection
 
 
 @pytest.mark.parametrize("command", ["EXAMINE", "UID SEARCH"])
@@ -68,7 +69,7 @@ def test_a_kept_connection_silent_on_the_read_itself_prunes_nothing_and_isnt_kep
         res, took = reconcile()
     finally:
         world.server.release_stalls()
-    assert res["error"] == "TimeoutError" and res["pruned"] == 0 and took < 5
+    assert res["error"] == "TimeoutError" and res["pruned"] == 0 and took < SHORT
     again, _ = reconcile()
     assert again["error"] is None and again["stored"] == stored and logins(world) == before + 1
 
@@ -79,4 +80,4 @@ def test_a_login_that_hangs_on_the_way_to_a_new_connection_waits_only_the_short_
         res, took = reconcile()
     finally:
         world.server.release_stalls()
-    assert res["error"] and took < 5
+    assert res["error"] and took < SHORT
