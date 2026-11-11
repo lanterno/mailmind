@@ -75,6 +75,12 @@ def reading(page, key):
     return frame
 
 
+def loaded(page, frame):
+    """Waits for the frame's document to have loaded: all it holds has tried to load, to run and to refresh by then. The page
+    dresses it sooner, once it is parsed."""
+    until(page, lambda: frame.evaluate("f => f.contentDocument?.readyState") == "complete", "the frame never loaded")
+
+
 def unsanitized(monkeypatch):
     monkeypatch.setattr("mailmind.content.sanitize.sanitize",
                         lambda html, load_images=False, fold=True: (html, {"blocked_images": 1, "blocked_css_urls": 0}))
@@ -117,7 +123,7 @@ def test_a_hostile_body_runs_nothing_and_reaches_nothing(page, world, monkeypatc
     pk, key = arrives(world, HOSTILE)
     frame = reading(page, key)
     assert frame.evaluate("f => f.contentDocument.querySelectorAll('script').length") > 0     # it did get here
-    page.wait_for_timeout(300)
+    loaded(page, frame)
     nothing_got_out(page)
     assert "/body.html" in frame.evaluate("f => f.contentDocument.URL")
     only_refused(page)
@@ -130,7 +136,7 @@ def test_what_a_hostile_body_can_be_clicked_into_stops_too(page, world, monkeypa
     url = frame.evaluate("f => f.contentDocument.URL")
     frame.evaluate("f => f.contentDocument.getElementById('go').click()")
     frame.evaluate("f => f.contentDocument.getElementById('js').click()")
-    page.wait_for_timeout(300)
+    page.wait_for_timeout(300)      # a javascript: link would run in a task after the click; nothing says it was refused
     nothing_got_out(page)
     assert frame.evaluate("f => f.contentDocument.URL") == url
     only_refused(page)
@@ -144,7 +150,7 @@ def test_with_images_asked_for_a_hostile_body_still_runs_nothing(page, world, mo
     until(page, lambda: TRACKER in page.blocked, "the image was never asked for")
     frame = page.locator("iframe.rd-iframe")
     until(page, lambda: "images=1" in frame.evaluate("f => f.contentDocument?.URL ?? ''"), "the frame kept its URL")
-    page.wait_for_timeout(300)
+    loaded(page, frame)
     assert page.evaluate("document.body.dataset.pwned") is None
     assert all(u.startswith("https://tracker.example.test/") for u in page.blocked), page.blocked     # images, and nothing else
     only_refused(page)
@@ -163,10 +169,10 @@ def test_the_documents_own_sandbox_holds_with_no_attribute_on_the_frame(page, wo
     bare = page.locator("#bare")
     assert bare.get_attribute("sandbox") is None
     until(page, lambda: bare.evaluate("f => f.contentDocument?.getElementById('said')?.textContent") == "Hello", "it never loaded")
-    page.wait_for_timeout(300)
-    nothing_got_out(page)
+    loaded(page, bare)
     # The policy's default-src would stop a script alone. Only a sandbox stops a <meta> refresh, and only the header's is here.
-    assert any("The document is sandboxed" in p for p in page.problems), page.problems
+    until(page, lambda: any("The document is sandboxed" in p for p in page.problems), "the refresh wasn't refused")
+    nothing_got_out(page)
     only_refused(page)
 
 
@@ -176,12 +182,12 @@ def test_no_remote_image_loads_until_asked_and_then_it_does(page, world):
     referrers = []
     page.pw.on("request", lambda r: referrers.append(r.headers.get("referer")) if r.url == TRACKER else None)
     frame = reading(page, key)
-    page.wait_for_timeout(200)
+    expect(page.locator(".rd-imgbar")).to_contain_text("1 remote image hidden")
+    expect(page.locator(".rd-extbar")).to_contain_text("1 tracker blocked")
+    loaded(page, frame)
     read = len(answers)
     clean(page)                                     # nothing has gone to the tracker
     assert frame.evaluate("f => f.contentDocument.images[0].getAttribute('src')") is None
-    expect(page.locator(".rd-imgbar")).to_contain_text("1 remote image hidden")
-    expect(page.locator(".rd-extbar")).to_contain_text("1 tracker blocked")
     page.get_by_role("button", name="Load images").click()
     until(page, lambda: page.blocked == [TRACKER], "the image was never asked for")
     expect(page.locator(".rd-imgbar")).to_have_count(0)
@@ -198,7 +204,7 @@ def test_the_documents_own_policy_stops_a_remote_image_the_sanitizer_let_through
     pk, key = arrives(world, f'<img src="{TRACKER}" alt="tracker">')
     frame = reading(page, key)
     assert frame.evaluate("f => f.contentDocument.images.length") == 1
-    page.wait_for_timeout(200)
+    loaded(page, frame)
     assert page.blocked == []
     only_refused(page)
 
@@ -351,10 +357,10 @@ def test_a_mail_as_tall_as_its_frame_doesnt_keep_growing_it(page, world, monkeyp
     unsanitized(monkeypatch)
     pk, key = arrives(world, "<style>html,body{height:100%}</style><p>Hello</p>")
     frame = reading(page, key)
-    until(page, lambda: frame.evaluate("f => f.contentDocument.readyState") == "complete", "it never loaded")
-    page.wait_for_timeout(200)
+    loaded(page, frame)
+    page.wait_for_timeout(200)      # the page fits it again on load, after it has drawn what came before
     settled = frame.evaluate("f => parseInt(f.style.height)")
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(500)      # what this asks is that time passing grows it no more
     assert frame.evaluate("f => parseInt(f.style.height)") == settled < 2000
     clean(page)
 
