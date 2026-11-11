@@ -18,7 +18,7 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"
 def posts(monkeypatch):
     sent = []
     monkeypatch.setattr(safe_http, "one_click_post", lambda url, _redirects=1: (sent.append(url), (True, 200, None))[1])
-    monkeypatch.setattr(unsubscribe, "rate_gate", lambda: None)
+    monkeypatch.setattr(unsubscribe.Pace, "wait_turn", lambda self: None)
     return sent
 
 
