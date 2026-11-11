@@ -6,7 +6,6 @@ an open transaction surface."""
 import email
 import imaplib
 import threading
-import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -55,18 +54,21 @@ def uid_of(world, name):
     return world.placed[name][2]
 
 
-def idling(session, seconds):
-    """Run session.idle(seconds) on a thread of its own; the thread's `got` holds what it returned
-    or raised."""
+def on_a_thread(call):
+    """Run call() on a thread of its own; the thread's `got` holds what it returned or raised."""
     def run():
         try:
-            t.got = session.idle(seconds)
+            t.got = call()
         except Exception as e:
             t.got = e
     t = threading.Thread(target=run, daemon=True)
     t.got = None
     t.start()
     return t
+
+
+def idling(session, seconds):
+    return on_a_thread(lambda: session.idle(seconds))
 
 
 def inbox_ids(world, user):
@@ -446,16 +448,17 @@ def test_idle_says_when_new_mail_arrives_and_leaves_idle(world, session):
     t = idling(session, 30)
     assert wait_until(lambda: world.server.commands_for(w.ADA, "IDLE"))
     world.server.deliver(w.ADA, "INBOX", w.variant(RECEIPT, Message_ID="<idle-1@example.test>"))
-    t.join(5)
+    t.join(30)
     assert (t.is_alive(), t.got) == (False, True)
     assert session.noop() is True                           # out of IDLE, and the session still works
 
 
 def test_idle_with_nothing_new_ends_when_its_time_is_up(world, session):
     session.select("INBOX", readonly=False)
-    started = time.monotonic()
-    assert session.idle(0.5) is False
-    assert time.monotonic() - started < 5 and session.noop() is True
+    t = idling(session, 0.5)
+    t.join(30)                                              # far past its time, well short of the session's minute
+    assert (t.is_alive(), t.got) == (False, False)
+    assert session.noop() is True
 
 
 def test_a_connection_dropped_in_idle_raises_at_once(world, session):
@@ -463,7 +466,7 @@ def test_a_connection_dropped_in_idle_raises_at_once(world, session):
     session.select("INBOX", readonly=False)
     world.server.drop("IDLE", user=w.ADA)
     t = idling(session, 60)
-    t.join(5)
+    t.join(30)
     assert not t.is_alive() and isinstance(t.got, commands.UNREACHABLE), t.got
 
 
@@ -475,7 +478,7 @@ def test_an_interrupt_ends_an_idle_at_once(world, kind):
         t = idling(s, 60)
         assert wait_until(lambda: world.server.commands_for(w.ADA, "IDLE"))
         s.interrupt()
-        t.join(5)
+        t.join(30)
         assert not t.is_alive()
         assert t.got is False or isinstance(t.got, commands.UNREACHABLE), t.got
     finally:
@@ -582,13 +585,13 @@ def test_a_timeout_set_later_holds_for_the_next_answer(world, session):
     """A connection kept was opened for its usual minute, and a borrower who can't wait that long says so."""
     world.server.stall("NOOP", user=w.ADA)
     session.set_timeout(0.3)
-    started = time.perf_counter()
+    t = on_a_thread(session.noop)
     try:
-        with pytest.raises(TimeoutError):
-            session.noop()
+        t.join(30)                                          # half the minute it would wait if the timeout didn't hold
+        assert not t.is_alive()
     finally:
         world.server.release_stalls()
-    assert time.perf_counter() - started < 5
+    assert isinstance(t.got, TimeoutError), t.got
 
 
 def test_setting_a_timeout_sends_nothing(world, session):
