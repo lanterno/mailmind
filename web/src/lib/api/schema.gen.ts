@@ -2699,9 +2699,12 @@ export interface components {
         };
         /**
          * CredentialShown
-         * @description `CredentialRef.masked`: its style, whether it's set, and at most a pointer to it, an op reference or a variable's name.
+         * @description `CredentialRef.masked`: its style, whether it's set, and at most a pointer to it, a Keychain item's name, an op reference
+         *     or a variable's name.
          */
         CredentialShown: {
+            /** Item */
+            item?: string | null;
             /** Ref */
             ref?: string | string[] | null;
             /** Set */
