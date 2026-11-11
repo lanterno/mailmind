@@ -184,3 +184,25 @@ def test_only_the_owner_writes_a_table():
     assert set(written) <= set(owner), "a table with no owner here"
     crossings = {(table, place) for table, places in written.items() for place in places if place != owner[table]}
     assert crossings == CROSSINGS
+
+
+def assembled(module):
+    """The names a context's wiring makes afresh in its assemble(): what it holds between requests."""
+    tree = ast.parse((PACKAGE / "bootstrap" / f"{module}.py").read_text(encoding="utf-8"))
+    return {name for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "assemble"
+            for g in ast.walk(node) if isinstance(g, ast.Global) for name in g.names}
+
+
+def test_nothing_keeps_an_object_the_wiring_assembles_past_its_import():
+    """wiring.assemble makes a new set of every context's objects, as each test does (tests/conftest.py's `_fresh_app`),
+    so a name bound to one at the top of a module would keep the first set's. Code and tests alike read one through its
+    module, `mailbox.ingest`, when they use it."""
+    made = {m: assembled(m) for m in (*CONTEXTS, "background")}
+    assert all(made[ctx] for ctx in CONTEXTS)
+    bound = set()
+    for p in [*PACKAGE.rglob("*.py"), *(ROOT / "tests").rglob("*.py")]:
+        for node in ast.parse(p.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("mailmind.bootstrap."):
+                module = node.module.rsplit(".", 1)[1]
+                bound |= {(p.relative_to(ROOT).as_posix(), a.name) for a in node.names if a.name in made.get(module, ())}
+    assert bound == set()
