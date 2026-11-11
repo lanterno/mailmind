@@ -175,4 +175,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=49;
+PRAGMA user_version=50;
