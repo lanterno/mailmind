@@ -18,7 +18,7 @@ from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, Pruned, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.domain import prune
-from mailmind.platform import environment, settings, sse
+from mailmind.platform import environment, private, settings, sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
@@ -121,7 +121,7 @@ class Reconciler:
             return                                        # user op live — yield, retry next cycle
         if not res["pruned"]:
             return
-        with open(settings.current().reconcile_audit, "a") as f:
+        with private.append(settings.current().reconcile_audit) as f:
             f.write(json.dumps({"kind": "reconcile", "ts": now_iso(), "auto": True,
                                 "account": res["account"], "pruned": res["pruned"],
                                 "live": res["live"]}) + "\n")
@@ -163,7 +163,7 @@ class Reconciler:
         results = [self._reconcile_folders(a, dry_run=dry_run) for a in accts]
         if not dry_run:
             stamp = now_iso()
-            with open(settings.current().reconcile_audit, "a") as f:
+            with private.append(settings.current().reconcile_audit) as f:
                 for r in results:
                     if r["pruned"]:
                         f.write(json.dumps({"kind": "reconcile", "ts": stamp,
