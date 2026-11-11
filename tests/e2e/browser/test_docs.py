@@ -231,14 +231,13 @@ def test_a_slow_answer_does_not_overwrite_a_newer_search(page, world):
     held = []
     slow = re.compile(r"/api/documents\?.*q=report")
     page.pw.route(slow, lambda route: held.append(route))
-    page.locator("#docSearch").fill("report")
-    while not held:
-        page.wait_for_timeout(50)
+    with page.pw.expect_request(slow):
+        page.locator("#docSearch").fill("report")
     page.locator("#docSearch").fill("nothing-is-called-this")
     expect(page.locator("#docList .doc-empty")).to_have_text("No files match.")
     with page.pw.expect_response(slow):
         held[0].continue_()
-    page.wait_for_timeout(100)
+    page.wait_for_timeout(100)      # time for the late answer to be drawn, if it would be: nothing on the page says it was read
     expect(page.locator("#docList .doc-empty")).to_have_text("No files match.")
     clean(page)
 
