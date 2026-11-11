@@ -3,7 +3,7 @@
 import imaplib
 
 from mailmind.accounts.api import TLSPinMismatch, provider_of
-from mailmind.compose.adapters import snippets_file
+from mailmind.compose.adapters import snippets_store
 from mailmind.compose.adapters import sqlite as book
 from mailmind.compose.adapters.smtp import SmtpTransport
 from mailmind.compose.application.composing import Composing
@@ -161,7 +161,7 @@ def assemble():
     composing = Composing(_uow, book, _accounts, _mail, _screen)
     sending = Sending(_uow, composing, outbox, book)
     drafts = Drafts(_uow, composing, outbox, book, _accounts, _mail, mailbox.copies, _screen)
-    snippets = Snippets(snippets_file)
+    snippets = Snippets(_uow, snippets_store)
 
 
 assemble()

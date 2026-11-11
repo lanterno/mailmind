@@ -48,10 +48,6 @@ class Settings:
         return os.path.join(self.home, ".rules.lock")
 
     @property
-    def snippets(self) -> str:
-        return os.path.join(self.home, "mailmind_snippets.json")
-
-    @property
     def sweep_audit(self) -> str:
         return os.path.join(self.home, "sweep_audit.jsonl")
 

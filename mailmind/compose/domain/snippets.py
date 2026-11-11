@@ -1,5 +1,5 @@
 """Snippets: your own words kept under a short name, which `;name` in the composer's text brings in. What makes one, and
-what is taken from a file of them. {{A placeholder}} in the text is only words here: going through them is the page's."""
+what is read back of those saved. {{A placeholder}} in the text is only words here: going through them is the page's."""
 import re
 from collections.abc import Iterable
 from typing import Literal, TypedDict
@@ -33,7 +33,7 @@ def _in_order(items: Iterable[Snippet]) -> list[Snippet]:
 
 
 def clean(raw: object) -> list[Snippet]:
-    """The snippets out of whatever a file held. TOTAL: never raises, drops what isn't one, and of two with a trigger keeps
+    """The snippets out of whatever was saved. TOTAL: never raises, drops what isn't one, and of two with a trigger keeps
     the first."""
     found: dict[str, Snippet] = {}
     for item in raw if is_list(raw) else []:
