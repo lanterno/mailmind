@@ -33,10 +33,9 @@ def test_every_data_file_lives_in_the_home_under_its_usual_name(tmp_path):
     s = settings.from_env({"MAILMIND_HOME": str(tmp_path)})
     assert s.home == str(tmp_path)
     assert {k: os.path.relpath(getattr(s, k), tmp_path) for k in
-            ("db", "config", "rules", "snippets", "sweep_audit", "reconcile_audit", "log")} == {
+            ("db", "config", "rules", "sweep_audit", "reconcile_audit", "log")} == {
         "db": "mailmind.db", "config": "mailmind.config.json", "rules": "mailmind_rules.json",
-        "snippets": "mailmind_snippets.json", "sweep_audit": "sweep_audit.jsonl",
-        "reconcile_audit": "reconcile_audit.jsonl", "log": "mailmind.log"}
+        "sweep_audit": "sweep_audit.jsonl", "reconcile_audit": "reconcile_audit.jsonl", "log": "mailmind.log"}
 
 
 def test_a_relative_home_is_taken_from_the_current_directory(tmp_path, monkeypatch):

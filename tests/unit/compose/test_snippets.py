@@ -1,28 +1,47 @@
-"""The words a person keeps for the composer: what makes one, the file and the routes. What `;name` does in the text is the
-page's, in features/compose."""
-import os
-import threading
+"""The words a person keeps for the composer: what makes one, how the database keeps them and the use case. What `;name`
+does in the text is the page's, in features/compose."""
+import json
 
 import pytest
 
-from mailmind.compose.adapters import snippets_file
+from at_once import HeldAfterItsRead, overlap
+from mailmind.compose.adapters import snippets_store
 from mailmind.compose.application.snippets import Snippets
 from mailmind.compose.domain import snippets
 from mailmind.kernel.errors import Refused
+from mailmind.platform.db.uow import UnitOfWork
 
 SIG = {"trigger": "sig", "text": "Thanks,\nAda"}
 
 
-class File:
-    def __init__(self, held=()):
-        self.held, self.writes = list(held), 0
+class Counted:
+    """The store, counting its writes."""
+    def __init__(self):
+        self.writes = 0
 
-    def read(self):
-        return list(self.held)
+    def read(self, c):
+        return snippets_store.read(c)
 
-    def write(self, items):
-        self.held = list(items)
+    def write(self, c, items):
+        snippets_store.write(c, items)
         self.writes += 1
+
+
+def kept():
+    """The snippets document as the database holds it: its text, and its version."""
+    with UnitOfWork().read() as c:
+        row = c.execute("SELECT body, version FROM documents WHERE name='snippets'").fetchone()
+    return None if row is None else (row["body"], row["version"])
+
+
+def put(text):
+    """`text` as the snippets document, as an old mailmind_snippets.json goes in."""
+    with UnitOfWork().write() as c:
+        c.execute("INSERT INTO documents(name, body, changed_at) VALUES('snippets', ?, '2026-11-11T00:00:00+00:00')", (text,))
+
+
+def use(store=snippets_store):
+    return Snippets(UnitOfWork(), store)
 
 
 @pytest.mark.parametrize("typed, trigger", [("sig", "sig"), (";sig", "sig"), ("  ;SIG ", "sig"), ("a", "a"), ("0-a_b", "0-a_b"),
@@ -94,62 +113,74 @@ def test_a_file_is_read_in_order_once_each_and_within_the_limits():
     assert len(snippets.clean([{"trigger": f"s{i}", "text": "x"} for i in range(snippets.MAX_SNIPPETS + 5)])) == snippets.MAX_SNIPPETS
 
 
-# ── the file ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+# ── the store ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
-def test_the_file_holds_them_for_its_owner_alone_and_leaves_nothing_beside_it(data_dir):
-    snippets_file.write([{"trigger": "s", "text": "你好"}])
-    path = data_dir / "mailmind_snippets.json"
-    assert os.stat(path).st_mode & 0o777 == 0o600
-    assert "你好" in path.read_text(encoding="utf-8")                                # as a person can read it
-    assert snippets_file.read() == [{"trigger": "s", "text": "你好"}]
-    assert not list(data_dir.glob(".snippets-*"))
+def test_the_database_keeps_them_as_a_person_reads_them_in_the_shape_the_file_held(data_dir):
+    use().post({"verb": "save", "trigger": "s", "text": "你好"})
+    body, version = kept()
+    assert "你好" in body and json.loads(body) == [{"trigger": "s", "text": "你好"}] and version == 1
+    assert use().load() == [{"trigger": "s", "text": "你好"}]
 
 
-def test_a_write_that_fails_leaves_the_file_as_it_was_and_no_temp_file(data_dir, monkeypatch):
-    snippets_file.write([SIG])
-    monkeypatch.setattr(os, "replace", lambda *a: (_ for _ in ()).throw(OSError("full")))
+def test_none_kept_or_what_wont_read_reads_as_nothing(data_dir):
+    assert use().load() == [] and kept() is None
+    put("{not json \xff")
+    assert use().load() == []
+
+
+def test_an_old_files_text_reads_as_its_snippets(data_dir):
+    put(json.dumps([SIG], indent=2, ensure_ascii=False))
+    assert use().listed() == {"ok": True, "snippets": [SIG]}
+
+
+def test_a_save_that_fails_on_its_way_leaves_what_was_kept(data_dir):
+    use().post({"verb": "save", **SIG})
+
+    class Full:
+        read = staticmethod(snippets_store.read)
+
+        @staticmethod
+        def write(c, items):
+            snippets_store.write(c, items)
+            raise OSError(28, "No space left on device")
+
     with pytest.raises(OSError):
-        snippets_file.write([])
-    monkeypatch.undo()
-    assert snippets_file.read() == [SIG]
-    assert not list(data_dir.glob(".snippets-*"))
-
-
-def test_a_file_missing_or_broken_reads_as_nothing(data_dir):
-    assert snippets_file.read() == []
-    (data_dir / "mailmind_snippets.json").write_bytes(b"{not json \xff")
-    assert snippets_file.read() == []
+        use(Full).post({"verb": "save", "trigger": "other", "text": "x"})
+    assert use().load() == [SIG] and kept()[1] == 1
 
 
 # ── the use case ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
-def test_what_changes_nothing_writes_nothing():
-    file = File([SIG])
-    assert Snippets(file).post({"verb": "delete", "trigger": "other"}) == {"ok": True, "snippets": [SIG]}
-    assert file.writes == 0
+def test_what_changes_nothing_writes_nothing(data_dir):
+    use().post({"verb": "save", **SIG})
+    store = Counted()
+    assert use(store).post({"verb": "delete", "trigger": "other"}) == {"ok": True, "snippets": [SIG]}
+    assert store.writes == 0 and kept()[1] == 1
 
 
-def test_two_changes_at_once_both_land():
-    """The first to read waits a moment for the other: without a change being one step, the second write loses the first."""
-    other_read, reads = threading.Event(), []
+def test_one_refused_writes_nothing(data_dir):
+    use().post({"verb": "save", **SIG})
+    with pytest.raises(Refused):
+        use().post({"verb": "save", "trigger": "two words", "text": "x"})
+    assert use().load() == [SIG] and kept()[1] == 1
 
-    class Slow(File):
-        def read(self):
-            held = super().read()
-            reads.append(1)
-            if len(reads) == 1:
-                other_read.wait(0.3)
-            else:
-                other_read.set()
-            return held
 
-    file = Slow()
-    use = Snippets(file)
-    runs = [threading.Thread(target=use.post, args=[{"verb": "save", "trigger": t, "text": "x"}]) for t in ("a", "b")]
-    for run in runs:
-        run.start()
-    for run in runs:
-        run.join()
-    assert [s["trigger"] for s in file.held] == ["a", "b"]
+def test_two_changes_at_once_both_land(data_dir):
+    """Two Snippets, as two processes' would be, each saving one while the other does: the first holds after its read
+    until the second has read too or waits for the write lock."""
+    held = HeldAfterItsRead(snippets_store)
+    one, other = use(held), use(held)
+    overlap(held, lambda: one.post({"verb": "save", "trigger": "a", "text": "x"}),
+            lambda: other.post({"verb": "save", "trigger": "b", "text": "y"}))
+    assert [s["trigger"] for s in use().load()] == ["a", "b"]
+
+
+def test_a_save_and_a_delete_at_once_both_land(data_dir):
+    use().post({"verb": "save", **SIG})
+    held = HeldAfterItsRead(snippets_store)
+    one, other = use(held), use(held)
+    overlap(held, lambda: one.post({"verb": "save", "trigger": "a", "text": "x"}),
+            lambda: other.post({"verb": "delete", "trigger": "sig"}))
+    assert [s["trigger"] for s in use().load()] == ["a"]

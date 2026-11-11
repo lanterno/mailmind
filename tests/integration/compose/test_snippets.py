@@ -1,10 +1,11 @@
-"""The words a person keeps for the composer, through their routes. What makes one, the file and the use case are
-tests/unit/compose/test_snippets.py's; what `;name` does in the text is the page's, in features/compose."""
+"""The words a person keeps for the composer, through their routes. What makes one, how the database keeps them and the use
+case are tests/unit/compose/test_snippets.py's; what `;name` does in the text is the page's, in features/compose."""
 import json
 
 import pytest
 
 import problems
+from mailmind.platform.db.uow import UnitOfWork
 
 SIG = {"trigger": "sig", "text": "Thanks,\nAda"}
 
@@ -12,12 +13,17 @@ SIG = {"trigger": "sig", "text": "Thanks,\nAda"}
 # ── the routes ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
+def kept():
+    with UnitOfWork().read() as c:
+        return json.loads(c.execute("SELECT body FROM documents WHERE name='snippets'").fetchone()["body"])
+
+
 def test_saved_it_is_listed_and_deleted_it_is_not(app, data_dir):
     assert app.get("/api/snippets").json == {"ok": True, "snippets": []}
     r = app.post("/api/snippets", {"verb": "save", "trigger": ";Sig", "text": SIG["text"]})
     assert (r.status, r.json) == (200, {"ok": True, "snippets": [SIG]})
     assert app.get("/api/snippets").json == {"ok": True, "snippets": [SIG]}
-    assert json.loads((data_dir / "mailmind_snippets.json").read_text()) == [SIG]
+    assert kept() == [SIG] and not (data_dir / "mailmind_snippets.json").exists()
     assert app.post("/api/snippets", {"verb": "delete", "trigger": "sig"}).json == {"ok": True, "snippets": []}
     assert app.get("/api/snippets").json["snippets"] == []
 
