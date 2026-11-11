@@ -1,8 +1,5 @@
-"""An event a person confirmed, as a METHOD:PUBLISH file: for their own calendar, inviting no one, and nothing a stranger's mail
-said can add a line to it."""
-
-import pytest
-
+"""/api/calendar/event: an event a person confirmed, answered as a METHOD:PUBLISH file for their own calendar, and nothing sent.
+What the file holds and what is refused are tests/unit/calendar/test_publish.py's."""
 from mailmind.bootstrap.mailbox import store
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
@@ -42,21 +39,10 @@ def test_the_route_sends_nothing(app, world):
         c.close()
 
 
-@pytest.mark.parametrize("fields, said", [
-    ({"title": "  "}, "an event needs a title"),
-    ({"start": ""}, "that start isn’t a date this can use"),
-    ({"start": "tomorrow"}, "that start isn’t a date this can use"),
-    ({"start": "2199-01-01T10:00"}, "that start isn’t a date this can use"),
-    ({"end": "2026-11-12T11:00"}, "that end doesn’t come after the start"),
-    ({"end": "whenever"}, "that end doesn’t come after the start"),
-])
-def test_what_wont_do_is_refused_in_words(app, world, fields, said):
-    r = confirm(app, world, **fields)
-    assert (r.status, r.json["detail"]) == (400, said)
-
-
-def test_an_empty_end_is_no_end(app, world):
-    assert field(confirm(app, world, end="").json["ics"], "DTEND") == "DTEND:20261112T133000"
+def test_a_refusal_is_the_400_in_its_own_words(app, world):
+    """What won't do, and the words for each, are Publishing's (tests/unit/calendar/test_publish.py)."""
+    r = confirm(app, world, title="  ")
+    assert (r.status, r.json["detail"]) == (400, "an event needs a title")
 
 
 def test_a_message_with_no_copy_left_is_not_found(app):

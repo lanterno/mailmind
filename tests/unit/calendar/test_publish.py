@@ -1,11 +1,16 @@
 """An event a person confirmed, as a METHOD:PUBLISH file: for their own calendar, inviting no one, and nothing a stranger's mail
-said can add a line to it."""
+said can add a line to it. What they confirmed is read as their input (mailmind.calendar.application.publishing.Publishing): a
+date that won't do is refused, and said so."""
 from datetime import datetime, timezone
 
 import pytest
+import time_machine
 
+from mailmind.calendar.application.publishing import Publishing
 from mailmind.calendar.domain import publish
 from mailmind.calendar.domain.publish import NewEvent
+from mailmind.kernel.errors import NotFound, Refused
+
 ME = "ada@example.test"
 STAMP = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
 UID = "abc@mailmind.local"
@@ -102,3 +107,47 @@ def test_the_same_event_has_the_same_uid_so_a_calendar_replaces_it():
     assert publish.uid_for(ME, 7, event) != publish.uid_for(ME, 8, event)
     assert publish.uid_for(ME, 7, event) != publish.uid_for(ME, 7, NewEvent("Other", event.start, None, ""))
     assert publish.uid_for(ME, 7, event).endswith("@mailmind.local")
+
+
+# -- what a person confirmed (Publishing) --------------------------------------------------------------------------
+
+class Messages:
+    """The one message an event is confirmed from, as Calendar's Messages port gives it."""
+    def message(self, pk):
+        return {"pk": 7, "account": ME, "message_key": 41} if pk == 7 else None
+
+
+def confirmed(**kw):
+    with time_machine.travel(STAMP, tick=False):
+        return Publishing(Messages()).event({"pk": 7, "title": "Lunch", "start": "2026-11-12T12:30", "end": "2026-11-12T13:30",
+                                             "place": "Cafe", **kw})
+
+
+def test_what_a_person_confirmed_is_the_file_for_their_own_calendar():
+    answer = confirmed()
+    assert (answer["ok"], answer["filename"]) == (True, "event.ics")
+    assert field(answer["ics"], "METHOD") == "METHOD:PUBLISH"
+    assert field(answer["ics"], "ORGANIZER") == "ORGANIZER:mailto:" + ME
+
+
+@pytest.mark.parametrize("fields, said", [
+    ({"title": "  "}, "an event needs a title"),
+    ({"start": ""}, "that start isn’t a date this can use"),
+    ({"start": "tomorrow"}, "that start isn’t a date this can use"),
+    ({"start": "2199-01-01T10:00"}, "that start isn’t a date this can use"),
+    ({"end": "2026-11-12T11:00"}, "that end doesn’t come after the start"),
+    ({"end": "whenever"}, "that end doesn’t come after the start"),
+])
+def test_what_wont_do_is_refused_in_words(fields, said):
+    with pytest.raises(Refused) as e:
+        confirmed(**fields)
+    assert str(e.value) == said
+
+
+def test_an_empty_end_is_no_end():
+    assert field(confirmed(end="")["ics"], "DTEND") == "DTEND:20261112T133000"
+
+
+def test_a_message_with_no_copy_left_is_not_found():
+    with pytest.raises(NotFound):
+        confirmed(pk=8)
