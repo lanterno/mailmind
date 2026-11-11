@@ -379,10 +379,12 @@ def test_escape_in_settings_steps_back_one_thing_at_a_time(page, world):
     expect(page.locator("#setList input")).to_have_count(0)
     expect(title).to_be_visible()
     remove = page.locator("#setList .set-mini.danger").first
+    page.clock.pause_at(page.evaluate("Date.now()") + 1_000)    # it stops asking by itself after 3 s of the page's clock
     remove.click()
     expect(remove).to_have_text("Confirm?")
     page.keyboard.press("Escape")                               # out of asking
     expect(remove).to_have_text("Remove")
+    page.clock.resume()
     expect(title).to_be_visible()
     page.keyboard.press(",")
     expect(title).to_be_hidden()
