@@ -118,6 +118,33 @@ def test_settings_adds_edits_tests_and_removes_a_connection(page, world):
     clean(page)
 
 
+def test_a_password_typed_into_settings_goes_to_the_keychain_and_never_to_the_file(page, world, fake_keychain):
+    from mailmind.bootstrap.accounts import config
+    entry = world.server.add_account("dee@example.test", password="dee-password")
+    fake_keychain.delete("account:dee@example.test")      # what the fake server's own entry kept
+    opened(page)
+    page.locator("#settingsBtn").click()
+    dialog = page.get_by_role("dialog", name="Email connections")
+    page.get_by_role("button", name="+ Add a connection").click()
+    dialog.get_by_label("Email", exact=True).fill("dee@example.test")
+    dialog.get_by_role("button", name="IMAP", exact=True).click()
+    dialog.get_by_label("Host").fill(entry["host"])
+    dialog.get_by_label("Port").fill(str(entry["port"]))
+    dialog.get_by_role("button", name="STARTTLS", exact=True).click()
+    expect(dialog.get_by_text("Kept in your login Keychain, never in a file.")).to_be_visible()
+    dialog.get_by_label("Password", exact=True).fill("dee-password")
+    dialog.get_by_role("button", name="Save connection").click()
+    row = dialog.locator('.set-row[data-email="dee@example.test"]')
+    expect(row).to_contain_text("in the Keychain")
+    assert fake_keychain.find("account:dee@example.test") == "dee-password"
+    written = next(a for a in config._raw()["accounts"] if a["email"] == "dee@example.test")
+    assert written["credential"] == {"keychain": "account:dee@example.test", "version": 1}
+    assert "dee-password" not in (world.dir / "mailmind.config.json").read_text()
+    row.get_by_role("button", name="Test").click()
+    expect(row.locator(".set-status")).to_have_text("✓ Connected")
+    clean(page)
+
+
 def test_the_help_overlay_lists_the_keys_and_can_turn_single_keys_off(page, world):
     opened(page)
     page.keyboard.press("?")
