@@ -25,12 +25,13 @@ class Interruptible(Protocol):
 class Watch[S, C: Interruptible]:
     """One key's worker: what it was started for, and what stops it."""
 
-    def __init__(self, spec: S, stopping: Callable[[], bool]):
+    def __init__(self, spec: S, stopping: Callable[[], bool], rest: float):
         self.spec = spec
         self._stopping = stopping
         self.quit = False                # retired: its key is gone or now wanted differently
         self.conn: C | None = None       # its connection, while it has one
         self.thread: threading.Thread | None = None
+        self.rest = rest                 # seconds it rests if its connection fails now
 
     def leaving(self) -> bool:
         return self.quit or self._stopping()
@@ -105,8 +106,7 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
             self._wake.wait_for(watch.leaving, timeout=seconds)
 
     def _worker(self, spec: S, watch: Watch[S, C] | None = None) -> None:
-        watch = watch or Watch(spec, self._stopping)
-        rest = self.FIRST_REST
+        watch = watch or Watch(spec, self._stopping, self.FIRST_REST)
         while not watch.leaving():
             if not self._wanted(spec):
                 self._say_unwanted(spec)
@@ -119,13 +119,13 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
                     return
                 self._conns.append(conn)
                 watch.conn = conn                 # set before leaving() is asked: _retire sets quit first
-                rest = self.FIRST_REST
+                watch.rest = self.FIRST_REST
                 self._serve(watch, conn)
             except Exception as e:
                 if not watch.leaving():
                     self._say_failed(spec, e)
-                self._rest(watch, rest)
-                rest = min(rest * 2, self.LONGEST_REST)
+                self._rest(watch, watch.rest)
+                watch.rest = min(watch.rest * 2, self.LONGEST_REST)
             finally:
                 watch.conn = None
                 if conn is not None:
@@ -136,7 +136,7 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
                     self._close(conn)
 
     def _spawn(self, spec: S) -> Watch[S, C]:
-        watch: Watch[S, C] = Watch(spec, self._stopping)
+        watch: Watch[S, C] = Watch(spec, self._stopping, self.FIRST_REST)
         watch.thread = threading.Thread(target=self._worker, args=(spec, watch), name=self._name(spec), daemon=True)
         watch.thread.start()
         return watch
@@ -180,6 +180,13 @@ class IdleSupervisor[S, C: Interruptible](abc.ABC):
         with self._watch_lock:
             return {key: watch.thread is not None and watch.thread.is_alive()
                     for key, watch in self._watchers.items()}
+
+    def next_rest(self, key: str) -> float | None:
+        """The seconds `key`'s worker rests if its connection fails now: FIRST_REST, twice as long after each failure in a
+        row up to LONGEST_REST, and FIRST_REST again once a connection serves. None when it has no worker."""
+        with self._watch_lock:
+            watch = self._watchers.get(key)
+            return None if watch is None else watch.rest
 
     def stop(self) -> None:
         self._stop.set()
