@@ -1,13 +1,12 @@
-"""The Assistant's wiring: which language model the process talks to, and with which key.
+"""The Assistant's wiring: the language model the process talks to, and with which key.
 
-`python -m mailmind serve` talks to the API through the Anthropic SDK: front.build calls use("sdk").
-Everything else, the command line included, gets the standard-library client. Either way, with no
-key the model is DisabledModel: AI is off and nothing is sent.
+The server and every command talk to the API through the Anthropic SDK. With no key the model is
+DisabledModel: AI is off and nothing is sent.
 
 The key is config_key() (mailmind.config.json's "anthropic_api_key", in any credential style,
 read through the Accounts context), and only then ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet
 switch to the environment's. Both are read at each call, so a new key takes effect at once, and the
-model is made again only when the key, ANTHROPIC_BASE_URL or the transport changes.
+model is made again only when the key or ANTHROPIC_BASE_URL changes.
 
 Every call is counted in the usage ledger, the ai_usage table of the data directory's database,
 and passes the cost governor first, whose daily limit is the config's "ai_daily_limit_usd" ($15
@@ -17,9 +16,9 @@ import threading
 
 from mailmind.accounts.adapters import config_file, secrets
 from mailmind.assistant.adapters import sqlite as answers
+from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
 from mailmind.assistant.adapters.disabled import DisabledModel
 from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
-from mailmind.assistant.adapters.urllib_http import UrllibModel
 from mailmind.assistant.application.ask import Asker
 from mailmind.assistant.application.asking import Asking
 from mailmind.assistant.application.assessment import Assessments
@@ -46,7 +45,7 @@ from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "rationales", "replies", "reviews", "rewriter", "screening", "sender_digest", "status", "threads", "transport", "use"]
+__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "rationales", "replies", "reviews", "rewriter", "screening", "sender_digest", "status", "threads"]
 
 CONFIG = "mailmind.config.json"
 ENV = environment.ANTHROPIC_API_KEY.name
@@ -73,30 +72,19 @@ def key() -> tuple[str, str]:
     return (environment.ANTHROPIC_API_KEY.value() or "").strip(), ENV
 
 
-def _sdk(api_key, base_url, **kw):
-    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel   # front.build's only
-    return AnthropicModel(api_key, base_url, **kw)
-
-
-TRANSPORTS = {"urllib": UrllibModel, "sdk": _sdk}     # each (key, base_url, timeout=, retries=)
-NAMES = {"urllib": "urllib", "sdk": "the Anthropic SDK"}
-
-
 class _Bound:
-    """The LanguageModel for the key, base URL and transport in force, made once for each."""
+    """The LanguageModel for the key and base URL in force, made once for each."""
 
-    def __init__(self, transport):
-        self.transport = transport
+    def __init__(self):
         self._made: tuple[Any, Any] = None, None
         self._lock = threading.Lock()
 
     def __call__(self):
-        api_key = key()[0]
-        made_for = (self.transport, api_key, environment.ANTHROPIC_BASE_URL.value())
+        made_for = (key()[0], environment.ANTHROPIC_BASE_URL.value())
         with self._lock:
             if self._made[0] != made_for:
-                transport, api_key, base_url = made_for
-                model = TRANSPORTS[transport](api_key, base_url) if api_key else DisabledModel()
+                api_key, base_url = made_for
+                model = AnthropicModel(api_key, base_url) if api_key else DisabledModel()
                 self._made = made_for, model
             return self._made[1]
 
@@ -117,18 +105,6 @@ def gateway() -> Gateway:
 
 def governor() -> CostGovernor:
     return GOVERNOR
-
-
-def use(transport: str) -> None:
-    """Talk to the API through `transport`: "sdk" or "urllib"."""
-    if transport not in TRANSPORTS:
-        raise ValueError(f"no transport {transport!r}")
-    _bound.transport = transport
-
-
-def transport() -> str:
-    """How this process reaches the API, in words for the startup line."""
-    return NAMES[_bound.transport]
 
 
 _uow = UnitOfWork()
@@ -232,16 +208,15 @@ _mail = _Mail()
 
 
 def assemble():
-    """The Assistant's objects, made afresh: the spend ledger, the cost governor, the gateway, which talks to the API
-    through urllib until front.build picks the SDK, the status and every feature's use case. Importing this module
-    assembles them once; wiring.assemble makes a new set of every context's."""
+    """The Assistant's objects, made afresh: the spend ledger, the cost governor, the gateway, the status and every
+    feature's use case. Importing this module assembles them once; wiring.assemble makes a new set of every context's."""
     global _bound, LEDGER, GOVERNOR, GATEWAY, status, calls, assessments, context, threads, briefs, reviews, replies, \
         rewriter, extractor, asker, asking, drafting, bulk, screening, rationales, sender_digest
-    _bound = _Bound("urllib")
+    _bound = _Bound()
     LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
     GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros, reserved=lambda: LEDGER.reserved())
     GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
-    status = Status(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(),
+    status = Status(lambda: gateway(), lambda: key(), lambda: governor(),
                     lambda: assessments.batch_status(), lambda: calls.model_label())
     calls = Calls(lambda: gateway(), status)
     assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail)

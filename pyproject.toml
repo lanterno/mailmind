@@ -181,12 +181,11 @@ name = "only the SDK adapter reaches the Anthropic SDK"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel",
                   "mailmind.assistant.application", "mailmind.assistant.domain",
-                  "mailmind.assistant.adapters.wire", "mailmind.assistant.adapters.urllib_http",
-                  "mailmind.assistant.adapters.disabled"]
+                  "mailmind.assistant.adapters.wire", "mailmind.assistant.adapters.disabled"]
 forbidden_modules = ["anthropic"]
 
 [[tool.importlinter.contracts]]
-# bootstrap.assistant loads the SDK adapter when front.build asks for it, and only then.
+# bootstrap.assistant binds the SDK's adapter, for the server and every command alike.
 name = "bootstrap imports the Anthropic SDK only through its adapter"
 type = "forbidden"
 source_modules = ["mailmind.bootstrap"]

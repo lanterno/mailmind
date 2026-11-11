@@ -1,10 +1,11 @@
-"""The Messages API's wire format, which both HTTP adapters speak: the request body for a Prompt,
+"""The Messages API's wire format, which the SDK's adapter speaks: the request body for a Prompt,
 and the Reply in a response."""
 from mailmind.assistant.application.ports import BatchResult, Prompt, Reply, Usage
 
 
 def body(prompt: Prompt) -> dict:
-    """The JSON body of a POST /v1/messages for `prompt`, `fallbacks` included when it asks."""
+    """The body of a POST /v1/messages for `prompt`, as the SDK's create takes it. The refusal fallback isn't in it:
+    the adapter asks for that as a beta, and a batch's requests can't take it."""
     out = {"model": prompt.model, "max_tokens": prompt.max_tokens,
            "messages": [{"role": "user", "content": prompt.text}]}
     if prompt.system:
@@ -16,8 +17,6 @@ def body(prompt: Prompt) -> dict:
         config["effort"] = prompt.effort
     if config:
         out["output_config"] = config
-    if prompt.fallback:
-        out["fallbacks"] = "default"
     return out
 
 
@@ -63,7 +62,7 @@ def reply(resp: dict, asked: str) -> Reply:
 
 
 def batch_request(custom_id: str, prompt: Prompt) -> dict:
-    """One request of a batch. Batches reject `fallbacks`, so the gateway doesn't ask for it in one."""
+    """One request of a batch, with no `fallbacks`, which batches reject."""
     return {"custom_id": custom_id, "params": body(prompt)}
 
 

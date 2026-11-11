@@ -18,7 +18,7 @@ from mailmind.kernel.ids import AccountId, FolderName, MessageKey, Pk, ThreadRef
 from mailmind.kernel.row import Connection, Row
 
 # The statuses worth sending again: a timeout, a conflict, a rate limit, an overload, a server
-# error. Both adapters retry these, twice; any other 4xx says the request itself won't do.
+# error. The SDK's adapter retries these, twice; any other 4xx says the request itself won't do.
 RETRIED = frozenset({408, 409, 429, 500, 502, 503, 504, 529})
 
 type Result = dict[str, Any]                  # what a request is answered with: its JSON

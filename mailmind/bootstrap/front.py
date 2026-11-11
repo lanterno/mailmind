@@ -1,13 +1,12 @@
 """The app on FastAPI and uvicorn, `python -m mailmind serve [port]`.
 
-It starts the workers through wiring.start and serves the routers. It talks
-to the Claude API through the Anthropic SDK, and an account whose config asks for IMAPClient
-("imap_adapter": "imapclient") reaches its server through it. The command line, which doesn't come
-through here, does neither.
+It starts the workers through wiring.start and serves the routers. An account whose config asks for
+IMAPClient ("imap_adapter": "imapclient") reaches its server through it. The command line, which doesn't
+come through here, stays on imaplib.
 """
 import dataclasses
 
-from mailmind.bootstrap import assistant, wiring, mailbox, web
+from mailmind.bootstrap import wiring, mailbox, web
 from mailmind.http import serving
 from mailmind.http.app import create_app
 from mailmind.platform import perimeter, settings, webroot
@@ -15,9 +14,8 @@ from mailmind.platform.logging import get_logger
 
 
 def build():
-    """The ASGI app over the routers. A POST's body may hold up to the route's own cap, and no other request's may hold anything. AI
-    calls go through the Anthropic SDK from here on, and an account that asks for IMAPClient gets it."""
-    assistant.use("sdk")
+    """The ASGI app over the routers. A POST's body may hold up to the route's own cap, and no other request's may hold anything.
+    An account that asks for IMAPClient gets it from here on."""
     mailbox.offer("imapclient")
 
     def body_cap(method, path):
@@ -28,7 +26,7 @@ def build():
 def serve(port=None):
     if port is not None:
         settings.configure(dataclasses.replace(settings.current(), port=port))
-    app = build()                       # first, so the startup lines name the SDK and who asked for IMAPClient
+    app = build()                       # first, so the startup lines name who asked for IMAPClient
     wiring.start()
     port = settings.current().port
     get_logger().info("MailMind → http://127.0.0.1:%(port)s  (serving now)", {"port": port})

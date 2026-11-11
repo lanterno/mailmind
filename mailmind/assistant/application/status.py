@@ -29,11 +29,10 @@ def _plain(e: Exception) -> str:
 
 class Status:
     def __init__(self, gateway: Callable[[], Gateway], key: Callable[[], tuple[str, str]],
-                 transport: Callable[[], str], governor: Callable[[], CostGovernor],
-                 batch_status: Callable[[], BatchStatus], model_label: Callable[[], str]):
+                 governor: Callable[[], CostGovernor], batch_status: Callable[[], BatchStatus],
+                 model_label: Callable[[], str]):
         self._gateway = gateway
         self._key = key
-        self._transport = transport
         self._governor = governor
         self._batch_status = batch_status
         self._model_label = model_label
@@ -57,7 +56,7 @@ class Status:
 
     def describe_engine(self) -> str:
         """One line for the startup log."""
-        return f"Claude API through {self._transport()} · {self._model_label()} · {self._key_note()}"
+        return f"Claude API · {self._model_label()} · {self._key_note()}"
 
     def _key_note(self) -> str:
         """Where the API key came from, or why there is none."""

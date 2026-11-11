@@ -16,7 +16,7 @@
 - The breaker. A permanent rejection, a 4xx that sending again won't change, says the request
   itself won't do. A rejected key (401 or 403) stops every background call at once, and
   TRIP_AFTER in a row for one feature and model stop that feature's. It stays open until the
-  model in use changes, which a new key, base URL or transport does. Interactive calls still go,
+  model in use changes, which a new key or base URL does. Interactive calls still go,
   so the user sees the error.
 
 Nothing here is durable: a restart closes the breaker and forgets the last interactive call. The
