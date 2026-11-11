@@ -3,8 +3,9 @@
 The test suite's world runs for real: three made-up accounts on the fake IMAP and SMTP servers, on loopback, with the
 corpus in their folders (its dates moved up so its newest message is today), and the fake Claude API, which answers from
 each call's schema. `python -m mailmind serve` runs against them as it would against real servers, in a temp data
-directory that goes when it stops, its database encrypted with a key made for the run (never the Keychain's), and with
-the suite's tripwire on: it refuses the real data files, any host off this machine and the programs that hold your
+directory that goes when it stops, its database encrypted with a key made for the run (never the Keychain's), the
+accounts' passwords in the tests' stand-in for the Keychain (a file in that directory), and with the suite's tripwire
+on, here and in the server: it refuses the real data files, any host off this machine and the programs that hold your
 credentials. What a send sends lands in the fake SMTP server, and what a filing moves moves on the fake IMAP server.
 
     python tests/support/demo.py [port]     # Ctrl-C ends it
@@ -24,6 +25,10 @@ TESTS = os.path.dirname(HERE)
 ROOT = os.path.dirname(TESTS)
 sys.path[:0] = [HERE, TESTS, ROOT]
 
+import guard                                        # noqa: E402
+guard.install()                                     # before the world keeps a password: never in the login Keychain
+
+import fake_keychain                                # noqa: E402
 from fakes.anthropic_api import FakeAnthropic      # noqa: E402
 from fakes.imap_server import FakeIMAPServer       # noqa: E402
 from fakes.smtp_server import FakeSMTPServer       # noqa: E402
@@ -54,6 +59,7 @@ def main():
     argv = ["mailmind", "serve", *sys.argv[1:2]]
     with tempfile.TemporaryDirectory(prefix="mailmind-demo-") as home, FakeIMAPServer() as imap, FakeSMTPServer() as smtp, \
             FakeAnthropic() as claude:
+        os.environ[fake_keychain.VARIABLE] = os.path.join(home, "keychain.json")   # shared with the server, which reads it
         populate(imap)
         w.connect_smtp(imap, smtp)
         w.write_config(imap, home, smtp)

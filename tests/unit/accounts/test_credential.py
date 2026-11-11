@@ -16,7 +16,11 @@ from mailmind.accounts.domain.credential import CredentialRef, credential_from
     ({"env": "DEE_PASSWORD"}, "env", {"style": "env", "set": True, "var": "DEE_PASSWORD"}),
     ({"proton_bridge": True}, "proton_bridge", {"style": "proton_bridge", "set": True}),
     ({"proton_bridge": False}, "unknown", {"style": "unknown", "set": False}),
-    ({"keychain": "dee"}, "unknown", {"style": "unknown", "set": False}),
+    ({"keychain": "account:dee@example.test"}, "keychain", {"style": "keychain", "set": True, "item": "account:dee@example.test"}),
+    ({"keychain": " "}, "keychain", {"style": "keychain", "set": False, "item": " "}),
+    ({"keychain": 7}, "keychain", {"style": "keychain", "set": False, "item": ""}),
+    ({"keychain": "database-key"}, "unknown", {"style": "unknown", "set": False}),
+    ({"vault": "dee"}, "unknown", {"style": "unknown", "set": False}),
     ({}, None, {"style": None, "set": False}),
     (None, None, {"style": None, "set": False}),
     (7, None, {"style": None, "set": False}),
@@ -30,6 +34,14 @@ def test_each_style_reads_and_masks(stored, style, mask):
 def test_a_password_never_shows_in_a_mask_or_a_repr():
     ref = CredentialRef.parse({"plain": "hunter2"})
     assert "hunter2" not in repr(ref) and "hunter2" not in str(ref.masked())
+
+
+def test_the_keychain_items_mailmind_names_are_its_own_and_never_the_database_keys():
+    from mailmind.accounts.domain import credential
+    from mailmind.platform.db import key
+    assert credential.account_item("dee@example.test") == "account:dee@example.test"
+    assert credential.DATABASE_KEY_ITEM == key.ACCOUNT
+    assert key.ACCOUNT not in {credential.account_item("database-key"), credential.API_KEY_ITEM}
 
 
 @pytest.mark.parametrize("named, op_refs", [("op://V/I/F", ["op://V/I/F"]), (["op://V/I/A", "op://V/I/B"], ["op://V/I/A", "op://V/I/B"])])
@@ -52,7 +64,7 @@ def test_an_entry_naming_two_shows_the_one_a_login_uses(stored, style, monkeypat
     assert secrets.resolve(stored, who="dee") == {"plain": "hunter2", "env": "from-env", "proton_bridge": "from-bridge", "op": "from-op"}[style]
 
 
-@pytest.mark.parametrize("stored", [None, {}, "", {"keychain": "dee"}, {"proton_bridge": False}], ids=repr)
+@pytest.mark.parametrize("stored", [None, {}, "", {"vault": "dee"}, {"keychain": "database-key"}, {"proton_bridge": False}], ids=repr)
 def test_no_style_resolves_to_a_refusal_naming_no_secret(stored):
     with pytest.raises(RuntimeError, match="no credential configured for dee"):
         secrets.resolve(stored, who="dee")

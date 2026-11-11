@@ -120,8 +120,9 @@
     {
      "alias": "Ada",
      "credential": {
+      "item": "account:ada@example.test",
       "set": true,
-      "style": "plain"
+      "style": "keychain"
      },
      "defaults_applied": {
       "host": false,
@@ -147,8 +148,9 @@
     {
      "alias": "Bea",
      "credential": {
+      "item": "account:bea@example.test",
       "set": true,
-      "style": "plain"
+      "style": "keychain"
      },
      "defaults_applied": {
       "host": false,
@@ -174,8 +176,9 @@
     {
      "alias": "Cy",
      "credential": {
+      "item": "account:cy@example.test",
       "set": true,
-      "style": "plain"
+      "style": "keychain"
      },
      "defaults_applied": {
       "host": false,

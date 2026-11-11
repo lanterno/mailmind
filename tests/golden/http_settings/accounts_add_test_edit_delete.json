@@ -295,7 +295,7 @@
     {
      "alias": "Ada",
      "credential": {
-      "plain": "app-password"
+      "keychain": "account:ada@example.test"
      },
      "email": "ada@example.test",
      "host": "127.0.0.1",
@@ -309,7 +309,7 @@
     {
      "alias": "Bea",
      "credential": {
-      "plain": "app-password"
+      "keychain": "account:bea@example.test"
      },
      "email": "bea@example.test",
      "host": "127.0.0.1",
@@ -323,7 +323,7 @@
     {
      "alias": "Cy",
      "credential": {
-      "plain": "app-password"
+      "keychain": "account:cy@example.test"
      },
      "email": "cy@example.test",
      "host": "127.0.0.1",

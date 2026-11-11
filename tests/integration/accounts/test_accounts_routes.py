@@ -236,7 +236,7 @@ def test_every_style_of_credential_is_listed_by_its_mask(app):
     assert shown["ops@example.test"] == {"style": "op", "set": True, "ref": ["op://V/I/A", "op://V/I/B"]}
     assert shown["env@example.test"] == {"style": "env", "set": True, "var": "DEE_PASSWORD"}
     assert shown["bridge@example.test"] == {"style": "proton_bridge", "set": True}
-    assert shown[w.ADA] == {"style": "plain", "set": True}
+    assert shown[w.ADA] == {"style": "keychain", "set": True, "item": f"account:{w.ADA}"}
     assert "app-password" not in json.dumps(r.json)
 
 

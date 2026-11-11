@@ -1,5 +1,6 @@
-"""Having a password from wherever its credential says (mailmind.accounts.adapters.secrets): a 1Password read, the
-environment, or Proton Bridge's own sources. `op` never runs here: each test answers for it, as the program would."""
+"""Having a password from wherever its credential says (mailmind.accounts.adapters.secrets): the Keychain, a 1Password
+read, the environment, or Proton Bridge's own sources. `op` never runs here: each test answers for it, as the program
+would, and the Keychain is the guard's stand-in."""
 import subprocess
 from types import SimpleNamespace
 
@@ -98,6 +99,100 @@ def test_when_no_ref_reads_the_last_refusal_is_raised(op):
     op({OTHER: [(1, "", "first")], REF: [(1, "", "second")]})
     with pytest.raises(RuntimeError, match="second"):
         secrets.resolve({"op": [OTHER, REF]}, who="ada")
+
+
+# -- the Keychain ------------------------------------------------------------------------------------------------
+
+ADA = "account:ada@example.test"
+
+
+class _Counting:
+    """The guard's stand-in, counting what is asked of it."""
+
+    def __init__(self, held):
+        self.held, self.asked = held, []
+
+    def find(self, name):
+        self.asked.append(name)
+        return self.held.find(name)
+
+    def add(self, name, secret, *, replace):
+        self.held.add(name, secret, replace=replace)
+
+    def delete(self, name):
+        return self.held.delete(name)
+
+
+@pytest.fixture
+def counted(fake_keychain):
+    from mailmind.platform import keychain
+    counting = _Counting(fake_keychain)
+    keychain.use(counting)
+    yield counting
+    keychain.use(fake_keychain)
+
+
+def test_a_keychain_item_is_what_it_holds_as_kept_and_is_read_once_a_process(fake_keychain, counted):
+    fake_keychain.add(ADA, " app password ", replace=False)
+    assert secrets.resolve({"keychain": ADA}, who="ada") == " app password "
+    assert secrets.resolve({"keychain": ADA}, who="ada", strip=True) == " app password "     # as it was typed
+    assert counted.asked == [ADA]
+
+
+def test_an_item_the_keychain_doesnt_hold_is_refused_naming_it_and_who_asked_and_nothing_is_kept(fake_keychain, counted):
+    with pytest.raises(RuntimeError, match=f"the Keychain holds no item {ADA} for ada"):
+        secrets.resolve({"keychain": ADA}, who="ada")
+    fake_keychain.add(ADA, "app-password", replace=False)
+    assert secrets.resolve({"keychain": ADA}, who="ada") == "app-password"
+    assert counted.asked == [ADA, ADA]
+
+
+@pytest.mark.parametrize("named", ["", "  ", None, 7])
+def test_a_keychain_credential_naming_no_item_is_no_credential(named, counted):
+    with pytest.raises(RuntimeError, match="no credential configured for ada"):
+        secrets.resolve({"keychain": named}, who="ada")
+    assert counted.asked == []
+
+
+def test_the_database_key_is_no_credential(fake_keychain, counted):
+    fake_keychain.add("database-key", "5e" * 32, replace=False)
+    with pytest.raises(RuntimeError, match="no credential configured for ada"):
+        secrets.resolve({"keychain": "database-key"}, who="ada")
+    assert counted.asked == []
+
+
+def test_a_keychain_that_wont_answer_is_said_and_nothing_is_kept(counted, monkeypatch):
+    from mailmind.platform import keychain
+
+    def locked(name):
+        raise keychain.Refused(f"The Keychain didn't give MailMind its item {name}", 36)
+    monkeypatch.setattr(counted, "find", locked)
+    with pytest.raises(keychain.Refused, match="exited 36"):
+        secrets.resolve({"keychain": ADA}, who="ada")
+    assert secrets._keychain_cache == {}
+
+
+def test_evict_and_forget_drop_what_was_read_so_the_next_read_asks_again(fake_keychain, counted):
+    fake_keychain.add(ADA, "old", replace=False)
+    fake_keychain.add("anthropic-api-key", "sk-ant-old", replace=False)
+    secrets.resolve({"keychain": ADA}, who="ada")
+    secrets.resolve({"keychain": "anthropic-api-key"}, who="anthropic_api_key")
+    fake_keychain.add(ADA, "new", replace=True)
+    fake_keychain.add("anthropic-api-key", "sk-ant-new", replace=True)
+    secrets.evict({"keychain": ADA})
+    assert secrets.resolve({"keychain": ADA}, who="ada") == "new"
+    assert secrets.resolve({"keychain": "anthropic-api-key"}, who="anthropic_api_key") == "sk-ant-old"
+    secrets.forget()
+    assert secrets.resolve({"keychain": "anthropic-api-key"}, who="anthropic_api_key") == "sk-ant-new"
+
+
+def test_each_assembly_starts_with_no_secret_read(fake_keychain, counted):
+    from mailmind.bootstrap import wiring
+    fake_keychain.add(ADA, "app-password", replace=False)
+    secrets.resolve({"keychain": ADA}, who="ada")
+    wiring.assemble()
+    secrets.resolve({"keychain": ADA}, who="ada")
+    assert counted.asked == [ADA, ADA]
 
 
 # -- the environment ---------------------------------------------------------------------------------------------

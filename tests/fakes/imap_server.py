@@ -904,9 +904,14 @@ class FakeIMAPServer:
                 acct.mailboxes[name] = Mailbox(name, special, uidvalidity=next(self._uidv))
 
     def config_entry(self, user):
+        """The MailMind config entry for `user`, its password kept in the Keychain: the tests' stand-in for it, which the
+        guard puts in the login Keychain's place."""
+        from mailmind.accounts.domain.credential import account_item
+        from mailmind.platform import keychain
         acct = self.accounts[user]
+        keychain.put(account_item(user), acct.password)
         return {"email": user, "type": acct.kind, "host": "127.0.0.1", "port": self.port,
-                "starttls": not self.implicit_tls, "credential": {"plain": acct.password},
+                "starttls": not self.implicit_tls, "credential": {"keychain": account_item(user)},
                 "smtp_host": "127.0.0.1", "smtp_port": 9}   # SMTP is another fake's job
 
     def deliver(self, user, mailbox, raw, flags=(), when=None, thread_of=None):
