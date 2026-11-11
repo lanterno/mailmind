@@ -19,6 +19,17 @@ MON = "DTSTART:20261005T100000"             # floating
 MON_END = "DTEND:20261005T103000"
 
 
+_BUDGET = ics._EXPAND_SECONDS               # what the reader allows itself for a rule, before _time_to_read raises it
+
+
+@pytest.fixture(autouse=True)
+def _time_to_read(monkeypatch):
+    """Time enough for each text and rule: these tests are about what the dates are, and a machine every core of which is
+    busy shouldn't run a rule out of its CPU budget. test_ics_reader_contract.py holds the budget itself."""
+    monkeypatch.setattr(ics, "_READ_SECONDS", 5.0)
+    monkeypatch.setattr(ics, "_EXPAND_SECONDS", 5.0)
+
+
 def cal(*lines, method="REQUEST"):
     """One event, UID and SUMMARY first so a line can say them again."""
     head = ["BEGIN:VCALENDAR", "VERSION:2.0"] + ([f"METHOD:{method}"] if method else [])
@@ -390,7 +401,6 @@ SERIES = {  # the start, the rest of what the event says: what it comes to
     "a-weekday-in-words": (MON, "RRULE:FREQ=WEEKLY;BYDAY=XX", ""),
     "an-interval-in-words": (MON, "RRULE:FREQ=WEEKLY;INTERVAL=often", ""),
     "a-part-nobody-knows": (MON, "RRULE:FREQ=WEEKLY;X-EXAMPLE=1", ""),
-    "never-comes-to-a-date": ("DTSTART:20261105T100000", "RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30", ""),
     # RDATE, on its own and beside a rule. A period gives its start: an occurrence runs as long as the event does.
     "an-rdate": (MON, "RDATE:20261105T100000", "2026-10-05 2026-11-05"),
     "an-rdate-beside-a-rule": (MON, "RRULE:FREQ=WEEKLY;COUNT=2\r\nRDATE:20261201T100000", "2026-10-05 2026-10-12 2026-12-01"),
@@ -404,6 +414,12 @@ SERIES = {  # the start, the rest of what the event says: what it comes to
 @pytest.mark.parametrize("start, rest, dates", SERIES.values(), ids=SERIES.keys())
 def test_what_a_series_comes_to(start, rest, dates):
     assert _days(start, *rest.split("\r\n")) == dates.split()
+
+
+def test_a_rule_that_never_comes_to_a_date_comes_to_none(monkeypatch):
+    """dateutil would look for a February 30 through every year it can reach: the reader's own budget is what ends it."""
+    monkeypatch.setattr(ics, "_EXPAND_SECONDS", _BUDGET)
+    assert _days("DTSTART:20261105T100000", "RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30") == []
 
 
 def test_a_rule_can_change_the_time_of_day():
