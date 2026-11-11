@@ -1,6 +1,5 @@
-"""Whether a message is snoozed is read from `snoozes`, by its key and folder, in every list."""
-from datetime import datetime, timedelta, timezone
-
+"""Whether a message is snoozed is read from `snoozes`, by its key and folder, in every list. What Undo gives back of a snooze is
+tests/unit/attention/test_snooze_reads.py's."""
 import pytest
 
 from fixtures import world as w
@@ -155,18 +154,6 @@ def test_due_goes_by_snoozes(c, world):
     set_snooze(c, pk, 1_000)
     assert pks(attention.book.due_snoozes(c, 999)) == set()
     assert pks(attention.book.due_snoozes(c, 1_000)) == {pk}
-
-
-def test_undo_of_a_second_snooze_gives_back_the_first_time(app, world):
-    copy = world.copy(LUNCH)
-    subject = world.row(LUNCH)["subject"]
-    first = int((datetime.now(timezone.utc) + timedelta(hours=3)).timestamp())
-    second = first + 3600
-    assert app.post("/api/snooze", {**copy, "until": first}).json["ok"]
-    assert app.post("/api/snooze", {**copy, "until": second}).json["ok"]
-    assert app.post("/api/undo", {}).json["ok"]
-    [item] = [i for i in app.get(f"/api/messages?account={w.ADA}&folder=__snoozed__&limit=100").json["items"] if i["subject"] == subject]
-    assert item["snoozed_until"] == first
 
 
 # -- what `snoozes` being by folder means ------------------------------------------------------------------
