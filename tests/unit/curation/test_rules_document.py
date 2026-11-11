@@ -8,7 +8,7 @@ import pytest
 from mailmind.bootstrap import curation
 from mailmind.bootstrap.curation import rules
 from mailmind.curation.domain import rulebook
-from mailmind.platform import documents
+from mailmind.platform.db import documents
 from mailmind.platform.db.uow import UnitOfWork
 from stored_rows import document, put_document, q
 

@@ -80,3 +80,15 @@ def test_a_write_is_its_callers_to_commit(data_dir):
             documents.write(c, "views", VIEWS)
             raise RuntimeError("the change went no further")
     assert held("views") is None
+
+
+def test_a_reader_that_keeps_one_asks_its_version_and_can_have_the_text_that_wont_parse(data_dir):
+    with UnitOfWork().read() as c:
+        assert documents.version(c, "rules") is None and documents.stored(c, "rules") is None
+    keep("rules", {"keep_senders": []})
+    keep("rules", {"keep_senders": ["lin@example.test"]})
+    with UnitOfWork().write() as c:
+        assert documents.version(c, "rules") == 2
+        c.execute("UPDATE documents SET body='{\"keep_senders\": [' WHERE name='rules'")
+        assert documents.stored(c, "rules") == ('{"keep_senders": [', 2)     # the rule book raises on it, never empties
+        assert documents.read(c, "rules") is None

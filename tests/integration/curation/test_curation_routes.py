@@ -5,7 +5,7 @@ import problems
 from fixtures import world as w
 from mailmind.bootstrap import curation
 from mailmind.bootstrap.curation import rules
-from mailmind.platform import audit
+from mailmind.platform.db import audit
 from mailmind.platform.db.uow import UnitOfWork
 
 BAD_REQUEST = problems.BAD_REQUEST

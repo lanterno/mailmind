@@ -1,7 +1,7 @@
-"""The audit trails' table (mailmind.platform.audit): a record goes in its caller's transaction, and only into a trail there is."""
+"""The audit trails' table (mailmind.platform.db.audit): a record goes in its caller's transaction, and only into a trail there is."""
 import pytest
 
-from mailmind.platform import audit
+from mailmind.platform.db import audit
 from mailmind.platform.db.uow import UnitOfWork
 
 RECORD = {"kind": "reconcile", "ts": "2026-11-02T12:00:00+00:00", "account": "ada@example.test", "pruned": 1, "live": 9}
