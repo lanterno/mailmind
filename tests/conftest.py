@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 import pytest
 
 import guard
-from mailmind.bootstrap import mailbox
 from mailmind.platform import perimeter
 from mailmind.platform import environment
 from mailmind.platform.logging import stop as stop_logging
@@ -103,20 +102,16 @@ def ai(anthropic_api, monkeypatch):
     return anthropic_api
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _pristine_state():
-    """Record the stateful modules' globals before the first test, whichever runs first. A test
-    that changes one outside the app fixture (assistant.status._last, say) then can't make its change the
-    state every later app test is reset to."""
-    import app_client
-    app_client.snapshot()
-
-
 @pytest.fixture(autouse=True)
-def _imap_adapters():
-    """imaplib for every account and nothing else offered, as a process starts: a test that offers
-    IMAPClient, or an app an earlier test built, can't leave it to the next."""
-    mailbox.reset()
+def _fresh_app():
+    """What the app holds between requests, made afresh for each test as a process starts with
+    (mailmind.bootstrap.wiring.assemble): every context's objects new, imaplib for every account and
+    nothing else offered, a cost governor that has seen no call and someone here now, no event kept,
+    nothing subscribed. No test sees what another left, and none has to say which module keeps what."""
+    from mailmind.bootstrap import wiring
+    wiring.assemble()
+    yield
+    wiring.unwire()
 
 
 @pytest.fixture(scope="session")
@@ -139,15 +134,6 @@ def _no_log_file():
     """A test that started the app, or asked for the log file, leaves the next test's lines out of it."""
     yield
     stop_logging()
-
-
-@pytest.fixture(autouse=True)
-def _fresh_governor():
-    """The cost governor as a fresh start finds it: no interactive call lately (the app tests share
-    one frozen moment, so an earlier test's call would make this one's triage yield), someone here
-    now, the breaker closed."""
-    from mailmind.bootstrap import assistant
-    assistant.governor().forget()
 
 
 @pytest.fixture(autouse=True)
@@ -235,22 +221,21 @@ def world(world_template, data_dir):
 
 @pytest.fixture
 def app(world, monkeypatch):
-    """The app as `python -m mailmind serve` builds it, over this test's world, with the clock frozen at NOW and every
-    module's process state reset. Yields an AppClient; its .clock moves the frozen time (clock.shift(timedelta(...)),
+    """The app as `python -m mailmind serve` builds it, over this test's world and the new set of objects `_fresh_app`
+    assembled, with the clock frozen at NOW. Yields an AppClient; its .clock moves the frozen time (clock.shift(timedelta(...)),
     clock.move_to(datetime))."""
     import dataclasses
     import time_machine
     import app_client
     import schema_contract
     from mailmind.bootstrap import wiring
-    app_client.reset_state()
     schema_contract.watch_reads(monkeypatch)
     monkeypatch.setattr(perimeter, "CSRF", app_client.CSRF)
     wiring.wire()                 # as wiring.start does, without starting the workers' threads
     from mailmind.platform import settings
     with time_machine.travel(NOW, tick=False) as clock:
         from mailmind.bootstrap import assistant
-        assistant.governor().forget()   # someone here at NOW, not at the real time reset_state ran at
+        assistant.governor().forget()   # someone here at NOW, not at the real time the test began
         running = app_client.RunningAsgiApp().start()
         try:
             with settings.use(dataclasses.replace(settings.current(), port=running.port)):
@@ -261,7 +246,6 @@ def app(world, monkeypatch):
                 schema_contract.verify()
         finally:
             running.stop()
-            app_client.reset_state()
 
 
 @pytest.fixture

@@ -1,73 +1,25 @@
 """The app's HTTP server, run in-process against the test's world, and a client that talks to it
 the way the page does: same-origin, with the CSRF token on every request.
 
-Each test gets a clean app: `reset_state` puts every module's private globals back to
-how they were at import (caches, the undo stack, the sync status, presence timestamps), so no
-test sees another's leftovers.
+Each test gets a new app: conftest's `_fresh_app` assembles every context's objects afresh
+(mailmind.bootstrap.wiring.assemble) before it starts, so no test sees another's caches, undo stack,
+sync status or presence, and none has to say which module keeps what.
 """
 import http.client
-import importlib
 import json
 import threading
 import time
 from dataclasses import dataclass
-from mailmind.bootstrap import mailbox
 
 CSRF = "test-csrf-token"
 
-# Modules whose private globals hold process state between requests, and instances (`module:name`)
-# whose private attributes do.
-STATEFUL = ("mailmind.bootstrap.background", "mailmind.bootstrap.accounts:logins", "mailmind.bootstrap.assistant:status", 
-            "mailmind.bootstrap.mailbox:pool", "mailmind.bootstrap.mailbox:warm", "mailmind.bootstrap.mailbox:realtime", "mailmind.bootstrap.mailbox:stats", "mailmind.bootstrap.mailbox:folders", "mailmind.bootstrap.mailbox:syncing",
-            "mailmind.curation.application.unsubscribe")
-_SIMPLE = (dict, list, set, int, float, str, bool, type(None))
-_pristine = {}
 
-
-def _holder(name):
-    module, _, attr = name.partition(":")
-    mod = importlib.import_module(module)
-    return getattr(mod, attr) if attr else mod
-
-
-def snapshot():
-    """Record each stateful module's private globals once, as they were at import."""
-    for name in STATEFUL:
-        mod = _holder(name)
-        if name in _pristine:
-            continue
-        saved = {}
-        for k, v in vars(mod).items():
-            if k.startswith("_") and not k.startswith("__") and isinstance(v, _SIMPLE):
-                saved[k] = v.copy() if isinstance(v, (dict, list, set)) else v
-        _pristine[name] = saved
-
-
-def reset_state():
-    """Put every recorded global back. Containers are refilled in place, so a module that holds
-    a reference to one keeps a live reference."""
-    snapshot()
-    for name, saved in _pristine.items():
-        mod = _holder(name)
-        for k, v in saved.items():
-            cur = getattr(mod, k, None)
-            if isinstance(v, dict) and isinstance(cur, dict):
-                cur.clear()
-                cur.update(v)
-            elif isinstance(v, list) and isinstance(cur, list):
-                cur[:] = v
-            elif isinstance(v, set) and isinstance(cur, set):
-                cur.clear()
-                cur.update(v)
-            else:
-                setattr(mod, k, v)
-    from mailmind.bootstrap import assistant, wiring
-    from mailmind.platform import sse
-    wiring.unwire()                          # the server's subscriptions on the bus, as wire() made them
-    sse.HUB = sse.Hub()                      # no events kept, no tab listening, a run of its own
-    assistant.use("urllib")                  # as a process starts, for the command line; front.build picks the SDK
-    mailbox.reset()                          # imaplib alone; front.build offers IMAPClient
-    assistant.governor().forget()            # a restart: no interactive call lately, someone here now
+def restart():
+    """The process restarts while the test goes on: everything held in memory made afresh and wired as the
+    server wires it, and only the database remembers."""
+    from mailmind.bootstrap import wiring
+    wiring.assemble()
+    wiring.wire()
 
 
 @dataclass

@@ -246,7 +246,7 @@ def test_hwf_a_restart_during_an_outage_keeps_the_persisted_backoff(app, world, 
     ai.responder = outage
     kick(app, pk)
     app.settle()
-    app_client.reset_state()                            # the process restarts; only the table remembers
+    app_client.restart()                                # only the table remembers
     run_tick(app, monkeypatch, cycles=6)                # cycles at +120s, then every 180s
     assert [t - asked[0] for t in asked] == [0, 300, 1020]          # 300s, then 600s, after each failure
     assert draft_rows(w.ADA, thread_key(world, QUILT))[0]["fail_count"] == 3
@@ -260,7 +260,7 @@ def test_hwf_the_tick_skips_a_warm_draft_and_drafts_the_next(app, world, ai, mon
     kick(app, warm)
     app.settle()
     ai.requests.clear()
-    app_client.reset_state()                            # a restart, which counts as someone here
+    app_client.restart()                                # which counts as someone here
     run_tick(app, monkeypatch, cycles=1)
     [req] = drafts(ai)
     assert "renee@atelier.example.test" in req.prompt and "lin@example.test" not in req.prompt

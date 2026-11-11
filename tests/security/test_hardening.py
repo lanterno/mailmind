@@ -15,7 +15,6 @@ import urllib.parse
 
 import pytest
 
-import app_client
 import problems
 from answered import answered
 from fixtures import world as w
@@ -34,13 +33,10 @@ CONFIG = {"accounts": [{"email": ACCT, "type": "imap", "host": "imap.example.tes
 
 @pytest.fixture
 def home(data_dir):
-    """A data directory holding the schema and Ada's config, and no mail yet, with nothing kept in
-    memory from another test."""
+    """A data directory holding the schema and Ada's config, and no mail yet."""
     with open(settings.current().config, "w") as f:
         json.dump(CONFIG, f)
-    app_client.reset_state()
     yield data_dir
-    app_client.reset_state()
 
 
 @pytest.fixture
