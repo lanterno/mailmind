@@ -192,7 +192,7 @@ def test_part_rows_go_only_for_a_message_with_an_email_attached(tmp_path):
         c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type) VALUES (?, '2', 'f', ?)", (pk, ctype))
     c.commit()
     c.close()
-    migrate.init(path)
+    migrate.init(path, migrations.MIGRATIONS[:28])
     assert query(path, "SELECT message_pk, content_type FROM attachments") == [(1, "application/pdf")]
 
 
