@@ -1,4 +1,5 @@
 """What a person's Markdown comes to, and what stays plain text."""
+import gc
 import time
 
 import pytest
@@ -189,11 +190,28 @@ def test_what_comes_out_has_been_through_the_sanitizer():
     assert 'rel="noopener' in html                 # the sanitizer's own mark on a link
 
 
-@pytest.mark.parametrize("hostile", [
-    "*a " * 60000, "[" * 190000, "`" * 190000, "**" * 90000, "> " * 90000, "- " * 90000, "[a](" * 40000, "*a* " * 45000,
-    "_a_b " * 30000, "<" * 190000, "\\" * 190000, "https:// " * 20000, "```\n" * 40000, "\n" * 190000,
+def cpu_time(text, times):
+    """This thread's CPU time to render `text` `times` over, the least of three tries with the collector off: what other work on
+    the machine does to it is left out."""
+    least = float("inf")
+    for _ in range(3):
+        gc.disable()
+        try:
+            began = time.thread_time()
+            for _ in range(times):
+                markdown.render(text)
+            least = min(least, time.thread_time() - began)
+        finally:
+            gc.enable()
+    return least
+
+
+@pytest.mark.parametrize("unit", [
+    "*a ", "[", "`", "**", "> ", "- ", "[a](", "*a* ", "_a_b ", "<", "\\", "https:// ", "```\n", "\n",
 ])
-def test_the_time_it_takes_follows_the_length_of_the_text(hostile):
-    started = time.monotonic()
-    markdown.render(hostile)
-    assert time.monotonic() - started < 3
+def test_the_time_it_takes_follows_the_length_of_the_text(unit):
+    """Text eight times as long takes about as long as eight of the short one, where a quadratic would take eight times that.
+    The long one is as long as the renderer takes, so a blowup shows where it is largest."""
+    n = (markdown.MAX_TEXT - 1) // (8 * len(unit))
+    short, long = unit * n, unit * (8 * n)
+    assert cpu_time(long, 1) < 3 * cpu_time(short, 8)
