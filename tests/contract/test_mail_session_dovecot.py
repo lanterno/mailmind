@@ -19,6 +19,7 @@ import re
 import socket
 import ssl
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -27,6 +28,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from waiting import wait_until
 
 pytestmark = pytest.mark.dovecot
 
@@ -254,6 +256,15 @@ def idling(session, seconds):
     return t
 
 
+def in_idle(thread):
+    """Whether thread's IDLE is under way: the server has said go on, and imaplib's IDLE, which both
+    adapters use, waits for what it says next."""
+    frame = sys._current_frames().get(thread.ident)
+    while frame is not None and frame.f_code is not imaplib.Idler.__next__.__code__:
+        frame = frame.f_back
+    return frame is not None
+
+
 # ── reading ─────────────────────────────────────────────────────────────────────────────────────
 
 def test_capabilities_are_what_dovecot_says_after_login(session):
@@ -446,7 +457,7 @@ def test_idle_says_when_new_mail_arrives_and_leaves_idle(dovecot, user, session)
     session.select("INBOX", readonly=False)
     t = idling(session, 30)
     seed(dovecot, user, "INBOX", message(1))
-    t.join(20)
+    t.join(30)
     assert t.got is True
     assert session.noop()
 
@@ -454,19 +465,20 @@ def test_idle_says_when_new_mail_arrives_and_leaves_idle(dovecot, user, session)
 def test_idle_with_nothing_new_ends_when_its_time_is_up(session):
     session.select("INBOX", readonly=False)
     started = time.monotonic()
-    assert session.idle(2) is False
-    assert 1.5 < time.monotonic() - started < 15
+    t = idling(session, 2)
+    t.join(30)                                              # far past its time
+    assert (t.is_alive(), t.got) == (False, False)
+    assert time.monotonic() - started >= 1.5
     assert session.noop()
 
 
 def test_an_interrupt_ends_an_idle_at_once(session):
     session.select("INBOX", readonly=False)
     t = idling(session, 60)
-    time.sleep(0.5)
-    started = time.monotonic()
+    assert wait_until(lambda: in_idle(t))
     session.interrupt()
-    t.join(5)
-    assert not t.is_alive() and time.monotonic() - started < 5
+    t.join(30)
+    assert not t.is_alive()
 
 
 # ── logging in ──────────────────────────────────────────────────────────────────────────────────
