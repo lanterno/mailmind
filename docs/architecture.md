@@ -108,7 +108,7 @@ The app lives in `mailmind/`.
   (`Scheduler.run`) from `contextvars`. `MAILMIND_LOG_LEVEL=DEBUG` shows debug lines and each exception's text at
   the terminal, never in the file. The `mailmind` logger doesn't propagate. `/api/debug/health` says how the job
   lanes, IDLE's workers, the queues, the breaker and today's AI ledger stand, in ids and counts, and reading it
-  doesn't count as someone here. Only a command's own output still prints (`bootstrap/cli.py`, `__main__.py`, `wiring.assess_batch`, `Directory.check` and `materialize`), which a test holds. It is standard library only.
+  doesn't count as someone here. Only a command's own output still prints (`bootstrap/cli.py`, `__main__.py`, `wiring.assess_batch`, `Directory.check`, `materialize` and `move_plaintext`), which a test holds. It is standard library only.
 - `mailmind.platform.bus` is an in-process publish and subscribe. An event is a frozen dataclass
   of ids and counts, and its class is its topic. Handlers run in the publisher's thread once the
   change has committed; one that raises is logged by class name and the rest still hear. Nothing
@@ -128,25 +128,29 @@ The app lives in `mailmind/`.
   The brief and delta, the review and thread summaries each hold one (`_FLIGHTS`), and so does
   drafting ahead (`assistant.drafting.DRAFT_FLIGHTS`, whose `busy(key)` answers "generating"). It is standard
   library only.
-- `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
-  checks an upgrade on a copy (see [Schema migrations](migrations.md)), and holds `uow.UnitOfWork`, how a use case gets a connection, and
-  `documents`, a document a context keeps whole as a row of `documents` (migration 48): its JSON in the shape the file it was once kept
-  in held, so that file's text goes in as it is, and a version on with each save. A context's adapter names its own row (`views`,
-  `snippets`), and its use case reads, changes and writes it in one write block. The
-  database is encrypted ([At rest](security.md#at-rest)): `driver` is the only module that imports SQLCipher's `sqlcipher3`, `key` holds
-  the Keychain's key and `database` keys each connection with it. The rest is standard library only.
-- `mailmind.platform.audit` holds the audit trails, in the database (`audit_events`, migration 48), so they are encrypted with it:
-  the `sweep` trail, what a sweep, expiry or a sender's cleanup trashed, and the `reconcile` trail, what a reconcile pruned. A row
-  keeps a record's JSON as a line of its trail's file held it, its `ts` beside it. `append` writes in its caller's transaction, and
-  each context writes its own trail through an adapter of its own; `read` gives both, newest first, those of one moment in the
-  order written. A sweep's record is committed before its move asks the server anything. No file beside the database holds a
-  trail. It is standard library only.
-- `mailmind.platform.private` opens a file that holds what is in someone's mail, an export, its owner's alone.
-  It is standard library only.
-- `mailmind.platform.documents` keeps a document a context holds whole, so far the rule book, as one row of `documents`
-  (migration 48): its body the JSON its file held, and a version that goes up with each write, so a reader that keeps one in
-  memory asks only that. Each function takes its caller's connection, so a read, a change and its write are one transaction
-  when the caller makes them one. It is standard library only.
+- `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and checks an upgrade on a copy
+  (see [Schema migrations](migrations.md)), and holds `uow.UnitOfWork`, how a use case gets a connection. The database is
+  encrypted ([At rest](security.md#at-rest)): `driver` is the only module that imports SQLCipher's `sqlcipher3`, `key` holds
+  the key, which it keeps in the login Keychain through `platform.keychain`, and `database` keys each connection with it.
+  Two tables hold what was once kept in files beside it:
+  - `documents` keeps a document a context holds whole, as one row named for it (`rules`, `views`, `snippets`): its JSON in
+    the shape its file held, and a version that goes up with each write, so a reader that keeps one in memory asks only
+    that. `read` gives the parsed value, and `stored` the text and its version, for the rule book, to which a body that
+    won't parse is an error and never an empty book. A context's adapter names its own row, and its use case reads,
+    changes and writes it in one write block.
+  - `audit` holds the audit trails (`audit_events`): the `sweep` trail, what a sweep, expiry or a sender's cleanup
+    trashed, and the `reconcile` trail, what a reconcile pruned, each record's JSON with its `ts` beside it. `append`
+    writes in its caller's transaction, each context through an adapter of its own; `read` gives both, newest first,
+    those of one moment in the order written. A sweep's record is committed before its move asks the server anything.
+
+  Each function takes its caller's connection and leaves the commit to it. The rest is standard library only.
+- `mailmind.platform.keychain` is the one reader and writer of the login Keychain: generic passwords under the service
+  `mailmind`, through `/usr/bin/security`. A secret goes to it on standard input (`security -i`, the secret in hex), never
+  on a command line, and no message or log line holds one. `add` never replaces an item (the database's key), `put` does
+  (an account's password, the Claude API key), and each reads back what it kept. A secret is printable ASCII, as
+  `security` prints any other in hex. `use(backend)` puts another backend in `Security`'s place, as the tests' tripwire
+  does. It is standard library only.
+- `mailmind.platform.private` opens a file an export writes, its owner's alone. It is standard library only.
 - `mailmind.content` is the library every context reads mail through, standard library only, and it knows nothing of
   mailboxes or accounts: `mime` (a raw message as parts and header values), `sanitize` (the HTML sanitizer, verbatim),
   `text` (what a list shows and what search indexes), `headers`, `quote` (the part of a reply you typed, and the

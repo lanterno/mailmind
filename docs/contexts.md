@@ -15,12 +15,21 @@ See [Architecture](architecture.md) for the layers around them.
   and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
   contexts and the tests reach the Assistant (`assistant.calls`, `.status`, `.assessments`, `.context`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
   The mail it reads goes through its `Mail` port and a bulk command's filter through `Search`, both bound there.
-- `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, `connections`, `health`, `logins`, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. `mailmind.accounts.api` names what the other contexts' wiring asks of it (the events, `provider_of`, `TLSPinMismatch`).
-  `application.ports` holds `AccountRepository`, `SecretResolver` and `ConnectionProbe`. `adapters.config_file` is the first, which `application.directory.Directory` reads and writes `mailmind.config.json`
+- `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, `connections`, `health`, `logins`, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. `mailmind.accounts.api` names what the other contexts' wiring asks of it (the events, `provider_of`, `TLSPinMismatch`, and `PlaintextSecret` for the entry point).
+  `application.ports` holds `AccountRepository`, `SecretStore` and `ConnectionProbe`. `adapters.config_file` is the first, which `application.directory.Directory` reads and writes `mailmind.config.json`
   through. `ConfigFile.read` parses the file again only when its inode, size or modification
   time changed, and hands each caller a copy of its own; `write` replaces it atomically, readable
-  by its owner only. `adapters.secrets` is the second, caching an `op` read only when it succeeds, and
-  `domain.credential.CredentialRef` the one reader of the styles the file allows (plain, `op`, `env`, the Bridge password).
+  by its owner only. `adapters.secrets` is the second, caching an `op` read and a Keychain item's (once for each version
+  the file names) only when it succeeds, and keeping a secret in the login Keychain or taking one out (`keep`, `discard`,
+  through `mailmind.platform.keychain`). `domain.credential.CredentialRef` is the one reader of the styles the file allows
+  (`keychain`, `op`, `env`, the Bridge password). The file never holds a secret itself: a `{"plain": ...}` or a bare
+  string reads as `plain` only to be refused, `PlaintextSecret` naming `accounts move-plaintext` (`Directory.move_plaintext`),
+  and the app won't start while the file holds one (`Directory.refuse_plaintext`). A password typed into Settings is
+  `domain.credential.Typed`, which no file can hold, until `Directory` keeps it in the account's own item,
+  `account:<address>`, and writes `{"keychain": item, "version": n}`: a new one replaces what the item held and is the next
+  version (`keychain_credential`), so IDLE logs in afresh and a process that read the last one reads it again. Removing the
+  account takes its item out, and a Keychain that won't is `Unreachable`, the file left as it was. `accounts password` and
+  `ai key` do the same from the command line. A draft's test tries a `Typed` password and keeps it nowhere.
   `Directory` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through
   both. `ConnectionProbe` is bound in `mailmind.bootstrap.accounts`, and is no adapter of Accounts': a login goes through the Mailbox's sessions, which pick the IMAP adapter.
   An account is still a dict, as the file holds it or as `domain.account.normalized` fills it in, and the whole app reads `acct["host"]`. `Endpoint` (`imap_endpoint`, `smtp_endpoint`) works out a server's host, port and TLS from an entry and its type,

@@ -58,6 +58,11 @@ MailMind module loads:
   repo root, and in the directory `MAILMIND_HOME` named), any non-loopback host, and the
   `claude`, `op` and `security` programs. A test that trips it fails. It also wraps SQLCipher's `connect`, which raises no
   audit event as the standard library's does.
+- The tripwire puts a stand-in in the login Keychain's place (`tests/support/fake_keychain.py`), handing it to
+  `mailmind.platform.keychain.use`, in every test process and every program a test starts with the tripwire installed. The
+  autouse fixture `fake_keychain` empties it around each test, and a test takes it to see what was kept. A program shares its
+  starter's when `MAILMIND_TEST_KEYCHAIN` names a file, as `just demo` does. The world's accounts keep their passwords there,
+  as `{"keychain": "account:<address>"}`.
 
 The fixtures, from the bottom up:
 
