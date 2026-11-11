@@ -6,7 +6,6 @@ from urllib.parse import quote
 
 import pytest
 
-from mailmind.bootstrap import discovery
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import attention
@@ -75,18 +74,6 @@ def test_a_command_doesnt_reach_snoozed_mail(app, world, ai):
     assert planned()["count"] == 1
     snooze(app, world.copy(RECEIPT))
     assert planned().get("count", 0) == 0
-
-
-def test_the_table_covers_every_indexed_column_and_ranks_them(world):
-    from mailmind.bootstrap.mailbox import store
-    c = store.conn()
-    columns = [r[1] for r in c.execute("PRAGMA table_info(msg_fts)")]
-    c.close()
-    assert columns == ["subject", "from_name", "from_addr", "recipients", "snippet", "body_text"]
-    weights = [float(x) for x in discovery.BM25.removeprefix("bm25(msg_fts,").removesuffix(")").split(",")]
-    assert len(weights) == len(columns)
-    by = dict(zip(columns, weights))
-    assert by["subject"] > by["from_addr"] == by["from_name"] > by["body_text"] > by["recipients"] > by["snippet"]
 
 
 def test_a_hit_in_the_subject_ranks_above_one_in_the_body(app, world):

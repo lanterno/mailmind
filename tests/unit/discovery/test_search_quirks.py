@@ -61,6 +61,18 @@ def test_the_grammar_says_where_snoozed_mail_went():
 
 # -- ranking --------------------------------------------------------------
 
+def test_the_table_covers_every_indexed_column_and_ranks_them(data_dir):
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    columns = [r[1] for r in c.execute("PRAGMA table_info(msg_fts)")]
+    c.close()
+    assert columns == ["subject", "from_name", "from_addr", "recipients", "snippet", "body_text"]
+    weights = [float(x) for x in discovery.BM25.removeprefix("bm25(msg_fts,").removesuffix(")").split(",")]
+    assert len(weights) == len(columns)
+    by = dict(zip(columns, weights))
+    assert by["subject"] > by["from_addr"] == by["from_name"] > by["body_text"] > by["recipients"] > by["snippet"]
+
+
 def test_search_and_ask_rank_by_one_table():
     sources = [*glob.glob(os.path.join(ROOT, "*.py")), *glob.glob(os.path.join(ROOT, "mailmind", "**", "*.py"), recursive=True)]
     named = {os.path.basename(p) for p in sources if "bm25(" in open(p, encoding="utf-8").read()}
