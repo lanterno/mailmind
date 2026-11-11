@@ -19,13 +19,12 @@ A loop that commits as it goes is one write block per commit, with whatever the 
 
 Each block's connection comes from database.connect, so WAL, synchronous=FULL and txguard apply.
 """
-import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 from mailmind.kernel.row import Connection
 from mailmind.platform import settings
-from mailmind.platform.db import database, txguard
+from mailmind.platform.db import database, driver, txguard
 
 
 class WroteInARead(RuntimeError):
@@ -36,7 +35,7 @@ class NestedWrite(RuntimeError):
     """A write block opened while this thread holds a transaction open: it would wait for itself."""
 
 
-def _data_directory() -> sqlite3.Connection:
+def _data_directory() -> driver.Connection:
     return database.connect(settings.current().db)
 
 
@@ -44,7 +43,7 @@ class UnitOfWork:
     """Blocks on the database `connect` opens, by default the data directory's as it is when each block opens. It holds
     nothing between blocks, so one is as good as another."""
 
-    def __init__(self, connect: Callable[[], sqlite3.Connection] = _data_directory):
+    def __init__(self, connect: Callable[[], driver.Connection] = _data_directory):
         self.connect = connect       # what DurableQueue opens its own connections with
 
     @contextmanager

@@ -162,8 +162,8 @@ def main(argv=None):
 def ai_usage(days):
     """Print what AI cost each of the last `days` local days, newest first, by feature, and the
     total. It reads the usage ledger and nothing else: no migration, no call. 0 when it could."""
-    import sqlite3
     from mailmind.platform import settings
+    from mailmind.platform.db import driver
     db = settings.current().db
     if not os.path.exists(db):
         print("There is no database yet, so no usage either.")
@@ -172,7 +172,7 @@ def ai_usage(days):
     from mailmind.bootstrap import assistant
     try:
         report = assistant.gateway().usage(max(1, days))
-    except sqlite3.OperationalError as e:
+    except driver.OperationalError as e:
         if "no such table" not in str(e):
             raise
         print("The database predates the usage ledger: start the app once and it will be added.")

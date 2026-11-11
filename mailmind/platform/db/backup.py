@@ -8,8 +8,8 @@ and copy one over the database (and delete the database's -wal and -shm files).
 import glob
 import os
 import re
-import sqlite3
 import time
+from mailmind.platform.db import driver
 
 KEEP = 3
 FOLDER = "backups"
@@ -22,7 +22,7 @@ def take(c, version):
     folder = os.path.join(os.path.dirname(path), FOLDER)
     os.makedirs(folder, mode=0o700, exist_ok=True)
     dest = _new_file(folder, f"mailmind-v{int(version)}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}")
-    copy = sqlite3.connect(dest)
+    copy = driver.connect(dest)
     try:
         c.backup(copy)
     finally:

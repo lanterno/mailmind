@@ -1,8 +1,7 @@
 """Opening a connection to MailMind's SQLite database."""
 import os
-import sqlite3
 
-from mailmind.platform.db import txguard
+from mailmind.platform.db import driver, txguard
 
 
 def keep_private(path):
@@ -23,9 +22,9 @@ def connect(path):
         os.close(os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600))
     except (FileExistsError, FileNotFoundError, NotADirectoryError):
         pass                                    # there already, or nowhere to put it: SQLite says which
-    c = sqlite3.connect(path, timeout=60, factory=txguard.Connection)
+    c = driver.connect(path, timeout=60, factory=txguard.Connection)
     txguard.track(c)
-    c.row_factory = sqlite3.Row
+    c.row_factory = driver.Row
     c.execute("PRAGMA journal_mode=WAL")
     # A commit survives a power cut, not only a crash: the outbox's `delivered` and the queue's
     # `applied` are exactly-once gates, and losing one would send or apply something twice. FULL

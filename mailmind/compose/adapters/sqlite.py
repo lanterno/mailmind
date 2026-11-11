@@ -1,5 +1,5 @@
 """Compose's tables: `outbox` and `drafts`. Each function takes its caller's connection and leaves the commit to it."""
-import sqlite3
+from mailmind.platform.db import driver
 
 
 def rekey_thread(c, account, survivor, absorbed):
@@ -28,7 +28,7 @@ def outbox_insert(c, row):
                RETURNING id""", {"orig_account": None, "orig_message_id": None, "orig_thread_id": None, "original_key": None,
                                   "wait_kind": "grace", **row})
         return cur.fetchone()["id"], True
-    except sqlite3.IntegrityError:   # someone inserted the same key between our SELECT and INSERT
+    except driver.IntegrityError:   # someone inserted the same key between our SELECT and INSERT
         r = c.execute("SELECT id FROM outbox WHERE idempotency_key=?",
                       (row["idempotency_key"],)).fetchone()
         return (r["id"] if r else None), False

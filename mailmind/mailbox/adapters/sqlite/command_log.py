@@ -1,12 +1,12 @@
 """The command log's rows: what `mailmind.mailbox.application.commands` keeps of each change to the mail on a server. Its QUEUE moves them through their states."""
 import json
-import sqlite3
 from datetime import datetime, timezone
 
 from mailmind.mailbox.adapters.sqlite.flags import set_local_flags
 from mailmind.mailbox.adapters.sqlite.sync_state import get_uidvalidity
 from mailmind.mailbox.domain.command import idempotency_key
 from mailmind.mailbox.domain.flags import as_columns, held_now
+from mailmind.platform.db import driver
 
 
 def flag_command(c, row, flags, mutation_id, when):
@@ -44,7 +44,7 @@ def command_insert(c, row):
                VALUES(:account,:idempotency_key,:kind,:message_id,:src_folder,:dest,
                  :params,'queued',:next_attempt_at,:created_at) RETURNING id""", row)
         return cur.fetchone()["id"], True
-    except sqlite3.IntegrityError:
+    except driver.IntegrityError:
         r = c.execute("SELECT id FROM mail_commands WHERE idempotency_key=?",
                       (row["idempotency_key"],)).fetchone()
         return (r["id"] if r else None), False

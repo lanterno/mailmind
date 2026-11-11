@@ -20,7 +20,6 @@ corrupt the live database. Grep this file for `accounts.connect` — there is no
 import os
 import re
 import shutil
-import sqlite3
 import urllib.request
 import zipfile
 from datetime import datetime, timezone
@@ -29,7 +28,7 @@ from email import policy as _policy
 from typing import Literal
 
 from mailmind.platform import settings
-from mailmind.platform.db import database
+from mailmind.platform.db import database, driver
 
 type ArchiveFormat = Literal["eml", "mbox"]
 
@@ -56,8 +55,8 @@ def _ro_conn():
     finally:
         c.close()
     # A URI, so the path is escaped: a #, ? or % in the data directory's name would end or bend it.
-    ro = sqlite3.connect(f"file:{urllib.request.pathname2url(settings.current().db)}?mode=ro", uri=True)
-    ro.row_factory = sqlite3.Row
+    ro = driver.connect(f"file:{urllib.request.pathname2url(settings.current().db)}?mode=ro", uri=True)
+    ro.row_factory = driver.Row
     return ro
 
 
@@ -215,7 +214,7 @@ def export_db(out):
     dest_path = os.path.join(out, f"mailmind-{stamp}.db")
     src = _ro_conn()
     try:
-        dest = sqlite3.connect(dest_path)
+        dest = driver.connect(dest_path)
         try:
             src.backup(dest)
         finally:

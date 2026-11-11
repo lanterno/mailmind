@@ -1,10 +1,10 @@
 """Discovery's view of the database. It writes nothing here: `messages`, `assessments` and the rest are read models, and
 which folder plays which role comes through `folders`."""
-import sqlite3
 
 from mailmind.discovery.adapters import fts
 from mailmind.discovery.domain import known, search
 from mailmind.platform.db.uow import UnitOfWork
+from mailmind.platform.db import driver
 
 _uow = UnitOfWork()
 
@@ -54,7 +54,7 @@ class StoredMail:
                 sql = (f"""SELECT {columns} FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key
                        WHERE 1=1{where_sql} ORDER BY m.ts DESC, m.folder='INBOX' DESC, {in_all}, m.pk DESC""")
                 return search.first_copies(c.execute(sql, [*params, *in_all_args]), limit, offset)
-            except sqlite3.OperationalError:
+            except driver.OperationalError:
                 return None
 
     def for_asking(self, match, accounts, limit):
@@ -83,7 +83,7 @@ class StoredMail:
         with _uow.read() as c:
             try:
                 return c.execute(sql, args).fetchall()
-            except sqlite3.OperationalError:
+            except driver.OperationalError:
                 return None
 
     def reach(self, spec, cap, apart):
@@ -112,7 +112,7 @@ class StoredMail:
                     f"ROW_NUMBER() OVER (PARTITION BY m.message_key ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth "
                     f"{base} AND NOT {not_apart}) WHERE nth=1 ORDER BY ts DESC LIMIT ?",
                     [*in_all_args, *bargs, *apart_args, cap]).fetchall()
-            except sqlite3.OperationalError:
+            except driver.OperationalError:
                 return None
         return count, rows, matched
 
@@ -130,14 +130,14 @@ class StoredMail:
                              "LEFT JOIN assessments s ON s.message_key=m.message_key "
                              f"WHERE msg_fts MATCH ? AND {where_sql} LIMIT 1", [match, pk, *params])
             return c.execute(sql, args).fetchone() is not None
-        except sqlite3.OperationalError:
+        except driver.OperationalError:
             return False
 
     def total(self):
         with _uow.read() as c:
             try:
                 return c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-            except sqlite3.OperationalError:
+            except driver.OperationalError:
                 return 0
 
     def attachments(self, accounts):

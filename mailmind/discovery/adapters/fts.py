@@ -6,10 +6,10 @@ breaks ingest.
 Injection-safe: FTS column specs are fixed literals; every value is FTS-quoted (embedded " doubled) and
 the whole MATCH string is passed as one bound parameter; structured values are bound `?` params.
 """
-import sqlite3
 
 from mailmind.discovery.domain.query import Kind
 from mailmind.kernel.snoozed import not_snoozed_sql, snoozed_sql
+from mailmind.platform.db import driver
 
 # How much a hit counts in each msg_fts column: subject, from_name, from_addr, recipients, snippet,
 # body_text. Search and Ask both rank by it: a subject above a sender above the body, and a snippet is
@@ -87,12 +87,12 @@ def index_message(c, pk):
                   "VALUES(?,?,?,?,?,?,?)",
                   (pk, r["subject"] or "", r["from_name"] or "", r["from_addr"] or "",
                    r["recipients"] or "", r["snippet"] or "", r["body_text"] or ""))
-    except sqlite3.OperationalError:
+    except driver.OperationalError:
         pass  # index not present yet (pre-migration) — safe to skip
 
 
 def forget_message(c, pk):
     try:
         c.execute("DELETE FROM msg_fts WHERE rowid=?", (pk,))
-    except sqlite3.OperationalError:
+    except driver.OperationalError:
         pass

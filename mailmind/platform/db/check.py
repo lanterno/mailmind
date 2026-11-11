@@ -20,10 +20,9 @@ that one holds every message. Nor is the growth of a table a migration carries s
 import collections
 import os
 import pathlib
-import sqlite3
 import tempfile
 
-from mailmind.platform.db import migrate, migrations
+from mailmind.platform.db import driver, migrate, migrations
 
 OK, PROBLEM, CANNOT_RUN = 0, 1, 2
 
@@ -68,9 +67,9 @@ def check_upgrade(path, say=print):
 
 
 def _copy_read_only(path, dest):
-    source = sqlite3.connect(pathlib.Path(path).resolve().as_uri() + "?mode=ro", uri=True)
+    source = driver.connect(pathlib.Path(path).resolve().as_uri() + "?mode=ro", uri=True)
     try:
-        target = sqlite3.connect(dest)
+        target = driver.connect(dest)
         try:
             source.backup(target)
         finally:
@@ -80,7 +79,7 @@ def _copy_read_only(path, dest):
 
 
 def _query(path, sql):
-    c = sqlite3.connect(path)
+    c = driver.connect(path)
     try:
         return c.execute(sql).fetchall()
     finally:
@@ -135,7 +134,7 @@ def _checks(path, keys_before):
     else:
         verdict = f"{total} problem(s), {sum(added.values())} of them new ({_by_table(added)})"
     out.append(("foreign_key_check", verdict, not added))
-    c = sqlite3.connect(path)
+    c = driver.connect(path)
     try:
         if c.execute("SELECT 1 FROM sqlite_master WHERE name='msg_fts'").fetchone():
             try:
@@ -143,7 +142,7 @@ def _checks(path, keys_before):
                 missing = c.execute("SELECT count(*) FROM messages WHERE pk NOT IN "
                                     "(SELECT rowid FROM msg_fts)").fetchone()[0]
                 out.append(("full-text index", f"{missing} message(s) not in it" if missing else "ok", not missing))
-            except sqlite3.DatabaseError:
+            except driver.DatabaseError:
                 out.append(("full-text index", "1 problem(s)", False))
     finally:
         c.close()

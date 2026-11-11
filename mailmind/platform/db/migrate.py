@@ -5,9 +5,8 @@ version set in the same transaction: a migration that fails leaves the database 
 before it, at the version before it, and the next start runs it again. Before it migrates a
 database that holds anything, it backs it up (mailmind.platform.db.backup).
 """
-import sqlite3
 
-from mailmind.platform.db import backup, database, migrations
+from mailmind.platform.db import backup, database, driver, migrations
 
 SQLITE_NEEDED = (3, 43)     # the search index's contentless_delete (migration 38)
 
@@ -18,9 +17,9 @@ def init(path, steps=None):
     and a database already at the last of them is left alone. The base schema only creates what is
     missing, but that includes a table a later migration retired, so it runs only on a database
     older than the frozen migrations' last, which it was written for, and never brings one back."""
-    if sqlite3.sqlite_version_info < SQLITE_NEEDED:
+    if driver.sqlite_version_info < SQLITE_NEEDED:
         raise RuntimeError(f"MailMind needs SQLite {'.'.join(map(str, SQLITE_NEEDED))} or newer, and this "
-                           f"Python has {sqlite3.sqlite_version}. Nothing was changed.")
+                           f"Python has {driver.sqlite_version}. Nothing was changed.")
     steps = migrations.MIGRATIONS if steps is None else steps
     database.keep_private(path)                 # one made before MailMind saw to it
     c = database.connect(path)
@@ -61,7 +60,7 @@ def _in_transaction(c, fn, version=None):
 
 
 class _Within:
-    """The connection as a migration sees it. sqlite3's executescript commits whatever
+    """The connection as a migration sees it. The driver's executescript commits whatever
     transaction is open before it runs, so here a script runs one statement at a time instead,
     inside the migration's transaction."""
 
@@ -78,11 +77,11 @@ class _Within:
 
 def _statements(script):
     """The statements in an SQL script, one at a time. A semicolon inside a string or a trigger's
-    body doesn't end one: sqlite3.complete_statement decides where each ends."""
+    body doesn't end one: driver.complete_statement decides where each ends."""
     pending = ""
     for piece in script.split(";"):
         pending += piece + ";"
-        if sqlite3.complete_statement(pending):
+        if driver.complete_statement(pending):
             if pending.strip(" \t\r\n;"):
                 yield pending
             pending = ""

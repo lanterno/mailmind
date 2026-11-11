@@ -18,7 +18,6 @@ The table needs id, state, attempts, next_attempt_at, last_error, the gate colum
 finished-at column, and the lane column when there is one. Every method but drain and run_forever
 runs on the connection it's given and leaves the commit to its caller.
 """
-import sqlite3
 import threading
 import time
 from collections.abc import Callable
@@ -26,13 +25,14 @@ from collections.abc import Callable
 from mailmind.kernel.row import Connection, Row
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
+from mailmind.platform.db import driver
 
 QUEUED, ERROR = "queued", "error"
 
 
 class DurableQueue:
     def __init__(self, name: str, table: str, *, running: str, finished: str, finished_at: str, gate: str,
-                 connect: Callable[[], sqlite3.Connection], max_attempts: int = 5, backoff_base: int = 20,
+                 connect: Callable[[], driver.Connection], max_attempts: int = 5, backoff_base: int = 20,
                  backoff_cap: int = 900, poll: int = 30, lane: str | None = None, unsure: tuple[str, str] | None = None):
         """`name` labels its log lines and threads; `running` and `finished` are the table's own
         names for those states; `connect` opens a connection to the database for drain and

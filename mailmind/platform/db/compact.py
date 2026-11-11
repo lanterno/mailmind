@@ -6,9 +6,8 @@ database while it runs, so only the owner asks for it, with MailMind stopped. It
 """
 import os
 import shutil
-import sqlite3
 
-from mailmind.platform.db import database
+from mailmind.platform.db import database, driver
 
 OK, PROBLEM, CANNOT_RUN = 0, 1, 2
 WAIT_SECONDS = 5       # for another process to let go, before it says the database is in use
@@ -35,7 +34,7 @@ def compact(path, say=print):
         try:
             c.execute("VACUUM")
             c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except sqlite3.OperationalError:
+        except driver.OperationalError:
             say("The database is in use. Stop MailMind and try again. Nothing changed.")
             return PROBLEM
         say(f"The database went from {_mb(pages * page)} to {_mb(os.path.getsize(path))}.")

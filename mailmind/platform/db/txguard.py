@@ -10,18 +10,18 @@ before the call.
 database.connect tracks each connection it opens for the thread that opened it. A SQLite
 connection belongs to that thread, so only the thread's own connections can be in its way.
 """
-import sqlite3
 import threading
 import weakref
 from collections.abc import Callable
+from mailmind.platform.db import driver
 
 
 class TxAcrossNetworkError(RuntimeError):
     """A network call made while this thread holds a transaction open."""
 
 
-class Connection(sqlite3.Connection):
-    """sqlite3's connection, which the guard can track without keeping it open."""
+class Connection(driver.Connection):
+    """The driver's connection, which the guard can track without keeping it open."""
 
 
 _local = threading.local()
@@ -41,7 +41,7 @@ def open_transactions() -> int:
     for c in list(getattr(_local, "conns", ())):
         try:
             n += c.in_transaction
-        except sqlite3.ProgrammingError:               # closed
+        except driver.ProgrammingError:               # closed
             pass
     return n
 
@@ -64,7 +64,7 @@ def release_thread() -> int:
                 left += 1
                 c.rollback()
             c.close()
-        except sqlite3.ProgrammingError:               # closed
+        except driver.ProgrammingError:               # closed
             pass
     if conns is not None:
         conns.clear()
