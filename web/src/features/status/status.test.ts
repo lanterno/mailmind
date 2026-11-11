@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { coachPlace, guideOffers, guideSteps } from "./guideSteps";
-import { pillLabel } from "./model";
+import { badAccounts, nameOf, pillLabel } from "./model";
 
 const digest = (over: object = {}) => ({ accounts: ["a@example.test"], aliases: {}, status: {}, sync: { last: null }, profile: "full", ...over }) as never;
 const now = new Date(2026, 10, 2, 12, 0);
@@ -28,6 +28,20 @@ describe("what the pill says", () => {
     expect(today.text).toMatch(/^Synced 9:05/);
     expect(pillLabel(digest({ sync: { last: new Date(2026, 9, 30).toISOString() } }), false, false, now).text).toMatch(/^Synced Oct 30/);
     expect(pillLabel(digest(), false, false, now).text).toBe("Not synced yet");
+  });
+});
+
+describe("each account", () => {
+  it("is named by its own name, else by the address before the @", () => {
+    const named = digest({ aliases: { "a@example.test": "Ada" } });
+    expect(nameOf(named, "a@example.test")).toBe("Ada");
+    expect(nameOf(named, "bo@example.test")).toBe("bo");
+    expect(nameOf(undefined, "bo@example.test")).toBe("bo");
+  });
+  it("is down for the rail only when it can’t connect, not while it syncs", () => {
+    const status = { "a@example.test": { health: "error" }, "b@example.test": { health: "syncing" }, "c@example.test": { health: "ok" } };
+    expect(badAccounts(digest({ status }))).toEqual(["a@example.test"]);
+    expect(badAccounts(undefined)).toEqual([]);
   });
 });
 
