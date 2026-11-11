@@ -365,6 +365,28 @@ def test_a_mail_as_tall_as_its_frame_doesnt_keep_growing_it(page, world, monkeyp
     clean(page)
 
 
+def drawn_height(page):
+    """The frame's height once React has drawn what the page last asked of it: its render waits in a message ahead of this one."""
+    return page.evaluate("""() => new Promise(done => { const c = new MessageChannel();
+        c.port1.onmessage = () => done(parseInt(document.querySelector('iframe.rd-iframe').style.height)); c.port2.postMessage(null) })""")
+
+
+def test_a_mail_as_tall_as_its_frame_keeps_its_height_however_often_it_is_fitted_again(page, world, monkeypatch):
+    unsanitized(monkeypatch)
+    pk, key = arrives(world, "<style>html,body{height:100%}</style><p>Hello</p>")
+    frame = reading(page, key)
+    loaded(page, frame)
+    page.get_by_role("button", name="Reading settings").click()
+    menu = page.get_by_role("dialog", name="Reading settings")
+    heights = []
+    for colors, dark in [("Dark", True), ("Original", False)] * 3:     # each dresses the mail again, and fits it as it does
+        menu.get_by_role("button", name=colors).click()
+        until(page, lambda: frame.evaluate("f => f.contentDocument.body.classList.contains('mm-dark')") is dark, "it wasn't dressed again")
+        heights.append(drawn_height(page))
+    assert len(set(heights[0::2])) == len(set(heights[1::2])) == 1 and max(heights) < 300, heights   # each look its own height
+    clean(page)
+
+
 def test_a_narrower_column_fits_the_frame_again(page, world):
     pk, key = arrives(world, "Words and more words. " * 200, "text/plain")
     frame = reading(page, key)
