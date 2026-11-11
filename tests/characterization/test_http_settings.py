@@ -7,6 +7,7 @@ import json
 
 from fixtures import world as w
 from mailmind.platform.db.uow import UnitOfWork
+from stored_rows import document
 
 DEE = "dee@example.test"
 
@@ -38,7 +39,7 @@ def test_sender_rules(app, golden, world):
     post(app, golden, "remove a rule", "/api/rules", {"token": "prizes.example.test", "verdict": "remove"})
     post(app, golden, "a token that is neither address nor domain", "/api/rules", {"token": "lin", "verdict": "keep"})
     post(app, golden, "an unknown verdict", "/api/rules", {"token": "lin@example.test", "verdict": "maybe"})
-    golden.note("mailmind_rules.json", disk(world, "mailmind_rules.json"))
+    golden.note("the rules document", json.loads(document("rules")))
 
 
 def test_saved_views(app, golden, world):

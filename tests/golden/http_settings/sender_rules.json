@@ -192,7 +192,7 @@
   "status": 400
  },
  {
-  "note": "mailmind_rules.json",
+  "note": "the rules document",
   "value": {
    "block_domains": [],
    "block_senders": [

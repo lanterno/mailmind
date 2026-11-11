@@ -16,6 +16,7 @@ from mailmind.bootstrap import compose
 from mailmind.bootstrap.mailbox import store
 from mailmind.content import mime
 from mailmind.platform import settings
+from stored_rows import put_document
 
 ACCT = "ada@example.test"
 CONFIG = {"accounts": [{"email": ACCT, "type": "imap", "host": "imap.example.test"}]}
@@ -131,8 +132,7 @@ def test_idna_forms_match_both_ways(home):
 
 
 def test_keep_senders_count_keep_domains_do_not(home):
-    with open(settings.current().rules, "w") as f:
-        json.dump({"keep_senders": ["vip@example.test"], "keep_domains": ["friends.example"]}, f)
+    put_document("rules", json.dumps({"keep_senders": ["vip@example.test"], "keep_domains": ["friends.example"]}))
     assert _known(["vip@example.test", "someone@friends.example"]) == {"vip@example.test": True, "someone@friends.example": False}
 
 

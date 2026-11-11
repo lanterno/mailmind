@@ -1,12 +1,11 @@
 """The classifier: which verdict wins, what counts as a bulk domain, and when a rule change reaches mail."""
 import json
-import os
 
 import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap import curation
-from stored_rows import NOW_TS
+from stored_rows import put_document
 
 RULES = {"keep_senders": ["both@rules.example.test"],
          "block_senders": ["both@rules.example.test", "noreply@kept.example.test"],
@@ -48,15 +47,12 @@ PRECEDENCE = [
 
 
 @pytest.fixture
-def rules_file(data_dir):
-    path = data_dir / "mailmind_rules.json"
-    with open(path, "w") as f:
-        json.dump(RULES, f)
-    return path
+def rule_book(data_dir):
+    put_document("rules", json.dumps(RULES))
 
 
 @pytest.mark.parametrize("addr,subject,listed,bucket,conf", PRECEDENCE, ids=[f"{a} {s}" for a, s, *_ in PRECEDENCE])
-def test_hwf_classifier_precedence(rules_file, addr, subject, listed, bucket, conf):
+def test_hwf_classifier_precedence(rule_book, addr, subject, listed, bucket, conf):
     assert curation.classify(addr, subject, "", listed)[:2] == (bucket, conf)
 
 
@@ -73,16 +69,10 @@ def test_hwf_the_short_esp_marker_still_counts_as_a_whole_label(data_dir, addr):
 
 def test_hwf_the_classifier_sees_rule_edits_and_reads_any_case(data_dir):
     from mailmind.bootstrap.curation import rules
-
-    def write(data, stamp):
-        path = data_dir / "mailmind_rules.json"
-        with open(path, "w") as f:
-            json.dump(data, f)
-        os.utime(path, (stamp, stamp))                   # the classifier caches the file by mtime
-    write({"keep_senders": ["Lin@Studio.Example.Test"]}, NOW_TS)
+    put_document("rules", json.dumps({"keep_senders": ["Lin@Studio.Example.Test"]}))
     assert curation.classify("lin@studio.example.test", "hi")[0] == "personal/protected"
     assert rules.load()["keep_senders"] == ["lin@studio.example.test"]
-    write({"block_domains": ["STUDIO.example.test"]}, NOW_TS + 1)
+    put_document("rules", json.dumps({"block_domains": ["STUDIO.example.test"]}))     # a version on, which the reader asks
     assert curation.classify("lin@studio.example.test", "hi")[0] == "blocked"
 
 

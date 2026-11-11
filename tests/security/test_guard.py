@@ -166,7 +166,7 @@ def test_data_dir_is_the_data_directory_every_module_uses(data_dir):
     assert json.loads((data_dir / "mailmind.config.json").read_text()) == {"accounts": []}
     assert sorted(e["kind"] for e in curation.AUDIT.read()["events"]) == ["reconcile", "sender_cleanup"]
     assert sorted(p.name for p in data_dir.iterdir() if not p.name.startswith("mailmind.db")) == [
-        ".rules.lock", "mailmind.config.json", "mailmind_rules.json"]
+        "mailmind.config.json"]
 
 
 def test_the_directory_mailmind_home_names_is_guarded_too(tmp_path, refused):

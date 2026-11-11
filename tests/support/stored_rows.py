@@ -72,3 +72,26 @@ def summary(pk, importance, category, action=""):
         c.commit()
     finally:
         c.close()
+
+
+# What importing a document's old file comes to: its text, inserted as it is; or, for one there already, put in its place a
+# version on, as a write by hand would.
+IMPORT = ("INSERT INTO documents(name, body, changed_at) VALUES(?, ?, ?) ON CONFLICT(name) DO UPDATE SET body=excluded.body, "
+          "version=documents.version + 1, changed_at=excluded.changed_at")
+
+
+def document(name):
+    """The text the document `name` holds, as it was written, or None when there is none."""
+    found = q("SELECT body FROM documents WHERE name=?", name)
+    return found[0]["body"] if found else None
+
+
+def put_document(name, text):
+    """Keep `text` as the document `name`, as an import of its old file does."""
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        c.execute(IMPORT, (name, text, "2026-11-02T12:00:00+00:00"))
+        c.commit()
+    finally:
+        c.close()

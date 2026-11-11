@@ -1,4 +1,4 @@
-"""A person's filters: what one may say, how they're kept in the rules file, and what POST /api/filters asks of the use case
+"""A person's filters: what one may say, how they're kept in the rule book, and what POST /api/filters asks of the use case
 (mailmind.curation.application.filters.Filters)."""
 import json
 import re
@@ -11,6 +11,7 @@ from mailmind.curation.domain import filters, rulebook
 from mailmind.discovery.domain import arrival
 from mailmind.discovery.domain.query import MAX_CHARS
 from mailmind.kernel.errors import NotFound, Refused
+from stored_rows import document, put_document
 
 
 # ── what one may say ────────────────────────────────────────────────────────────────────────────
@@ -55,12 +56,12 @@ def test_what_filters_ask_together():
     assert filters.flags_of([star, read]) == {"flagged": True, "seen": True}
 
 
-# ── the file ────────────────────────────────────────────────────────────────────────────────────
+# ── the rule book ───────────────────────────────────────────────────────────────────────────────
 
-def test_a_file_from_before_filters_reads_as_none(data_dir):
-    with open(data_dir / "mailmind_rules.json", "w") as f:
-        json.dump({"keep_senders": ["a@example.test"]}, f)
-    assert rules.load()["filters"] == []
+def test_a_rule_book_from_before_filters_reads_as_none(data_dir):
+    put_document("rules", json.dumps({"keep_senders": ["a@example.test"]}))
+    r = rules.load()
+    assert r["filters"] == [] and r["keep_senders"] == ["a@example.test"]
 
 
 def test_a_change_of_the_lists_keeps_the_filters(data_dir):
@@ -72,26 +73,17 @@ def test_a_change_of_the_lists_keeps_the_filters(data_dir):
     assert rules.load()["filters"] == [f]
 
 
-def test_it_is_on_disk_with_the_lists(data_dir):
+def test_it_is_kept_with_the_lists(data_dir):
     f = filters.new("from:lin", True, False)
     rules.change(lambda r: r.update(filters=[f]))
-    with open(data_dir / "mailmind_rules.json") as file:
-        on_disk = json.load(file)
-    assert on_disk["filters"] == [f] and "keep_senders" in on_disk
+    kept = json.loads(document("rules"))
+    assert kept["filters"] == [f] and "keep_senders" in kept
 
 
 @pytest.mark.parametrize("bad", [[{"q": "from:lin"}], [{"id": "f", "q": 3}], ["not a filter"], 3])
 def test_a_filter_that_isnt_one_is_not_read_as_one(bad):
     with pytest.raises((ValueError, TypeError, AttributeError)):
         rulebook.normalized({"filters": bad})
-
-
-def test_a_bad_hand_edit_keeps_the_rules_read_well(data_dir):
-    rules.add("kept.example.test", "keep")
-    assert rules.load()["keep_domains"] == ["kept.example.test"]
-    with open(data_dir / "mailmind_rules.json", "w") as f:
-        json.dump({"keep_domains": ["other.example.test"], "filters": [{"nope": 1}]}, f)
-    assert rules.load()["keep_domains"] == ["kept.example.test"]
 
 
 def test_a_change_that_raises_saves_nothing(data_dir):
@@ -103,7 +95,7 @@ def test_a_change_that_raises_saves_nothing(data_dir):
     assert rules.load()["filters"] == []
 
 
-# ── a change asked for (Filters.post), kept in the rules file ───────────────────────────────────────
+# ── a change asked for (Filters.post), kept in the rule book ────────────────────────────────────────
 
 GOOD = {"verb": "create", "q": "from:news@loom.example.test", "star": True, "read": False}
 

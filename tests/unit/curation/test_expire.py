@@ -1,5 +1,5 @@
 """Expiry rules: rule storage, sender/domain matching, and age selection. Nothing touches IMAP, and
-the rules file is the test's own (`data_dir`). All addresses are fictional."""
+the rule book is in the test's own database (`data_dir`). All addresses are fictional."""
 import email
 from datetime import datetime, timezone
 
@@ -8,7 +8,7 @@ import pytest
 from mailmind.bootstrap import curation
 from mailmind.bootstrap.curation import rules
 from mailmind.curation.domain import expiry, rulebook
-from mailmind.platform import settings
+from stored_rows import put_document
 
 HOUR = 3600
 NOW = 1_800_000_000
@@ -120,13 +120,11 @@ def test_zero_hours_clears(data_dir):
     assert rules.load()[rules.EXPIRE] == {}
 
 
-def test_legacy_file_without_expiry_loads(data_dir):
-    with open(settings.current().rules, "w") as f:
-        f.write('{"keep_domains": ["work.test"], "block_domains": [], '
-                '"keep_senders": [], "block_senders": []}')
+def test_a_rule_book_from_before_expiry_loads(data_dir):
+    put_document("rules", '{"keep_domains": ["work.test"], "block_domains": [], "keep_senders": [], "block_senders": []}')
     r = rules.load()
     assert r[rules.EXPIRE] == {} and r["keep_domains"] == ["work.test"]
 
 
-def test_missing_file_loads_empty(data_dir):
+def test_no_rule_book_loads_empty(data_dir):
     assert rules.load()[rules.EXPIRE] == {}

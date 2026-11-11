@@ -135,6 +135,17 @@ def test_rules_keep_block_remove_and_expire(data_dir, capsys):
     assert "keep_domains (0): —" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("argv", [["rules"], ["rules", "keep", "kept.example.test"], ["rules", "expire", "shelf.example.test", "72"]],
+                         ids=" ".join)
+def test_the_rules_commands_make_the_database_they_are_kept_in(data_dir, capsys, argv):
+    """The rules live in the database, so a rules command run before the app ever has makes it, as a sync does."""
+    for name in ("mailmind.db", "mailmind.db-wal", "mailmind.db-shm"):
+        (data_dir / name).unlink(missing_ok=True)
+    main(argv)
+    main(["rules"])
+    assert "keep_senders (0): —" in capsys.readouterr().out
+
+
 def test_views_add_list_and_remove(data_dir, capsys):
     main(["views", "add", "Unread from Thimble", "from:thimble is:unread"])
     made = capsys.readouterr().out
