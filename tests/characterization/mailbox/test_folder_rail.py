@@ -1,9 +1,9 @@
 """The folder rail: one LIST for a burst and for its time to live, and the last list when a refresh fails or is refused."""
-import time
 from datetime import timedelta
 
 import gate
 from fixtures import world as w
+from waiting import wait_until
 from world_helpers import count
 
 
@@ -15,7 +15,7 @@ def test_hwf_a_burst_of_folder_requests_lists_the_folders_once(app, world):
     with gate.held_elsewhere():                              # every request queues on the cold cache
         for t in clients:
             t.start()
-        time.sleep(0.3)
+        assert wait_until(lambda: gate.waiting_for_a_gate() == 4)
     for t in clients:
         t.join(30)
     assert answers == [200] * 4
