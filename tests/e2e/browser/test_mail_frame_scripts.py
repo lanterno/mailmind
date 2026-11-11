@@ -92,6 +92,24 @@ def asked_by_frames(page):
     return asked
 
 
+def until(page, check, what):
+    for _ in range(100):
+        if check():
+            return
+        page.pw.wait_for_timeout(50)
+    assert check(), what
+
+
+# What Chromium says as it reads a <meta> refresh it won't follow: one to a javascript: URL, or any in a sandbox.
+REFRESH_REFUSED = re.compile(r"Refused to (refresh .* to a javascript: URL|execute the redirect specified via '<meta)")
+
+
+def refreshes_refused(page, *frames):
+    """Waits until each <meta> refresh the frames hold was refused, as each was read: none is left to go off."""
+    n = sum(frame.locator('meta[http-equiv="refresh" i]').count() for frame in frames)
+    until(page, lambda: sum(bool(REFRESH_REFUSED.search(p)) for p in page.problems) >= n, "a refresh wasn't refused")
+
+
 def click_if_there(where):
     """The sanitizer takes some of these out."""
     if where.count():
@@ -107,7 +125,8 @@ def test_nothing_in_a_message_runs_or_asks_for_anything(page, world, wall, asked
         assert frame.locator("script").count() >= 2 and frame.locator("[onerror]").count() >= 2
     click_if_there(frame.get_by_text("a link"))
     click_if_there(frame.get_by_role("button", name="go"))
-    page.pw.wait_for_timeout(1500)           # past the second meta refresh
+    refreshes_refused(page, frame)
+    page.pw.wait_for_timeout(300)            # a javascript: link would run in a task after the click; nothing says it was refused
     assert page.pw.evaluate("window.__ran || []") == []
     # The frame's policy lets an https image through, for someone who asks to see them, so holding those back is the sanitizer's.
     only = {f"{AWAY}/pixel.png", f"{AWAY}/back.png"} if wall == "no sanitizer" else set()
@@ -149,7 +168,7 @@ def quoted_in_a_reply(page, world, body):
 def test_nothing_in_a_message_runs_in_the_quote_of_a_reply(page, world, wall):
     frame = quoted_in_a_reply(page, world, HOSTILE)
     expect(frame.get_by_text("A message with everything in it")).to_be_visible()
-    page.pw.wait_for_timeout(1500)           # past the second meta refresh
+    refreshes_refused(page, page.frame_locator(FRAME).first, frame)     # the reader's frame says so of its own too
     assert page.pw.evaluate("window.__ran || []") == []
     assert [p for p in page.problems if p.startswith("pageerror")] == []
 
