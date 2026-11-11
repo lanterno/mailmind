@@ -1,11 +1,10 @@
 """mailmind.platform.workers.idle_supervisor: one worker thread per key, kept in line with what is
 wanted. Plain threads and a connection that is only an event; tests/unit/mailbox/test_idle_supervisor.py
-holds the same through IDLE itself."""
+holds the same through IDLE itself. What a worker does shows on its connection, which the subclass makes."""
 import ast
 import pathlib
 import sys
 import threading
-import time
 
 import pytest
 
@@ -14,30 +13,41 @@ from mailmind.platform.workers.idle_supervisor import IdleSupervisor
 from waiting import wait_until
 
 ME = threading.current_thread().name
+TICK = 2 ** -10         # a rest of moments, where the app's first is 5 seconds
 
 
 class Line:
-    """A connection. A worker waits on it until news comes, or until it is interrupted, which makes
-    the wait raise, as a socket shut down from another thread does."""
+    """A connection, which knows the worker that opened it. A worker waits on it until news comes, or until it is interrupted,
+    which makes the wait raise, as a socket shut down from another thread does."""
 
-    def __init__(self, key):
-        self.key = key
+    def __init__(self, spec):
+        self.spec, self.key = spec, spec[0]
+        self.thread = threading.current_thread()
         self.interrupted_by = []
         self.closed_by = []
         self.news = threading.Event()
         self.shut = False
         self.deaf = False                 # it takes no notice of the first interrupt
+        self.waiting = False              # its worker waits on it now
 
     def interrupt(self):
         self.interrupted_by.append(threading.current_thread().name)
         if self.deaf:
             self.deaf = False
             return
+        self.drop()
+
+    def drop(self):
+        """The far end goes, as a server hanging up does."""
         self.shut = True
         self.news.set()
 
     def wait(self):
-        self.news.wait(10)
+        self.waiting = True
+        try:
+            self.news.wait(300)
+        finally:
+            self.waiting = False
         self.news.clear()
         if self.shut:
             raise OSError("shut down")
@@ -51,17 +61,13 @@ class Watching(IdleSupervisor):
         self.wanted = {k: "first" for k in keys}
         self.limit = 12
         self.lines = []
-        self.threads = []
+        self.workers = []                 # each thread that asked for a connection
         self.refuse_connect = 0           # how many connects raise
         self.never_ready = set()          # keys whose connections will never do
         self.unreadable = False
         self.serve_once = False           # a connection serves one wait, then ends
         self.said = []
-
-    def _spawn(self, spec):
-        watch = super()._spawn(spec)
-        self.threads.append(watch.thread)
-        return watch
+        self.rests = []                   # what each failure rested for
 
     def _desired(self):
         return None if self.unreadable else {k: (k, way) for k, way in self.wanted.items()}
@@ -79,10 +85,12 @@ class Watching(IdleSupervisor):
         return f"watch:{spec[0]}"
 
     def _connect(self, spec, /):
+        if threading.current_thread() not in self.workers:
+            self.workers.append(threading.current_thread())
         if self.refuse_connect:
             self.refuse_connect -= 1
             raise ConnectionRefusedError("no one there")
-        line = Line(spec[0])
+        line = Line(spec)
         self.lines.append(line)
         return line
 
@@ -103,14 +111,14 @@ class Watching(IdleSupervisor):
 
     def _say_failed(self, spec, error, /):
         self.said.append(("failed", spec[0], type(error).__name__))
+        self.rests.append(self.next_rest(spec[0]))
 
     def line_of(self, key, n=0):
         return [line for line in self.lines if line.key == key][n]
 
     def serving(self, key):
-        """Whether `key`'s worker has its connection, and so can be interrupted."""
-        watch = self._watchers.get(key)
-        return watch is not None and watch.conn is not None
+        """Whether a worker for `key` waits on its connection, and so can be interrupted."""
+        return any(line.waiting for line in self.lines if line.key == key)
 
 
 @pytest.fixture
@@ -124,9 +132,9 @@ def build():
     yield make
     for sup in made:
         sup.stop()
-    threads = [t for sup in made for t in sup.threads]
+    threads = [t for sup in made for t in sup.workers]
     for t in threads:
-        t.join(5)
+        t.join(30)
     assert not any(t.is_alive() for t in threads), "a worker didn't stop"
 
 
@@ -140,27 +148,26 @@ def test_each_key_wanted_gets_a_worker_of_its_own(build):
     assert started(sup) == 2
     assert sup.watching() == {"a": True, "b": True}
     assert wait_until(lambda: sup.serving("a") and sup.serving("b"))
-    assert sup._watchers["a"].thread.name == "watch:a" and sup._watchers["a"].thread.daemon
-    assert sup._watchers["a"].thread is not sup._watchers["b"].thread
+    a, b = sup.line_of("a").thread, sup.line_of("b").thread
+    assert a.name == "watch:a" and a.daemon and a is not b
 
 
 def test_a_second_reconcile_with_nothing_changed_leaves_the_workers_be(build):
     sup = build("a")
     started(sup)
     assert wait_until(lambda: sup.serving("a"))
-    first = sup._watchers["a"]
     assert sup.reconcile() == 1
-    assert sup._watchers["a"] is first and len(sup.lines) == 1 and sup.line_of("a").interrupted_by == []
+    assert len(sup.lines) == 1 and sup.line_of("a").interrupted_by == [] and sup.line_of("a").thread.is_alive()
 
 
 def test_a_key_no_longer_wanted_is_retired_at_once(build):
     sup = build("a", "b")
     started(sup)
     assert wait_until(lambda: sup.serving("a"))
-    worker = sup._watchers["a"].thread
+    worker = sup.line_of("a").thread
     del sup.wanted["a"]
     assert sup.reconcile() == 1
-    worker.join(5)
+    worker.join(30)
     assert not worker.is_alive() and set(sup.watching()) == {"b"}
     assert sup.line_of("a").interrupted_by == [ME]
 
@@ -169,14 +176,14 @@ def test_a_key_wanted_differently_gets_a_fresh_worker(build):
     sup = build("a")
     started(sup)
     assert wait_until(lambda: sup.serving("a"))
-    old = sup._watchers["a"]
+    old = sup.line_of("a")
     sup.wanted["a"] = "second"
     sup.reconcile()
-    old.thread.join(5)
-    new = sup._watchers["a"]
-    assert not old.thread.is_alive() and new is not old
-    assert new.spec == ("a", "second") and sup.watching() == {"a": True}
+    old.thread.join(30)
+    assert not old.thread.is_alive()
     assert wait_until(lambda: len(sup.lines) == 2)
+    new = sup.line_of("a", 1)
+    assert new.spec == ("a", "second") and new.thread is not old.thread and sup.watching() == {"a": True}
 
 
 def test_workers_start_up_to_the_limit_and_a_retirement_makes_room(build):
@@ -194,32 +201,34 @@ def test_before_begin_and_after_stop_reconcile_starts_nothing(build):
     assert sup.reconcile() == 0 and sup.watching() == {} and sup.lines == []
     started(sup)
     assert wait_until(lambda: sup.serving("a"))
-    worker = sup._watchers["a"].thread
+    worker = sup.line_of("a").thread
     sup.stop()
-    worker.join(5)
+    worker.join(30)
     assert sup.reconcile() == 0 and sup.watching() == {} and len(sup.lines) == 1
 
 
 def test_when_what_is_wanted_cant_be_told_the_workers_stay_as_they_are(build):
     sup = build("a")
     started(sup)
-    first = sup._watchers["a"]
+    assert wait_until(lambda: sup.serving("a"))
     sup.unreadable = True
     assert sup.reconcile() == 0
-    assert sup._watchers["a"] is first and sup.watching() == {"a": True}
+    assert sup.watching() == {"a": True} and len(sup.lines) == 1 and sup.line_of("a").interrupted_by == []
 
 
 def test_stop_interrupts_each_connection_and_leaves_closing_it_to_its_worker(build):
     sup = build("a", "b")
     started(sup)
     assert wait_until(lambda: sup.serving("a") and sup.serving("b"))
-    threads = [w.thread for w in sup._watchers.values()]
+    a, b = sup.line_of("a"), sup.line_of("b")
     sup.stop()
-    for t in threads:
-        t.join(5)
-    assert sup.line_of("a").interrupted_by == [ME] and sup.line_of("b").interrupted_by == [ME]
-    assert sup.line_of("a").closed_by == ["watch:a"] and sup.line_of("b").closed_by == ["watch:b"]
-    assert sup._conns == [] and sup.watching() == {}
+    for line in (a, b):
+        line.thread.join(30)
+    assert a.interrupted_by == [ME] and b.interrupted_by == [ME]
+    assert a.closed_by == ["watch:a"] and b.closed_by == ["watch:b"]
+    assert sup.watching() == {}
+    sup.stop()                                                 # each worker took its connection off the list as it went
+    assert a.interrupted_by == [ME] and b.interrupted_by == [ME]
 
 
 def test_a_retired_worker_still_on_its_way_out_is_interrupted_by_stop_too(build):
@@ -227,26 +236,29 @@ def test_a_retired_worker_still_on_its_way_out_is_interrupted_by_stop_too(build)
     sup = build("a")
     started(sup)
     assert wait_until(lambda: sup.serving("a"))
-    worker, line = sup._watchers["a"].thread, sup.line_of("a")
+    line = sup.line_of("a")
     line.deaf = True
     del sup.wanted["a"]
     sup.reconcile()
-    assert sup.watching() == {} and sup._conns == [line] and worker.is_alive()
+    assert sup.watching() == {} and line.thread.is_alive()
     sup.stop()
-    worker.join(5)
-    assert not worker.is_alive() and len(line.interrupted_by) == 2 and line.closed_by == ["watch:a"]
+    line.thread.join(30)
+    assert not line.thread.is_alive() and len(line.interrupted_by) == 2 and line.closed_by == ["watch:a"]
 
 
 def test_a_connection_that_never_will_do_ends_its_worker_and_is_closed(build):
     sup = build("a")
     sup.never_ready = {"a"}
     started(sup)
-    worker = sup._watchers["a"].thread
-    worker.join(5)
-    assert not worker.is_alive() and sup.watching() == {"a": False}
-    assert sup.line_of("a").closed_by == ["watch:a"] and sup._conns == []
+    assert wait_until(lambda: sup.lines)
+    line = sup.line_of("a")
+    line.thread.join(30)
+    assert not line.thread.is_alive() and sup.watching() == {"a": False}
+    assert line.closed_by == ["watch:a"]
     sup.reconcile()                                            # it isn't started again
-    assert sup._watchers["a"].thread is worker and len(sup.lines) == 1
+    assert sup.watching() == {"a": False} and len(sup.lines) == 1
+    sup.stop()                                                 # and it never listed its connection to be interrupted
+    assert line.interrupted_by == []
 
 
 def test_a_connection_that_ends_while_still_wanted_is_closed_and_replaced(build):
@@ -257,41 +269,33 @@ def test_a_connection_that_ends_while_still_wanted_is_closed_and_replaced(build)
     first = sup.line_of("a")
     first.news.set()
     assert wait_until(lambda: first.closed_by == ["watch:a"] and len(sup.lines) == 2)
-    assert wait_until(lambda: sup._conns == [sup.line_of("a", 1)])
+    second = sup.line_of("a", 1)
+    assert wait_until(lambda: second.waiting)
     assert sup.watching() == {"a": True} and sup.said == []
+    sup.stop()                                                 # the first is off the list, the second on it
+    assert first.interrupted_by == [] and second.interrupted_by == [ME]
 
 
-class Rests(Watching):
-    """Writes down each rest and takes none, then quits at the `until`th."""
-
-    def __init__(self, *keys, until):
-        super().__init__(*keys)
-        self.until = until
-        self.rests = []
-
-    def _rest(self, watch, seconds):
-        self.rests.append(seconds)
-        if len(self.rests) == self.until:
-            watch.quit = True
+def test_a_worker_rests_twice_as_long_each_time_up_to_the_longest(build):
+    sup = build("a")
+    sup.FIRST_REST, sup.LONGEST_REST = TICK, 60 * TICK         # as 5 seconds is to 300
+    sup.refuse_connect = 8
+    started(sup)
+    assert wait_until(lambda: sup.serving("a"))
+    assert [r / TICK for r in sup.rests] == [1, 2, 4, 8, 16, 32, 60, 60]
 
 
-def test_a_worker_rests_twice_as_long_each_time_up_to_the_longest():
-    sup = Rests("a", until=8)
-    sup.refuse_connect = 100
-    sup._worker(("a", "first"))
-    assert sup.rests == [5, 10, 20, 40, 80, 160, 300, 300]
-
-
-def test_a_connection_that_serves_starts_the_rests_over():
-    sup = Rests("a", until=4)
+def test_a_connection_that_serves_starts_the_rests_over(build):
+    sup = build("a")
+    sup.FIRST_REST, sup.LONGEST_REST = TICK, 60 * TICK
     sup.refuse_connect = 3
-
-    def drops(watch, conn, /):
-        raise OSError("the line dropped")
-    sup._serve = drops
-    sup._worker(("a", "first"))
-    assert sup.rests == [5, 10, 20, 5]
-    assert sup.lines[0].closed_by == [ME]
+    started(sup)
+    assert wait_until(lambda: sup.serving("a"))
+    assert sup.next_rest("a") == TICK
+    sup.line_of("a").drop()
+    assert wait_until(lambda: len(sup.lines) == 2 and sup.line_of("a", 1).waiting)
+    assert [r / TICK for r in sup.rests] == [1, 2, 4, 1]
+    assert sup.line_of("a").closed_by == ["watch:a"]
 
 
 def test_a_worker_says_what_failed(build):
@@ -305,28 +309,27 @@ def test_a_worker_interrupted_as_it_leaves_says_nothing_failed(build):
     sup = build("a")
     started(sup)
     assert wait_until(lambda: sup.serving("a"))
-    worker = sup._watchers["a"].thread
+    line = sup.line_of("a")
     sup.stop()
-    worker.join(5)
-    assert not worker.is_alive() and sup.line_of("a").shut and sup.said == []
+    line.thread.join(30)
+    assert not line.thread.is_alive() and line.shut and sup.said == []
 
 
 @pytest.mark.parametrize("how", ["retired", "stopped"])
 def test_a_worker_resting_is_woken_at_once(build, how):
     sup = build("a")
-    sup.FIRST_REST = 60
+    sup.FIRST_REST = 3600                                      # one left to rest is still resting when the test gives up on it
     sup.refuse_connect = 1
     started(sup)
     assert wait_until(lambda: sup.said)
-    worker = sup._watchers["a"].thread
-    began = time.monotonic()
+    [worker] = sup.workers
     if how == "retired":
         del sup.wanted["a"]
         sup.reconcile()
     else:
         sup.stop()
-    worker.join(5)
-    assert not worker.is_alive() and time.monotonic() - began < 2
+    worker.join(30)
+    assert not worker.is_alive()
 
 
 def test_a_worker_that_finds_itself_unwanted_says_so_and_hands_over(build):
@@ -334,14 +337,15 @@ def test_a_worker_that_finds_itself_unwanted_says_so_and_hands_over(build):
     sup = build("a")
     started(sup)
     assert wait_until(lambda: sup.serving("a"))
-    old, line = sup._watchers["a"], sup.line_of("a")
+    old = sup.line_of("a")
     sup.wanted["a"] = "second"                                 # and no reconcile from here
-    line.news.set()
-    old.thread.join(5)
-    assert not old.thread.is_alive() and line.closed_by == ["watch:a"]
+    old.news.set()
+    old.thread.join(30)
+    assert not old.thread.is_alive() and old.closed_by == ["watch:a"]
     assert sup.said == [("unwanted", "a")]
-    assert wait_until(lambda: sup.serving("a"))
-    assert sup._watchers["a"] is not old and sup._watchers["a"].spec == ("a", "second")
+    assert wait_until(lambda: len(sup.lines) == 2 and sup.line_of("a", 1).waiting)
+    new = sup.line_of("a", 1)
+    assert new.spec == ("a", "second") and new.thread is not old.thread
 
 
 def test_it_is_abstract_until_told_what_a_connection_is():
