@@ -265,7 +265,7 @@ def test_the_startup_line_says_when_there_is_no_key(plain, data_dir, monkeypatch
     from mailmind.bootstrap import assistant
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     assert assistant.status.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: "
-                                                  "set anthropic_api_key in mailmind.config.json, or ANTHROPIC_API_KEY")
+                                                  "keep one with `uv run python -m mailmind ai key`, or set ANTHROPIC_API_KEY")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
     assert assistant.status.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: "
                                                   "the anthropic_api_key in mailmind.config.json can't be read")

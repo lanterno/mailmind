@@ -192,3 +192,105 @@ def test_db_rethread_regroups_the_mail_and_writes_down_what_it_names(world, caps
         assert c.execute("SELECT count(*) FROM thread_links WHERE message_pk=?", (reply,)).fetchone()[0] > 0
     finally:
         c.close()
+
+
+def _config(world):
+    import json
+    return json.loads((world.dir / "mailmind.config.json").read_text())
+
+
+def _typing(monkeypatch, text, *, tty=False):
+    """What standard input gives: `text` as its first line, or as what the person types at a prompt."""
+    import getpass
+    import io
+    stdin = io.StringIO(text + "\n")
+    monkeypatch.setattr(stdin, "isatty", lambda: tty)
+    monkeypatch.setattr(sys, "stdin", stdin)
+    asked = []
+    monkeypatch.setattr(getpass, "getpass", lambda prompt: asked.append(prompt) or text)
+    return asked
+
+
+def _exit(argv):
+    with pytest.raises(SystemExit) as done:
+        main(argv)
+    return done.value.code
+
+
+def test_accounts_password_keeps_it_in_the_keychain_and_points_the_config_at_it(world, monkeypatch, capsys, fake_keychain):
+    _typing(monkeypatch, "  a-new-password  ")
+    before = next(a for a in _config(world)["accounts"] if a["email"] == w.ADA)["credential"]
+    assert _exit(["accounts", "password", w.ADA]) == 0
+    assert fake_keychain.find(f"account:{w.ADA}") == "a-new-password"
+    after = next(a for a in _config(world)["accounts"] if a["email"] == w.ADA)["credential"]
+    assert after == {"keychain": f"account:{w.ADA}", "version": (before.get("version") or 0) + 1}
+    out = capsys.readouterr().out
+    assert out == f"{w.ADA}'s password is in the login Keychain as account:{w.ADA}, and mailmind.config.json names it.\n"
+    assert "a-new-password" not in (world.dir / "mailmind.config.json").read_text()
+
+
+def test_accounts_password_asks_at_a_prompt_that_shows_nothing_at_a_terminal(world, monkeypatch, capsys, fake_keychain):
+    asked = _typing(monkeypatch, "typed-at-the-prompt", tty=True)
+    assert _exit(["accounts", "password", w.ADA]) == 0
+    assert asked == [f"Password for {w.ADA} (nothing shows as you type): "]
+    assert fake_keychain.find(f"account:{w.ADA}") == "typed-at-the-prompt"
+    assert "typed-at-the-prompt" not in capsys.readouterr().out
+
+
+def test_accounts_password_for_an_account_the_config_doesnt_hold_changes_nothing(world, monkeypatch, capsys, fake_keychain):
+    _typing(monkeypatch, "whatever")
+    kept, before = fake_keychain.items(), _config(world)
+    assert _exit(["accounts", "password", "nobody@example.test"]) == 1
+    assert capsys.readouterr().out == ("mailmind.config.json has no account nobody@example.test: add it in Settings, or to the "
+                                       "file, first.\n")
+    assert (fake_keychain.items(), _config(world)) == (kept, before)
+    assert _exit(["accounts", "password"]) == 1
+    assert capsys.readouterr().out == "Name the account: uv run python -m mailmind accounts password you@example.com\n"
+
+
+@pytest.mark.parametrize("typed, said", [
+    ("", "Nothing was given, so nothing changed.\n"),
+    ("café", "Nothing changed: A secret MailMind keeps in the Keychain is printable ASCII, and not empty: letters, digits, "
+             "punctuation and spaces.\n"),
+], ids=repr)
+def test_a_password_that_cant_be_kept_changes_nothing_and_is_never_said(world, monkeypatch, capsys, fake_keychain, typed, said):
+    _typing(monkeypatch, typed)
+    kept, before = fake_keychain.items(), _config(world)
+    assert _exit(["accounts", "password", w.ADA]) == 1
+    assert capsys.readouterr().out == said
+    assert (fake_keychain.items(), _config(world)) == (kept, before)
+
+
+def test_a_keychain_that_wont_keep_it_changes_nothing(world, monkeypatch, capsys, fake_keychain):
+    from mailmind.platform import keychain
+
+    class Locked:
+        def find(self, name):
+            raise keychain.Refused(f"The Keychain didn't give MailMind its item {name}", 36)
+
+        def add(self, name, secret, *, replace):
+            pass
+    _typing(monkeypatch, "a-new-password")
+    before = _config(world)
+    keychain.use(Locked())
+    try:
+        assert _exit(["accounts", "password", w.ADA]) == 1
+    finally:
+        keychain.use(fake_keychain)
+    assert capsys.readouterr().out == "Nothing changed: The Keychain didn't keep the password. Is the login keychain locked?\n"
+    assert _config(world) == before
+
+
+def test_ai_key_keeps_the_claude_key_in_the_keychain_and_the_assistant_reads_it(data_dir, monkeypatch, capsys, fake_keychain):
+    import json
+    from mailmind.bootstrap import assistant
+    (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [], "anthropic_api_key": {"env": "SOME_KEY"}}))
+    _typing(monkeypatch, "sk-ant-kept-in-the-keychain")
+    assert _exit(["ai", "key"]) == 0
+    assert capsys.readouterr().out == ("The Claude API key is in the login Keychain as anthropic-api-key, and "
+                                       "mailmind.config.json names it.\n")
+    assert fake_keychain.items() == {"anthropic-api-key": "sk-ant-kept-in-the-keychain"}
+    written = (data_dir / "mailmind.config.json").read_text()
+    assert json.loads(written)["anthropic_api_key"] == {"keychain": "anthropic-api-key", "version": 1}
+    assert "sk-ant" not in written
+    assert assistant.key() == ("sk-ant-kept-in-the-keychain", "mailmind.config.json")
