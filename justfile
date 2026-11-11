@@ -224,6 +224,10 @@ views:
 db-check-upgrade *args:
     {{py}} -m mailmind db check-upgrade {{args}}
 
+# Encrypt a database that is still plaintext, and its backups, with MailMind stopped (owner only; --dry tries a copy)
+db-encrypt *args:
+    {{py}} -m mailmind db encrypt {{args}}
+
 # Give back the room freed in the database file, with MailMind stopped (owner only)
 db-compact *args:
     {{py}} -m mailmind db compact {{args}}
