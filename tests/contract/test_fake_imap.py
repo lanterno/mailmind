@@ -7,12 +7,12 @@ drifted from what the app relies on fails here first.
 import imaplib
 import json
 import threading
-import time
 
 import pytest
 
 from answered import answered
 from fakes.imap_server import FakeIMAPServer
+from waiting import wait_until
 
 ADA = "ada@example.test"
 
@@ -271,11 +271,11 @@ def test_idle_hears_new_mail(srv, app):
     heard = []
 
     def later():
-        time.sleep(0.2)
+        assert wait_until(lambda: srv.commands_for(ADA, "IDLE"))
         srv.deliver(ADA, "INBOX", _mail(1))
 
     threading.Thread(target=later, daemon=True).start()
-    with M.idle(duration=2) as idler:
+    with M.idle(duration=30) as idler:
         for typ, data in idler:
             heard.append((typ, data))
             if typ == "EXISTS":
