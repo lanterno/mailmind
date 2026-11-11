@@ -309,7 +309,11 @@ def test_opening_a_conversation_warms_its_closed_members_once_each(page, world):
     page.pw.on("request", lambda r: asked.append(r.url) if "prefetch=1" in r.url else None)
     opened(page)
     r = page.locator("#rows .row[data-key]").filter(has=page.locator(".thr-count")).filter(has_text="unch").first
+    # Held while the click lands: a pointer resting on a row for a moment warms that row's body, and a click a busy
+    # machine is slow to deliver would be one.
+    page.clock.pause_at(page.evaluate("Date.now()") + 1_000)
     r.click()
+    page.clock.resume()
     members = page.locator("#thread .tmsg")
     expect(members).to_have_count(3)
     keys = [int(k) for k in members.evaluate_all("ms => ms.map(m => m.dataset.key)")]
