@@ -1,7 +1,15 @@
-// Where you are lives in the URL, so a deep link, Back and a reload all come back to it. What the list shows is one
-// type, not a set of flags: a folder (a real one, or a virtual one named __like_this__), all inboxes, a virtual one over every
-// account, a search, or the Document Hub, which holds files and not rows.
+// Where you are lives in the URL, so a deep link, Back, a reload and a link opened in a new tab all come back to it. What the
+// list shows is one type, not a set of flags: a folder (a real one, or a virtual one named __like_this__), all inboxes, a
+// virtual one over every account, a search, or the Document Hub, which holds files and not rows.
+//
+// The browser keeps every URL a tab goes to in its history, in plaintext, and may sync it, so no URL names anything of a
+// person's. A route that holds an account, a folder, a search, a topic or an opened message is a place, `/p/<id>`: its id is
+// random and made here, so going somewhere waits for nothing, and the server keeps what it stands for in the encrypted database
+// and puts it back into a page opened there (`<meta name="mailmind-place">`). Only a route that holds none of that is written as
+// itself. Nothing goes into `history.state` either, which the browser keeps on disk too.
 import { useSyncExternalStore } from "react";
+import { post, refusalOf } from "../lib/api/client";
+import { LIMITS } from "../lib/api/limits.gen";
 import { navigate } from "../lib/backTrap";
 import type { Copy } from "../lib/copy";
 
@@ -31,39 +39,147 @@ export type Opened = ({ kind: "message" } & Copy) | ({ kind: "thread"; id: strin
 // `brief` is the phone's way to say the brief is showing: there a pane is either the list or what's open.
 export interface Route { source: ListSource | null; opened: Opened; brief?: boolean }
 
-const seg = encodeURIComponent;
+const HOME: Route = { source: null, opened: null };
+const PLACE = /^\/p\/([^/]+)$/;
 
-export function pathOf({ source, opened, brief }: Route): string {
-  let path = "";
-  const query = new URLSearchParams();
-  if (source?.kind === "folder") path += `/m/${seg(source.account)}/${seg(source.folder)}`;
-  else if (source?.kind === "allInboxes") path += "/all";
-  else if (source?.kind === "across") path += `/all/${source.folder}`;
-  else if (source?.kind === "documents") path += "/documents";
-  else if (source?.kind === "search") {
-    path += "/search";
-    query.set("q", source.q);
-    if (source.account) query.set("account", source.account);
-    if (source.lane) query.set("lane", source.lane);
-    if (source.thread) query.set("thread", source.thread);
-    if (source.asked) query.set("asked", source.asked);
-  }
-  else if (source?.kind === "digest") path += source.list === "topic" ? `/brief/topic/${seg(source.label)}` : `/brief/${source.list}`;
-  if (brief) query.set("brief", "1");
-  if (opened?.kind === "thread") {
-    query.set("c", opened.id);
-    query.set("ca", opened.account);
-  }
-  if (opened) {
-    query.set("key", String(opened.key));
-    query.set("folder", opened.folder);
-    query.set("uid", String(opened.uid));
-  }
-  const q = query.toString();
-  return `${path || "/"}${q ? `?${q}` : ""}`;
+// The routes written as themselves, since nothing in them is anyone's.
+function readable({ source, opened, brief }: Route): string | null {
+  if (opened) return null;
+  const path = !source ? "/"
+    : source.kind === "allInboxes" ? "/all"
+    : source.kind === "across" ? `/all/${source.folder}`
+    : source.kind === "documents" ? "/documents"
+    : source.kind === "digest" && source.list !== "topic" ? `/brief/${source.list}`
+    : null;
+  return path && brief ? `${path}?brief=1` : path;
 }
 
+// A route as plain data in one order, so the same route is the same text however it was made: what a place holds.
+function plain({ source, opened, brief }: Route): Route {
+  return {
+    source: !source ? null
+      : source.kind === "folder" ? { kind: "folder", account: source.account, folder: source.folder }
+      : source.kind === "search" ? { kind: "search", q: source.q, account: source.account, ...(source.lane ? { lane: source.lane } : {}), ...(source.thread ? { thread: source.thread } : {}), ...(source.asked ? { asked: source.asked } : {}) }
+      : source.kind === "across" ? { kind: "across", folder: source.folder }
+      : source.kind === "digest" ? (source.list === "topic" ? { kind: "digest", list: "topic", label: source.label } : { kind: "digest", list: source.list })
+      : source.kind === "allInboxes" ? { kind: "allInboxes" } : { kind: "documents" },
+    opened: !opened ? null
+      : opened.kind === "thread" ? { kind: "thread", id: opened.id, account: opened.account, key: opened.key, folder: opened.folder, uid: opened.uid }
+      : { kind: "message", key: opened.key, folder: opened.folder, uid: opened.uid },
+    ...(brief ? { brief: true } : {}),
+  };
+}
+
+type Fields = Record<string, unknown>;
+const isObject = (v: unknown): v is Fields => typeof v === "object" && v !== null && !Array.isArray(v);
+const isText = (v: unknown): v is string => typeof v === "string";
+const isCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v > 0;
+
+function sourceFrom(s: unknown): ListSource | null | undefined {
+  if (s === null) return null;
+  if (!isObject(s)) return undefined;
+  const { kind, account, folder, list, label, q, lane, thread, asked } = s;
+  if (kind === "folder") return isText(account) && isText(folder) ? { kind, account, folder } : undefined;
+  if (kind === "allInboxes" || kind === "documents") return { kind };
+  if (kind === "across") return isText(folder) && isVirtual(folder) ? { kind, folder } : undefined;
+  if (kind === "digest") {
+    if (list === "needs" || list === "tidy") return { kind, list };
+    return list === "topic" && isText(label) ? { kind, list, label } : undefined;
+  }
+  if (kind !== "search" || !isText(q) || !isText(account)) return undefined;
+  return { kind, q, account, ...(lane === "feed" || lane === "papertrail" ? { lane } : {}), ...(isText(thread) && thread ? { thread } : {}), ...(isText(asked) && asked ? { asked } : {}) };
+}
+
+function openedFrom(o: unknown): Opened | undefined {
+  if (o === null) return null;
+  if (!isObject(o)) return undefined;
+  const { kind, id, account, key, folder, uid } = o;
+  if (!isCount(key) || !isCount(uid) || !isText(folder) || !folder) return undefined;
+  if (kind === "message") return { kind, key, folder, uid };
+  return kind === "thread" && isText(id) && id && isText(account) ? { kind, id, account, key, folder, uid } : undefined;
+}
+
+// What a place's route says, held to a route's shape: what the page reads back, it doesn't take on trust.
+export function routeFrom(said: unknown): Route | null {
+  if (!isObject(said) || !("source" in said) || !("opened" in said)) return null;
+  const source = sourceFrom(said["source"] ?? null), opened = openedFrom(said["opened"] ?? null);
+  if (source === undefined || opened === undefined) return null;
+  return said["brief"] === true ? { source, opened, brief: true } : { source, opened };
+}
+
+// Each place this page knows, by its id, and its id by the route's text, so a route is one URL for as long as the page lasts.
+const routes = new Map<string, Route>();
+const places = new Map<string, string>();
+
+function know(id: string, route: Route, text: string) {
+  routes.set(id, route);
+  places.set(text, id);
+}
+
+function newPlace(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// A new place goes to the server once this turn of the page is over, with the others made in it, so a link drawn with one has
+// reached it long before anyone could open that link in a new tab. Places the server couldn't be reached for go again a little
+// later. One it refuses, or one too long to keep, lasts only as long as the page: a reload of it opens at home.
+const unsent: { id: string; route: Fields }[] = [];
+let sending = false, again: ReturnType<typeof setTimeout> | undefined;
+
+function send() {
+  sending = false;
+  while (unsent.length) {
+    const batch = unsent.splice(0, LIMITS.places_at_once);
+    post("/api/places", { places: batch }).catch((e: unknown) => {
+      if (refusalOf(e)) return;
+      unsent.push(...batch);
+      clearTimeout(again);
+      again = setTimeout(sendSoon, 5000);
+    });
+  }
+}
+
+function sendSoon() {
+  if (sending) return;
+  sending = true;
+  void Promise.resolve().then(send);
+}
+
+export function pathOf(route: Route): string {
+  const itself = readable(route);
+  if (itself) return itself;
+  const held = plain(route), text = JSON.stringify(held);
+  let id = places.get(text);
+  if (!id) {
+    id = newPlace();
+    know(id, held, text);
+    if (new TextEncoder().encode(text).length <= LIMITS.place_bytes) {
+      unsent.push({ id, route: { ...held } });
+      sendSoon();
+    }
+  }
+  return `/p/${id}`;
+}
+
+// The place this page was opened at, as the server put it in.
+function opening() {
+  if (typeof location === "undefined" || typeof document === "undefined") return;     // a test with no page
+  const id = PLACE.exec(location.pathname)?.[1];
+  const said = id ? document.querySelector<HTMLMetaElement>('meta[name="mailmind-place"]')?.content : "";
+  if (!id || !said) return;
+  try {
+    const route = routeFrom(JSON.parse(said));
+    if (route) know(id, route, JSON.stringify(plain(route)));
+  } catch { /* no route: the page opens at home */ }
+}
+opening();
+
+// A place reads as the route it holds, and one this page doesn't know as home. The readable forms of the others still read, as
+// a person may type one: `/m/<account>/<folder>`, `/search?q=`, `/brief/topic/<label>`, and `?key=&folder=&uid=` for what is open.
 export function parseRoute(pathname: string, search: string): Route {
+  const place = PLACE.exec(pathname)?.[1];
+  if (place !== undefined) return routes.get(place) ?? HOME;
   const q = new URLSearchParams(search);
   const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
   let source: ListSource | null = null;
