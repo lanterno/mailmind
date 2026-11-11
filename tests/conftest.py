@@ -160,12 +160,31 @@ def _tripwire():
         pytest.fail("the test tripwire refused: " + "; ".join(found), pytrace=False)
 
 
+@pytest.fixture(scope="session")
+def _new_database(tmp_path_factory):
+    """A database store.init made at the newest schema, once: running every migration took a test 40 ms."""
+    import sqlite3
+    from mailmind.platform import settings
+    from mailmind.bootstrap.mailbox import store
+    d = tmp_path_factory.mktemp("new-database")
+    with settings.use(settings.Settings(home=str(d))):
+        store.init()
+    path = os.path.join(d, "mailmind.db")
+    db = sqlite3.connect(path)
+    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    db.close()
+    return path
+
+
 @pytest.fixture
-def data_dir(tmp_path):
-    """A temp directory holding this test's database, config, rules, views and audit trails."""
+def data_dir(tmp_path, _new_database):
+    """A temp directory holding this test's database, config, rules, views and audit trails. The database is a copy of one
+    at the newest schema, which store.init then finds as a start does."""
+    import shutil
     from mailmind.platform import settings
     from mailmind.bootstrap.mailbox import store
     with settings.use(settings.Settings(home=str(tmp_path))):
+        shutil.copyfile(_new_database, tmp_path / "mailmind.db")
         store.init()
         yield tmp_path
 
