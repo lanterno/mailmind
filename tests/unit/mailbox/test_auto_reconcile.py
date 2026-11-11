@@ -4,6 +4,7 @@ audit trail says so, and an open list hears it. A user op taking the gate betwee
 turn."""
 import contextlib
 import json
+import os
 
 from mailmind.bootstrap.mailbox import store
 from mailmind.mailbox.application.reconcile import Reconciler
@@ -86,6 +87,7 @@ def test_a_message_gone_from_the_server_goes_from_the_store_and_is_said(data_dir
     [line] = audit()
     assert {k: line[k] for k in ("kind", "auto", "account", "pruned")} == \
         {"kind": "reconcile", "auto": True, "account": ADA, "pruned": 1}
+    assert oct(os.stat(settings.current().reconcile_audit).st_mode & 0o777) == "0o600"     # it names what was pruned
 
 
 def test_with_nothing_gone_nothing_is_said(data_dir, monkeypatch):

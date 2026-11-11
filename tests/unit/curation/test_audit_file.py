@@ -1,9 +1,11 @@
 """The audit trails through mailmind.curation.adapters.audit_file: a line a record, appended; a sender's cleanup that
-can't be written stops nothing; and a read merges both trails newest first, past a torn line."""
+can't be written stops nothing; a read merges both trails newest first, past a torn line; and each trail is
+its owner's alone."""
 import json
+import os
 
 from mailmind.curation.adapters.audit_file import AuditFile
-from mailmind.platform import settings
+from mailmind.platform import private, settings
 
 ADA = "ada@example.test"
 ROW = {"uid": "7", "from": "bot@notify-example.test", "subject": "Your weekly digest " * 20, "bucket": "promo",
@@ -56,3 +58,16 @@ def test_a_read_says_when_there_is_more_than_it_gave(data_dir):
     AuditFile().swept(ADA, [{**ROW, "uid": str(u)} for u in range(5)])
     assert (len(AuditFile().read(limit=3)["events"]), AuditFile().read(limit=3)["has_more"]) == (3, True)
     assert AuditFile().read(limit=5)["has_more"] is False
+
+
+def test_each_trail_is_its_owners_alone_and_one_an_older_version_left_open_is_brought_into_line(data_dir):
+    s = settings.current()
+    with open(s.reconcile_audit, "w") as f:                 # as one before this was made, readable by others
+        f.write("")
+    os.chmod(s.reconcile_audit, 0o644)
+    AuditFile().swept(ADA, [ROW])
+    AuditFile().cleaned_up("bot@notify-example.test", "notify-example.test", 12, "ok")
+    with private.append(s.reconcile_audit) as f:
+        f.write("{}\n")
+    assert {os.path.basename(p): oct(os.stat(p).st_mode & 0o777) for p in (s.sweep_audit, s.reconcile_audit)} == \
+        {"sweep_audit.jsonl": "0o600", "reconcile_audit.jsonl": "0o600"}
