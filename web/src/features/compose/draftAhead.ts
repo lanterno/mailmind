@@ -43,7 +43,11 @@ async function peek(copy: Copy) {
 
 async function check(copy: Copy, tries: number) {
   const { key } = copy;
-  if (!onScreen(key) || chips.get().get(key) === "ready") return;
+  if (chips.get().get(key) === "ready") return;
+  if (!onScreen(key)) {   // moved off: never strand "Drafting…", which coming back would take for a wait still going
+    forget(key);
+    return;
+  }
   let d;
   try {
     d = await get(`/api/ai/draft-ahead?${copyQuery(copy)}`);
