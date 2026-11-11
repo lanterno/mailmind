@@ -1,5 +1,6 @@
 """A login its server refused (CredentialsRejected, accounts.logins): nothing the app does sends it again until its hold
-ends, the account changes or someone asks."""
+ends, the account changes or someone asks. How long each hold lasts, and what Logins does when told of a login that
+worked or an account changed, is tests/unit/accounts/test_refused_login.py."""
 import time
 from datetime import timedelta
 
@@ -7,7 +8,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.accounts.domain.events import CredentialsRejected
-from mailmind.accounts.domain.login_hold import FIRST, LONGEST
+from mailmind.accounts.domain.login_hold import FIRST
 from mailmind.bootstrap import accounts, mailbox
 from mailmind.mailbox.application import syncing as syncing_module
 from mailmind.platform import bus
@@ -84,36 +85,6 @@ def test_a_move_queues_and_waits_out_the_hold(app, world):
     past_the_hold(app)
     mailbox.commands.drain()
     assert logins(world) == before + 1 and not world.server.find(w.ADA, "INBOX", w.message_id(name))
-
-
-def test_each_try_refused_after_a_hold_ended_waits_twice_as_long_up_to_an_hour(app, world):
-    world.server.fail("LOGIN", REFUSED, user=w.ADA, times=None)
-    sync()
-    tries = logins(world)
-    for rest in (FIRST, FIRST * 2, FIRST * 4, FIRST * 8, LONGEST, LONGEST):
-        app.clock.shift(timedelta(seconds=rest - 1))
-        sync()
-        assert logins(world) == tries, rest
-        app.clock.shift(timedelta(seconds=2))
-        sync()
-        assert logins(world) == tries + 1, rest
-        tries += 1
-
-
-def test_a_login_that_works_starts_the_count_again(app, world):
-    world.server.fail("LOGIN", REFUSED, user=w.ADA, times=2)
-    sync()
-    past_the_hold(app)
-    sync()                                                # refused again: the next waits twice as long
-    past_the_hold(app, FIRST * 2)
-    sync()
-    assert health(app)["healthy"]
-    world.server.fail("LOGIN", REFUSED, user=w.ADA)
-    tries = logins(world)
-    sync()
-    past_the_hold(app)
-    sync()
-    assert logins(world) == tries + 2 and health(app)["healthy"]
 
 
 @pytest.mark.parametrize("trouble", [lambda server, who: server.drop("LOGIN", user=who, times=2),
