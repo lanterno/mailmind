@@ -67,7 +67,7 @@ def test_a_plaintext_database_is_refused_and_left_as_it_was(tmp_path):
     with settings.use(settings.Settings(home=str(tmp_path))):
         for opening in (lambda: database.connect(path), lambda: migrate.init(path),
                         lambda: database.keyed(path, read_only=True)):
-            with pytest.raises(database.NotEncrypted, match="db encrypt --dry"):
+            with pytest.raises(database.NotEncrypted, match="isn.t encrypted"):
                 opening()
     assert fingerprint(path) == before and sorted(os.listdir(tmp_path)) == ["mailmind.db"]
 
