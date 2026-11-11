@@ -1,8 +1,7 @@
-"""What the search box offers as you type: the word being typed, finished from the grammar and from who has written to you."""
+"""What the search box offers as you type, through its route over the stored mail: a sender and a domain finished from who has
+written, a search finding what was finished, and an answer to any text or none. What is read for which word is
+tests/unit/discovery/test_suggest.py."""
 import urllib.parse
-
-import pytest
-
 
 
 def offered(app, box):
@@ -32,13 +31,6 @@ def test_a_finished_domain_finds_its_mail(app):
     value = next(i["value"] for i in offered(app, "from:loom") if i["detail"] == "everyone at this domain")
     found = app.get(f"/api/search?scope=all&q={urllib.parse.quote(value)}").json
     assert {i["from_addr"] for i in found["items"]} == {"news@loom.example.test"}
-
-
-@pytest.mark.parametrize("box", ["is:", "has:a"])
-def test_a_closed_value_reads_no_mail(app, box, monkeypatch):
-    from mailmind.bootstrap import discovery
-    monkeypatch.setattr(discovery._mail, "senders_like", lambda q: pytest.fail("read who has written"))
-    assert offered(app, box)
 
 
 def test_it_answers_any_text(app):

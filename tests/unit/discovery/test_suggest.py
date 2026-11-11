@@ -1,7 +1,9 @@
-"""What the search box offers as you type: the word being typed, finished from the grammar and from who has written to you."""
+"""What the search box offers as you type: the word being typed, finished from the grammar and from who has written to you, and
+what the use case (mailmind.discovery.application.suggest.Suggesting) reads of the stored mail for it."""
 
 import pytest
 
+from mailmind.discovery.application.suggest import Suggesting
 from mailmind.discovery.domain import query, suggest
 from mailmind.discovery.domain.query import Kind, QuerySpec
 
@@ -100,3 +102,39 @@ def test_how_many_of_each_it_offers_is_held():
     where = [{"domain": f"d{i}.example.test", "n": 1} for i in range(8)]
     items = suggest.offers(suggest.typing("from:p"), who, where)
     assert len(items) == 5 + 3
+
+
+# ── what it reads (Suggesting.answer, over a fake of the stored mail) ───────────────────────────
+
+class Mail:
+    """Who has written, as the store would answer, with each question noted."""
+    def __init__(self):
+        self.asked = []
+
+    def senders_like(self, q):
+        self.asked.append(("senders", q))
+        return [{"addr": "lin@example.test", "name": "Lin Mori", "n": 3}]
+
+    def sender_domains_like(self, q):
+        self.asked.append(("domains", q))
+        return [{"domain": "loom.example.test", "n": 2}]
+
+
+@pytest.mark.parametrize("box", ["is:", "has:a"])
+def test_a_closed_value_reads_no_mail(box):
+    mail = Mail()
+    answer = Suggesting(mail).answer(box)
+    assert answer["ok"] and answer["items"] and mail.asked == []
+
+
+@pytest.mark.parametrize("box", [None, "", "from:ada "])
+def test_with_nothing_to_finish_nothing_is_read_or_offered(box):
+    mail = Mail()
+    assert Suggesting(mail).answer(box) == {"ok": True, "items": []} and mail.asked == []
+
+
+def test_a_sender_being_typed_is_finished_from_who_has_written_and_their_domains():
+    mail = Mail()
+    values = [i["value"] for i in Suggesting(mail).answer("from:L")["items"]]
+    assert mail.asked == [("senders", "l"), ("domains", "l")]
+    assert "from:lin@example.test " in values and "from:loom.example.test " in values
