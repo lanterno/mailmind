@@ -1,5 +1,6 @@
 """A snooze is kept by message key and folder, so it outlives the row it was set on. And a message
-that wakes is unread on the server too, or the next sync that read its flags would take that back."""
+that wakes is unread on the server too, or the next sync that read its flags would take that back. Which wakes ask that of the
+queue is tests/unit/attention/test_snooze_durable.py's."""
 from datetime import datetime, timedelta, timezone
 
 from fixtures import world as w
@@ -198,13 +199,6 @@ def test_a_server_that_refuses_the_mark_doesnt_lose_the_message(app, world):
     assert copy(world, CI)["seen"] == 1                         # as the server has it
     assert app.get("/api/pending").json["stuck"] == 1
     assert world.row(CI)["subject"] in listed(app)
-
-
-def test_waking_unread_mail_asks_nothing_of_the_server(app, world):
-    snooze(app, world)
-    app.clock.shift(timedelta(hours=7))
-    attention.snoozing.wake_due()
-    assert app.get("/api/pending").json["items"] == []
 
 
 def test_read_only_wakes_and_the_mark_waits_in_the_queue(world, monkeypatch, app):
