@@ -108,7 +108,7 @@ The app lives in `mailmind/`.
   (`Scheduler.run`) from `contextvars`. `MAILMIND_LOG_LEVEL=DEBUG` shows debug lines and each exception's text at
   the terminal, never in the file. The `mailmind` logger doesn't propagate. `/api/debug/health` says how the job
   lanes, IDLE's workers, the queues, the breaker and today's AI ledger stand, in ids and counts, and reading it
-  doesn't count as someone here. Only a command's own output still prints (`bootstrap/cli.py`, `__main__.py`, `wiring.assess_batch`, `Directory.check`, `materialize` and `move_plaintext`), which a test holds. It is standard library only.
+  doesn't count as someone here. Only a command's own output still prints (`bootstrap/cli.py`, `__main__.py`, `wiring.assess_batch`, `Directory.check` and `materialize`), which a test holds. It is standard library only.
 - `mailmind.platform.bus` is an in-process publish and subscribe. An event is a frozen dataclass
   of ids and counts, and its class is its topic. Handlers run in the publisher's thread once the
   change has committed; one that raises is logged by class name and the rest still hear. Nothing

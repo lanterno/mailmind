@@ -23,7 +23,8 @@ See [Architecture](architecture.md) for the layers around them.
   the file names) only when it succeeds, and keeping a secret in the login Keychain or taking one out (`keep`, `discard`,
   through `mailmind.platform.keychain`). `domain.credential.CredentialRef` is the one reader of the styles the file allows
   (`keychain`, `op`, `env`, the Bridge password). The file never holds a secret itself: a `{"plain": ...}` or a bare
-  string reads as `plain` only to be refused, `PlaintextSecret` naming `accounts move-plaintext` (`Directory.move_plaintext`),
+  string reads as `plain` only to be refused, `PlaintextSecret` naming for each the command that keeps it in the Keychain
+  (`accounts password <address>`, `ai key`),
   and the app won't start while the file holds one (`Directory.refuse_plaintext`). A password typed into Settings is
   `domain.credential.Typed`, which no file can hold, until `Directory` keeps it in the account's own item,
   `account:<address>`, and writes `{"keychain": item, "version": n}`: a new one replaces what the item held and is the next
