@@ -2,8 +2,8 @@
 
   serve [port]                 serve the app on http://127.0.0.1:<port> (default 8721)
   check                        whether each account's credential resolves: ok or fail, never a secret
-  accounts [materialize [WHO]] the connected accounts; `materialize` writes stored secrets into the
-                               config file, making it self-contained
+  accounts [materialize [WHO]] the connected accounts; `materialize` keeps each secret held elsewhere
+                               (1Password, a variable, the Bridge password) in the Keychain
   sync [WHO] [days]            pull mail from the servers into the database
   assess [limit] [workers]     summarize the mail with no summary yet, at full price
   assess --batch               send it as a batch at half price, within today's limit, and bring in

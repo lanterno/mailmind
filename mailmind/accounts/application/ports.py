@@ -12,10 +12,19 @@ class AccountRepository(Protocol):
     def write(self, raw: Entry) -> None: ...
 
 
-class SecretResolver(Protocol):
-    """A credential, in any style the file allows."""
+class SecretStore(Protocol):
+    """Where a credential's secret is: having it, in any style the file allows, and keeping one in the login Keychain or
+    taking it out, which raises mailmind.platform.keychain's KeychainProblem when the Keychain won't."""
     def resolve(self, cred: Credential, *, who: str, strip: bool = False) -> str: ...
     def evict(self, cred: Credential) -> None: ...
+
+    def keep(self, item: str, secret: str) -> None:
+        """Keep `secret` as `item`, in place of what was there."""
+        ...
+
+    def discard(self, item: str) -> bool:
+        """Take `item` out. False when there was none."""
+        ...
 
 
 class ConnectionProbe(Protocol):

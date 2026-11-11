@@ -12,33 +12,37 @@ An optional top-level "anthropic_api_key" holds the Claude API key, in any of th
 "preferences" block holds what the Settings page sets (mailmind.accounts.domain.preferences);
 with none, each preference is its default.
 
-Credential styles (so this works for anyone, with or without 1Password): plain, op, env and
-proton_bridge, which mailmind.accounts.domain.credential lists and mailmind.accounts.adapters.secrets
-resolves.
+Credential styles (so this works for anyone, with or without 1Password): keychain, plain, op, env
+and proton_bridge, which mailmind.accounts.domain.credential lists and mailmind.accounts.adapters.secrets
+resolves. A password typed into Settings goes to the login Keychain, in the account's own item
+(`account:<address>`), before the file is written, and the file names the item: a new one replaces
+what the item held, and removing the account takes its item out. A Keychain that won't is
+`Unreachable`, and the file is left as it was.
 
 Type defaults (override per account as needed):
   gmail  -> imap.gmail.com:993 TLS, trash "[Gmail]/Trash", app-password spaces stripped
   imap   -> :993 TLS,            trash "Trash",          password used verbatim
   proton -> 127.0.0.1:1143 STARTTLS (local Bridge), trash "Trash"
 """
-import os
 import threading
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from mailmind.accounts.application.ports import AccountRepository, SecretResolver
+from mailmind.accounts.application.ports import AccountRepository, SecretStore
 from mailmind.accounts.domain import account, events, preferences
 from mailmind.accounts.domain.account import Entry, MaskedRow
-from mailmind.accounts.domain.credential import CredentialRef, credential_from
+from mailmind.accounts.domain.credential import CredentialRef, Typed, account_item, credential_from, keychain_credential
+from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.parsed import is_object
-from mailmind.platform import bus, settings
+from mailmind.platform import bus
+from mailmind.platform.keychain import KeychainProblem
 from mailmind.platform.logging import get_logger
 
 log = get_logger("accounts")
 
 
 class Directory:
-    def __init__(self, file: AccountRepository, secrets: SecretResolver, ai_key: Callable[[], str | None]):
+    def __init__(self, file: AccountRepository, secrets: SecretStore, ai_key: Callable[[], str | None]):
         self._file, self._secrets, self._ai_key = file, secrets, ai_key
         self._write_lock = threading.Lock()
 
@@ -162,6 +166,27 @@ class Directory:
         an atomic rename so a crash can never leave a partial/world-readable file."""
         self._file.write(raw)
 
+    def _kept(self, item: str, cred: dict[str, Any] | Typed, before: object) -> dict[str, Any]:
+        """What the file holds of `cred`: a typed secret is kept in the Keychain as `item` first, and the file names the
+        item. A secret that can't be kept (not printable ASCII, an address no item can be named for) raises ValueError in a
+        sentence of the Keychain's, which holds no secret."""
+        if not isinstance(cred, Typed):
+            return cred
+        try:
+            self._secrets.keep(item, cred.password)
+        except KeychainProblem:
+            raise Unreachable("The Keychain didn't keep the password. Is the login keychain locked?") from None
+        return keychain_credential(item, before)
+
+    def _let_go(self, email: str) -> None:
+        """Take the account's own Keychain item out, if it has one."""
+        try:
+            self._secrets.discard(account_item(email))
+        except ValueError:
+            pass                        # an address no item could be named for: there is none
+        except KeychainProblem:
+            raise Unreachable("The Keychain didn't let go of the password. Is the login keychain locked?") from None
+
     def add_account(self, p: Mapping[str, Any]) -> MaskedRow:
         with self._write_lock:
             raw = self._raw()
@@ -174,9 +199,9 @@ class Directory:
             cred = credential_from(p.get("credential"))
             if cred is None:
                 raise ValueError("a credential is required")
-            entry["credential"] = cred
             account.refuse_bad_endpoints(entry, {})
             account.validate_new(entry)
+            entry["credential"] = self._kept(account_item(entry["email"]), cred, None)
             raw["accounts"].append(entry)
             self.save(raw)
         bus.publish(events.AccountAdded(entry["email"]))
@@ -191,13 +216,15 @@ class Directory:
             old_cred = entry.get("credential")
             before = dict(entry)
             account.apply_fields(entry, p)
-            if "credential" in p:
-                new = credential_from(p["credential"])
-                if new is not None:          # only replace when a real value/ref/var was given
-                    entry["credential"] = new
-                    self._secrets.evict(old_cred)
+            new = credential_from(p["credential"]) if "credential" in p else None
             account.refuse_bad_endpoints(entry, before)
             account.validate_new(entry)
+            if new is not None:                 # only replace when a real value/ref/var was given
+                entry["credential"] = self._kept(account_item(entry["email"]), new, old_cred)
+                own = account_item(entry["email"])
+                if _names(old_cred, own) and not _names(entry["credential"], own):
+                    self._let_go(entry["email"])
+                self._secrets.evict(old_cred)
             self.save(raw)
         bus.publish(events.AccountChanged(entry["email"]))
         return account.masked_row(entry)
@@ -208,6 +235,7 @@ class Directory:
             entry = account.find(raw, email)
             if entry is None:
                 return False
+            self._let_go(entry["email"])
             self._secrets.evict(entry.get("credential"))
             raw["accounts"] = [e for e in raw["accounts"] if e is not entry]
             self.save(raw)
@@ -215,8 +243,8 @@ class Directory:
         return True
 
     def materialize(self, only: str | None = None) -> None:
-        """Rewrite op/env/proton_bridge credentials as inline {plain:...} in
-        mailmind.config.json, making it fully self-contained (no 1Password needed).
+        """Keep each account's secret that lives elsewhere (1Password, a variable, the Bridge password) in
+        its own Keychain item, and point mailmind.config.json at it, so none of those is needed again.
         The file is git-ignored. Pass an email to convert just one account."""
         raw = self._raw()
         changed = 0
@@ -224,20 +252,20 @@ class Directory:
             if only and entry.get("email") != only:
                 continue
             cred = entry.get("credential")
-            if CredentialRef.parse(cred).style == "plain":
-                continue  # already inline
+            if CredentialRef.parse(cred).style == "keychain":
+                continue  # kept there already
             try:
                 pw = self.resolve_credential({"email": entry.get("email"), "credential": cred,
                                          "strip_spaces": account.strip_for(entry)})
+                entry["credential"] = self._kept(account_item(entry["email"]), Typed(pw), cred)
             except Exception as e:
                 print(f"  ! skip {entry.get('email')}: {e}")
                 continue
-            entry["credential"] = {"plain": pw}
             changed += 1
             print(f"  materialized {entry.get('email')}")
         if changed:
             self.save(raw)
-        print(f"done — {changed} account(s) now self-contained in {os.path.basename(settings.current().config)}")
+        print(f"done — {changed} account(s) now kept in the Keychain")
 
     def check(self) -> None:
         """Resolve every account's credential and report ok/fail WITHOUT printing secrets."""
@@ -252,3 +280,8 @@ class Directory:
                 print(f"  ok    {'anthropic_api_key':42} ({len(self._ai_key() or '')} chars)")
             except Exception as e:
                 print(f"  FAIL  {'anthropic_api_key':42} {e}")
+
+
+def _names(cred: object, item: str) -> bool:
+    ref = CredentialRef.parse(cred)
+    return ref.style == "keychain" and ref.named == item

@@ -1,8 +1,10 @@
 """Having an account's password, from wherever its credential says (mailmind.accounts.domain.credential).
 
 A Keychain item is read through mailmind.platform.keychain, and an op read through the 1Password CLI. Each is cached
-for the process's life, and only when it succeeds; `evict` drops a credential's cached reads when it is replaced or
-removed, and `forget` drops them all, as a new process starts with none.
+for the process's life, and only when it succeeds: an item for each version the file names, so a secret kept again, by
+this process or another, is read again. `evict` drops a credential's cached reads when it is replaced or removed, and
+`forget` drops them all, as a new process starts with none. `keep` and `discard` are how Accounts keeps a typed password
+in the Keychain, and takes one out.
 
 The Bridge password comes from the first of: the environment variable MAILMIND_PROTON_BRIDGE_PASS;
 1Password's op://Private/<MAILMIND_PROTON_OP_ITEM>/password, when that variable names an item;
@@ -42,14 +44,20 @@ def _op_read(ref, strip):
     raise RuntimeError(f"op read failed for {ref}: {last}")
 
 
-def _keychain_read(item, who):
-    if item in _keychain_cache:
-        return _keychain_cache[item]
+def _keychain_read(item, version, who):
+    kept = (item, repr(version))
+    if kept in _keychain_cache:
+        return _keychain_cache[kept]
     secret = keychain.find(item)
     if secret is None:
         raise RuntimeError(f"the Keychain holds no item {item} for {who}")
-    _keychain_cache[item] = secret
+    _keychain_cache[kept] = secret
     return secret
+
+
+def _drop(item):
+    for kept in [k for k in _keychain_cache if k[0] == item]:
+        del _keychain_cache[kept]
 
 
 def resolve(cred, *, who, strip=False):
@@ -57,12 +65,12 @@ def resolve(cred, *, who, strip=False):
     show. `strip` takes the spaces out of an op read (a Gmail app password as 1Password keeps it).
     Raises when it can't be had."""
     ref = CredentialRef.parse(cred or {})
-    if ref.style == "plain":
+    if ref.style in ("plain", "typed"):
         return ref.named
     if ref.style == "keychain":
         if not (isinstance(ref.named, str) and ref.named.strip()):
             raise RuntimeError(f"no credential configured for {who}")
-        return _keychain_read(ref.named, who)
+        return _keychain_read(ref.named, ref.version, who)
     if ref.style == "env":
         v = environment.credential(ref.named)
         if not v:
@@ -88,7 +96,19 @@ def evict(cred):
         for one in ref.op_refs:
             _op_cache.pop(one, None)
     if ref.style == "keychain" and isinstance(ref.named, str):
-        _keychain_cache.pop(ref.named, None)
+        _drop(ref.named)
+
+
+def keep(item, secret):
+    """Keep `secret` in the Keychain as `item`, in place of what it held there."""
+    _drop(item)
+    keychain.put(item, secret)
+
+
+def discard(item):
+    """Take the Keychain's `item` out, and forget what was read of it. False when it held none."""
+    _drop(item)
+    return keychain.delete(item)
 
 
 def forget():

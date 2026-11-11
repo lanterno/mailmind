@@ -1,6 +1,7 @@
 """The credential styles mailmind.config.json may name, and the one reader of them.
 
-  { "keychain": "account:you@example.com" }         a generic password in the login Keychain, under the service mailmind
+  { "keychain": "account:you@example.com",           a generic password in the login Keychain, under the service mailmind;
+    "version": 2 }                                    how many MailMind has kept there, so a new one reads as a new credential
   { "plain": "the-password" }                       inline (the file is kept off git)
   "the-password"                                     the same, shorthand
   { "op": "op://Vault/Item/Field" }                 read from the 1Password CLI at runtime
@@ -12,15 +13,26 @@ An entry naming two gets the first of plain, keychain, env, proton_bridge, op. H
 mailmind.accounts.adapters.secrets's; this only says where it is, and what MailMind names the Keychain items it keeps:
 `account:<address>` for an account's password, `anthropic-api-key` for the Claude API key. No credential may name the
 item the database's key is kept in, which would send that key to a mail server.
+
+A password typed into Settings is `Typed` until it is saved: saving keeps it in the account's Keychain item and writes the
+file the item's name (`keychain_credential`), and a draft's test tries it and keeps it nowhere. It isn't JSON, so no file
+can hold one.
 """
 from dataclasses import dataclass, field
 from typing import Any, Literal, Required, TypedDict, TypeIs
 
-from mailmind.kernel.parsed import is_list, is_object
+from mailmind.kernel.parsed import as_int, is_list, is_object
 
-# JSON as it parsed, so what a key holds is the file's word for it.
-type Credential = str | dict[str, Any] | None
-type Style = Literal["plain", "keychain", "op", "env", "proton_bridge", "unknown"]
+
+@dataclass(frozen=True)
+class Typed:
+    """A password typed into Settings, held in memory alone. It stays out of a repr."""
+    password: str = field(repr=False)
+
+
+# JSON as it parsed, so what a key holds is the file's word for it, or a password typed and not yet kept.
+type Credential = str | dict[str, Any] | Typed | None
+type Style = Literal["plain", "keychain", "typed", "op", "env", "proton_bridge", "unknown"]
 
 API_KEY_ITEM = "anthropic-api-key"
 DATABASE_KEY_ITEM = "database-key"      # mailmind.platform.db.key's, which no credential names
@@ -44,12 +56,16 @@ class CredentialMask(TypedDict, total=False):
 class CredentialRef:
     """Where an account's secret is. `style` is None when there's no credential at all, and "unknown" when the file's
     says something no style reads. `named` is what the style's key holds: the Keychain item's name, the op reference or
-    references, the variable's name, and for plain the password itself, so it stays out of a repr."""
+    references, the variable's name, and for plain or a typed one the password itself, so it stays out of a repr.
+    `version` is a Keychain credential's."""
     style: Style | None
     named: Any = field(default=None, repr=False)
+    version: Any = None
 
     @classmethod
     def parse(cls, cred: object) -> "CredentialRef":
+        if isinstance(cred, Typed):
+            return cls("typed", cred.password)
         if isinstance(cred, str):
             return cls("plain", cred)
         if not is_object(cred) or not cred:
@@ -57,7 +73,9 @@ class CredentialRef:
         if "plain" in cred:
             return cls("plain", cred["plain"])
         if "keychain" in cred:
-            return cls("unknown") if cred["keychain"] == DATABASE_KEY_ITEM else cls("keychain", cred["keychain"])
+            if cred["keychain"] == DATABASE_KEY_ITEM:
+                return cls("unknown")
+            return cls("keychain", cred["keychain"], cred.get("version"))
         if "env" in cred:
             return cls("env", cred["env"])
         if cred.get("proton_bridge"):
@@ -89,19 +107,29 @@ def _text(held: object) -> TypeIs[str]:
     return isinstance(held, str) and bool(held.strip())
 
 
-def credential_from(p: object) -> dict[str, Any] | None:
-    """Build a stored credential dict from a request payload {style,value|ref|var}.
-    Returns None to mean 'keep existing'. Raises ValueError on invalid input."""
+def keychain_credential(item: str, before: object) -> dict[str, Any]:
+    """The credential naming `item` once a secret is kept there. Its version is one past `before`'s when that named the
+    same item, so the file says the secret changed: IDLE logs in afresh, a refused login's hold doesn't hold the new one,
+    and a process that read the last one reads the Keychain again."""
+    was = CredentialRef.parse(before)
+    kept = as_int(was.version) if was.style == "keychain" and was.named == item else None
+    return {"keychain": item, "version": max(kept or 0, 0) + 1}
+
+
+def credential_from(p: object) -> dict[str, Any] | Typed | None:
+    """What a request payload {style, value|ref|var} asks the file to hold: a stored credential, or a password typed for
+    the Keychain (`Typed`), which the file never holds. Returns None to mean 'keep existing'. Raises ValueError on
+    invalid input."""
     if not p:
         return None
     if not is_object(p):
         raise ValueError("a credential names its style")
     style = p.get("style")
-    if style == "plain":
+    if style in ("keychain", "plain"):     # plain: the page's word for it until it says keychain
         v = p.get("value")
         if not (v and isinstance(v, str)):  # never blank out / store an empty password
             raise ValueError("password required")
-        return {"plain": v}
+        return Typed(v)
     if style == "op":
         ref = p.get("ref")
         if not (_text(ref) or (is_list(ref) and ref and all(_text(one) for one in ref))):
