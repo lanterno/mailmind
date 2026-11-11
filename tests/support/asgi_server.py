@@ -32,6 +32,26 @@ class _Server(serving.Server):
                 await asyncio.wait_for(self._stopping.wait(), 0.1)
             should_exit = await self.on_tick(0)
 
+    async def shutdown(self, sockets=None):
+        """uvicorn's shutdown asks each open connection to close and then always waits a tenth of a second for them to. With
+        none open and no request still running, there is nothing to wait for, so this closes up without that pause; with one,
+        it is uvicorn's shutdown (and the app's: event streams end at once) as `serve` runs it. A connection the test's client
+        has just closed is still open here for a millisecond or so, so that much is waited for first."""
+        for server in self.servers:
+            server.close()                               # no connection comes in from here on
+        deadline = self._loop.time() + 0.02
+        while self.server_state.connections and self._loop.time() < deadline:
+            await asyncio.sleep(0.001)
+        if self.server_state.connections or self.server_state.tasks:
+            await super().shutdown(sockets=sockets)
+            return
+        for sock in sockets or []:
+            sock.close()
+        for server in self.servers:
+            await server.wait_closed()
+        if not self.force_exit:
+            await self.lifespan.shutdown()
+
     def stop(self):
         """From another thread: shutdown begins at once."""
         self.should_exit = True
