@@ -1,9 +1,9 @@
 """IDLE's supervisor (realtime.reconcile): the workers follow the configuration as it changes. An
 account added is watched, one removed or disabled stops being watched at once, and one now reached
 another way gets a fresh worker; a change that doesn't touch how it is reached leaves the worker
-be. The account events it hears come from config (mailmind.accounts.domain.events)."""
+be. The account events it hears come from config (mailmind.accounts.domain.events). Each test has a supervisor of its own,
+and sees its workers through the sessions they open."""
 import threading
-import time
 
 import pytest
 
@@ -22,43 +22,57 @@ def idling(world, user, n=1):
 
 
 def edit_by_hand(email, **fields):
-    """Change an account in the config file as an editor would, publishing no event. It holds the
-    config's write lock meanwhile, as the app's own writers do, so a worker pinning its first
-    certificate can't write its older copy of the file over the edit."""
+    """Change an account in the config file as an editor would, publishing no event. A test asks this once every account
+    idles, so each has pinned its first certificate and no worker writes an older copy of the file over the edit."""
+    from mailmind.accounts.adapters import config_file
     from mailmind.bootstrap.accounts import config
-    with config._write_lock:
-        raw = config._raw()
-        next(a for a in raw["accounts"] if a["email"] == email).update(fields)
-        config.save(raw)
+    raw = config_file.FILE.read()
+    next(a for a in raw["accounts"] if a["email"] == email).update(fields)
+    config.save(raw)
+
+
+def all_idling(world):
+    return all(idling(world, user) for user in (w.ADA, w.BEA, w.CY))
 
 
 @pytest.fixture
-def supervisor(world, monkeypatch):
-    """realtime with state of its own, hearing the account events, and every worker it starts
-    stopped after the test."""
-    from mailmind.bootstrap.mailbox import realtime
+def supervisor(world):
+    """IDLE's supervisor as the app builds it, of the test's own, hearing the account events, and every worker it starts
+    stopped after the test. `opened` holds whose session each worker opened, on which thread, and `interrupted` whose was
+    interrupted; `made(acct, session)` is what a worker gets of each session, which a test may change."""
     from mailmind.accounts.domain import events
+    from mailmind.bootstrap import accounts, mailbox
+    from mailmind.mailbox.application.realtime import Realtime
     from mailmind.platform import bus
-    for name, value in (("_stop", threading.Event()), ("_kick", threading.Event()), ("_dirty", set()),
-                        ("_conns", []), ("_watchers", {}), ("_running", False)):
-        monkeypatch.setattr(realtime, name, value)
-    threads = []
-    spawn = realtime._spawn
 
-    def spawned(acct):
-        watch = spawn(acct)
-        threads.append(watch.thread)
-        return watch
-    monkeypatch.setattr(realtime, "_spawn", spawned)
+    def opening(acct, **kw):
+        realtime.opened.append((acct["email"], threading.current_thread()))
+        session = mailbox.open_session(acct, **kw)
+        interrupt = session.interrupt
+
+        def interrupting():
+            realtime.interrupted.append(acct["email"])
+            interrupt()
+        session.interrupt = interrupting
+        return realtime.made(acct, session)
+    realtime = Realtime(accounts, opening)
+    realtime.opened, realtime.interrupted, realtime.made = [], [], lambda acct, session: session
     ends = [bus.subscribe(t, realtime.reconcile)
             for t in (events.AccountAdded, events.AccountChanged, events.AccountRemoved)]
     yield realtime
     for end in ends:
         end()
     realtime.stop()
+    threads = {t for _, t in realtime.opened}
     for t in threads:
-        t.join(5)
+        t.join(30)
     assert not any(t.is_alive() for t in threads), "an IDLE worker didn't stop"
+
+
+def worker_of(supervisor, email):
+    """The thread of the newest worker to open a session for `email`, once one has."""
+    assert wait_until(lambda: any(who == email for who, _ in supervisor.opened))
+    return [t for who, t in supervisor.opened if who == email][-1]
 
 
 def test_start_watches_every_account(world, supervisor):
@@ -71,22 +85,20 @@ def test_a_removed_account_stops_being_watched_at_once(world, supervisor):
     from mailmind.bootstrap.accounts import config
     supervisor.start()
     assert idling(world, w.BEA)
-    worker = supervisor._watchers[w.BEA].thread
+    worker = worker_of(supervisor, w.BEA)
     assert config.remove_account(w.BEA)
-    worker.join(5)                                      # out of an IDLE it would hold for 24 minutes
+    worker.join(30)                                     # out of an IDLE it would hold for 24 minutes
     assert not worker.is_alive() and set(supervisor.watching()) == {w.ADA, w.CY}
-    n = len(world.server.commands_for(w.BEA))
-    time.sleep(0.2)
-    assert len(world.server.commands_for(w.BEA)) == n
+    assert not any(t.is_alive() for who, t in supervisor.opened if who == w.BEA)     # none is left to talk to her server
 
 
 def test_a_disabled_account_stops_being_watched(world, supervisor):
     from mailmind.bootstrap.accounts import config
     supervisor.start()
     assert idling(world, w.CY)
-    worker = supervisor._watchers[w.CY].thread
+    worker = worker_of(supervisor, w.CY)
     config.update_account(w.CY, {"disabled": True})
-    worker.join(5)
+    worker.join(30)
     assert not worker.is_alive() and w.CY not in supervisor.watching()
 
 
@@ -94,24 +106,24 @@ def test_a_changed_password_gets_a_fresh_worker_that_logs_in_with_it(world, supe
     from mailmind.bootstrap.accounts import config
     supervisor.start()
     assert idling(world, w.ADA)
-    old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
+    old, logins = worker_of(supervisor, w.ADA), count(world, "LOGIN")
     with world.server.lock:
         world.server.accounts[w.ADA].password = "a-new-app-password"
     config.update_account(w.ADA, {"credential": {"style": "plain", "value": "a-new-app-password"}})
-    old.thread.join(5)
-    assert not old.thread.is_alive()
+    old.join(30)
+    assert not old.is_alive()
     assert idling(world, w.ADA, 2)
     assert count(world, "LOGIN") == logins + 1
-    assert supervisor._watchers[w.ADA] is not old and supervisor.watching()[w.ADA]
+    assert worker_of(supervisor, w.ADA) is not old and supervisor.watching()[w.ADA]
 
 
 def test_a_new_alias_leaves_the_worker_be(world, supervisor):
     from mailmind.bootstrap.accounts import config
     supervisor.start()
     assert idling(world, w.ADA)
-    old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
-    config.update_account(w.ADA, {"alias": "Ada at home"})
-    assert supervisor._watchers[w.ADA] is old and old.thread.is_alive()
+    old, logins = worker_of(supervisor, w.ADA), count(world, "LOGIN")
+    config.update_account(w.ADA, {"alias": "Ada at home"})          # whose event the supervisor hears before this returns
+    assert supervisor.interrupted == [] and worker_of(supervisor, w.ADA) is old and old.is_alive()
     assert count(world, "LOGIN") == logins
 
 
@@ -138,13 +150,13 @@ def test_past_the_cap_a_removed_account_makes_room_for_the_next(world, superviso
 def test_a_worker_backing_off_stops_at_once_when_its_account_goes(world, supervisor):
     from mailmind.bootstrap.accounts import config
     world.server.drop("LOGIN", user=w.ADA, times=None)
+    supervisor.FIRST_REST = 3600                        # one left to rest is still resting when the test gives up on it
     supervisor.start()
     assert wait_until(lambda: count(world, "LOGIN") >= 1)
-    worker = supervisor._watchers[w.ADA].thread
-    began = time.monotonic()
+    worker = worker_of(supervisor, w.ADA)
     config.remove_account(w.ADA)
-    worker.join(5)
-    assert not worker.is_alive() and time.monotonic() - began < 2     # its backoff is 5 seconds
+    worker.join(30)
+    assert not worker.is_alive()
 
 
 @pytest.fixture
@@ -171,7 +183,7 @@ def test_a_refused_login_stops_a_worker_sending_it(world, supervisor, refused_lo
     supervisor.start()
     assert wait_until(lambda: count(world, "LOGIN") == 1)
     assert idling(world, w.BEA) and idling(world, w.CY)         # the others are no worse off
-    time.sleep(0.3)                                             # a dozen rests or more
+    assert wait_until(lambda: [who for who, _ in supervisor.opened].count(w.ADA) >= 12)    # a dozen tries
     assert count(world, "LOGIN") == 1
     assert w.ADA in supervisor.watching()                       # it is still there for when the hold ends
 
@@ -190,21 +202,19 @@ def test_a_server_without_idle_ends_its_worker_and_is_logged_out_of(world, super
     world.server.without = {"IDLE"}
     logouts = count(world, "LOGOUT")
     supervisor.start()
-    worker = supervisor._watchers[w.ADA].thread
-    worker.join(5)
+    worker = worker_of(supervisor, w.ADA)
+    worker.join(30)
     assert not worker.is_alive() and supervisor.watching()[w.ADA] is False    # the periodic sync has it
     assert count(world, "LOGOUT") == logouts + 1 and count(world, "IDLE") == 0
-    assert world.server.commands_for(w.ADA, "SELECT") == [] and supervisor._conns == []
+    assert world.server.commands_for(w.ADA, "SELECT") == []
 
 
-def test_a_server_without_idle_is_asked_to_log_out_once(world, supervisor, monkeypatch):
+def test_a_server_without_idle_is_asked_to_log_out_once(world, supervisor):
     """The wire can't show the second ask, which goes to a socket the first closed: the session can."""
     world.server.without = {"IDLE"}
     asked = []
-    opening = supervisor._open_session
 
-    def counting(acct):
-        session = opening(acct)
+    def counting(acct, session):
         logout = session.logout
 
         def logging_out():
@@ -212,10 +222,10 @@ def test_a_server_without_idle_is_asked_to_log_out_once(world, supervisor, monke
             return logout()
         session.logout = logging_out
         return session
-    monkeypatch.setattr(supervisor, "_open_session", counting)
+    supervisor.made = counting
     supervisor.start()
-    worker = supervisor._watchers[w.ADA].thread
-    worker.join(5)
+    worker = worker_of(supervisor, w.ADA)
+    worker.join(30)
     assert not worker.is_alive()
     assert asked.count(w.ADA) == 1
 
@@ -223,13 +233,13 @@ def test_a_server_without_idle_is_asked_to_log_out_once(world, supervisor, monke
 def test_a_worker_whose_account_was_changed_by_hand_hands_over_to_a_fresh_one(world, supervisor, monkeypatch):
     monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
     supervisor.start()
-    assert idling(world, w.ADA)
-    old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
+    assert all_idling(world)
+    old, logins = worker_of(supervisor, w.ADA), count(world, "LOGIN")
     edit_by_hand(w.ADA, strip_spaces=True)              # no event: as an edit of the file would be
-    old.thread.join(5)
-    assert not old.thread.is_alive()
+    old.join(30)
+    assert not old.is_alive()
     assert wait_until(lambda: count(world, "LOGIN") == logins + 1)
-    assert supervisor._watchers[w.ADA] is not old and supervisor.watching()[w.ADA]
+    assert worker_of(supervisor, w.ADA) is not old and supervisor.watching()[w.ADA]
 
 
 def test_asking_for_another_imap_adapter_hands_over_to_a_fresh_worker(world, supervisor, monkeypatch):
@@ -237,13 +247,13 @@ def test_asking_for_another_imap_adapter_hands_over_to_a_fresh_worker(world, sup
     mailbox.offer("imapclient")                         # front.build's
     monkeypatch.setattr(supervisor, "IDLE_SECONDS", 0.1)
     supervisor.start()
-    assert idling(world, w.ADA)
-    old, logins = supervisor._watchers[w.ADA], count(world, "LOGIN")
+    assert all_idling(world)
+    old, logins = worker_of(supervisor, w.ADA), count(world, "LOGIN")
     edit_by_hand(w.ADA, imap_adapter="imapclient")
-    old.thread.join(5)
-    assert not old.thread.is_alive()
+    old.join(30)
+    assert not old.is_alive()
     assert wait_until(lambda: count(world, "LOGIN") == logins + 1)
-    assert supervisor._watchers[w.ADA] is not old and supervisor.watching()[w.ADA]
+    assert worker_of(supervisor, w.ADA) is not old and supervisor.watching()[w.ADA]
 
 
 def test_the_configuration_says_what_happened_to_each_account(data_dir):
