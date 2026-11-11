@@ -163,7 +163,7 @@ def test_opening_the_composer_never_takes_focus_back(page, world):
     opened(page)
     page.keyboard.press("c")
     subject(page).focus()
-    page.wait_for_timeout(120)
+    page.clock.run_for(120)                                 # any timer the opening set has gone off
     assert page.evaluate("document.activeElement.id") == "cmpSubject"
     clean(page)
 
@@ -278,7 +278,7 @@ def test_an_untouched_reply_closes_with_nothing_saved(page, world):
     expect(body(page)).to_be_visible()
     page.keyboard.press("Escape")
     expect(body(page)).to_be_hidden()
-    page.wait_for_timeout(150)
+    page.heard_all_asked()                                  # a closing save is asked for as it closes
     assert asked == []
     clean(page)
 
@@ -367,7 +367,7 @@ def test_saves_of_one_composer_go_in_turn(page, world):
     until(page, lambda: held.routes, "the first save reached the network")
     body(page).press_sequentially(" The dark one?")
     page.keyboard.press("Control+s")
-    page.wait_for_timeout(200)
+    page.heard_all_asked()
     assert len(held.routes) == 1                          # the second waits for the first's answer
     asked = []
     page.on("request", lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/draft") else None)
@@ -388,7 +388,7 @@ def test_a_send_during_a_first_save_leaves_no_copy_behind(page, app, world):
     asked = []
     page.on("request", lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/send") else None)
     send_button(page).click()
-    page.wait_for_timeout(200)
+    page.heard_all_asked()
     assert asked == []                                    # the send waits to learn which copy it replaces
     held.let_go()
     until(page, lambda: asked, "the send went")
@@ -496,7 +496,6 @@ def test_an_empty_subject_is_asked_about_and_send_anyway_arms_after_a_moment(pag
     expect(go).to_have_attribute("aria-disabled", "true")
     page.clock.run_for(800)
     expect(go).not_to_have_attribute("aria-disabled", "true")
-    page.wait_for_timeout(800)   # the arm delay reads the page's real clock too
     go.click()
     expect(body(page)).to_be_hidden()
     let_undo_pass(page)
