@@ -100,6 +100,31 @@ describe("a popover's first control", () => {
     frame.paint();
     expect(asked).toEqual(["input"]);
   });
+  // The page's focus going to `at`, which is a field or not, and inside the popover or not.
+  const focusTo = (at: { field: boolean; inside: boolean }) => {
+    const e = new Event("focusin");
+    Object.defineProperty(e, "target", { value: { inside: at.inside, matches: (sel: string) => at.field && sel.includes("input") } });
+    window.dispatchEvent(e);
+  };
+  const box = (focus: () => void) => ({ ...popover(focus), contains: (n: { inside: boolean }) => n.inside });
+
+  it("leaves the focus in a field someone went into before that frame", async () => {
+    const frame = aFrame(), focus = vi.fn();
+    const r = await renderHook(() => useFocusFirst("input"));
+    (r.result as { current: unknown }).current = box(focus);
+    focusTo({ field: true, inside: true });                     // the second field, say
+    frame.paint();
+    expect(focus).not.toHaveBeenCalled();
+  });
+  it("still takes it when the focus went to a button inside, or only to what is around it", async () => {
+    const frame = aFrame(), focus = vi.fn();
+    const r = await renderHook(() => useFocusFirst());
+    (r.result as { current: unknown }).current = box(focus);
+    focusTo({ field: false, inside: true });                    // a button of the guide's new card
+    focusTo({ field: true, inside: false });                    // a field behind the popover
+    frame.paint();
+    expect(focus).toHaveBeenCalled();
+  });
   it("takes nothing if the popover closed first", async () => {
     const frame = aFrame();
     await renderHook(() => useFocusFirst());
