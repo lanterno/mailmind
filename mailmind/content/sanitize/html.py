@@ -204,6 +204,28 @@ def _css_decode_escapes(s: str) -> str:
     return s[:_CSS_DECL_VAL_MAX * 2]
 
 
+def _css_breaks_out(value: str) -> bool:
+    """Whether a decoded value, written out as it reads, would end its declaration or its rule early: a `;` outside any
+    string or parentheses, a brace outside a string, or a string or parenthesis left open. An escaped quote decodes to a
+    bare one, so `"a\\";position:fixed` would read as a string, then a declaration of its own. Fail closed."""
+    quote, depth = "", 0
+    for ch in value:
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            if not depth:
+                return True
+            depth -= 1
+        elif ch in "{}" or (ch == ";" and not depth):
+            return True
+    return bool(quote) or depth != 0
+
+
 def _css_strip_comments(s: str) -> str:
     """Remove /* ... */ including an unterminated /* to EOF. Only removes => no growth."""
     out: list[str] = []
@@ -303,6 +325,8 @@ def _css_sanitize_one(prop: str, raw_val: str, ctx: CssContext) -> str | None:
 
     # 1) global value denylist (runs on decoded+lowercased copy)
     if _CSS_BAD_VAL.search(lowered):
+        return None
+    if _css_breaks_out(canon):
         return None
     # 2) functional-indirection denylist (var/env/attr/image-set/...). url( handled below.
     if _CSS_BAD_FUNC.search(lowered):
