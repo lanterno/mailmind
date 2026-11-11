@@ -9,7 +9,7 @@ the cases pytest collects for each:
 ```bash
 uv run pytest tests/unit/curation/test_classifier.py        # classifier behaviour (35)
 uv run pytest tests/security/test_sanitize.py               # HTML sanitizer: 24 attack classes, expects 0 leaks (68)
-uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests (45)
+uv run pytest tests/unit/content/test_css_sanitizer.py      # CSS sanitizer unit tests (66)
 uv run pytest tests/unit/curation/test_expire.py            # expiry rules (23)
 uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (77)
 uv run pytest tests/unit/calendar/test_invite_text.py       # what an invite's text comes to: who an RSVP goes to, its dates, what's left of a broken one (222)
