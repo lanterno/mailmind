@@ -1,9 +1,9 @@
 """The questions a verdict answers, and the SQL that asks them over stored rows: the two must agree."""
-import sqlite3
 
 import pytest
 
 from mailmind.kernel import attention
+from mailmind.platform.db import driver
 
 IMPORTANCE = [None, 1, 2, 3, 4, 5]
 CATEGORY = [None, "action-needed", "personal", "work-job", "finance", "calendar", "info", "other"]
@@ -75,7 +75,7 @@ def test_everything_on_the_agenda_needs_you():
 
 @pytest.mark.parametrize("alias", ["s", ""])
 def test_the_sql_answers_as_the_python_does(alias):
-    db = sqlite3.connect(":memory:")
+    db = driver.connect(":memory:")
     db.execute("CREATE TABLE assessments(importance, category, action)")
     table = "assessments s" if alias else "assessments"
     for row in GRID:

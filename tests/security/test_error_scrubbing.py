@@ -6,7 +6,6 @@ test_hardening.py has one read. What the log may hold is logging's to say.
 """
 import imaplib
 import json
-import sqlite3
 from datetime import timedelta
 
 import pytest
@@ -16,6 +15,7 @@ import route_tables
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.platform import profile
+from mailmind.platform.db import driver
 
 SECRET = "hunter2-secret-token"
 SEEN = "ada-inbox-05-receipt.eml"
@@ -61,7 +61,7 @@ def walk_for_leaks(app, routes, body, secrets):
 # ── whatever a route raises ──────────────────────────────────────────────────────────────────────
 
 RAISED = {"RuntimeError": lambda: RuntimeError(SECRET), "KeyError": lambda: KeyError(SECRET), "OSError": lambda: OSError(13, SECRET, SECRET),
-          "sqlite3": lambda: sqlite3.OperationalError(SECRET), "IMAP refused": lambda: imaplib.IMAP4.error(f"NO {SECRET}"),
+          "sqlite3": lambda: driver.OperationalError(SECRET), "IMAP refused": lambda: imaplib.IMAP4.error(f"NO {SECRET}"),
           "IMAP lost": lambda: imaplib.IMAP4.abort(SECRET), "a type error": lambda: TypeError(SECRET),
           "a value error": lambda: ValueError(SECRET), "read-only": lambda: profile.ReadOnlyError(SECRET)}
 

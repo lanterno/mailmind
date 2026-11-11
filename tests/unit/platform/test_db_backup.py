@@ -1,12 +1,11 @@
 """mailmind.platform.db.backup, and when migrate.init takes a backup: before it changes the schema
 of a database that holds anything, and at no other time. Fictional data in temp directories only."""
 import os
-import sqlite3
 import stat
 
 import pytest
 
-from mailmind.platform.db import backup, migrate, migrations
+from mailmind.platform.db import backup, database, migrate, migrations
 
 NEWEST = migrations.MIGRATIONS[-1][0]
 
@@ -15,7 +14,7 @@ def database_at(folder, version):
     """mailmind.db in `folder`, migrated to `version` and holding one muted thread."""
     path = str(folder / "mailmind.db")
     migrate.init(path, migrations.MIGRATIONS[:version])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("INSERT INTO muted(account, thread_id, muted_at) VALUES ('ada@example.test', 't1', 'now')")
     c.commit()
     c.close()
@@ -23,7 +22,7 @@ def database_at(folder, version):
 
 
 def read(path, sql):
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         return c.execute(sql).fetchall()
     finally:
@@ -61,7 +60,7 @@ def test_a_new_or_current_database_takes_no_backup(tmp_path):
 
 def test_only_the_newest_three_are_kept(tmp_path):
     path = database_at(tmp_path, NEWEST)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         made = [os.path.basename(backup.take(c, NEWEST)) for _ in range(5)]
     finally:

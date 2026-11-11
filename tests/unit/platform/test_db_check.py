@@ -2,12 +2,11 @@
 folders: it reports what the next start's migrations would do, on a copy, in row counts and
 verdicts only, and never writes the database it checks."""
 import hashlib
-import sqlite3
 
 import pytest
 
 from mailmind.__main__ import main
-from mailmind.platform.db import check, migrate, migrations
+from mailmind.platform.db import check, database, migrate, migrations
 
 NEWEST = migrations.MIGRATIONS[-1][0]
 MARK = "quilt-pattern-7731"            # in every row written here; no report may show it
@@ -18,7 +17,7 @@ def database_at(folder, version):
     muted thread."""
     path = str(folder / "mailmind.db")
     migrate.init(path, migrations.MIGRATIONS[:version])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     for uid in (1, 2):
         c.execute("INSERT INTO messages(account, kind, folder, uid, message_id, subject, from_addr) "
                   "VALUES ('ada@example.test', 'imap', 'INBOX', ?, ?, ?, 'lin@example.test')",
@@ -39,9 +38,10 @@ def run(path):
 
 def fingerprint(folder):
     """Every file in `folder`, by name and content hash, but for the write-ahead log's shared-memory
-    index, which every reader of the database writes its read locks to."""
+    index, which every reader of the database writes its read locks to, and an empty log, which a reader opens
+    when there is none: SQLite's own, holding nothing of the database."""
     return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.iterdir()
-            if not p.name.endswith("-shm")}
+            if not p.name.endswith("-shm") and not (p.name.endswith("-wal") and not p.stat().st_size)}
 
 
 @pytest.mark.parametrize("version", [NEWEST - 1, NEWEST])
@@ -63,7 +63,7 @@ def test_it_reports_counts_and_verdicts_and_leaves_the_database_alone(tmp_path, 
 
 def orphan(path, pk):
     """A body whose message is gone, as an older MailMind with foreign keys off left behind."""
-    c = sqlite3.connect(path)                               # foreign keys aren't enforced here
+    c = database.keyed(path)                               # foreign keys aren't enforced here
     c.execute("INSERT INTO bodies(message_pk, raw) VALUES (?, ?)", (pk, MARK.encode()))
     c.commit()
     c.close()
@@ -107,7 +107,7 @@ def test_the_command_line_exits_with_the_verdict(tmp_path, capsys):
 
 def test_a_table_a_migration_retires_is_reported_and_is_no_loss(tmp_path):
     path = database_at(tmp_path, 36)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("INSERT INTO briefing_cache(key, narrative) VALUES ('ada|2026-11-06|v2', ?)", (MARK,))
     c.commit()
     c.close()
@@ -124,7 +124,7 @@ def test_a_table_no_migration_retired_is_a_loss(tmp_path, monkeypatch):
 
     def init_that_drops_a_table(db, steps=None):
         real(db, steps)
-        c = sqlite3.connect(db)
+        c = database.keyed(db)
         c.execute("DROP TABLE muted")
         c.commit()
         c.close()
@@ -139,7 +139,7 @@ def test_a_table_no_migration_retired_is_a_loss(tmp_path, monkeypatch):
 def holding_an_attached_email(folder, version):
     """A database at `version`: message 1 has an email attached and two part rows, and message 2 a part row and none."""
     path = database_at(folder, version)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     for pk, ctype in ((1, "application/pdf"), (1, "Message/RFC822"), (2, "application/pdf")):
         c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type) VALUES (?, '2', 'f', ?)", (pk, ctype))
     c.commit()
@@ -157,7 +157,7 @@ def losing_a_part_row(monkeypatch, which="id=(SELECT max(id) FROM attachments)")
 
     def init(db, steps=None):
         real(db, steps)
-        c = sqlite3.connect(db)
+        c = database.keyed(db)
         c.execute(f"DELETE FROM attachments WHERE {which}")
         c.commit()
         c.close()
@@ -190,7 +190,7 @@ def test_a_database_past_m28_has_no_part_rows_to_lose(tmp_path, monkeypatch):
 
 def test_a_database_with_no_attached_email_loses_no_part_rows_in_a_trim(tmp_path, monkeypatch):
     path = database_at(tmp_path, 27)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type) VALUES (1, '2', 'f', 'application/pdf')")
     c.commit()
     c.close()

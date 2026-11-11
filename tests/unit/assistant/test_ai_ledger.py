@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fakes import anthropic_api as fa
+from mailmind.platform.db import database, driver
 # conftest.NOW, Monday 2 November 2026 at noon UTC (and TZ is UTC). Not imported: under importlib
 # mode `import conftest` runs conftest.py again, as a second module, and that takes the key out.
 MONDAY_NOON = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
@@ -165,11 +166,10 @@ def test_spent_today_and_the_days_report_add_up_the_features(gateway, ai, clock)
 
 
 def test_a_ledger_that_fails_never_fails_the_call(gateway, ai, monkeypatch, capsys):
-    import sqlite3
     from mailmind.bootstrap import assistant
 
     def broken(*a, **kw):
-        raise sqlite3.OperationalError("database is locked")
+        raise driver.OperationalError("database is locked")
     monkeypatch.setattr(assistant.LEDGER, "record", broken)
     assert gateway.ask("Catch me up.", feature="thread").text == fa.STUB_TEXT
     assert "[ai] the usage ledger failed: OperationalError" in capsys.readouterr().out
@@ -184,11 +184,10 @@ def test_dollars_round_up_to_the_cent():
 
 
 def test_a_ledger_that_cant_be_read_leaves_the_status_without_a_spend(data_dir, monkeypatch, capsys):
-    import sqlite3
     from mailmind.bootstrap import assistant
 
     def broken(day):
-        raise sqlite3.OperationalError("database is locked")
+        raise driver.OperationalError("database is locked")
     monkeypatch.setattr(assistant.LEDGER, "spent", broken)
     assert assistant.status.report()["spent_today_micros"] is None
     assert "[ai] the usage ledger can't be read: OperationalError" in capsys.readouterr().out
@@ -213,20 +212,19 @@ def test_the_command_line_lists_each_day_by_feature_and_the_total(gateway, ai, c
 
 
 def test_the_command_line_reads_and_never_migrates(tmp_path, capsys):
-    import sqlite3
     from mailmind.__main__ import ai_usage
     from mailmind.platform import settings
     with settings.use(settings.Settings(home=str(tmp_path))):
         db = settings.current().db
         assert ai_usage(7) == 1
         assert not (tmp_path / "mailmind.db").exists()
-        c = sqlite3.connect(db)
+        c = database.keyed(db)
         c.execute("CREATE TABLE messages (pk INTEGER PRIMARY KEY)")
         c.execute("PRAGMA user_version=20")
         c.commit()
         c.close()
         assert ai_usage(7) == 1
-        c = sqlite3.connect(db)
+        c = database.keyed(db)
         try:
             assert c.execute("PRAGMA user_version").fetchone()[0] == 20
             assert [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")] == ["messages"]

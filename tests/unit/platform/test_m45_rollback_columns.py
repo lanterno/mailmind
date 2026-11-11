@@ -1,14 +1,13 @@
 """Migration 45: what was written only for a rollback goes, and what a run of an older commit wrote only there comes across
 first, of a row with or without a key. Each database here is fictional, built at its version in a temp folder."""
 import contextlib
-import sqlite3
 
 import pytest
 
 from mailmind.bootstrap.assistant import answers
 from mailmind.bootstrap.mailbox import store
 from mailmind.platform import settings
-from mailmind.platform.db import check, migrate, migrations
+from mailmind.platform.db import check, database, migrate, migrations
 from mailmind.platform.db.migrations import m0045_rollback_columns as m45
 
 ADA = "ada@example.test"
@@ -26,7 +25,7 @@ def at(tmp_path, version=44):
 
 @contextlib.contextmanager
 def writing(path):
-    c = sqlite3.connect(path)           # foreign keys aren't enforced here, as an older MailMind left them
+    c = database.keyed(path)           # foreign keys aren't enforced here, as an older MailMind left them
     try:
         yield c
         c.commit()
@@ -35,7 +34,7 @@ def writing(path):
 
 
 def rows(path, sql, *args):
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         return c.execute(sql, args).fetchall()
     finally:
@@ -111,7 +110,7 @@ def test_the_key_it_gets_is_the_one_the_app_would_mint(tmp_path):
         by_id = mail(c, uid=1, message_id=" <a@\r\n example.test> ")
         by_envelope = mail(c, uid=2, message_id=None)
     migrate.init(path)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         assert store.mint_key(c, ADA, "<a@example.test>", "lin@example.test", "2026-11-02", MARK) == keys(path)[by_id]
         assert store.mint_key(c, ADA, None, "lin@example.test", "2026-11-02", MARK) == keys(path)[by_envelope]

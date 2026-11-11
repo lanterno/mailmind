@@ -1,10 +1,9 @@
 """The one fingerprint every stored AI answer is checked against, and migration 22, which moved thread
 summaries onto it. Fictional Message-IDs only."""
-import sqlite3
 import zlib
 
 from mailmind.assistant.domain import fingerprint
-from mailmind.platform.db import migrate, migrations
+from mailmind.platform.db import database, migrate, migrations
 from mailmind.platform.db.migrations import m0022_thread_fingerprints as m22
 
 A, B, C = "<a@example.test>", "<b@example.test>", "<c@example.test>"
@@ -39,7 +38,7 @@ def at_v21(tmp_path, messages, summaries):
     INBOX, and `summaries` as (thread_id, fingerprint)."""
     path = str(tmp_path / "v21.db")
     migrate.init(path, migrations.MIGRATIONS[:21])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.executemany("INSERT INTO messages(pk, account, kind, folder, uid, message_id, thread_id, ts) "
                   "VALUES (?, ?, 'imap', 'INBOX', ?, ?, ?, ?)", [(m[0], ADA, *m[1:]) for m in messages])
     c.executemany("INSERT INTO thread_summaries(account, thread_id, scope, fingerprint, tldr) "
@@ -50,7 +49,7 @@ def at_v21(tmp_path, messages, summaries):
 
 
 def stored(path):
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         return dict(c.execute("SELECT thread_id, fingerprint FROM thread_summaries"))
     finally:
@@ -82,7 +81,7 @@ def test_migration_22_run_again_changes_nothing(tmp_path):
     path = at_v21(tmp_path, LUNCH, [("t-lunch", old([(1, A), (2, B)]))])
     migrate.init(path)
     once = stored(path)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         m22.migrate(c)
         c.commit()
@@ -95,7 +94,7 @@ def test_the_migrated_fingerprint_is_the_one_the_app_computes(data_dir):
     from mailmind.bootstrap.mailbox import store
     from mailmind.bootstrap import assistant
     path = str(data_dir / "mailmind.db")
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.executemany("INSERT INTO messages(pk, account, kind, folder, uid, message_id, thread_id, ts) "
                   "VALUES (?, ?, 'imap', 'INBOX', ?, ?, ?, ?)", [(m[0], ADA, *m[1:]) for m in LUNCH])
     c.commit()
@@ -105,7 +104,7 @@ def test_the_migrated_fingerprint_is_the_one_the_app_computes(data_dir):
         rows = assistant.context.rows(c, ADA, "t-lunch")
     finally:
         c.close()
-    raw = sqlite3.connect(path)
+    raw = database.keyed(path)
     try:
         frozen = m22._by_message_id(m22._rows(raw, ADA, "t-lunch"))
     finally:

@@ -50,6 +50,18 @@ def test_opening_the_owners_database_with_sqlite_is_refused(refused):
     assert len(refused) == 2
 
 
+def test_opening_the_owners_database_with_the_encrypted_driver_is_refused(refused):
+    """It raises no audit event of its own, so the tripwire wraps its connect, and so MailMind's own way in."""
+    from mailmind.platform.db import database, driver
+    with pytest.raises(guard.Tripwire):
+        driver.connect(os.path.join(ROOT, "mailmind.db"))
+    with pytest.raises(guard.Tripwire):
+        driver.connect(f"file:{ROOT}/mailmind.db?mode=ro", uri=True)
+    with pytest.raises(guard.Tripwire):
+        database.keyed(os.path.join(ROOT, "mailmind.db"), read_only=True)
+    assert len(refused) == 4        # MailMind's way in, twice: reading the file's first bytes, then connecting
+
+
 def test_renaming_onto_or_deleting_the_owners_data_is_refused(tmp_path, refused):
     src = tmp_path / "x.json"
     src.write_text("{}")

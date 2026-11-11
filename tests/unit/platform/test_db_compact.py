@@ -1,12 +1,11 @@
 """`python -m mailmind db compact`: it gives the room back, and it stops short rather than half do it."""
 import os
 import shutil
-import sqlite3
 from collections import namedtuple
 
 import pytest
 
-from mailmind.platform.db import compact, migrate
+from mailmind.platform.db import compact, database, migrate
 
 MB = 1_000_000
 
@@ -21,7 +20,7 @@ def freed(tmp_path):
     """A database in which a large table was emptied, so its file holds room it isn't using."""
     path = str(tmp_path / "mailmind.db")
     migrate.init(path)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("CREATE TABLE ballast(x BLOB)")
     c.executemany("INSERT INTO ballast VALUES (?)", [(b"x" * 100_000,) for _ in range(40)])
     c.execute("INSERT INTO muted(account, thread_id, muted_at) VALUES ('ada@example.test', 't1', 'now')")
@@ -39,7 +38,7 @@ def test_it_gives_the_room_back_and_keeps_the_rows(freed):
     assert code == compact.OK, report
     assert os.path.getsize(freed) < size - 3 * MB
     assert report.startswith("The database went from ") and "ada@example.test" not in report
-    c = sqlite3.connect(freed)
+    c = database.keyed(freed)
     assert c.execute("SELECT thread_id FROM muted").fetchall() == [("t1",)]
     assert c.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
     assert c.execute("PRAGMA user_version").fetchone()[0] == migrate.migrations.MIGRATIONS[-1][0]
@@ -49,7 +48,7 @@ def test_it_gives_the_room_back_and_keeps_the_rows(freed):
 def test_a_database_in_use_is_left_as_it_was(freed, monkeypatch):
     monkeypatch.setattr(compact, "WAIT_SECONDS", 0)
     size = os.path.getsize(freed)
-    other = sqlite3.connect(freed)
+    other = database.keyed(freed)
     other.execute("BEGIN IMMEDIATE")
     code, report = report_of(freed)
     other.rollback()

@@ -1,9 +1,8 @@
 """A message's key: what makes rows copies of one message, what it keeps through a move, an Undo, a
 renumber and a second folder, how long it waits for a copy to come back, and where the API shows it."""
-import sqlite3
 
 from mailmind.mailbox.domain import identity
-from mailmind.platform.db import migrate, migrations
+from mailmind.platform.db import database, migrate, migrations
 
 
 def execute(sql, *args):
@@ -32,7 +31,7 @@ def test_a_message_with_no_id_is_known_by_its_envelope():
 def test_migration_30_gives_the_keys_and_keeps_what_the_ai_said(tmp_path):
     path = str(tmp_path / "old.db")
     migrate.init(path, migrations.MIGRATIONS[:29])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     rows = [(1, "INBOX", 1, "<a@example.test>"), (2, "Archive", 7, "<a@example.test>"), (3, "INBOX", 2, ""),
             (4, "INBOX", 3, None)]
     c.executemany("INSERT INTO messages(pk, account, kind, folder, uid, message_id, from_addr, subject, date_iso) "
@@ -41,7 +40,7 @@ def test_migration_30_gives_the_keys_and_keeps_what_the_ai_said(tmp_path):
     c.commit()
     c.close()
     migrate.init(path)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         keys = dict(c.execute("SELECT pk, message_key FROM messages"))
         assert keys[1] == keys[2] is not None
@@ -54,12 +53,12 @@ def test_migration_30_gives_the_keys_and_keeps_what_the_ai_said(tmp_path):
 def test_migration_30_can_run_again(tmp_path):
     path = str(tmp_path / "old.db")
     migrate.init(path, migrations.MIGRATIONS[:30])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("PRAGMA user_version=29")
     c.commit()
     c.close()
     migrate.init(path, migrations.MIGRATIONS[:30])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         assert c.execute("PRAGMA user_version").fetchone()[0] == 30
     finally:

@@ -11,6 +11,7 @@ from mailmind.assistant.application.governor import (PRESENCE_SECONDS, SCHEDULED
                                                      CostGovernor, allowing_over)
 from mailmind.assistant.application.ports import Deferred, ModelError, OverLimit
 from mailmind.assistant.domain import features
+from mailmind.platform.db import driver
 
 
 class Clock:
@@ -167,8 +168,7 @@ def test_at_the_limit_background_work_stops_and_an_interactive_call_needs_leave(
 
 
 def test_a_ledger_that_cant_be_read_stops_background_work_but_not_a_click(capsys):
-    import sqlite3
-    gov, _, _ = governor(spent=sqlite3.OperationalError("database is locked"))
+    gov, _, _ = governor(spent=driver.OperationalError("database is locked"))
     assert gov.held_back("background", "triage", "m", MODEL) == "limit"
     with gov.call("interactive", "ask", "m", MODEL):
         pass

@@ -57,7 +57,8 @@ def opened(app):
 
 def test_a_download_holds_the_snapshot_and_its_folder_goes_afterwards(app, folders):
     r = app.get("/api/export")
-    assert r.status == 200 and r.body.startswith(b"SQLite format 3") and int(r.headers["content-length"]) == len(r.body)
+    assert r.status == 200 and int(r.headers["content-length"]) == len(r.body)
+    assert not r.body.startswith(b"SQLite format 3")             # encrypted, as the database is
     assert r.headers["content-type"] == "application/octet-stream"
     assert re.fullmatch(r"attachment; filename=mailmind-\d{8}T\d{6}Z\.db", r.headers["content-disposition"])
     assert len(folders) == 1 and wait_until(lambda: not os.path.exists(folders[0]))

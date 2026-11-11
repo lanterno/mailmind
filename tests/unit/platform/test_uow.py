@@ -1,10 +1,9 @@
 """One connection for one block: what a read block gives, what a write block holds and when it lets go."""
-import sqlite3
 
 import pytest
 
 from mailmind.platform import settings
-from mailmind.platform.db import database, txguard
+from mailmind.platform.db import database, driver, txguard
 from mailmind.platform.db.txguard import TxAcrossNetworkError
 from mailmind.platform.db.uow import NestedWrite, UnitOfWork, WroteInARead
 
@@ -31,18 +30,18 @@ def add(c, what="a note"):
 
 
 def closed(c):
-    with pytest.raises(sqlite3.ProgrammingError):
+    with pytest.raises(driver.ProgrammingError):
         c.execute("SELECT 1")
     return True
 
 
 def the_write_lock_is_free():
-    other = sqlite3.connect(settings.current().db, timeout=0)
+    other = database.keyed(settings.current().db, timeout=0)
     try:
         other.execute("BEGIN IMMEDIATE")
         other.rollback()
         return True
-    except sqlite3.OperationalError as e:
+    except driver.OperationalError as e:
         assert "locked" in str(e)
         return False
     finally:

@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from mailmind.platform.db import database, txguard
+from mailmind.platform.db import database, driver, txguard
 from mailmind.platform.db.txguard import TxAcrossNetworkError
 
 
@@ -134,7 +134,6 @@ def test_guard_calls_leaves_an_object_without_that_method_alone():
 
 
 def test_each_connection_is_still_an_sqlite3_connection(db):
-    import sqlite3
     c = database.connect(db)
-    assert isinstance(c, sqlite3.Connection)
+    assert isinstance(c, driver.Connection)
     c.close()

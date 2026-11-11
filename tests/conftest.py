@@ -1,6 +1,7 @@
 """Shared setup for the pytest-native tests in this directory.
 
-Before any MailMind module loads, this takes any Claude key out of the environment and installs
+Before any MailMind module loads, this takes any Claude key out of the environment, sets the database key
+every test and every program it starts encrypts with (MAILMIND_DB_KEY, never the Keychain's), and installs
 the tripwire in support/guard.py. It takes every variable `mailmind.platform.environment` declares out but
 the three modes the suite passes under either way (MAILMIND_WORKERS, MAILMIND_POOL and
 MAILMIND_WARM_FOLDERS), so every test starts in the full profile and one that wants another sets it. With MAILMIND_HOME gone, a test that forgets data_dir lands on the repo root, and the
@@ -23,6 +24,7 @@ import guard
 from mailmind.platform import perimeter
 from mailmind.platform import environment
 from mailmind.platform.logging import stop as stop_logging
+from mailmind.platform.db import database
 
 _home = os.environ.get("MAILMIND_HOME", "")
 # What a developer exported reaches no test, so each starts from the defaults. The modes the whole suite is meant to pass under
@@ -32,6 +34,9 @@ for _variable in environment.VARIABLES:
     if _variable.name not in _MODES:
         os.environ.pop(_variable.name, None)
 os.environ["TZ"] = "UTC"            # "today" and local times must not depend on the machine
+# The database key, for this process and every program a test starts: no test reaches the Keychain (the tripwire
+# refuses its program), and each database a test makes is encrypted with this.
+os.environ[environment.DB_KEY.name] = TEST_DB_KEY = "5e" * 32
 time.tzset()
 if _home:
     guard.protect(_home)
@@ -149,14 +154,13 @@ def _tripwire():
 @pytest.fixture(scope="session")
 def _new_database(tmp_path_factory):
     """A database store.init made at the newest schema, once: running every migration took a test 40 ms."""
-    import sqlite3
     from mailmind.platform import settings
     from mailmind.bootstrap.mailbox import store
     d = tmp_path_factory.mktemp("new-database")
     with settings.use(settings.Settings(home=str(d))):
         store.init()
     path = os.path.join(d, "mailmind.db")
-    db = sqlite3.connect(path)
+    db = database.keyed(path)
     db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     db.close()
     return path
@@ -181,7 +185,6 @@ def world_template(tmp_path_factory):
     from fakes.imap_server import FakeIMAPServer
     from fixtures import world
     from mailmind.platform import settings
-    import sqlite3
     from mailmind.bootstrap.mailbox import store
     d = tmp_path_factory.mktemp("world-template")
     import time_machine
@@ -191,7 +194,7 @@ def world_template(tmp_path_factory):
         world.write_config(srv, str(d))
         store.init()
         world.ingest_all()
-        db = sqlite3.connect(os.path.join(d, "mailmind.db"))
+        db = database.keyed(os.path.join(d, "mailmind.db"))
         db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         db.close()
     return os.path.join(d, "mailmind.db"), placed

@@ -1,12 +1,11 @@
 """What a question to Ask reads comes from Discovery's read model, which says None for a query the index rejects."""
-import sqlite3
 
 import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap import assistant, discovery
 from mailmind.bootstrap.mailbox import store
-from mailmind.platform.db import database
+from mailmind.platform.db import database, driver
 
 
 def execute(sql, *args):
@@ -25,9 +24,9 @@ def test_a_query_the_index_rejects_reads_as_none(world):
 
 def test_a_database_that_wont_open_is_not_a_bad_query(world, monkeypatch):
     def refuses(path):
-        raise sqlite3.OperationalError("unable to open database file")
+        raise driver.OperationalError("unable to open database file")
     monkeypatch.setattr(database, "connect", refuses)
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(driver.OperationalError):
         assistant.asker.ask(w.ADA, "When is lunch?")
 
 

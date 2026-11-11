@@ -1,8 +1,8 @@
 """Who a message went to, one row each: what `/api/contacts/known` reads, how ingest and opening a message
 write it, and what migration 35 made of the text column for mail already stored."""
-import sqlite3
 
 import pytest
+from mailmind.platform.db import database
 
 
 
@@ -11,7 +11,7 @@ import pytest
 @pytest.fixture
 def stored(tmp_path):
     from mailmind.platform.db.migrations import m0035_message_recipients as m
-    db = sqlite3.connect(tmp_path / "old.db")
+    db = database.keyed(tmp_path / "old.db")
     db.execute("PRAGMA foreign_keys=ON")
     db.execute("CREATE TABLE messages(pk INTEGER PRIMARY KEY, recipients TEXT)")
     db.execute("CREATE TABLE bodies(message_pk INTEGER PRIMARY KEY, raw BLOB)")

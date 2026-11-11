@@ -13,6 +13,7 @@ from mailmind.bootstrap.assistant import answers
 from assistant_world import CLIENT, LUNCH, LUNCH_MID, QUILT, execute, pk_of, renumber_inbox, summarize_as
 from stored_rows import A, NOW_TS, _ahead, _ahead_keys, put, q, summary
 from world_helpers import VENUE_END, body_of
+from mailmind.platform.db import driver
 
 ATELIER = "ada-inbox-09-rfc2047-folded.eml"     # Renee's workshop plan: another thread of one, inside 72h
 DRAFTING = "You are drafting a reply"
@@ -207,10 +208,9 @@ def test_hwf_a_custom_draft_is_never_banked(app, world, ai):
 
 
 def test_hwf_a_failed_bank_write_still_returns_the_draft(app, world, ai, monkeypatch):
-    import sqlite3
 
     def full_disk(*a, **kw):
-        raise sqlite3.OperationalError("database or disk is full")
+        raise driver.OperationalError("database or disk is full")
     monkeypatch.setattr(answers, "draft_ahead_put", full_disk)
     r = app.post("/api/ai/draft-reply", world.copy(QUILT))
     assert r.status == 200 and r.json["body"]

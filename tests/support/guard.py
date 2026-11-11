@@ -2,7 +2,7 @@
 machine, or start a credential helper or the claude CLI.
 
 conftest.py installs it before any MailMind module is imported. Python audit hooks see every
-open(), sqlite3.connect(), rename, delete, socket connect, DNS lookup and process start in the
+open(), sqlite3.connect(), SQLCipher's connect, rename, delete, socket connect, DNS lookup and process start in the
 process, so a module path a fixture forgot to redirect fails the test instead of reading or
 writing real mail. Each refusal raises, so the access never happens, and is recorded, so a caller
 that swallows the exception still fails the test (see the autouse fixture in conftest.py).
@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import threading
+import urllib.parse
 
 ROOT = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 # Where the owner's data may live: the repo root, and any directory MAILMIND_HOME named when the
@@ -48,7 +49,7 @@ def _private(path):
     except TypeError:
         return False
     if p.startswith("file:"):                           # an sqlite URI
-        p = p[5:].split("?", 1)[0]
+        p = urllib.parse.unquote(p[5:].split("?", 1)[0])
     if not p or p == ":memory:":
         return False
     d, name = os.path.split(os.path.realpath(os.path.abspath(p)))
@@ -137,4 +138,22 @@ def install():
     global _installed
     if not _installed:
         sys.addaudithook(_hook)
+        _guard_the_driver()
         _installed = True
+
+
+def _guard_the_driver():
+    """SQLCipher's driver (the database MailMind opens) raises no audit event when it connects, so its connect is
+    wrapped instead, in the driver and in MailMind's module that takes it: a database the tripwire guards is refused
+    there too."""
+    from sqlcipher3 import dbapi2
+    real = dbapi2.connect
+
+    def connect(database, *args, **kwargs):
+        where = os.fsdecode(database) if isinstance(database, (str, bytes, os.PathLike)) else database
+        if isinstance(where, str) and _private(where):
+            _refuse(f"sqlcipher3.connect {where!r}")
+        return real(database, *args, **kwargs)
+    dbapi2.connect = connect
+    if "mailmind.platform.db.driver" in sys.modules:       # taken already, by a module conftest imports first
+        sys.modules["mailmind.platform.db.driver"].connect = connect

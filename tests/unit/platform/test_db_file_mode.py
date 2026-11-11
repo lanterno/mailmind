@@ -1,11 +1,10 @@
 """The database holds every message, so only its owner may read it, whatever the umask, and its log and index with it."""
 import os
-import sqlite3
 import stat
 
 import pytest
 
-from mailmind.platform.db import database, migrate
+from mailmind.platform.db import database, driver, migrate
 
 
 def mode(path):
@@ -31,7 +30,7 @@ def test_a_new_database_is_its_owners_alone_and_so_is_its_log(tmp_path):
 
 def test_a_start_takes_back_a_database_from_before_with_its_log(tmp_path):
     path = str(tmp_path / "mailmind.db")
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("CREATE TABLE t(x)")
     c.execute("INSERT INTO t VALUES (1)")
@@ -46,7 +45,7 @@ def test_a_start_takes_back_a_database_from_before_with_its_log(tmp_path):
 
 def test_a_connection_leaves_what_a_database_holds_and_its_mode_alone(tmp_path):
     path = str(tmp_path / "mailmind.db")
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("CREATE TABLE t(x)")
     c.execute("INSERT INTO t VALUES (1)")
     c.commit()
@@ -59,7 +58,7 @@ def test_a_connection_leaves_what_a_database_holds_and_its_mode_alone(tmp_path):
 
 
 def test_a_folder_that_isnt_there_is_still_for_sqlite_to_say(tmp_path):
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(driver.OperationalError):
         database.connect(str(tmp_path / "nowhere" / "mailmind.db"))
 
 

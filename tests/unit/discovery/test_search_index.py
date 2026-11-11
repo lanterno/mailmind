@@ -1,9 +1,8 @@
 """The search index holds no copy of the mail (migration 38) and still does all it did."""
-import sqlite3
 
 import pytest
 
-from mailmind.platform.db import check, migrate, migrations
+from mailmind.platform.db import check, database, driver, migrate, migrations
 from mailmind.platform.db.migrations import m0038_contentless_search as m38
 from mailmind.bootstrap import discovery
 
@@ -42,7 +41,7 @@ def test_the_index_keeps_no_copy_of_the_mail(data_dir):
 
 
 def test_the_migration_builds_the_index_from_what_the_messages_hold(before):
-    c = sqlite3.connect(before)
+    c = database.keyed(before)
     kept = add_message(c, 1, "Marigold border", "Four more squares")
     c.execute("INSERT INTO msg_fts(rowid, subject, body_text) VALUES (?, 'stale words', 'stale words')", (kept,))
     missed = add_message(c, 2, "Allotment rota", "Your turn on Saturday")
@@ -51,7 +50,7 @@ def test_the_migration_builds_the_index_from_what_the_messages_hold(before):
     c.commit()
     c.close()
     migrate.init(before)
-    c = sqlite3.connect(before)
+    c = database.keyed(before)
     assert hits(c, '"marigold"') == [kept] and hits(c, '"saturday"') == [missed]
     assert hits(c, '"stale"') == [] and hits(c, '"orphan"') == []
     assert c.execute("SELECT count(*) FROM msg_fts").fetchone()[0] == 3
@@ -60,12 +59,12 @@ def test_the_migration_builds_the_index_from_what_the_messages_hold(before):
 
 
 def test_the_migration_again_changes_nothing(before):
-    c = sqlite3.connect(before)
+    c = database.keyed(before)
     add_message(c, 1, "Marigold border", "Four more squares")
     c.commit()
     c.close()
     migrate.init(before)
-    c = sqlite3.connect(before)
+    c = database.keyed(before)
     pk = add_message(c, 2, "Allotment rota", "Saturday")
     c.execute("INSERT INTO msg_fts(rowid, subject) VALUES (?, 'rota')", (pk,))
     m38.migrate(c)                 # were it to build again, the index would lose the word only it holds
@@ -113,12 +112,12 @@ def test_ranking_still_counts_the_columns(data_dir):
 
 
 def test_a_start_with_too_old_a_sqlite_says_so_and_changes_nothing(before, monkeypatch):
-    monkeypatch.setattr(sqlite3, "sqlite_version_info", (3, 42, 0))
-    monkeypatch.setattr(sqlite3, "sqlite_version", "3.42.0")
+    monkeypatch.setattr(driver, "sqlite_version_info", (3, 42, 0))
+    monkeypatch.setattr(driver, "sqlite_version", "3.42.0")
     with pytest.raises(RuntimeError, match=r"needs SQLite 3\.43 or newer, and this Python has 3\.42\.0"):
         migrate.init(before)
     monkeypatch.undo()
-    c = sqlite3.connect(before)
+    c = database.keyed(before)
     assert c.execute("PRAGMA user_version").fetchone()[0] == 37
     c.close()
 
@@ -129,7 +128,7 @@ def report_of(path):
 
 
 def test_the_upgrade_check_says_the_index_was_rebuilt_and_is_no_loss(before):
-    c = sqlite3.connect(before)
+    c = database.keyed(before)
     pk = add_message(c, 1, "Marigold border", "Four more squares")
     c.execute("INSERT INTO msg_fts(rowid, subject) VALUES (?, 'marigold')", (pk,))
     c.execute("INSERT INTO msg_fts(rowid, subject) VALUES (999, 'an orphan')")
@@ -146,7 +145,7 @@ def test_the_upgrade_check_says_the_index_was_rebuilt_and_is_no_loss(before):
 def test_the_upgrade_check_fails_on_a_message_the_index_doesnt_hold(tmp_path):
     path = str(tmp_path / "mailmind.db")
     migrate.init(path)
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     add_message(c, 1, "Marigold border", "Four more squares")
     c.commit()
     c.close()

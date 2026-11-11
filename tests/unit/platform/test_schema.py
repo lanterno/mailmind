@@ -7,9 +7,9 @@ When a migration is added, the file's name changes with the version: rename it i
 as the migration, and the diff shows exactly what the migration did to the schema.
 """
 import os
-import sqlite3
 
 import pytest
+from mailmind.platform.db import database
 
 HERE = os.path.dirname(__file__)
 
@@ -26,7 +26,7 @@ def snapshot_path():
 def dump(path):
     """The schema as SQL text: every table, index, trigger and view, in name order, then the
     version. Whitespace inside a statement is collapsed so formatting edits don't count."""
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         rows = c.execute("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL "
                          "AND name NOT LIKE 'sqlite_%' ORDER BY type, name").fetchall()

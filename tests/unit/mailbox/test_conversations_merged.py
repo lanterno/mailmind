@@ -1,9 +1,9 @@
 """When two threads become one, each context moves what it keeps under the id that went, in the merge's own
 transaction: mutes and follow-ups, thread summaries and the reply drafted ahead, a queued reply's follow-up."""
 import itertools
-import sqlite3
 
 import pytest
+from mailmind.platform.db import driver
 
 A = "ada@example.test"
 _uid = itertools.count(1)
@@ -86,11 +86,11 @@ def test_a_keeper_that_fails_rolls_the_merge_back(db, regroup, monkeypatch):
 
     def fails(c, merged):
         c.execute("UPDATE muted SET thread_id=? WHERE thread_id=?", (merged.survivor, merged.absorbed))
-        raise sqlite3.OperationalError("disk full")
+        raise driver.OperationalError("disk full")
     monkeypatch.setattr(bound, "_merged", fails)
     add(db, "<j@example.test>", refs="<p@example.test> <q@example.test>")
     db.commit()
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(driver.OperationalError):
         regroup.quiet(db)
     db.rollback()
     assert tid(db, p) == absorbed and everything_kept(db) == before

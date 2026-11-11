@@ -8,7 +8,6 @@ behaviour change.
 AI is off here: there is no key, so nothing reaches the fake Claude API. The AI routes with a key
 are in test_http_ai.py.
 """
-import sqlite3
 from urllib.parse import quote, urlencode
 
 import pytest
@@ -16,6 +15,7 @@ import pytest
 import problems
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
+from mailmind.platform.db import database
 
 
 def fetch(app, golden, path, label=None, **kw):
@@ -83,9 +83,9 @@ def test_export_plan_and_database_export(app, golden, tmp_path):
     fetch(app, golden, "/api/export/plan")
     r = app.get("/api/export")
     golden.record("GET /api/export", r, body=False)
-    assert r.body.startswith(b"SQLite format 3\x00")
+    assert not r.body.startswith(b"SQLite format 3\x00")           # encrypted with the database's key, which opens it below
     (tmp_path / "export.db").write_bytes(r.body)
-    db = sqlite3.connect(tmp_path / "export.db")
+    db = database.keyed(tmp_path / "export.db")
     try:
         golden.note("messages in the export", db.execute("SELECT count(*) FROM messages").fetchone()[0])
     finally:

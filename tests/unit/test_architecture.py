@@ -135,6 +135,15 @@ def test_the_package_opens_no_connection_outside_the_unit_of_work():
     assert found == set()
 
 
+def test_nothing_takes_sqlite_from_the_standard_library():
+    """The database is encrypted, and only SQLCipher's driver (platform/db/driver.py) reads it: the standard library's
+    sqlite3 can't, and its errors are other classes, which an `except` would never see raised. The frozen migrations
+    still name it, and migrations/__init__.py makes that name the driver."""
+    frozen = PACKAGE / "platform" / "db" / "migrations" / "m0001_m0020.py"
+    found = {rel(path) for path in sorted(PACKAGE.rglob("*.py")) if path != frozen and "sqlite3" in set(imports(path))}
+    assert found == set()
+
+
 def names_the_store(path):
     """Each way the file reaches the Mailbox's store by name, its package included. A word in a docstring is no reach."""
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):

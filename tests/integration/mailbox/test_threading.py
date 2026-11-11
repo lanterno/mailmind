@@ -1,11 +1,11 @@
 """Threading what a sync stored (store.thread_stored, the Threader in the Mailbox's domain): what it decides, what it
 reads and rewrites to do so, and that no sync takes the whole-account path. test_threads.py pins the whole-account path,
 and test_threading_property.py holds the two to the same threads."""
-import sqlite3
 
 import pytest
 
 from fixtures import world as w
+from mailmind.platform.db import database, driver
 
 
 # -- through a sync ------------------------------------------------------------
@@ -87,11 +87,11 @@ def test_a_merge_that_fails_in_a_sync_holds_no_lock_and_the_next_sync_does_it(wo
     real = bound._merged
 
     def fails(c, merged):
-        raise sqlite3.OperationalError("disk full")
+        raise driver.OperationalError("disk full")
     monkeypatch.setattr(bound, "_merged", fails)
-    with pytest.raises(sqlite3.OperationalError):
+    with pytest.raises(driver.OperationalError):
         world.deliver(w.ADA, "INBOX", joined)
-    c = sqlite3.connect(world.dir / "mailmind.db", timeout=0)
+    c = database.keyed(world.dir / "mailmind.db", timeout=0)
     c.execute("UPDATE sync_state SET last_sync=last_sync")       # no waiting: the write lock is free
     c.commit()
     c.close()

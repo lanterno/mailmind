@@ -9,11 +9,10 @@ purpose: m5 computes the thread ids, m6 and m10 read the body text and the recip
 stored mail, and m22 rewrites thread summaries' fingerprints. Those must come out right instead. A column a migration ends
 goes with it. The database base is today's schema, so m1's rebuild of a pre-folder sync_state is not exercised here.
 """
-import sqlite3
 
 import pytest
 
-from mailmind.platform.db import migrate, migrations
+from mailmind.platform.db import database, driver, migrate, migrations
 from mailmind.platform.db.migrations import m0001_m0020 as frozen
 
 NEWEST = migrations.MIGRATIONS[-1][0]
@@ -71,8 +70,8 @@ def tables(c):
 
 
 def seed(path):
-    c = sqlite3.connect(path)
-    c.row_factory = sqlite3.Row             # as fts_index reads its rows
+    c = database.keyed(path)
+    c.row_factory = driver.Row             # as fts_index reads its rows
     c.execute("PRAGMA foreign_keys=ON")
     try:
         for t in sorted(tables(c), key=lambda t: (t != "messages", t != "message_identity", t != "ai_batches", t != "drafts")):    # what the rest refer to first
@@ -90,7 +89,7 @@ def seed(path):
 
 
 def query(path, sql, params=()):
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         return c.execute(sql, params).fetchall()
     finally:
@@ -98,7 +97,7 @@ def query(path, sql, params=()):
 
 
 def shape(path):
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     try:
         return {t: [r[1] for r in c.execute(f'PRAGMA table_info("{t}")')] for t in tables(c)}
     finally:
@@ -172,7 +171,7 @@ def test_a_folder_synced_before_m24_still_counts_as_synced(tmp_path):
     finished a sync counts as synced, as it did before; one that never has doesn't."""
     path = str(tmp_path / "m24.db")
     migrate.init(path, migrations.MIGRATIONS[:23])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("INSERT INTO sync_state(account, folder, last_sync, last_uid) "
               "VALUES (?, 'INBOX', '2026-11-01T09:00:00+00:00', 12)", (ACCOUNT,))
     c.execute("INSERT INTO sync_state(account, folder, uidvalidity) VALUES (?, 'Junk', 7)", (ACCOUNT,))
@@ -187,7 +186,7 @@ def test_part_rows_go_only_for_a_message_with_an_email_attached(tmp_path):
     """m28: parsing stopped numbering an attached email's parts along with the message's own."""
     path = str(tmp_path / "m28.db")
     migrate.init(path, migrations.MIGRATIONS[:27])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("PRAGMA foreign_keys=OFF")
     for pk, ctype in ((1, "application/pdf"), (2, "application/pdf"), (2, "Message/RFC822")):
         c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type) VALUES (?, '2', 'f', ?)", (pk, ctype))
@@ -211,7 +210,7 @@ def test_the_queue_s_rows_become_commands_with_their_ids(tmp_path):
     """m39: `messages.pending_removal` names a row by id, and any open row may already have reached the server."""
     path = str(tmp_path / "m39.db")
     migrate.init(path, migrations.MIGRATIONS[:38])
-    c = sqlite3.connect(path)
+    c = database.keyed(path)
     c.execute("""INSERT INTO read_mutations(id, account, idempotency_key, op, message_id, src_folder, dest, payload,
                    state, attempts, next_attempt_at, applied, created_at)
                  VALUES (7, 'ada@example.test', 'k', 'trash', '<m@example.test>', 'INBOX', 'Trash', '{"uid": 3}',
