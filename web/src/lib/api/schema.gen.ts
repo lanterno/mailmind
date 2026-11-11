@@ -2573,6 +2573,8 @@ export interface components {
             theme?: components["schemas"]["Theme"] | null;
             /** Undo Send Seconds */
             undo_send_seconds?: number | null;
+            /** Weekly Review */
+            weekly_review?: boolean | null;
         };
         /** CleanedUp */
         CleanedUp: {
@@ -4439,6 +4441,8 @@ export interface components {
             theme: components["schemas"]["Theme"];
             /** Undo Send Seconds */
             undo_send_seconds: number;
+            /** Weekly Review */
+            weekly_review: boolean;
         };
         /** PreferencesAnswer */
         PreferencesAnswer: {
