@@ -11,7 +11,8 @@ Otherwise a minimal header-only RFC822 is synthesized from the stored row (From/
 Message-ID/threading), stamped with X-MailMind-* so a future reimport keeps thread/bucket info.
 
 Safety: the DB is opened mode=ro after a WAL checkpoint, so a bug here can never write or
-corrupt the live database. Grep this file for `accounts.connect` — there is none.
+corrupt the live database. Grep this file for `accounts.connect` — there is none. What it writes is its owner's
+alone, wherever it goes: each file readable by them only, and each folder it makes listable by them only.
 
   python -m mailmind export --format eml  --out /tmp/mail [--account me@x.com] [--attachments]
   python -m mailmind export --format mbox --out /tmp/mail
@@ -26,7 +27,7 @@ from email.message import EmailMessage
 from email import policy as _policy
 from typing import Literal
 
-from mailmind.platform import settings
+from mailmind.platform import private, settings
 from mailmind.platform.db import database, driver
 
 type ArchiveFormat = Literal["eml", "mbox"]
@@ -126,9 +127,9 @@ def export_eml(out, account=None, attachments=False):
         for r in _rows(c, account):
             raw, real = _raw_for(c, r)
             d = os.path.join(out, _safe(r["account"], "acct"), _safe(r["folder"] or "INBOX", "folder"))
-            os.makedirs(d, exist_ok=True)
+            private.folder(d)
             base = _safe((r["message_id"] or "").strip("<>"), r["pk"])
-            with open(os.path.join(d, f"{base}-{r['pk']}.eml"), "wb") as f:
+            with private.create(os.path.join(d, f"{base}-{r['pk']}.eml")) as f:
                 f.write(raw)
             if attachments and real:
                 try:
@@ -137,9 +138,9 @@ def export_eml(out, account=None, attachments=False):
                         if not payload:
                             continue
                         ad = os.path.join(d, "att")
-                        os.makedirs(ad, exist_ok=True)
+                        private.folder(ad)
                         fn = _safe(a.get("filename") or a["part_id"], a["part_id"])
-                        with open(os.path.join(ad, f"{r['pk']}_{fn}"), "wb") as af:
+                        with private.create(os.path.join(ad, f"{r['pk']}_{fn}")) as af:
                             af.write(payload)
                 except Exception:
                     pass
@@ -159,14 +160,14 @@ def export_mbox(out, account=None):
     files, handles = {}, {}
     n = 0
     try:
-        os.makedirs(out, exist_ok=True)
+        private.folder(out)
         for r in _rows(c, account):
             key = (r["account"], r["folder"] or "INBOX")
             if key not in handles:
                 d = os.path.join(out, _safe(r["account"], "acct"))
-                os.makedirs(d, exist_ok=True)
+                private.folder(d)
                 path = os.path.join(d, _safe(r["folder"] or "INBOX", "folder") + ".mbox")
-                handles[key] = open(path, "wb")
+                handles[key] = private.create(path)
                 files[key] = path
             raw, _real = _raw_for(c, r)
             sep = ("From mailmind@localhost " + (r["date_iso"] or "")).encode("utf-8", "replace")
@@ -191,11 +192,11 @@ def archive(out, form: ArchiveFormat):
     """One zip of the mail in a standard format, in `out`: what `export_eml` or `export_mbox` writes, each file gone as it is packed,
     so a large mailbox is on the disk about once and not twice."""
     tree = os.path.join(out, "mail")
-    os.makedirs(tree)
+    os.mkdir(tree, 0o700)
     _WRITERS[form](tree)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     path = os.path.join(out, f"mailmind-{form}-{stamp}.zip")
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+    with private.create(path) as f, zipfile.ZipFile(f, "w", zipfile.ZIP_DEFLATED) as z:
         for where, _folders, names in os.walk(tree):
             for name in sorted(names):
                 file = os.path.join(where, name)
@@ -208,9 +209,10 @@ def archive(out, form: ArchiveFormat):
 def export_db(out):
     """A consistent on-disk snapshot via sqlite's online backup API (checkpoint first), encrypted with the database's
     key: it opens on this computer, or wherever that key is given (MAILMIND_DB_KEY)."""
-    os.makedirs(out, exist_ok=True)
+    private.folder(out)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     dest_path = os.path.join(out, f"mailmind-{stamp}.db")
+    private.create(dest_path).close()
     src = _ro_conn()
     try:
         dest = database.keyed(dest_path)        # encrypted with the database's key, as the database is
