@@ -1,4 +1,6 @@
-"""Tidy on its own: once a day, for someone who turned it on, only what the brief's Tidy offers, and all of it can be taken back."""
+"""Tidy on its own: once a day, for someone who turned it on, only what the brief's Tidy offers, and all of it can be taken back.
+Here the job through the app, on the AI's verdicts, with Undo; when a run files (once a day, from the hour the day starts) is the
+unit half's (tests/unit/mailbox/test_tidying.py)."""
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -79,41 +81,6 @@ def test_mail_already_out_of_the_inbox_is_left_where_it_is(on, world):
     mark = world.mark()
     round_(on)
     assert world.writes(mark) == []
-
-
-def test_it_runs_once_a_day(on, world):
-    judged(world, SAFE)
-    round_(on)
-    judged(world, TOO)                                      # safe to file only later that day
-    round_(on)
-    assert in_inbox(world, TOO)
-    assert on.get("/api/tidy").json["filed"] == 1
-
-
-def test_the_next_day_it_runs_again(on, world):
-    judged(world, SAFE)
-    round_(on)
-    judged(world, TOO)
-    on.clock.move_to(MORNING + timedelta(days=1))
-    assistant.governor().saw_someone()
-    round_(on)
-    assert not in_inbox(world, TOO)
-    assert on.get("/api/tidy").json["group"] == "tidy-2026-11-04"
-
-
-def test_nothing_to_file_doesnt_use_up_the_day(on, world):
-    round_(on)
-    judged(world, SAFE)
-    round_(on)
-    assert not in_inbox(world, SAFE)
-
-
-@pytest.mark.parametrize("hour, files", [(5, False), (6, True)])
-def test_it_waits_for_the_day_to_start(on, world, hour, files):
-    judged(world, SAFE)
-    on.clock.move_to(MORNING.replace(hour=hour))
-    round_(on)
-    assert in_inbox(world, SAFE) is not files
 
 
 def test_with_ai_off_it_files_nothing(app, world, monkeypatch):
