@@ -6,7 +6,7 @@ import threading
 import pytest
 
 from fixtures import world as w
-from world_helpers import wait_until
+from waiting import wait_until
 
 NAME = "bea-inbox-01-client.eml"
 
