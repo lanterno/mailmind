@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 from fixtures import world as w
 from mailmind.bootstrap import assistant
+from waiting import wait_until
 from world_helpers import VENUE_END
 
 
@@ -31,9 +32,7 @@ def test_hwf_polling_routes_dont_count_as_someone_at_the_screen(app, world, monk
               .encode())
     assert b" 200 " in s.recv(64)
     s.close()
-    deadline = time.monotonic() + 5
-    while sse.HUB.listening() and time.monotonic() < deadline:
-        time.sleep(0.02)
+    assert wait_until(lambda: not sse.HUB.listening())                 # its stream has ended
     assert governor._last_seen == 0.0
     app.get("/api/digest")
     assert governor._last_seen == time.time()
