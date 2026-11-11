@@ -3,7 +3,6 @@ reader of the environment."""
 import ast
 import pathlib
 import re
-import sys
 
 import pytest
 
@@ -71,14 +70,6 @@ def test_the_readme_lists_each_variable_and_no_other():
     table = text.split("## Environment variables", 1)[1].split("\n## ", 1)[0]
     listed = set(re.findall(r"^\| `((?:MAILMIND|ANTHROPIC)_[A-Z0-9_]+)", table, flags=re.M))
     assert listed == NAMES
-
-
-def test_it_is_the_standard_library_alone():
-    """The command line imports it, and runs on Python alone."""
-    tree = ast.parse(ITSELF.read_text())
-    top = {a.name.split(".")[0] for node in tree.body if isinstance(node, ast.Import) for a in node.names}
-    top |= {node.module.split(".")[0] for node in tree.body if isinstance(node, ast.ImportFrom) and node.module}
-    assert top <= set(sys.stdlib_module_names)
 
 
 def test_the_profiles_it_takes_are_the_profiles():

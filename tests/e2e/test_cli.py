@@ -22,19 +22,36 @@ def justfile_commands():
 
 
 def _with_nothing_installed(home, *args):
-    """This Python without its site-packages, as a machine that has only Python runs it."""
+    """This Python without its site-packages, as `python3 -m mailmind` runs outside the project's environment."""
     return subprocess.run([sys.executable, "-S", "-E", *args], cwd=ROOT, env={**os.environ, "MAILMIND_HOME": str(home)}, capture_output=True, text=True)
 
 
-def test_every_command_loads_with_nothing_installed(tmp_path):
-    """`bootstrap.calendar` loads icalendar and `bootstrap.front` the rest, so neither may reach the top of what a command imports."""
-    done = _with_nothing_installed(tmp_path, "-c", "import mailmind.__main__; from mailmind.bootstrap import assistant, cli, wiring")
-    assert done.returncode == 0, done.stderr
+@pytest.mark.parametrize("argv", [["serve"], ["assess", "10", "1"], ["assess", "--batch"], ["ai", "usage", "--days", "3"]], ids=" ".join)
+def test_a_command_says_how_to_run_it_with_nothing_installed(tmp_path, argv):
+    """Every command runs on the runtime packages: the Assistant's wiring loads the Anthropic SDK, say. Whichever is
+    missing first, the command says so, and how to run it with them."""
+    (tmp_path / "mailmind.db").touch()                          # so `ai usage` gets as far as the ledger
+    done = _with_nothing_installed(tmp_path, "-m", "mailmind", *argv)
+    assert done.returncode == 1, done.stderr
+    said = re.fullmatch(r"MailMind needs its runtime packages, and ([\w.]+) isn't installed\. Run it as `(.*)`\.\n", done.stderr)
+    assert said, done.stderr
+    assert said[2] == "uv run python -m mailmind " + " ".join(argv)
 
 
-def test_serve_says_what_it_needs_with_nothing_installed(tmp_path):
-    done = _with_nothing_installed(tmp_path, "-m", "mailmind", "serve")
-    assert done.returncode == 1 and "serve needs the runtime packages" in done.stderr, done.stderr
+def test_a_missing_module_of_mailminds_own_still_raises(monkeypatch):
+    import mailmind.__main__ as entry
+
+    def missing(args):
+        raise ModuleNotFoundError("No module named 'mailmind.gone'", name="mailmind.gone")
+    monkeypatch.setattr(entry, "_run", missing)
+    with pytest.raises(ModuleNotFoundError):
+        main(["check"])
+
+
+def test_the_help_names_the_command_as_it_runs(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    assert capsys.readouterr().out.startswith("usage: uv run python -m mailmind ")
 
 
 def test_the_justfile_names_commands():
