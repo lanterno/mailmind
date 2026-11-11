@@ -117,19 +117,32 @@ def test_a_kept_link_opens_nothing_once_a_renumber_gave_its_copy_another_uid(pag
     clean(page)
 
 
+def opening_reads(page):
+    """A list that fills with each read of a message to open it, which warming one doesn't count as."""
+    seen = []
+    page.on("request", lambda r: seen.append(r.url) if re.search(r"/api/(message/body|thread)\?", r.url) and "prefetch=1" not in r.url else None)
+    return seen
+
+
 def test_a_link_without_a_uid_opens_nothing(page, world):
+    reads = opening_reads(page)
     page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX")
     expect(page.locator("#listTitle")).to_have_text("Inbox")
-    page.wait_for_timeout(300)
+    expect(page.locator("#reader")).to_have_class(re.compile("brief-pane"))
+    page.heard_all_asked()                              # a message opened is read as its route is
+    assert reads == []
     expect(page.locator(".rd-subj")).to_have_count(0)
     expect(page.locator("iframe.rd-iframe")).to_have_count(0)
     clean(page)
 
 
 def test_a_link_from_before_keys_opens_nothing(page, world):
+    reads = opening_reads(page)
     page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?m={world.pk(RECEIPT)}")
     expect(page.locator("#listTitle")).to_have_text("Inbox")
-    page.wait_for_timeout(300)
+    expect(page.locator("#reader")).to_have_class(re.compile("brief-pane"))
+    page.heard_all_asked()
+    assert reads == []
     expect(page.locator(".rd-subj")).to_have_count(0)
     expect(page.locator("iframe.rd-iframe")).to_have_count(0)
     clean(page)
@@ -243,11 +256,16 @@ def test_star_and_unread_reach_the_server(page, world):
     expect(page.locator(".rd-subj")).to_be_visible()
     page.keyboard.press("s")
     until(page, lambda: "\\Flagged" in world.where(RECEIPT)["server"][0][3], "the star never reached the server")
+    page.heard_all_asked()
+    marked = []
+    page.on("request", lambda r: marked.append(r.post_data_json["seen"]) if r.url.endswith("/api/seen") else None)
     page.keyboard.press("u")
     expect(r).to_have_class(re.compile(r"\bunread\b"))
-    page.wait_for_timeout(1500)     # the dwell doesn't take it back
+    page.clock.run_for(1500)        # past the dwell, which doesn't take it back
+    page.heard_all_asked()
+    assert True not in marked
     expect(r).to_have_class(re.compile(r"\bunread\b"))
-    assert "\\Seen" not in world.where(RECEIPT)["server"][0][3]
+    until(page, lambda: "\\Seen" not in world.where(RECEIPT)["server"][0][3], "the unread mark never reached the server")
     clean(page)
 
 
@@ -292,7 +310,7 @@ def test_opening_a_conversation_warms_its_closed_members_once_each(page, world):
     expect(members).to_have_count(3)
     keys = [int(k) for k in members.evaluate_all("ms => ms.map(m => m.dataset.key)")]
     until(page, lambda: len(asked) == 2, "the closed members weren't warmed")
-    page.wait_for_timeout(200)
+    page.heard_all_asked()
     assert [re.search(r"[?&]key=(\d+)&", u).group(1) for u in asked] == [str(keys[1]), str(keys[0])]    # newest first
     clean(page)
 
@@ -317,7 +335,7 @@ def test_resting_on_a_row_warms_its_body_and_crossing_it_asks_for_nothing(page, 
     page.mouse.move(1, 1)
     first.hover()
     page.clock.run_for(200)
-    page.wait_for_timeout(100)
+    page.heard_all_asked()
     assert len(asked) == 1                              # once a page
     page.clock.resume()
     clean(page)
