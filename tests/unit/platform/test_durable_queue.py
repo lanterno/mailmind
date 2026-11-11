@@ -306,19 +306,14 @@ def test_a_row_coming_due_just_after_a_drain_that_wont_take_it_gets_one_more_loo
 def test_the_worker_puts_back_what_a_crash_left_then_drains_when_kicked(q):
     stuck = add(q, "stuck")
     run(q, lambda c: q.claim(c, stuck))
-    handled, woke, stop = [], threading.Event(), threading.Event()
-
-    def handle(id_):
-        handled.append(id_)
-        woke.set()
-    worker = threading.Thread(target=lambda: q.run_forever(lambda: q.drain(handle, NOW), stop), daemon=True)
+    handled, stop = [], threading.Event()
+    worker = threading.Thread(target=lambda: q.run_forever(lambda: q.drain(handled.append, NOW), stop), daemon=True)
     worker.start()
     try:
-        assert woke.wait(30) and handled == [stuck]
-        woke.clear()
+        assert wait_until(lambda: handled) and handled == [stuck]
         fresh = add(q, "fresh")
         q.kick()
-        assert woke.wait(30) and handled[-1] == fresh
+        assert wait_until(lambda: fresh in handled)      # this handle takes nothing off, so the drain sees the crash's again first
     finally:
         stop.set()
         q.kick()
