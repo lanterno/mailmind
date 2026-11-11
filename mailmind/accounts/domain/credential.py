@@ -2,17 +2,19 @@
 
   { "keychain": "account:you@example.com",           a generic password in the login Keychain, under the service mailmind;
     "version": 2 }                                    how many MailMind has kept there, so a new one reads as a new credential
-  { "plain": "the-password" }                       inline (the file is kept off git)
-  "the-password"                                     the same, shorthand
   { "op": "op://Vault/Item/Field" }                 read from the 1Password CLI at runtime
   { "op": ["op://.../Field A", "op://.../Field B"] } refs tried in order
   { "env": "ENV_VAR_NAME" }                          read from an environment variable
   { "proton_bridge": true }                          the Proton Mail Bridge password
 
-An entry naming two gets the first of plain, keychain, env, proton_bridge, op. Having the secret is
+An entry naming two gets the first of keychain, env, proton_bridge, op, and one naming plain is refused whatever else it
+names. Having the secret is
 mailmind.accounts.adapters.secrets's; this only says where it is, and what MailMind names the Keychain items it keeps:
 `account:<address>` for an account's password, `anthropic-api-key` for the Claude API key. No credential may name the
 item the database's key is kept in, which would send that key to a mail server.
+
+The file never holds a secret itself. One that does, `{ "plain": "the-password" }` or a bare string as MailMind once
+wrote them, reads as the style "plain" only so it can be refused: `PlaintextSecret` says how to move it to the Keychain.
 
 A password typed into Settings is `Typed` until it is saved: saving keeps it in the account's Keychain item and writes the
 file the item's name (`keychain_credential`), and a draft's test tries it and keeps it nowhere. It isn't JSON, so no file
@@ -35,12 +37,26 @@ type Credential = str | dict[str, Any] | Typed | None
 type Style = Literal["plain", "keychain", "typed", "op", "env", "proton_bridge", "unknown"]
 
 API_KEY_ITEM = "anthropic-api-key"
+API_KEY_WHO = "anthropic_api_key"       # the file's key for it, and the name a refusal gives it
+MOVE_PLAINTEXT = "uv run python -m mailmind accounts move-plaintext"
 DATABASE_KEY_ITEM = "database-key"      # mailmind.platform.db.key's, which no credential names
 
 
 def account_item(email: str) -> str:
     """The Keychain item MailMind keeps `email`'s password in."""
     return f"account:{email}"
+
+
+class PlaintextSecret(RuntimeError):
+    """The file holds `who`'s secrets in plain text, which MailMind no longer reads. It says how to move them to the
+    Keychain, and holds no secret: `who` is each account's address, or API_KEY_WHO."""
+
+    def __init__(self, who: list[str]):
+        self.who = who
+        said = [("the Claude API key" if one == API_KEY_WHO else f"{one}'s password") for one in who]
+        them = said[0] if len(said) == 1 else ", ".join(said[:-1]) + " and " + said[-1]
+        super().__init__(f"mailmind.config.json holds {them} in plain text, which MailMind no longer reads. Move "
+                         f"{'it' if len(said) == 1 else 'them'} to the login Keychain with `{MOVE_PLAINTEXT}`.")
 
 
 class CredentialMask(TypedDict, total=False):
@@ -56,7 +72,8 @@ class CredentialMask(TypedDict, total=False):
 class CredentialRef:
     """Where an account's secret is. `style` is None when there's no credential at all, and "unknown" when the file's
     says something no style reads. `named` is what the style's key holds: the Keychain item's name, the op reference or
-    references, the variable's name, and for plain or a typed one the password itself, so it stays out of a repr.
+    references, the variable's name, and for plain (refused) or a typed one the password itself, so it stays out of a
+    repr.
     `version` is a Keychain credential's."""
     style: Style | None
     named: Any = field(default=None, repr=False)
@@ -125,7 +142,7 @@ def credential_from(p: object) -> dict[str, Any] | Typed | None:
     if not is_object(p):
         raise ValueError("a credential names its style")
     style = p.get("style")
-    if style in ("keychain", "plain"):     # plain: the page's word for it until it says keychain
+    if style == "keychain":
         v = p.get("value")
         if not (v and isinstance(v, str)):  # never blank out / store an empty password
             raise ValueError("password required")
@@ -143,3 +160,26 @@ def credential_from(p: object) -> dict[str, Any] | Typed | None:
     if style == "proton_bridge":
         return {"proton_bridge": True}
     return None  # style unchanged / not provided -> keep existing
+
+
+def holds_plaintext(cred: object) -> bool:
+    """Whether `cred` is a secret the file holds itself, `{"plain": ...}` or a bare string, and not an empty one."""
+    ref = CredentialRef.parse(cred)
+    return ref.style == "plain" and bool(ref.named)
+
+
+def plaintext(raw: object) -> list[tuple[str, dict[str, Any], str, str]]:
+    """Each secret the file `raw` holds in plain text, in its order, as (who, the mapping that holds it, its key there, the
+    Keychain item it belongs in). Who is an account's address, or API_KEY_WHO for the Claude API key."""
+    if not is_object(raw):
+        return []
+    held: list[tuple[str, dict[str, Any], str, str]] = []
+    entries = raw.get("accounts")
+    for entry in entries if is_list(entries) else []:
+        if is_object(entry) and holds_plaintext(entry.get("credential")):
+            email = entry.get("email")
+            who = email if isinstance(email, str) and email else "an account with no address"
+            held.append((who, entry, "credential", account_item(who)))
+    if holds_plaintext(raw.get(API_KEY_WHO)):
+        held.append((API_KEY_WHO, raw, API_KEY_WHO, API_KEY_ITEM))
+    return held

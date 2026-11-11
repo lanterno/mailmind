@@ -142,13 +142,14 @@ def _daemon(target):
 
 
 def start(spawn=_daemon):
-    """Everything that's done before the app serves: check the profile, open the log, create or migrate
-    the schema, wire the workers, and start them: the two queues' workers, the background jobs on a
+    """Everything that's done before the app serves: check the profile, refuse a config that holds a secret
+    itself (PlaintextSecret, which says how to move it to the Keychain), open the log, create or migrate the schema, wire the workers, and start them: the two queues' workers, the background jobs on a
     scheduler (background.schedule says which), and IDLE. Read-only, only snooze wake starts, since it
     needs no mail server: sends and moves wait in their queues, and nothing syncs.
 
     `spawn(target)` runs each worker and each job's lane; by default on a daemon thread of its own."""
     profile.check()                      # a MAILMIND_PROFILE that names no profile stops the start
+    accounts.config.refuse_plaintext()   # and so does a secret the config holds itself
     setup_logging()
     store.init()
     wire()

@@ -14,7 +14,7 @@ import pathlib
 import subprocess
 import time
 
-from mailmind.accounts.domain.credential import CredentialRef
+from mailmind.accounts.domain.credential import CredentialRef, PlaintextSecret
 from mailmind.platform import environment, keychain
 
 BRIDGE_FILE = pathlib.Path.home() / ".config" / "mailmind" / "proton_bridge_pass"
@@ -63,10 +63,12 @@ def _drop(item):
 def resolve(cred, *, who, strip=False):
     """The secret `cred` names, for the account (or setting) `who`, which only error messages
     show. `strip` takes the spaces out of an op read (a Gmail app password as 1Password keeps it).
-    Raises when it can't be had."""
+    Raises when it can't be had, and PlaintextSecret when the file holds it itself."""
     ref = CredentialRef.parse(cred or {})
-    if ref.style in ("plain", "typed"):
+    if ref.style == "typed":
         return ref.named
+    if ref.style == "plain" and ref.named:
+        raise PlaintextSecret([who])
     if ref.style == "keychain":
         if not (isinstance(ref.named, str) and ref.named.strip()):
             raise RuntimeError(f"no credential configured for {who}")

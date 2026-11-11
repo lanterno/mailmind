@@ -42,6 +42,6 @@ def throwaway_account(draft: Mapping[str, Any]) -> Entry:
                    "trash": td["trash"], "credential": Typed(typed if isinstance(typed, str) else "")}
     if not acct["host"]:
         raise DraftRefused("a host is required")
-    if cs.get("style") not in ("keychain", "plain") or not (isinstance(typed, str) and typed):
+    if cs.get("style") != "keychain" or not (isinstance(typed, str) and typed):
         raise DraftRefused("save the account to test a stored secret; before then only a typed password is tried")
     return acct

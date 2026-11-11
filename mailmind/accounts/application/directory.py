@@ -12,9 +12,10 @@ An optional top-level "anthropic_api_key" holds the Claude API key, in any of th
 "preferences" block holds what the Settings page sets (mailmind.accounts.domain.preferences);
 with none, each preference is its default.
 
-Credential styles (so this works for anyone, with or without 1Password): keychain, plain, op, env
-and proton_bridge, which mailmind.accounts.domain.credential lists and mailmind.accounts.adapters.secrets
-resolves. A password typed into Settings goes to the login Keychain, in the account's own item
+Credential styles (so this works for anyone, with or without 1Password): keychain, op, env and
+proton_bridge, which mailmind.accounts.domain.credential lists and mailmind.accounts.adapters.secrets
+resolves. The file never holds a secret itself: one that does is refused (`refuse_plaintext`), and
+`move_plaintext` keeps each in the Keychain instead. A password typed into Settings goes to the login Keychain, in the account's own item
 (`account:<address>`), before the file is written, and the file names the item: a new one replaces
 what the item held, and removing the account takes its item out. A Keychain that won't is
 `Unreachable`, and the file is left as it was.
@@ -31,8 +32,8 @@ from typing import Any
 from mailmind.accounts.application.ports import AccountRepository, SecretStore
 from mailmind.accounts.domain import account, events, preferences
 from mailmind.accounts.domain.account import Entry, MaskedRow
-from mailmind.accounts.domain.credential import (API_KEY_ITEM, CredentialRef, Typed, account_item, credential_from,
-                                                 keychain_credential)
+from mailmind.accounts.domain.credential import (API_KEY_ITEM, API_KEY_WHO, CredentialRef, PlaintextSecret, Typed,
+                                                 account_item, credential_from, keychain_credential, plaintext)
 from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.parsed import is_object
 from mailmind.platform import bus
@@ -270,6 +271,39 @@ class Directory:
             self._secrets.evict(old)
             self.save(raw)
         return API_KEY_ITEM
+
+    def refuse_plaintext(self) -> None:
+        """Raise PlaintextSecret, naming each, when the file holds a secret itself."""
+        held = plaintext(self._raw())
+        if held:
+            raise PlaintextSecret([who for who, *_ in held])
+
+    def move_plaintext(self) -> int:
+        """Keep each secret the file holds in plain text, an account's password or the Claude API key, in its own Keychain
+        item, and point the file at the item. What it prints names accounts, never a secret; one it can't keep stays as it
+        was. The answer is how many moved."""
+        moved: list[str] = []
+        with self._write_lock:
+            raw = self._raw()
+            for who, holder, key, item in plaintext(raw):
+                cred = holder[key]
+                secret = CredentialRef.parse(cred).named
+                try:
+                    if not (isinstance(secret, str) and secret):
+                        raise ValueError("it holds no password")
+                    holder[key] = self._kept(item, Typed(secret), cred)
+                except (ValueError, Unreachable) as e:     # their words, which hold no secret
+                    print(f"  ! skip {who}: {e}")
+                    continue
+                print(f"  moved {who}")
+                moved.append(who)
+            if moved:
+                self.save(raw)
+        for who in moved:
+            if who != API_KEY_WHO:
+                bus.publish(events.AccountChanged(who))
+        print(f"done — {len(moved)} secret(s) now kept in the Keychain")
+        return len(moved)
 
     def materialize(self, only: str | None = None) -> None:
         """Keep each account's secret that lives elsewhere (1Password, a variable, the Bridge password) in
