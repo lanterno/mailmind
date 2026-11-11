@@ -178,13 +178,60 @@ def test_a_folders_link_opened_in_a_new_tab_opens_that_folder(page, world):
     link = page.locator('#folderrail .frow[data-folder="Archive"]')
     href = link.get_attribute("href")
     assert re.fullmatch(r"/p/[A-Za-z0-9_-]{22}", href)
-    assert page.where(href) == f"/m/{w.ADA.replace('@', '%40')}/Archive"      # it has reached the server, as it would have long before a person clicks
+    link.hover()                                          # the pointer comes over it on its way to the click
+    assert page.where(href) == f"/m/{w.ADA.replace('@', '%40')}/Archive"      # so it has reached the server before the click
     with page.pw.context.expect_page() as opening:
         link.click(modifiers=["ControlOrMeta"])
     tab = opening.value
     expect(tab.locator("#listTitle")).to_have_text("Archive")
     title(page, "Inbox")                                  # this tab stays where it was
     tab.close()
+    clean(page)
+
+
+def kept():
+    """The ids of the places the server keeps, from this test's own database."""
+    from mailmind.platform.db.uow import UnitOfWork
+    with UnitOfWork().read() as c:
+        return {row[0] for row in c.execute("SELECT id FROM places")}
+
+
+def places_answered(page):
+    """Each request the page sends with places, and whether it has been answered."""
+    sent = {}
+    page.pw.on("request", lambda r: sent.setdefault(r, False) if r.url.endswith("/api/places") else None)
+    page.pw.on("requestfinished", lambda r: sent.update({r: True}) if r.url.endswith("/api/places") else None)
+    return sent
+
+
+def settled(page, sent):
+    page.heard_all_asked()
+    for _ in range(100):
+        if all(sent.values()):
+            return
+        page.wait_for_timeout(50)
+    raise AssertionError("a place sent was never answered")
+
+
+def test_drawing_the_rail_keeps_no_place_and_a_link_hovered_opens_its_own_elsewhere(page, world):
+    sent = places_answered(page)
+    page.goto("/")
+    title(page, "Inbox")
+    links = page.locator('#folderrail a.frow[href^="/p/"]')
+    assert links.count() >= 10, links.count()
+    at_a_place(page)
+    home = urlsplit(page.url).path[len("/p/"):]
+    settled(page, sent)
+    assert kept() == {home}                               # where the page went, and no link drawn
+    link = page.locator('#folderrail .frow[data-folder="Archive"]')
+    href = link.get_attribute("href")
+    link.hover()
+    settled(page, sent)
+    assert kept() == {home, href[len("/p/"):]}            # just the one pointed at
+    other = page.pw.context.new_page()
+    other.goto(href)
+    expect(other.locator("#listTitle")).to_have_text("Archive")
+    other.close()
     clean(page)
 
 
