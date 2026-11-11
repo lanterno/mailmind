@@ -35,7 +35,8 @@ python3 -m mailmind ai usage --days 7  # what the Claude API cost each day, by f
 python3 -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
 
-`just test` (`uv run pytest`) runs every test, and `just test -k hardening` picks by file or test name.
+`just test` (`uv run pytest -n auto`) runs every test, a process for each core, and `just test -k hardening` picks by file or
+test name; `just test -n0` runs them in one process.
 [docs/testing.md](docs/testing.md) lists what to run first for a change.
 
 ## Constraints

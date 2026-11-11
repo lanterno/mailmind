@@ -2,8 +2,10 @@
 
 ## Which tests to run first
 
-Tests — `just test` (`uv run pytest`) runs them all. `just test -k hardening` picks by file or test name, so `-k` also picks a
-single test: `just test -k test_a_rebound_name_reads_nothing`. These are the first to run for a change in what they cover, with
+Tests — `just test` (`uv run pytest -n auto`) runs them all, in a process for each core (pytest-xdist). `just test -n0`, or
+`uv run pytest`, runs them in one. `just test -k hardening` picks by file or test name, so `-k` also picks a
+single test: `just test -k test_a_rebound_name_reads_nothing`. For a few tests one process is quicker, as the workers take a
+few seconds to start. These are the first to run for a change in what they cover, with
 the cases pytest collects for each:
 
 ```bash
@@ -70,6 +72,10 @@ The fixtures, from the bottom up:
   code. `tests/golden/schema_v<N>.sql` is the schema snapshot: rename it in the commit that adds
   migration N.
 
+Under `-n`, each worker is a pytest session of its own: it installs the tripwire, runs its own fake Claude API and makes its own
+`world` template and new database, under a temp directory of its own. A test keeps to its temp directory and every server takes
+a port the system picks, so no two workers share a file or a port, and a test passes in any worker, in any company.
+
 A known bug is a `xfail(strict=True)` test that states the right behaviour, so fixing the bug
 fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows where each fails.
 
@@ -105,12 +111,13 @@ changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo,
 
 These tests are marked `browser` and skipped unless pytest runs with `--browser`.
 `just test-full` installs Chromium if needed and runs everything. `just verify` leaves them out
-to stay fast.
+to stay fast. `just test-full` and `just test-browser` run four processes at a time (`-n 4`), each with a Chromium and a build of
+its own: a Chromium keeps cores of its own busy, and with a process for each core the tests' waits for the page run out.
 
 `tests/contract/test_mail_session_dovecot.py` holds the MailSession contract against a real server,
 Dovecot 2.3 in Docker (pinned by digest), through each adapter, and checks what each call left
 through a connection of its own. Its tests are marked `dovecot` and skipped unless pytest runs
-with `--dovecot`; `just test-dovecot` runs them, and needs Docker running. One container serves
+with `--dovecot`; `just test-dovecot` runs them, in one process, and needs Docker running. One container serves
 the run, and each test logs in as a user of its own, with an empty mailbox.
 
 The Python has no build step. `pyproject.toml` declares the runtime packages and, in its dev group,
