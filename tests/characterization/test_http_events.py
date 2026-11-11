@@ -8,7 +8,6 @@ that only frame the connection are left out of the record. The keepalive interva
 listener is noticed (and its thread ends) within the test.
 """
 import socket
-import time
 
 # Headers about the connection, not the stream.
 CONNECTION_HEADERS = {"connection", "keep-alive", "transfer-encoding", "date", "server"}
@@ -17,6 +16,7 @@ import pytest
 
 from app_client import CSRF
 from fixtures import world as w
+from waiting import wait_until
 
 
 class Stream:
@@ -87,10 +87,8 @@ def quick(monkeypatch):
 
 READ_THREAD = "ada-inbox-04-ci.eml"                     # muting it queues nothing: no `outbox` event among these
 
-def subscribers(sse, n, timeout=5):
-    deadline = time.monotonic() + timeout
-    while sse.HUB.listening() != n and time.monotonic() < deadline:
-        time.sleep(0.02)
+def subscribers(sse, n):
+    wait_until(lambda: sse.HUB.listening() == n)
     return sse.HUB.listening()
 
 
