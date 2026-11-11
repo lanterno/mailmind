@@ -1,5 +1,6 @@
 """The pending-changes tray: moves and flag changes that haven't reached a server, /api/pending,
-with Retry for what the queue gave up on and Discard for any of them."""
+with Retry for what the queue gave up on and Discard for any of them. What a queued flag change shows, and what its
+Discard gives back, are the unit half's (tests/unit/mailbox/test_pending_tray.py)."""
 import pytest
 
 import problems
@@ -69,13 +70,6 @@ def test_a_queued_move_shows_with_what_the_tray_needs_and_leaves_once_it_lands(a
     assert item["subject"] == world.row(RECEIPT)["subject"]
     commands.drain()
     assert tray(app) == {"items": [], "waiting": 0, "stuck": 0}
-
-
-def test_a_queued_flag_change_names_its_message_and_what_it_asks(app, world):
-    subject = world.row(RECEIPT)["subject"]
-    queue_star(app, world)
-    [item] = tray(app)["items"]
-    assert (item["op"], item["flags"], item["subject"]) == ("flag", {"flagged": True}, subject)
 
 
 def test_a_change_the_server_refused_stays_in_the_tray_as_stuck(app, world):
@@ -158,13 +152,6 @@ def test_discarding_one_of_a_group_leaves_undo_the_rest(app, world):
     [held] = undo.entries(c)
     c.close()
     assert [ch["message_id"] for ch in held["children"]] == [world.row(LUNCH)["message_id"]]
-
-
-def test_discard_of_a_flag_change_puts_the_flags_back(app, world):
-    mid = queue_star(app, world)
-    assert row_flagged(world) == 1
-    assert app.post("/api/pending/discard", {"id": mid}).json["ok"]
-    assert row_flagged(world) == 0
 
 
 def test_discard_of_a_given_up_move_clears_it_from_the_tray(app, world):
