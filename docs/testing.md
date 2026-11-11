@@ -22,11 +22,11 @@ uv run pytest tests/{unit,integration}/compose/test_draft_resume.py   # reopenin
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (101)
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (52)
 uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (198)
-uv run pytest tests/{unit,integration}/http/test_problems.py   # the problem document each of kernel.errors answers (32)
+uv run pytest tests/{unit,integration}/http/test_problems.py   # the problem document each of kernel.errors answers (40)
 uv run pytest tests/unit/http/test_route.py                 # what a route does around its handler, and what the app answers where none matches, on a toy router (183)
 uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (148)
 uv run pytest tests/unit/http/test_event_stream.py          # what a tab holds, and every way a stream ends, Ctrl-C included (12)
-uv run pytest tests/{unit,integration}/http/test_export_route.py   # the download in chunks, and that no way it ends leaves its folder (17)
+uv run pytest tests/{unit,integration}/http/test_export_route.py   # the download in chunks, and that no way it ends leaves its folder (15)
 ```
 
 The composer's send-time checks and reopen helpers are `web/src/features/compose/sendGuard.ts` and `draftResume.ts`, free of DOM
