@@ -1,9 +1,9 @@
-"""A person's filters: what one may say, how they're kept in the rules file, and POST /api/filters."""
+"""POST /api/filters: a filter made, changed and taken away through the route, a query Discovery can't judge on arrival refused
+in its words, and what the route answers a change it can't make. What the use case decides is tests/unit/curation/test_filters.py."""
 
 import pytest
 
 import problems
-from mailmind.curation.domain import filters
 
 GOOD = {"verb": "create", "q": "from:news@loom.example.test", "star": True, "read": False}
 
@@ -31,20 +31,10 @@ def test_create_list_update_and_delete(app):
     assert saved(app) == []
 
 
-def test_a_query_is_kept_as_typed(app):
-    made = post(app, q='  from:Lin "Thursday Lunch"  ').json["filters"][0]
-    assert made["q"] == 'from:Lin "Thursday Lunch"'
-
-
-def test_a_query_a_filter_cant_use_is_refused_in_its_own_words(app):
+def test_a_query_a_filter_cant_use_is_refused_in_discoverys_own_words(app):
     r = post(app, q="from:lin has:attachment")
     assert r.status == 400 and "attachments" in r.json["detail"]
     assert saved(app) == []
-
-
-def test_a_filter_must_do_something(app):
-    r = post(app, star=False, read=False)
-    assert r.status == 400 and "Choose what the filter does" in r.json["detail"]
 
 
 @pytest.mark.parametrize("verb", ["update", "delete"])
@@ -56,11 +46,3 @@ def test_a_verb_it_doesnt_know_is_a_bad_request(app):
     assert post(app, verb="move").json == problems.BAD_REQUEST
     r = app.post("/api/filters", {"q": "from:lin", "star": True})
     assert r.status == 400 and "verb must be" in r.json["detail"]
-
-
-def test_it_keeps_a_ceiling(app, monkeypatch):
-    monkeypatch.setattr(filters, "MOST", 1)
-    assert post(app).status == 200
-    r = post(app, q="from:bea")
-    assert r.status == 400 and "as many filters" in r.json["detail"]
-    assert len(saved(app)) == 1

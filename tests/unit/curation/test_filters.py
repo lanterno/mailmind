@@ -1,12 +1,16 @@
-"""A person's filters: what one may say, how they're kept in the rules file, and POST /api/filters."""
+"""A person's filters: what one may say, how they're kept in the rules file, and what POST /api/filters asks of the use case
+(mailmind.curation.application.filters.Filters)."""
 import json
+import re
 
 import pytest
 
 from mailmind.bootstrap.curation import rules
+from mailmind.curation.application.filters import Filters
 from mailmind.curation.domain import filters, rulebook
 from mailmind.discovery.domain import arrival
 from mailmind.discovery.domain.query import MAX_CHARS
+from mailmind.kernel.errors import NotFound, Refused
 
 
 # ── what one may say ────────────────────────────────────────────────────────────────────────────
@@ -97,3 +101,75 @@ def test_a_change_that_raises_saves_nothing(data_dir):
     with pytest.raises(RuntimeError):
         rules.change(fails)
     assert rules.load()["filters"] == []
+
+
+# ── a change asked for (Filters.post), kept in the rules file ───────────────────────────────────────
+
+GOOD = {"verb": "create", "q": "from:news@loom.example.test", "star": True, "read": False}
+
+
+class Conditions:
+    """Discovery's word on a query, as a filter asks for it: one about attachments can't be judged yet, and any other can."""
+    def refusal(self, q):
+        return "MailMind can't tell attachments of mail as it arrives." if "has:attachment" in q else None
+
+
+def post(**body):
+    return Filters(rules, Conditions()).post({**GOOD, **body})
+
+
+def test_a_filter_is_made_with_an_id_of_its_own_and_kept(data_dir):
+    [made] = post()["filters"]
+    assert made["id"].startswith("f-") and {k: made[k] for k in ("q", "star", "read")} == {"q": GOOD["q"], "star": True, "read": False}
+    assert rules.load()["filters"] == [made]
+
+
+def test_an_update_says_it_anew_and_a_delete_takes_it_away(data_dir):
+    [made] = post()["filters"]
+    changed = {"id": made["id"], "q": "subject:invoice", "star": False, "read": True}
+    assert post(verb="update", id=made["id"], q="subject:invoice", star=False, read=True)["filters"] == [changed]
+    assert post(verb="delete", id=made["id"], q=None, star=None, read=None)["filters"] == []
+    assert rules.load()["filters"] == []
+
+
+def test_a_query_is_kept_as_typed(data_dir):
+    assert post(q='  from:Lin "Thursday Lunch"  ')["filters"][0]["q"] == 'from:Lin "Thursday Lunch"'
+
+
+@pytest.mark.parametrize("verb", ["create", "update"])
+def test_a_query_a_filter_cant_use_is_refused_in_its_own_words_and_nothing_changes(data_dir, verb):
+    [made] = post()["filters"]
+    with pytest.raises(Refused, match="^MailMind can't tell attachments"):
+        post(verb=verb, id=made["id"], q="from:lin has:attachment")
+    assert rules.load()["filters"] == [made]
+
+
+@pytest.mark.parametrize("verb", ["create", "update"])
+def test_a_filter_must_do_something(data_dir, verb):
+    [made] = post()["filters"]
+    with pytest.raises(Refused, match="^Choose what the filter does"):
+        post(verb=verb, id=made["id"], star=False, read=False)
+    assert rules.load()["filters"] == [made]
+
+
+@pytest.mark.parametrize("verb", ["update", "delete"])
+def test_naming_a_filter_there_isnt_finds_none_and_changes_nothing(data_dir, verb):
+    [made] = post()["filters"]
+    with pytest.raises(NotFound, match="no such filter"):
+        post(verb=verb, id="f-gone")
+    assert rules.load()["filters"] == [made]
+
+
+@pytest.mark.parametrize("verb", [None, "move"])
+def test_a_verb_it_doesnt_know_is_refused(data_dir, verb):
+    with pytest.raises(Refused, match=re.escape("verb must be create|update|delete")):
+        post(verb=verb)
+    assert rules.load()["filters"] == []
+
+
+def test_it_keeps_a_ceiling(data_dir, monkeypatch):
+    monkeypatch.setattr(filters, "MOST", 1)
+    post()
+    with pytest.raises(Refused, match=re.escape("That's as many filters as MailMind keeps (1).")):
+        post(q="from:bea")
+    assert len(rules.load()["filters"]) == 1
