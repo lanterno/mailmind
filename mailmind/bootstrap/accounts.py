@@ -85,9 +85,10 @@ def check_pin(acct, host, port, imap):
 
 
 def assemble():
-    """Accounts' objects, made afresh: the file's directory, the connector, and who has been refused a login.
-    Importing this module assembles them once; wiring.assemble makes a new set of every context's."""
+    """Accounts' objects, made afresh: the file's directory, the connector, who has been refused a login, and no secret
+    read yet. Importing this module assembles them once; wiring.assemble makes a new set of every context's."""
     global config, _connector, connections, health, logins
+    secrets.forget()
     config = Directory(config_file.FILE, secrets, _ai_key)
     _connector = imap_connection.Connector(config)
     connections = Connections(config, get, accounts, _Probe(), quiet_error, _retry_sync, _forget_status)

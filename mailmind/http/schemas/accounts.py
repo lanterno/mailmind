@@ -49,9 +49,11 @@ class AccountBody(AccountDraft):
 
 
 class CredentialShown(Answer):
-    """`CredentialRef.masked`: its style, whether it's set, and at most a pointer to it, an op reference or a variable's name."""
+    """`CredentialRef.masked`: its style, whether it's set, and at most a pointer to it, a Keychain item's name, an op reference
+    or a variable's name."""
     style: str | None
     set: bool
+    item: str | None = None
     ref: str | list[str] | None = None
     var: str | None = None
 
