@@ -9,8 +9,8 @@ import pytest
 from mailmind.accounts.adapters import config_file
 from mailmind.platform import settings
 
-ADA = {"email": "ada@example.test", "type": "imap", "host": "127.0.0.1", "credential": {"plain": "x"}}
-BEA = {"email": "bea@example.test", "type": "imap", "host": "127.0.0.1", "credential": {"plain": "y"}}
+ADA = {"email": "ada@example.test", "type": "imap", "host": "127.0.0.1", "credential": {"keychain": "account:ada@example.test", "version": 1}}
+BEA = {"email": "bea@example.test", "type": "imap", "host": "127.0.0.1", "credential": {"keychain": "account:bea@example.test", "version": 1}}
 
 
 @pytest.fixture
@@ -55,11 +55,11 @@ def test_an_edit_in_place_is_read_at_once(data_dir, parses):
     with open(path, "r+") as fh:                 # the same inode and size, a later mtime
         text = fh.read()
         fh.seek(0)
-        fh.write(text.replace('"x"', '"z"'))
+        fh.write(text.replace('"version": 1', '"version": 2'))
     st = os.stat(path)
     os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
     assert os.stat(path).st_ino == ino
-    assert f.read()["accounts"][0]["credential"] == {"plain": "z"}
+    assert f.read()["accounts"][0]["credential"] == {"keychain": "account:ada@example.test", "version": 2}
 
 
 def test_each_read_is_a_copy_of_its_own(data_dir):

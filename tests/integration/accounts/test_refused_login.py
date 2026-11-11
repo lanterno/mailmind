@@ -128,12 +128,14 @@ def test_a_new_password_goes_at_once(app, world, who):
     assert logins(world, who) == before + 1 and health(app, who)["healthy"]
 
 
-def test_a_password_changed_in_the_file_by_hand_goes_at_once(app, world):
+def test_a_password_changed_by_another_process_goes_at_once(app, world, fake_keychain):
+    """As `accounts password` does: the Keychain holds the new one, and the file names the item's next version."""
     from mailmind.bootstrap.accounts import config
     world.server.accounts[w.ADA].password = "the-new-password"
     sync()
+    fake_keychain.add(f"account:{w.ADA}", "the-new-password", replace=True)
     raw = config._raw()
-    next(a for a in raw["accounts"] if a["email"] == w.ADA)["credential"] = {"plain": "the-new-password"}
+    next(a for a in raw["accounts"] if a["email"] == w.ADA)["credential"] = {"keychain": f"account:{w.ADA}", "version": 2}
     config.save(raw)
     sync()
     assert health(app)["healthy"]

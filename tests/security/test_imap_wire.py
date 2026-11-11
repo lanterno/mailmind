@@ -14,6 +14,7 @@ import pytest
 from hypothesis import assume, given, strategies as st
 
 from fixtures import world as w
+from mailmind.accounts.domain.credential import Typed
 from property_runs import runs
 
 RECEIPT = "ada-inbox-05-receipt.eml"
@@ -262,9 +263,9 @@ def test_trying_an_account_typed_with_a_line_break_in_its_login(app, world, wire
 
 @pytest.mark.parametrize("user, password", TYPED_LOGINS)
 def test_opening_a_session_with_a_line_break_in_its_login(world, adapter, wire, user, password):
-    """A saved account's address, or a password pasted with its line end into the config, on either adapter."""
+    """A saved account's address, or a password typed with its line end, on either adapter."""
     from mailmind.bootstrap import accounts, mailbox
-    acct = {**accounts.get(w.ADA), "email": user, "credential": {"plain": password}}
+    acct = {**accounts.get(w.ADA), "email": user, "credential": Typed(password)}
     with pytest.raises(imaplib.IMAP4.error):
         mailbox.open_session(acct, timeout=10)
     assert on_the_wire(wire) == []

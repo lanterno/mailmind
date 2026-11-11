@@ -2,7 +2,8 @@
 import pytest
 
 from mailmind.accounts.adapters import secrets
-from mailmind.accounts.domain.credential import CredentialRef, Typed, credential_from, keychain_credential
+from mailmind.accounts.domain.credential import (CredentialRef, PlaintextSecret, Typed, credential_from, keychain_credential,
+                                                 plaintext)
 
 
 @pytest.mark.parametrize("stored, style, mask", [
@@ -51,7 +52,6 @@ def test_op_refs_are_tried_in_order(named, op_refs):
 
 @pytest.mark.parametrize("stored, style", [
     ({"op": "op://V/I/F", "env": "DEE_PASSWORD"}, "env"),
-    ({"op": "op://V/I/F", "plain": "hunter2"}, "plain"),
     ({"op": "op://V/I/F", "proton_bridge": True}, "proton_bridge"),
     ({"op": "op://V/I/F", "proton_bridge": False}, "op"),
 ], ids=repr)
@@ -61,7 +61,7 @@ def test_an_entry_naming_two_shows_the_one_a_login_uses(stored, style, monkeypat
     monkeypatch.setattr(secrets, "_bridge", {})
     monkeypatch.setattr(secrets, "_op_read", lambda ref, strip: "from-op")
     assert CredentialRef.parse(stored).style == style
-    assert secrets.resolve(stored, who="dee") == {"plain": "hunter2", "env": "from-env", "proton_bridge": "from-bridge", "op": "from-op"}[style]
+    assert secrets.resolve(stored, who="dee") == {"env": "from-env", "proton_bridge": "from-bridge", "op": "from-op"}[style]
 
 
 @pytest.mark.parametrize("stored", [None, {}, "", {"vault": "dee"}, {"keychain": "database-key"}, {"proton_bridge": False}], ids=repr)
@@ -70,8 +70,47 @@ def test_no_style_resolves_to_a_refusal_naming_no_secret(stored):
         secrets.resolve(stored, who="dee")
 
 
-def test_an_empty_plain_is_what_the_file_says():
-    assert secrets.resolve({"plain": ""}, who="dee") == ""
+def test_an_empty_plain_is_no_credential():
+    with pytest.raises(RuntimeError, match="no credential configured for dee") as no:
+        secrets.resolve({"plain": ""}, who="dee")
+    assert not isinstance(no.value, PlaintextSecret)
+
+
+MOVE = "Move it to the login Keychain with `uv run python -m mailmind accounts move-plaintext`."
+
+
+@pytest.mark.parametrize("stored", [{"plain": "hunter2"}, "hunter2", {"op": "op://V/I/F", "plain": "hunter2"}, {"plain": 123}],
+                         ids=repr)
+def test_a_secret_the_file_holds_itself_is_refused_saying_how_to_move_it(stored):
+    assert CredentialRef.parse(stored).style == "plain"
+    with pytest.raises(PlaintextSecret) as no:
+        secrets.resolve(stored, who="dee@example.test")
+    assert str(no.value) == f"mailmind.config.json holds dee@example.test's password in plain text, which MailMind no longer reads. {MOVE}"
+
+
+def test_a_claude_key_the_file_holds_itself_is_refused_too():
+    with pytest.raises(PlaintextSecret) as no:
+        secrets.resolve("sk-ant-in-the-file", who="anthropic_api_key")
+    assert str(no.value) == f"mailmind.config.json holds the Claude API key in plain text, which MailMind no longer reads. {MOVE}"
+
+
+def test_plaintext_finds_each_secret_the_file_holds_itself_in_its_order():
+    raw = {"anthropic_api_key": "sk-ant-x", "accounts": [
+        {"email": "ada@example.test", "credential": {"plain": "a"}},
+        {"email": "bea@example.test", "credential": {"keychain": "account:bea@example.test"}},
+        {"email": "cy@example.test", "credential": "c"}, {"email": "dee@example.test", "credential": {"plain": ""}}, "junk",
+        {"credential": {"plain": "e"}}]}
+    found = plaintext(raw)
+    assert [(who, key, item) for who, _, key, item in found] == [
+        ("ada@example.test", "credential", "account:ada@example.test"), ("cy@example.test", "credential", "account:cy@example.test"),
+        ("an account with no address", "credential", "account:an account with no address"),
+        ("anthropic_api_key", "anthropic_api_key", "anthropic-api-key")]
+    assert found[0][1] is raw["accounts"][0] and found[-1][1] is raw
+    assert str(PlaintextSecret([who for who, *_ in found])) == (
+        "mailmind.config.json holds ada@example.test's password, cy@example.test's password, an account with no address's "
+        "password and the Claude API key in plain text, which MailMind no longer reads. Move them to the login Keychain with "
+        "`uv run python -m mailmind accounts move-plaintext`.")
+    assert plaintext({"accounts": "junk", "anthropic_api_key": {"keychain": "anthropic-api-key"}}) == [] == plaintext(None)
 
 
 def test_evict_drops_each_of_a_credentials_reads_and_no_others(monkeypatch):
@@ -93,7 +132,7 @@ def test_a_request_writes_the_style_it_names(asked, stored):
     assert credential_from(asked) == stored
 
 
-@pytest.mark.parametrize("asked", [None, {}, {"value": "hunter2"}], ids=repr)
+@pytest.mark.parametrize("asked", [None, {}, {"value": "hunter2"}, {"style": "plain", "value": "hunter2"}], ids=repr)
 def test_a_request_naming_no_style_keeps_what_is_there(asked):
     assert credential_from(asked) is None
 

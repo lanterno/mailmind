@@ -247,9 +247,10 @@ def test_ai_is_on_with_a_key_and_off_without_one(api, monkeypatch):
     assert assistant.calls.engine() == "none"
 
 
-def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monkeypatch):
+def test_a_key_the_config_file_names_wins_over_the_environment(api, data_dir, monkeypatch, fake_keychain):
     from mailmind.bootstrap import assistant
-    config(data_dir, anthropic_api_key="sk-ant-config-key")
+    fake_keychain.add("anthropic-api-key", "sk-ant-config-key", replace=False)
+    config(data_dir, anthropic_api_key={"keychain": "anthropic-api-key", "version": 1})
     with pytest.raises(RuntimeError, match="401"):              # the fake knows only its own key
         assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     assert api.requests[0].key == "sk-ant-config-key"
@@ -259,6 +260,8 @@ def test_a_key_in_the_config_file_wins_over_the_environment(api, data_dir, monke
     assert assistant.key() == ("sk-ant-env-ref-key", "mailmind.config.json")
     config(data_dir, anthropic_api_key="")                      # empty is unset: the environment's key
     assert assistant.key() == (fa.KEY, "ANTHROPIC_API_KEY")
+    config(data_dir, anthropic_api_key="sk-ant-in-the-file")    # held in the file: refused, so no key at all
+    assert assistant.key() == ("", "mailmind.config.json")
 
 
 def test_the_startup_line_says_when_there_is_no_key(plain, data_dir, monkeypatch):

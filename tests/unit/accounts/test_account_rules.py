@@ -10,7 +10,7 @@ from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.domain import account
 from mailmind.accounts.domain.account import imap_endpoint, smtp_endpoint
 
-ADA = {"email": "ada@example.test", "type": "imap", "host": "imap.example.test", "credential": {"plain": "hunter2"}}
+ADA = {"email": "ada@example.test", "type": "imap", "host": "imap.example.test", "credential": {"keychain": "account:ada@example.test", "version": 1}}
 TYPED = {"style": "keychain", "value": "hunter2"}
 
 
@@ -152,6 +152,6 @@ def test_what_the_file_already_held_reads_as_it_stands(directory, held):
 
 
 def test_an_entry_the_file_gives_no_address_is_not_used_and_stops_nothing_else(directory):
-    directory.save({"accounts": [{"type": "imap", "host": "imap.example.test", "credential": {"plain": "hunter2"}}, dict(ADA)]})
+    directory.save({"accounts": [{"type": "imap", "host": "imap.example.test", "credential": {"keychain": "account:ada@example.test", "version": 1}}, dict(ADA)]})
     assert [a["email"] for a in directory.accounts()] == ["ada@example.test"]
     assert [r["email"] for r in directory.masked_rows()] == [None, "ada@example.test"]

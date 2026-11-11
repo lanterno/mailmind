@@ -10,8 +10,8 @@ from mailmind.accounts.domain import preferences
 from mailmind.kernel import send_window
 from mailmind.kernel.errors import Refused
 
-ADA = {"email": "ada@example.test", "type": "imap", "host": "imap.example.test", "credential": {"plain": "app-password"}}
-KEPT = {"anthropic_api_key": {"plain": "a-key"}, "signature_default": "Yours,\nAda", "webmail": ["https://mail.example.test"],
+ADA = {"email": "ada@example.test", "type": "imap", "host": "imap.example.test", "credential": {"keychain": "account:ada@example.test", "version": 1}}
+KEPT = {"anthropic_api_key": {"keychain": "anthropic-api-key", "version": 1}, "signature_default": "Yours,\nAda", "webmail": ["https://mail.example.test"],
         "something_a_later_version_wrote": {"deep": [1, 2.5, "ü"]}}
 
 

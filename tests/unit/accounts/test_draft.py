@@ -40,6 +40,7 @@ def test_what_a_draft_tries_can_never_be_written_to_a_file_or_the_keychain(data_
     {"op": "op://Private/Dee/password"},
     {"plain": "stored-as-the-file-holds-it"},
     {"keychain": "account:dee@example.test"},
+    {"style": "plain", "value": "typed-password"},
     {"style": "keychain", "value": 123},
     {"style": "keychain"},
     {"style": "keychain", "value": ""},

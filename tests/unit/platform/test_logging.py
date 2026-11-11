@@ -431,7 +431,7 @@ def test_only_a_commands_own_output_is_a_print():
                 if (where := _where_it_prints(ast.parse(path.read_text())))}
     for the_command_line in ("__main__.py", "bootstrap/cli.py"):
         del printing[the_command_line]
-    assert printing == {"accounts/application/directory.py": {"check", "materialize"},
+    assert printing == {"accounts/application/directory.py": {"check", "materialize", "move_plaintext"},
                         "bootstrap/wiring.py": {"assess_batch"}}
 
 

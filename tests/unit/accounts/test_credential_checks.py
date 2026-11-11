@@ -58,7 +58,7 @@ def test_check_says_ok_with_a_length_or_fail_with_why_for_each_account(directory
 
 
 def test_check_says_how_the_claude_key_went_when_the_file_names_one(directory, capsys):
-    directory(_Secrets(), ai_key=lambda: "sk-ant-hunter22", anthropic_api_key={"plain": "sk-ant-hunter22"}).check()
+    directory(_Secrets(), ai_key=lambda: "sk-ant-hunter22", anthropic_api_key={"keychain": "anthropic-api-key", "version": 1}).check()
     assert capsys.readouterr().out.splitlines()[-1].split() == ["ok", "anthropic_api_key", "(15", "chars)"]
 
 
@@ -70,5 +70,5 @@ def test_check_says_why_the_claude_key_failed(directory, capsys):
 
 
 def test_check_never_shows_a_secret(directory, capsys):
-    directory(_Secrets(refusing={BEA}), ai_key=lambda: "sk-ant-hunter22", anthropic_api_key={"plain": "sk-ant-hunter22"}).check()
+    directory(_Secrets(refusing={BEA}), ai_key=lambda: "sk-ant-hunter22", anthropic_api_key={"keychain": "anthropic-api-key", "version": 1}).check()
     assert "hunter22" not in capsys.readouterr().out

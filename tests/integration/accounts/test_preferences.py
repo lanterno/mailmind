@@ -9,7 +9,7 @@ import problems
 from mailmind.accounts.domain import preferences
 from mailmind.bootstrap import assistant
 
-KEPT = {"anthropic_api_key": {"plain": "a-key"}, "signature_default": "Yours,\nAda", "webmail": ["https://mail.example.test"],
+KEPT = {"anthropic_api_key": {"keychain": "anthropic-api-key", "version": 1}, "signature_default": "Yours,\nAda", "webmail": ["https://mail.example.test"],
         "something_a_later_version_wrote": {"deep": [1, 2.5, "ü"]}}
 
 

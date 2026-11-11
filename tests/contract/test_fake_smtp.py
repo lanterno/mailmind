@@ -6,6 +6,7 @@ import smtplib
 import pytest
 
 from fakes.smtp_server import FakeSMTPServer
+from mailmind.accounts.domain.credential import Typed
 
 ADA = "ada@example.test"
 RAW = (b"From: Ada <ada@example.test>\r\nTo: Lin <lin@example.test>\r\nSubject: Hi\r\n"
@@ -21,7 +22,7 @@ def smtp():
 
 def acct(srv, password="app-password"):
     return {"email": ADA, "smtp_host": "127.0.0.1", "smtp_port": srv.port, "smtp_starttls": True,
-            "credential": {"plain": password}}
+            "credential": Typed(password)}
 
 
 def test_the_app_sends_over_starttls_with_a_login(smtp, data_dir):

@@ -162,8 +162,10 @@ def kind(request):
 
 
 def write_config(data_dir, user, port, password=PASSWORD):
+    from mailmind.platform import keychain
+    keychain.put(f"account:{user}", password)                   # the tripwire's stand-in
     entry = {"email": user, "type": "imap", "host": "127.0.0.1", "port": port, "starttls": False,
-             "credential": {"plain": password}, "smtp_host": "127.0.0.1", "smtp_port": 9}
+             "credential": {"keychain": f"account:{user}"}, "smtp_host": "127.0.0.1", "smtp_port": 9}
     with open(os.path.join(data_dir, "mailmind.config.json"), "w") as f:
         json.dump({"accounts": [entry]}, f)
 

@@ -11,7 +11,7 @@ from mailmind.accounts.domain.events import AccountChanged, AccountRemoved, Cred
 from mailmind.accounts.domain.login_hold import FIRST, LONGEST, login_id
 
 ADA = {"email": "ada@example.test", "host": "imap.example.test", "port": 993, "starttls": False, "strip_spaces": False,
-       "credential": {"plain": "app-password"}}
+       "credential": {"keychain": "account:ada@example.test", "version": 1}}
 BEA = {**ADA, "email": "bea@example.test"}
 
 
@@ -59,11 +59,11 @@ def test_a_login_that_works_starts_the_count_again(clock):
 
 
 def test_another_server_address_or_credential_isnt_held(clock):
-    """A password changed in the file by hand goes at once: the hold named the login that was refused."""
+    """A new password goes at once, its credential a new version: the hold named the login that was refused."""
     logins = Logins()
     refused(logins)
     assert logins.held(ADA)
-    assert not logins.held({**ADA, "credential": {"plain": "the-new-password"}})
+    assert not logins.held({**ADA, "credential": {"keychain": "account:ada@example.test", "version": 2}})
     assert not logins.held({**ADA, "host": "imap2.example.test"})
     assert not logins.held(BEA)
 

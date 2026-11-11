@@ -12,6 +12,7 @@ import pytest
 
 from answered import answered
 from fakes.imap_server import FakeIMAPServer
+from mailmind.accounts.domain.credential import Typed
 from waiting import wait_until
 
 ADA = "ada@example.test"
@@ -71,7 +72,7 @@ def test_a_login_before_starttls_is_refused(srv):
 def test_a_wrong_password_is_a_login_failure(srv, app):
     from mailmind.bootstrap import accounts
     with pytest.raises(accounts.LoginUnreachable):
-        accounts.connect({**app, "credential": {"plain": "nope"}}, timeout=5)
+        accounts.connect({**app, "credential": Typed("nope")}, timeout=5)
 
 
 def test_list_shows_each_folder_with_its_special_use(srv, app):

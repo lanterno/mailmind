@@ -5,7 +5,7 @@ from mailmind.accounts.domain import login_hold
 from mailmind.accounts.domain.login_hold import FIRST, LONGEST, Hold, after_refusal, login_id
 
 ADA = {"email": "ada@example.test", "host": "imap.example.test", "port": 993, "starttls": False, "strip_spaces": False,
-       "credential": {"plain": "hunter2"}, "alias": "Ada", "trash": "Trash"}
+       "credential": {"keychain": "account:ada@example.test", "version": 1}, "alias": "Ada", "trash": "Trash"}
 
 
 @pytest.mark.parametrize("said, refusal", [
@@ -24,13 +24,13 @@ def test_a_login_is_the_same_login_whatever_else_the_account_says():
 
 
 @pytest.mark.parametrize("changed", [{"email": "bea@example.test"}, {"host": "other.example.test"}, {"port": 143}, {"starttls": True},
-                                     {"strip_spaces": True}, {"credential": {"plain": "hunter3"}}, {"credential": {"op": "op://V/I/F"}}], ids=repr)
+                                     {"strip_spaces": True}, {"credential": {"keychain": "account:ada@example.test", "version": 2}}, {"credential": {"op": "op://V/I/F"}}], ids=repr)
 def test_another_server_address_or_credential_is_another_login(changed):
     assert login_id(ADA) != login_id({**ADA, **changed})
 
 
 def test_a_logins_id_says_nothing_of_it():
-    assert "hunter2" not in login_id(ADA) and "ada" not in login_id(ADA) and len(login_id(ADA)) == 64
+    assert "account" not in login_id(ADA) and "ada" not in login_id(ADA) and len(login_id(ADA)) == 64
 
 
 def test_a_first_refusal_holds_for_the_first_rest():
