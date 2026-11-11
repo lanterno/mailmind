@@ -73,6 +73,23 @@ The fixtures, from the bottom up:
 A known bug is a `xfail(strict=True)` test that states the right behaviour, so fixing the bug
 fails the test until the marker goes. `uv run pytest --runxfail -k <name>` shows where each fails.
 
+A test passes or fails on what happened, never on how long it took. Other suites share the machine, so a fixed sleep or a
+"finished within N s" fails under load:
+
+- Wait for a condition with `wait_until(cond)` from `tests/support/waiting.py`. It polls for up to 30 s and returns whether
+  `cond` came true, so assert it. `blocked_in(thread, fn)` says a thread waits inside `fn` on a lock, a Condition or an
+  Event. That lets a test act once a thread has queued. `tests/support/gate.py` builds `waits_for_a_gate(thread)` and
+  `waiting_for_a_gate()` on it.
+- Read time from a clock the test moves: the `app` fixture's `app.clock`, `time_machine` around code that runs outside it,
+  or an injected `now`. Test speed through what the code does: a call counted, an Event set, a thread still alive after a
+  join long past its due time. A wake shows up against a wait made long, such as an hour, rather than one timed short.
+- If a bound must stay, make it one-sided and generous: well past what the step takes, and short of the wait it must not
+  make. `tests/unit/compose/test_markdown.py` holds the renderer to linear time with a ratio of CPU time at two lengths.
+- A sleep that is the behaviour under test (a stream left silent, a page that must stop growing) may stay. It needs a
+  comment and must not lead to an assertion about wall time.
+- In the browser, wait with Playwright's `expect` and `wait_for`. Move the page's timers with `page.clock.run_for`.
+  `page.heard_all_asked()` comes before saying that a request wasn't made.
+
 `tests/unit/mailbox/test_queue_state_machine.py` runs Hypothesis over the command path and Undo: random moves, flag
 changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
 `MAILMIND_MACHINE_RUNS=1500` asks for that many with fresh seeds, and `MAILMIND_MACHINE_STEPS` for longer ones.
