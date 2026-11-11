@@ -258,17 +258,24 @@ def rules_expire(token, hours):
     print(f"  {t} -> {'expires after ' + str(h) + 'h' if h else 'no expiry'}")
 
 
+def _views():
+    """The saved views, which the database keeps: brought to the newest schema first, as a start does."""
+    from mailmind.bootstrap.mailbox import store
+    store.init()
+    return discovery.views
+
+
 def views_list():
-    for v in discovery.views.merged():
+    for v in _views().merged():
         print(f"  {'*' if v['builtin'] else ' '} {v['id']:18} {v['name']:24} {v['q']}")
 
 
 def views_add(name, query):
-    print(discovery.views.add(name, query))
+    print(_views().add(name, query))
 
 
 def views_remove(view_id):
-    print("removed" if discovery.views.remove(view_id) else "not removed (builtin or missing)")
+    print("removed" if _views().remove(view_id) else "not removed (builtin or missing)")
 
 
 def export(fmt, out, account, attachments):

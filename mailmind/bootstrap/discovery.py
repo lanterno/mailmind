@@ -1,7 +1,7 @@
 """Discovery's wiring: the one place that binds its ports, to its own adapters and, until those contexts move, to the
 legacy modules behind them. The legacy modules and the command line reach Discovery through here.
 """
-from mailmind.discovery.adapters import fts, views_file
+from mailmind.discovery.adapters import fts, views_store
 from mailmind.discovery.adapters.fts import BM25, forget_message, index_message, to_sql, visible
 from mailmind.discovery.adapters.sqlite import StoredMail
 from mailmind.discovery.api import QuerySpec
@@ -12,6 +12,7 @@ from mailmind.discovery.application.search import Search
 from mailmind.discovery.application.suggest import Suggesting
 from mailmind.discovery.application.views import SavedViews
 from mailmind.mailbox.domain import roles
+from mailmind.platform.db.uow import UnitOfWork
 from mailmind.bootstrap import mailbox
 
 __all__ = ["BM25", "build", "conditions", "contacts", "documents", "forget_message", "fts", "index_message", "known", "search", "suggesting",
@@ -54,7 +55,7 @@ def assemble():
     every context's."""
     global _mail, views, search, conditions, documents, contacts, suggesting, known
     _mail = StoredMail(_Folders())
-    views = SavedViews(views_file)
+    views = SavedViews(UnitOfWork(), views_store)
     search = Search(_mail, _Accounts())
     conditions = Conditions(_mail)
     documents = DocumentHub(_mail, _Accounts())

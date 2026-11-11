@@ -2,7 +2,7 @@
 
 A view is just {id, name, q} where q is a raw search-grammar string (the same grammar /api/search parses), so a saved
 search and an auto-label "lane" are the same thing. Built-in DEFAULTS and LANES are merged in read-only at load time:
-they always appear, can't be deleted, and are never written to disk.
+they always appear, can't be deleted, and are never saved.
 """
 import secrets
 from collections.abc import Iterable
@@ -44,7 +44,7 @@ BUILTIN_IDS = {v["id"] for v in DEFAULTS} | {v["id"] for v in LANES}
 
 
 def clean(raw: object) -> list[View]:
-    """User views out of whatever a file held (no builtins). TOTAL: never raises, drops malformed entries."""
+    """User views out of whatever was saved (no builtins). TOTAL: never raises, drops malformed entries."""
     out: list[View] = []
     for v in (raw if is_list(raw) else []):
         if not is_object(v):
@@ -72,7 +72,7 @@ def new(name: str | None, q: str | None) -> View | None:
 
 
 def without(user_views: Iterable[View], view_id: str | None) -> list[View] | None:
-    """The views with this one gone, or None if that changes nothing. A built-in or a lane can't go, whatever a file holds."""
+    """The views with this one gone, or None if that changes nothing. A built-in or a lane can't go, whatever was saved."""
     if view_id in BUILTIN_IDS:
         return None
     cur = list(user_views)

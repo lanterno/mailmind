@@ -5,13 +5,14 @@ from typing import Protocol
 from mailmind.discovery.domain.known import Facts
 from mailmind.discovery.domain.query import QuerySpec
 from mailmind.discovery.domain.views import View
-from mailmind.kernel.row import Row
+from mailmind.kernel.row import Connection, Row
 
 
-class ViewsFile(Protocol):
-    """Where a person's saved views are kept. What it holds is whatever the file held."""
-    def read(self) -> object: ...
-    def write(self, user_views: list[View]) -> None: ...
+class ViewsStore(Protocol):
+    """Where a person's saved views are kept: adapters.views_store. What a read gives is whatever was kept, which may be
+    anything. Each call runs on the connection it's given and leaves the commit to its caller."""
+    def read(self, c: Connection) -> object: ...
+    def write(self, c: Connection, user_views: list[View]) -> None: ...
 
 
 class SearchIndex(Protocol):
