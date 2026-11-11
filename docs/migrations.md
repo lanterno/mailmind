@@ -56,7 +56,7 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   in that file's `ENDED`. One that carries what it ends over to another table says so in `migrations.FILLED`, as m45 does
   `assessments`, `snoozes` and `message_identity`: the check reports that table's growth as `carried over`, and its shrinking is
   still a loss.
-  One that takes rows on purpose says so in `migrations.TRIMMED`, as m28 does, with how to count them beforehand: the check passes exactly that many gone, and fails one more.
+  One that takes rows on purpose says so in `migrations.TRIMMED`, as m28 and m50 do, with how to count them beforehand (a table may be taken from by more than one): the check passes exactly that many gone, and fails one more. m50 takes the rows of mail deleted while an older MailMind left foreign keys off, in every table that goes with its message.
 - Before it migrates a database that holds anything, `init` backs it up with SQLite's backup API
   to `backups/mailmind-v{N}-{UTC time}.db` beside it, encrypted with the same key and readable by its owner only, keeping the
   newest 3 (`backup.py` says how to roll back).
