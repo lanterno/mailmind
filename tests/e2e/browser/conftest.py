@@ -55,9 +55,20 @@ class Page:
     def __init__(self, page, origin):
         self.pw, self.origin = page, origin
         self.blocked, self.problems = [], []
+        self._last_word = False
 
     def __getattr__(self, name):
         return getattr(self.pw, name)
+
+    def heard_all_asked(self):
+        """Returns once Playwright has told of every request the page made before this call, so a test may say one wasn't
+        made. The page asks once more, and Playwright tells of its requests in the order they were made."""
+        word = self.origin + "/__last_word__"
+        if not self._last_word:
+            self.pw.route(word, lambda route: route.fulfill(status=204))
+            self._last_word = True
+        with self.pw.expect_response(word):
+            self.pw.evaluate("u => void fetch(u)", word)
 
 
 @pytest.fixture
