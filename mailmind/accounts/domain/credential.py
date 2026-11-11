@@ -38,13 +38,19 @@ type Style = Literal["plain", "keychain", "typed", "op", "env", "proton_bridge",
 
 API_KEY_ITEM = "anthropic-api-key"
 API_KEY_WHO = "anthropic_api_key"       # the file's key for it, and the name a refusal gives it
-MOVE_PLAINTEXT = "uv run python -m mailmind accounts move-plaintext"
 DATABASE_KEY_ITEM = "database-key"      # mailmind.platform.db.key's, which no credential names
 
 
 def account_item(email: str) -> str:
     """The Keychain item MailMind keeps `email`'s password in."""
     return f"account:{email}"
+
+
+def _keeps(who: str) -> str:
+    """The command that keeps `who`'s secret in the Keychain: an account's by its address, the Claude API key by ai key."""
+    if who == API_KEY_WHO:
+        return "ai key"
+    return f"accounts password {who if '@' in who else '<address>'}"
 
 
 class PlaintextSecret(RuntimeError):
@@ -55,8 +61,9 @@ class PlaintextSecret(RuntimeError):
         self.who = who
         said = [("the Claude API key" if one == API_KEY_WHO else f"{one}'s password") for one in who]
         them = said[0] if len(said) == 1 else ", ".join(said[:-1]) + " and " + said[-1]
-        super().__init__(f"mailmind.config.json holds {them} in plain text, which MailMind no longer reads. Move "
-                         f"{'it' if len(said) == 1 else 'them'} to the login Keychain with `{MOVE_PLAINTEXT}`.")
+        how = ", ".join(f"`uv run python -m mailmind {_keeps(one)}`" for one in who)
+        super().__init__(f"mailmind.config.json holds {them} in plain text, which MailMind no longer reads. Keep "
+                         f"{'it' if len(said) == 1 else 'them'} in the login Keychain instead: {how}.")
 
 
 class CredentialMask(TypedDict, total=False):

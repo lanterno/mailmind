@@ -6,8 +6,6 @@
                                (1Password, a variable, the Bridge password) in the Keychain
   accounts password WHO        keep WHO's password in the login Keychain and point the config at it: it asks
                                at a prompt that shows nothing, or reads the first line of standard input
-  accounts move-plaintext      keep each password the config holds itself, and the Claude API key if it
-                               does, in the login Keychain, and point the config at each
   sync [WHO] [days]            pull mail from the servers into the database
   assess [limit] [workers]     summarize the mail with no summary yet, at full price
   assess --batch               send it as a batch at half price, within today's limit, and bring in
@@ -57,7 +55,7 @@ def parser():
     serve.add_argument("port", nargs="?", type=int, help="default 8721")
     commands.add_parser("check", help="whether each account's credential resolves")
     people = commands.add_parser("accounts", help="the connected accounts")
-    people.add_argument("action", nargs="?", choices=["list", "materialize", "password", "move-plaintext"], default="list")
+    people.add_argument("action", nargs="?", choices=["list", "materialize", "password"], default="list")
     people.add_argument("who", nargs="?", help="with materialize, just this account; with password, the account")
     sync = commands.add_parser("sync", help="pull mail into the database")
     sync.add_argument("who", nargs="?", default="all", help="an account's address, or all")
@@ -153,8 +151,6 @@ def _run(args):
             return cli.check()
         if args.command == "accounts" and args.action == "password":
             sys.exit(cli.set_password(args.who))
-        if args.command == "accounts" and args.action == "move-plaintext":
-            sys.exit(cli.move_plaintext())
         if args.command == "accounts":
             return cli.materialize(args.who) if args.action == "materialize" else cli.list_accounts()
         if args.command == "sync":

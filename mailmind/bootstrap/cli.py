@@ -34,13 +34,6 @@ def materialize(only):
     config.materialize(only)
 
 
-def move_plaintext():
-    """`accounts move-plaintext`: each secret mailmind.config.json holds itself, kept in the login Keychain instead."""
-    from mailmind.bootstrap.accounts import config
-    config.move_plaintext()
-    return 0
-
-
 def _secret(prompt):
     """What the person types at a prompt that shows nothing, or the first line of standard input when it's no terminal.
     Spaces around it go, as the settings page trims a password."""
