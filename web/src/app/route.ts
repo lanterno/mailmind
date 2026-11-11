@@ -6,8 +6,9 @@
 // person's. A route that holds an account, a folder, a search, a topic or an opened message is a place, `/p/<id>`: its id is
 // random and made here, so going somewhere waits for nothing, and the server keeps what it stands for in the encrypted database
 // and puts it back into a page opened there (`<meta name="mailmind-place">`), or loaded again for one Back comes to that the
-// page doesn't know. Only a route that holds none of that is written as itself. Nothing goes into `history.state` either,
-// which the browser keeps on disk too.
+// page doesn't know. A place reaches the server only when it is about to be used, so drawing links keeps nothing. Only a
+// route that holds none of that is written as itself. Nothing goes into `history.state` either, which the browser keeps on
+// disk too.
 import { useSyncExternalStore } from "react";
 import { post, refusalOf } from "../lib/api/client";
 import { LIMITS } from "../lib/api/limits.gen";
@@ -111,6 +112,7 @@ export function routeFrom(said: unknown): Route | null {
 // Each place this page knows, by its id, and its id by the route's text, so a route is one URL for as long as the page lasts.
 const routes = new Map<string, Route>();
 const places = new Map<string, string>();
+const offered = new Set<string>();     // the places sent, on their way, or the server's own
 
 function know(id: string, route: Route, text: string) {
   routes.set(id, route);
@@ -122,11 +124,12 @@ function newPlace(): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-// A new place goes to the server once this turn of the page is over, with the others made in it, so a link drawn with one has
-// reached it long before anyone could open that link in a new tab. It goes as keepalive, so a batch on its way when the page
-// goes (a reload, Back to a place made before it) still arrives, as far as the browser carries that much that way. Places the
-// server couldn't be reached for go again a little later. One it refuses, or one too long to keep, lasts only as long as the
-// page: a reload of it opens at home.
+// A place goes to the server only when it is about to be used: when the page goes there, or when a link to it is pointed at,
+// pressed, focused, given its menu or dragged, one of which comes before the link can be opened in a new tab. So a link drawn
+// sends nothing, and the server keeps only places someone went to or nearly did. It goes once, once this turn of the page is
+// over, with the others sent in it, and as keepalive, so a batch on its way when the page goes (a reload, Back to a place made
+// before it) still arrives, as far as the browser carries that much that way. Places the server couldn't be reached for go
+// again a little later. One it refuses, or one too long to keep, lasts only as long as the page: a reload of it opens at home.
 const unsent: { id: string; route: Fields }[] = [];
 let sending = false, again: ReturnType<typeof setTimeout> | undefined;
 const KEEPALIVE_BYTES = 16_384;     // the browser carries 64 KB at most in all, for every keepalive request on its way
@@ -151,6 +154,16 @@ function sendSoon() {
   void Promise.resolve().then(send);
 }
 
+function offer(id: string) {
+  const route = routes.get(id);
+  if (!route || offered.has(id)) return;
+  offered.add(id);
+  if (new TextEncoder().encode(JSON.stringify(route)).length > LIMITS.place_bytes) return;
+  unsent.push({ id, route: { ...route } });
+  sendSoon();
+}
+
+// The URL of a route, for a link or for going there: a place this page made is known to it, and sent only once used.
 export function pathOf(route: Route): string {
   const itself = readable(route);
   if (itself) return itself;
@@ -159,13 +172,20 @@ export function pathOf(route: Route): string {
   if (!id) {
     id = newPlace();
     know(id, held, text);
-    if (new TextEncoder().encode(text).length <= LIMITS.place_bytes) {
-      unsent.push({ id, route: { ...held } });
-      sendSoon();
-    }
   }
   return `/p/${id}`;
 }
+
+const NEAR_USE = ["pointerover", "pointerdown", "focusin", "contextmenu", "dragstart"] as const;
+
+function nearlyUsed(e: Event) {
+  const target = e.target as { closest?: (selector: string) => Element | null } | null;
+  const href = target?.closest?.('a[href^="/p/"]')?.getAttribute("href");
+  const id = href ? PLACE.exec(href)?.[1] : undefined;
+  if (id) offer(id);
+}
+if (typeof document !== "undefined" && typeof document.addEventListener === "function")
+  for (const type of NEAR_USE) document.addEventListener(type, nearlyUsed, { capture: true, passive: true });
 
 // The place this page was opened at, as the server put it in.
 function opening() {
@@ -175,7 +195,10 @@ function opening() {
   if (!id || !said) return;
   try {
     const route = routeFrom(JSON.parse(said));
-    if (route) know(id, route, JSON.stringify(plain(route)));
+    if (route) {
+      know(id, route, JSON.stringify(plain(route)));
+      offered.add(id);
+    }
   } catch { /* no route: the page opens at home */ }
 }
 opening();
@@ -231,14 +254,18 @@ function subscribe(fn: () => void) {
   };
 }
 
-export function go(route: Route, { replace = false } = {}) {
+// Goes to a route, and says the URL it wrote.
+export function go(route: Route, { replace = false } = {}): string {
   const path = pathOf(route);
+  const place = PLACE.exec(path)?.[1];
+  if (place) offer(place);
   navigate((overTrap) => {
     if (path === read()) return;
     if (replace || overTrap) history.replaceState(null, "", path);
     else history.pushState(null, "", path);
     listeners.forEach((fn) => fn());
   });
+  return path;
 }
 
 let cached: Route = { source: null, opened: null };

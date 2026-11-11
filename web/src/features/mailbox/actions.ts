@@ -4,7 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { get, post, refusalOf } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
 import type { FilingVerb, GetAnswers, PostAnswers, SnoozePreset } from "../../lib/api/types";
-import { currentRoute, go, pathOf, type Route } from "../../app/route";
+import { currentRoute, go, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
 import { createFloat, OFFERS_MS, toast } from "../../lib/toast";
@@ -80,7 +80,7 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
 }) {
   hide(rows);
   const was = currentRoute();
-  if (after) go(after, { replace: true });
+  const there = after ? go(after, { replace: true }) : null;
   inFlight++;
   try {
     const r = (await call()) as R & Answer;
@@ -92,7 +92,7 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
     if (label) offerUndo(label);
   } catch (e) {
     toast(fail(e instanceof Error ? e.message : ""));
-    if (after && location.pathname + location.search === pathOf(after)) go(was, { replace: true });   // it stayed, so back to it
+    if (there && location.pathname + location.search === there) go(was, { replace: true });   // it stayed, so back to it
   } finally {
     unhide(rows);
     if (--inFlight === 0) readAgain(qc);
