@@ -40,13 +40,16 @@ function words({ source, opened }: Route): string[] {
 
 let posted: { url: string; token: string | null; body: { places: { id: string; route: Route }[] } }[];
 let answer: () => Promise<Response>;
+let alive: (boolean | undefined)[];      // each request's keepalive
 
 beforeEach(() => {
   posted = [];
+  alive = [];
   answer = () => Promise.resolve(new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } }));
   vi.stubGlobal("document", { querySelector: (q: string) => (q === 'meta[name="csrf"]' ? { content: "the-token" } : null) });
   vi.stubGlobal("fetch", vi.fn((url: string, init: RequestInit) => {
     posted.push({ url, token: new Headers(init.headers).get("X-CSRF-Token"), body: JSON.parse(init.body as string) as never });
+    alive.push(init.keepalive);
     return answer();
   }));
 });
@@ -144,6 +147,13 @@ describe("a place, to the server", () => {
     await turn();
     expect(posted.map((p) => p.body.places.length)).toEqual([LIMITS.places_at_once, LIMITS.places_at_once, 1]);
     expect(posted.flatMap((p) => p.body.places.map((x) => x.id))).toEqual(made);
+  });
+  it("goes as keepalive, so it arrives if the page goes meanwhile, unless it is more than the browser carries that way", async () => {
+    pathOf(folder(1));
+    await turn();
+    for (let n = 0; n < LIMITS.places_at_once; n++) pathOf({ source: { kind: "search", q: `${n} ${"x".repeat(400)}`, account: "" }, opened: null });
+    await turn();
+    expect(alive).toEqual([true, false]);
   });
   it("goes again a little later when the server can't be reached, and not when it refuses", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
