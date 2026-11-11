@@ -195,9 +195,12 @@ def test_a_short_swipe_does_nothing(page, world):
     swipeable(page)
     sel = row_sel(world, RECEIPT)
     before = world.mark()
+    posted = []
+    page.on("request", lambda r: posted.append(r.url) if r.method == "POST" else None)
     page.pw.evaluate(SWIPE, [sel, -40])
     expect(page.locator(sel)).to_have_count(1)
-    page.wait_for_timeout(150)
+    page.heard_all_asked()                              # a swipe that files asks the server as it ends
+    assert posted == []
     assert world.writes(before) == []
     assert page.locator(sel).evaluate("r => r.style.transform") == ""
     clean(page)
