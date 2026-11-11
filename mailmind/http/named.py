@@ -20,15 +20,6 @@ def copy_pk(mailbox, key, folder, uid=None, gone="not found"):
     return pk
 
 
-def message_pk(mailbox, key, folder=None, uid=None, gone="not found"):
-    """The pk of a copy of the message `key` names, the one at `uid` in `folder`, else in `folder`, where there is one. Raises
-    NotFound, saying `gone`, when no copy of it is left."""
-    pk = mailbox.queries.pk_of_message(key, folder, uid)
-    if pk is None:
-        raise NotFound(gone)
-    return pk
-
-
 def with_copy(mailbox, body, gone: str | None = "not found"):
     """A request's fields, as its use case reads them, with `pk` for the copy its `key`, `folder` and `uid` name: None where it
     names no key, for the use case to word. With `gone` None, a copy that isn't there is a `pk` of None too."""
