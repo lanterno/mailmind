@@ -199,3 +199,41 @@ def test_a_database_with_no_attached_email_loses_no_part_rows_in_a_trim(tmp_path
     code, report = run(path)
     assert attachments_line(report) == ["attachments", "1", "0", "CHANGED"]
     assert code == check.PROBLEM, report
+
+
+def holding_bodies_of_mail_gone(folder):
+    """A database just before m50: message 1's stored body, and two whose messages are gone."""
+    path = database_at(folder, 49)
+    c = database.keyed(path)                               # foreign keys aren't enforced here
+    for pk in (98, 99):
+        c.execute("INSERT INTO bodies(message_pk, raw) VALUES (?, ?)", (pk, MARK.encode()))
+    c.commit()
+    c.close()
+    return path
+
+
+def bodies_line(report):
+    return next(line.split() for line in report.splitlines() if line.startswith("  bodies"))
+
+
+def test_the_bodies_of_mail_gone_m50_takes_are_no_loss(tmp_path):
+    code, report = run(holding_bodies_of_mail_gone(tmp_path))
+    assert bodies_line(report) == ["bodies", "3", "1", "trimmed"]
+    assert code == check.OK and "every table kept its rows: yes" in report and "foreign_key_check: ok" in report, report
+    assert MARK not in report
+
+
+def test_a_body_more_than_m50_takes_is_a_loss(tmp_path, monkeypatch):
+    path = holding_bodies_of_mail_gone(tmp_path)
+    real = migrate.init
+
+    def init_that_loses_every_body(db, steps=None):
+        real(db, steps)
+        c = database.keyed(db)
+        c.execute("DELETE FROM bodies")
+        c.commit()
+        c.close()
+    monkeypatch.setattr(migrate, "init", init_that_loses_every_body)
+    code, report = run(path)
+    assert bodies_line(report) == ["bodies", "3", "0", "CHANGED"]
+    assert code == check.PROBLEM and "every table kept its rows: no (bodies)" in report, report
