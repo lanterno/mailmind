@@ -47,11 +47,11 @@ The app lives in `mailmind/`.
   log says once, by the variable's name, never its value. It is the only module that reads the environment
   (`tests/unit/platform/test_environment.py`), and it reads at each call, so a test changes a variable with
   `monkeypatch.setenv`. A new variable is declared there, and the README's table names it. It is standard library
-  only, not the pydantic-settings the proposal named, since the command line runs on Python alone.
+  only, not the pydantic-settings the proposal named.
 - `mailmind.platform.settings` is the one source of the data paths and the port. Code calls
   `settings.current()` where it opens a file or checks the port, never once at import, so a test
   can swap the whole data directory with `settings.use(...)`. `MAILMIND_HOME` names the data
-  directory, and nothing creates it. `python -m mailmind serve [port]` puts the port in the settings.
+  directory, and nothing creates it. `uv run python -m mailmind serve [port]` puts the port in the settings.
 - Each context's wiring (`mailmind.bootstrap.<context>`) makes what it holds between requests, its use cases with their
   caches, the pool, the sync status, Undo's stack, in its `assemble()`, which importing the module runs once.
   `wiring.assemble()` makes a new set of every context's, in the order they use each other, with no event kept and nothing
@@ -66,9 +66,9 @@ The app lives in `mailmind/`.
   `wiring.start()` is the startup: the profile check, the schema, `wire`,
   then the workers. Full, those are the outbox's and the command path's drains, the
   scheduler's jobs and IDLE; read-only, the snooze job alone.
-- `python -m mailmind serve` (`mailmind/__main__.py`) is how the app runs.
+- `uv run python -m mailmind serve` (`mailmind/__main__.py`) is how the app runs.
   `mailmind.bootstrap.front.serve` starts the app as above and serves it with FastAPI on uvicorn,
-  bound to 127.0.0.1. Its `build` picks the Anthropic SDK, offers IMAPClient to an account
+  bound to 127.0.0.1. Its `build` offers IMAPClient to an account
   that asks for it (see the Mailbox paragraph). A line at startup says which IMAP adapter
   serves how many accounts (`[imap] ...`). Every route runs on a FastAPI router, on a thread of
   AnyIO's pool, whose limit `http.app` raises to 64 at startup (see [Routing](routing.md)).

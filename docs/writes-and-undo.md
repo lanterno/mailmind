@@ -243,4 +243,4 @@
   the commit. A new table keyed on a thread id gets a `rekey_thread` in its owner's adapter, called from
   `_conversations_merged` in `mailmind.bootstrap.mailbox`. A split doesn't split: mail left unconnected by a copy going, or
   by one stored again naming something else, keeps its one id. `store.recompute_threads` regroups a whole account and is
-  the repair (`python3 -m mailmind db rethread`), which parts what no longer reaches a Gmail copy; no sync takes it.
+  the repair (`uv run python -m mailmind db rethread`), which parts what no longer reaches a Gmail copy; no sync takes it.

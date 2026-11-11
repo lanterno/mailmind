@@ -43,7 +43,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
    mailmind/assistant/         summarize + score importance 1–5 with Claude
         │
    mailmind/http/  +  web/ (the React app)   the app on http://127.0.0.1:8721, served by
-                                       `python -m mailmind serve` (FastAPI on uvicorn)
+                                       `uv run python -m mailmind serve` (FastAPI on uvicorn)
 ```
 
 Around that spine sit the client modules: `mailmind/mailbox/` (IMAP writes, IMAP IDLE),
@@ -206,9 +206,9 @@ and the Claude API.
   was never opened can still be left, and a second try after the sweep still knows it. A mailto goes through the
   outbox, so a server that's away only makes it wait, and it's filed in Sent. A preview stands for ten minutes and
   for the way out it showed: after that, or if the list changed it, the block and sweep go ahead and nothing is sent.
-- **Expiry rules.** Give a sender or domain a shelf life — `python3 -m mailmind rules expire
+- **Expiry rules.** Give a sender or domain a shelf life — `uv run python -m mailmind rules expire
   github.com 72` — and its INBOX mail moves to Trash once it is older than that. The
-  server checks hourly; `python3 -m mailmind expire --dry` previews. Expiry is independent of
+  server checks hourly; `uv run python -m mailmind expire --dry` previews. Expiry is independent of
   keep/block, so a kept sender can still age out.
 - **Lists that heal.** A row leaves the list the moment you file it, a folder pages with
   **Load 200 more** and a search with **Load more results**, capped counts read honestly as
@@ -244,10 +244,9 @@ Everything here runs through Claude and returns **schema-validated** structured
 output, so malformed-response errors don't reach the UI. Nothing is ever sent
 automatically.
 
-- **The Claude API.** With an API key set, the server calls the Messages API through the
-  official Anthropic SDK, and the command line through a client of its own on Python alone
-  (`claude-opus-5-5` unless `MAILMIND_MODEL` names another; per-message triage
-  runs at low effort, everything else at medium). Without a key, AI is off and
+- **The Claude API.** With an API key set, the server and every command call the Messages API
+  through the official Anthropic SDK (`claude-opus-5-5` unless `MAILMIND_MODEL` names another;
+  per-message triage runs at low effort, everything else at medium). Without a key, AI is off and
   nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
   The key goes in `mailmind.config.json` as `"anthropic_api_key"` (inline, or
@@ -261,7 +260,7 @@ automatically.
   drafted.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
   …) at Anthropic's list prices. The sync menu shows what today cost so far against the
-  daily limit, and `python3 -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
+  daily limit, and `uv run python -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
   A backlog (a first import, or after an outage) goes to the Message Batches API at half price,
   one batch at a time, while new mail is still triaged as it arrives, so a large import can leave
   older mail without a summary for up to a day. Anthropic holds a batch until MailMind has brought
@@ -472,11 +471,11 @@ automatically.
 
 - **One-click local backup** of your whole mailbox as a consistent `.db` snapshot from
   Settings, or a zip of lossless per-message `.eml` files or standard `mbox` archives, there
-  or from the command line (`python3 -m mailmind export --format eml --out DIR`). Read-only — it never
+  or from the command line (`uv run python -m mailmind export --format eml --out DIR`). Read-only — it never
   touches IMAP.
 - **Upgrades can't cost you mail.** Before a new version changes the database's layout, MailMind
   backs it up beside it (the newest three kept, readable only by you), and each step of the change
-  lands whole or not at all. `python3 -m mailmind db check-upgrade` tries the next upgrade on a copy
+  lands whole or not at all. `uv run python -m mailmind db check-upgrade` tries the next upgrade on a copy
   first and reports only row counts and integrity checks, never a message.
 - **The page asks no other host for anything** until you load a message's images. Its fonts are served from the
   app, so opening your mail tells no font service you did.
@@ -544,9 +543,10 @@ automatically.
 ## Prerequisites
 
 - **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14.
-- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the server's six
-  packages, FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and recurring-ical-events,
-  from `pyproject.toml` on first run.
+- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the six packages the
+  server and every command run on, FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and
+  recurring-ical-events, from `pyproject.toml` on first run. Every command is
+  `uv run python -m mailmind ...`.
 - **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
   builds it first.
 - **A Claude API key**, for summaries and the other AI features, as
@@ -573,11 +573,11 @@ cp mailmind.config.example.json mailmind.config.json
 $EDITOR mailmind.config.json
 
 # 2. Verify the credentials resolve (prints ok/fail per account and for the API key, no secrets)
-python3 -m mailmind check
+uv run python -m mailmind check
 
 # 3. Pull recent mail, then summarize it
-python3 -m mailmind sync all 90   # last 90 days (use a big number like 3650 for all-time)
-python3 -m mailmind assess 2000 3  # summarize up to 2000, 3 workers
+uv run python -m mailmind sync all 90   # last 90 days (use a big number like 3650 for all-time)
+uv run python -m mailmind assess 2000 3  # summarize up to 2000, 3 workers
 
 # 4. Run the dashboard
 just run                          # builds the app, then http://127.0.0.1:8721   (custom port: just run 9000)
@@ -623,7 +623,7 @@ in US dollars: `15` unless you set another positive number.
 An account may say `"pool": true` to keep a connection open between reads, and `"warm_folders": true` to sync its
 Drafts, Archive and Sent beside the Inbox. A set `MAILMIND_POOL` or `MAILMIND_WARM_FOLDERS` decides over either.
 
-An account may also say `"imap_adapter": "imapclient"`. `python -m mailmind serve` then reaches
+An account may also say `"imap_adapter": "imapclient"`. `uv run python -m mailmind serve` then reaches
 it through the IMAPClient library instead of Python's own imaplib: the new IMAP code, tried on
 real mail before it becomes the default. The command line stays on imaplib, removing the key goes
 back, and the startup line `[imap] …` says how many accounts asked.
@@ -636,7 +636,7 @@ back, and the startup line `[imap] …` says how many accounts asked.
   `"port": 143, "starttls": true` for STARTTLS. Either way the server's certificate
   is verified, so a self-signed one won't connect. The **trash folder name matters** —
   some servers use `INBOX.Trash` instead of `Trash`; a wrong name silently breaks
-  sweeps. Run `python3 -m mailmind inventory you@company.com` to see the real names.
+  sweeps. Run `uv run python -m mailmind inventory you@company.com` to see the real names.
 - **Proton** — install and run Proton Mail Bridge, then supply the Bridge
   password via `MAILMIND_PROTON_BRIDGE_PASS`, a 1Password item
   (`MAILMIND_PROTON_OP_ITEM`), or `~/.config/mailmind/proton_bridge_pass`
@@ -657,20 +657,20 @@ queues until a full run, and it syncs nothing in the background. `just dev` does
 The app, at `/`, exists once built (`just build-web`, which needs Node and which `just run` does
 first). With nothing built, the server says so.
 
-**CLI curation** (`python3 -m mailmind`, or `just`) — works across every account:
+**CLI curation** (`uv run python -m mailmind`, or `just`) — works across every account:
 
 ```bash
-python3 -m mailmind status              # INBOX + Trash counts
-python3 -m mailmind inventory all       # every folder + message/unseen counts
-python3 -m mailmind plan all            # classify the live inbox, show what would be trashed
-python3 -m mailmind sweep you@x.com --dry   # preview a junk sweep (ALWAYS dry-run first)
-python3 -m mailmind sweep you@x.com         # move junk → Trash (verified)
-python3 -m mailmind rules keep example.com  # learned rule: always keep this sender/domain
-python3 -m mailmind rules block spammer.com # always trash (writes a rule)
-python3 -m mailmind rules                  # show the learned lists
-python3 -m mailmind rules expire github.com 72  # trash this domain's INBOX mail after 72h (0 clears)
-python3 -m mailmind expire all --dry       # preview what the expiry rules would trash now
-python3 -m mailmind assess --batch         # what has no summary yet, as a batch at half price, within today's limit; again for the answers
+uv run python -m mailmind status              # INBOX + Trash counts
+uv run python -m mailmind inventory all       # every folder + message/unseen counts
+uv run python -m mailmind plan all            # classify the live inbox, show what would be trashed
+uv run python -m mailmind sweep you@x.com --dry   # preview a junk sweep (ALWAYS dry-run first)
+uv run python -m mailmind sweep you@x.com         # move junk → Trash (verified)
+uv run python -m mailmind rules keep example.com  # learned rule: always keep this sender/domain
+uv run python -m mailmind rules block spammer.com # always trash (writes a rule)
+uv run python -m mailmind rules                  # show the learned lists
+uv run python -m mailmind rules expire github.com 72  # trash this domain's INBOX mail after 72h (0 clears)
+uv run python -m mailmind expire all --dry       # preview what the expiry rules would trash now
+uv run python -m mailmind assess --batch         # what has no summary yet, as a batch at half price, within today's limit; again for the answers
 ```
 
 > ⚠️ **`sweep`, `sweep-stored`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
@@ -682,7 +682,7 @@ python3 -m mailmind assess --batch         # what has no summary yet, as a batch
 
 | Variable | Effect |
 |---|---|
-| `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. The server and every `python3 -m mailmind` command read it. |
+| `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. The server and every `uv run python -m mailmind` command read it. |
 | `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves, flag changes and a draft's copy on the server wait for a full run, sweeps and one-click unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |

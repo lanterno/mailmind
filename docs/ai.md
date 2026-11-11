@@ -9,12 +9,11 @@ output's form (`schema.structured`) and the system prompt. It sends it through a
 `Reply`: the text, the model that served it, its `Usage` and its stop reason. A call with no
 reply raises `ModelError` (a `RuntimeError` with `status` and `permanent`).
 
-Serving talks through the Anthropic SDK (`front.build` calls
-`assistant.use("sdk")`); the command line and the scripts through
-`UrllibModel`. Only
-`mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and only `front.build` loads
-it. The two share the wire format (`adapters.wire`) and must behave the same:
-`tests/contract/test_ai_contract.py` runs every case through each. The key is
+The server and every command talk through the Anthropic SDK: `mailmind.bootstrap.assistant` binds
+`AnthropicModel`, so the command line, which never comes through `front.build`, reaches the API as the
+server does. Only `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and
+`adapters.wire` holds what it sends and how it reads a reply. `tests/contract/test_ai_contract.py`
+holds it to the contract against the fake API. The key is
 `assistant.config_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
 credential style) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
 means no key, never a fall-through to the environment's. With no key the model is
@@ -38,10 +37,10 @@ slots in one pass, so a subject holding `{blocks}` stays those words, and a temp
 that change raise the version (all of them, for `SYSTEM`), and `tests/unit/assistant/test_prompts.py` holds the two together.
 
 `schema.structured` drops the keywords structured output rejects (`minimum`, `maximum`,
-`maxLength`) and closes every object, so callers must keep clamping what they read. Both
-transports send `fallbacks: "default"` with its beta on the models that accept it, read a
-refusal as an empty reply, and retry 408/409/429/5xx twice. The SDK sends the key as
-`Authorization: Bearer`, urllib as `x-api-key`; the fake API accepts both.
+`maxLength`) and closes every object, so callers must keep clamping what they read. The
+adapter sends `fallbacks: "default"` with its beta on the models that accept it, reads a
+refusal as an empty reply, and retries 408/409/429/5xx twice. It sends the key as
+`Authorization: Bearer`; the fake API takes that or `x-api-key`, as the real one does.
 
 One contract: a failed call raises `RuntimeError` (the caller retries
 later, nothing is cached); a successful but unusable reply returns `{}` (the caller
@@ -70,7 +69,7 @@ that fails is logged by class name and never fails the call.
 What the ledger holds is read back in three places:
 - `assistant.status.report()` carries `spent_today_micros`, which the sync menu's AI line shows.
 - `/api/debug/ai?days=N` (30 by default) lists each day by feature.
-- `python3 -m mailmind ai usage` prints the same. It reads the ledger only and never migrates.
+- `uv run python -m mailmind ai usage` prints the same. It reads the ledger only and never migrates.
 
 The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
 `assistant.governor()`) before every call it sends. `domain.features.kind` sorts each feature:
@@ -90,7 +89,7 @@ The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
   runs it inside `assistant.allowing_over()`.
 - The breaker. A 401 or 403 stops every background and speculative call, and three permanent
   4xx in a row for one feature and model stop that pair. It stays open until the model in use
-  changes, which a new key, base URL or transport does. Interactive calls still go.
+  changes, which a new key or base URL does. Interactive calls still go.
 
 Background work asks `gateway().held_back(feature)` before a batch, and a call that was held
 back anyway raises `Deferred(reason)`. Nothing is counted for it, and `Status.noting` doesn't record it
@@ -101,7 +100,7 @@ tests start each one afresh with `forget()`.
 A backlog goes through the Message Batches API at half price (`pricing.batch_micros`, decision D7): `BATCH_MIN`
 messages waiting is one, whether a first import or after an outage, and new mail stays synchronous.
 `assistant.assessments.batch_submit` sends it and `batch_collect` brings the answers in, both from its `round`, which
-collects first since that sends no mail and the answers are paid for. `python3 -m mailmind assess --batch` does
+collects first since that sends no mail and the answers are paid for. `uv run python -m mailmind assess --batch` does
 the same for any size. `MAILMIND_NO_BATCHES=1` keeps the job from sending one, so a backlog goes synchronously as it
 did; a batch already out is still brought in.
 - One at a time (migration 36: `ai_batches`, and `ai_batch_items` by message key). `needs_summary` leaves out what a

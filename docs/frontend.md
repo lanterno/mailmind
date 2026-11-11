@@ -6,7 +6,7 @@ system fonts), and `web/assets/theme.js` the one classic script, a file since th
 joins `CLASSIC` in `web/vite.config.js`. `just build-web` (Vite, Node) writes it all, named by content, to `mailmind/http/dist` (gitignored),
 and `just run` builds it first. `mailmind.platform.webroot` serves only that folder, with gzip and an ETag, so an edit reaches the app through a
 build. `/assets/` serves only `.css`, `.js` and `.woff2`, each kept for good. With nothing built `/` and each place in the app (`routers/static._is_place`, as
-`app/route.ts` writes one) answer 404 and say how to build, and `python -m mailmind serve` logs a line saying so. `/next` redirects, to the app's own
+`app/route.ts` writes one) answer 404 and say how to build, and `uv run python -m mailmind serve` logs a line saying so. `/next` redirects, to the app's own
 places only. `/api/events` opens with `hello{build}` (`sse.HELLO`, no id), naming `webroot.edition`: the files, and a hash of the token a
 restart changes. A tab that loaded another offers a reload (`newBuild` in `app/realtime.ts`). `web/src` is strict TypeScript, and its API client
 is `lib/api/client.ts`, typed by `lib/api/types.ts` from the routes' schemas. Where you are lives in the URL

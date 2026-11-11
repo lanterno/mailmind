@@ -1,6 +1,6 @@
 # MailMind — common commands. `just` with no argument lists everything.
 # Everything runs through uv, which installs the runtime packages and dev tools on first use, and
-# through `python -m mailmind`, which says what each command does.
+# through `uv run python -m mailmind`, which says what each command does.
 
 py := "uv run python"
 

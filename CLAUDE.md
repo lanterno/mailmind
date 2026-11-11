@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 A `justfile` wraps everything below — `just` alone lists the recipes. The raw commands
-work identically if `just` isn't installed. `just run`, `just lint` and `just test` need
+work identically if `just` isn't installed. The recipes and every command need
 [uv](https://docs.astral.sh/uv/) (`brew install uv`); `uv run` installs the runtime packages and
 the dev tools on first use.
 
@@ -23,16 +23,16 @@ just setup                        # install the Python packages, node_modules an
 uv run python -m mailmind serve [port]   # run the app as last built (default http://127.0.0.1:8721)
 MAILMIND_PROFILE=read-only uv run python -m mailmind serve   # the same, read-only
 
-python3 -m mailmind check         # verify credentials resolve, per account (prints ok/fail, no secrets)
-python3 -m mailmind sync all 90   # pull last 90 days; `sync <email> <days>` for one account
-python3 -m mailmind assess 2000 3 # summarize up to 2000 messages, 3 workers
-python3 -m mailmind rules         # the learned rules; `rules keep|block|remove|expire ...` change them
-python3 -m mailmind sweep --dry   # what a junk sweep would trash; also status, inventory, plan, expire
-python3 -m mailmind export        # what an export would hold; `--format eml|mbox|db --out DIR` writes it
-python3 -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
-python3 -m mailmind db compact         # owner only, MailMind stopped: give back the room freed in the file
-python3 -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
-python3 -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
+uv run python -m mailmind check         # verify credentials resolve, per account (prints ok/fail, no secrets)
+uv run python -m mailmind sync all 90   # pull last 90 days; `sync <email> <days>` for one account
+uv run python -m mailmind assess 2000 3 # summarize up to 2000 messages, 3 workers
+uv run python -m mailmind rules         # the learned rules; `rules keep|block|remove|expire ...` change them
+uv run python -m mailmind sweep --dry   # what a junk sweep would trash; also status, inventory, plan, expire
+uv run python -m mailmind export        # what an export would hold; `--format eml|mbox|db --out DIR` writes it
+uv run python -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
+uv run python -m mailmind db compact         # owner only, MailMind stopped: give back the room freed in the file
+uv run python -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
+uv run python -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
 
 `just test` (`uv run pytest -n auto`) runs every test, a process for each core, and `just test -k hardening` picks by file or

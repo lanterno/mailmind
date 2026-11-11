@@ -2,7 +2,7 @@
 
 Only outstanding work is listed, re-verified against the tree on 2026-11-10: shipped behaviour is
 described in the README and in the code itself, not here. The app is the React one in `web/src`, at `/`,
-served by `python -m mailmind serve`. Each item says what is still missing there or on the server.
+served by `uv run python -m mailmind serve`. Each item says what is still missing there or on the server.
 
 Items cite functions and symbols rather than line numbers, which drift. Value and effort are
 relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
@@ -31,7 +31,7 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   yet), and an undo entry that names no account, as a snooze's does (`snooze.undo_entry`), though undoing a snooze asks
   no server anything.
 - **Soak IMAPClient on real accounts, then make it the default** · high value · effort S — Waits on
-  the owner. `python -m mailmind serve` reaches an account through IMAPClient when its config asks (`"imap_adapter":
+  the owner. `uv run python -m mailmind serve` reaches an account through IMAPClient when its config asks (`"imap_adapter":
   "imapclient"`; the startup line counts them). Both adapters pass the contract against the fake
   and against Dovecot (`just test-dovecot`), and the whole suite passes under either. On real
   Gmail, IMAP and Proton Bridge accounts the two answered every read alike (capabilities, folders,
@@ -39,7 +39,8 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   there yet, nor run on it for days. The owner asks for it on one account, then on all, and uses
   it daily for a week, watching Settings' sync health and the server's output;
   removing the key goes back. Then `front.build` calls `mailbox.use("imapclient")` and the ask
-  goes.
+  goes. The command line never comes through `front.build`, so it stays on imaplib until then; it runs on
+  the server's packages now, so it can take IMAPClient in the same step, and imaplib's adapter go after it.
 - **Turn the connection pool on by default** · high value · effort M — Waits on the owner's soak.
   `Pool` is complete, safety-reviewed and wired into four read call sites (`Ingest.fetch_body`,
   `Folders._live_folder_list` backing the folder rail, `Sweeps.plan` ahead of a sweep, and reconcile's read of UIDs), but
@@ -49,15 +50,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   recycles a Bridge connection sooner, and `Pool._enabled` leaves Bridge out of the `MAILMIND_POOL=1`
   catch-all, so it has to be listed by address); extend borrowing to mutations (only reads borrow
   today); and default it on.
-
-## The API, now that one client and one door read it
-
-- **Move the command line off `urllib_http.py`** · low value · effort S — `python3 -m mailmind` runs on Python alone, so
-  `assess` and the rest reach Claude through `UrllibModel` (`TRANSPORTS` in `bootstrap/assistant.py`; only `front.build` calls
-  `assistant.use("sdk")`), and `tests/contract/test_ai_contract.py` holds the two to one behaviour over `adapters.wire`.
-  Make the SDK the one transport, and every command a `uv run python -m mailmind ...`, and `UrllibModel`, the doubled contract
-  runs and that part of `wire` go. The same step lets the command line take IMAPClient once its soak ends, and imaplib's
-  adapter go after it.
 
 ## The desktop app
 
@@ -72,9 +64,8 @@ implementation.
 
 - **At-rest encryption for `mailmind.db`** — the DB now holds full bodies and attachments, which
   materially raises its value. Current posture is gitignored, with no encryption anywhere in the
-  tree; the database, config, rules, views, snippets, log and backups are owner-only. SQLCipher was postponed on 2026-11-03, and
-  `python3 -m mailmind`, which runs on Python alone, would have to install it too. The question is whether that posture stays acceptable
-  for a single-user localhost machine or becomes opt-in encryption.
+  tree; the database, config, rules, views, snippets, log and backups are owner-only. SQLCipher was postponed on 2026-11-03.
+  The question is whether that posture stays acceptable for a single-user localhost machine or becomes opt-in encryption.
 - **How aggressively to prefetch folders** — on-demand sync bounds disk and first-sync cost, but
   unified-inbox-across-accounts and global search both want broader coverage.
 - **Where the data directory lives by default** — `MAILMIND_HOME` names one, and unset it is the repo

@@ -11,7 +11,7 @@ See [Architecture](architecture.md) for the layers around them.
   (a reply drafted ahead's rules: its key, what's eligible, when one may be served, the backoff and the three strikes; `reply_worthy` gates what is spent, not what is served),
   `brief`, `review` and `digest` (what is taken from a model's answer, within its caps, and what stands in when it won't do), `citations` (only the ids the model was shown)
   and `action_plan` (what is taken from a plan, and how far a verb may reach), and
-  `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK), `UrllibModel` (standard library)
+  `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK, for the server and every command)
   and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
   contexts and the tests reach the Assistant (`assistant.calls`, `.status`, `.assessments`, `.context`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
   The mail it reads goes through its `Mail` port and a bulk command's filter through `Search`, both bound there.
@@ -134,7 +134,7 @@ See [Architecture](architecture.md) for the layers around them.
   RSVP goes through Compose's outbox, and a message through `stored_mail` and `ingest` until the Mailbox holds it.
   `icalendar_acl` is the only module that imports `icalendar` and `recurring_ical_events`, and nothing of either leaves it. So Calendar is
   standard library only but for that module. `mailmind.bootstrap.calendar` binds it as it loads, so nothing the command line loads imports
-  that at its top: the command line reads no invite, and runs on Python alone (`tests/e2e/test_cli.py`). An invite is a
+  that at its top: the command line reads no invite. An invite is a
   stranger's text and the reader runs on a request thread, so it never raises. `icalendar_acl` takes a text of at most `_MAX_TEXT`
   with at most `_MAX_EVENTS`, expands nothing finer than a day and gives each call a budget of its thread's time (`_within`: a tracer
   raises at the next plain call of the reading, since a rule that never comes to a date walks to year 9999 inside one `next()`
