@@ -789,6 +789,10 @@ class Session:
 
 # ── the server ──────────────────────────────────────────────────────────────────────────────────
 
+# How often serve_forever looks up from waiting for a connection: stop() waits for that, and every test that has a world stops one.
+POLL = 0.005
+
+
 class _Handler(socketserver.BaseRequestHandler):
     def handle(self):
         srv = self.server.fake
@@ -858,7 +862,7 @@ class FakeIMAPServer:
         self._tcp = _TCP(("127.0.0.1", 0), _Handler)
         self._tcp.fake = self
         self.port = self._tcp.server_address[1]
-        threading.Thread(target=self._tcp.serve_forever, kwargs={"poll_interval": 0.05},
+        threading.Thread(target=self._tcp.serve_forever, kwargs={"poll_interval": POLL},
                          name="fake-imap", daemon=True).start()
         return self
 
