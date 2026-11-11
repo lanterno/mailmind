@@ -5,7 +5,10 @@ from types import SimpleNamespace
 import pytest
 
 from mailmind.bootstrap import mailbox
+from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.warm import Warming
+
+ADA, BEA, CY = "ada@example.test", "bea@example.test", "cy@example.test"
 
 
 @pytest.fixture(autouse=True)
@@ -14,8 +17,85 @@ def nothing_kept_after():
     mailbox.pool.close_all()
 
 
-def account(**fields):
-    return {"email": "ada@example.test", **fields}
+def account(email=ADA, **fields):
+    return {"email": email, **fields}
+
+
+# -- a kept connection --------------------------------------------------------------------------------------------
+
+class _Session:
+    def noop(self):
+        return True
+
+    def set_timeout(self, seconds):
+        pass
+
+    def logout(self):
+        pass
+
+
+class _Directory:
+    """The accounts as the file has them, and Bea's server the fragile Bridge."""
+    def __init__(self, *accounts):
+        self._accounts = list(accounts)
+
+    def accounts(self):
+        return self._accounts
+
+    def profile(self, acct):
+        return SimpleNamespace(bridge=acct["email"] == BEA, recycle_seconds=600, recycle_uses=200)
+
+
+@pytest.fixture
+def pool_of(monkeypatch):
+    """A pool over the accounts given, with neither variable set unless a test sets one."""
+    monkeypatch.delenv("MAILMIND_POOL", raising=False)
+    made = []
+
+    def make(*accounts):
+        made.append(Pool(_Directory(*accounts), lambda acct, **kw: _Session()))
+        return made[-1]
+    yield make
+    for pool in made:
+        pool.close_all()
+
+
+def pooled(pool, acct):
+    """Whether two borrows come back with one session, which only a kept connection does."""
+    with pool.borrow(acct) as first:
+        pass
+    with pool.borrow(acct) as second:
+        pass
+    return first is second
+
+
+def test_nothing_set_and_nothing_asked_pools_nothing(pool_of):
+    pool = pool_of(account())
+    assert not pooled(pool, account()) and pool.stats()["enabled"] is False
+
+
+def test_an_account_that_asks_is_pooled_with_nothing_set(pool_of):
+    ada, cy = account(pool=True), account(CY, pool=False)
+    pool = pool_of(ada, cy)
+    assert pooled(pool, ada) and not pooled(pool, cy)
+    assert (pool.stats()["enabled"], pool.stats()["target"]) == (True, "listed")
+
+
+def test_bridge_is_pooled_when_it_asks_itself(pool_of):
+    """As the variable's list takes it: only "all" leaves Bridge out."""
+    bea = account(BEA, pool=True)
+    assert pooled(pool_of(bea), bea)
+
+
+@pytest.mark.parametrize("setting", ["0", "off", "someone-else@example.test"])
+def test_the_variable_set_decides_the_run_over_what_the_file_says(pool_of, monkeypatch, setting):
+    ada = account(pool=True)
+    pool = pool_of(ada)
+    monkeypatch.setenv("MAILMIND_POOL", setting)
+    assert not pooled(pool, ada)
+
+
+# -- warming ------------------------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("fields, env, warmed", [

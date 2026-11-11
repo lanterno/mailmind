@@ -1,5 +1,5 @@
-"""An account can ask in the file for a kept connection, or for more than its INBOX synced, and so last between runs. Neither
-variable set and nothing asked keeps everything off, as it always was; a variable that is set decides for the run."""
+"""An account's ask for a kept connection, as the app reads it from the file and keeps it through an edit on the settings page.
+Which accounts the pool keeps a connection for is the unit half's (tests/unit/mailbox/test_pool_and_warming_by_account.py)."""
 
 import pytest
 
@@ -28,29 +28,6 @@ def pooled(email=w.ADA):
 def nothing_kept_after():
     yield
     mailbox.pool.close_all()
-
-
-def test_nothing_set_and_nothing_asked_pools_nothing(world):
-    assert not pooled() and mailbox.pool.stats()["enabled"] is False
-
-
-def test_an_account_that_asks_is_pooled_with_nothing_set(world):
-    edit_by_hand(w.ADA, pool=True)
-    assert pooled() and not pooled(w.CY)
-    assert (mailbox.pool.stats()["enabled"], mailbox.pool.stats()["target"]) == (True, "listed")
-
-
-def test_bridge_is_pooled_when_it_asks_itself(world):
-    """As the variable's list takes it: only "all" leaves Bridge out."""
-    edit_by_hand(w.BEA, pool=True)
-    assert pooled(w.BEA)
-
-
-@pytest.mark.parametrize("setting", ["0", "off", "someone-else@example.test"])
-def test_the_variable_set_decides_the_run_over_what_the_file_says(world, monkeypatch, setting):
-    edit_by_hand(w.ADA, pool=True)
-    monkeypatch.setenv("MAILMIND_POOL", setting)
-    assert not pooled()
 
 
 def test_the_key_counts_only_as_true(world):
