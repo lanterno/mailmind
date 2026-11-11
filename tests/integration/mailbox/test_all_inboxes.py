@@ -1,5 +1,6 @@
 """Every account's Inbox as one list and who you wait on across accounts: one query each, where the browser used to ask
-each account and merge what came back, a page of each with no way further."""
+each account and merge what came back, a page of each with no way further. That an account on its first scan holds up no
+one, and that only the first page starts a scan, is the unit half's (tests/unit/mailbox/test_all_inboxes.py)."""
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -115,26 +116,6 @@ def test_with_no_account_it_is_empty(app):
     got = inboxes(app)
     assert (got["items"], got["total"], got["has_more"]) == ([], 0, False)
     assert app.get("/api/waiting-on-others").json["items"] == []
-
-
-def test_an_account_on_its_first_scan_holds_up_no_one(app, world, monkeypatch):
-    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 3600)        # a list that waited for it would never answer
-    execute("DELETE FROM sync_state WHERE account=? AND folder='INBOX'", w.BEA)
-    world.server.stall("SELECT", user=w.BEA)                             # and BEA's scan goes nowhere until the end
-    try:
-        got = inboxes(app, "?limit=500")
-        assert got["syncing"] is True
-        assert {i["account"] for i in got["items"]} == set(EVERYONE)         # BEA's as they are stored
-    finally:
-        world.server.release_stalls()
-
-
-def test_a_later_page_starts_no_scan(app, world):
-    execute("DELETE FROM sync_state WHERE account=? AND folder='INBOX'", w.BEA)
-    asked = len(world.server.commands)
-    assert "syncing" not in inboxes(app, "?limit=2&offset=2")
-    app.settle()
-    assert len(world.server.commands) == asked
 
 
 def follow_up(account, thread, kind, due):
