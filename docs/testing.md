@@ -52,6 +52,10 @@ MailMind module loads:
 
 The fixtures, from the bottom up:
 
+- Every test starts from a new set of the app's objects: `_fresh_app` runs `mailmind.bootstrap.wiring.assemble()` before
+  it, so no cache, undo stack, sync status or subscription one test leaves reaches the next, and nothing lists which module
+  keeps what. A test reads one through its module (`mailbox.ingest`), never by a name imported at the top of the file,
+  which would keep the first set's. `app_client.restart()` is a process restart in the middle of a test.
 - `data_dir` makes a fresh temp directory the app's data directory (`settings.use`) and puts a new
   database there: a copy of one `store.init` made once for the session, which is quicker than running every migration.
 - `world` is a fictional 25-message corpus (`tests/fixtures/corpus/`, three accounts) served by

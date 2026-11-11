@@ -52,11 +52,17 @@ The app lives in `mailmind/`.
   `settings.current()` where it opens a file or checks the port, never once at import, so a test
   can swap the whole data directory with `settings.use(...)`. `MAILMIND_HOME` names the data
   directory, and nothing creates it. `python -m mailmind serve [port]` puts the port in the settings.
+- Each context's wiring (`mailmind.bootstrap.<context>`) makes what it holds between requests, its use cases with their
+  caches, the pool, the sync status, Undo's stack, in its `assemble()`, which importing the module runs once.
+  `wiring.assemble()` makes a new set of every context's, in the order they use each other, with no event kept and nothing
+  subscribed. Nothing outside a module keeps one of those objects: code reads it through its module when it uses it,
+  `mailbox.ingest`, never by a name bound at import (`tests/unit/test_architecture.py`). The command line uses the set its
+  imports made; the tests assemble a new one for each test.
 - `mailmind.bootstrap.wiring.wire()` subscribes the app, on `mailmind.platform.bus`, to
   what the workers publish: Compose's `Sent`, `Failed` and `DraftCopyRemoved`, the Mailbox's `Applied` and
   `InboxChanged`, and what Attention's use cases say happened, which refreshes the stats and tells the tabs.
   It also hands each account event (below) to `realtime.reconcile`. `Restored` (a
-  queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (the tests' state reset does).
+  queued move that won't happen) refreshes the tabs as `Applied` does. Wiring again replaces the last wiring, and `unwire()` ends it (each test's end does).
   `wiring.start()` is the startup: the profile check, the schema, `wire`,
   then the workers. Full, those are the outbox's and the command path's drains, the
   scheduler's jobs and IDLE; read-only, the snooze job alone.
