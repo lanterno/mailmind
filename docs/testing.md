@@ -16,17 +16,17 @@ uv run pytest tests/unit/curation/test_expire.py            # expiry rules (23)
 uv run pytest tests/unit/calendar/test_upcoming.py          # Today & next invites, RRULE expansion + the Waiting view's recipient (77)
 uv run pytest tests/unit/calendar/test_invite_text.py       # what an invite's text comes to: who an RSVP goes to, its dates, what's left of a broken one (222)
 uv run pytest tests/contract/test_ics_reader_contract.py    # the reader of invites: never raises, plain data, bounded (180)
-uv run pytest tests/unit/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (44)
+uv run pytest tests/{unit,integration}/discovery/test_contacts_known.py   # the "new to you" lookup: who counts as known, exact matching, CSRF (44)
 uv run pytest tests/unit/compose/test_send_after.py         # /api/send refuses passed and far-off send times (5)
-uv run pytest tests/unit/compose/test_draft_resume.py       # reopening a saved draft: split, files, Bcc, threading, refusals, saves (162)
+uv run pytest tests/{unit,integration}/compose/test_draft_resume.py   # reopening a saved draft: split, files, Bcc, threading, refusals, saves (162)
 uv run pytest tests/security/test_hardening.py              # security and data-loss fixes, one test or more per fix (101)
 uv run pytest tests/security/test_mail_frame.py             # a mail body's own document: its policy, who may frame it, what it holds (52)
 uv run pytest tests/security/test_malformed_input.py        # a request that won't read gets the 400, never the 500: the cases, and a walk of every POST route (198)
-uv run pytest tests/unit/http/test_problems.py              # the problem document each of kernel.errors answers (32)
+uv run pytest tests/{unit,integration}/http/test_problems.py   # the problem document each of kernel.errors answers (32)
 uv run pytest tests/unit/http/test_route.py                 # what a route does around its handler, and what the app answers where none matches, on a toy router (183)
 uv run pytest tests/unit/http/test_schema_contract.py       # the test-time hold on answers and on what a use case reads, and every route's own words (148)
 uv run pytest tests/unit/http/test_event_stream.py          # what a tab holds, and every way a stream ends, Ctrl-C included (12)
-uv run pytest tests/unit/http/test_export_route.py          # the download in chunks, and that no way it ends leaves its folder (17)
+uv run pytest tests/{unit,integration}/http/test_export_route.py   # the download in chunks, and that no way it ends leaves its folder (17)
 ```
 
 The composer's send-time checks and reopen helpers are `web/src/features/compose/sendGuard.ts` and `draftResume.ts`, free of DOM
@@ -37,9 +37,14 @@ component that renders nothing asks no more of. A known bug there is an `it.fail
 
 ## The pytest suite in `tests/`
 
-`tests/unit/<context>/` holds each context's tests, `contract/` one promise through every adapter (and the fakes against
-themselves), `security/` what must never get through, `characterization/` the app as it answers (goldens and, in a folder per context, the
-hard-won fixes by subject) and `e2e/` the whole program. `support/` holds the helpers, on pytest's path, so a test says `import problems`.
+`tests/unit/<context>/` holds each context's tests that run without the app: a use case over fakes behind its ports, a domain
+rule, an adapter against a fake server. `tests/integration/<context>/` holds the ones that start it (the `app`, `world` or
+`golden` fixture, directly or through another): a route as a browser calls it, or the app over the fake servers. A file whose
+tests go both ways keeps its name in each, so `tests/{unit,integration}/http/test_problems.py` runs both halves. A rule a use case
+decides is tested in `unit/`, and `integration/` holds the route that reaches it. `contract/` holds one promise through every
+adapter (and the fakes against themselves), `security/` what must never get through, `characterization/` the app as it answers
+(goldens and, in a folder per context, the hard-won fixes by subject) and `e2e/` the whole program. `support/` holds the helpers,
+on pytest's path, so a test says `import problems`.
 
 They pin today's behaviour ahead of the refactor. Each test sees only fictional
 data (`example.test` addresses) in a temp directory. `tests/conftest.py` sets that up before any
@@ -64,7 +69,7 @@ The fixtures, from the bottom up:
   renumber on cue (`server.fail`, `server.drop`, `smtp.fail`, ...).
 - `app` runs the app in-process: what `mailmind.bootstrap.front.build` makes, on uvicorn. Every account in the world
   goes through imaplib, as a real one does unless it asks otherwise.
-  `world.ask_for_imapclient` has an account ask for IMAPClient (`tests/unit/mailbox/test_gmail_through_imapclient.py`).
+  `world.ask_for_imapclient` has an account ask for IMAPClient (`tests/integration/mailbox/test_gmail_through_imapclient.py`).
   Its CSRF token is fixed, and the clock is frozen at `conftest.NOW` (2026-11-02 12:00 UTC); `app.clock.shift(timedelta(...))`
   moves it. The page it answers with is a tiny stand-in build (`_a_build`, `tests/fixtures/tiny_build.py`), so these tests need
   no node. `tests/e2e/test_front_door.py` runs the app as a program instead.
@@ -100,7 +105,7 @@ A test passes or fails on what happened, never on how long it took. Other suites
 - In the browser, wait with Playwright's `expect` and `wait_for`. Move the page's timers with `page.clock.run_for`.
   `page.heard_all_asked()` comes before saying that a request wasn't made.
 
-`tests/unit/mailbox/test_queue_state_machine.py` runs Hypothesis over the command path and Undo: random moves, flag
+`tests/integration/mailbox/test_queue_state_machine.py` runs Hypothesis over the command path and Undo: random moves, flag
 changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
 `MAILMIND_MACHINE_RUNS=1500` asks for that many with fresh seeds, and `MAILMIND_MACHINE_STEPS` for longer ones.
 
