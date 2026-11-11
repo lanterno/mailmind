@@ -49,6 +49,7 @@ def test_the_source_page_runs_no_inline_script_and_names_what_the_build_fills_in
     with open(os.path.join(webroot.REPO, "web", "index.html"), encoding="utf-8") as f:
         text = f.read()
     assert '<meta name="csrf" content="__CSRF_TOKEN__">' in text and '<meta name="mailmind-build" content="__BUILD__">' in text
+    assert '<meta name="mailmind-place" content="__PLACE__">' in text
     assert '<script src="/assets/theme.js"></script>' in text and "<script>" not in text
 
 
