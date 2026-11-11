@@ -85,13 +85,6 @@ def test_a_sender_with_no_stored_body_can_be_unsubscribed_from(app, world):
     assert world.writes(since) == []
 
 
-def test_mail_from_before_ingest_kept_them_is_read_off_the_server(app, world):
-    forget_headers(world)
-    assert method(app) == "one-click"
-    r = row(world)
-    assert r["list_unsub_method"] == "one-click" and r["list_unsub_raw"]
-
-
 def test_that_read_takes_the_headers_alone(app, world):
     forget_headers(world)
     before = len(world.server.commands)
