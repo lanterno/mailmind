@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LIMITS } from "../lib/api/limits.gen";
-import { parseRoute, pathOf, routeFrom, sourceKey, type Route } from "./route";
+import { go, parseRoute, pathOf, routeFrom, sourceKey, type Route } from "./route";
 
 // Routes that hold something of a person's: an account, a folder, a search, a question, a topic, or what is open.
 const personal: Route[] = [
@@ -124,10 +124,14 @@ describe("the URL", () => {
 
 describe("a place, to the server", () => {
   const folder = (n: number): Route => ({ source: { kind: "folder", account: "ada@example.test", folder: `Projects/${n}-${Math.random()}` }, opened: null });
+  beforeEach(() => {
+    vi.stubGlobal("location", { pathname: "/", search: "" });
+    vi.stubGlobal("history", { state: null, pushState: vi.fn(), replaceState: vi.fn() });
+  });
 
-  it("goes once this turn is over, with the others the turn made, with the page's token", async () => {
+  it("goes when the page goes there, once this turn is over, with the others the turn went to, with the page's token", async () => {
     const a = folder(1), b = folder(2);
-    const ids = [pathOf(a), pathOf(b), pathOf(a)].map((p) => p.slice(3));
+    const ids = [go(a), go(b), go(a)].map((p) => p.slice(3));
     expect(posted).toEqual([]);                    // navigating waits for nothing
     await turn();
     expect(posted).toEqual([{ url: "/api/places", token: "the-token", body: { places: [{ id: ids[0], route: a }, { id: ids[1], route: b }] } }]);
@@ -135,30 +139,36 @@ describe("a place, to the server", () => {
   });
   it("goes once: a route the page has already sent is the place it was", async () => {
     const a = folder(1);
-    pathOf(a);
+    go(a);
     await turn();
-    pathOf(a);
-    pathOf({ ...a });
+    go(a);
+    go({ ...a });
     await turn();
     expect(posted).toHaveLength(1);
   });
+  it("doesn't go for a link drawn to it, however many", async () => {
+    const links = Array.from({ length: 200 }, (_, n) => pathOf(folder(n)));
+    await turn();
+    expect(posted).toEqual([]);
+    expect(new Set(links).size).toBe(200);
+  });
   it("goes as more requests past what one may name", async () => {
-    const made = Array.from({ length: LIMITS.places_at_once * 2 + 1 }, (_, n) => pathOf(folder(n)).slice(3));
+    const made = Array.from({ length: LIMITS.places_at_once * 2 + 1 }, (_, n) => go(folder(n)).slice(3));
     await turn();
     expect(posted.map((p) => p.body.places.length)).toEqual([LIMITS.places_at_once, LIMITS.places_at_once, 1]);
     expect(posted.flatMap((p) => p.body.places.map((x) => x.id))).toEqual(made);
   });
   it("goes as keepalive, so it arrives if the page goes meanwhile, unless it is more than the browser carries that way", async () => {
-    pathOf(folder(1));
+    go(folder(1));
     await turn();
-    for (let n = 0; n < LIMITS.places_at_once; n++) pathOf({ source: { kind: "search", q: `${n} ${"x".repeat(400)}`, account: "" }, opened: null });
+    for (let n = 0; n < LIMITS.places_at_once; n++) go({ source: { kind: "search", q: `${n} ${"x".repeat(400)}`, account: "" }, opened: null });
     await turn();
     expect(alive).toEqual([true, false]);
   });
   it("goes again a little later when the server can't be reached, and not when it refuses", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     answer = () => Promise.reject(new TypeError("Failed to fetch"));
-    const route = folder(1), path = pathOf(route);
+    const route = folder(1), path = go(route);
     await vi.advanceTimersByTimeAsync(0);
     expect(posted).toHaveLength(1);
     answer = () => Promise.resolve(new Response(JSON.stringify({ type: "/problems/refused", status: 400 }), { status: 400 }));
@@ -170,11 +180,61 @@ describe("a place, to the server", () => {
   });
   it("doesn't go when it is too long to keep, and lasts as long as the page", async () => {
     const long: Route = { source: { kind: "search", q: "x".repeat(LIMITS.place_bytes), account: "" }, opened: null };
-    const path = pathOf(long);
+    const path = go(long);
     await turn();
     expect(posted).toEqual([]);
     expect(path).toMatch(/^\/p\//);
     expect(parseRoute(path, "")).toEqual(long);
+  });
+});
+
+describe("a link to a place", () => {
+  const folder = (n: number): Route => ({ source: { kind: "folder", account: "ada@example.test", folder: `Clients/${n}` }, opened: null });
+  async function drawn(count: number) {
+    vi.resetModules();
+    const heard = new Map<string, (e: Event) => void>();
+    vi.stubGlobal("document", {
+      querySelector: (q: string) => (q === 'meta[name="csrf"]' ? { content: "the-token" } : null),
+      addEventListener: (type: string, fn: (e: Event) => void, options: AddEventListenerOptions) => options.capture && heard.set(type, fn),
+    });
+    const page = await import("./route");
+    const links = Array.from({ length: count }, (_, n) => page.pathOf(folder(n)));
+    // What the page hears, with `href` the link the event's target is in, or none.
+    const on = (type: string, href: string | null) =>
+      heard.get(type)?.({ target: { closest: (selector: string) => (href && selector === 'a[href^="/p/"]' ? { getAttribute: () => href } : null) } } as unknown as Event);
+    return { page, links, on };
+  }
+
+  it("sends nothing for being drawn", async () => {
+    await drawn(120);
+    await turn();
+    expect(posted).toEqual([]);
+  });
+  it.each(["pointerover", "pointerdown", "focusin", "contextmenu", "dragstart"])("sends just its place on %s, ahead of the click, and once", async (type) => {
+    const { links, on } = await drawn(40);
+    on(type, links[7]!);
+    on(type, links[7]!);
+    on("pointerover", links[7]!);
+    await turn();
+    expect(posted.map((p) => p.body.places)).toEqual([[{ id: links[7]!.slice(3), route: folder(7) }]]);
+  });
+  it("sends nothing for what isn't a link to a place this page made", async () => {
+    const { on } = await drawn(3);
+    on("pointerover", null);
+    on("pointerdown", "/p/Not-A-Place-Made-Here");
+    on("focusin", "/p/");
+    await turn();
+    expect(posted).toEqual([]);
+  });
+  it("hovered, then gone to, is sent once", async () => {
+    const { page, links, on } = await drawn(3);
+    vi.stubGlobal("location", { pathname: "/", search: "" });
+    vi.stubGlobal("history", { state: null, pushState: vi.fn(), replaceState: vi.fn() });
+    on("pointerover", links[1]!);
+    await turn();
+    expect(page.go(folder(1))).toBe(links[1]);
+    await turn();
+    expect(posted).toHaveLength(1);
   });
 });
 
@@ -193,6 +253,8 @@ describe("the place a page was opened at", () => {
     expect(page.parseRoute(`/p/${ID}`, "")).toEqual(route);
     expect(page.currentRoute()).toEqual(route);
     expect(page.pathOf(structuredClone(route))).toBe(`/p/${ID}`);
+    vi.stubGlobal("history", { state: null, pushState: vi.fn(), replaceState: vi.fn() });
+    expect(page.go(structuredClone(route))).toBe(`/p/${ID}`);
     await turn();
     expect(posted).toEqual([]);                    // the server has it
   });
