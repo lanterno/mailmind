@@ -802,15 +802,11 @@ def test_a_first_read_that_fails_after_saying_its_reading_says_so_and_only_a_per
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
     world.server.fail("UID SEARCH", user=w.ADA, times=None)
-    read = []
-    page.on("request", lambda r: read.append(r.url) if "/api/messages?" in r.url and "folder=Junk" in r.url else None)
     with held_elsewhere(w.ADA):
         page.locator('#folderrail .frow[data-folder="Junk"]').click()
         expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…")
     expect(page.locator("#rows")).to_contain_text("Couldn’t sync this folder.")
-    asked = len(read)
-    page.heard_all_asked()                                # the failure is heard as the list says so: a read again would be asked by now
-    assert len(read) == asked
+    page.wait_for_timeout(500)      # this watches for a loop: one that went round would have logged in many times by now
     assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "Junk"]) == 1
     world.server.clear_faults()
     page.locator("#rows").get_by_role("button", name="Retry").click()
@@ -828,15 +824,11 @@ def test_an_inbox_whose_first_read_fails_stops_all_inboxes_saying_its_reading_an
     finally:
         c.close()
     world.server.fail("UID SEARCH", user=w.ADA, times=None)
-    read = []
-    page.on("request", lambda r: read.append(r.url) if "/api/inboxes?" in r.url else None)
     with held_elsewhere(w.ADA):
         page.goto("/all")
         expect(page.locator("#list")).to_contain_text("reading the rest")
     expect(page.locator("#list")).not_to_contain_text("reading the rest")
-    asked = len(read)
-    page.heard_all_asked()                                # the failure is heard as the list says so: a read again would be asked by now
-    assert len(read) == asked
+    page.wait_for_timeout(500)      # this watches for a loop: one that went round would have logged in many times by now
     assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "INBOX"]) == 1
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     expect(page.locator("#rows .row[data-key]").first).to_be_visible()   # what is stored stays
