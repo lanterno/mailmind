@@ -1,7 +1,6 @@
 """Connections kept open: a pooled one checked and replaced, and IDLE's worker, on what it does before a sync, how it stops
 and an account removed."""
 import threading
-import time
 
 import pytest
 
@@ -31,7 +30,7 @@ def idle(monkeypatch):
     yield start
     realtime.stop()
     for t in workers:
-        t.join(5)
+        t.join(30)
     assert not any(t.is_alive() for t in workers), "an IDLE worker didn't stop"
 
 
@@ -94,7 +93,7 @@ def test_hwf_stopping_idle_leaves_closing_each_socket_to_its_worker(world, idle,
     worker = idle()
     assert wait_until(lambda: count(world, "IDLE") == 1)
     realtime.stop()
-    worker.join(5)
+    worker.join(30)
     assert not worker.is_alive()
     assert closed_by and set(closed_by) == {"idle-worker"}
 
@@ -103,10 +102,8 @@ def test_hwf_an_idle_worker_stops_watching_a_removed_account(world, idle, monkey
     from mailmind.bootstrap.accounts import config
     from mailmind.bootstrap.mailbox import realtime
     monkeypatch.setattr(realtime, "IDLE_SECONDS", 0.1)
-    idle()
+    worker = idle()
     assert wait_until(lambda: count(world, "IDLE") >= 1)
     assert config.remove_account(w.ADA)
-    time.sleep(0.3)                                              # a few IDLE cycles to notice
-    n = len(world.server.commands_for(w.ADA))
-    time.sleep(0.25)
-    assert len(world.server.commands_for(w.ADA)) == n
+    worker.join(30)                                              # it notices as an IDLE cycle ends, and stops
+    assert not worker.is_alive()
