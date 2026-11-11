@@ -274,7 +274,7 @@ function Backup() {
       <div className="lbl">Backup &amp; Export</div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
         <span id="exportPlan" className="set-help" style={{ margin: 0 }}>{data ? `${data.total.toLocaleString()} messages · ${data.bodies.toLocaleString()} with full bodies · ${data.groups.length} folders` : "Counting…"}</span>
-        <a className="set-mini" href="/api/export" download title="Download a full local snapshot of your synced mail"><Icon name="download" /> Backup (.db)</a>
+        <a className="set-mini" href="/api/export" download title="Download a full local snapshot of your synced mail, encrypted as the database is: it opens with the key in this Mac's Keychain"><Icon name="download" /> Backup (.db)</a>
       </div>
       <div className="pref-line">
         <Seg label="Export format" value={format} options={entries(FORMAT_LABEL)} onChange={setFormat} />
