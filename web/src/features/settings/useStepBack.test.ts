@@ -12,14 +12,16 @@ function aPage() {
     addEventListener: (_: string, fn: Listener, capture?: boolean) => void side(capture).add(fn),
     removeEventListener: (_: string, fn: Listener, capture?: boolean) => void side(capture).delete(fn),
   });
-  const field = { closest: (sel: string) => (sel.includes("input") ? {} : null), blur: vi.fn() };
+  const dialog = { focus: vi.fn() };
+  const field = { closest: (sel: string) => (sel.includes("input") ? {} : sel.includes("dialog") ? dialog : null), blur: vi.fn() };
+  const loose = { closest: (sel: string) => (sel.includes("input") ? {} : null), blur: vi.fn() };
   const elsewhere = { closest: () => null, blur: vi.fn() };
   const press = (key: string, target: object = elsewhere) => {
     const e = { key, target, stopPropagation: vi.fn(), preventDefault: vi.fn() };
     capturing.forEach((fn) => fn(e));
     return { ...e, stopped: e.stopPropagation.mock.calls.length > 0 && e.preventDefault.mock.calls.length > 0 };
   };
-  return { press, field, capturing, bubbling };
+  return { press, field, loose, dialog, capturing, bubbling };
 }
 
 const settings = (step?: () => boolean) => renderHook(() => useStepBack(step));
@@ -34,9 +36,22 @@ describe("Esc in Settings", () => {
     const page = aPage(), step = vi.fn(() => true);
     await settings(step);
     const esc = page.press("Escape", page.field);
-    expect(page.field.blur).toHaveBeenCalled();
+    expect(page.dialog.focus).toHaveBeenCalled();
     expect(esc.stopped).toBe(true);
     expect(step).not.toHaveBeenCalled();
+  });
+  it("puts the focus on the dialog around the field, where its focus trap leaves it, not nowhere", async () => {
+    const page = aPage();
+    await settings();
+    page.press("Escape", page.field);
+    expect(page.dialog.focus).toHaveBeenCalledTimes(1);
+    expect(page.field.blur).not.toHaveBeenCalled();
+  });
+  it("blurs a field with no dialog around it", async () => {
+    const page = aPage();
+    await settings();
+    expect(page.press("Escape", page.loose).stopped).toBe(true);
+    expect(page.loose.blur).toHaveBeenCalledTimes(1);
   });
   it("then closes what Settings has open, a form, and goes no further", async () => {
     const page = aPage(), step = vi.fn(() => true);
