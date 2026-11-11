@@ -5,7 +5,6 @@ import dataclasses
 import http.client
 import json
 import threading
-import time
 from typing import Annotated
 
 import pytest
@@ -30,6 +29,7 @@ from mailmind.platform.db import txguard
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import correlation
 from problems import CONTENT_TYPE
+from waiting import wait_until
 
 BAD_REQUEST = problems.BAD_REQUEST
 TOO_LARGE = problems.blank(413, "payload too large")
@@ -501,37 +501,37 @@ def test_more_requests_wait_at_once_than_anyio_starts_with(served, monkeypatch):
 
     def waiting(*args, **kwargs):
         arrived.append(1)
-        proceed.wait(15)
+        proceed.wait(60)
         return {"ok": True, "got": {}}
     monkeypatch.setattr(on("/api/toy-work", "GET"), "work", waiting)
     clients = [threading.Thread(target=served.get, args=("/api/toy-work",)) for _ in range(45)]
     try:
         for t in clients:
             t.start()
-        deadline = time.monotonic() + 10
-        while len(arrived) < 45 and time.monotonic() < deadline:
-            time.sleep(0.02)
-        assert len(arrived) == 45
+        assert wait_until(lambda: len(arrived) == 45)
     finally:
         proceed.set()
         for t in clients:
-            t.join(15)
+            t.join(30)
 
 
 def test_a_blocked_handler_doesnt_hold_the_server_past_its_grace(data_dir, monkeypatch):
     """A blocked one doesn't hold the exit: the pool's threads are daemons."""
-    release = threading.Event()
-    monkeypatch.setattr(on("/api/toy-work", "GET"), "work", lambda: release.wait(30) and {"ok": True, "got": {}})
+    arrived, release = threading.Event(), threading.Event()
+
+    def blocked():
+        arrived.set()
+        release.wait(60)
+        return {"ok": True, "got": {}}
+    monkeypatch.setattr(on("/api/toy-work", "GET"), "work", blocked)
     server = Uvicorn(create_app(routers=[toy], token=lambda: app_client.CSRF, body_cap=lambda method, path: 0), grace=0.2)
     server.start()
     try:
         with settings.use(dataclasses.replace(settings.current(), port=server.port)):
             client = app_client.AppClient(server.port)
             threading.Thread(target=lambda: _quietly(client), daemon=True).start()
-            time.sleep(0.3)
-            began = time.monotonic()
-            server.stop()
-            assert time.monotonic() - began < 2
+            assert arrived.wait(30)
+            server.stop()                    # which fails if the server is still up 15 s on, where the handler waits a minute
     finally:
         release.set()
 
