@@ -4,7 +4,7 @@ the legacy modules behind filing and sending. The legacy modules reach Curation 
 from mailmind.bootstrap import mailbox
 from mailmind.curation.adapters import rules_file as rules
 from mailmind.curation.adapters import safe_http, sqlite
-from mailmind.curation.adapters.audit_file import AuditFile
+from mailmind.curation.adapters.audit_events import AuditEvents
 from mailmind.curation.api import (BLOCKED, EXPIRE, JUNK_BUCKETS, KEYS, MKT, NOTIF, PERSONAL, PROTECTED, RECEIPT, SPAM,
                                    arrival_ts, by_rule, decided, domain_listed, expiry_hours, is_junk, looks_human,
                                    select_expired)
@@ -173,7 +173,7 @@ def assemble():
     the sweeps, expiry and the filters. Importing this module assembles them once; wiring.assemble makes a new set of
     every context's."""
     global AUDIT, _mail, cleanup, screener, sweeps, expiry, filters
-    AUDIT = AuditFile()
+    AUDIT = AuditEvents()
     _mail = sqlite.SenderMail(_MessageRows())
     cleanup = Cleanup(rules, _mail, Unsubscribing(_mail, _ListHeaders(), _SafeHttp(), _SystemSend()), _filing, AUDIT,
                       _csrf)

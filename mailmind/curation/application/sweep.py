@@ -3,7 +3,7 @@ anything moves, so a stored row can't send the wrong message anywhere."""
 from collections.abc import Callable
 from typing import Any
 
-from mailmind.curation.application.ports import AuditLog, FilingCommands, LiveSession, Mailboxes, RuleBookRepository, SenderMail
+from mailmind.curation.application.ports import FilingCommands, LiveSession, Mailboxes, RuleBookRepository, SenderMail, SweepTrail
 from mailmind.curation.domain import sweep_plan
 from mailmind.curation.domain.live import READ_FIELDS, Classified, Read, read_from_headers
 from mailmind.kernel.errors import Refused
@@ -22,7 +22,7 @@ def fetch_headers(s: LiveSession) -> list[Read]:
 
 
 class Sweeps:
-    def __init__(self, rules: RuleBookRepository, mail: SenderMail, boxes: Mailboxes, audit: AuditLog,
+    def __init__(self, rules: RuleBookRepository, mail: SenderMail, boxes: Mailboxes, audit: SweepTrail,
                  filing: FilingCommands):
         self._rules, self._mail, self._boxes, self._audit, self._filing = rules, mail, boxes, audit, filing
 

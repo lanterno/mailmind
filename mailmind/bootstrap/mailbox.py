@@ -20,6 +20,7 @@ from mailmind.assistant.adapters import sqlite as assistant_store
 from mailmind.attention.adapters import sqlite as attention_store
 from mailmind.compose.adapters import sqlite as compose_store
 from mailmind.discovery.adapters import fts
+from mailmind.mailbox.adapters import reconcile_trail
 from mailmind.mailbox.adapters import sqlite as store
 from mailmind.mailbox.adapters.sqlite import stored_mail  # noqa: F401  (all the other contexts' wiring reaches of the store)
 from mailmind.mailbox.adapters.imap.imap_names import BadValue, imap_quote
@@ -353,7 +354,7 @@ def assemble():
     filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
     tidying = Tidying(_uow, store, filing, undo)
     syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick)
-    reconciler = Reconciler(_uow, store, _directory, pool, folders, stats)
+    reconciler = Reconciler(_uow, store, _directory, pool, folders, stats, reconcile_trail)
     digest = Digest(_uow, store, _directory, syncing, _ai_status)
 
 

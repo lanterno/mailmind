@@ -4,7 +4,7 @@ import imaplib
 import time
 from typing import Any
 
-from mailmind.curation.application.ports import AuditLog, FilingCommands, Mailboxes, RuleBookRepository, SenderMail
+from mailmind.curation.application.ports import FilingCommands, Mailboxes, RuleBookRepository, SenderMail, SweepTrail
 from mailmind.curation.domain.expiry import AGE_FIELDS, aged_from_headers, audited, select_expired
 from mailmind.curation.domain.rulebook import EXPIRE
 from mailmind.platform.logging import get_logger
@@ -14,7 +14,7 @@ log = get_logger("expire")
 
 
 class Expiry:
-    def __init__(self, rules: RuleBookRepository, mail: SenderMail, boxes: Mailboxes, audit: AuditLog,
+    def __init__(self, rules: RuleBookRepository, mail: SenderMail, boxes: Mailboxes, audit: SweepTrail,
                  filing: FilingCommands):
         self._rules, self._mail, self._boxes, self._audit, self._filing = rules, mail, boxes, audit, filing
 

@@ -5,7 +5,6 @@ NON-blocking so a live user op is never stalled (mirrors the body-backfill loop)
 piggybacks a user-triggered (IDLE) sync. reconcile_account is a SAFE pure-prune (never prunes on IMAP error, UIDVALIDITY
 change, or an OK-but-empty SEARCH against a non-empty store).
 """
-import json
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
@@ -15,10 +14,10 @@ from mailmind.kernel.ids import INBOX, AccountId, FolderName
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.pool import Pool
-from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, Pruned, StoredMail
+from mailmind.mailbox.application.ports import Account, AccountPruned, Accounts, Pruned, ReconcileTrail, StoredMail
 from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.domain import prune
-from mailmind.platform import environment, private, settings, sse
+from mailmind.platform import environment, sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
@@ -30,13 +29,15 @@ class Reconciler:
     _RECONCILE_INTERVAL = environment.RECONCILE_SECS.value()    # full-cycle target; 0 disables
     READ_TIMEOUT = 15        # a background path: a hung account must not pin the IMAP gate for the interactive minute
 
-    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, pool: Pool, folders: Folders, stats: LiveStats):
+    def __init__(self, uow: UnitOfWork, store: StoredMail, accounts: Accounts, pool: Pool, folders: Folders, stats: LiveStats,
+                 trail: ReconcileTrail):
         self._uow = uow
         self._store = store
         self._accounts = accounts
         self._pool = pool
         self._folders = folders
         self._stats = stats
+        self._trail = trail
 
     def reconciled_folders(self, email: AccountId) -> list[FolderName]:
         """The folders reconcile looks at for an account: each one a sync has stored (it has a
@@ -121,10 +122,8 @@ class Reconciler:
             return                                        # user op live — yield, retry next cycle
         if not res["pruned"]:
             return
-        with private.append(settings.current().reconcile_audit) as f:
-            f.write(json.dumps({"kind": "reconcile", "ts": now_iso(), "auto": True,
-                                "account": res["account"], "pruned": res["pruned"],
-                                "live": res["live"]}) + "\n")
+        with self._uow.write() as c:                     # committed before the next turn asks a server anything
+            self._trail.pruned(c, [res], auto=True)
         self._stats.invalidate()
         self._folders.invalidate(acct["email"])                # folder badge counts changed
         try:
@@ -162,13 +161,9 @@ class Reconciler:
             raise Refused("unknown account")
         results = [self._reconcile_folders(a, dry_run=dry_run) for a in accts]
         if not dry_run:
-            stamp = now_iso()
-            with private.append(settings.current().reconcile_audit) as f:
-                for r in results:
-                    if r["pruned"]:
-                        f.write(json.dumps({"kind": "reconcile", "ts": stamp,
-                                            "account": r["account"], "pruned": r["pruned"],
-                                            "live": r["live"]}) + "\n")
+            if pruned := [r for r in results if r["pruned"]]:
+                with self._uow.write() as c:             # after every account's server, committed as it ends
+                    self._trail.pruned(c, pruned)
             self._stats.invalidate()
         return {"ok": True, "dry_run": dry_run, "results": results,
                 "total_ghosts": sum(r["ghosts"] for r in results),

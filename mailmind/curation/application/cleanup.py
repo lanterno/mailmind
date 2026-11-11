@@ -6,7 +6,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
-from mailmind.curation.application.ports import AuditLog, FilingCommands, RuleBookRepository, SenderMail
+from mailmind.curation.application.ports import FilingCommands, RuleBookRepository, SenderMail, SweepTrail
 from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import cleanup_plan, noise, rulebook, unsubscribe
 from mailmind.kernel.errors import NotFound, Refused
@@ -18,7 +18,7 @@ type Query = Mapping[str, Sequence[str]]      # a query string as the routes par
 
 class Cleanup:
     def __init__(self, rules: RuleBookRepository, mail: SenderMail, unsubscribing: Unsubscribing,
-                 filing: FilingCommands, audit: AuditLog, secret: Callable[[], str]):
+                 filing: FilingCommands, audit: SweepTrail, secret: Callable[[], str]):
         self._rules, self._mail, self._unsub = rules, mail, unsubscribing
         self._filing, self._audit, self._secret = filing, audit, secret
 

@@ -172,7 +172,7 @@ def _plan(accts, do_sweep=False, dry=False):
         grand += p["junk"]
         if do_sweep and not dry and p["junk"]:
             r = curation.sweeps.sweep(a, dry=False)
-            msg = f"   swept: moved {r['moved']}/{p['junk']} to Trash (logged -> sweep_audit.jsonl)"
+            msg = f"   swept: moved {r['moved']}/{p['junk']} to Trash (recorded in the audit trail)"
             if r["stragglers"]:
                 msg += f"  ! {len(r['stragglers'])} could not be verified-moved"
             print(msg)

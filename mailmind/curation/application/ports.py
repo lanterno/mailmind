@@ -55,8 +55,9 @@ class SafeHttp(Protocol):
     def one_click_post(self, url: str) -> tuple[bool, int, str]: ...
 
 
-class AuditLog(Protocol):
-    """A reviewable record of what was trashed. Written before a move, so a crash still records it."""
+class SweepTrail(Protocol):
+    """The sweep trail, in the database: a reviewable record of what was trashed, and of each sender's cleanup. A sweep's
+    record is committed when `swept` returns, before the move asks the server anything, so a crash still records it."""
     def swept(self, account: str, rows: Sequence[Audited]) -> None: ...
     def cleaned_up(self, from_addr: str, token: str, swept: int, status: str) -> None: ...
 

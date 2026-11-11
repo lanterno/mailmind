@@ -48,14 +48,6 @@ class Settings:
         return os.path.join(self.home, ".rules.lock")
 
     @property
-    def sweep_audit(self) -> str:
-        return os.path.join(self.home, "sweep_audit.jsonl")
-
-    @property
-    def reconcile_audit(self) -> str:
-        return os.path.join(self.home, "reconcile_audit.jsonl")
-
-    @property
     def log(self) -> str:
         return os.path.join(self.home, "mailmind.log")
 

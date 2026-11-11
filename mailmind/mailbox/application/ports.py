@@ -322,3 +322,9 @@ class Pruned(TypedDict):
 class AccountPruned(Pruned):
     """What it came to over an account's folders."""
     folders: int
+
+
+class ReconcileTrail(Protocol):
+    """The reconcile trail, among the audit trails in the database: what a reconcile pruned, a record for each account, in
+    the caller's transaction. `auto` marks the background job's."""
+    def pruned(self, c: Connection, results: Sequence[AccountPruned], auto: bool = ...) -> None: ...
