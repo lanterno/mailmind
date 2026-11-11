@@ -2,7 +2,7 @@
 the legacy modules behind filing and sending. The legacy modules reach Curation through here.
 """
 from mailmind.bootstrap import mailbox
-from mailmind.curation.adapters import rules_file as rules
+from mailmind.curation.adapters import rules_document as rules
 from mailmind.curation.adapters import safe_http, sqlite
 from mailmind.curation.adapters.audit_events import AuditEvents
 from mailmind.curation.api import (BLOCKED, EXPIRE, JUNK_BUCKETS, KEYS, MKT, NOTIF, PERSONAL, PROTECTED, RECEIPT, SPAM,

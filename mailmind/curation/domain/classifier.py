@@ -131,7 +131,7 @@ MONEY = re.compile(r"(\$\s?\d|\d\s?\$|usd|\bbtc\b|bitcoin|\beuros?\b|€|\bcash\
 # --- protected (never auto-trash) --------------------------------------------
 # Generic institutional matchers. These are deliberately broad — protect your
 # OWN niche institutions (a specific university, bank, clinic, ...) by adding
-# their domains to keep_domains in mailmind_rules.json rather than editing here.
+# their domains to keep_domains (`python -m mailmind rules keep <domain>`) rather than editing here.
 GOV_RE = re.compile(r"(\.gov(\.[a-z]{2})?$|\.gouv\.[a-z]{2}$|\.go\.[a-z]{2}$|\.gob\.[a-z]{2}$|"
                     r"\.admin\.[a-z]{2}$|\.gc\.ca$|\.govt\.|\bgov\.)", re.I)
 EDU_RE = re.compile(r"(\.edu$|\.edu\.[a-z]{2}$|\.ac\.[a-z]{2}$|\.uni-[a-z]+\.)", re.I)

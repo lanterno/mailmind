@@ -231,7 +231,14 @@ def mailboxes(command, who, dry=False):
         _empty_trash(accts)
 
 
+def _rule_book():
+    """The rules live in the database: bring it to the newest schema first, as a sync does."""
+    from mailmind.bootstrap.mailbox import store
+    store.init()
+
+
 def rules_list():
+    _rule_book()
     r = curation.rules.load()
     for k in curation.rules.KEYS:
         print(f"{k} ({len(r[k])}): {', '.join(r[k]) or '—'}")
@@ -241,6 +248,7 @@ def rules_list():
 
 def rules_add(verdict, tokens):
     from mailmind.bootstrap.mailbox import ingest
+    _rule_book()
     for tok in tokens:
         t, where = curation.rules.add(tok, verdict)
         print(f"  {t} -> {where}; {ingest.reclassify(t)} stored messages classified again")
@@ -248,12 +256,14 @@ def rules_add(verdict, tokens):
 
 def rules_remove(tokens):
     from mailmind.bootstrap.mailbox import ingest
+    _rule_book()
     for tok in tokens:
         curation.rules.remove(tok)
         print(f"  removed {tok}; {ingest.reclassify(tok)} stored messages classified again")
 
 
 def rules_expire(token, hours):
+    _rule_book()
     t, h = curation.rules.set_expiry(token, hours)
     print(f"  {t} -> {'expires after ' + str(h) + 'h' if h else 'no expiry'}")
 
