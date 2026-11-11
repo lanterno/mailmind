@@ -2319,7 +2319,7 @@ export interface components {
         };
         /**
          * AuditEvent
-         * @description A line of an audit trail: a sweep's message, a sender's cleanup or a reconcile's count.
+         * @description A record of an audit trail: a sweep's message, a sender's cleanup or a reconcile's count.
          */
         AuditEvent: {
             /** Account */
