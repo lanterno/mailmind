@@ -3,14 +3,13 @@
 The scheduler's clock is fixed at T, so a lane's `next_at` says how long it waits before its next round; the tests read that
 rather than time how long the lane took."""
 import json
-import sys
 import threading
 
 import pytest
 
 from mailmind.platform.workers.scheduler import Scheduler
 from mailmind.bootstrap import background
-from waiting import wait_until
+from waiting import blocked_in, wait_until
 
 
 T = 1_800_000_000.0
@@ -18,12 +17,6 @@ T = 1_800_000_000.0
 
 def due(jobs):
     return jobs.snapshot()[0]["next_at"]
-
-
-def waiting_its_turn(thread):
-    """Whether `thread` is held at the start of Scheduler.run, as a round asked for while another is under way is."""
-    frame = sys._current_frames().get(thread.ident)
-    return frame is not None and frame.f_code is Scheduler.run.__code__
 
 
 @pytest.fixture
@@ -120,7 +113,7 @@ def test_rounds_of_one_job_never_overlap(jobs):
     assert wait_until(lambda: inside)                            # the lane's round is under way
     other = threading.Thread(target=lambda: jobs.run("slow"), daemon=True)
     other.start()
-    assert wait_until(lambda: waiting_its_turn(other))           # a caller's round waits its turn
+    assert wait_until(lambda: blocked_in(other, Scheduler.run))  # a caller's round waits its turn
     assert len(inside) == 1
     release.set()
     other.join(30)
