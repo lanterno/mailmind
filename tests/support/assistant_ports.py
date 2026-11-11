@@ -11,7 +11,7 @@ import time
 from mailmind.assistant.application.assessment import Assessments
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
-from mailmind.assistant.application.ports import BatchResult, ModelError, Reply, Usage
+from mailmind.assistant.application.ports import AIOff, BatchResult, ModelError, Reply, Usage
 from mailmind.assistant.application.status import Status
 from mailmind.kernel.assessment import Assessment
 
@@ -29,10 +29,11 @@ def reply_of(said, model):
 class Model:
     """A LanguageModel. Each reply a test queued answers one call in turn, as `reply_of` reads it; with none queued, an
     empty object. A batch is answered once a test ends it, each request as `end_batch` says or else with an empty object.
-    An exception in `failing`, by the method's name, is raised by that method until it is taken out."""
-    enabled = True
+    An exception in `failing`, by the method's name, is raised by that method until it is taken out. With `enabled` False
+    it is the stand-in for AI off, which raises AIOff for anything asked of it, and notes what that was."""
 
-    def __init__(self, *replies):
+    def __init__(self, *replies, enabled=True):
+        self.enabled = enabled
         self.replies = list(replies)
         self.sent = []
         self.batches = {}          # its id -> {"requests": [(custom id, Prompt)], "ended": bool, "results": {custom id: said}}
@@ -51,10 +52,14 @@ class Model:
 
     def complete(self, prompt):
         self.sent.append(prompt)
+        if not self.enabled:
+            raise AIOff("AI is off")
         return reply_of(self.replies.pop(0) if self.replies else {}, prompt.model)
 
     def _ask(self, name, batch_id=None):
         self.asked.append(name)
+        if not self.enabled:
+            raise AIOff("AI is off")
         if name in self.failing:
             raise self.failing[name]
         if batch_id is not None and batch_id not in self.batches:
@@ -197,28 +202,33 @@ class Triage:
         self.items.update((k, batch_id) for k in keys)
         return batch_id
 
-    def batch_sent(self, c, batch_id, remote_id, now):
-        self.batches[batch_id].update(state="running", remote_id=remote_id, polled_at=now)
+    def _update(self, batch_id, **columns):
+        """An UPDATE: a batch dropped meanwhile is no row to change."""
+        if batch_id in self.batches:
+            self.batches[batch_id].update(columns)
 
     def _release(self, batch_id):
         self.items = {k: b for k, b in self.items.items() if b != batch_id}
 
+    def batch_sent(self, c, batch_id, remote_id, now):
+        self._update(batch_id, state="running", remote_id=remote_id, polled_at=now)
+
     def batch_drop(self, c, batch_id):
-        del self.batches[batch_id]
+        self.batches.pop(batch_id, None)
         self._release(batch_id)
 
     def batch_polled(self, c, batch_id, now):
-        self.batches[batch_id]["polled_at"] = now
+        self._update(batch_id, polled_at=now)
 
     def batch_keys(self, c, batch_id):
         return {k for k, b in self.items.items() if b == batch_id}
 
     def batch_collected(self, c, batch_id, now):
         self._release(batch_id)
-        self.batches[batch_id].update(state="collected", ended_at=now)
+        self._update(batch_id, state="collected", ended_at=now)
 
     def batch_discarded(self, c, batch_id):
-        self.batches[batch_id]["state"] = "done"
+        self._update(batch_id, state="done")
 
     def batches_in_state(self, c, state):
         return [b for _, b in sorted(self.batches.items()) if b["state"] == state]

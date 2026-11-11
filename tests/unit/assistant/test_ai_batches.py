@@ -1,10 +1,15 @@
 """A backlog of triage through the Message Batches API: what each transport sends and reads, what a batch
 costs and how that counts against the daily limit, and the job that sends one and brings its answers in.
 Everything here is against the fake API; nothing real is sent."""
+import time
 
 import pytest
 
+from assistant_ports import Model, Triage, message, triage_on
 from fakes import anthropic_api as fa
+from mailmind.assistant.application.governor import CostGovernor
+from mailmind.assistant.application.ports import ModelError
+from mailmind.assistant.domain import models, pricing
 from mailmind.assistant.domain.prompts import SYSTEM
 
 TRANSPORTS = ["sdk", "urllib"]
@@ -124,3 +129,214 @@ def test_an_estimate_errs_high():
     chars = 3000                                # about 750 tokens of mail, and an answer of about 100
     assert pricing.batch_estimate("claude-opus-5-5", chars) > pricing.batch_micros(
         pricing.cost_micros("claude-opus-5-5", "claude-opus-5-5", 750, 100))
+
+
+# -- the job, on stored mail and a model of its own --------------------------------
+
+class Backlog:
+    """Eight messages waiting for triage, a backlog from 5 up with the 2 newest kept back, asked about at every round."""
+
+    def __init__(self, model=None, governor=None, ledger=None):
+        self.model, self.triage = model or Model(), Triage(message(n) for n in range(1, 9))
+        self.job = triage_on(self.model, self.triage, ledger, governor)
+        self.job.BATCH_MIN, self.job.BATCH_KEEP_NEWEST, self.job.BATCH_POLL = 5, 2, 0
+
+    def waiting(self):
+        return [r["message_key"] for r in self.triage.needs_summary(None, 1000)]
+
+    def sent(self):
+        return [int(cid) for cid in self.model.batched]
+
+    def states(self):
+        return [b["state"] for b in self.triage.batches.values()]
+
+    def estimates(self, rows):
+        return [pricing.batch_estimate(models.DEFAULT, len(SYSTEM) + len(self.job._triage_prompt(r))) for r in rows]
+
+
+@pytest.fixture
+def backlog():
+    return Backlog()
+
+
+def test_a_backlog_goes_as_a_batch_and_the_newest_stay(backlog):
+    before = backlog.waiting()
+    assert backlog.job.batch_submit() == len(before) - 2
+    assert backlog.sent() == before[2:]
+    assert backlog.waiting() == before[:2]
+
+
+def test_a_few_new_messages_are_no_backlog(backlog):
+    backlog.job.BATCH_MIN = len(backlog.waiting()) + 1
+    assert backlog.job.batch_submit() == 0
+    assert backlog.model.asked == []
+
+
+def test_one_batch_at_a_time(backlog):
+    assert backlog.job.batch_submit() > 0
+    assert backlog.job.batch_submit() == 0
+    assert backlog.model.asked == ["submit_batch"]
+
+
+def test_a_batch_is_no_bigger_than_its_maximum(backlog):
+    backlog.job.BATCH_MAX = 3
+    assert backlog.job.batch_submit() == 3
+
+
+def test_an_answer_for_nothing_of_ours_is_ignored(backlog):
+    ours = backlog.job.batch_submit()
+    [batch] = backlog.model.batches.values()
+    prompt = batch["requests"][0][1]
+    batch["requests"] += [("not-a-key", prompt), ("999999", prompt)]
+    backlog.model.end_batch()
+    assert backlog.job.batch_collect() == ours
+
+
+def test_nothing_is_brought_in_before_the_batch_ends(backlog):
+    assert backlog.job.batch_submit() > 0
+    assert backlog.job.batch_collect() == 0
+    assert backlog.job.batch_status()["waiting"] > 0
+    assert backlog.model.discarded == []
+
+
+def test_it_asks_only_so_often(backlog):
+    backlog.job.BATCH_POLL = 300
+    assert backlog.job.batch_submit() > 0
+    backlog.model.asked.clear()
+    backlog.job.batch_collect()
+    assert backlog.model.asked == []
+    backlog.triage.batch_open(None)["polled_at"] -= 301
+    backlog.job.batch_collect()
+    assert backlog.model.asked == ["batch_ended"]
+    backlog.job.batch_collect()
+    assert backlog.model.asked == ["batch_ended"]
+
+
+def test_a_batch_is_removed_from_the_api_once_its_answers_are_stored(backlog):
+    assert backlog.job.batch_submit() > 0
+    [batch] = backlog.model.batches
+    backlog.model.end_batch()
+    backlog.job.batch_collect()
+    assert (backlog.model.discarded, backlog.states()) == ([batch], ["done"])
+
+
+def test_removing_it_is_tried_again_when_it_fails(backlog):
+    assert backlog.job.batch_submit() > 0
+    [batch] = backlog.model.batches
+    backlog.model.end_batch()
+    backlog.model.failing["discard_batch"] = ModelError("no", 400)
+    assert backlog.job.batch_collect() > 0
+    assert (backlog.model.discarded, backlog.states()) == ([], ["collected"])
+    del backlog.model.failing["discard_batch"]
+    assert backlog.job.batch_collect() == 0                 # nothing is stored twice
+    assert (backlog.model.discarded, backlog.states()) == ([batch], ["done"])
+
+
+def test_a_batch_the_api_no_longer_has_gives_its_messages_back(backlog):
+    assert backlog.job.batch_submit() > 0
+    backlog.model.batches.clear()
+    backlog.job.batch_collect()
+    assert (backlog.triage.batches, backlog.job.batch_status()["waiting"]) == ({}, 0)
+
+
+def test_an_outage_leaves_the_batch_out(backlog):
+    assert backlog.job.batch_submit() > 0
+    backlog.model.failing["batch_ended"] = ModelError("busy", 503)
+    assert backlog.job.batch_collect() == 0
+    assert backlog.job.batch_status()["state"] == "running"
+    del backlog.model.failing["batch_ended"]
+    backlog.model.end_batch()
+    assert backlog.job.batch_collect() > 0
+
+
+def test_a_crash_while_sending_gives_its_messages_back_in_time(backlog):
+    lately = int(time.time()) - backlog.job.BATCH_SEND_GIVE_UP + 60       # begun, and not sent, a little under the time ago
+    backlog.triage.batch_begin(None, "triage-batch", models.DEFAULT, backlog.waiting()[:2], 10, 0, lately)
+    backlog.job.batch_collect()
+    assert backlog.job.batch_status()["waiting"] == 2     # it may still be going
+    assert backlog.job.batch_submit() == 0
+    backlog.triage.batch_open(None)["created_at"] -= 61
+    backlog.job.batch_collect()
+    assert backlog.job.batch_status()["waiting"] == 0
+
+
+# -- within the daily limit ------------------------------------------------------
+
+def limited(micros, spent=0):
+    """A backlog whose governor allows `micros` a day, `spent` of it gone."""
+    return Backlog(governor=CostGovernor(spent=lambda: spent, limit=lambda: micros))
+
+
+def test_a_batch_takes_only_its_share_of_what_the_limit_leaves():
+    each = Backlog().estimates([message(n) for n in range(6, 0, -1)])     # what the six oldest ask, newest first
+    backlog = limited((sum(each[:3]) + each[3] // 2) * Backlog().job.BATCH_SHARE)
+    assert backlog.job.batch_submit() == 3
+
+
+def test_what_a_batch_books_counts_the_system_prompt_each_request_carries(backlog):
+    rows = backlog.triage.needs_summary(None, 1000)[2:]
+    assert backlog.job.batch_submit(at_least=1) == len(rows) > 0
+    assert backlog.job.batch_status()["estimate_micros"] == sum(backlog.estimates(rows))
+
+
+def test_at_the_limit_no_batch_goes():
+    backlog = limited(15_000_000, spent=15_000_000)
+    assert backlog.job.batch_submit() == 0
+    assert backlog.model.asked == []
+
+
+def test_a_limit_with_no_room_for_one_request_sends_nothing():
+    backlog = limited(1)
+    assert backlog.job.batch_submit() == 0
+    assert backlog.model.asked == []
+
+
+@pytest.mark.parametrize("held", ["yielding", "limit"])
+def test_answers_are_brought_in_at_the_limit_and_while_someone_uses_ai(held):
+    """They are paid for already, and bringing them in sends no mail."""
+    model, today = Model(), {"spent": 0}
+    governor = CostGovernor(spent=lambda: today["spent"], limit=lambda: 15_000_000)
+    backlog = Backlog(model, governor)
+    assert backlog.job.batch_submit() > 0
+    model.end_batch()
+    if held == "yielding":
+        with governor.call("interactive", "ask", models.DEFAULT, model):
+            pass                                            # someone asked just now: the rest yields
+    else:
+        today["spent"] = 15_000_000
+    assert backlog.job.round() == (backlog.job.ASSESS_YIELD if held == "yielding" else None)
+    assert backlog.job.batch_status()["waiting"] == 0
+    assert model.discarded and model.sent == []
+
+
+# -- the round, and AI off -------------------------------------------------------
+
+def test_the_round_sends_the_backlog_and_triages_the_newest_at_once(backlog):
+    before = backlog.waiting()
+    backlog.job.round()
+    assert backlog.model.asked == ["submit_batch"]
+    assert len(backlog.model.sent) == 2
+    assert backlog.waiting() == [] and len(backlog.sent()) == len(before) - 2
+
+
+def test_the_switch_keeps_the_round_from_sending_one_and_still_brings_one_in(backlog, monkeypatch):
+    assert backlog.job.batch_submit() > 0
+    backlog.model.end_batch()
+    for n in range(9, 15):
+        backlog.triage.add(message(n))                      # a backlog again
+    monkeypatch.setenv("MAILMIND_NO_BATCHES", "1")
+    backlog.job.round()
+    assert backlog.model.discarded                          # the one that was out came in
+    assert backlog.model.asked.count("submit_batch") == 1   # and no other went, though mail is waiting
+
+
+def test_with_ai_off_nothing_goes_and_nothing_is_touched():
+    off = Model(enabled=False)
+    backlog = Backlog(off)
+    assert backlog.job.batch_submit(at_least=1, keep=0) == 0
+    assert backlog.triage.batches == {}
+    triage = backlog.triage
+    triage.batch_sent(None, triage.batch_begin(None, "triage-batch", models.DEFAULT, backlog.waiting()[:2], 10, 0, 0),
+                      "msgbatch_x", 0)
+    assert backlog.job.batch_collect() == 0
+    assert (off.asked, off.sent, backlog.job.batch_status()["waiting"]) == ([], [], 2)
