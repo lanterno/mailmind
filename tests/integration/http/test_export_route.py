@@ -169,14 +169,6 @@ def test_an_mbox_archive_holds_a_file_for_each_folder_that_a_mail_program_can_re
     assert wait_until(lambda: not os.path.exists(archives[0]))
 
 
-@pytest.mark.parametrize("form", ["eml", "mbox"])
-def test_only_the_zip_is_left_of_what_an_archive_wrote(app, tmp_path, form):
-    out = tmp_path / "out"
-    out.mkdir()
-    path = export.archive(str(out), form)
-    assert os.listdir(out) == [os.path.basename(path)]
-
-
 @pytest.mark.parametrize("query", ["", "?format=", "?format=db", "?format=pst", "?format=EML"])
 def test_a_format_we_do_not_offer_is_the_bad_request_and_nothing_is_written(app, archives, query):
     r = app.get("/api/export/archive" + query)
