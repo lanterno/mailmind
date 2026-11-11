@@ -98,7 +98,8 @@ A test passes or fails on what happened, never on how long it took. Other suites
 - Wait for a condition with `wait_until(cond)` from `tests/support/waiting.py`. It polls for up to 30 s and returns whether
   `cond` came true, so assert it. `blocked_in(thread, fn)` says a thread waits inside `fn` on a lock, a Condition or an
   Event. That lets a test act once a thread has queued. `tests/support/gate.py` builds `waits_for_a_gate(thread)` and
-  `waiting_for_a_gate()` on it.
+  `waiting_for_a_gate()` on it, and `tests/support/at_once.py` builds `overlap`: two changes to a kept document at once, the first
+  held after its read until the second has read too or waits for the write lock.
 - Read time from a clock the test moves: the `app` fixture's `app.clock`, `time_machine` around code that runs outside it,
   or an injected `now`. Test speed through what the code does: a call counted, an Event set, a thread still alive after a
   join long past its due time. A wake shows up against a wait made long, such as an hour, rather than one timed short.

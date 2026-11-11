@@ -129,7 +129,10 @@ The app lives in `mailmind/`.
   drafting ahead (`assistant.drafting.DRAFT_FLIGHTS`, whose `busy(key)` answers "generating"). It is standard
   library only.
 - `mailmind.platform.db` opens the database, runs its migrations, backs it up before one and
-  checks an upgrade on a copy (see [Schema migrations](migrations.md)), and holds `uow.UnitOfWork`, how a use case gets a connection. The
+  checks an upgrade on a copy (see [Schema migrations](migrations.md)), and holds `uow.UnitOfWork`, how a use case gets a connection, and
+  `documents`, a document a context keeps whole as a row of `documents` (migration 48): its JSON in the shape the file it was once kept
+  in held, so that file's text goes in as it is, and a version on with each save. A context's adapter names its own row (`views`,
+  `snippets`), and its use case reads, changes and writes it in one write block. The
   database is encrypted ([At rest](security.md#at-rest)): `driver` is the only module that imports SQLCipher's `sqlcipher3`, `key` holds
   the Keychain's key and `database` keys each connection with it. The rest is standard library only.
 - `mailmind.platform.private` opens a file that holds what is in someone's mail, an audit trail or an export, its owner's alone.

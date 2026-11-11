@@ -87,8 +87,9 @@ See [Architecture](architecture.md) for the layers around them.
   facts, and how the answer reads) and `contacts` (autocomplete's needle and the card). None of them reads a clock: a use
   case hands in `rel_time` or `now_iso`'s value. `adapters` holds `fts` (`to_sql` turns a parsed query into a MATCH and bound SQL, and
   `index_message` and `forget_message` keep the index up to date), `sqlite` (`StoredMail`, which reads `messages` and the
-  rest as read models and writes nothing) and `views_file`. `application` holds `ports.py` and the use cases `Search`,
-  `SavedViews`, `DocumentHub`, `Contacts`, `KnownContacts`, `Suggesting` (what the search box offers as you type) and `Conditions` (whether a query can be judged of mail as it arrives, and whether a message fits it). `mailmind.bootstrap.discovery` binds them, and it's how
+  rest as read models and writes nothing) and `views_store` (the saved views, the `views` document in the database). `application`
+  holds `ports.py` and the use cases `Search`, `SavedViews` (which reads, changes and writes the views in one write block, so two saves
+  at once lose neither), `DocumentHub`, `Contacts`, `KnownContacts`, `Suggesting` (what the search box offers as you type) and `Conditions` (whether a query can be judged of mail as it arrives, and whether a message fits it). `mailmind.bootstrap.discovery` binds them, and it's how
   the routers and the command line reach Discovery (`discovery.search.answer(qs)`, `discovery.known.ask(addrs)`).
   A folder's role goes through the Mailbox (`mailbox.folders.role`), and the account list through Accounts.
   It is standard library only.
@@ -151,7 +152,7 @@ See [Architecture](architecture.md) for the layers around them.
   draft split back into your text, its quote and its files, and which copy may be believed), `attachments`, `limits`, `outbox_item` (a try's numbers,
   what one leaves on a row and what a delivered send still owes), `events` and `errors`. A row's state changes stay in `DurableQueue`, whose conditional
   UPDATEs the worker can't race, so `outbox_item` holds no copy of them. `adapters` holds `smtp` (`SmtpTransport`, the only module that speaks SMTP),
-  `snippets_file` and `sqlite` (`outbox` and `drafts`). `application` holds `ports.py` and the use cases `Composing` (a request made into a message), `Snippets`, `Sending`, `Drafts`
+  `snippets_store` (the `snippets` document in the database) and `sqlite` (`outbox` and `drafts`). `application` holds `ports.py` and the use cases `Composing` (a request made into a message), `Snippets` (a change one write block, as the saved views'), `Sending`, `Drafts`
   and `Outbox`, the queue and its worker. `mailmind.bootstrap.compose` binds them, and it's how the routers, the other contexts and the tests reach
   Compose (`compose.sending.send(body)`, `compose.drafts.save(body)`, `compose.outbox.drain()`, `compose.book` for its tables). `mailmind.compose.api` names
   what others use without its wiring (`build_message`, the events). The copies on the server go through the Mailbox's `application.copies.Copies`
