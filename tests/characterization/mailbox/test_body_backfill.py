@@ -33,13 +33,16 @@ def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
     with world.server.lock:                                      # deleted elsewhere, not yet pruned here
         for r in stuck:
             world.server.mailbox(r["account"], r["folder"]).messages.pop(r["uid"])
+    began = time.time()
     for _ in range(4):                                           # backfill rounds enough to have asked for each
         mailbox.syncing.backfill_round()
+    ended = time.time()
     fetched = q("SELECT pk FROM messages WHERE body_text IS NOT NULL")
     assert {r["pk"] for r in fetched} & set(older)
     missed = dict(mailbox.syncing._backfill_missed)
     assert set(missed) == {r["pk"] for r in stuck}               # each waits its turn, once
-    assert all(one.until >= time.time() + body_backfill.NOT_GIVEN_WAIT - 60 for one in missed.values())
+    wait = body_backfill.NOT_GIVEN_WAIT
+    assert all(began + wait <= one.until <= ended + wait for one in missed.values())
 
 
 def test_hwf_backfill_asks_again_for_a_missed_body_once_its_wait_is_over(world, monkeypatch):
@@ -71,7 +74,9 @@ def test_hwf_backfill_asks_nothing_more_of_a_server_it_cant_reach(world, monkeyp
         raise ConnectionRefusedError()
     monkeypatch.setattr(ingest, "fetch_body", down)
     assert mailbox.syncing.backfill_round() == body_backfill.UNREACHABLE_REST
+    ended = time.time()
     assert len(asked) == len(mailbox.syncing._backfill_resting) == 3      # once for each account: every server is down
-    assert all(one.until <= time.time() + 60 for one in mailbox.syncing._backfill_missed.values())   # it may not be the message
+    assert all(one.until <= ended + body_backfill.UNREACHABLE_REST         # it may not be the message's fault
+               for one in mailbox.syncing._backfill_missed.values())
     assert mailbox.syncing.backfill_round() == body_backfill.UNREACHABLE_REST
     assert len(asked) == 3
