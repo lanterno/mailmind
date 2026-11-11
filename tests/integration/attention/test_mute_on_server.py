@@ -1,5 +1,6 @@
 """Muting a thread marks it read on the server too (decision D6), through the same queue as any flag
-change, and Undo marks unread again only what muting marked read."""
+change, and Undo marks unread again only what muting marked read. What Muting asks of the queue, and when it asks nothing, is
+tests/unit/attention/test_mute_on_server.py's."""
 from datetime import timedelta
 
 from fixtures import world as w
@@ -49,25 +50,6 @@ def test_muting_marks_the_unread_members_read_on_the_server(app, world):
     assert not seen_on_server(world, uid)
     commands.drain()
     assert seen_on_server(world, uid)
-
-
-def test_muting_a_thread_already_read_asks_nothing_of_the_server(app, world):
-    from mailmind.bootstrap.mailbox import store
-    lunch, uid = thread_with_a_reply(world)
-    c = store.conn()
-    c.execute("UPDATE messages SET seen=1 WHERE account=? AND thread_id=?", (w.ADA, lunch["thread_id"]))
-    c.commit()
-    c.close()
-    assert app.post("/api/mute", named(lunch)).json["ok"]
-    assert app.get("/api/pending").json["items"] == []
-
-
-def test_muting_again_queues_nothing_more(app, world):
-    lunch, uid = thread_with_a_reply(world)
-    assert app.post("/api/mute", named(lunch)).json["ok"]
-    before = len(app.get("/api/pending").json["items"])
-    assert before and app.post("/api/mute", named(lunch)).json["ok"]
-    assert len(app.get("/api/pending").json["items"]) == before
 
 
 def test_undo_marks_unread_what_muting_marked_read_and_no_more(app, world):
