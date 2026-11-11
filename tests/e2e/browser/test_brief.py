@@ -315,6 +315,24 @@ def test_your_week_is_written_when_you_open_it_and_an_item_opens(page, world, ai
     clean(page)
 
 
+def test_your_week_read_on_a_later_day_says_the_week_it_looked_back_on(page, app, world, ai):
+    from datetime import datetime, timezone
+    lunch_needs_a_reply(world)
+    assert app.post("/api/preferences", {"weekly_review": True}).status == 200
+    assert app.post("/api/review", {}).status == 200          # Monday's, as one written ahead would be
+    wednesday = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
+    app.clock.move_to(wednesday)
+    page.pw.clock.set_system_time(wednesday)
+    asked = len(ai.requests)
+    page.goto("/")
+    page.get_by_role("button", name="Your week").click()
+    panel = page.get_by_role("dialog", name="Weekly review")
+    expect(panel.locator(".rv-stats")).to_be_visible()
+    expect(panel.locator("#rvRange")).to_have_text("\u00b7 the 7 days to Monday")
+    assert len([r for r in ai.requests[asked:] if "next" in ((r.schema or {}).get("properties") or {})]) == 0
+    clean(page)
+
+
 def test_mail_landing_elsewhere_says_so_and_takes_you_there(page, world, ai):
     brief_replies(ai)
     page.goto("/")

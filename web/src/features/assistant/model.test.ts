@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DigestItem } from "../mailbox";
-import { commitments, eventWhen, meetingWhen, greeting, nameIn, needsNote, waitAge } from "./model";
+import { commitments, eventWhen, meetingWhen, greeting, nameIn, needsNote, reviewRange, waitAge } from "./model";
 
 const item = (key: number, over: Partial<DigestItem> = {}) => ({ key, folder: "INBOX", uid: key, importance: 1, needs_you: false, safe_to_file: false, commitment_worthy: false, ...over }) as DigestItem;
 
@@ -31,6 +31,17 @@ describe("the side column's words", () => {
     expect(eventWhen({ start: new Date(2026, 10, 2, 15, 0).toISOString(), all_day: false }, now)[1]).toBe("today");
     expect(eventWhen({ start: new Date(2026, 10, 2).toISOString(), all_day: true }, now)).toEqual(["Today", "all day"]);
     expect(eventWhen({ start: new Date(2026, 10, 4).toISOString(), all_day: true }, now)[1]).toBe("all day");
+  });
+  it("says a review written today looked back over the last seven days", () => {
+    expect(reviewRange(new Date(2026, 10, 2, 0, 5).toISOString(), now)).toBe("last 7 days");
+  });
+  it("says one written on an earlier day, as one written ahead on Monday is read all week, looked back to that day", () => {
+    const monday = new Date(2026, 10, 2, 7, 0);
+    const weekday = monday.toLocaleDateString(undefined, { weekday: "long" });
+    expect(reviewRange(monday.toISOString(), new Date(2026, 10, 8, 23, 0))).toBe(`the 7 days to ${weekday}`);
+  });
+  it("says the last seven days for a time that won't read", () => {
+    expect(reviewRange("", now)).toBe("last 7 days");
   });
   it("counts days waited", () => {
     const at = now.getTime() / 1000;

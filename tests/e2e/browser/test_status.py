@@ -384,6 +384,17 @@ def test_the_morning_brief_is_off_until_it_is_ticked_and_then_it_goes_in_the_fil
     clean(page)
 
 
+def test_last_weeks_review_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
+    dialog = preferences_open(page)
+    held = lambda: file_of(world).get("preferences", {})
+    box = dialog.get_by_label("Have last week\u2019s review ready each Monday")
+    expect(box).not_to_be_checked()
+    assert "weekly_review" not in held()
+    box.check()
+    until(page, lambda: held().get("weekly_review") is True, "the file holds it")
+    clean(page)
+
+
 def test_tidy_by_itself_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
     dialog = preferences_open(page)
     held = lambda: file_of(world).get("preferences", {})
