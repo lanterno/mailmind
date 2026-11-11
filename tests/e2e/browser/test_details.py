@@ -23,6 +23,14 @@ Object.defineProperty(document, "hidden", { get: () => window.away });
 Object.defineProperty(document, "visibilityState", { get: () => (window.away ? "hidden" : "visible") });
 """
 
+# The page's event stream, where a test can see it: an event published before it is open never reaches the page.
+STREAM = "window.EventSource = class extends window.EventSource { constructor(...a) { super(...a); window.stream = this; } };"
+
+
+def stream_open(page):
+    """Waits for the page's event stream (STREAM, added before the page loads) to be open, its server end listening."""
+    page.pw.wait_for_function("() => window.stream?.readyState === 1")
+
 
 def clean(page):
     assert page.problems == [], page.problems
@@ -244,10 +252,9 @@ def test_with_single_keys_off_help_still_opens(page, world):
     receipt = row(page, world, RECEIPT)
     receipt.click()
     page.keyboard.press("e")
-    page.wait_for_timeout(100)
-    expect(receipt).to_have_count(1)                            # off, as you asked
     page.keyboard.press("?")
     expect(page.locator(".legsearch")).to_contain_text("from:")
+    expect(receipt).to_have_count(1)                            # off, as you asked: the key before ? was heard first
     clean(page)
 
 
@@ -311,8 +318,7 @@ def test_a_saved_view_doesnt_offer_to_be_saved_again(page, world):
     expect(page.locator("#clientCtx")).to_be_visible()
     expect(page.locator("#clientCtx .ctx-save")).to_have_count(0)
     page.keyboard.press("v")
-    page.wait_for_timeout(100)
-    assert asked == []
+    assert asked == []                                          # a prompt holds the key until it is answered
     page.locator("#search").fill("is:unread from:lin")
     page.keyboard.press("Enter")
     expect(page.locator("#clientCtx .ctx-save")).to_be_visible()
@@ -466,7 +472,7 @@ def test_a_folder_on_a_desktop_opens_on_its_first_message_and_closing_it_stays_c
     page.keyboard.press("Escape")
     expect(first).not_to_have_class(re.compile(r"\bsel\b"))
     expect(page.locator("#reader")).to_have_text("No message selected.")
-    page.wait_for_timeout(100)
+    page.wait_for_timeout(100)      # a list read again just after would open it again; nothing on the page says one came back
     expect(first).not_to_have_class(re.compile(r"\bsel\b"))
     clean(page)
 
@@ -512,9 +518,11 @@ def test_a_meeting_about_to_start_stays_on_the_pill_when_its_notification_is_tur
 
 
 def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
+    page.pw.add_init_script(STREAM)
     opened(page)
-    sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
-    page.wait_for_timeout(200)
+    stream_open(page)
+    with page.pw.expect_request(re.compile(r"/api/(messages|inboxes)\?")):    # the list is read again: the event was heard here
+        sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
     expect(page.locator("#newPill")).to_have_count(0)     # it's on the list you're looking at
     page.locator("#search").fill("from:lin")
     page.keyboard.press("Enter")
@@ -605,7 +613,7 @@ def test_with_the_event_stream_down_the_counts_and_the_tray_are_still_read(page,
     asked = []
     page.on("request", lambda r: asked.append(r.url))
     opened(page)
-    page.wait_for_timeout(100)                                  # the stream has said it is down
+    page.heard_all_asked()                                      # what opening the page asked for, before the timers
     asked.clear()
     page.clock.run_for(21_000)
     until(page, lambda: any("/api/outbox" in u for u in asked), "the tray was never read again")
@@ -619,12 +627,13 @@ def test_with_the_event_stream_down_the_counts_and_the_tray_are_still_read(page,
 
 def test_with_the_event_stream_up_nothing_is_read_on_a_timer(page, app, world):
     asked = []
+    page.pw.add_init_script(STREAM)
     opened(page)
     expect(page.get_by_role("option").first).to_be_visible()
-    page.wait_for_timeout(300)                                  # the stream has opened
+    stream_open(page)
     page.on("request", lambda r: asked.append(r.url))
-    page.clock.run_for(46_000)
-    page.wait_for_timeout(200)
+    page.clock.run_for(46_000)                                  # each timer's read is asked for as it goes off
+    page.heard_all_asked()
     assert not any("/api/digest" in u or "/api/outbox" in u for u in asked), asked
     clean(page)
 
@@ -793,11 +802,15 @@ def test_a_first_read_that_fails_after_saying_its_reading_says_so_and_only_a_per
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
     world.server.fail("UID SEARCH", user=w.ADA, times=None)
+    read = []
+    page.on("request", lambda r: read.append(r.url) if "/api/messages?" in r.url and "folder=Junk" in r.url else None)
     with held_elsewhere(w.ADA):
         page.locator('#folderrail .frow[data-folder="Junk"]').click()
         expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…")
     expect(page.locator("#rows")).to_contain_text("Couldn’t sync this folder.")
-    page.wait_for_timeout(500)                            # a read that went round again would have logged in many times by now
+    asked = len(read)
+    page.heard_all_asked()                                # the failure is heard as the list says so: a read again would be asked by now
+    assert len(read) == asked
     assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "Junk"]) == 1
     world.server.clear_faults()
     page.locator("#rows").get_by_role("button", name="Retry").click()
@@ -815,11 +828,15 @@ def test_an_inbox_whose_first_read_fails_stops_all_inboxes_saying_its_reading_an
     finally:
         c.close()
     world.server.fail("UID SEARCH", user=w.ADA, times=None)
+    read = []
+    page.on("request", lambda r: read.append(r.url) if "/api/inboxes?" in r.url else None)
     with held_elsewhere(w.ADA):
         page.goto("/all")
         expect(page.locator("#list")).to_contain_text("reading the rest")
     expect(page.locator("#list")).not_to_contain_text("reading the rest")
-    page.wait_for_timeout(500)                            # a read that went round again would have logged in many times by now
+    asked = len(read)
+    page.heard_all_asked()                                # the failure is heard as the list says so: a read again would be asked by now
+    assert len(read) == asked
     assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "INBOX"]) == 1
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     expect(page.locator("#rows .row[data-key]").first).to_be_visible()   # what is stored stays
@@ -850,7 +867,7 @@ def test_a_tab_nobody_is_looking_at_counts_as_no_one_and_reads_what_it_missed_on
     sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
     expect(page.pw).to_have_title("(1) MailMind")                # all three have arrived
     page.clock.run_for(61_000)                                  # the digest's delay, the headline's, and a minute of timers
-    page.wait_for_timeout(300)
+    page.heard_all_asked()
     assert [p for p in asked if p.startswith("/api/") and p not in UI_QUIET] == []
     page.evaluate("window.away = false; document.dispatchEvent(new Event('visibilitychange', { bubbles: true }))")
     until(page, lambda: "/api/digest" in asked and "/api/messages" in asked, "what it missed was never read")
