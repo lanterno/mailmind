@@ -134,25 +134,13 @@ def test_a_keychain_that_wont_keep_a_password_is_said_and_the_file_is_left_as_it
     assert written(data_dir) == before
 
 
-def test_moving_plaintext_skips_one_the_keychain_cant_hold_and_leaves_it_to_be_refused(directory, data_dir, fake_keychain,
-                                                                                         capsys):
-    directory.save({"accounts": [{**ENTRY, "credential": {"plain": "café"}}, {**ENTRY, "email": BEA, "credential": "bea-password"}]})
-    assert directory.move_plaintext() == 1
-    assert stored(data_dir) == {ADA: {"plain": "café"}, BEA: {"keychain": "account:bea@example.test", "version": 1}}
-    assert fake_keychain.items() == {"account:bea@example.test": "bea-password"}
-    out = capsys.readouterr().out
-    assert out.startswith(f"  ! skip {ADA}: A secret MailMind keeps in the Keychain is printable ASCII") and "café" not in out
-    with pytest.raises(PlaintextSecret, match=f"holds {ADA}'s password in plain text"):
-        directory.refuse_plaintext()
-
-
-def test_moving_plaintext_with_a_keychain_that_wont_leaves_the_file_as_it_was(directory, data_dir, locked, capsys):
+def test_a_password_kept_for_an_account_the_file_held_one_for_ends_the_refusal(directory, data_dir, fake_keychain):
     directory.save({"accounts": [{**ENTRY, "credential": {"plain": "hunter2"}}]})
-    before = written(data_dir)
-    assert directory.move_plaintext() == 0
-    assert written(data_dir) == before
-    assert capsys.readouterr().out == (f"  ! skip {ADA}: The Keychain didn't keep the password. Is the login keychain locked?\n"
-                                       "done — 0 secret(s) now kept in the Keychain\n")
+    with pytest.raises(PlaintextSecret, match=f"accounts password {ADA}"):
+        directory.refuse_plaintext()
+    directory.set_password(ADA, "hunter2")
+    assert stored(data_dir) == {ADA: {"keychain": f"account:{ADA}", "version": 1}}
+    directory.refuse_plaintext()
 
 
 def test_a_file_that_holds_no_secret_itself_is_not_refused(directory):

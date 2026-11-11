@@ -305,14 +305,15 @@ def _plaintext_config(data_dir):
     (data_dir / "mailmind.config.json").write_text(json.dumps(raw))
 
 
-def test_serve_refuses_a_config_that_holds_a_secret_itself_and_says_how_to_move_it(data_dir, monkeypatch):
+def test_serve_refuses_a_config_that_holds_a_secret_itself_and_names_the_command_for_each(data_dir, monkeypatch):
     from mailmind.bootstrap import wiring
     _plaintext_config(data_dir)
     monkeypatch.setattr(wiring, "setup_logging", lambda: pytest.fail("the start went on past the config"))
     said = _exit(["serve", "0"])
     assert said == ("mailmind.config.json holds ada@example.test's password, bea@example.test's password and the Claude API "
-                    "key in plain text, which MailMind no longer reads. Move them to the login Keychain with "
-                    "`uv run python -m mailmind accounts move-plaintext`.")
+                    "key in plain text, which MailMind no longer reads. Keep them in the login Keychain instead: "
+                    "`uv run python -m mailmind accounts password ada@example.test`, "
+                    "`uv run python -m mailmind accounts password bea@example.test`, `uv run python -m mailmind ai key`.")
     assert "in-the-file" not in said
 
 
@@ -321,27 +322,28 @@ def test_check_fails_an_account_whose_password_the_config_holds(data_dir, capsys
     main(["check"])
     out = capsys.readouterr().out
     assert ("FAIL  ada@example.test" in out and "ada@example.test's password in plain text" in out
-            and "`uv run python -m mailmind accounts move-plaintext`" in out)
+            and "`uv run python -m mailmind accounts password ada@example.test`" in out)
     assert "in-the-file" not in out
 
 
-def test_move_plaintext_keeps_each_secret_the_config_holds_in_the_keychain(data_dir, capsys, fake_keychain):
+def test_the_commands_the_refusal_names_keep_each_secret_in_the_keychain_and_the_start_goes_on(data_dir, monkeypatch,
+                                                                                               capsys, fake_keychain):
     import json
     _plaintext_config(data_dir)
-    assert _exit(["accounts", "move-plaintext"]) == 0
-    assert capsys.readouterr().out == ("  moved ada@example.test\n  moved bea@example.test\n  moved anthropic_api_key\n"
-                                       "done — 3 secret(s) now kept in the Keychain\n")
+    for who, secret in (("ada@example.test", "ada-in-the-file"), ("bea@example.test", "bea-in-the-file")):
+        _typing(monkeypatch, secret)
+        assert _exit(["accounts", "password", who]) == 0
+    _typing(monkeypatch, "sk-ant-in-the-file")
+    assert _exit(["ai", "key"]) == 0
     assert fake_keychain.items() == {"account:ada@example.test": "ada-in-the-file", "account:bea@example.test": "bea-in-the-file",
                                      "anthropic-api-key": "sk-ant-in-the-file"}
     written = (data_dir / "mailmind.config.json").read_text()
-    raw = json.loads(written)
     assert "in-the-file" not in written
-    assert [a["credential"] for a in raw["accounts"]] == [{"keychain": "account:ada@example.test", "version": 1},
-                                                          {"keychain": "account:bea@example.test", "version": 1},
-                                                          {"env": "CY_PASSWORD"}]
-    assert raw["anthropic_api_key"] == {"keychain": "anthropic-api-key", "version": 1}
-    assert _exit(["accounts", "move-plaintext"]) == 0
-    assert capsys.readouterr().out == "done — 0 secret(s) now kept in the Keychain\n"
+    assert [a["credential"] for a in json.loads(written)["accounts"]][:2] == [
+        {"keychain": "account:ada@example.test", "version": 1}, {"keychain": "account:bea@example.test", "version": 1}]
+    capsys.readouterr()
+    main(["check"])
+    assert "FAIL  ada@example.test" not in capsys.readouterr().out
 
 
 def test_a_keychain_that_wont_answer_ends_a_command_with_its_line(monkeypatch):

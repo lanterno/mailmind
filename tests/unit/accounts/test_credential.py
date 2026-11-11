@@ -76,7 +76,7 @@ def test_an_empty_plain_is_no_credential():
     assert not isinstance(no.value, PlaintextSecret)
 
 
-MOVE = "Move it to the login Keychain with `uv run python -m mailmind accounts move-plaintext`."
+KEEP_DEE = "Keep it in the login Keychain instead: `uv run python -m mailmind accounts password dee@example.test`."
 
 
 @pytest.mark.parametrize("stored", [{"plain": "hunter2"}, "hunter2", {"op": "op://V/I/F", "plain": "hunter2"}, {"plain": 123}],
@@ -85,13 +85,14 @@ def test_a_secret_the_file_holds_itself_is_refused_saying_how_to_move_it(stored)
     assert CredentialRef.parse(stored).style == "plain"
     with pytest.raises(PlaintextSecret) as no:
         secrets.resolve(stored, who="dee@example.test")
-    assert str(no.value) == f"mailmind.config.json holds dee@example.test's password in plain text, which MailMind no longer reads. {MOVE}"
+    assert str(no.value) == f"mailmind.config.json holds dee@example.test's password in plain text, which MailMind no longer reads. {KEEP_DEE}"
 
 
 def test_a_claude_key_the_file_holds_itself_is_refused_too():
     with pytest.raises(PlaintextSecret) as no:
         secrets.resolve("sk-ant-in-the-file", who="anthropic_api_key")
-    assert str(no.value) == f"mailmind.config.json holds the Claude API key in plain text, which MailMind no longer reads. {MOVE}"
+    assert str(no.value) == ("mailmind.config.json holds the Claude API key in plain text, which MailMind no longer reads. Keep it "
+                             "in the login Keychain instead: `uv run python -m mailmind ai key`.")
 
 
 def test_plaintext_finds_each_secret_the_file_holds_itself_in_its_order():
@@ -108,8 +109,9 @@ def test_plaintext_finds_each_secret_the_file_holds_itself_in_its_order():
     assert found[0][1] is raw["accounts"][0] and found[-1][1] is raw
     assert str(PlaintextSecret([who for who, *_ in found])) == (
         "mailmind.config.json holds ada@example.test's password, cy@example.test's password, an account with no address's "
-        "password and the Claude API key in plain text, which MailMind no longer reads. Move them to the login Keychain with "
-        "`uv run python -m mailmind accounts move-plaintext`.")
+        "password and the Claude API key in plain text, which MailMind no longer reads. Keep them in the login Keychain instead: "
+        "`uv run python -m mailmind accounts password ada@example.test`, `uv run python -m mailmind accounts password "
+        "cy@example.test`, `uv run python -m mailmind accounts password <address>`, `uv run python -m mailmind ai key`.")
     assert plaintext({"accounts": "junk", "anthropic_api_key": {"keychain": "anthropic-api-key"}}) == [] == plaintext(None)
 
 
