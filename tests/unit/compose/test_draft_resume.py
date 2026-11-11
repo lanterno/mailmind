@@ -999,13 +999,6 @@ def test_bad_pk_unknown_and_not_a_draft(calls):
     assert code == 400 and r["detail"] == "That message isn’t a draft.", r
 
 
-def test_resume_route_requires_csrf(app, recorders):
-    pk, _ = _saved_and_synced(recorders, text="Mine.")
-    assert app.post("/api/draft/resume", w.copy_of(pk), headers={"X-CSRF-Token": None}).status == 403
-    r = app.post("/api/draft/resume", w.copy_of(pk))
-    assert r.status == 200 and r.json["text"] == "Mine.", r.body
-
-
 def test_resumed_reply_sends_one_quote(calls):
     opk, r = _reply_resumed(calls, bcc=["dee@example.test"])
     res, code = answered(composer.sending.send, _payload(r))

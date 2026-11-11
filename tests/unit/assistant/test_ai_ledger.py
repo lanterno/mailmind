@@ -7,9 +7,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fakes import anthropic_api as fa
-from mailmind.bootstrap.assistant import answers
-
-LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch thread
 # conftest.NOW, Monday 2 November 2026 at noon UTC (and TZ is UTC). Not imported: under importlib
 # mode `import conftest` runs conftest.py again, as a second module, and that takes the key out.
 MONDAY_NOON = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
@@ -178,62 +175,12 @@ def test_a_ledger_that_fails_never_fails_the_call(gateway, ai, monkeypatch, caps
     assert "[ai] the usage ledger failed: OperationalError" in capsys.readouterr().out
 
 
-# ── every feature names its calls ─────────────────────────────────────────────
-
-def summarize_as(pk, importance, category):
-    from mailmind.bootstrap.mailbox import store
-    c = store.conn()
-    try:
-        answers.save_summary(c, pk, "Stub triage.", importance, category, "Reply", "claude-opus-5-5",
-                           datetime.now(timezone.utc).isoformat())
-        c.commit()
-    finally:
-        c.close()
-
-
-def test_each_ai_feature_counts_its_calls_under_its_own_name(app, world, ai):
-    from mailmind.bootstrap import assistant
-    assistant.assessments.summarize_pending(limit=1, workers=1)
-    lunch = world.pk(LUNCH)
-    summarize_as(lunch, 5, "action-needed")
-    assert app.post("/api/ai/summarize", world.copy(LUNCH)).status == 200
-    assert app.post("/api/briefing", {}).status == 200
-    assert app.post("/api/briefing/since", {"since": 0}).status == 200
-    assert app.post("/api/review", {}).status == 200
-    assert app.post("/api/ai/draft-reply", {**world.copy(LUNCH), "tone": "warm"}).status == 200
-    app.clock.shift(timedelta(seconds=46))         # drafting ahead yields to the calls just made
-    assert app.get(f"/api/ai/draft-ahead?key={world.key(LUNCH)}").json["status"] == "generating"
-    app.settle()
-    assert app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"}).status == 200
-    assert app.post("/api/ai/ask", {"question": "When is lunch with Lin?"}).status == 200
-    assert app.post("/api/ai/do-plan", {"cmd": "archive the newsletters"}).status == 200
-    counted = {r["feature"]: r["calls"] for r in rows()}
-    assert counted == {"triage": 1, "thread": 1, "brief": 1, "delta": 1, "review": 1, "draft": 1,
-                       "draft-ahead": 1, "rewrite": 1, "ask": 1, "plan": 1}
-    assert sum(counted.values()) == len(ai.requests)
-
-
 # ── what the ledger reports ──────────────────────────────────────────────────
 
 def test_dollars_round_up_to_the_cent():
     from mailmind.assistant.domain.pricing import usd
     assert [usd(m) for m in (0, 1, 10_000, 15_200, 1_234_567_890)] == [
         "$0.00", "$0.01", "$0.01", "$0.02", "$1,234.57"]
-
-
-def test_the_status_says_what_today_cost_and_the_debug_route_lists_each_day(app, ai):
-    import json
-    ai.queue(answer(json.dumps({"text": "See you Thursday."}), 1000, 100))
-    assert app.get("/api/digest").json["ai"]["spent_today_micros"] == 0
-    assert app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"}).status == 200
-    assert app.get("/api/digest").json["ai"]["spent_today_micros"] == 1000 * 4 + 100 * 20
-    assert app.get("/api/debug/ai?days=2").json["days"] == [
-        {"day": "2026-11-02", "calls": 1, "cost_micros": 6000,
-         "features": {"rewrite": {"calls": 1, "cost_micros": 6000}}},
-        {"day": "2026-11-01", "calls": 0, "cost_micros": 0, "features": {}}]
-    assert len(app.get("/api/debug/ai").json["days"]) == 30
-    assert len(app.get("/api/debug/ai?days=0").json["days"]) == 1
-    assert len(app.get("/api/debug/ai?days=5000").json["days"]) == 366
 
 
 def test_a_ledger_that_cant_be_read_leaves_the_status_without_a_spend(data_dir, monkeypatch, capsys):

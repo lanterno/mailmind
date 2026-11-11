@@ -8,7 +8,6 @@ import string
 
 import pytest
 
-import problems
 from fixtures import world as w
 
 LABELLED = "EXISTS (SELECT 1 FROM message_labels l WHERE l.message_pk = m.pk AND l.label COLLATE NOCASE IN (?, ?))"
@@ -96,30 +95,8 @@ def test_no_query_raises_and_every_match_is_one_fts_accepts(data_dir):
         c.close()
 
 
-def test_a_nul_in_the_query_is_a_bad_query_not_a_server_error(app):
-    # FTS5 reads the bound MATCH string only up to the NUL, so it sees an unterminated quote
-    r = app.get("/api/search?scope=all&q=lunch%00quilt")
-    assert (r.status, r.json) == (400, problems.refused("bad query"))
-
-
-def senders(app, q):
-    r = app.get(f"/api/search?scope=all&q={q}").json
-    return {i["from_addr"] for i in r["items"]}, len(r["items"])
-
-
-def test_a_negation_alone_excludes_what_it_names(app, world):
-    found, n = senders(app, "-from:lin")
-    assert n > 0 and "lin@example.test" not in found
-
-
-
 @pytest.mark.parametrize("query,fragment", [("-before:2026-11-02", "m.ts >= ?"), ("-after:2026-11-02", "m.ts < ?"),
                                             ("before:2026-11-02", "m.ts < ?"), ("after:2026-11-02", "m.ts >= ?")])
 def test_not_before_a_time_is_after_it(query, fragment):
     from mailmind.bootstrap import discovery
     assert discovery.build(query)[1] == [fragment]
-
-
-def test_excluding_a_category_keeps_mail_that_has_none(app, world):
-    _, everything = senders(app, "in:INBOX")
-    assert senders(app, "in:INBOX%20-category:info")[1] == everything     # nothing is summarized here

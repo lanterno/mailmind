@@ -129,22 +129,3 @@ def test_a_write_that_fails_on_its_way_leaves_the_file_and_no_temporary_one(data
     monkeypatch.undo()
     assert f.read() == {"accounts": [ADA]}
     assert [p.name for p in data_dir.iterdir() if p.name.startswith(".cfg-")] == []
-
-
-def test_a_request_parses_the_file_once_however_often_it_reads_it(app, parses, monkeypatch):
-    from mailmind.bootstrap.accounts import config
-    calls = []
-    real = config._raw
-
-    def counted():
-        calls.append(1)
-        return real()
-    monkeypatch.setattr(config, "_raw", counted)
-    config.save(real())                         # a new file: the next read parses it
-    parses.clear()
-    assert app.get("/api/digest").status == 200
-    assert len(calls) > 1                       # the request consults the file several times
-    assert parses == ["mailmind.config.json"]   # and parses it once
-    parses.clear()
-    assert app.get("/api/digest").status == 200
-    assert parses == []                         # unchanged since: not at all

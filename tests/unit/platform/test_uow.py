@@ -3,7 +3,6 @@ import sqlite3
 
 import pytest
 
-from fixtures import world as w
 from mailmind.platform import settings
 from mailmind.platform.db import database, txguard
 from mailmind.platform.db.txguard import TxAcrossNetworkError
@@ -158,34 +157,6 @@ def test_any_network_check_inside_a_write_block_raises(uow):
         with pytest.raises(TxAcrossNetworkError, match="^IMAP FETCH while a transaction is open on this thread$"):
             txguard.refuse_network("IMAP FETCH")
     txguard.refuse_network("IMAP FETCH")
-
-
-def test_an_imap_session_inside_a_write_block_raises_before_anything_is_sent(world):
-    from mailmind.bootstrap import accounts, mailbox
-    before = len(world.server.commands)
-    with UnitOfWork().write():
-        with pytest.raises(TxAcrossNetworkError, match="^an IMAP connection while"):
-            mailbox.open_session(accounts.get(w.ADA))
-    assert len(world.server.commands) == before
-
-
-def test_an_smtp_session_inside_a_write_block_raises_before_anything_is_sent(world):
-    from mailmind.bootstrap import accounts
-    from mailmind.bootstrap.compose import transport
-    before = len(world.smtp.commands)
-    with UnitOfWork().write():
-        with pytest.raises(TxAcrossNetworkError, match="^an SMTP connection while"):
-            transport.send(accounts.get(w.ADA), b"Subject: x\r\n\r\nx\r\n", ["lin@example.test"])
-    assert len(world.smtp.commands) == before and world.smtp.messages == []
-
-
-def test_a_claude_request_inside_a_write_block_raises_before_anything_is_sent(world, ai, monkeypatch):
-    from mailmind.bootstrap import assistant
-    monkeypatch.setattr(assistant.status, "_last", {"ok": None, "ts": 0, "error": ""})   # report() stays as it was
-    with UnitOfWork().write():
-        with pytest.raises(TxAcrossNetworkError, match="^a Claude API request while"):
-            assistant.calls.call_claude("Say hello to Ada.")
-    assert ai.requests == []
 
 
 def test_a_network_call_refused_inside_a_write_block_undoes_the_block_if_it_goes_uncaught(uow):

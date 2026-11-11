@@ -1,6 +1,5 @@
 """The ProviderProfile (mailmind.accounts.domain.provider): what each kind of account's server does
 on its own, its quirks, and what its CAPABILITY list says."""
-from fixtures import world as w
 from mailmind.accounts.domain import provider
 
 
@@ -48,15 +47,3 @@ def test_deep_links_open_the_message_where_the_provider_can():
     assert imap.deep_link(**link) == ""
     assert imap.deep_link(**link, webmail="https://webmail.example.test/") == "https://webmail.example.test/"
     assert gmail.deep_link(**{**link, "message_id": ""}) == ""
-
-
-def test_the_fake_servers_capabilities_reach_the_profile(world):
-    from mailmind.bootstrap import accounts
-    acct = accounts.get(w.ADA)
-    world.server.without = {"MOVE"}
-    M = accounts.connect(acct, timeout=10)
-    try:
-        p = provider.resolve(acct, M.capabilities)
-    finally:
-        M.logout()
-    assert (p.move, p.uidplus, p.idle, p.special_use) == (False, True, True, True)

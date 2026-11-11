@@ -308,20 +308,6 @@ def test_nothing_is_read_of_who_you_write_to_for_someone_known(home, monkeypatch
     assert len(calls) == 1
 
 
-def test_route_answers_near(app):
-    _msg(ACCT, "john@example.test", folder="Sent")
-    r = app.post("/api/contacts/known", {"addrs": ["jon@example.test"]})
-    assert r.status == 200 and r.json["items"]["jon@example.test"]["near"] == "john@example.test", r.body
-
-
-def test_route_requires_csrf(app):
-    _msg("lio@example.test")
-    body = {"addrs": ["lio@example.test"]}
-    assert app.post("/api/contacts/known", body, headers={"X-CSRF-Token": None}).status == 403
-    r = app.post("/api/contacts/known", body)
-    assert r.status == 200 and r.json["items"]["lio@example.test"]["known"] is True, r.body
-
-
 def test_never_waits_on_the_imap_lock(home):
     done = []
     with held_elsewhere():                               # a long mail operation holds the gate

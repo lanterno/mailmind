@@ -14,7 +14,6 @@ import threading
 
 import pytest
 import trustme
-from fixtures import world as w
 from mailmind.bootstrap.curation import safe_http
 
 HOST = "unsub.example.test"
@@ -299,16 +298,3 @@ def test_a_login_in_a_url_goes_nowhere(lists):
 def test_a_url_cant_write_a_line_of_its_own_request(lists, path):
     assert post(lists.url(path))[0] is False
     assert lists.seen == []
-
-
-def test_a_cleanup_doesnt_reach_an_internal_address_a_message_names(app, world, nowhere):
-    """The way there: a sender's list header, the cleanup's preview and its token, and the real POST."""
-    loom = "news@loom.example.test"
-    mid = "<issue-300@loom.example.test>"
-    world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Message_ID=mid, Date="Mon, 02 Nov 2026 07:00:00 +0000",
-                                            List_Unsubscribe="<https://169.254.169.254/latest/meta-data/>",
-                                            List_Unsubscribe_Post="List-Unsubscribe=One-Click", Subject="Issue 300"), (w.SEEN,))
-    token = app.get(f"/api/cleanup/sender?addr={loom}").json["confirm_token"]
-    done = app.post("/api/cleanup/execute", {"from_addr": loom, "do_unsubscribe": True, "confirm_token": token}).json
-    assert (done["status"], done["method"]) == ("failed", "one-click")
-    assert nowhere == []

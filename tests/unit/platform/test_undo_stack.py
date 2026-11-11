@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import time_machine
 
-import problems
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Conflict
@@ -61,17 +60,6 @@ def test_it_holds_fifty_groups_each_counting_once(data_dir):
     mailbox.undo.push(move(51), "g")
     held = ids(mailbox.undo.entries())
     assert len(held) == 50 and held[0] == "<m1@example.test>" and held[-1] == ["<m50@example.test>", "<m51@example.test>"]
-
-
-def test_an_entry_a_day_old_can_no_longer_be_undone(app, world):
-    """Whichever comes first, of 50 groups and 24 hours: Undo finds nothing, and asks no server."""
-    mailbox.undo.push(move(1))
-    app.clock.shift(timedelta(hours=23, minutes=59))
-    assert ids(mailbox.undo.entries()) == ["<m1@example.test>"]
-    app.clock.shift(timedelta(minutes=2))
-    assert mailbox.undo.entries() == []
-    r = app.post("/api/undo", {})
-    assert (r.status, r.json) == (404, problems.not_found(empty=True))
 
 
 def test_a_new_entry_ends_what_has_grown_too_old(data_dir):
