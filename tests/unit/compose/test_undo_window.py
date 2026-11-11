@@ -34,14 +34,14 @@ def choose(world, seconds):
 def test_with_nothing_set_a_send_waits_the_default_and_says_so(app):
     r = app.post("/api/send", new()).json
     assert r["undo_seconds"] == send_window.DEFAULT == outbox.SEND_DELAY
-    assert abs(due_of(r["outbox_id"]) - (time.time() + send_window.DEFAULT)) <= 2
+    assert due_of(r["outbox_id"]) == time.time() + send_window.DEFAULT
 
 
 def test_a_chosen_window_is_what_a_send_waits_and_what_the_page_counts(app, world):
     choose(world, 30)
     r = app.post("/api/send", new()).json
     assert r["undo_seconds"] == 30
-    assert abs(due_of(r["outbox_id"]) - (time.time() + 30)) <= 2
+    assert due_of(r["outbox_id"]) == time.time() + 30
     app.clock.shift(timedelta(seconds=29))
     outbox.drain()
     assert app.post("/api/outbox/cancel", {"id": r["outbox_id"]}).status == 200      # still undoable just before its end
@@ -74,4 +74,4 @@ def test_an_rsvp_tells_the_page_the_same_window(app, world):
     choose(world, 20)
     r = app.post("/api/invite/rsvp", {**world.copy("ada-inbox-06-outlook-invite.eml"), "decision": "accept"}).json
     assert r["undo_seconds"] == 20
-    assert abs(due_of(r["outbox_id"]) - (time.time() + 20)) <= 2
+    assert due_of(r["outbox_id"]) == time.time() + 20
