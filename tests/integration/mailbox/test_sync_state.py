@@ -1,9 +1,6 @@
 """Sync's bookkeeping against the world's fake server: the per-folder watermark, how much of a
-folder its scans have read, the UIDVALIDITY reset, the flags of stored mail read again, ingest_message (Undo's one-message re-ingest), and the
-guards that keep reconcile from
-pruning live mail. Reconcile prunes INBOX rows whose UID the server no longer has; every guard
-here exists because a wrong prune deletes real mail from the local view, and incremental sync,
-which only looks above the watermark, never brings it back.
+folder its scans have read, the UIDVALIDITY reset, the flags of stored mail read again, and ingest_message (Undo's
+one-message re-ingest). What reconcile may prune is the unit half's (tests/unit/mailbox/test_sync_state.py).
 """
 import pytest
 
@@ -241,97 +238,3 @@ def test_a_uidvalidity_change_drops_the_folder_and_resyncs_it_whole(world):
     assert watermark() == len(after)
     for r in q("SELECT message_id, thread_id FROM messages WHERE account=? AND folder='INBOX'", w.ADA):
         assert r["thread_id"] == thread[r["message_id"]]     # thread ids come from Message-IDs, not UIDs
-
-
-# ── reconcile ────────────────────────────────────────────────────────────
-
-def gone(world, name):
-    """Another client deletes `name` from the server."""
-    with world.server.lock:
-        world.server.mailbox(*world.placed[name][:2]).messages.pop(world.uid(name))
-
-
-def test_reconcile_prunes_what_the_server_lost_and_stamps_the_rest(world):
-    from mailmind.bootstrap.mailbox import reconciler
-    gone(world, "ada-inbox-04-ci.eml")
-    before = inbox()
-    res = reconciler.reconcile_account(acct())
-    assert {k: res[k] for k in ("stored", "live", "ghosts", "pruned", "error")} == {
-        "stored": len(before), "live": len(before) - 1, "ghosts": 1, "pruned": 1, "error": None}
-    assert world.where("ada-inbox-04-ci.eml")["db"] == []
-    assert {r["verified"] for r in q("SELECT verified FROM messages WHERE account=? AND folder='INBOX'", w.ADA)} == {1}
-
-
-def test_a_dry_run_counts_the_ghosts_and_changes_nothing(world):
-    from mailmind.bootstrap.mailbox import reconciler
-    gone(world, "ada-inbox-04-ci.eml")
-    before = inbox()
-    res = reconciler.reconcile_account(acct(), dry_run=True)
-    assert (res["ghosts"], res["pruned"]) == (1, 0)
-    assert inbox() == before
-
-
-def test_reconcile_never_lowers_the_watermark(world):
-    from mailmind.bootstrap.mailbox import ingest
-    from mailmind.bootstrap.mailbox import reconciler
-    uid = world.server.deliver(w.ADA, "INBOX", late())
-    ingest.sync_new(acct())
-    with world.server.lock:
-        world.server.mailbox(w.ADA, "INBOX").messages.pop(uid)
-    assert reconciler.reconcile_account(acct())["pruned"] == 1
-    assert watermark() == uid
-
-
-@pytest.mark.parametrize("trouble", ["a refused SEARCH", "a dropped connection", "a refused EXAMINE"])
-def test_reconcile_never_prunes_when_the_server_misbehaves(world, trouble):
-    from mailmind.bootstrap.mailbox import reconciler
-    gone(world, "ada-inbox-04-ci.eml")
-    before = inbox()
-    if trouble == "a refused SEARCH":
-        world.server.fail("UID SEARCH", user=w.ADA)
-    elif trouble == "a dropped connection":
-        world.server.drop("UID SEARCH", user=w.ADA)
-    else:
-        world.server.fail("EXAMINE", user=w.ADA)          # reconcile selects read-only
-    res = reconciler.reconcile_account(acct())
-    assert res["error"] and res["pruned"] == 0
-    assert inbox() == before
-
-
-def test_reconcile_never_prunes_across_a_uidvalidity_change(world):
-    from mailmind.bootstrap.mailbox import reconciler
-    before = inbox()
-    world.server.renumber(w.ADA, "INBOX")
-    res = reconciler.reconcile_account(acct())
-    assert "UIDVALIDITY changed" in res["error"] and res["pruned"] == 0
-    assert inbox() == before
-
-
-def test_an_empty_search_against_a_stored_inbox_prunes_only_when_forced(world):
-    from mailmind.bootstrap.mailbox import reconciler
-    before = inbox()
-    with world.server.lock:
-        world.server.mailbox(w.ADA, "INBOX").messages.clear()
-    res = reconciler.reconcile_account(acct())
-    assert res["error"].startswith("empty SEARCH") and res["pruned"] == 0
-    assert inbox() == before
-    assert reconciler.reconcile_account(acct(), force=True)["pruned"] == len(before)
-    assert inbox() == []
-
-
-def test_mail_a_sync_stores_while_reconcile_runs_survives_it(world, monkeypatch):
-    from mailmind.bootstrap.mailbox import reconciler
-    from mailmind.bootstrap.mailbox import store
-    real = store.get_uidvalidity
-    landed = []
-
-    def sync_lands_after_the_search(c, account, folder):     # what reconcile asks next, before its write lock
-        if not landed:
-            landed.append(True)
-            world.deliver(w.ADA, "INBOX", late())   # the 300 s sync passes no IMAP gate
-        return real(c, account, folder)
-
-    monkeypatch.setattr(store, "get_uidvalidity", sync_lands_after_the_search)
-    reconciler.reconcile_account(acct())
-    assert landed
-    assert NEW in [m for _, m in inbox()]
