@@ -35,6 +35,14 @@ export function meetingWhen(e: Pick<Upcoming, "start" | "all_day">): string {
   return e.all_day ? `${day}, all day` : `${day}, ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }).toLowerCase()}`;
 }
 
+// What a weekly review looked back on, beside its title: the last seven days when it was written today, and else the seven days
+// up to the day it was written, as one written ahead on Monday morning is read all week.
+export function reviewRange(generated: string, now: Date): string {
+  const written = new Date(generated);
+  if (Number.isNaN(written.getTime()) || written.toDateString() === now.toDateString()) return "last 7 days";
+  return `the 7 days to ${written.toLocaleDateString(undefined, { weekday: "long" })}`;
+}
+
 export function waitAge(ts: number, now: Date): string {
   const days = Math.floor((now.getTime() / 1000 - (ts || 0)) / 86400);
   return days < 1 ? "today" : days === 1 ? "1 day" : `${days} days`;

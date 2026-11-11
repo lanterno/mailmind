@@ -3,12 +3,13 @@ import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, refusalOf } from "../../lib/api/client";
 import { copyId, copyOf } from "../../lib/copy";
+import { minute } from "../../lib/clock";
 import { createStore } from "../../lib/store";
 import { Icon } from "../../lib/ui/Icon";
 import { filing } from "../mailbox";
 import type { Mailbox } from "../mailbox";
 import { useReview, type Review } from "./data";
-import { COMMIT_CAP, commitments, meetingWhen } from "./model";
+import { COMMIT_CAP, commitments, meetingWhen, reviewRange } from "./model";
 import { dueWords, localDay } from "./fields";
 import { useTaskChanges, useTasks, type Task } from "./tasks";
 import { useLayer } from "../../lib/backTrap";
@@ -160,6 +161,7 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
 
 function YourWeek({ m }: { m: Mailbox }) {
   const { review, loading, error, again } = useReview(true);
+  const now = new Date(minute.useValue());
   let body: React.ReactNode = null;
   if (loading) body = <div className="rv-load"><span className="spin">↻</span> Looking back over your week…</div>;
   else if (error instanceof ApiError && error.aiOff) body = <div className="rv-err">AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.</div>;
@@ -169,7 +171,7 @@ function YourWeek({ m }: { m: Mailbox }) {
   return (
     <>
       <div className="commit-hd">
-        <Icon name="cal" /> Your week <span className="sub" id="rvRange">{review ? "· last 7 days" : ""}</span>
+        <Icon name="cal" /> Your week <span className="sub" id="rvRange">{review ? `· ${reviewRange(review.generated, now)}` : ""}</span>
         <button className="btn-retry" id="rvRerun" title="Regenerate" aria-label="Regenerate" style={{ marginLeft: 8 }} onClick={again}>↻</button>
       </div>
       <div className="rv-scroll" id="rvBody">{body}</div>

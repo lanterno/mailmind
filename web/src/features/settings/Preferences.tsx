@@ -90,6 +90,8 @@ export function PreferencesForm() {
         <div className="set-help">Once a day’s AI has cost this much, background work stops and MailMind asks before spending more.</div>
         <Check checked={p.morning_brief} onChange={(morning_brief) => setPrefs({ morning_brief })}>Have today’s brief ready each morning</Check>
         <div className="set-help">Written before you open your Inbox, within the daily limit, and only if you’ve used MailMind in the last two days.</div>
+        <Check checked={p.weekly_review} onChange={(weekly_review) => setPrefs({ weekly_review })}>Have last week’s review ready each Monday</Check>
+        <div className="set-help">Written on Monday morning, within the daily limit, and only if you’ve used MailMind in the last two days. Your week shows it until the next Monday, and ↻ there writes a new one.</div>
         <Check checked={p.auto_tidy} onChange={(auto_tidy) => setPrefs({ auto_tidy })}>File low-priority mail by itself, once a day</Check>
         <div className="set-help">Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.</div>
       </div>
