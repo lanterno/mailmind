@@ -1,5 +1,6 @@
 """Filing a whole conversation (/api/thread/archive and /api/thread/trash): which messages it takes,
-one Undo for all of them, and what a failure leaves, on the fake IMAP server."""
+one Undo for all of them, and what a failure leaves, on the fake IMAP server. A message with no thread, every message
+accepted before the first try, and a try that raises are the unit half's (tests/unit/mailbox/test_thread_filing.py)."""
 import pytest
 
 import problems
@@ -9,7 +10,6 @@ LUNCH = "ada-inbox-01-lunch.eml"
 CONFIRM = "ada-inbox-02-lunch-confirm.eml"
 REPLY = "ada-sent-01-lunch-reply.eml"
 RECEIPT = "ada-inbox-05-receipt.eml"
-CI = "ada-inbox-04-ci.eml"
 CLIENT = "bea-inbox-01-client.eml"
 
 
@@ -62,15 +62,6 @@ def test_any_message_can_anchor_the_conversation(app, world):
     copies = in_order([world.copy(LUNCH), world.copy(CONFIRM)])
     r = app.post("/api/thread/trash", world.copy(LUNCH)).json
     assert in_order(r["filed"]) == copies
-
-
-def test_a_message_without_a_thread_is_a_conversation_of_one(app, world):
-    set_thread(world, RECEIPT, None)
-    set_thread(world, CI, "")
-    copy = world.copy(RECEIPT)
-    r = app.post("/api/thread/archive", copy).json
-    assert (r["filed"], r["count"]) == ([copy], 1)
-    assert boxes(world, RECEIPT) == ["Archive"] and boxes(world, CI) == ["INBOX"]
 
 
 def test_the_trash_route_uses_trash(app, world):
@@ -161,18 +152,6 @@ def restart():
     c.close()
 
 
-def test_the_whole_conversation_leaves_the_lists_before_the_first_try(app, world, monkeypatch):
-    from mailmind.bootstrap.mailbox import server_ops
-    real, listed = server_ops.apply, []
-
-    def looks(row, first_try=False, **kw):
-        listed.append([world.where(n)["db"] for n in (LUNCH, CONFIRM)])
-        return real(row, first_try, **kw)
-    monkeypatch.setattr(server_ops, "apply", looks)
-    assert app.post("/api/thread/archive", world.copy(CONFIRM)).json["count"] == 2
-    assert listed[0] == [[], []]
-
-
 def test_a_crash_while_accepting_leaves_all_of_it_as_it_was(world, monkeypatch):
     from mailmind.bootstrap import mailbox
     real, pushed = mailbox.undo.push_within, []
@@ -206,24 +185,6 @@ def test_a_crash_in_the_first_try_leaves_the_rest_for_the_next_start(world, monk
     restart()
     mailbox.commands.drain()
     assert [r["state"] for r in commands()] == ["done", "done"]
-    assert boxes(world, LUNCH) == ["Archive"] and boxes(world, CONFIRM) == ["Archive"]
-
-
-def test_a_try_that_raises_leaves_it_queued_and_the_rest_still_go(world, monkeypatch):
-    from mailmind.bootstrap import mailbox
-    real, tried = mailbox.server_ops.apply, []
-
-    def first_breaks(row, first_try=False, **kw):
-        tried.append(row["message_id"])
-        if len(tried) == 1:
-            raise RuntimeError("something nobody expected")
-        return real(row, first_try, **kw)
-    monkeypatch.setattr(mailbox.server_ops, "apply", first_breaks)
-    r = mailbox.filing.do_thread_file("/api/thread/archive", {"pk": world.pk(CONFIRM)})
-    assert (r["ok"], r["count"], r["failed"], r["queued"], r["undoable"]) == (True, 2, 0, 1, True)
-    assert len(set(tried)) == 2
-    assert sorted(x["state"] for x in commands()) == ["done", "queued"]     # nothing left to wait for a restart
-    mailbox.commands.drain()
     assert boxes(world, LUNCH) == ["Archive"] and boxes(world, CONFIRM) == ["Archive"]
 
 
