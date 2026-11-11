@@ -1,5 +1,6 @@
 """A login its server refused (CredentialsRejected, accounts.logins): nothing the app does sends it again until its hold
 ends, the account changes or someone asks."""
+import time
 from datetime import timedelta
 
 import pytest
@@ -8,6 +9,7 @@ from fixtures import world as w
 from mailmind.accounts.domain.events import CredentialsRejected
 from mailmind.accounts.domain.login_hold import FIRST, LONGEST
 from mailmind.bootstrap import accounts, mailbox
+from mailmind.mailbox.application import syncing as syncing_module
 from mailmind.platform import bus
 
 REFUSED = "NO [AUTHENTICATIONFAILED] invalid credentials"
@@ -34,7 +36,18 @@ def who(request):
     return request.param
 
 
-def test_whoever_asks_a_refused_login_goes_once(app, world, who):
+class _NoPacing:
+    """The `time` module inside the Mailbox's Syncing, but the backfill's pause between fetches returns at once."""
+
+    def sleep(self, _seconds):
+        pass
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+def test_whoever_asks_a_refused_login_goes_once(app, world, who, monkeypatch):
+    monkeypatch.setattr(syncing_module, "time", _NoPacing())     # the other accounts' bodies come in without 1.5 s between them
     world.server.fail("LOGIN", REFUSED, user=who, times=None)
     acct, before = accounts.get(who), logins(world, who)
     sync(who)
