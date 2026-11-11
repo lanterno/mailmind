@@ -222,6 +222,9 @@ def test_with_no_accounts_the_welcome_offers_settings(page, world):
     expect(page.locator(".firstrun .fr-h")).to_have_text("Welcome to MailMind")
     page.locator("#frAdd").click()
     expect(page.locator("#setClose")).to_be_visible()
+    # Settings asks for the digest again as it opens. The answer this test's route is still fetching for it is let finish:
+    # cut off by the page closing, it fails the next test as that one opens its page.
+    page.pw.unroute_all(behavior="wait")
     clean(page)
 
 
