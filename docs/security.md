@@ -67,3 +67,34 @@ document too, or the frame would show a browser's error page. The document holds
 (`mailDoc.lookOf`) as soon as it is parsed, folds a plain mail's quote and takes its link clicks through `contentDocument`, so a
 reading setting fetches nothing. Load images is a new frame on `images=1`, since moving a loaded frame would add a history entry.
 The composer's quote (`QuoteFrame`) is a srcdoc with an empty `sandbox`, which inherits the page's policy.
+
+## At rest
+
+The database is encrypted on disk. Its driver is SQLCipher's build of SQLite (the `sqlcipher3` package, which only
+`mailmind.platform.db.driver` imports, as import-linter holds), and it encrypts every page of `mailmind.db` and of its
+write-ahead log with AES-256, each page with an HMAC, so a page changed on disk fails to read rather than reading
+wrong. Backups, the upgrade check's copy and a database export are encrypted with the same key. Nothing in the package
+takes the standard library's `sqlite3` (`tests/unit/test_architecture.py`), which reads no encrypted file.
+
+The key (`platform.db.key`) is 32 random bytes, one for the computer, kept in the login Keychain as a generic password
+(service `mailmind`, account `database-key`). The first start that makes a database makes it, and so does `db encrypt`
+for a database from before. A connection takes it raw (`PRAGMA key = "x'…'"`), so no passphrase is stretched: the key
+is random, and opening one costs nothing. MailMind reaches the Keychain only through `/usr/bin/security`, hands it a new
+key on standard input, never on a command line another program can read, and never replaces one the Keychain holds,
+since a database made with that one could no longer be read. MailMind writes the key to no file, log or terminal.
+`MAILMIND_DB_KEY` (64 hex digits) stands in for the Keychain: for the tests, the demo, which makes a key for each run,
+and a computer with no Keychain.
+
+A database still plaintext is refused (`database.NotEncrypted`), never opened as it is, with what to run: `db encrypt
+--dry`, which tries it on a copy and changes nothing, then `db encrypt` with MailMind stopped, which checks each
+encrypted copy (rows per table, integrity, foreign keys, the search index, the schema version) before it puts it in
+place of the database or a backup. A key that doesn't fit opens nothing (`database.KeyDoesNotFit`), and a Keychain that
+won't answer stops the start (`key.KeyProblem`), each with a line that says so and no traceback.
+
+What it protects: the mail wherever the file goes without the Keychain, in a copy of the disk or the data directory, a
+sync folder, a support bundle or a backup, from another user of the computer and from a disk taken out of it. What it
+doesn't: code running as you, which can ask the Keychain as MailMind does, or a login keychain whose password is
+known. The free blocks a plaintext database left on disk before `db encrypt` are out of its reach; FileVault covers
+those, and is worth turning on. The other files in the data directory are still plaintext and readable by you only:
+`mailmind.config.json`, whose passwords can live in 1Password or the environment instead, the rules, views and
+snippets files, the audit trails, and the log, which holds no address or subject.

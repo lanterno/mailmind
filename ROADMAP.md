@@ -57,10 +57,6 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
 These are carried forward from the original phase plan because they need a call, not an
 implementation.
 
-- **At-rest encryption for `mailmind.db`** — the DB now holds full bodies and attachments, which
-  materially raises its value. Current posture is gitignored, with no encryption anywhere in the
-  tree; the database, config, rules, views, snippets, log and backups are owner-only. SQLCipher was postponed on 2026-11-03.
-  The question is whether that posture stays acceptable for a single-user localhost machine or becomes opt-in encryption.
 - **How aggressively to prefetch folders** — on-demand sync bounds disk and first-sync cost, but
   unified-inbox-across-accounts and global search both want broader coverage.
 - **Where the data directory lives by default** — `MAILMIND_HOME` names one, and unset it is the repo
@@ -72,3 +68,7 @@ implementation.
 
 1. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
+2. **Keep the rest of what is personal in the encrypted database** (high) — the database is encrypted, and the rules, views,
+   snippets and audit trails are still files beside it, readable by their owner only. Moved into tables, a copy of the data
+   directory holds nothing readable without the Keychain's key. Accounts' inline passwords in `mailmind.config.json` (the
+   `plain` credential) would go to the Keychain on the same road.

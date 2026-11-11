@@ -473,12 +473,17 @@ automatically.
 
 ### Data ownership & trust
 
-- **One-click local backup** of your whole mailbox as a consistent `.db` snapshot from
+- **Your mail is encrypted on disk.** The database, its log, its backups and a database export are encrypted with
+  SQLCipher (AES-256), with a key MailMind makes once and keeps in your login Keychain, so a copy of the file, in a backup
+  of the disk, a sync folder or anyone else's hands, can't be read without it. Every other file MailMind writes, an export
+  included, is readable by you only. A database from before encryption is refused until
+  `uv run python -m mailmind db encrypt` encrypts it (`--dry` tries it on a copy first).
+- **One-click local backup** of your whole mailbox as a consistent `.db` snapshot, encrypted as the database is, from
   Settings, or a zip of lossless per-message `.eml` files or standard `mbox` archives, there
   or from the command line (`uv run python -m mailmind export --format eml --out DIR`). Read-only — it never
   touches IMAP.
 - **Upgrades can't cost you mail.** Before a new version changes the database's layout, MailMind
-  backs it up beside it (the newest three kept, readable only by you), and each step of the change
+  backs it up beside it (the newest three kept, encrypted and readable only by you), and each step of the change
   lands whole or not at all. `uv run python -m mailmind db check-upgrade` tries the next upgrade on a copy
   first and reports only row counts and integrity checks, never a message.
 - **The page asks no other host for anything** until you load a message's images. Its fonts are served from the
@@ -547,6 +552,8 @@ automatically.
 ## Prerequisites
 
 - **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14.
+- **macOS**, whose login Keychain keeps the key the database is encrypted with. Elsewhere, set `MAILMIND_DB_KEY` to
+  64 hex digits of your own (`openssl rand -hex 32`) and keep them safe: they are the only way into the database.
 - **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the six packages the
   server and every command run on, FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and
   recurring-ical-events, from `pyproject.toml` on first run. Every command is
@@ -723,21 +730,29 @@ in `mailmind.config.json`; a variable that is set decides over the file.
 
 In the repo folder, or in the directory `MAILMIND_HOME` names:
 
-- `mailmind.db` — SQLite store of messages, bodies, attachments + summaries.
+- `mailmind.db` — SQLite store of messages, bodies, attachments + summaries, encrypted with the key in your login
+  Keychain (the item `mailmind`). Keep a copy of that key somewhere safe, such as 1Password: without it neither the
+  database nor its backups can be read on another computer. `security find-generic-password -s mailmind -a
+  database-key -w` prints it.
 - `mailmind_snippets.json` — your saved snippets, written whole, readable by you only.
 - `mailmind_rules.json` — your learned keep/block lists, expiry rules and filters. It's written whole or
   not at all, readable by you only. A hand edit that breaks it leaves the rules last read in
   force, and the next save keeps the broken copy in `backups/`.
 - `mailmind_views.json` — your saved searches / smart-folder lanes.
-- `sweep_audit.jsonl` / `reconcile_audit.jsonl` — audit trails.
+- `sweep_audit.jsonl` / `reconcile_audit.jsonl` — audit trails, readable by you only.
 - `mailmind.log` (and `.1` to `.3`, older) — what the app said of its own running, one JSON object a
   line, readable by you only. It holds ids, counts and the kinds of error, never an address or a subject.
-- `backups/` — the database as it stood before each upgrade (the newest three, readable by you
+- `backups/` — the database as it stood before each upgrade (the newest three, encrypted and readable by you
   only), and any rules file that wouldn't parse.
 - `mailmind.config.json` — your accounts + credentials.
 
 All of the above are in `.gitignore`, and a `MAILMIND_HOME` outside the repo keeps them out of
 it altogether. **Nothing personal is committed.**
+
+**Coming from a version before encryption?** MailMind won't open a plaintext database. Stop it, then run
+`uv run python -m mailmind db encrypt --dry` (it tries the encryption on a copy and shows only counts and checks), then
+`uv run python -m mailmind db encrypt`, which encrypts the database and its backups, each checked before it replaces
+one. Encryption doesn't reach what the plaintext file left in free space on the disk; FileVault does.
 
 ## Testing
 

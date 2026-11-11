@@ -31,6 +31,7 @@ uv run python -m mailmind sweep --dry   # what a junk sweep would trash; also st
 uv run python -m mailmind export        # what an export would hold; `--format eml|mbox|db --out DIR` writes it
 uv run python -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
 uv run python -m mailmind db compact         # owner only, MailMind stopped: give back the room freed in the file
+uv run python -m mailmind db encrypt --dry   # owner only: encrypting a plaintext database, tried on a copy; then without --dry
 uv run python -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
 uv run python -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
@@ -85,6 +86,9 @@ The docs below say why. These are the ones a change can break without noticing:
   value can never be a person's.
 - **The database.** A use case holds no SQL and gets a `UnitOfWork`, one connection a block. No transaction stays open across a network
   call: commit first, and a new network path calls `txguard.refuse_network`.
+- **The database is encrypted.** Open a database file only through `platform.db.database` (`connect`, or `keyed` for a copy), and take
+  SQLite's names from `platform.db.driver`, never the standard library's `sqlite3`, which reads no encrypted file and whose errors no
+  `except` of the driver's catches. A new file holding mail is a database keyed the same way, never a plaintext one beside it.
 - **Migrations are append-only.** A schema change is a new file after the last. Never edit the frozen `migrations/m0001_m0020.py` and the
   copies beside it, never renumber or delete one. Rename `tests/golden/schema_v<N>.sql` in the commit that adds migration N.
 - **Identity.** `pk` is not stable. Durable state keys on the message key, and the API names no pk: a copy is key, folder and uid.

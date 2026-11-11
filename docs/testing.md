@@ -50,10 +50,14 @@ They pin today's behaviour ahead of the refactor. Each test sees only fictional
 data (`example.test` addresses) in a temp directory. `tests/conftest.py` sets that up before any
 MailMind module loads:
 
-- It removes any Claude key and any `MAILMIND_HOME` from the environment and sets `TZ=UTC`.
+- It removes any Claude key and any `MAILMIND_HOME` from the environment and sets `TZ=UTC`. It sets `MAILMIND_DB_KEY` to
+  the test key (`TEST_DB_KEY`), so every database a test or a program it starts makes is encrypted, and none asks the
+  Keychain. A test opens a database file with `database.keyed(path)` and takes SQLite's names from `platform.db.driver`:
+  the standard library's `sqlite3` reads no encrypted file, and is for a test that writes a plaintext one on purpose.
 - It installs the tripwire in `tests/support/guard.py`. The tripwire refuses the real data files (at the
   repo root, and in the directory `MAILMIND_HOME` named), any non-loopback host, and the
-  `claude`, `op` and `security` programs. A test that trips it fails.
+  `claude`, `op` and `security` programs. A test that trips it fails. It also wraps SQLCipher's `connect`, which raises no
+  audit event as the standard library's does.
 
 The fixtures, from the bottom up:
 
