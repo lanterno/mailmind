@@ -40,10 +40,6 @@ class Job:
     _wake: threading.Event = field(default_factory=threading.Event, repr=False)
 
 
-def _daemon(target):
-    threading.Thread(target=target, name=getattr(target, "__name__", None), daemon=True).start()
-
-
 class Scheduler:
     def __init__(self, clock=time.time):
         self._jobs: dict[str, Job] = {}
@@ -59,9 +55,9 @@ class Scheduler:
     def names(self) -> list[str]:
         return list(self._jobs)
 
-    def start(self, spawn: Callable[[Callable[[], None]], None] = _daemon) -> None:
-        """Start each job's lane, named job:<name>; `spawn(target)` runs it, by default on a
-        daemon thread of that name."""
+    def start(self, spawn: Callable[[Callable[[], None]], None]) -> None:
+        """Start each job's lane, named job:<name>; `spawn(target)` runs it (wiring.start's, on a
+        daemon thread of that name)."""
         for job in self._jobs.values():
             def lane(job=job):
                 self._lane(job)
