@@ -7,8 +7,9 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.compose import outbox
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap import compose
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 from mailmind.platform.db.migrations import m0044_outbox_original_key
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
@@ -42,8 +43,8 @@ def reply(app, pk, key="k-reply"):
 
 
 def goes_out(app):
-    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
-    outbox.drain()
+    app.clock.shift(timedelta(seconds=compose.outbox.SEND_DELAY + 1))
+    compose.outbox.drain()
 
 
 def another_message_takes(pk, other):
@@ -99,7 +100,7 @@ def test_a_renumbered_original_is_answered_and_followed_up_on_the_row_it_has_now
     original = world.row(LUNCH)
     reply(app, original["pk"])
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     now = world.row(LUNCH)
     assert now["pk"] != original["pk"]
     goes_out(app)

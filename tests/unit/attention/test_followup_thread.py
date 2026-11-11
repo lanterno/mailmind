@@ -4,7 +4,8 @@ import time
 
 from fixtures import world as w
 from mailmind.bootstrap import accounts, attention
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # the newest of Ada's lunch thread that isn't hers
 
@@ -52,6 +53,6 @@ def test_a_nudge_outlasts_a_renumber_of_the_row_it_began_from(app, world):
     original = world.row(LUNCH)
     nudge_on(original["thread_id"])
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     assert world.pk(LUNCH) != original["pk"]
     assert listed(app, "__waiting__") == [newest_of(original["thread_id"])]

@@ -2,7 +2,8 @@
 from fixtures import world as w
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap import discovery
-from mailmind.bootstrap.mailbox import commands, ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 NEWS = "ada-inbox-03-newsletter.eml"
@@ -43,7 +44,7 @@ def test_new_mail_that_fits_is_starred_and_the_server_hears(app, world):
     uid = world.deliver(w.ADA, "INBOX", a_lunch(1))
     assert stored(uid)["flagged"] == 1                                       # here at once, in the sync
     assert w.FLAGGED not in on_server(world, uid)
-    commands.drain()
+    mailbox.commands.drain()
     assert w.FLAGGED in on_server(world, uid)
     assert w.SEEN not in on_server(world, uid) and stored(uid)["seen"] == 0
 
@@ -52,7 +53,7 @@ def test_mark_read_reaches_the_server(app, world):
     filter_on(app, "from:lin@example.test", read=True)
     uid = world.deliver(w.ADA, "INBOX", a_lunch(1))
     assert stored(uid)["seen"] == 1
-    commands.drain()
+    mailbox.commands.drain()
     assert w.SEEN in on_server(world, uid) and stored(uid)["flagged"] == 0
 
 
@@ -61,7 +62,7 @@ def test_two_filters_are_one_change(app, world):
     filter_on(app, "subject:lunch", read=True)
     uid = world.deliver(w.ADA, "INBOX", a_lunch(1))
     assert len(waiting()) == 1
-    commands.drain()
+    mailbox.commands.drain()
     assert {w.SEEN, w.FLAGGED} <= set(on_server(world, uid))
 
 
@@ -98,7 +99,7 @@ def test_mail_that_doesnt_fit_asks_nothing(app, world):
     since = world.mark()
     uid = world.deliver(w.ADA, "INBOX", a_lunch(1))
     assert stored(uid)["flagged"] == 0 and waiting() == []
-    commands.drain()
+    mailbox.commands.drain()
     assert world.writes(since) == []
 
 
@@ -107,7 +108,7 @@ def test_flags_it_came_with_ask_nothing(app, world):
     since = world.mark()
     uid = world.deliver(w.ADA, "INBOX", a_lunch(1), flags=(w.SEEN, w.FLAGGED))
     assert waiting() == []
-    commands.drain()
+    mailbox.commands.drain()
     assert world.writes(since) == [] and stored(uid)["flagged"] == 1
 
 
@@ -126,7 +127,7 @@ def test_another_folder_isnt_arrival(app, world):
 def test_a_whole_scan_reads_what_was_already_there(app, world):
     filter_on(app, "from:lin@example.test", star=True)
     uid = world.server.deliver(w.ADA, "INBOX", a_lunch(1))
-    ingest.sync_folder(accounts.get(w.ADA), "INBOX", full=True)
+    mailbox.ingest.sync_folder(accounts.get(w.ADA), "INBOX", full=True)
     assert stored(uid)["flagged"] == 0 and waiting() == []
 
 
@@ -143,9 +144,9 @@ def test_a_message_brought_back_by_undo_isnt_new(app, world):
     filter_on(app, "from:lin@example.test", star=True)
     key = stored(uid)["message_key"]
     assert app.post("/api/archive", {"key": key, "folder": "INBOX", "uid": uid}).status == 200
-    commands.drain()
+    mailbox.commands.drain()
     assert app.post("/api/undo", {}).status == 200
-    commands.drain()
+    mailbox.commands.drain()
     c = store.conn()
     try:
         rows = c.execute("SELECT * FROM messages WHERE account=? AND message_key=?", (w.ADA, key)).fetchall()
@@ -157,7 +158,7 @@ def test_a_message_brought_back_by_undo_isnt_new(app, world):
 def test_a_later_sync_doesnt_take_the_mark_back(app, world):
     filter_on(app, "from:lin@example.test", star=True)
     uid = world.deliver(w.ADA, "INBOX", a_lunch(1))
-    ingest.sync_new(accounts.get(w.ADA))                                     # the server still says unflagged
+    mailbox.ingest.sync_new(accounts.get(w.ADA))                                     # the server still says unflagged
     assert stored(uid)["flagged"] == 1 and len(waiting()) == 1
 
 
@@ -166,8 +167,8 @@ def test_read_only_marks_it_here_and_the_server_waits(app, world, monkeypatch):
     uid = world.server.deliver(w.ADA, "INBOX", a_lunch(1))
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
     since = world.mark()
-    ingest.sync_new(accounts.get(w.ADA))
-    commands.drain()
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
+    mailbox.commands.drain()
     assert world.writes(since) == []
     assert stored(uid)["flagged"] == 1 and len(waiting()) == 1
 
@@ -185,7 +186,7 @@ def test_a_filter_that_cant_be_judged_stops_no_sync(app, world, monkeypatch):
 
 def test_the_worker_is_woken(app, world, monkeypatch):
     woken = []
-    monkeypatch.setattr(commands, "kick", lambda: woken.append(1))
+    monkeypatch.setattr(mailbox.commands, "kick", lambda: woken.append(1))
     filter_on(app, "from:lin@example.test", star=True)
     world.deliver(w.ADA, "INBOX", a_lunch(1))
     assert woken

@@ -6,7 +6,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap.compose import book
-from mailmind.bootstrap.compose import composing
+from mailmind.bootstrap import compose
 from stored_rows import A, rows
 
 
@@ -57,7 +57,7 @@ def test_hwf_a_draft_saved_with_the_fold_goes_out_without_it(world):
                            None, "sha")
     c.commit()
     c.close()
-    spec, _, _ = composing.spec({"account": A, "mode": "reply", "to": ["lin@example.test"], "subject": "Re: Lunch",
+    spec, _, _ = compose.composing.spec({"account": A, "mode": "reply", "to": ["lin@example.test"], "subject": "Re: Lunch",
                                        "text": "Great", "draft_id": did,
                                        "resume": {"tail_text": "\n\nOn Sunday:\n> lunch?\n"}})
     assert "<details" not in spec["html"] and "lunch?" in spec["html"]

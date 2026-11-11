@@ -13,7 +13,7 @@ import pytest
 from fixtures import world as w
 from mailmind.bootstrap import calendar, mailbox
 from mailmind.bootstrap.calendar import ics
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
 from mailmind.calendar.application import agenda as agenda_use_case
 from mailmind.content import mime
 from mailmind.mailbox.application.session import Headers
@@ -392,7 +392,7 @@ def test_ingest_keeps_an_invite_so_it_is_listed_unopened(data_dir):
         if cal:
             m.add_attachment(cal.encode(), maintype="text", subtype="calendar", filename="invite.ics")
         return m.as_bytes()
-    ingest._process(_FakeSession({1: raw(1, _ics("in", NOW + timedelta(days=1))), 2: raw(2)}),
+    mailbox.ingest._process(_FakeSession({1: raw(1, _ics("in", NOW + timedelta(days=1))), 2: raw(2)}),
                     {"email": ACCT, "kind": "imap"}, ["1", "2"], "INBOX", with_body=True)
     c = store.conn()
     rows = {r["uid"]: r for r in c.execute("SELECT pk, uid, body_fetched, seen FROM messages")}
@@ -423,7 +423,7 @@ def test_an_inline_only_invite_is_recorded_once_and_listed(data_dir):
     assert [a["content_type"] for a in both] == ["application/ics"], "no second chip when a file carries it"
     pk = _msg()
     c = store.conn()
-    ingest._keep_body(c, pk, _alt(cal), mime.parse(_alt(cal)))
+    mailbox.ingest._keep_body(c, pk, _alt(cal), mime.parse(_alt(cal)))
     c.commit()
     c.close()
     assert [(_named(x), x["summary"]) for x in _up()] == [(w.copy_of(pk), "Quarterly review")]

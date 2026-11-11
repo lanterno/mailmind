@@ -4,7 +4,8 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 
 CY = "cy-inbox-03-unrelated.eml"
 ADA = "ada-inbox-05-receipt.eml"
@@ -37,7 +38,7 @@ def labelled(world):
         c.commit()
     finally:
         c.close()
-    ingest.sync_new(accounts.get(w.CY))
+    mailbox.ingest.sync_new(accounts.get(w.CY))
     return world
 
 
@@ -53,7 +54,7 @@ def test_a_sync_of_a_non_gmail_account_asks_for_none_and_keeps_none(world):
         c.commit()
     finally:
         c.close()
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     assert not any("X-GM-LABELS" in str(line) for line in world.server.commands[since:])
     assert q("SELECT * FROM message_labels WHERE message_pk=?", world.pk(ADA)) == []
     assert q("SELECT count(*) AS n FROM message_labels ml JOIN messages m ON m.pk=ml.message_pk WHERE m.account=?", w.ADA)[0]["n"] == 0
@@ -68,7 +69,7 @@ def test_a_label_gone_at_the_next_fetch_goes_here_too(labelled):
         c.commit()
     finally:
         c.close()
-    ingest.sync_new(accounts.get(w.CY))
+    mailbox.ingest.sync_new(accounts.get(w.CY))
     assert labels_of(labelled.pk(CY)) == {"Two words", "\\Inbox"}
 
 
@@ -87,7 +88,7 @@ def test_a_flag_refresh_leaves_labels_alone(labelled):
     # a sync that reads no new mail reads flags again, and a label is not one of them
     fake_message(labelled, CY).labels.add("Added on Gmail")
     before = labels_of(labelled.pk(CY))
-    ingest.sync_new(accounts.get(w.CY))
+    mailbox.ingest.sync_new(accounts.get(w.CY))
     assert labels_of(labelled.pk(CY)) == before
 
 

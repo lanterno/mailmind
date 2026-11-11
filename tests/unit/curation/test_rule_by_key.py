@@ -1,7 +1,7 @@
 """A block from the reader names the message it trashes by key and folder, which still names that copy after a renumber."""
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest
+from mailmind.bootstrap import mailbox
 
 NEWSLETTER = "ada-inbox-03-newsletter.eml"
 
@@ -9,7 +9,7 @@ NEWSLETTER = "ada-inbox-03-newsletter.eml"
 def test_a_block_trashes_the_copy_its_key_and_folder_name(app, world):
     sender = world.row(NEWSLETTER)["from_addr"]
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     r = app.post("/api/rules", {"token": sender, "verdict": "block", **world.copy(NEWSLETTER)}).json
     assert r["trashed"] is True
     assert [box for _, box, _, _ in world.where(NEWSLETTER)["server"]] == ["Trash"]

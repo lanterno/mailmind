@@ -6,7 +6,7 @@ from playwright.sync_api import expect
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
-from mailmind.bootstrap.mailbox import ingest
+from mailmind.bootstrap import mailbox
 from mailmind.bootstrap import accounts
 
 pytestmark = pytest.mark.browser
@@ -164,7 +164,7 @@ def test_a_renumber_leaves_a_tasks_link(page, world, ai):
     page.locator('[data-suggestion="task"]').get_by_role("button", name="Add to tasks").click()
     expect(page.locator('[data-suggestion="task"]')).to_have_count(0)
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     page.reload()
     expect(page.locator(".rd-subj")).to_be_visible()
     page.keyboard.press("ControlOrMeta+k")

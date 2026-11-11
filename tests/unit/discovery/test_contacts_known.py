@@ -11,7 +11,8 @@ import pytest
 from gate import held_elsewhere
 from answered import answered
 from mailmind.bootstrap import discovery
-from mailmind.bootstrap.compose import book, outbox
+from mailmind.bootstrap.compose import book
+from mailmind.bootstrap import compose
 from mailmind.bootstrap.mailbox import store
 from mailmind.content import mime
 from mailmind.platform import settings
@@ -57,7 +58,7 @@ def _outbox(envelope, delivered):
         "recipients": json.dumps({"to": envelope, "cc": [], "bcc": []}), "subject": "Plans",
         "raw": b"x", "next_attempt_at": 0, "draft_id": None, "created_at": "2026-10-01T09:00:00"})
     if delivered:
-        outbox.QUEUE.mark_gate(c, oid)
+        compose.outbox.QUEUE.mark_gate(c, oid)
     c.commit()
     c.close()
 

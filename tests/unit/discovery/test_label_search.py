@@ -4,7 +4,8 @@ import pytest
 
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 
 CY = "cy-inbox-03-unrelated.eml"
 ADA = "ada-inbox-05-receipt.eml"
@@ -21,7 +22,7 @@ def labelled(world):
         c.commit()
     finally:
         c.close()
-    ingest.sync_new(accounts.get(w.CY))
+    mailbox.ingest.sync_new(accounts.get(w.CY))
     return world
 
 

@@ -20,9 +20,8 @@ import problems
 from answered import answered
 from fixtures import world as w
 from mailmind.bootstrap import accounts, assistant, background, curation, mailbox
-from mailmind.bootstrap.accounts import config
-from mailmind.bootstrap.compose import transport
-from mailmind.bootstrap.mailbox import commands, ingest, server_ops, store
+from mailmind.bootstrap import compose
+from mailmind.bootstrap.mailbox import store
 from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
 from mailmind.mailbox.domain.command import ServerAnswer
 from mailmind.platform import perimeter, settings
@@ -90,7 +89,7 @@ def starttls_ctx(home, monkeypatch):
     """starttls_ctx(host): the TLS context an IMAP connection to `host` gets."""
     monkeypatch.setattr(_FakeIMAP, "made", [])
     monkeypatch.setattr(imaplib, "IMAP4", _FakeIMAP)
-    monkeypatch.setattr(config, "resolve_credential", lambda acct: "app-password")
+    monkeypatch.setattr(accounts.config, "resolve_credential", lambda acct: "app-password")
 
     def ctx(host):
         accounts.connect({"email": ACCT, "host": host, "port": 143, "starttls": True})
@@ -137,10 +136,10 @@ def smtp_ctx(home, monkeypatch):
     monkeypatch.setattr(_FakeSMTP, "ctxs", [])
     monkeypatch.setattr(smtplib, "SMTP", _FakeSMTP)
     monkeypatch.setattr(smtplib, "SMTP_SSL", _FakeSMTP)
-    monkeypatch.setattr(config, "resolve_credential", lambda acct: "app-password")
+    monkeypatch.setattr(accounts.config, "resolve_credential", lambda acct: "app-password")
 
     def ctx(host, starttls):
-        transport.connect({"email": ACCT, "smtp_host": host, "smtp_port": 587 if starttls else 465,
+        compose.transport.connect({"email": ACCT, "smtp_host": host, "smtp_port": 587 if starttls else 465,
                            "smtp_starttls": starttls})
         return _FakeSMTP.ctxs[-1]
     return ctx
@@ -530,7 +529,7 @@ def test_undo_ingest_leaves_the_inbox_watermark_alone(home, connected):
     c.commit()
     c.close()
     connected(_undo_target(900, "<back@example.test>"))
-    assert ingest.ingest_message(accounts.get(ACCT), "INBOX", "<back@example.test>") == 1
+    assert mailbox.ingest.ingest_message(accounts.get(ACCT), "INBOX", "<back@example.test>") == 1
     c = store.conn()
     got = c.execute("SELECT uid FROM messages WHERE message_id=?", ("<back@example.test>",)).fetchall()
     c.close()
@@ -540,8 +539,8 @@ def test_undo_ingest_leaves_the_inbox_watermark_alone(home, connected):
 
 def test_undo_ingest_into_an_unopened_folder_keeps_its_first_full_sync(home, connected):
     connected(_undo_target(31, "<filed@example.test>"))
-    assert ingest.ingest_message(accounts.get(ACCT), "Archive", "<filed@example.test>") == 1
-    assert not ingest.folder_synced(ACCT, "Archive")
+    assert mailbox.ingest.ingest_message(accounts.get(ACCT), "Archive", "<filed@example.test>") == 1
+    assert not mailbox.ingest.folder_synced(ACCT, "Archive")
 
 
 @pytest.fixture
@@ -552,7 +551,7 @@ def trash_probe(monkeypatch):
     def probe(row, first_try=False, **kw):
         held.append(gates.held())
         return ServerAnswer(dest="Trash")
-    monkeypatch.setattr(server_ops, "apply", probe)
+    monkeypatch.setattr(mailbox.server_ops, "apply", probe)
     return held
 
 
@@ -607,7 +606,7 @@ def test_trashing_the_same_message_offline_again_queues_it_again(home, offline):
     first = mailbox.filing.do_trash({"pk": _message(mid=mid)})
     assert first["ok"] and first.get("status") == "queued", first
     c = store.conn()
-    commands.QUEUE.finish(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")     # the queue applied it
+    mailbox.commands.QUEUE.finish(c, _queued(mid)[0]["id"], "2026-11-01T10:00:00+00:00")     # the queue applied it
     c.commit()
     c.close()
     second = mailbox.filing.do_trash({"pk": _message(mid=mid)})                # moved back, then trashed again

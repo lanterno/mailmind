@@ -2,7 +2,8 @@
 it has now, marked done and removed. The message leaving takes only the link."""
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 RECEIPT = "ada-inbox-05-receipt.eml"
@@ -47,7 +48,7 @@ def test_a_renumber_leaves_the_task_and_its_link(app, world):
     add(app, world)
     pk = world.pk(LUNCH)
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     assert world.pk(LUNCH) != pk
     got = items(app)[0]
     assert (got["key"], got["folder"], got["uid"]) == (world.key(LUNCH), "INBOX", world.row(LUNCH)["uid"])

@@ -2,7 +2,8 @@
 follow-up's dismissal the message of a thread by its key, which still names it after a renumber gives its row a new pk."""
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 RECEIPT = "ada-inbox-05-receipt.eml"
@@ -23,7 +24,7 @@ def listed(app, folder="INBOX"):
 
 def renumber_inbox(world):
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
 
 
 def test_copies_are_snoozed_and_woken_by_their_key_and_folder(app, world):

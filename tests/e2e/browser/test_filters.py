@@ -6,7 +6,7 @@ from axe_playwright_python.sync_playwright import Axe
 from playwright.sync_api import expect
 
 from fixtures import world as w
-from mailmind.bootstrap.mailbox import commands
+from mailmind.bootstrap import mailbox
 
 pytestmark = pytest.mark.browser
 
@@ -80,7 +80,7 @@ def test_the_filter_stars_the_next_mail_that_fits(page, app, world):
     page.goto(INBOX)
     page.get_by_role("tab", name="Everything").click()
     expect(page.locator("#rows .row", has_text="Lunch again").first.locator(".rflag")).to_be_visible()
-    commands.drain()
+    mailbox.commands.drain()
     assert w.FLAGGED in world.server.messages(w.ADA, "INBOX")[uid].flags
     clean(page)
 

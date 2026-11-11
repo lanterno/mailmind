@@ -18,7 +18,8 @@ import problems
 from answered import answered
 from fixtures import world as w
 from mailmind.bootstrap import accounts, mailbox
-from mailmind.bootstrap.compose import book, drafts, outbox, sending
+from mailmind.bootstrap import compose as composer      # `compose` is the context's api, below
+from mailmind.bootstrap.compose import book
 from mailmind.bootstrap.mailbox import store
 from mailmind.compose import api as compose
 from mailmind.compose.domain import limits, markdown
@@ -79,8 +80,8 @@ def recorders(monkeypatch):
         return len(calls.sent), True
     monkeypatch.setattr(mailbox.copies, "append_to_drafts", append)
     monkeypatch.setattr(mailbox.copies, "delete_draft_uid", delete)
-    monkeypatch.setattr(outbox, "enqueue", enqueue)
-    monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: True)     # the server still holds the copy
+    monkeypatch.setattr(composer.outbox, "enqueue", enqueue)
+    monkeypatch.setattr(composer.drafts, "_live", lambda acct, folder, uid: True)     # the server still holds the copy
     return calls
 
 
@@ -92,7 +93,7 @@ def calls(home, recorders):
 def _save(account=ACCT, draft_id=None, **kw):
     body = {"mode": "new", "account": account, "to": ["bo@example.test"], "subject": "Plans",
             "text": "Saturday works.", "draft_id": draft_id, **kw}
-    res, code = answered(drafts.save, body)
+    res, code = answered(composer.drafts.save, body)
     assert code == 200 and res["ok"], (code, res)
     return res
 
@@ -148,7 +149,7 @@ def _saved_and_synced(calls, **kw):
 
 
 def _resume(pk):
-    return answered(drafts.resume, {"pk": pk})
+    return answered(composer.drafts.resume, {"pk": pk})
 
 
 def _key(pk):
@@ -371,7 +372,7 @@ def test_failed_save_under_a_new_from_keeps_the_old_copy(calls, monkeypatch):
     def unreachable(acct, raw, **kw):
         raise OSError("connection refused")
     monkeypatch.setattr(mailbox.copies, "append_to_drafts", unreachable)
-    res, code = answered(drafts.save, {"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
+    res, code = answered(composer.drafts.save, {"mode": "new", "account": "zed@example.test", "to": ["bo@example.test"],
                              "subject": "Plans", "text": "Saturday works.", "draft_id": did})
     assert code == 200 and res["ok"] and res["pushed"] is False, (code, res)   # the journal holds it
     assert calls.deleted == [], calls.deleted
@@ -390,7 +391,7 @@ def _other_folder_draft(uid=5):
     c.commit()
     row = c.execute("SELECT * FROM messages WHERE folder='Old drafts' AND uid=?", (uid,)).fetchone()
     c.close()
-    return drafts.info(row)["draft_id"]
+    return composer.drafts.info(row)["draft_id"]
 
 
 def test_copy_in_another_drafts_folder_is_removed_there(calls):
@@ -414,7 +415,7 @@ def test_received_mail_a_row_points_at_is_never_removed(calls):
     c.commit()
     row = c.execute("SELECT * FROM messages WHERE folder='Bank drafts'").fetchone()
     c.close()
-    assert drafts.info(row) == {}                         # no Edit for it today
+    assert composer.drafts.info(row) == {}                         # no Edit for it today
     c = store.conn()
     did = book.draft_upsert(c, {"id": None, "account": ACCT, "folder": "Bank drafts", "uid": 3,
                                  "message_id": "<stmt@bank.example.test>", "uidvalidity": 912,
@@ -493,7 +494,7 @@ def test_other_apps_draft_registers_with_folder_uidvalidity(calls):
     c.commit()
     row = c.execute("SELECT * FROM messages WHERE uid=9").fetchone()
     c.close()
-    info = drafts.info(row)
+    info = composer.drafts.info(row)
     d = _row(info["draft_id"])
     assert (d["uid"], d["uidvalidity"], d["mode"]) == (9, 4242, "new"), dict(d)
 
@@ -813,7 +814,7 @@ def test_an_attached_email_goes_out_whole_when_the_draft_is_sent(calls):
         m.add_attachment(_old_thread(), filename="Old thread.eml")
     r, code = _resume(_synced(_foreign([body]), 13))
     assert code == 200, (code, r)
-    answered(sending.send, _payload(r))
+    answered(composer.sending.send, _payload(r))
     m, _, _ = _sent(calls)
     [att] = list(m.iter_attachments())
     assert att.get_content_type() == "message/rfc822" and att["Content-Transfer-Encoding"] != "base64", att.as_string()
@@ -994,10 +995,10 @@ def test_draft_whose_saves_would_be_too_large_is_refused(calls, monkeypatch):
 
 def test_bad_pk_unknown_and_not_a_draft(calls):
     opk = _original()
-    assert answered(drafts.resume, {"pk": "x"}) == (problems.refused("Missing draft."), 400)
-    assert answered(drafts.resume, {})[1] == 400
-    assert answered(drafts.resume, {"pk": 99999})[1] == 404
-    r, code = answered(drafts.resume, {"pk": opk})
+    assert answered(composer.drafts.resume, {"pk": "x"}) == (problems.refused("Missing draft."), 400)
+    assert answered(composer.drafts.resume, {})[1] == 400
+    assert answered(composer.drafts.resume, {"pk": 99999})[1] == 404
+    r, code = answered(composer.drafts.resume, {"pk": opk})
     assert code == 400 and r["detail"] == "That message isn’t a draft.", r
 
 
@@ -1010,7 +1011,7 @@ def test_resume_route_requires_csrf(app, recorders):
 
 def test_resumed_reply_sends_one_quote(calls):
     opk, r = _reply_resumed(calls, bcc=["dee@example.test"])
-    res, code = answered(sending.send, _payload(r))
+    res, code = answered(composer.sending.send, _payload(r))
     assert code == 200 and res["ok"], res
     m, meta, built = _sent(calls)
     text, html = _parts(m)
@@ -1026,7 +1027,7 @@ def test_resumed_forward_sends_each_file_once(calls):
     opk = _original()
     pk, _ = _saved_and_synced(calls, mode="forward", in_reply_to_pk=opk, subject="Fwd: Plans", text="FYI")
     r, _ = _resume(pk)
-    res, code = answered(sending.send, _payload(r, to=["dee@example.test"]))
+    res, code = answered(composer.sending.send, _payload(r, to=["dee@example.test"]))
     assert code == 200, res
     m, meta, _ = _sent(calls)
     files = [p.get_filename() for p in m.iter_attachments()]
@@ -1042,7 +1043,7 @@ def test_send_never_fetches_the_original(calls, monkeypatch):
     def refuse(pk):
         raise AssertionError(f"fetched pk {pk}")
     monkeypatch.setattr(mailbox.ingest, "fetch_body", refuse)
-    res, code = answered(sending.send, _payload(r))
+    res, code = answered(composer.sending.send, _payload(r))
     assert code == 200 and res["ok"], res
 
 
@@ -1053,7 +1054,7 @@ def test_renumbered_original_still_gets_answered(calls):
     c.commit()
     c.close()
     npk = _original(uid=8)
-    sending.send(_payload(r))
+    composer.sending.send(_payload(r))
     assert _sent(calls)[1]["in_reply_to_pk"] == npk
 
 
@@ -1063,7 +1064,7 @@ def test_deleted_original_sends_threaded_without_answered(calls):
     store.delete_message(c, opk)
     c.commit()
     c.close()
-    res, code = answered(sending.send, _payload(r))
+    res, code = answered(composer.sending.send, _payload(r))
     assert code == 200, res
     m, meta, _ = _sent(calls)
     assert str(m["In-Reply-To"]) == "<orig1@example.test>" and meta["in_reply_to_pk"] is None, meta
@@ -1073,14 +1074,14 @@ def test_changed_tail_sends_plain_text(calls):
     _, r = _reply_resumed(calls)
     p = _payload(r)
     p["resume"]["tail_text"] = r["tail_text"].replace("Saturday", "Sunday")
-    sending.send(p)
+    composer.sending.send(p)
     text, html = _parts(_sent(calls)[0])
     assert html is None and text == OWN + p["resume"]["tail_text"], (text, html)
 
 
 def test_a_markdown_message_goes_as_text_and_html_and_a_plain_one_as_text_alone(calls):
-    sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": "See **you** Saturday"})
-    sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": "See you Saturday"})
+    composer.sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": "See **you** Saturday"})
+    composer.sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": "See you Saturday"})
     marked, _, _ = _sent(calls, 0)
     assert marked.get_content_type() == "multipart/alternative"
     text, html = _parts(marked)
@@ -1090,7 +1091,7 @@ def test_a_markdown_message_goes_as_text_and_html_and_a_plain_one_as_text_alone(
 
 
 def test_a_markdown_reply_keeps_the_originals_html_after_what_you_typed(calls):
-    sending.send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: Plans", "in_reply_to_pk": _original(),
+    composer.sending.send({"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: Plans", "in_reply_to_pk": _original(),
                   "text": "*Saturday* works"})
     text, html = _parts(_sent(calls)[0])
     assert text.startswith("*Saturday* works\n\nOn Mon, 02 Feb 2026")
@@ -1110,7 +1111,7 @@ def test_a_markdown_reply_reopens_as_what_you_typed_and_goes_out_with_one_quote(
     r, code = _resume(pk)
     assert code == 200, r
     assert r["text"] == "*Yes*" and r["tail_text"].startswith("\n\nOn Mon, 02 Feb 2026")
-    sending.send(_payload(r))
+    composer.sending.send(_payload(r))
     text, html = _parts(_sent(calls)[0])
     assert text.count("Shall we meet") == 1 and html.count("Shall we meet") == 1
     assert html.startswith("<p><em>Yes</em></p><div>On Mon, 02 Feb 2026")
@@ -1141,7 +1142,7 @@ def test_a_picture_in_the_text_reopens_at_its_mark_and_goes_out_again(calls):
     assert r["text"] == "![a chart](cid:pic1) *here*"
     assert [(f["filename"], f["cid"]) for f in r["files"]] == [("chart.png", "pic1")]
     assert r["notes"]["inline"] == 0 and r["notes"]["plain"] is False
-    sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": r["text"], "draft_id": r["draft_id"],
+    composer.sending.send({"mode": "new", "account": ACCT, "to": ["bo@example.test"], "subject": "Plans", "text": r["text"], "draft_id": r["draft_id"],
                   "attachments": [{k: f[k] for k in ("filename", "content_type", "b64", "cid")} for f in r["files"]]})
     m, _, _ = _sent(calls)
     picture = next(p for p in m.walk() if p.get_content_type() == "image/png")
@@ -1172,7 +1173,7 @@ def test_whole_resume_sends_as_typed(calls):
                    [("In-Reply-To", "<orig1@example.test>")])
     r, _ = _resume(_synced(raw, 12))
     assert r["split"] == "whole", r
-    sending.send(_payload(r, text=r["text"] + "\nSee you."))
+    composer.sending.send(_payload(r, text=r["text"] + "\nSee you."))
     m, _, _ = _sent(calls)
     text, html = _parts(m)
     assert html is None and text == "On my way.\n\n> Shall we meet?\nSee you.\n", repr(text)
@@ -1182,7 +1183,7 @@ def test_whole_resume_sends_as_typed(calls):
 def test_resave_three_times_keeps_one_quote_and_the_bcc(calls):
     _, r = _reply_resumed(calls, bcc=["dee@example.test"])
     for i in range(3):
-        res, code = answered(drafts.save, _payload(r, text=r["text"] + f"\nEdit {i}."))
+        res, code = answered(composer.drafts.save, _payload(r, text=r["text"] + f"\nEdit {i}."))
         assert code == 200 and res["ok"], res
         r, code = _resume(_synced(calls.appended[-1]["raw"], res["uid"]))
         assert code == 200 and r["split"] == "exact", r
@@ -1193,13 +1194,13 @@ def test_resave_three_times_keeps_one_quote_and_the_bcc(calls):
 
 def test_bad_resume_shape_is_400(calls):
     _, r = _reply_resumed(calls)
-    res, code = answered(sending.send, _payload(r, resume="x"))
+    res, code = answered(composer.sending.send, _payload(r, resume="x"))
     assert (code, res["detail"]) == (400, "bad draft data"), res
     assert calls.sent == []
 
 
 def test_unflagged_reply_still_needs_its_original(calls):
-    res, code = answered(sending.send, {"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
+    res, code = answered(composer.sending.send, {"mode": "reply", "account": ACCT, "to": ["bo@example.test"], "subject": "Re: x",
                                 "text": "hi", "in_reply_to_pk": "<orig1@example.test>"})
     assert (code, res["detail"]) == (400, "missing original message"), res
 
@@ -1208,7 +1209,7 @@ def test_replaced_copy_is_refused_and_drafts_resynced(calls, monkeypatch):
     pk, _ = _saved_and_synced(calls, text="Old words.")
     synced = []
     monkeypatch.setattr(mailbox.ingest, "sync_folder", lambda acct, folder, full=False, recent=None: synced.append((acct["email"], folder, full)))
-    monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: False)
+    monkeypatch.setattr(composer.drafts, "_live", lambda acct, folder, uid: False)
     r, code = _resume(pk)
     assert code == 409 and "changed since the list loaded" in r["detail"], (code, r)
     c = store.conn()
@@ -1229,7 +1230,7 @@ def test_a_draft_waiting_in_the_outbox_is_not_reopened(calls):
     r, code = _resume(pk)
     assert code == 423 and "in the outbox" in r["detail"], (code, r)
     c = store.conn()
-    outbox.QUEUE.cancel_queued(c, oid)
+    composer.outbox.QUEUE.cancel_queued(c, oid)
     c.commit()
     c.close()
     assert _resume(pk)[1] == 200                                # cancelled: free to edit
@@ -1248,7 +1249,7 @@ def test_a_copy_replaced_or_sent_while_edit_waited_is_refused(change, calls, mon
         c.commit()
         c.close()
         return True
-    monkeypatch.setattr(drafts, "_live", meanwhile)
+    monkeypatch.setattr(composer.drafts, "_live", meanwhile)
     synced = []
     monkeypatch.setattr(mailbox.ingest, "sync_folder", lambda acct, folder, full=False, recent=None: synced.append(full))
     r, code = _resume(pk)
@@ -1260,7 +1261,7 @@ def test_save_and_send_cleanup_move_the_row_under_the_lock(calls, monkeypatch):
     monkeypatch.setattr(book, "draft_settle_push", lambda c, *a: (held.append(("settle", gates.held(ACCT))), real_settle(c, *a))[1])
     monkeypatch.setattr(book, "draft_delete", lambda c, did: (held.append(("delete", gates.held(ACCT))), real_delete(c, did))[1])
     did = _save()["draft_id"]
-    outbox._side_effects(1, {"sent_appended": 1, "original_key": None, "orig_message_id": None, "answered_set": 1,
+    composer.outbox._side_effects(1, {"sent_appended": 1, "original_key": None, "orig_message_id": None, "answered_set": 1,
                              "followup_recorded": 1, "draft_id": did, "draft_deleted": 0},
                          {"email": ACCT})
     assert held == [("settle", True), ("delete", True)], held
@@ -1269,7 +1270,7 @@ def test_save_and_send_cleanup_move_the_row_under_the_lock(calls, monkeypatch):
 
 def test_unreachable_server_opens_the_local_copy(calls, monkeypatch):
     pk, _ = _saved_and_synced(calls, text="Mine.")
-    monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: None)
+    monkeypatch.setattr(composer.drafts, "_live", lambda acct, folder, uid: None)
     r, code = _resume(pk)
     assert code == 200 and r["text"] == "Mine.", r
 
@@ -1296,7 +1297,7 @@ def test_long_subject_reopens_as_drafted_however_often_it_is_saved(calls):
         assert code == 200 and r["subject"] == subj, (code, r["subject"])
         _save(draft_id=res["draft_id"], subject=r["subject"], text=r["text"])
         pk = _synced(calls.appended[-1]["raw"], uid)
-    res, code = answered(sending.send, _payload(_resume(pk)[0], in_reply_to_pk=None))
+    res, code = answered(composer.sending.send, _payload(_resume(pk)[0], in_reply_to_pk=None))
     assert code == 200 and str(_sent(calls)[0]["Subject"]) == subj, str(_sent(calls)[0]["Subject"])
 
 
@@ -1323,7 +1324,7 @@ def test_raw_utf8_headers_come_back_as_text_and_send_cleanly(calls):
     r, code = _resume(_synced(raw, 22))
     assert code == 200 and r["to"] == ["José Ñúñez <jose@bücher.example>", "Bo <bo@example.test>"], r
     assert r["cc"] == ["Zoë <zoe@example.test>"], r["cc"]
-    res, code = answered(sending.send, _payload(r, in_reply_to_pk=None))
+    res, code = answered(composer.sending.send, _payload(r, in_reply_to_pk=None))
     assert code == 200, res
     m, _, built = _sent(calls)
     assert b"unknown-8bit" not in built["raw"] and b"xn--bcher-kva.example" in built["raw"], built["raw"][:400]
@@ -1392,7 +1393,7 @@ def draft_live(home, monkeypatch):
 
     def ask(fake, uid=42):
         monkeypatch.setattr(accounts, "connect", lambda a, timeout=60: fake)
-        return drafts._live({"email": ACCT}, "Drafts", uid)
+        return composer.drafts._live({"email": ACCT}, "Drafts", uid)
     return ask
 
 
@@ -1418,26 +1419,26 @@ def test_draft_live_is_a_short_stateless_probe(home, monkeypatch):
     timeouts = []
     fake = _FakeIMAP(["42"])
     monkeypatch.setattr(accounts, "connect", lambda a, timeout=60: (timeouts.append(timeout), fake)[1])
-    assert drafts._live({"email": ACCT}, "Drafts", 42) is True
+    assert composer.drafts._live({"email": ACCT}, "Drafts", 42) is True
     assert timeouts and timeouts[0] <= 15 and fake.calls[-1] == ("logout",), (timeouts, fake.calls)
 
 
 def test_draft_live_logs_out_after_a_reset(home, monkeypatch):
     fake = _FakeIMAP(["42"], boom=True)
     monkeypatch.setattr(accounts, "connect", lambda a, timeout=60: fake)
-    assert drafts._live({"email": ACCT}, "Drafts", 42) is None and fake.calls[-1] == ("logout",)
+    assert composer.drafts._live({"email": ACCT}, "Drafts", 42) is None and fake.calls[-1] == ("logout",)
 
 
 def test_draft_live_with_no_connection_is_unknown(home, monkeypatch):
     def refused(a, timeout=60):
         raise OSError("no route to host")
     monkeypatch.setattr(accounts, "connect", refused)
-    assert drafts._live({"email": ACCT}, "Drafts", 42) is None
+    assert composer.drafts._live({"email": ACCT}, "Drafts", 42) is None
 
 
 def test_edit_probes_the_server_without_holding_the_ops_lock(calls, monkeypatch):
     pk, _ = _saved_and_synced(calls, text="Mine.")
     held = []
-    monkeypatch.setattr(drafts, "_live", lambda acct, folder, uid: (held.append(gates.held(acct["email"])), True)[1])
+    monkeypatch.setattr(composer.drafts, "_live", lambda acct, folder, uid: (held.append(gates.held(acct["email"])), True)[1])
     r, code = _resume(pk)
     assert code == 200 and held == [False], (code, held)

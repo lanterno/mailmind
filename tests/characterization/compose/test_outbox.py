@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import problems
 from fixtures import world as w
-from mailmind.bootstrap.compose import sending
+from mailmind.bootstrap import compose
 from mailmind.compose.domain import outbox_item
 from stored_rows import q
 from waiting import wait_until
@@ -147,7 +147,7 @@ def test_hwf_a_send_goes_out_when_its_undo_window_ends(world, monkeypatch):
     t = threading.Thread(target=worker, name="outbox-worker", daemon=True)
     t.start()
     try:
-        assert sending.send(new(idempotency_key="k-soon"))["ok"]
+        assert compose.sending.send(new(idempotency_key="k-soon"))["ok"]
         wait_until(lambda: world.smtp.messages, timeout=15)      # due within a second; the worker polls every 30
         assert world.smtp.messages
     finally:

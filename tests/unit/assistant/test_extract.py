@@ -6,7 +6,8 @@ import pytest
 from fakes import anthropic_api as fa
 from mailmind.assistant.domain import extraction
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 from fixtures import world as w
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
@@ -113,7 +114,7 @@ def test_a_renumber_leaves_what_the_key_names(app, world, ai):
     ai.queue(fa.answer({"events": [], "tasks": []}))
     copy = world.copy(LUNCH)
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     assert app.post("/api/ai/extract", {"key": copy["key"], "folder": "INBOX"}).status == 200
 
 

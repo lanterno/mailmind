@@ -2,7 +2,7 @@
 which copy each event came from."""
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest
+from mailmind.bootstrap import mailbox
 
 INVITE = "ada-inbox-06-outlook-invite.eml"
 
@@ -10,7 +10,7 @@ INVITE = "ada-inbox-06-outlook-invite.eml"
 def test_an_invite_is_answered_by_its_key_after_a_renumber(app, world):
     key = world.key(INVITE)
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     r = app.post("/api/invite/rsvp", {"key": key, "folder": "INBOX", "decision": "accept"})
     assert r.status == 200 and r.json["queued"] is True
 

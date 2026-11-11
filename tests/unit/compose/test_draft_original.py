@@ -2,7 +2,7 @@
 from datetime import timedelta
 
 from fixtures import world as w
-from mailmind.bootstrap.compose import outbox
+from mailmind.bootstrap import compose
 from mailmind.bootstrap.mailbox import store
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
@@ -49,8 +49,8 @@ def test_a_reopened_reply_answers_its_original(app, world):
                                   "resume": {"in_reply_to": opened["in_reply_to"], "references": opened["references"],
                                              "tail_text": opened["tail_text"]}}).json
     assert sent["ok"], sent
-    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
-    outbox.drain()
+    app.clock.shift(timedelta(seconds=compose.outbox.SEND_DELAY + 1))
+    compose.outbox.drain()
     [(_, _, _, flags)] = world.where(LUNCH)["server"]
     [(_, _, _, others)] = world.where(OTHER)["server"]
     assert "\\Answered" in flags and "\\Answered" not in others

@@ -4,7 +4,8 @@ from playwright.sync_api import expect
 
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 from mailmind.platform import sse
 
 pytestmark = pytest.mark.browser
@@ -26,7 +27,7 @@ def labelled(world):
         c.commit()
     finally:
         c.close()
-    ingest.sync_new(accounts.get(w.CY))
+    mailbox.ingest.sync_new(accounts.get(w.CY))
 
 
 def accounts_inbox(page, who):

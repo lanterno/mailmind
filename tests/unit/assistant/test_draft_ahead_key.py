@@ -5,7 +5,8 @@ import urllib.parse
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word: the anchor of Ada's lunch thread
 QUILT = "ada-inbox-11-html-cid.eml"             # a person's message, alone in its thread
@@ -62,7 +63,7 @@ def test_a_pk_that_has_gone_to_another_message_is_not_served_the_draft_it_was_ma
     lunch = world.pk(LUNCH)
     banked(app, ai, lunch)
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     moved, quilt = pk_of(LUNCH), pk_of(QUILT)
     assert moved != lunch and query("SELECT 1 FROM messages WHERE pk=?", lunch) == []
     execute("UPDATE messages SET pk=? WHERE pk=?", lunch, quilt)

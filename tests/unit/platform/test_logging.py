@@ -17,7 +17,6 @@ import pytest
 import guard
 from fixtures import world as w
 from mailmind.bootstrap import assistant, background, calendar, compose, curation, discovery, mailbox, wiring
-from mailmind.bootstrap.mailbox import realtime
 from mailmind.http import serving
 from mailmind.platform import logging as logs
 from mailmind.platform import profile, settings
@@ -286,7 +285,7 @@ def test_uvicorn_setting_up_its_own_logging_leaves_ours_going(home, capsys):
 
 
 def test_each_start_of_the_app_opens_it(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(realtime, "start", lambda: None)
+    monkeypatch.setattr(mailbox.realtime, "start", lambda: None)
     monkeypatch.setattr(background, "JOBS", background.JOBS)
     with settings.use(settings.Settings(home=str(tmp_path))):
         wiring.start(spawn=lambda target: None)
@@ -455,7 +454,7 @@ def test_a_bus_handler_that_fails_goes_in_the_file_too(home):
 
 
 def test_each_start_says_its_startup_lines_in_the_file(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(realtime, "start", lambda: None)
+    monkeypatch.setattr(mailbox.realtime, "start", lambda: None)
     monkeypatch.setattr(background, "JOBS", background.JOBS)
     with settings.use(settings.Settings(home=str(tmp_path))):
         wiring.start(spawn=lambda target: None)

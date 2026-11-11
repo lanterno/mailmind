@@ -4,8 +4,8 @@ from datetime import timedelta
 
 from fixtures import world as w
 from mailmind.bootstrap import accounts
-from mailmind.bootstrap.compose import outbox
-from mailmind.bootstrap.mailbox import ingest
+from mailmind.bootstrap import compose
+from mailmind.bootstrap import mailbox
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
 SUBJECT = "Re: Lunch on Thursday?"
@@ -17,8 +17,8 @@ def reply(app, key, **kw):
 
 
 def goes_out(app):
-    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
-    outbox.drain()
+    app.clock.shift(timedelta(seconds=compose.outbox.SEND_DELAY + 1))
+    compose.outbox.drain()
 
 
 def answered(world, name):
@@ -28,7 +28,7 @@ def answered(world, name):
 def test_a_reply_names_its_original_by_key_after_a_renumber(app, world):
     key = world.key(LUNCH)
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
     assert reply(app, key).json["ok"]
     goes_out(app)
     [sent] = world.smtp.messages
@@ -38,7 +38,7 @@ def test_a_reply_names_its_original_by_key_after_a_renumber(app, world):
 
 def test_a_reply_finds_its_original_by_key_once_it_is_archived(app, world):
     assert app.post("/api/archive", world.copy(LUNCH)).json["ok"]
-    ingest.sync_folder(accounts.get(w.ADA), "Archive")                  # the copy it has now, once its folder is read
+    mailbox.ingest.sync_folder(accounts.get(w.ADA), "Archive")                  # the copy it has now, once its folder is read
     assert reply(app, world.key(LUNCH)).json["ok"]
     goes_out(app)
     assert answered(world, LUNCH) == [("Archive", True)]

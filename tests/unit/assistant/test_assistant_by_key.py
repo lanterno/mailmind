@@ -7,7 +7,8 @@ from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.assistant import answers
-from mailmind.bootstrap.mailbox import ingest, store
+from mailmind.bootstrap.mailbox import store
+from mailmind.bootstrap import mailbox
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word: the anchor of Ada's lunch thread
 DRAFT = "See you at 12:30."
@@ -15,7 +16,7 @@ DRAFT = "See you at 12:30."
 
 def renumber_inbox(world):
     world.server.renumber(w.ADA, "INBOX")
-    ingest.sync_new(accounts.get(w.ADA))
+    mailbox.ingest.sync_new(accounts.get(w.ADA))
 
 
 def summarize_as(world, name):
