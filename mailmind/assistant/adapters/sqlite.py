@@ -36,7 +36,8 @@ def rekey_thread(c, account, survivor, absorbed):
 
 # ------------------------------------------------------------------- the brief, the delta, the review
 def _forget_old_answers(c, table):
-    """Each is read on the day it was written: a week keeps its table tiny."""
+    """A brief and a delta are read on the day they were written, and a review written ahead on Monday morning for the rest of
+    its week, which ends before it is a week old: a week keeps each table tiny."""
     c.execute(f"DELETE FROM {table} WHERE created_at < ?",
               ((datetime.now(timezone.utc) - timedelta(days=7)).isoformat(),))
 

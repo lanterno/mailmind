@@ -39,6 +39,7 @@ class ChangedPreferences(RequestBody):
     quiet_until: str | None = None
     guide_offered: Flag | None = None
     morning_brief: Flag | None = None
+    weekly_review: Flag | None = None
     auto_tidy: Flag | None = None
     ai_daily_limit_usd: Dollars | None = None
 
@@ -70,6 +71,7 @@ class Preferences(Answer):
     quiet_until: str
     guide_offered: bool
     morning_brief: bool
+    weekly_review: bool
     auto_tidy: bool
     ai_daily_limit_usd: float
 

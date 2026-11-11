@@ -1,15 +1,16 @@
-"""A weekly review, with no I/O: its shapes, what is taken from a model's answer, what stands in when the answer won't do, and
-what makes one stale."""
+"""A weekly review, with no I/O: its shapes, what is taken from a model's answer, what stands in when the answer won't do, what
+makes one stale, and when one is written ahead and read."""
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any, TypedDict
 
-from mailmind.assistant.domain import fingerprint
+from mailmind.assistant.domain import brief, fingerprint
 
 EVENTS_READ = 40            # of each list asked of the calendar
 EVENTS_EACH_WAY = 6         # how many just gone, and how many to come
 EVENT_SUMMARY_MAX = 120
 AHEAD_DAYS = 7
+WRITTEN_AHEAD_ON = 0        # Monday: the week just ended is reviewed on its morning, and read until the next
 
 
 class Stats(TypedDict):
@@ -64,6 +65,16 @@ class Awaited(TypedDict):
 class Retrospective(TypedDict):
     narrative: str
     next: list[str]
+
+
+def is_ahead_morning(local: datetime) -> bool:
+    """Whether the week's review may be written ahead at this local time: the morning brief's hours, on the week's first day."""
+    return local.weekday() == WRITTEN_AHEAD_ON and brief.is_morning(local.hour)
+
+
+def week_so_far(today: date) -> list[str]:
+    """The days of today's week so far, newest first, from today back to its first: those a review written ahead is read on."""
+    return [(today - timedelta(days=n)).isoformat() for n in range((today.weekday() - WRITTEN_AHEAD_ON) % 7 + 1)]
 
 
 def meetings_of(gone: Iterable[Mapping[str, Any]], coming: Iterable[Mapping[str, Any]],

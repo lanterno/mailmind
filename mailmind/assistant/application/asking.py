@@ -62,6 +62,9 @@ class Asking:
     def write_brief_ahead(self) -> None:
         self._briefs.write_ahead(self._enabled())
 
+    def write_review_ahead(self) -> None:
+        self._reviews.write_ahead(self._enabled())
+
     def briefing(self, force: bool = False, generate: bool = True) -> Result:
         """The synthesized 'Today' card. GET only reads what is stored (generate=False); POST
         /api/briefing writes it once, and /api/briefing/refresh again (force)."""
@@ -69,8 +72,9 @@ class Asking:
 
     def review(self, force: bool = False, generate: bool = True) -> Result:
         """The Weekly Review — retrospective over the last 7 days. GET only reads what is stored;
-        POST /api/review writes it once, and /api/review/refresh again (force)."""
-        return self._reviews.build(self._enabled(), force=force, generate=generate)
+        POST /api/review writes it once, and /api/review/refresh again (force). For someone who has it written ahead on
+        Monday morning, what is stored this week is read all week."""
+        return self._reviews.build(self._enabled(), force=force, generate=generate, week=self._mail.weekly_review())
 
     def delta(self, qs_or_body: object, generate: bool = True) -> Result:
         """The 'since you last looked' delta digest. GET only reads what is stored; POST writes it.

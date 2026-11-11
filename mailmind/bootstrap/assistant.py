@@ -121,6 +121,9 @@ class _Mail:
     def accounts(self):
         return accounts.accounts()
 
+    def weekly_review(self):
+        return accounts.config.preferences()["weekly_review"]
+
     def get_message(self, c, pk):
         return mailbox.stored_mail.get_message(c, pk)
 

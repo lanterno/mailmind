@@ -56,6 +56,7 @@ DEFAULTS: Mapping[str, Any] = {
     "quiet_until": "07:00",
     "guide_offered": False,                 # the first-run guide has been offered, here and in any browser from now on
     "morning_brief": False,
+    "weekly_review": False,                 # the week's review written ahead on Monday morning, and read all week
     "auto_tidy": False,
 }
 AI_DAILY_LIMIT = "ai_daily_limit_usd"       # at the file's top level, not in the block

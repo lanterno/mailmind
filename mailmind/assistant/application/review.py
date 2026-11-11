@@ -5,6 +5,9 @@ and what you cleaned up. One schema-constrained Claude call turns the numbers + 
 threads into a short prose retrospective plus up to 3 "start next week with" suggestions. Stored in
 `reviews` by (account set + local date), so the cost is paid once a day and the lists are
 deterministic SQL (only the prose + the picks are AI). Row text is fed as UNTRUSTED DATA.
+
+For someone who turned it on, the week's review is written ahead on Monday morning, and read all week: a read then takes the
+newest stored since Monday, not only today's.
 """
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime, timedelta, timezone
@@ -13,7 +16,7 @@ from typing import Any
 
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
-from mailmind.assistant.domain import prompts, review
+from mailmind.assistant.domain import brief, prompts, review
 from mailmind.assistant.domain.review import Awaited, Meeting, Needed, Retrospective, Stats
 from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.row import Connection, Row
@@ -119,38 +122,67 @@ class Reviews:
                 "week_start": datetime.fromtimestamp(since_ts, timezone.utc).isoformat(),
                 "model": model, "generated": created_at, "cached": cached, "stale": stale}
 
-    def build(self, accounts_set: Iterable[str] | None, force: bool = False, generate: bool = True) -> Result:
+    def _stored_row(self, c: Connection, accounts: str, days: Sequence[str]) -> tuple[str, Row] | None:
+        """The newest review stored on one of `days`, newest first, and its day."""
+        for day in days:
+            if (row := self._answers.get_review(c, accounts, day)) is not None:
+                return day, row
+        return None
+
+    def write_ahead(self, accounts_set: Iterable[str] | None) -> None:
+        """The week's review, before anyone opens it: on Monday morning, with none stored this week, and once triage has read
+        the last day's mail, which is what its lists are made from. What is held back or fails waits for the next round."""
+        local = datetime.now().astimezone()
+        if not review.is_ahead_morning(local):
+            return
+        with self._uow.read() as c:
+            if self._answers.needs_summary(c, 1, newer_than=int(local.timestamp()) - brief.AHEAD_READS_BACK):
+                return
+        try:
+            self.build(accounts_set, feature="review-ahead", week=True)
+        except (NotSent, Unreachable):
+            return
+
+    def build(self, accounts_set: Iterable[str] | None, force: bool = False, generate: bool = True,
+              feature: str = "review", week: bool = False) -> Result:
         """With generate=False it only reads: nothing stored yet ->
-        {missing:true}, and no AI call."""
+        {missing:true}, and no AI call. With `week` a read takes the newest review stored since Monday, as a review written
+        ahead is read all week; without, only today's."""
         accounts_set = set(accounts_set or [])
         import time
         since_ts = time.time() - WEEK_SECONDS
-        accounts, day = ",".join(sorted(accounts_set)), datetime.now().astimezone().date().isoformat()
+        today = datetime.now().astimezone().date()
+        accounts, day = ",".join(sorted(accounts_set)), today.isoformat()
+        days = review.week_so_far(today) if week else [day]
         with self._uow.read() as c:
             stats, needs, waiting = self._aggregate(c, accounts_set, since_ts)
-            cached_row = self._answers.get_review(c, accounts, day)
+            cached = self._stored_row(c, accounts, days)
         fp = review.fingerprint_of(stats, needs, waiting)
 
-        def stored(row: Row) -> Result:
+        def stored(written_on: str, row: Row) -> Result:
             said = json.loads(row["stats_json"])
-            said["handled"] = stats["handled"]      # an Undo changes it: as it stands, not as it was written
+            if written_on == day:
+                said["handled"], since = stats["handled"], since_ts     # an Undo changes it: as it stands, not as it was written
+            else:                   # an earlier day's, read all week: the week it looked back on, as it said it
+                said.setdefault("handled", stats["handled"])
+                since = datetime.fromisoformat(row["created_at"]).timestamp() - WEEK_SECONDS
             with self._uow.read() as c:
                 stored_needs = self._items_now(c, json.loads(row["needs_json"]))
                 stored_waiting = self._items_now(c, json.loads(row["waiting_json"]))
                 meetings = self._items_now(c, said.pop("meetings", []))     # kept beside its numbers, for what they were made from
             return self._result(said, stored_needs, stored_waiting, meetings,
                            {"narrative": row["narrative"], "next": json.loads(row["next_json"])},
-                           row["model"], row["created_at"], True, row["fingerprint"] != fp, since_ts)
+                           row["model"], row["created_at"], True, row["fingerprint"] != fp, since)
 
-        if cached_row and not force:
-            return stored(cached_row)
+        if cached and not force:
+            return stored(*cached)
         if not generate:
             return {"ok": True, "missing": True}
 
         def read() -> Result | None:
             with self._uow.read() as c:
-                row = self._answers.get_review(c, accounts, day)
-            return stored(row) if row else None
+                again = self._stored_row(c, accounts, days)
+            return stored(*again) if again else None
 
         def make() -> Result:
             bl = ", ".join(f"{k}: {v}" for k, v in sorted(stats["by_bucket"].items(), key=lambda kv: -kv[1])[:5])
@@ -167,7 +199,7 @@ class Reviews:
             waiting_txt = "\n".join(f"- {w['subject']} → {w['to']}" for w in waiting) or "(nothing)"
             prompt = prompts.REVIEW.fill(stats=stats_txt, meetings=review.meeting_lines(meetings), needs=needs_txt[:CAP_TOTAL], waiting=waiting_txt[:2000])
             try:
-                obj = self._calls.call_claude_json(prompt, REVIEW_SCHEMA, feature="review")
+                obj = self._calls.call_claude_json(prompt, REVIEW_SCHEMA, feature=feature)
                 ai: Retrospective = review.clean(obj)
                 model = self._calls.model_label()
                 if review.degenerate(ai["narrative"]):     # the deterministic narrative is still useful
