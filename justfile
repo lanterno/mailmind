@@ -40,20 +40,22 @@ run-fast port="": build-web
 # Everything a change should pass before committing
 verify: lint compile test check-frontend check-web audit
 
-# Every test but the browser's and Dovecot's. Pick some with `just test -k hardening`
+# Every test but the browser's and Dovecot's, a process for each core (pytest-xdist). Pick some with `just test -k hardening`;
+# `just test -n0` runs them in this one process
 test *args:
-    uv run pytest {{args}}
+    uv run pytest -n auto {{args}}
 
-# Every test, the browser's included
+# Every test, the browser's included, four processes at a time: each runs a Chromium, which keeps cores of its own busy, and
+# with a process for each core the browser tests' waits run out. `just test-full -n0` runs them in one
 test-full *args: setup
-    uv run pytest --browser {{args}}
+    uv run pytest -n 4 --browser {{args}}
 
-# Only the browser tests, which drive the app in Chromium
+# Only the browser tests, which drive the app in Chromium, four processes at a time as test-full runs them
 test-browser *args: setup
-    uv run pytest --browser tests/e2e/browser {{args}}
+    uv run pytest -n 4 --browser tests/e2e/browser {{args}}
 
 # The MailSession contract against a real IMAP server, Dovecot in Docker, through each adapter.
-# Needs Docker running; the first run pulls the image.
+# Needs Docker running; the first run pulls the image. One process, as one container serves the run.
 test-dovecot *args:
     uv run pytest --dovecot tests/contract/test_mail_session_dovecot.py {{args}}
 
