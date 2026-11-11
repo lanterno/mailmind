@@ -1,5 +1,6 @@
 """The tasks a person confirmed: kept under the message's key, so a renumber leaves them be, listed with a link back to the copy
-it has now, marked done and removed. The message leaving takes only the link."""
+it has now, marked done and removed. The message leaving takes only the link. What a person may confirm is the use case's,
+tests/unit/attention/test_tasks.py."""
 from fixtures import world as w
 from mailmind.bootstrap import accounts
 from mailmind.bootstrap.mailbox import store
@@ -82,12 +83,6 @@ def test_confirming_the_same_one_again_is_one_row_with_the_latest_date(app, worl
     assert len(q("SELECT * FROM tasks")) == 1
 
 
-def test_a_task_needs_no_date(app, world):
-    r = app.post("/api/tasks", {**world.copy(LUNCH), "title": "Call Lin"})
-    assert r.status == 200 and r.json["task"]["due"] is None
-    assert app.post("/api/tasks", {**world.copy(RECEIPT), "title": "Check it", "due": ""}).json["task"]["due"] is None
-
-
 def test_open_tasks_come_first_the_soonest_due_ahead_of_those_with_none(app, world):
     add(app, world, title="None")
     first = add(app, world, title="Later", due="2026-11-20")
@@ -117,13 +112,10 @@ def test_a_task_thats_gone_says_so(app):
         assert (r.status, r.json["detail"]) == (404, "that task is gone"), path
 
 
-def test_what_wont_do_is_refused_in_words(app, world):
-    no_title = add(app, world, title="   ")
-    bad_date = add(app, world, due="next Friday")
-    far_date = add(app, world, due="2199-01-01")
-    assert (no_title.status, no_title.json["detail"]) == (400, "a task needs a title")
-    assert (bad_date.status, bad_date.json["detail"]) == (400, "that date isn’t one this can use")
-    assert (far_date.status, far_date.json["detail"]) == (400, "that date isn’t one this can use")
+def test_a_refusal_is_the_400_in_its_own_words_and_makes_nothing(app, world):
+    """What won't do, and the words for each, are the use case's (tests/unit/attention/test_tasks.py)."""
+    r = add(app, world, title="   ")
+    assert (r.status, r.json["detail"]) == (400, "a task needs a title")
     assert q("SELECT * FROM tasks") == []
 
 
@@ -131,10 +123,6 @@ def test_naming_no_message_or_a_gone_one_makes_nothing(app):
     assert app.post("/api/tasks", {"title": "x"}).status == 400
     assert app.post("/api/tasks", {"key": 987654, "title": "x"}).status == 404
     assert q("SELECT * FROM tasks") == []
-
-
-def test_a_title_comes_to_one_line(app, world):
-    assert add(app, world, title="Sign\r\nthe\tform").json["task"]["title"] == "Sign the form"
 
 
 def test_an_account_turned_off_has_its_tasks_kept_and_not_listed(app, world):
