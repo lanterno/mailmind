@@ -4,7 +4,7 @@ sets it itself. The browser tests serve the real build (`serve_the_build`)."""
 import os
 
 PAGE = ('<!doctype html><html lang="en"><head><meta name="csrf" content="__CSRF_TOKEN__">'
-        '<meta name="mailmind-build" content="__BUILD__"></head><body><div id="root"></div></body></html>')
+        '<meta name="mailmind-build" content="__BUILD__"><meta name="mailmind-place" content="__PLACE__"></head><body><div id="root"></div></body></html>')
 SCRIPT = "assets/app-abc123.js"
 FONT = "assets/face-abc123.woff2"
 STYLES = "assets/styles/fonts.css"          # the path the walks over every route ask for

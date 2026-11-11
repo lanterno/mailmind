@@ -21,7 +21,7 @@ from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
 from mailmind.kernel import send_window, snoozed
 from mailmind.mailbox.application.filing import Filing
 from mailmind.mailbox.domain import filing
-from mailmind.platform.db import export
+from mailmind.platform.db import export, places
 
 # Each, as the page has it: by its name in the document.
 SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "RewriteOp": prompts.RewriteOp,
@@ -96,7 +96,8 @@ def test_a_plan_that_names_no_preset_there_is_waits_until_tomorrow_as_its_previe
 def test_each_limit_the_page_has_is_the_one_its_use_case_holds_to():
     assert PAGE_LIMITS == {"ai_daily_limit_usd": preferences.AI_DAILY_LIMIT_MAX,
                            "attach_bytes": limits.MAX_ATTACH_BYTES, "bulk_rows": Filing.BULK_MAX,
-                           "instruction_chars": prompts.INSTRUCTION_MAX, "snooze_copies": snooze.BULK_CAP,
+                           "instruction_chars": prompts.INSTRUCTION_MAX, "place_bytes": places.MOST_BYTES,
+                           "places_at_once": places.MOST_AT_ONCE, "snooze_copies": snooze.BULK_CAP,
                            "undo_send_longest": send_window.LONGEST, "undo_send_shortest": send_window.SHORTEST}
 
 

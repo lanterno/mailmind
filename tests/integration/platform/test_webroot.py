@@ -49,11 +49,13 @@ def test_the_page_names_its_own_build_and_this_runs_token_and_isnt_stored(app):
     text = r.body.decode()
     assert f'<meta name="mailmind-build" content="{webroot.edition(CSRF)}">' in text
     assert f'<meta name="csrf" content="{CSRF}">' in text
-    assert "__CSRF_TOKEN__" not in text and "__BUILD__" not in text
+    assert '<meta name="mailmind-place" content="">' in text
+    assert "__CSRF_TOKEN__" not in text and "__BUILD__" not in text and "__PLACE__" not in text
     assert r.headers["cache-control"] == "no-store"
 
 
-@pytest.mark.parametrize("path", ["/", "/all", "/all/__snoozed__", "/documents", "/search", "/m/ada%40example.test/INBOX", "/brief/needs"])
+@pytest.mark.parametrize("path", ["/", "/all", "/all/__snoozed__", "/documents", "/search", "/m/ada%40example.test/INBOX", "/brief/needs",
+                                  "/p/aBc-_123456789012"])
 def test_with_nothing_built_home_and_every_place_say_how_to_build_it(app, nothing_built, path):
     r = app.get(path)
     assert r.status == 404 and b"just build-web" in r.body and r.headers["content-type"].startswith("text/plain")
@@ -73,7 +75,7 @@ def test_with_nothing_built_the_event_stream_still_opens_and_says_so(app, nothin
 
 
 @pytest.mark.parametrize("path", ["/", "/?m=3", "/all", "/all/__snoozed__", "/documents", "/search", "/search?q=x", "/m/ada%40example.test/INBOX", "/brief/needs",
-                                  "/brief/topic/Trips%20%26%20travel"])
+                                  "/brief/topic/Trips%20%26%20travel", "/p/aBc-_123456789012"])
 def test_home_and_every_place_in_it_is_the_app_holding_this_runs_token(app, path):
     r = app.get(path)
     assert r.status == 200 and r.headers["cache-control"] == "no-store" and b'<div id="root">' in r.body
@@ -81,7 +83,7 @@ def test_home_and_every_place_in_it_is_the_app_holding_this_runs_token(app, path
     assert r.headers["content-security-policy"] == perimeter.page_policy()
 
 
-@pytest.mark.parametrize("path", ["/nextdoor", "/alley", "/searching", "/mail", "/m", "/brief"])
+@pytest.mark.parametrize("path", ["/nextdoor", "/alley", "/searching", "/mail", "/m", "/brief", "/p", "/p/", "/p/aBc-_123456789012/more", "/place"])
 def test_a_path_that_only_starts_like_a_place_isnt_one(app, path):
     assert app.get(path).status == 404
 
@@ -89,6 +91,7 @@ def test_a_path_that_only_starts_like_a_place_isnt_one(app, path):
 @pytest.mark.parametrize("path, where", [
     ("/next", "/"), ("/next/", "/"), ("/next?m=3", "/?m=3"), ("/next/all", "/all"), ("/next/documents", "/documents"), ("/next/search?q=x&lane=feed", "/search?q=x&lane=feed"),
     ("/next/m/ada%40example.test/INBOX?m=3", "/m/ada%40example.test/INBOX?m=3"), ("/next/brief/needs", "/brief/needs"),
+    ("/next/p/aBc-_123456789012", "/p/aBc-_123456789012"),
 ])
 def test_a_link_from_when_the_app_was_at_next_comes_to_the_same_place(app, path, where):
     r = app.get(path)
@@ -129,7 +132,8 @@ def test_a_file_is_found_by_its_path_as_sent_and_never_decoded_into_another(app,
     assert (r.status, r.body) == (404, b"not found")
 
 
-@pytest.mark.parametrize("path", ["/", "/all", "/search", "/m/ada%40example.test/INBOX", "/brief/needs", "/next", "/next/all", SCRIPT, "/assets/nope.js", "/nope"])
+@pytest.mark.parametrize("path", ["/", "/all", "/search", "/m/ada%40example.test/INBOX", "/brief/needs", "/p/aBc-_123456789012", "/next", "/next/all", SCRIPT,
+                                  "/assets/nope.js", "/nope"])
 def test_opening_the_page_or_a_file_isnt_someone_here(app, monkeypatch, path):
     """A tab left open reloading, or a link opened from elsewhere, shouldn't keep drafting ahead going."""
     seen = []
