@@ -17,23 +17,27 @@ from mailmind.kernel.row import Row
 from mailmind.platform import profile
 
 MIN_GAP = 3.0              # >= 3s between ANY two outbound unsubscribes (politeness)
-_rate_lock = threading.Lock()
-_rate_last = 0.0
 
 
-def rate_gate() -> None:
-    """Process-global politeness: >= MIN_GAP between any two outbound unsubscribes."""
-    global _rate_last
-    with _rate_lock:
-        wait = MIN_GAP - (time.time() - _rate_last)
-        if wait > 0:
-            time.sleep(min(wait, MIN_GAP))
-        _rate_last = time.time()
+class Pace:
+    """Politeness: at least MIN_GAP between any two outbound unsubscribes this process sends."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._last = 0.0
+
+    def wait_turn(self) -> None:
+        with self._lock:
+            wait = MIN_GAP - (time.time() - self._last)
+            if wait > 0:
+                time.sleep(min(wait, MIN_GAP))
+            self._last = time.time()
 
 
 class Unsubscribing:
     def __init__(self, mail: SenderMail, headers: ListHeaders, http: SafeHttp, send: SystemSend):
         self._mail, self._headers, self._http, self._send = mail, headers, http, send
+        self._pace = Pace()
 
     def _from_server(self, row: Row) -> UnsubWay | None:
         """Ask the server for one message's unsubscribe headers alone: mail from before ingest kept them,
@@ -95,11 +99,11 @@ class Unsubscribing:
         if repeat is not None:
             return repeat
         if info["method"] == "one-click":
-            rate_gate()
+            self._pace.wait_turn()
             ok, http_status, _reason = self._http.one_click_post(info["https_uri"] or "")
             tried = unsubscribe.after_one_click(ok, http_status)
         elif info["method"] == "mailto":
-            rate_gate()
+            self._pace.wait_turn()
             tried = unsubscribe.after_mailto(self._mailto(info, accts, key))
         else:
             tried = unsubscribe.without_sending(info)
