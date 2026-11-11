@@ -1,5 +1,5 @@
-// Email connections: who MailMind reads, and how it reaches each. A password goes to the server once and never comes back;
-// what the page shows of a stored one is only how it is kept.
+// Email connections: who MailMind reads, and how it reaches each. A password goes to the server once, which keeps it in the
+// login Keychain, and never comes back; what the page shows of a stored one is only how it is kept.
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
@@ -21,9 +21,9 @@ import { useLayer } from "../../lib/backTrap";
 
 type Connection = NonNullable<GetAnswers["/api/accounts"]["accounts"]>[number];
 type Health = GetAnswers["/api/account-health"]["accounts"][number];
-type Credential = { set?: boolean; style?: string; ref?: string | string[]; var?: string };
+type Credential = { set?: boolean; style?: string; ref?: string | string[]; var?: string; item?: string };
 type Kind = "gmail" | "imap" | "proton";
-type Cred = "plain" | "op" | "env" | "proton_bridge";
+type Cred = "keychain" | "op" | "env" | "proton_bridge";
 type Tested = { kind: "run" | "ok" | "err"; text: string } | null;
 
 const credentialOf = (c: Connection) => c.credential as unknown as Credential;
@@ -55,7 +55,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
   const [host, setHost] = useState(row?.host ?? "");
   const [port, setPort] = useState(String(row?.port ?? 993));
   const [security, setSecurity] = useState<"tls" | "starttls">(row?.starttls ? "starttls" : "tls");
-  const [style, setStyle] = useState<Exclude<Cred, "proton_bridge">>(was?.style === "op" || was?.style === "env" ? was.style : "plain");
+  const [style, setStyle] = useState<Exclude<Cred, "proton_bridge">>(was?.style === "op" || was?.style === "env" ? was.style : "keychain");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [opRef, setOpRef] = useState(was?.style === "op" ? refOf(was) : "");
@@ -66,7 +66,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
 
   const credential = () => {
     if (type === "proton") return { style: "proton_bridge" };
-    if (style === "plain") return password.trim() ? { style: "plain", value: password.trim() } : null;
+    if (style === "keychain") return password.trim() ? { style: "keychain", value: password.trim() } : null;
     if (style === "op") return opRef.trim() ? { style: "op", ref: opRef.trim() } : null;
     return envVar.trim() ? { style: "env", var: envVar.trim() } : null;
   };
@@ -124,13 +124,14 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
         )
         : (
           <>
-            <Seg label="Credential" value={style} options={[["plain", "Password"], ["op", "1Password"], ["env", "Env var"]]} onChange={setStyle} />
-            {style === "plain" && (
+            <Seg label="Credential" value={style} options={[["keychain", "Password"], ["op", "1Password"], ["env", "Env var"]]} onChange={setStyle} />
+            {style === "keychain" && (
               <>
                 <div className="pwwrap">
                   <input type={showPassword ? "text" : "password"} aria-label="Password" value={password} autoComplete="new-password" placeholder={row ? "•••••••• unchanged — leave blank to keep" : "paste the password / app password"} onChange={(e) => setPassword(e.target.value)} />
                   <button type="button" className="eye" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(!showPassword)}><Icon name="eye" /></button>
                 </div>
+                <div className="set-help">Kept in your login Keychain, never in a file.</div>
                 {type === "gmail" && <div className="set-help">Gmail needs an App Password (2-Step Verification → App passwords), not your login password.</div>}
               </>
             )}
@@ -160,7 +161,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
 
 function Credentials({ c }: { c: Credential | null }) {
   if (!c?.set) return <span className="set-cred">no password set</span>;
-  if (c.style === "plain") return <span className="set-cred"><span className="lock"><Icon name="lock" /></span> ••••••••</span>;
+  if (c.style === "keychain") return <span className="set-cred"><span className="lock"><Icon name="lock" /></span> in the Keychain</span>;
   if (c.style === "op") return <span className="set-cred"><Icon name="key" /> {refOf(c)}</span>;
   if (c.style === "env") return <span className="set-cred">env ${c.var}</span>;
   if (c.style === "proton_bridge") return <span className="set-cred">Proton Bridge</span>;

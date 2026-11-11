@@ -39,7 +39,7 @@ function AiOff() {
   return (
     <div className="bf-aioff">
       <p><b>AI is off.</b> Summaries, this brief and reply drafts come from Claude, and MailMind has no Anthropic API key. Your mail works the same without it.</p>
-      <p className="m">To turn it on, put an <code>anthropic_api_key</code> in <code>mailmind.config.json</code>, or set <code>ANTHROPIC_API_KEY</code>, then restart MailMind.</p>
+      <p className="m">To turn it on, keep your key in the login Keychain with <code>uv run python -m mailmind ai key</code>, or set <code>ANTHROPIC_API_KEY</code>, then restart MailMind.</p>
       <p className="m pv"><Icon name="lock" /><span>{AI_PRIVACY}</span></p>
     </div>
   );
