@@ -43,9 +43,12 @@ export function useRealtime() {
     });
     es.addEventListener("new-mail", (e) => {
       const digest = qc.getQueryData<GetAnswers["/api/digest"]>(["digest"]);
-      onNewMail(JSON.parse((e as MessageEvent<string>).data) as object, currentRoute(), Boolean(digest && digest.ai.engine !== "none"), (a) => digest?.aliases?.[a] || shortAddress(a));
+      onNewMail(JSON.parse((e as MessageEvent<string>).data) as object, currentRoute(), Boolean(digest && digest.ai.engine !== "none"), (a) => digest?.aliases?.[a] || shortAddress(a), digest?.accounts ?? []);
     });
-    es.addEventListener("snooze-wake", (e) => onSnoozeWake(JSON.parse((e as MessageEvent<string>).data) as { accounts?: string[]; count?: number }, currentRoute()));
+    es.addEventListener("snooze-wake", (e) => {
+      const digest = qc.getQueryData<GetAnswers["/api/digest"]>(["digest"]);
+      onSnoozeWake(JSON.parse((e as MessageEvent<string>).data) as { accounts?: string[]; count?: number }, currentRoute(), digest?.accounts ?? []);
+    });
     es.addEventListener("resync", () => again("digest"));
     // With the stream down nothing says what changed, so the counts and the tray are read on a timer until it reconnects.
     let up = false;

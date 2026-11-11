@@ -9,23 +9,33 @@ import { announce } from "../../lib/toast";
 interface Pending { count: number; woke: number; account: string; since: number; headline: string }
 const pending = createStore<Pending | null>(null);
 
-const LOOK_KEY = "mm_lastlook";
+// When each account's Inbox was last looked at, by the account's place in the list the page has, so this browser's storage holds
+// no address. It once kept them by address, under a key let go of as the first look is read.
+const LOOK_KEY = "mm_looked";
+const LOOK_KEY_BY_ADDRESS = "mm_lastlook";
 const FIRST_LOOK_MS = 6 * 3600 * 1000;
 
 function looks(): Record<string, number> {
+  store(LOOK_KEY_BY_ADDRESS, null);
   try {
-    return JSON.parse(stored(LOOK_KEY) ?? "{}") as Record<string, number>;
+    const said: unknown = JSON.parse(stored(LOOK_KEY) ?? "{}");
+    return typeof said === "object" && said !== null && !Array.isArray(said) ? said as Record<string, number> : {};
   } catch {
     return {};
   }
 }
+
+const lookOf = (accounts: string[], account: string) => {
+  const at = accounts.indexOf(account);
+  return at < 0 ? 0 : Number(looks()[at]) || 0;
+};
 
 // The watermark moves only when you really look: an Inbox opened or the tab come back to, never on a background tick.
 export function lookedAt(source: ListSource | null, accounts: string[]) {
   const inbox = source?.kind === "allInboxes" ? accounts : source?.kind === "folder" && source.folder.toUpperCase() === "INBOX" ? [source.account] : [];
   if (!inbox.length) return;
   const all = looks(), now = Date.now();
-  for (const a of inbox) all[a] = now;
+  for (const at of inbox.map((a) => accounts.indexOf(a))) if (at >= 0) all[at] = now;
   store(LOOK_KEY, JSON.stringify(all));
   pending.set(null);
 }
@@ -80,7 +90,7 @@ function tell(account: string, count: number, name: string) {
   } catch { /* the title still counts it */ }
 }
 
-export function onNewMail(d: { account?: string; folder?: string; count?: number }, route: Route, ai: boolean, nameOf: (account: string) => string) {
+export function onNewMail(d: { account?: string; folder?: string; count?: number }, route: Route, ai: boolean, nameOf: (account: string) => string, listed: string[]) {
   const account = d.account ?? "", folder = d.folder ?? "INBOX", count = d.count || 1;
   tell(account, count, nameOf(account));
   if (landedHere(route.source, account, folder)) return;
@@ -89,7 +99,7 @@ export function onNewMail(d: { account?: string; folder?: string; count?: number
     count: (was?.count ?? 0) + count,
     woke: was?.woke ?? 0,
     account: was && was.account !== account ? "" : account,
-    since: was?.since ?? (looks()[account] || Date.now() - FIRST_LOOK_MS),
+    since: was?.since ?? (lookOf(listed, account) || Date.now() - FIRST_LOOK_MS),
     headline: was?.headline ?? "",
   });
   clearTimeout(timer);
@@ -99,7 +109,7 @@ export function onNewMail(d: { account?: string; folder?: string; count?: number
 
 // Mail back from a snooze, and no Inbox on screen to show it: nobody saw it happen, so it stays said (see lib/toast.tsx) until
 // the Inbox is looked at. An Inbox on screen shows it as it does new mail, and nothing is said over that.
-export function onSnoozeWake(d: { accounts?: string[]; count?: number }, route: Route) {
+export function onSnoozeWake(d: { accounts?: string[]; count?: number }, route: Route, listed: string[]) {
   const accounts = d.accounts ?? [], account = accounts.length === 1 ? accounts[0]! : "", woke = d.count || 1;
   if (landedHere(route.source, account, "INBOX")) return;
   if (!document.hidden) announce(`${woke} snoozed message${woke === 1 ? "" : "s"} back`);
@@ -108,7 +118,7 @@ export function onSnoozeWake(d: { accounts?: string[]; count?: number }, route: 
     count: was?.count ?? 0,
     woke: (was?.woke ?? 0) + woke,
     account: was && was.account !== account ? "" : account,
-    since: was?.since ?? (looks()[account] || Date.now() - FIRST_LOOK_MS),
+    since: was?.since ?? (lookOf(listed, account) || Date.now() - FIRST_LOOK_MS),
     headline: was?.headline ?? "",
   });
 }
