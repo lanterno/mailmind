@@ -237,6 +237,40 @@ class Triage:
         return len(self.items)
 
 
+class Said:
+    """The Answers port's briefs, deltas and reviews in memory, each kept under what the SQLite adapter keys it by, and the
+    mail still waiting for triage (`waiting`, rows with their `ts`), which is all a brief written ahead asks of it."""
+
+    def __init__(self):
+        self.briefs, self.deltas, self.reviews, self.waiting = {}, {}, {}, []
+
+    def needs_summary(self, c, limit=200, newer_than=None):
+        return [r for r in self.waiting if r["ts"] > (-1 if newer_than is None else newer_than)][:limit]
+
+    def get_brief(self, c, accounts, day):
+        return self.briefs.get((accounts, day))
+
+    def save_brief(self, c, accounts, day, fingerprint, narrative, groups_json, model, created_at):
+        self.briefs[accounts, day] = {"accounts": accounts, "day": day, "fingerprint": fingerprint, "narrative": narrative,
+                                      "groups_json": groups_json, "model": model, "created_at": created_at}
+
+    def get_delta(self, c, accounts, since_ts, fingerprint):
+        return self.deltas.get((accounts, since_ts, fingerprint))
+
+    def save_delta(self, c, accounts, since_ts, fingerprint, headline, items_json, model, created_at):
+        self.deltas[accounts, since_ts, fingerprint] = {"headline": headline, "items_json": items_json, "model": model,
+                                                        "created_at": created_at}
+
+    def get_review(self, c, accounts, day):
+        return self.reviews.get((accounts, day))
+
+    def save_review(self, c, accounts, day, fingerprint, narrative, next_json, stats_json, needs_json, waiting_json, model,
+                    created_at):
+        self.reviews[accounts, day] = {"fingerprint": fingerprint, "narrative": narrative, "next_json": next_json,
+                                       "stats_json": stats_json, "needs_json": needs_json, "waiting_json": waiting_json,
+                                       "model": model, "created_at": created_at}
+
+
 def gateway_on(model, ledger=None, governor=None, clock=time.time):
     """The real Gateway, over `model` and `ledger`."""
     return Gateway(lambda: model, Ledger() if ledger is None else ledger, clock=clock, governor=governor)

@@ -1,15 +1,14 @@
-"""The morning's brief, written ahead of the first open: for someone who turned it on, in the morning, once triage has read
-the last day's mail, and within the cost governor."""
-from datetime import datetime, timedelta, timezone
+"""The morning's brief, written ahead of the first open, for someone who turned it on: the preference, the background round
+that asks for it, and the brief the Inbox then opens on. When in the morning it is written, what it waits for and how the
+cost governor holds it back are tests/unit/assistant/test_brief_ahead.py's."""
+from datetime import datetime, timezone
 
 import pytest
 
 from fakes import anthropic_api as fa
 from mailmind.bootstrap import accounts, assistant, background
-from mailmind.bootstrap.mailbox import store
 
 MORNING = datetime(2026, 11, 3, 7, 0, tzinfo=timezone.utc)
-CLIENT = "bea-inbox-01-client.eml"
 
 
 def triaged(ai):
@@ -21,16 +20,6 @@ def triaged(ai):
 
 def turned_on(app):
     assert app.post("/api/preferences", {"morning_brief": True}).status == 200
-
-
-def not_triaged(world, name, age):
-    """Leave one message unread by triage, `age` before the morning."""
-    c = store.conn()
-    key = world.key(name)
-    c.execute("DELETE FROM assessments WHERE message_key=?", (key,))
-    c.execute("UPDATE messages SET ts=? WHERE message_key=?", (int((MORNING - age).timestamp()), key))
-    c.commit()
-    c.close()
 
 
 @pytest.fixture
@@ -62,61 +51,6 @@ def test_turned_on_the_brief_is_there_when_the_inbox_opens(ready, ai):
     r = ready.get("/api/briefing")
     assert (r.json["narrative"], r.json["cached"]) == ("Bea wants an answer.", True)
     assert len(written(ai)) == 1
-
-
-def test_a_brief_already_written_today_is_left_alone(ready, ai):
-    background.brief_ahead_round()
-    background.brief_ahead_round()
-    assert len(written(ai)) == 1
-
-
-@pytest.mark.parametrize("hour", [0, 4, 12, 23])
-def test_outside_the_morning_nothing_is_written(ready, ai, hour):
-    ready.clock.move_to(MORNING.replace(hour=hour))
-    background.brief_ahead_round()
-    assert ai.requests == []
-
-
-@pytest.mark.parametrize("hour", [5, 11])
-def test_the_morning_is_from_five_until_noon(ready, ai, hour):
-    ready.clock.move_to(MORNING.replace(hour=hour))
-    background.brief_ahead_round()
-    assert len(written(ai)) == 1
-
-
-def test_it_waits_for_triage_to_read_the_last_days_mail(ready, world, ai):
-    not_triaged(world, CLIENT, timedelta(hours=2))
-    background.brief_ahead_round()
-    assert ai.requests == []
-
-
-def test_an_older_backlog_doesnt_hold_it_up(ready, world, ai):
-    not_triaged(world, CLIENT, timedelta(days=3))
-    background.brief_ahead_round()
-    assert len(written(ai)) == 1
-
-
-def test_after_days_away_nothing_is_written_until_someone_is_back(ready, ai):
-    ready.clock.move_to(MORNING + timedelta(days=2))
-    background.brief_ahead_round()
-    assert ai.requests == []
-    assistant.governor().saw_someone()
-    background.brief_ahead_round()
-    assert len(written(ai)) == 1
-
-
-def test_a_day_off_leaves_it_on(ready, ai):
-    ready.clock.move_to(MORNING + timedelta(days=1))       # nobody has been here since the day before yesterday's noon
-    background.brief_ahead_round()
-    assert len(written(ai)) == 1
-
-
-def test_a_failed_call_waits_for_the_next_round(ready, ai):
-    ai.queue(fa.error(400, "invalid_request_error", "bad request"))
-    background.brief_ahead_round()
-    assert ready.get("/api/briefing").json["missing"] is True
-    background.brief_ahead_round()
-    assert ready.get("/api/briefing").json["cached"] is True
 
 
 def test_it_is_a_preference_and_nothing_else_can_be_it(app):
