@@ -78,9 +78,18 @@ def compose(page, addr, subj, text):
 
 
 def let_undo_pass(page):
-    expect(page.locator("#sendFloat")).to_contain_text("Sending in 10s")
-    page.clock.run_for(11_000)
-    expect(page.locator("#sendFloat")).to_contain_text("Sent")
+    float_ = page.locator("#sendFloat")
+    expect(float_).to_contain_text("Sending in 10s")
+    # "Sent" stays up for 2.4 s of the page's clock, which a busy machine can spend between two steps here: the clock is held
+    # from here, and runs as many seconds as the countdown still says.
+    page.clock.pause_at(page.evaluate("Date.now()") + 1_000)
+    page.clock.run_for(seconds_left(float_) * 1_000)
+    expect(float_).to_contain_text("Sent")
+    page.clock.resume()
+
+
+def seconds_left(float_):
+    return int(re.search(r"Sending in (\d+)s", float_.inner_text())[1])
 
 
 def due(app):

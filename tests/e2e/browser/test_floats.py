@@ -144,6 +144,22 @@ def axe_says(page):
     return {v["id"]: [n["target"] for n in v["nodes"]] for v in found}
 
 
+def axe_says_held(page):
+    """What axe says with the page's clock held, so a float that goes by itself stays while axe looks at it. axe's own steps
+    wait on that clock's timers, so it is given time on it a frame at a time until it has done, far less than a float lasts."""
+    page.pw.evaluate(FADES_DONE)
+    page.pw.evaluate(Axe().axe_script)
+    page.pw.evaluate("""() => { window.axeSaid = null;
+        axe.run({iframes: false}).then(r => { window.axeSaid = r.violations.map(v => [v.id, v.nodes.map(n => n.target)]) }) }""")
+    for _ in range(60):
+        if page.pw.evaluate("window.axeSaid !== null"):
+            break
+        page.clock.run_for(16)
+    said = page.pw.evaluate("window.axeSaid")
+    assert said is not None, "axe hadn't done after a second of the page's time"
+    return dict(said)
+
+
 def test_axe_finds_nothing_on_a_rows_states_or_the_floats(page, world, every_theme):
     opened(page)
     rows = page.locator("#rows .row.cmsg")
@@ -161,8 +177,11 @@ def test_axe_finds_nothing_on_a_rows_states_or_the_floats(page, world, every_the
     send(page)
     float_ = page.locator("#sendFloat")
     expect(float_).to_contain_text("Sending in")
-    assert axe_says(page) == {}
-    page.clock.run_for(11_000)
+    # Held from here, so the countdown waits for each check: "Sent" stays up for 2.4 s of the page's clock, and a busy
+    # machine can spend longer than that on axe.
+    page.clock.pause_at(page.evaluate("Date.now()") + 1_000)
+    assert axe_says_held(page) == {}
+    page.clock.run_for(int(re.search(r"Sending in (\d+)s", float_.inner_text())[1]) * 1_000)
     expect(float_).to_contain_text("Sent")
-    assert axe_says(page) == {}
+    assert axe_says_held(page) == {}
     clean(page)
