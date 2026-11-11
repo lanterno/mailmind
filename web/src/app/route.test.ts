@@ -197,6 +197,37 @@ describe("the place a page was opened at", () => {
   });
 });
 
+describe("Back or Forward to a place from before the page was loaded", () => {
+  async function loaded() {
+    vi.resetModules();
+    const heard: ((e: Event) => void)[] = [];
+    const at = { pathname: "/all", search: "", reload: vi.fn() };
+    vi.stubGlobal("location", at);
+    vi.stubGlobal("window", { addEventListener: (name: string, fn: (e: Event) => void) => name === "popstate" && heard.push(fn) });
+    const page = await import("./route");
+    const back = (pathname: string) => {
+      at.pathname = pathname;
+      const e = { stopImmediatePropagation: vi.fn() };
+      for (const fn of heard) fn(e as unknown as Event);
+      return e;
+    };
+    return { page, at, back };
+  }
+
+  it("loads one this page doesn't know from the server, and no one else hears of it", async () => {
+    const { at, back } = await loaded();
+    const e = back("/p/Made-Before-A-Reload0");
+    expect(at.reload).toHaveBeenCalledOnce();
+    expect(e.stopImmediatePropagation).toHaveBeenCalledOnce();
+  });
+  it("leaves one this page knows, and a route written as itself, to the page", async () => {
+    const { page, at, back } = await loaded();
+    const events = [back(page.pathOf(personal[0]!)), back("/all"), back("/"), back("/m/ada%40example.test/INBOX")];
+    expect(at.reload).not.toHaveBeenCalled();
+    for (const e of events) expect(e.stopImmediatePropagation).not.toHaveBeenCalled();
+  });
+});
+
 describe("a route read back", () => {
   it.each([...personal, ...readable.map(([r]) => r)].map((r) => [named(r), r] as const))("%s reads as it was", (_, route) => {
     expect(routeFrom(JSON.parse(JSON.stringify(route)))).toEqual(route);
