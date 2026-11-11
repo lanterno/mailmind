@@ -340,3 +340,17 @@ def test_with_ai_off_nothing_goes_and_nothing_is_touched():
                       "msgbatch_x", 0)
     assert backlog.job.batch_collect() == 0
     assert (off.asked, off.sent, backlog.job.batch_status()["waiting"]) == ([], [], 2)
+
+
+def test_while_someone_uses_ai_no_batch_goes_and_the_backlog_still_waits():
+    """A backlog yields to a person as every background call does: nothing is asked of the model, and none of it is
+    marked as sent, so the next round finds it all still waiting."""
+    model = Model()
+    governor = CostGovernor(spent=lambda: 0, limit=lambda: 15_000_000)
+    backlog = Backlog(model, governor)
+    before = backlog.waiting()
+    with governor.call("interactive", "ask", models.DEFAULT, model):
+        pass                                                # someone asked just now
+    assert backlog.job.batch_submit() == 0
+    assert model.asked == []
+    assert backlog.waiting() == before and backlog.job.batch_status()["waiting"] == 0
