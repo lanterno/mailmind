@@ -249,22 +249,26 @@ def test_a_refused_archive_puts_the_row_back_and_says_so(page, world):
     clean(page)
 
 
-def test_star_and_unread_reach_the_server(page, world):
+@pytest.mark.parametrize("dwelt", [False, True], ids=["before the dwell", "after it"])
+def test_star_and_unread_reach_the_server(page, world, dwelt):
     opened(page)
     r = row(page, world, RECEIPT)
+    page.clock.pause_at(page.evaluate("Date.now()") + 1_000)     # held: the dwell is over only when the test says
     r.click()
     expect(page.locator(".rd-subj")).to_be_visible()
     page.keyboard.press("s")
     until(page, lambda: "\\Flagged" in world.where(RECEIPT)["server"][0][3], "the star never reached the server")
+    if dwelt:
+        page.clock.run_for(1_300)                                # a moment on it has marked it read
+        expect(r).not_to_have_class(re.compile(r"\bunread\b"))
     page.heard_all_asked()
     marked = []
     page.on("request", lambda r: marked.append(r.post_data_json["seen"]) if r.url.endswith("/api/seen") else None)
     page.keyboard.press("u")
+    page.clock.run_for(1500)        # past the dwell, which doesn't take it back; the list draws what it's told on this clock too
     expect(r).to_have_class(re.compile(r"\bunread\b"))
-    page.clock.run_for(1500)        # past the dwell, which doesn't take it back
     page.heard_all_asked()
     assert True not in marked
-    expect(r).to_have_class(re.compile(r"\bunread\b"))
     until(page, lambda: "\\Seen" not in world.where(RECEIPT)["server"][0][3], "the unread mark never reached the server")
     clean(page)
 
