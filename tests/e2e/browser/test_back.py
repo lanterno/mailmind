@@ -47,7 +47,7 @@ def two_pages(page):
     page.goto(f"/m/{w.ADA}/Sent")
     expect(page.locator("#monos")).not_to_be_empty()
     page.locator('a.frow[data-folder="INBOX"]').click()
-    expect(page.pw).to_have_url(re.compile("/INBOX"))
+    page.expect_where("/INBOX")
     return page
 
 
@@ -61,9 +61,9 @@ def test_back_closes_a_dialog_and_stays_on_the_page(page, world):
     expect(help_).to_be_visible()
     page.pw.go_back()
     expect(help_).to_have_count(0)
-    expect(page.pw).to_have_url(INBOX)
+    page.expect_where(INBOX)
     page.pw.go_back()
-    expect(page.pw).to_have_url(SENT)
+    page.expect_where(SENT)
     clean(page)
 
 
@@ -76,7 +76,7 @@ def test_a_dialog_closed_another_way_gives_its_entry_back(page, world):
     expect(help_).to_have_count(0)
     until(page, lambda: page.pw.evaluate("history.state === null || !history.state.mmTrap"), "the entry was spent")
     page.pw.go_back()
-    expect(page.pw).to_have_url(SENT)
+    page.expect_where(SENT)
     clean(page)
 
 
@@ -93,12 +93,12 @@ def test_back_closes_stacked_layers_one_at_a_time(page, world):
     page.pw.go_back()
     expect(plan).to_have_count(0)
     expect(drawer).to_be_visible()
-    expect(page.pw).to_have_url(INBOX)
+    page.expect_where(INBOX)
     page.pw.go_back()
     expect(drawer).to_have_count(0)
-    expect(page.pw).to_have_url(INBOX)
+    page.expect_where(INBOX)
     page.pw.go_back()
-    expect(page.pw).to_have_url(SENT)
+    page.expect_where(SENT)
     clean(page)
 
 
@@ -107,11 +107,11 @@ def test_going_somewhere_from_a_dialog_leaves_one_back_to_the_page_before(page, 
     page.keyboard.press("ControlOrMeta+k")
     page.get_by_role("combobox", name="Command").fill("All inboxes")
     page.keyboard.press("Enter")
-    expect(page.pw).to_have_url(re.compile("/all"))
+    page.expect_where("/all")
     page.pw.go_back()
-    expect(page.pw).to_have_url(INBOX)
+    page.expect_where(INBOX)
     page.pw.go_back()
-    expect(page.pw).to_have_url(SENT)
+    page.expect_where(SENT)
     clean(page)
 
 
@@ -122,7 +122,7 @@ def test_back_closes_the_composer_and_keeps_what_was_typed(page, world):
     subject.fill("Kept by Back")
     page.pw.go_back()
     expect(subject).to_have_count(0)
-    expect(page.pw).to_have_url(INBOX)
+    page.expect_where(INBOX)
     until(page, lambda: any("Kept by Back" in str(r) for r in drafts(world)), "the draft was saved")
     clean(page)
 
@@ -140,9 +140,9 @@ def test_back_on_a_message_returns_to_the_list(page, world):
     inbox(page)
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     page.get_by_role("option").first.click()
-    expect(page.pw).to_have_url(re.compile(r"key=\d+&folder="))
+    page.expect_where(r"key=\d+&folder=")
     page.pw.go_back()
-    expect(page.pw).not_to_have_url(re.compile(r"key=\d+"))
+    page.expect_where(r"key=\d+", present=False)
     clean(page)
 
 

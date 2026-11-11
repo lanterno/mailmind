@@ -281,7 +281,7 @@ def test_a_file_opens_its_mail_and_downloads_from_its_link(page, world):
     row.get_by_role("button").click()
     expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
     expect(row).to_be_visible()                                 # the Hub stays beside what it opened
-    assert "/documents?" in page.url
+    assert "/documents?" in page.where()
     clean(page)
 
 

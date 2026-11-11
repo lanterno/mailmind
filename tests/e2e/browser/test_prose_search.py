@@ -1,6 +1,5 @@
 """A sentence in the search box: searched as written, then as the search it reads as, under a chip that takes that back. The model
 is asked on Enter and only then, and a plain keyword search never asks it."""
-import re
 import time
 
 import pytest
@@ -71,8 +70,8 @@ def test_a_sentence_is_translated_and_the_chip_gets_the_literal_search_back(page
     chip(page).get_by_role("button").click()
     expect(chip(page)).to_have_count(0)
     expect(box(page)).to_have_value(SENTENCE)
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=emails"))
-    assert "asked=" not in page.url
+    page.expect_where(r"/search\?q=emails")
+    assert "asked=" not in page.where()
     assert len(plans(ai)) == 1
     clean(page)
 
@@ -113,7 +112,7 @@ def test_the_chip_says_so_while_it_is_going(page, world, ai):
     page.pw.route("**/api/ai/do-plan", lambda route: held.append(route))
     search(page, SENTENCE)
     expect(page.locator("#clientCtx .ctx-chip")).to_contain_text("Translating")
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=emails"))     # the literal search is already there
+    page.expect_where(r"/search\?q=emails")     # the literal search is already there
     held[0].continue_()
     expect(chip(page)).to_contain_text("Translated from")
     clean(page)
@@ -147,7 +146,7 @@ def test_with_ai_off_a_sentence_stays_literal(page, world):
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     seen = planner_requests(page)
     search(page, SENTENCE)
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=emails"))
+    page.expect_where(r"/search\?q=emails")
     page.heard_all_asked()
     assert seen == []
     expect(box(page)).to_have_value(SENTENCE)
@@ -160,7 +159,7 @@ def test_a_planner_that_fails_leaves_the_literal_search(page, world, ai):
     inbox(page)
     page.pw.route("**/api/ai/do-plan", lambda route: route.fulfill(status=502, content_type="application/problem+json", body='{"type":"/problems/unreachable","title":"unreachable","status":502}'))
     search(page, SENTENCE)
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=emails"))
+    page.expect_where(r"/search\?q=emails")
     expect(page.locator("#clientCtx .ctx-chip")).to_have_count(0, timeout=2000)
     expect(box(page)).to_have_value(SENTENCE)
     assert all("502" in p for p in page.problems), page.problems
@@ -181,7 +180,7 @@ def test_over_the_days_limit_it_asks_nobody_and_stays_literal(page, world, ai):
     translating_to(ai)
     inbox(page)
     search(page, SENTENCE)
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=emails"))
+    page.expect_where(r"/search\?q=emails")
     expect(page.locator("#clientCtx .ctx-chip")).to_have_count(0, timeout=2000)
     expect(page.get_by_role("alertdialog")).to_have_count(0)
     assert plans(ai) == []
@@ -217,10 +216,10 @@ def test_leaving_before_it_answers_leaves_you_where_you_went(page, world, ai):
     held = []
     page.pw.route("**/api/ai/do-plan", lambda route: held.append(route))
     search(page, SENTENCE)
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=emails"))
+    page.expect_where(r"/search\?q=emails")
     box(page).fill("lunch")
     box(page).press("Enter")
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=lunch"))
+    page.expect_where(r"/search\?q=lunch")
     held[0].continue_()
     page.wait_for_timeout(300)              # time for the late answer to be taken, if it would be: nothing on the page says it was
     expect(box(page)).to_have_value("lunch")

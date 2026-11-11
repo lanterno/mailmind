@@ -6,11 +6,13 @@ here and listed in `page.blocked`, which `clean` holds empty, so no test sends a
 means the same day on both sides. `page.problems` collects uncaught errors, console errors and
 content security policy violations.
 """
+import json
 import os
 import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
+from urllib.parse import quote, urlencode, urlsplit
 
 import pytest
 
@@ -49,6 +51,40 @@ def chromium():
         browser.close()
 
 
+def place_route(place):
+    """The route a place holds, as the server keeps it, or None for one it doesn't hold. Read only: opening it would mark it."""
+    from mailmind.platform.db.uow import UnitOfWork
+    with UnitOfWork().read() as c:
+        row = c.execute("SELECT route FROM places WHERE id=?", (place,)).fetchone()
+    return None if row is None else json.loads(row[0])
+
+
+def readable(route):
+    """A route as the page once wrote it into its URL, which every route holding something of a person's now leaves out."""
+    source, opened, query = route.get("source"), route.get("opened"), []
+    kind = (source or {}).get("kind")
+
+    def seg(text):
+        return quote(text, safe="")
+
+    if kind == "folder":
+        path = f"/m/{seg(source['account'])}/{seg(source['folder'])}"
+    elif kind == "search":
+        path = "/search"
+        query += [("q", source["q"])] + [(name, source[name]) for name in ("account", "lane", "thread", "asked") if source.get(name)]
+    elif kind == "digest":
+        path = f"/brief/topic/{seg(source['label'])}" if source["list"] == "topic" else f"/brief/{source['list']}"
+    else:
+        path = {"allInboxes": "/all", "documents": "/documents", None: "/"}.get(kind) or f"/all/{source['folder']}"
+    if route.get("brief"):
+        query.append(("brief", "1"))
+    if opened and opened["kind"] == "thread":
+        query += [("c", opened["id"]), ("ca", opened["account"])]
+    if opened:
+        query += [("key", opened["key"]), ("folder", opened["folder"]), ("uid", opened["uid"])]
+    return path + (f"?{urlencode(query)}" if query else "")
+
+
 class Page:
     """A Playwright page plus what the fence and the console saw."""
 
@@ -59,6 +95,31 @@ class Page:
 
     def __getattr__(self, name):
         return getattr(self.pw, name)
+
+    def where(self, url=None, timeout=10):
+        """Where the page is, or where `url` goes, written as its URL once wrote it (`/m/<account>/<folder>?key=…`), so a test
+        can say what that holds: a place's route as the page sent it to the server, or the URL itself for one written as
+        itself. Waits for a new place to reach the server, and fails if it never does."""
+        parts = urlsplit(url or self.pw.url)
+        place = re.fullmatch(r"/p/([A-Za-z0-9_-]+)", parts.path)
+        if not place:
+            return parts.path + (f"?{parts.query}" if parts.query else "")
+        for _ in range(timeout * 20):
+            route = place_route(place.group(1))
+            if route is not None:
+                return readable(route)
+            self.pw.wait_for_timeout(50)
+        raise AssertionError(f"the place {place.group(1)} never reached the server")
+
+    def expect_where(self, pattern, present=True):
+        """Wait until where the page is matches `pattern` (or, with present=False, doesn't), as `expect(...).to_have_url` would."""
+        found = re.compile(pattern) if isinstance(pattern, str) else pattern
+        for _ in range(200):
+            now = self.where()
+            if bool(found.search(now)) == present:
+                return now
+            self.pw.wait_for_timeout(50)
+        raise AssertionError(f"{'not ' if present else ''}at {found.pattern}: at {now}")
 
     def heard_all_asked(self):
         """Returns once Playwright has told of every request the page made before this call, so a test may say one wasn't

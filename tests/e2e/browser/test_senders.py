@@ -177,7 +177,7 @@ def test_from_this_sender_searches_for_them(page, world):
     opened_receipt(page, world)
     page.locator("button.rd-sender").click()
     page.get_by_role("button", name="From this sender").click()
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=from%3A"))
+    page.expect_where(r"/search\?q=from%3A")
     expect(page.get_by_role("option").first).to_contain_text("Thimble")
     clean(page)
 

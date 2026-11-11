@@ -57,7 +57,7 @@ def test_typing_offers_senders_and_the_keys_take_one_and_search_it(page, world):
     page.keyboard.press("ArrowDown")
     expect(box(page)).to_have_attribute("aria-activedescendant", offers(page).first.get_attribute("id"))
     page.keyboard.press("Enter")
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=from%3Alin%40example\.test"))
+    page.expect_where(r"/search\?q=from%3Alin%40example\.test")
     expect(box(page)).to_have_value("from:lin@example.test")
     expect(listed(page)).to_have_count(0)
     expect(rows(page).first).to_be_visible()
@@ -68,7 +68,7 @@ def test_a_click_takes_one_too(page, world):
     inbox(page)
     box(page).fill("from:loom")
     offers(page).filter(has_text="everyone at this domain").click()
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=from%3Aloom\.example\.test"))
+    page.expect_where(r"/search\?q=from%3Aloom\.example\.test")
     expect(box(page)).to_be_focused()
     clean(page)
 
@@ -79,7 +79,7 @@ def test_an_operator_goes_on_to_its_values(page, world):
     offers(page).filter(has_text="is:").click()
     expect(box(page)).to_have_value("is:")
     expect(offers(page).first).to_contain_text("is:unread")
-    assert "/search" not in page.url
+    assert "/search" not in page.where()
     clean(page)
 
 
@@ -91,7 +91,7 @@ def test_tab_finishes_the_word_and_leaves_it_to_you_to_search(page, world):
     page.keyboard.press("Tab")
     expect(box(page)).to_have_value("is:unread ")
     expect(box(page)).to_be_focused()
-    assert "/search" not in page.url
+    assert "/search" not in page.where()
     clean(page)
 
 
@@ -100,7 +100,7 @@ def test_enter_with_nothing_picked_searches_what_is_typed(page, world):
     box(page).fill("lin")
     expect(offers(page).first).to_be_visible()
     page.keyboard.press("Enter")
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=lin"))
+    page.expect_where(r"/search\?q=lin")
     expect(box(page)).to_have_value("lin")
     expect(listed(page)).to_have_count(0)
     clean(page)
@@ -150,7 +150,7 @@ def test_the_list_passes_axe(page, world):
 def open_hit(page, world, name):
     row = page.locator('#rows .row[data-key="{key}"][data-folder="{folder}"]'.format(**world.copy(name)))
     row.click()
-    expect(page.pw).to_have_url(re.compile(rf"key={world.key(name)}"))
+    page.expect_where(rf"key={world.key(name)}")
 
 
 def test_a_search_can_be_held_to_the_conversation_open_and_let_go(page, world):
@@ -163,12 +163,12 @@ def test_a_search_can_be_held_to_the_conversation_open_and_let_go(page, world):
     scope = page.locator("#scopeThread")
     expect(scope).to_have_text("this conversation only")
     scope.click()
-    expect(page.pw).to_have_url(re.compile(r"[?&]thread="))
+    page.expect_where(r"[?&]thread=")
     expect(rows(page)).to_have_count(2)
     expect(page.locator("#scopeTog")).to_have_count(0)
     expect(page.locator(".rd-iframe, #thread").first).to_be_visible()      # what you were reading stays open
     scope.click()
-    expect(page.pw).not_to_have_url(re.compile(r"[?&]thread="))
+    page.expect_where(r"[?&]thread=", present=False)
     expect(rows(page)).to_have_count(total)
     clean(page)
 
@@ -179,7 +179,7 @@ def test_the_box_offers_the_conversation_you_are_reading(page, world):
     first = offers(page).first
     expect(first).to_contain_text("in this conversation only")
     first.click()
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=noodle&account=.*&thread="))
+    page.expect_where(r"/search\?q=noodle&account=.*&thread=")
     expect(page.locator("#thread .tmsg")).to_have_count(3)                  # still reading it
     expect(page.locator("#scopeThread")).to_have_text("this conversation only ✕")
     clean(page)
@@ -189,8 +189,8 @@ def test_the_next_search_stays_held_to_the_conversation(page, world):
     read_the_lunch_conversation(page)
     box(page).fill("noodle")
     offers(page).first.click()
-    expect(page.pw).to_have_url(re.compile(r"[?&]thread="))
+    page.expect_where(r"[?&]thread=")
     box(page).fill("thursday")
     page.keyboard.press("Enter")
-    expect(page.pw).to_have_url(re.compile(r"/search\?q=thursday&account=.*&thread="))
+    page.expect_where(r"/search\?q=thursday&account=.*&thread=")
     clean(page)

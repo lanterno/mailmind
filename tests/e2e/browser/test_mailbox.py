@@ -55,7 +55,7 @@ def test_a_link_from_when_the_app_lived_at_next_opens_the_same_place(page, world
 
 def test_it_opens_the_first_accounts_inbox_with_its_rail_and_list(page, world):
     opened(page)
-    assert page.url.endswith(f"/m/{w.ADA.replace('@', '%40')}/INBOX")
+    assert page.where() == f"/m/{w.ADA.replace('@', '%40')}/INBOX"
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     expect(page.locator('#folderrail .frow[data-folder="INBOX"]')).to_have_attribute("aria-current", "page")
     expect(row(page, world, RECEIPT)).to_be_visible()
@@ -66,7 +66,7 @@ def test_a_folder_is_a_link_and_back_comes_back(page, world):
     opened(page)
     page.locator('#folderrail .frow[data-folder="Sent"]').click()
     expect(page.locator("#listTitle")).to_have_text("Sent")
-    assert "/Sent" in page.url
+    assert "/Sent" in page.where()
     page.go_back()
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     clean(page)
@@ -384,7 +384,7 @@ def test_a_search_shows_what_it_finds_and_escape_leaves_it(page, world):
     box.fill("from:lin")
     box.press("Enter")
     expect(page.locator("#listTitle")).to_have_text("Search")
-    assert "q=from%3Alin" in page.url
+    assert "q=from%3Alin" in page.where()
     box.press("Escape")
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     clean(page)
@@ -487,7 +487,7 @@ def test_all_inboxes_shows_the_views_that_arent_folders_over_every_account(page,
     page.keyboard.press("g")
     page.keyboard.press("z")
     expect(page.locator("#listTitle")).to_have_text("Snoozed")
-    assert "/all/__snoozed__" in page.url
+    assert "/all/__snoozed__" in page.where()
     clean(page)
 
 
@@ -509,12 +509,12 @@ def test_a_tab_on_an_older_build_offers_a_reload_and_a_current_one_doesnt(page, 
     opened(page)
     float_ = page.locator("#buildFloat")
     assert float_.is_hidden()
-    page.pw.route("**/m/**", lambda route: route.fulfill(
+    page.pw.route("**/p/**", lambda route: route.fulfill(
         response=(r := route.fetch()), body=re.sub(r'(name="mailmind-build" content=")[^"]+', r"\1older", r.text())))
     page.pw.reload()
     float_.wait_for(state="visible")
     assert "MailMind was updated" in float_.inner_text()
-    page.pw.unroute("**/m/**")
+    page.pw.unroute("**/p/**")
     page.locator("#buildReload").click()
     float_.wait_for(state="hidden")
     clean(page)

@@ -533,7 +533,7 @@ def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
     page.pw.clock.run_for(10_000)                          # no toast's life: it stays said until it's looked at
     expect(pill).to_contain_text("2 back from snooze")
     pill.click()
-    expect(page.pw).to_have_url(re.compile(r"/INBOX"))
+    page.expect_where(r"/INBOX")
     expect(pill).to_have_count(0)
     clean(page)
 
@@ -541,7 +541,7 @@ def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
 def test_mail_back_from_snooze_is_said_over_another_folder_of_its_account(page, world):
     opened(page)
     page.locator('.frow[data-folder="Sent"]').first.click()
-    expect(page.pw).to_have_url(re.compile(r"/Sent"))
+    page.expect_where(r"/Sent")
     sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
     expect(page.locator("#newPill")).to_contain_text("1 back from snooze")
     clean(page)
@@ -550,7 +550,7 @@ def test_mail_back_from_snooze_is_said_over_another_folder_of_its_account(page, 
 def test_new_mail_and_mail_back_from_snooze_share_the_pill(page, world):
     opened(page)
     page.locator('.frow[data-folder="Sent"]').first.click()
-    expect(page.pw).to_have_url(re.compile(r"/Sent"))
+    page.expect_where(r"/Sent")
     sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
     sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 3})
     expect(page.locator("#newPill")).to_contain_text("3 new, 1 back from snooze")
@@ -981,16 +981,16 @@ def test_escape_closes_a_message_before_it_leaves_the_search_it_was_opened_from(
     box = page.get_by_role("combobox", name="Search")
     box.fill("lunch")
     box.press("Enter")
-    expect(page.pw).to_have_url(re.compile("search"))
+    page.expect_where("search")
     page.get_by_role("option").first.click()
     expect(page.locator("#bodyframe, iframe").first).to_be_visible()
     box.blur()
     page.keyboard.press("Escape")                               # the message, and the search stays
     expect(page.locator("#bodyframe, iframe")).to_have_count(0)
-    expect(page.pw).to_have_url(re.compile("search"))
+    page.expect_where("search")
     expect(page.get_by_role("option").first).to_be_visible()
     page.keyboard.press("Escape")                               # then the search
-    expect(page.pw).not_to_have_url(re.compile("search"))
+    page.expect_where("search", present=False)
     clean(page)
 
 
@@ -1010,10 +1010,10 @@ def test_escape_in_the_search_box_clears_the_search_and_goes_home(page, world):
     box = page.get_by_role("combobox", name="Search")
     box.fill("lunch")
     box.press("Enter")
-    expect(page.pw).to_have_url(re.compile("search"))
+    page.expect_where("search")
     box.focus()
     box.press("Escape")
-    expect(page.pw).not_to_have_url(re.compile("search"))
+    page.expect_where("search", present=False)
     expect(box).to_have_value("")
     expect(page.get_by_role("option").first).to_be_visible()
     clean(page)

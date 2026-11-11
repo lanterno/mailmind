@@ -36,7 +36,7 @@ def until(page, check, what):
 def lane(page, view):
     page.goto(f"/m/{w.ADA}/INBOX")
     page.locator(f'a.frow[data-view="__lane_{view}__"]').click()
-    expect(page.pw).to_have_url(re.compile(f"lane={view}"))
+    page.expect_where(f"lane={view}")
     return page
 
 

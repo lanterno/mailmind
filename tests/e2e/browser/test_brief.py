@@ -185,7 +185,7 @@ def test_needs_you_opens_a_list_of_its_own_with_a_way_back(page, world, ai):
     expect(page.locator("#clientCtx")).to_contain_text("from today’s brief")
     expect(page.locator("#rows .row[data-key]")).to_have_count(2)
     expect(page.locator("#count")).to_have_text("2 messages")
-    assert "/brief/needs" in page.url
+    assert page.where().startswith("/brief/needs?")      # what is open in it makes it a place
     page.reload()                                      # the URL says where you are
     expect(page.locator("#rows .row[data-key]")).to_have_count(2)
     page.get_by_role("button", name="‹ Inbox").click()

@@ -165,7 +165,7 @@ def test_do_says_when_its_preview_has_expired_and_moves_nothing(page, world, ai,
 def test_a_plan_thats_no_action_is_a_search(page, world, ai):
     do_plan_for(page, ai, "from:lin", intent="search")
     expect(page.locator("#listTitle")).to_have_text("Search")
-    assert "q=from%3Alin" in page.url
+    assert "q=from%3Alin" in page.where()
     clean(page)
 
 
@@ -173,7 +173,7 @@ def test_show_as_search_runs_the_plans_filter(page, world, ai):
     plan = do_plan_for(page, ai, "from:lin")
     plan.get_by_role("button", name="Show as search").click()
     expect(page.locator("#listTitle")).to_have_text("Search")
-    assert "q=from%3Alin" in page.url
+    assert "q=from%3Alin" in page.where()
     clean(page)
 
 
