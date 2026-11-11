@@ -72,3 +72,19 @@ export async function cleanup() {
 
 // Whatever was set off since, settled inside React's turn: a fetch answered, a timer run.
 export const settle = () => act(async () => {});
+
+// The clock as it was when this loaded, so a wait still ends in a test that has faked the timers.
+const realTimeout = globalThis.setTimeout;
+
+// Until `check` passes: each turn lets what a query set off land, as React and TanStack Query hand it on in later tasks.
+export async function waitFor(check: () => void, turns = 50) {
+  for (let turn = 0; ; turn++) {
+    try {
+      check();
+      return;
+    } catch (e) {
+      if (turn >= turns) throw e;
+    }
+    await act(async () => void (await new Promise((done) => realTimeout(done, 0))));
+  }
+}
