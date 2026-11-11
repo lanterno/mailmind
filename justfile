@@ -182,7 +182,7 @@ plan target="all":
 sweep-dry target="all":
     {{py}} -m mailmind sweep {{target}} --dry
 
-# Move junk to Trash. Mutates real mailboxes; logged to sweep_audit.jsonl
+# Move junk to Trash. Mutates real mailboxes; recorded in the audit trail, in the database
 sweep target:
     {{py}} -m mailmind sweep {{target}}
 

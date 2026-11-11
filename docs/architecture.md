@@ -135,7 +135,13 @@ The app lives in `mailmind/`.
   `snippets`), and its use case reads, changes and writes it in one write block. The
   database is encrypted ([At rest](security.md#at-rest)): `driver` is the only module that imports SQLCipher's `sqlcipher3`, `key` holds
   the Keychain's key and `database` keys each connection with it. The rest is standard library only.
-- `mailmind.platform.private` opens a file that holds what is in someone's mail, an audit trail or an export, its owner's alone.
+- `mailmind.platform.audit` holds the audit trails, in the database (`audit_events`, migration 48), so they are encrypted with it:
+  the `sweep` trail, what a sweep, expiry or a sender's cleanup trashed, and the `reconcile` trail, what a reconcile pruned. A row
+  keeps a record's JSON as a line of its trail's file held it, its `ts` beside it. `append` writes in its caller's transaction, and
+  each context writes its own trail through an adapter of its own; `read` gives both, newest first, those of one moment in the
+  order written. A sweep's record is committed before its move asks the server anything. No file beside the database holds a
+  trail. It is standard library only.
+- `mailmind.platform.private` opens a file that holds what is in someone's mail, an export, its owner's alone.
   It is standard library only.
 - `mailmind.content` is the library every context reads mail through, standard library only, and it knows nothing of
   mailboxes or accounts: `mime` (a raw message as parts and header values), `sanitize` (the HTML sanitizer, verbatim),
