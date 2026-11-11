@@ -25,6 +25,8 @@
   db check-upgrade             try the next start's migrations on a copy of the database, and report
                                only row counts and integrity checks
   db compact                   give back the room freed in the database file, with MailMind stopped
+  db encrypt [--dry]           encrypt a database that is still plaintext, and its backups, with MailMind
+                               stopped; --dry tries it on a copy, and says only row counts and checks
   db rethread [WHO]            the repair: regroup the mail into threads from what each message names,
                                whole; no sync needs it, and what it changes moves as a merge does
   ai usage [--days N]          what the Claude API cost each local day of the last N (default 7), by
@@ -89,6 +91,9 @@ def parser():
     check.add_argument("--db", help="the database to check (default: the data directory's)")
     shrink = db.add_parser("compact", help="give back the room freed in the file, with MailMind stopped")
     shrink.add_argument("--db", help="the database to compact (default: the data directory's)")
+    seal = db.add_parser("encrypt", help="encrypt a plaintext database and its backups, with MailMind stopped")
+    seal.add_argument("--db", help="the database to encrypt (default: the data directory's)")
+    seal.add_argument("--dry", action="store_true", help="try it on a copy, and change nothing")
     db.add_parser("rethread", help="regroup the mail into threads, whole").add_argument("who", nargs="?", default="all", help="an account's address, or all")
     ai = commands.add_parser("ai", help="the Claude API").add_subparsers(dest="ai_command", required=True)
     usage = ai.add_parser("usage", help="what AI cost each day, by feature")
@@ -122,6 +127,9 @@ def _main(argv=None):
         if args.db_command == "compact":
             from mailmind.platform.db import compact
             sys.exit(compact.compact(path))
+        if args.db_command == "encrypt":
+            from mailmind.platform.db import encrypt
+            sys.exit(encrypt.encrypt(path, dry=args.dry))
         from mailmind.platform.db import check as db_check
         sys.exit(db_check.check_upgrade(path))
     if args.command != "serve":
