@@ -1,6 +1,7 @@
 """Fakes behind the Assistant's ports, for a use case a unit test builds by hand: a LanguageModel that answers from a queue
 and keeps each Prompt it was sent, a UsageLedger in memory, a unit of work with no database, and `Triage`, the stored mail
-and the Answers port's triage half as the SQLite adapter keeps them. `calls_on` makes the Calls every use case asks
+and the Answers port's triage half as the SQLite adapter keeps them, `Said`, its briefs, deltas and reviews, and `Week`,
+the Mail port as a weekly review reads it. `calls_on` makes the Calls every use case asks
 through, over the real Gateway (and a CostGovernor, when a test hands one), so what reaches the model and the feature each
 call is counted under are as the app's."""
 import contextlib
@@ -269,6 +270,48 @@ class Said:
         self.reviews[accounts, day] = {"fingerprint": fingerprint, "narrative": narrative, "next_json": next_json,
                                        "stats_json": stats_json, "needs_json": needs_json, "waiting_json": waiting_json,
                                        "model": model, "created_at": created_at}
+
+
+class Week:
+    """The Mail port as a weekly review reads it: the week's counts, the mail that needs the person (`needs`, as
+    needs_you_rows answers) and the threads they wait on (`waiting`, as awaited_threads does), the invites in the mail, and
+    where each message's copy is now (`copies`, by key). With `calendar_down` the invites can't be read."""
+
+    def __init__(self):
+        self.sent, self.received, self.buckets, self.replylater, self.cleaned, self.handled = 0, 0, {}, 0, 0, 0
+        self.needs, self.waiting, self.events, self.copies, self.calendar_down = [], [], [], {}, False
+
+    def sent_since(self, c, accounts, since_ts):
+        return self.sent
+
+    def received_since(self, c, accounts, since_ts):
+        return self.received
+
+    def received_by_bucket(self, c, accounts, since_ts):
+        return [{"bucket": b, "n": n} for b, n in self.buckets.items()]
+
+    def needs_you_rows(self, c, accounts, n):
+        return self.needs[:n]
+
+    def awaited_threads(self, c, accounts, n):
+        return self.waiting[:n]
+
+    def replylater_due(self, c, accounts):
+        return self.replylater
+
+    def senders_cleaned(self, c, since_iso, accounts):
+        return self.cleaned
+
+    def handled_since(self, c, accounts, since_iso):
+        return self.handled
+
+    def events_from(self, when, limit):
+        if self.calendar_down:
+            raise OSError("the calendar can't be read")
+        return self.events[:limit]
+
+    def copy_now(self, c, key, folder):
+        return self.copies.get(key)
 
 
 def gateway_on(model, ledger=None, governor=None, clock=time.time):

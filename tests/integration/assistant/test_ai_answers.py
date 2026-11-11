@@ -1,7 +1,8 @@
 """The brief, the delta and the review are kept in tables of their own (migration 37), and what they say
 about a message still holds when its row doesn't: they name messages by key, and a read names each copy by its
-key and the folder it is in now."""
-import json
+key and the folder it is in now. Here on the store: a renumber, a copy on its way out or in two folders, a window past its
+cap and the tables themselves. What Briefs and Reviews keep of a message and what a stored one says once the mail has moved
+on are tests/unit/assistant/test_ai_answers.py's."""
 import time
 from datetime import datetime, timezone
 
@@ -99,14 +100,6 @@ def new_mail(n):
 
 # -- the brief -------------------------------------------------------------------------------------
 
-def test_a_stored_brief_says_which_messages_it_holds_by_key(app, world, ai):
-    anchor = world.row(LUNCH)
-    summarize_as(anchor["pk"])
-    brief_of(ai, app, [anchor["pk"]])
-    [row] = q("SELECT * FROM briefs")
-    assert (row["accounts"], row["narrative"]) == (",".join((w.ADA, w.BEA, w.CY)), NARRATIVE)
-    assert json.loads(row["groups_json"]) == [{"label": "Lunch", "messages": [[anchor["message_key"], "INBOX"]]}]
-
 
 def test_a_stored_brief_finds_a_message_with_no_message_id_after_a_renumber(app, world, ai):
     raw = w.raw(QUILT).replace(b"Message-ID:", b"X-Was-Message-ID:", 1)
@@ -120,16 +113,6 @@ def test_a_stored_brief_finds_a_message_with_no_message_id_after_a_renumber(app,
     assert new["pk"] != old["pk"]
     [group] = brief_now(app)["groups"]
     assert group["messages"] == [w.copy_of(new["pk"])]
-
-
-def test_a_stored_brief_counts_what_it_still_holds(app, world, ai):
-    lunch, other = world.pk(LUNCH), world.pk(QUILT)
-    summarize_as(lunch)
-    summarize_as(other)
-    assert brief_of(ai, app, [lunch, other])["groups"][0]["count"] == 2
-    execute("DELETE FROM messages WHERE pk=?", other)
-    [group] = brief_now(app)["groups"]
-    assert (group["count"], group["messages"]) == (1, [w.copy_of(lunch)])
 
 
 def test_a_stored_brief_leaves_out_a_message_on_its_way_out(app, world, ai):
@@ -179,17 +162,6 @@ def test_a_stored_reviews_waiting_list_follows_a_renumber_too(app, world, ai):
     assert now["thread_id"] == lunch["thread_id"]
 
 
-def test_a_stored_review_leaves_out_a_message_that_has_gone(app, world, ai):
-    pk = world.pk(LUNCH)
-    copy = w.copy_of(pk)
-    summarize_as(pk)
-    assert copy in named(review_of(ai, app)["needs"])
-    execute("DELETE FROM messages WHERE pk=?", pk)
-    again = review_now(app)
-    assert copy not in named(again["needs"])
-    assert again["stale"] is True            # and it says the mail changed
-
-
 def test_a_waiting_item_that_named_no_message_stays(app, world, ai):
     waiting_on("rf:no-such-thread")
     review_of(ai, app)
@@ -197,39 +169,11 @@ def test_a_waiting_item_that_named_no_message_stays(app, world, ai):
     assert "pk" not in item and item["key"] is None
 
 
-def test_a_stored_review_keeps_what_it_said_when_the_mail_moves_on(app, world, ai):
-    pk = world.pk(LUNCH)
-    summarize_as(pk)
-    first = review_of(ai, app)
-    world.deliver(w.ADA, "INBOX", new_mail(1))
-    again = review_now(app)
-    assert (again["narrative"], again["next"], again["stats"]) == (WEEK, ["Answer Lin"], first["stats"])
-    assert again["stale"] is True
-
-
 # -- the delta -------------------------------------------------------------------------------------
 
 def delta(app, ai, headline):
     ai.queue(fa.answer({"headline": headline, "items": [{"who": "Loom", "gist": "New issue", "importance": 1}]}))
     return app.post("/api/briefing/since", {"account": w.ADA, "since": 0}).json
-
-
-def test_a_delta_read_again_costs_nothing(app, world, ai):
-    assert delta(app, ai, "One new.")["cached"] is False
-    calls = len(ai.requests)
-    again = delta(app, ai, "Not asked for.")
-    assert (again["cached"], again["headline"]) == (True, "One new.") and len(ai.requests) == calls
-    assert app.get(f"/api/briefing/since?account={w.ADA}&since=0").json["headline"] == "One new."
-
-
-def test_a_delta_is_written_again_when_a_message_in_its_window_is_swapped(app, world, ai):
-    world.deliver(w.ADA, "INBOX", new_mail(1))
-    assert delta(app, ai, "Before.")["headline"] == "Before."
-    count = app.get(f"/api/briefing/since?account={w.ADA}&since=0").json["count"]
-    execute("DELETE FROM messages WHERE message_id=?", "<new-1@loom.example.test>")
-    world.deliver(w.ADA, "INBOX", new_mail(2))
-    after = delta(app, ai, "After.")
-    assert (after["headline"], after["cached"], after["count"]) == ("After.", False, count)
 
 
 def test_a_delta_past_its_cap_is_written_again_when_more_mail_comes(app, world, ai):
