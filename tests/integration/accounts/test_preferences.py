@@ -1,13 +1,13 @@
-"""A person's preferences: the block in mailmind.config.json, read and written through the Directory, and their route. The file is
-the owner's real one in use, so what a block's absence means and what a write leaves alone are held here."""
+"""A person's preferences through their routes: what the page reads with nothing set, a change refused whole, what the schemas
+refuse, the AI's daily limit where the Assistant reads it, and what a browser held brought in. What the Directory keeps in the file,
+and how, is tests/unit/accounts/test_preferences.py."""
 import json
 
 import pytest
 
 import problems
 from mailmind.accounts.domain import preferences
-from mailmind.bootstrap import accounts, assistant
-from mailmind.kernel import send_window
+from mailmind.bootstrap import assistant
 
 KEPT = {"anthropic_api_key": {"plain": "a-key"}, "signature_default": "Yours,\nAda", "webmail": ["https://mail.example.test"],
         "something_a_later_version_wrote": {"deep": [1, 2.5, "ü"]}}
@@ -41,24 +41,6 @@ def test_a_file_with_no_block_answers_each_default_and_reading_writes_nothing(ap
 # ── writing ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
-def test_a_change_leaves_every_other_key_in_the_file_as_it_was(app, world):
-    was = with_file(world)
-    r = app.post("/api/preferences", {"density": "compact"})
-    assert r.status == 200 and r.json["preferences"]["density"] == "compact"
-    now = file_of(world)
-    assert now.pop("preferences") == {"density": "compact"}
-    assert now == was
-    assert list(now) == list(was)                # in the order it had
-    assert path_of(world).stat().st_mode & 0o077 == 0
-
-
-def test_a_change_keeps_the_rest_of_the_block_and_what_it_doesnt_know(app, world):
-    with_file(world, preferences={"theme": "dusk", "a_later_one": {"x": 1}})
-    app.post("/api/preferences", {"high_contrast": True})
-    assert file_of(world)["preferences"] == {"theme": "dusk", "a_later_one": {"x": 1}, "high_contrast": True}
-    assert app.get("/api/preferences").json["preferences"]["theme"] == "dusk"
-
-
 def test_a_value_none_can_be_refuses_the_whole_change_and_writes_nothing(app, world):
     with_file(world)
     before = path_of(world).read_bytes()
@@ -67,40 +49,11 @@ def test_a_value_none_can_be_refuses_the_whole_change_and_writes_nothing(app, wo
     assert path_of(world).read_bytes() == before
 
 
-@pytest.mark.parametrize("change", [{"undo_send_seconds": send_window.SHORTEST}, {"undo_send_seconds": send_window.LONGEST}])
-def test_each_end_of_the_undo_send_window_can_be_set(app, world, change):
-    assert app.post("/api/preferences", change).json["preferences"]["undo_send_seconds"] == change["undo_send_seconds"]
-
-
-@pytest.mark.parametrize("seconds", [send_window.SHORTEST - 1, send_window.LONGEST + 1, 0, 86400])
-def test_past_either_end_of_the_window_is_refused(app, world, seconds):
-    assert app.post("/api/preferences", {"undo_send_seconds": seconds}).status == 400
-    assert "preferences" not in file_of(world)
-
-
-@pytest.mark.parametrize("bad", ["25:00", "7:00", "22:60", "22:00:00", "soon"])
-def test_a_quiet_hour_that_is_no_time_is_refused(app, world, bad):
-    assert app.post("/api/preferences", {"quiet_from": bad}).status == 400
-
-
 @pytest.mark.parametrize("field, bad", [("density", "tiny"), ("theme", "noon"), ("read_size", "xxl"), ("search_scope", "none"),
                                         ("high_contrast", "true"), ("undo_send_seconds", "soon")])
 def test_what_the_schema_refuses_is_the_bad_request(app, world, field, bad):
     assert (lambda r: (r.status, r.json))(app.post("/api/preferences", {field: bad})) == (400, problems.BAD_REQUEST)
     assert "preferences" not in file_of(world)
-
-
-def test_a_file_that_wont_parse_is_never_overwritten(app, world):
-    path_of(world).write_text("{ not json")
-    with pytest.raises(ValueError):
-        accounts.config.set_preferences({"density": "cozy"})
-    assert path_of(world).read_text() == "{ not json"
-
-
-def test_a_change_of_nothing_writes_nothing(app, world):
-    before = path_of(world).stat().st_mtime_ns
-    assert app.post("/api/preferences", {}).status == 200
-    assert path_of(world).stat().st_mtime_ns == before
 
 
 # ── the AI's daily limit ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -134,38 +87,6 @@ def test_what_a_browser_held_comes_in_only_for_what_the_file_doesnt_say(app, wor
     assert r.status == 200
     assert file_of(world)["preferences"] == {"theme": "dusk", "density": "cozy", "read_size": "xl"}
     assert (r.json["preferences"]["theme"], r.json["preferences"]["read_size"]) == ("dusk", "xl")
-
-
-def test_what_cant_be_a_preference_is_left_out_without_a_word(app, world):
-    r = app.post("/api/preferences/import", {"held": {"theme": "noon", "made_up": 1, "single_keys": "1", "ai_daily_limit_usd": 2, "conversations": False}})
-    assert r.status == 200
-    assert file_of(world)["preferences"] == {"conversations": False}
-    assert "ai_daily_limit_usd" not in file_of(world)
-
-
-def test_with_nothing_to_bring_in_the_file_is_not_written(app, world):
-    with_file(world, preferences={"density": "cozy"})
-    before = path_of(world).read_bytes()
-    r = app.post("/api/preferences/import", {"held": {"density": "compact", "theme": "noon"}})
-    assert r.status == 200 and r.json["preferences"]["density"] == "cozy"
-    assert path_of(world).read_bytes() == before
-
-
-# ── the Directory, as the routes use it ──────────────────────────────────────────────────────────────────────────────
-
-
-def test_one_preference_is_what_the_file_says_or_none(app, world):
-    assert accounts.config.preference("undo_send_seconds") is None
-    with_file(world, preferences={"undo_send_seconds": 30})
-    assert accounts.config.preference("undo_send_seconds") == 30
-
-
-def test_the_first_run_guide_is_offered_once_and_the_file_remembers(app, world):
-    """It lives on the server so that clearing a browser's data doesn't offer it again."""
-    assert app.get("/api/preferences").json["preferences"]["guide_offered"] is False
-    assert app.post("/api/preferences", {"guide_offered": True}).json["preferences"]["guide_offered"] is True
-    assert file_of(world)["preferences"]["guide_offered"] is True
-    assert app.get("/api/preferences").json["preferences"]["guide_offered"] is True
 
 
 @pytest.mark.parametrize("value", ["yes", 1, "true"])
