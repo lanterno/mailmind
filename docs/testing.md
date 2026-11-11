@@ -29,6 +29,9 @@ uv run pytest tests/unit/http/test_export_route.py          # the download in ch
 
 The composer's send-time checks and reopen helpers are `web/src/features/compose/sendGuard.ts` and `draftResume.ts`, free of DOM
 and `state` references, with Vitest suites beside them. The send guard's reads `tests/fixtures/send_guard_words.json`.
+Vitest has no DOM, so a suite stubs what its module reaches (`document`, `history`, `EventSource`, a timer) with `vi.stubGlobal`
+and the fake timers, and runs a hook through `web/src/lib/testing/renderHook.ts`: React renders it into a stand-in root, which a
+component that renders nothing asks no more of. A known bug there is an `it.fails` test stating the right behaviour.
 
 ## The pytest suite in `tests/`
 
