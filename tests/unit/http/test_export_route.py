@@ -22,6 +22,7 @@ import problems
 import schema_contract
 from mailmind.http.routers import export as export_routes
 from mailmind.platform.db import export
+from waiting import wait_until
 
 BIG = 3 * export_routes.CHUNK + 5
 
@@ -53,13 +54,6 @@ def big_export(monkeypatch):
     return made
 
 
-def until(holds, seconds=5):
-    deadline = time.monotonic() + seconds
-    while not holds() and time.monotonic() < deadline:
-        time.sleep(0.01)
-    return holds()
-
-
 def opened(app):
     """A client that asks for the export and reads no answer."""
     s = socket.create_connection(("127.0.0.1", app.port), timeout=10)
@@ -73,7 +67,7 @@ def test_a_download_holds_the_snapshot_and_its_folder_goes_afterwards(app, folde
     assert r.status == 200 and r.body.startswith(b"SQLite format 3") and int(r.headers["content-length"]) == len(r.body)
     assert r.headers["content-type"] == "application/octet-stream"
     assert re.fullmatch(r"attachment; filename=mailmind-\d{8}T\d{6}Z\.db", r.headers["content-disposition"])
-    assert len(folders) == 1 and until(lambda: not os.path.exists(folders[0]))
+    assert len(folders) == 1 and wait_until(lambda: not os.path.exists(folders[0]))
 
 
 def test_a_failed_snapshot_is_the_fixed_failure_and_leaves_no_folder(app, monkeypatch, capsys):
@@ -95,7 +89,7 @@ def test_a_client_that_hangs_up_midway_leaves_no_folder(app, big_export):
     assert s.recv(4096).startswith(b"HTTP/1.1 200")
     assert os.path.exists(big_export[0])
     s.close()
-    assert until(lambda: not os.path.exists(big_export[0]))
+    assert wait_until(lambda: not os.path.exists(big_export[0]))
 
 
 def test_a_client_that_hangs_up_during_the_snapshot_leaves_no_folder(app, monkeypatch):
@@ -114,7 +108,7 @@ def test_a_client_that_hangs_up_during_the_snapshot_leaves_no_folder(app, monkey
     assert asked.wait(5)
     s.close()
     go_on.set()
-    assert until(lambda: made and not os.path.exists(made[0]))
+    assert wait_until(lambda: made and not os.path.exists(made[0]))
 
 
 def test_a_client_that_reads_slowly_holds_no_thread_of_the_pool(app, big_export, monkeypatch):
@@ -162,7 +156,7 @@ def test_an_eml_archive_holds_each_message_as_a_file_under_its_account_and_folde
         assert collections.Counter(name.rsplit("/", 1)[0] for name in names) == {"/".join(safely(g)): g["messages"] for g in plan["groups"]}
         said = [email.message_from_bytes(z.read(name)) for name in names]
     assert all(m["From"] and m["Message-ID"] for m in said)
-    assert until(lambda: not os.path.exists(archives[0]))
+    assert wait_until(lambda: not os.path.exists(archives[0]))
 
 
 def test_an_mbox_archive_holds_a_file_for_each_folder_that_a_mail_program_can_read(app, archives, tmp_path):
@@ -178,7 +172,7 @@ def test_an_mbox_archive_holds_a_file_for_each_folder_that_a_mail_program_can_re
         box = mailbox.mbox(tmp_path / account / f"{folder}.mbox", create=False)
         assert len(box) == group["messages"] and all(m["From"] and m["Message-ID"] for m in box)
         box.close()
-    assert until(lambda: not os.path.exists(archives[0]))
+    assert wait_until(lambda: not os.path.exists(archives[0]))
 
 
 @pytest.mark.parametrize("form", ["eml", "mbox"])

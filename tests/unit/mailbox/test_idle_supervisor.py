@@ -8,17 +8,9 @@ import time
 import pytest
 
 from fixtures import world as w
+from waiting import wait_until
 
 DEE = "dee@example.test"
-
-
-def wait_until(cond, timeout=5.0):
-    deadline = time.monotonic() + timeout
-    while not cond():
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.01)
-    return True
 
 
 def count(world, command, user=w.ADA):

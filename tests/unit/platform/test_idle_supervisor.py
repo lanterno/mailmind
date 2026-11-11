@@ -11,17 +11,9 @@ import pytest
 
 from mailmind.platform.workers import idle_supervisor
 from mailmind.platform.workers.idle_supervisor import IdleSupervisor
+from waiting import wait_until
 
 ME = threading.current_thread().name
-
-
-def wait_until(cond, timeout=5.0):
-    deadline = time.monotonic() + timeout
-    while not cond():
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.005)
-    return True
 
 
 class Line:

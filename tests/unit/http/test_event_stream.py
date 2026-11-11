@@ -22,6 +22,7 @@ from mailmind.http.routers import events
 from mailmind.http.routers.events import _Stream
 from mailmind.http.schemas.common import Answer, answers
 from mailmind.platform import settings, sse, webroot
+from waiting import wait_until
 
 GRACE = 5           # long enough to notice anything that waits it out
 
@@ -85,13 +86,6 @@ class Tab:
         self.conn.close()
 
 
-def until(holds, seconds=3):
-    deadline = time.monotonic() + seconds
-    while not holds() and time.monotonic() < deadline:
-        time.sleep(0.01)
-    return holds()
-
-
 def get(port, path):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
     try:
@@ -125,7 +119,7 @@ def test_a_tab_that_hangs_up_frees_its_listener_long_before_a_keepalive(server):
     tab = Tab(server.port)
     assert sse.HUB.listening() == 1
     tab.hang_up()
-    assert until(lambda: sse.HUB.listening() == 0)
+    assert wait_until(lambda: sse.HUB.listening() == 0)
     assert Tab(server.port).answer.status == 200         # its place is free
 
 
@@ -270,7 +264,7 @@ def test_a_tab_that_stopped_reading_holds_the_server_no_longer_than_its_grace(da
         silent.connect(("127.0.0.1", running_server.port))
         silent.sendall(f"GET /api/events HTTP/1.1\r\nHost: 127.0.0.1:{running_server.port}\r\nSec-Fetch-Site: same-origin\r\n\r\n".encode())
         try:
-            assert until(lambda: sse.HUB.listening() == 1)
+            assert wait_until(lambda: sse.HUB.listening() == 1)
             for _ in range(100):
                 sse.publish("outbox", {"more": "x" * 1_000_000})
             time.sleep(0.2)                              # as far as it will go

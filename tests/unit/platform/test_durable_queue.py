@@ -7,6 +7,7 @@ import pytest
 
 from mailmind.platform.db import database
 from mailmind.platform.workers.durable_queue import DurableQueue
+from waiting import wait_until
 
 NOW = 1_800_000_000
 
@@ -28,15 +29,6 @@ def laned(q):
     """The same table, its rows in lanes; the worker drains only when kicked."""
     return DurableQueue("jobs", "jobs", running="busy", finished="over", finished_at="finished_at", gate="done",
                         connect=q._uow.connect, poll=30, lane="lane")
-
-
-def wait_until(cond, timeout=5.0):
-    deadline = time.monotonic() + timeout
-    while not cond():
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.01)
-    return True
 
 
 def run(q, fn):

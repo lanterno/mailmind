@@ -13,6 +13,7 @@ import pytest
 
 from fixtures import world as w
 from mailmind.platform.db.txguard import TxAcrossNetworkError
+from waiting import wait_until
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 
@@ -52,15 +53,6 @@ def box(world, name="INBOX", user=w.ADA):
 
 def uid_of(world, name):
     return world.placed[name][2]
-
-
-def wait_until(cond, timeout=5.0):
-    ends = time.monotonic() + timeout
-    while time.monotonic() < ends:
-        if cond():
-            return True
-        time.sleep(0.02)
-    return cond()
 
 
 def idling(session, seconds):

@@ -11,15 +11,7 @@ from fixtures import world as w
 from mailmind.platform.workers import gates
 from mailmind.mailbox.domain.events import InboxChanged
 from mailmind.bootstrap import mailbox
-
-
-def wait_until(cond, timeout=5.0):
-    deadline = time.monotonic() + timeout
-    while not cond():
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.01)
-    return True
+from waiting import wait_until
 
 
 @pytest.fixture

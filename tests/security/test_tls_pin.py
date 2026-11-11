@@ -3,7 +3,6 @@ Proton Bridge's certificate can't be verified, the first certificate an account 
 and any other after it is refused before a password is sent. Every world account is on loopback
 behind STARTTLS, as Bridge is."""
 import json
-import time
 
 import pytest
 
@@ -11,6 +10,7 @@ import problems
 from fixtures import world as w
 from mailmind.accounts.domain import tls_pin
 from mailmind.bootstrap import mailbox
+from waiting import wait_until
 
 WRONG = "sha256:" + "0" * 64
 
@@ -45,15 +45,6 @@ def connect(email=w.ADA):
 
 def logins(world, email=w.ADA):
     return len(world.server.commands_for(email, "LOGIN"))
-
-
-def wait_until(cond, timeout=5.0):
-    deadline = time.monotonic() + timeout
-    while not cond():
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.01)
-    return True
 
 
 def test_the_first_connection_pins_the_certificate_and_the_next_must_match_it(world):

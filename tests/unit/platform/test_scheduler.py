@@ -7,15 +7,7 @@ import pytest
 
 from mailmind.platform.workers.scheduler import Scheduler
 from mailmind.bootstrap import background
-
-
-def wait_until(cond, timeout=5.0):
-    deadline = time.monotonic() + timeout
-    while not cond():
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.005)
-    return True
+from waiting import wait_until
 
 
 @pytest.fixture
