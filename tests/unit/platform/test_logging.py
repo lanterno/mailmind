@@ -3,6 +3,7 @@ A log is personal data, so most of these say what stays out. Every address is fi
 import ast
 import dataclasses
 import fnmatch
+import io
 import json
 import logging as stdlib_logging
 import os
@@ -264,6 +265,16 @@ def test_a_file_that_cant_be_written_stops_nothing(tmp_path, capsys):
         log.warning("still said")
     got = capsys.readouterr()
     assert got.out == "[test] still said\n" and got.err == ""
+
+
+def test_a_terminal_that_cant_be_written_stops_nothing(monkeypatch, capsys):
+    """stdout closed under it: the line is lost, and no traceback of it goes to stderr either."""
+    closed = io.StringIO()
+    closed.close()
+    monkeypatch.setattr(sys, "stdout", closed)
+    log.warning("still going")
+    monkeypatch.undo()
+    assert capsys.readouterr() == ("", "")
 
 
 def test_uvicorn_setting_up_its_own_logging_leaves_ours_going(home, capsys):
