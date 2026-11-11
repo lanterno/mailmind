@@ -26,6 +26,21 @@ def adapter(request, world):
     return request.param
 
 
+@pytest.fixture
+def endings(monkeypatch):
+    """How each session the test opens ends: with a LOGOUT, or hung up on with none."""
+    from mailmind.mailbox.adapters.imap.imapclient_session import ImapClientSession
+    from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
+    ended = []
+    for cls in (ImaplibSession, ImapClientSession):
+        for how in ("logout", "shutdown"):
+            def noting(self, real=getattr(cls, how), how=how):
+                ended.append(how)
+                return real(self)
+            monkeypatch.setattr(cls, how, noting)
+    return ended
+
+
 def rows():
     c = mailbox.store.conn()
     try:
@@ -47,7 +62,7 @@ def test_a_try_waits_for_a_hung_server_no_longer_than_a_person_will():
 
 
 @pytest.mark.parametrize("command", ["LOGIN", "SELECT", "UID MOVE"])
-def test_a_click_on_a_hung_server_answers_once_it_has_waited_and_offers_undo(app, world, quick, adapter, command):
+def test_a_click_on_a_hung_server_answers_once_it_has_waited_and_offers_undo(app, world, quick, adapter, endings, command):
     """Once, for each step's answer, and with no second wait for a LOGOUT nobody will answer."""
     pk = world.pk(RECEIPT)
     world.server.stall(command, user=w.ADA)
@@ -59,7 +74,8 @@ def test_a_click_on_a_hung_server_answers_once_it_has_waited_and_offers_undo(app
         world.server.release_stalls()
     assert (r.json["ok"], r.json["status"], r.json["undoable"]) == (True, "queued", True)
     assert hidden(pk)
-    assert LISTEN <= took < 1.5 * LISTEN, f"took {took:.2f}s"
+    assert LISTEN <= took < 10, f"took {took:.2f}s"      # it waited for the answer, and not the 12 s a person would
+    assert endings == ([] if command == "LOGIN" else ["shutdown"])     # no session, or one hung up on with no LOGOUT
     [row] = rows()
     assert (row["state"], row["attempts"], row["begun"]) == ("queued", 0, 1)
 
