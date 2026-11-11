@@ -68,6 +68,26 @@ function giveLook(doc: Document, { css, inverted }: Look) {
 
 const met = new WeakSet<Document>();    // the documents that have had what each gets only once
 
+// How tall the mail's own content is, whatever height its frame has now. A mail whose html and body follow the frame's height
+// (height:100%, 100vh) measures as tall as the frame, and a fit on that grew the frame by `pad` every time it was asked, or by
+// whatever the frame was at partway through its height's transition. So for that moment the two are held to their content,
+// above anything the mail says; only the frame's own document is touched, and the page around it doesn't move.
+function contentHeight(doc: Document): number | undefined {
+  const { documentElement: root, body } = doc;
+  if (!body) return undefined;
+  const styles = [root, body].map((e) => [e, e.getAttribute("style")] as const);
+  for (const [e] of styles) {
+    e.style.setProperty("height", "auto", "important");
+    e.style.setProperty("min-height", "0", "important");
+  }
+  const needs = body.scrollHeight;
+  for (const [e, style] of styles) {
+    if (style === null) e.removeAttribute("style");
+    else e.setAttribute("style", style);
+  }
+  return needs;
+}
+
 export function MailFrame({ body, images, minHeight, pad }: { body: MailBody; images: boolean; minHeight: number; pad: number }) {
   const name = themeStore.useValue();
   const prefs = readPrefs.useValue();
@@ -77,8 +97,9 @@ export function MailFrame({ body, images, minHeight, pad }: { body: MailBody; im
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState<number | null>(null);
   const fit = () => {
-    const scrolled = frame.current?.contentDocument?.body?.scrollHeight;
-    setHeight(Math.min((scrolled || minHeight) + pad, MAX_HEIGHT));
+    const doc = frame.current?.contentDocument;
+    if (doc && !doc.URL.endsWith(src)) return;      // the blank document before the mail's: nothing of the mail to fit yet
+    setHeight(Math.min(((doc && contentHeight(doc)) || minHeight) + pad, MAX_HEIGHT));
   };
   // True once there is nothing more to wait for: the frame's document is dressed, or it has none this page may reach.
   const dress = () => {
