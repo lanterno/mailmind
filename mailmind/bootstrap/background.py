@@ -12,10 +12,6 @@ SYNC_INTERVAL = 300                       # seconds between automatic syncs
 ASSESS_INTERVAL = 300                     # seconds between the assess job's rounds, unless kicked
 
 
-# Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
-# to Trash on an own timer. Same shape as reconcile — one account per hold of the gate, taken
-# NON-blocking so a live user op is never stalled. Not started under NOSYNC (no IMAP writes).
-_EXPIRE_INTERVAL = environment.EXPIRE_SECS.value()        # 0 disables
 _uow = UnitOfWork()
 
 
@@ -53,7 +49,16 @@ def _kick(job):
         JOBS.kick(job)
 
 
-JOBS = scheduler.Scheduler()             # the background jobs; wiring.start puts the running ones here
+def assemble():
+    """The background jobs as a process starts: none on the scheduler /api/debug/jobs reports until wiring.start puts the
+    running ones there, and the expiry rules' pace as the environment says. Importing this module assembles them once;
+    wiring.assemble does it again with every context's."""
+    global JOBS, _EXPIRE_INTERVAL
+    JOBS = scheduler.Scheduler()
+    # Expiry rules (rules.EXPIRE, e.g. "github.com after 72h"): move INBOX mail past its age limit
+    # to Trash on an own timer. Same shape as reconcile — one account per hold of the gate, taken
+    # NON-blocking so a live user op is never stalled. Not started under NOSYNC (no IMAP writes).
+    _EXPIRE_INTERVAL = environment.EXPIRE_SECS.value()        # 0 disables
 
 
 def schedule(jobs):
@@ -78,3 +83,6 @@ def schedule(jobs):
     jobs.add("forget", forget_round, every=86400, first=600)               # keys with no copy left
     jobs.add("brief-ahead", brief_ahead_round, every=600, first=90)        # opt-in: the morning's brief
     jobs.add("tidy", tidy_round, every=900, first=120)                     # opt-in: Tidy once a day
+
+
+assemble()

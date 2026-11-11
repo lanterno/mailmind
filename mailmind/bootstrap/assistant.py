@@ -111,12 +111,6 @@ def limit_micros() -> int:
     return round(limits.daily_limit_usd(value) * 1_000_000)
 
 
-_bound = _Bound("urllib")
-LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
-GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros, reserved=lambda: LEDGER.reserved())
-GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
-
-
 def gateway() -> Gateway:
     return GATEWAY
 
@@ -138,9 +132,6 @@ def transport() -> str:
 
 
 _uow = UnitOfWork()
-status = Status(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(), lambda: assessments.batch_status(),
-                lambda: calls.model_label())
-calls = Calls(lambda: gateway(), status)
 
 
 class _Mail:
@@ -238,18 +229,36 @@ class _Search:
 
 
 _mail = _Mail()
-assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail)
-context = ContextAssembler(_mail)
-threads = ThreadDigest(calls, answers, _uow, context)
-briefs = Briefs(calls, answers, _uow, _mail)
-reviews = Reviews(calls, answers, _uow, _mail)
-replies = ReplyDrafts(calls, context, _uow, _mail)
-rewriter = Rewriter(calls)
-extractor = Extractor(calls, context, _uow, _mail)
-asker = Asker(calls, _mail)
-asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)
-drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, curation.looks_human)
-bulk = BulkCommands(calls, _Search())
-screening = Screening(calls, _uow, _mail)
-rationales = Rationales(calls, _uow, _mail)
-sender_digest = SenderDigest(calls, _uow, _mail)
+
+
+def assemble():
+    """The Assistant's objects, made afresh: the spend ledger, the cost governor, the gateway, which talks to the API
+    through urllib until front.build picks the SDK, the status and every feature's use case. Importing this module
+    assembles them once; wiring.assemble makes a new set of every context's."""
+    global _bound, LEDGER, GOVERNOR, GATEWAY, status, calls, assessments, context, threads, briefs, reviews, replies, \
+        rewriter, extractor, asker, asking, drafting, bulk, screening, rationales, sender_digest
+    _bound = _Bound("urllib")
+    LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
+    GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros, reserved=lambda: LEDGER.reserved())
+    GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
+    status = Status(lambda: gateway(), lambda: key(), lambda: transport(), lambda: governor(),
+                    lambda: assessments.batch_status(), lambda: calls.model_label())
+    calls = Calls(lambda: gateway(), status)
+    assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail)
+    context = ContextAssembler(_mail)
+    threads = ThreadDigest(calls, answers, _uow, context)
+    briefs = Briefs(calls, answers, _uow, _mail)
+    reviews = Reviews(calls, answers, _uow, _mail)
+    replies = ReplyDrafts(calls, context, _uow, _mail)
+    rewriter = Rewriter(calls)
+    extractor = Extractor(calls, context, _uow, _mail)
+    asker = Asker(calls, _mail)
+    asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)
+    drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, curation.looks_human)
+    bulk = BulkCommands(calls, _Search())
+    screening = Screening(calls, _uow, _mail)
+    rationales = Rationales(calls, _uow, _mail)
+    sender_digest = SenderDigest(calls, _uow, _mail)
+
+
+assemble()

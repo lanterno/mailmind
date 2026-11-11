@@ -164,13 +164,23 @@ class _Mailboxes:
         return bulk_moves.move_verified(session, uids, dest)
 
 
-AUDIT = AuditFile()
-_mail = sqlite.SenderMail(_MessageRows())
 _filing = _Filing()
 _boxes = _Mailboxes()
-cleanup = Cleanup(rules, _mail, Unsubscribing(_mail, _ListHeaders(), _SafeHttp(), _SystemSend()), _filing, AUDIT,
-                  _csrf)
-screener = Screener(rules, _mail, _boxes, _filing)
-sweeps = Sweeps(rules, _mail, _boxes, AUDIT, _filing)
-expiry = Expiry(rules, _mail, _boxes, AUDIT, _filing)
-filters = Filters(rules, _Conditions())
+
+
+def assemble():
+    """Curation's objects, made afresh: the audit trail, the cleanup with its pace between unsubscribes, the Screener,
+    the sweeps, expiry and the filters. Importing this module assembles them once; wiring.assemble makes a new set of
+    every context's."""
+    global AUDIT, _mail, cleanup, screener, sweeps, expiry, filters
+    AUDIT = AuditFile()
+    _mail = sqlite.SenderMail(_MessageRows())
+    cleanup = Cleanup(rules, _mail, Unsubscribing(_mail, _ListHeaders(), _SafeHttp(), _SystemSend()), _filing, AUDIT,
+                      _csrf)
+    screener = Screener(rules, _mail, _boxes, _filing)
+    sweeps = Sweeps(rules, _mail, _boxes, AUDIT, _filing)
+    expiry = Expiry(rules, _mail, _boxes, AUDIT, _filing)
+    filters = Filters(rules, _Conditions())
+
+
+assemble()

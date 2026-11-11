@@ -3,7 +3,6 @@
 import imaplib
 
 from mailmind.accounts.api import TLSPinMismatch, provider_of
-from mailmind.bootstrap.mailbox import copies
 from mailmind.compose.adapters import snippets_file
 from mailmind.compose.adapters import sqlite as book
 from mailmind.compose.adapters.smtp import SmtpTransport
@@ -149,11 +148,20 @@ class _Screen:
         mailbox.stats.invalidate()
 
 
-transport = SmtpTransport(_Credentials())
 _accounts, _mail, _screen = _Accounts(), _Messages(), _Screen()
 _uow = UnitOfWork()
-outbox = Outbox(_uow, book, transport, copies, _accounts, _mail, _Effects(), _screen)
-composing = Composing(_uow, book, _accounts, _mail, _screen)
-sending = Sending(_uow, composing, outbox, book)
-drafts = Drafts(_uow, composing, outbox, book, _accounts, _mail, copies, _screen)
-snippets = Snippets(snippets_file)
+
+
+def assemble():
+    """Compose's objects, made afresh: the transport, the outbox and its worker, and the drafts. Importing this module
+    assembles them once; wiring.assemble makes a new set of every context's, after the Mailbox's, whose copies they use."""
+    global transport, outbox, composing, sending, drafts, snippets
+    transport = SmtpTransport(_Credentials())
+    outbox = Outbox(_uow, book, transport, mailbox.copies, _accounts, _mail, _Effects(), _screen)
+    composing = Composing(_uow, book, _accounts, _mail, _screen)
+    sending = Sending(_uow, composing, outbox, book)
+    drafts = Drafts(_uow, composing, outbox, book, _accounts, _mail, mailbox.copies, _screen)
+    snippets = Snippets(snippets_file)
+
+
+assemble()

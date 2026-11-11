@@ -19,11 +19,7 @@ def _ai_key():
     return assistant.config_key()
 
 
-config = Directory(config_file.FILE, secrets, _ai_key)
 quiet_error = conn_error.quiet
-_connector = imap_connection.Connector(config)
-connect = _connector.connect
-check_pin = _connector.check_pin
 
 
 def accounts():
@@ -79,6 +75,24 @@ def _sync_record():
     return mailbox.syncing.sync_record()
 
 
-connections = Connections(config, get, accounts, _Probe(), quiet_error, _retry_sync, _forget_status)
-health = Health(_sync_record)
-logins = Logins()
+def connect(acct, timeout=60):
+    """An imaplib connection to `acct`'s server, logged in (imap_connection.Connector)."""
+    return _connector.connect(acct, timeout=timeout)
+
+
+def check_pin(acct, host, port, imap):
+    return _connector.check_pin(acct, host, port, imap)
+
+
+def assemble():
+    """Accounts' objects, made afresh: the file's directory, the connector, and who has been refused a login.
+    Importing this module assembles them once; wiring.assemble makes a new set of every context's."""
+    global config, _connector, connections, health, logins
+    config = Directory(config_file.FILE, secrets, _ai_key)
+    _connector = imap_connection.Connector(config)
+    connections = Connections(config, get, accounts, _Probe(), quiet_error, _retry_sync, _forget_status)
+    health = Health(_sync_record)
+    logins = Logins()
+
+
+assemble()

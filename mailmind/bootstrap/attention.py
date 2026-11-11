@@ -48,10 +48,19 @@ class _Undo:
         mailbox.undo.push(entry, group)
 
 
-_threads = Threads(_Messages(), _Accounts())
 _uow = UnitOfWork()
-snoozing = Snoozing(_uow, book, _Messages(), _Undo())
-muting = Muting(_uow, book, _Messages(), _threads, _Undo())
-followups = FollowUps(_uow, book, _threads, _Accounts())
-clocked = Clocked(snoozing, followups)
-tasks = Tasks(_uow, book, _Messages(), _Accounts())
+
+
+def assemble():
+    """Attention's objects, made afresh. Importing this module assembles them once; wiring.assemble makes a new set of
+    every context's."""
+    global snoozing, muting, followups, clocked, tasks
+    threads = Threads(_Messages(), _Accounts())
+    snoozing = Snoozing(_uow, book, _Messages(), _Undo())
+    muting = Muting(_uow, book, _Messages(), threads, _Undo())
+    followups = FollowUps(_uow, book, threads, _Accounts())
+    clocked = Clocked(snoozing, followups)
+    tasks = Tasks(_uow, book, _Messages(), _Accounts())
+
+
+assemble()

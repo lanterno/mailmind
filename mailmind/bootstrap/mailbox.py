@@ -47,8 +47,7 @@ from mailmind.platform.db import txguard
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.undo import Undo
 
-from mailmind.bootstrap import accounts         # the connection's TLS, pin and login, until they move into Accounts
-from mailmind.bootstrap.accounts import config           # the credential, likewise
+from mailmind.bootstrap import accounts         # the connection's TLS, pin, login and credential, until they move into Accounts
 
 store.bind_index(fts)
 
@@ -96,7 +95,7 @@ def kind():
 
 
 def kind_for(acct):
-    """The adapter the account `acct` (a config.accounts() entry) goes through."""
+    """The adapter the account `acct` (an accounts.config.accounts() entry) goes through."""
     asked = acct.get("imap_adapter")
     return asked if asked in _offered else _kind
 
@@ -105,7 +104,7 @@ def describe():
     """The adapters in use, for the startup line: each with how many accounts it serves, the
     one every account gets first. A configuration that can't be read counts no account."""
     try:
-        counts = Counter(kind_for(a) for a in config.accounts())
+        counts = Counter(kind_for(a) for a in accounts.config.accounts())
     except Exception:
         counts = Counter()
     rest = sorted(k for k in counts if k != _kind)
@@ -114,7 +113,7 @@ def describe():
 
 
 def open_session(acct, timeout=60) -> MailSession:
-    """A logged-in MailSession for the account `acct` (a config.accounts() entry). A login its server refused waits out
+    """A logged-in MailSession for the account `acct` (an accounts.config.accounts() entry). A login its server refused waits out
     its hold (accounts.logins): nothing is sent, and it raises as the refusal did, so each caller does as it did then."""
     if accounts.logins.held(acct):
         raise accounts.LoginUnreachable("a login its server refused is held back")
@@ -144,7 +143,7 @@ def session_for(acct, timeout=60) -> MailSession:
         session = imapclient_session.connect(
             host, port, starttls=bool(acct["starttls"]), ssl_context=accounts.tls_context(host), timeout=timeout,
             check_tls=lambda imap: accounts.check_pin(acct, host, port, imap),
-            username=acct["email"], password=lambda: config.resolve_credential(acct),
+            username=acct["email"], password=lambda: accounts.config.resolve_credential(acct),
             guard=lambda imap: txguard.guard_calls(imap, "send", "IMAP command"))
     except (TLSPinMismatch, imaplib.IMAP4.abort):
         raise
@@ -168,16 +167,16 @@ class _Accounts:
             webmail=(wmap or {}).get(row["account"]))
 
     def alias_map(self):
-        return config.alias_map()
+        return accounts.config.alias_map()
 
     def webmail_map(self):
-        return config.webmail_map()
+        return accounts.config.webmail_map()
 
     def signature_map(self):
-        return config.signature_map()
+        return accounts.config.signature_map()
 
     def signature_default(self):
-        return config.signature_default()
+        return accounts.config.signature_default()
 
     """What the Mailbox asks of Accounts."""
 
@@ -313,32 +312,9 @@ def _reverse_block(d):
     return curation.cleanup.reverse_block(d)
 
 
-_uow = UnitOfWork()
-_directory = _Accounts()
-_attention = _Attention()
-copies = Copies(_open, imap_quote)
-server_ops = ServerOps(_uow, store, _directory, _open, imap_quote)
-commands = MailCommands(_uow, store, _directory, server_ops)
-pool = Pool(_directory, _open)
-ingest = Ingest(_uow, store, _directory, _open, pool, _Curation(), _attention, fts)
-warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
-realtime = Realtime(_directory, _open)
-stats = LiveStats(_directory, _Curation())
-folders = Folders(_uow, store, _directory, pool, ingest, _attention)
-queries = Queries(_uow, store, _attention, folders, _directory)
-bodies = Bodies(_uow, store, ingest, _Reader())
-reversals = Reversals(_uow, store, _directory, server_ops, commands, ingest)
-
-
 def _after_undo():
     stats.invalidate()
     folders.invalidate()            # undo re-added or removed a message: refresh the rail's badges
-
-
-undo = Undo(_uow, {"move": reversals.move, "gmail_archive": reversals.gmail_archive, "snooze": _reverse_snooze,
-                         "mute": _reverse_mute, "unblock": _reverse_block}, _after_undo, _directory.quiet_error)
-filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
-tidying = Tidying(_uow, store, filing, undo)
 
 
 def _kick(job):
@@ -347,13 +323,42 @@ def _kick(job):
     background._kick(job)
 
 
-syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick)
-reconciler = Reconciler(_uow, store, _directory, pool, folders, stats)
-
-
 def _ai_status():
     from mailmind.bootstrap import assistant
     return assistant.status.report()
 
 
-digest = Digest(_uow, store, _directory, syncing, _ai_status)
+_uow = UnitOfWork()
+_directory = _Accounts()
+_attention = _Attention()
+
+
+def assemble():
+    """The Mailbox's objects, made afresh: the caches, the pool, the sync status, IDLE's workers (none started), Undo's
+    stack, and imaplib for every account with nothing else offered. Importing this module assembles them once, which is
+    all the command line needs; wiring.assemble makes a new set of every context's."""
+    global copies, server_ops, commands, pool, ingest, warm, realtime, stats, folders, queries, bodies, reversals, undo, \
+        filing, tidying, syncing, reconciler, digest
+    reset()
+    copies = Copies(_open, imap_quote)
+    server_ops = ServerOps(_uow, store, _directory, _open, imap_quote)
+    commands = MailCommands(_uow, store, _directory, server_ops)
+    pool = Pool(_directory, _open)
+    ingest = Ingest(_uow, store, _directory, _open, pool, _Curation(), _attention, fts)
+    warm = Warming(_directory, _open, lambda *a, **kw: ingest.sync_folder(*a, **kw))
+    realtime = Realtime(_directory, _open)
+    stats = LiveStats(_directory, _Curation())
+    folders = Folders(_uow, store, _directory, pool, ingest, _attention)
+    queries = Queries(_uow, store, _attention, folders, _directory)
+    bodies = Bodies(_uow, store, ingest, _Reader())
+    reversals = Reversals(_uow, store, _directory, server_ops, commands, ingest)
+    undo = Undo(_uow, {"move": reversals.move, "gmail_archive": reversals.gmail_archive, "snooze": _reverse_snooze,
+                       "mute": _reverse_mute, "unblock": _reverse_block}, _after_undo, _directory.quiet_error)
+    filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
+    tidying = Tidying(_uow, store, filing, undo)
+    syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick)
+    reconciler = Reconciler(_uow, store, _directory, pool, folders, stats)
+    digest = Digest(_uow, store, _directory, syncing, _ai_status)
+
+
+assemble()

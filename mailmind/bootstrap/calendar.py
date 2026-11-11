@@ -58,9 +58,18 @@ class _Send:
         return compose.outbox.send_delay()
 
 
-_stored = StoredInvites(_Folders())
 ics = icalendar_acl
-invites = Invites(_stored, ics)
-agenda = Agenda(_stored, ics)
-rsvp = Rsvp(invites, _stored, _Messages(), _Send())
-publishing = Publishing(_Messages())
+
+
+def assemble():
+    """Calendar's objects, made afresh. Importing this module assembles them once; wiring.assemble makes a new set of
+    every context's."""
+    global invites, agenda, rsvp, publishing
+    stored = StoredInvites(_Folders())
+    invites = Invites(stored, ics)
+    agenda = Agenda(stored, ics)
+    rsvp = Rsvp(invites, stored, _Messages(), _Send())
+    publishing = Publishing(_Messages())
+
+
+assemble()

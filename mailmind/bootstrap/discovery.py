@@ -49,11 +49,18 @@ class _KeptSenders:
             return set()
 
 
-_mail = StoredMail(_Folders())
-views = SavedViews(views_file)
-search = Search(_mail, _Accounts())
-conditions = Conditions(_mail)
-documents = DocumentHub(_mail, _Accounts())
-contacts = Contacts(_mail)
-suggesting = Suggesting(_mail)
-known = KnownContacts(_mail, _Accounts(), _Folders(), _KeptSenders())
+def assemble():
+    """Discovery's objects, made afresh. Importing this module assembles them once; wiring.assemble makes a new set of
+    every context's."""
+    global _mail, views, search, conditions, documents, contacts, suggesting, known
+    _mail = StoredMail(_Folders())
+    views = SavedViews(views_file)
+    search = Search(_mail, _Accounts())
+    conditions = Conditions(_mail)
+    documents = DocumentHub(_mail, _Accounts())
+    contacts = Contacts(_mail)
+    suggesting = Suggesting(_mail)
+    known = KnownContacts(_mail, _Accounts(), _Folders(), _KeptSenders())
+
+
+assemble()

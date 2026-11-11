@@ -14,10 +14,8 @@ from mailmind.platform import bus, profile, sse
 from mailmind.platform.logging import get_logger, setup as setup_logging
 from mailmind.platform.workers import scheduler
 
-from mailmind.bootstrap.mailbox import commands
-from mailmind.bootstrap.mailbox import realtime
 from mailmind.bootstrap.mailbox import store
-from mailmind.bootstrap import assistant
+from mailmind.bootstrap import assistant, attention, curation, discovery
 from mailmind.mailbox.domain.events import Applied
 from mailmind.mailbox.domain.events import Restored
 from mailmind.mailbox.domain.events import FlagsChanged
@@ -117,7 +115,7 @@ def wire():
                    bus.subscribe(TasksChanged, _after_tasks_changed)])
     _wired.extend(bus.subscribe(topic, accounts.logins.changed) for topic in     # ahead of what starts a new worker
                   (AccountChanged, AccountRemoved))
-    _wired.extend(bus.subscribe(topic, realtime.reconcile) for topic in
+    _wired.extend(bus.subscribe(topic, mailbox.realtime.reconcile) for topic in
                   (AccountAdded, AccountChanged, AccountRemoved))
 
 
@@ -125,6 +123,18 @@ def unwire():
     """End wire()'s subscriptions."""
     while _wired:
         _wired.pop()()
+
+
+def assemble():
+    """A new set of what every context holds between requests, as a process starts with: each context's objects made
+    afresh, in the order they use each other, no event kept and no tab listening, and nothing subscribed. Importing a
+    context's module assembles its objects once, which is all the command line needs. The tests assemble a new set for
+    each test, so none sees another's leftovers. Calendar's loads icalendar, so it comes here and not at the top."""
+    from mailmind.bootstrap import calendar
+    unwire()
+    for context in (accounts, mailbox, attention, calendar, compose, curation, discovery, assistant, background):
+        context.assemble()
+    sse.HUB = sse.Hub()
 
 
 def _daemon(target):
@@ -151,9 +161,9 @@ def start(spawn=_daemon):
                           "in their queues; snooze still runs)")
     else:
         spawn(compose.outbox.worker_loop)
-        spawn(commands.worker_loop)
+        spawn(mailbox.commands.worker_loop)
         jobs.start(spawn)
-        realtime.start()                     # per-account IMAP IDLE workers + SSE dispatch
+        mailbox.realtime.start()             # per-account IMAP IDLE workers + SSE dispatch
     get_logger("ai").info("%(engine)s", {"engine": assistant.status.describe_engine()})
     get_logger("imap").info("%(adapters)s", {"adapters": mailbox.describe()})
 

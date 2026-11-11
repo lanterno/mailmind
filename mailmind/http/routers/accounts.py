@@ -20,7 +20,6 @@ from mailmind.kernel.when import now_iso
 
 def router(accounts, mailbox):
     r = route.router()
-    config = accounts.config
 
     def change(action, asked):
         try:
@@ -32,8 +31,8 @@ def router(accounts, mailbox):
 
     @r.get("/api/accounts", responses=answers(Listed))
     def listed():
-        return {"ok": True, "accounts": config.masked_rows(),
-                "signature_default": config.signature_default(), "generated": now_iso()}
+        return {"ok": True, "accounts": accounts.config.masked_rows(),
+                "signature_default": accounts.config.signature_default(), "generated": now_iso()}
 
     @r.get("/api/account-health", responses=answers(Standing))
     def account_health():
