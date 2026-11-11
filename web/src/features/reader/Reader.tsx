@@ -258,10 +258,14 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
   const { data: d, error } = useBody(copy);
   const row = m.openRow;
   const { key, folder, uid } = copy;
+  // Opened unread, it is marked read after a moment on it: decided once, as it opens or as its row first shows. Marked
+  // unread again while it's open, it stays so, rather than have the dwell begin again and take that back.
+  const known = row?.seen !== undefined;
+  const unread = useEffectEvent(() => row?.seen === false);
   useEffect(() => {
-    if (row?.seen === false) armDwell(m.qc, { key, folder, uid });
+    if (known && unread()) armDwell(m.qc, { key, folder, uid });
     return cancelDwell;
-  }, [m.qc, key, folder, uid, row?.seen]);
+  }, [m.qc, key, folder, uid, known]);
   const flagged = row?.flagged ?? false;
   const isDraft = Boolean(d?.is_draft);
   useDraftAhead(d ? copy : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
