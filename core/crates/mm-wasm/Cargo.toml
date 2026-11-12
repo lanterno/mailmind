@@ -1,0 +1,29 @@
+[package]
+name = "mm-wasm"
+description = "The core in the browser: the WebAssembly a dedicated worker runs, over the origin's private files"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# Everything is for the browser. On other targets the crate is empty, so the workspace's checks still pass there.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3.105"
+mm-app.workspace = true
+mm-fixtures.workspace = true
+mm-store.workspace = true
+# The transfer traits: a database file in and out of the pool, unchanged.
+rsqlite-vfs = "0.2"
+serde_json.workspace = true
+# The same build rusqlite links: its WasmOsCallback gives the pool the browser's clock and randomness.
+sqlite-wasm-rs = { version = "0.6.3", default-features = false, features = ["wasm-bindgen"] }
+sqlite-wasm-vfs = { version = "0.3", features = ["sahpool"] }
+wasm-bindgen = "0.2.130"
+zeroize.workspace = true
+
+[lints]
+workspace = true
