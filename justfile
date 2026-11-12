@@ -38,7 +38,7 @@ run-fast port="": build-web
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Everything a change should pass before committing
-verify: lint compile test check-frontend check-web audit
+verify: lint compile test check-frontend check-web core-verify audit
 
 # Every test but the browser's and Dovecot's, a process for each core (pytest-xdist). Pick some with `just test -k hardening`;
 # `just test -n0` runs them in this one process
@@ -122,7 +122,7 @@ audit:
     trap 'rm -f "$req"' EXIT
     uv export --frozen --format requirements-txt --all-groups --no-emit-project -q -o "$req"
     uv run pip-audit --strict --require-hashes --disable-pip --progress-spinner off -r "$req"
-    osv-scanner scan source --lockfile uv.lock --lockfile web/package-lock.json
+    osv-scanner scan source --lockfile uv.lock --lockfile web/package-lock.json --lockfile core/Cargo.lock
 
 # Build the app, its files named by their content, into mailmind/http/dist (needs node). It doesn't exist without this:
 # with nothing built, `/` answers 404 and says to run this.
@@ -247,3 +247,46 @@ export-mbox out="/tmp/mailmind-export":
 # A consistent snapshot of the database
 export-db out="/tmp/mailmind-export":
     {{py}} -m mailmind export --format db --out {{out}}
+
+# ── the clients ───────────────────────────────────────────────────────────────
+# The Rust core every client runs (core/). Needs Rust: the toolchain is pinned in core/rust-toolchain.toml.
+# Each shell has recipes of its own: `just apple`, `just android`, `just web` and `just desktop` list them.
+
+mod? apple 'shells/apple/justfile'
+mod? android 'shells/android/justfile'
+mod? web 'shells/web/justfile'
+mod? desktop 'shells/desktop/justfile'
+
+# The core's checks: formatting, lints as errors, and its tests
+core-verify:
+    cd core && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
+
+# Measure the core against budgets.toml on 100,000 fictional messages, in a release build; fails when one is over
+budgets:
+    cd core && cargo run --release -q -p mm-budgets
+
+# A fictional mailbox at `path`, keyed with the fixture key: `just fixtures /tmp/inbox.db 5000`
+fixtures path count="100000":
+    cd core && cargo run --release -q -p mm-fixtures -- "{{absolute_path(path)}}" {{count}}
+
+# The core as a program on a fictional mailbox, speaking JSON lines on standard input and output (mm_app::wire)
+core-serve count="100000":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd core
+    db=target/fixtures/inbox-{{count}}.db
+    mkdir -p target/fixtures
+    test -f "$db" || cargo run --release -q -p mm-fixtures -- "$db" {{count}}
+    # The fixture key (mm_fixtures::FIXTURE_KEY_HEX): it guards only fictional mail
+    MAILMIND_DB_KEY=f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7 cargo run --release -q -p mm-daemon -- "$db"
+
+# The Swift and Kotlin bindings from the core, into each shell's generated folder
+gen-bindings:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd core
+    cargo build -q -p mm-ffi
+    lib=target/debug/libmailmind_core.dylib
+    test -f "$lib" || lib=target/debug/libmailmind_core.so
+    cargo run -q -p mm-ffi --bin uniffi-bindgen -- generate --library "$lib" --language swift --out-dir ../shells/apple/Generated
+    cargo run -q -p mm-ffi --bin uniffi-bindgen -- generate --library "$lib" --language kotlin --no-format --out-dir ../shells/android/core/src/main/kotlin
