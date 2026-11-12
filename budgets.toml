@@ -8,15 +8,26 @@
 [core.open_to_first_rows_ms]
 what = "open the database, order an inbox of 100,000 messages and load its first rows"
 limit = 150.0
+measured = 121.8
+on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-12"
+# Nearly all of it is ordering the inbox: version 50's indexes leave SQLite sorting all 100,000 rows. A partial
+# covering index on messages(folder, ts DESC, pk DESC, account) WHERE pending_removal IS NULL took it to 9.6 ms in
+# the same run. It is the first migration the core adds; then this limit drops.
 
 [core.idle_memory_mb]
 what = "the core's heap and SQLite's memory with that inbox open and idle"
 limit = 40.0
+measured = 3.5
+on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-12"
 
 [core.scroll_page_p95_ms]
 what = "load the next page of 50 rows while scrolling, 95th percentile"
 limit = 3.0
+measured = 0.05
+on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-12"
 
 [core.jump_p95_ms]
 what = "load the rows around a far position, as a scrollbar drag does, 95th percentile"
 limit = 16.0
+measured = 0.19
+on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-12"
