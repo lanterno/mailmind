@@ -1,0 +1,57 @@
+# The Android shell: a Compose app over the Rust core. See CLAUDE.md here.
+# Run from the repo root as `just android <recipe>`. Paths are from this file's folder, wherever just runs.
+
+here := source_directory()
+core := here / "../../core"
+jni := here / "core/src/main/jniLibs"
+# The ABIs the app ships, and their Rust targets in the same order. app/build.gradle.kts filters to the same ABIs.
+abis := "arm64-v8a x86_64"
+rust_targets := "aarch64-linux-android x86_64-linux-android"
+
+_default:
+    @just --justfile "{{source_file()}}" --unsorted --list
+
+# The core for each ABI, then the debug app, in app/build/outputs/apk/debug
+build: libs
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{here}}"
+    # The wrapper once it is committed; until then the Gradle on the PATH, whose version CI pins.
+    if [ -x ./gradlew ]; then ./gradlew assembleDebug; else gradle assembleDebug; fi
+
+# The core as a release shared library per ABI, in core/src/main/jniLibs where Gradle packages it from
+libs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    . "$HOME/.cargo/env" 2>/dev/null || true
+    command -v cargo-ndk >/dev/null || { echo "cargo-ndk is missing: cargo install cargo-ndk --locked" >&2; exit 1; }
+    # The C inside the core (SQLCipher, OpenSSL) is compiled for the oldest Android the app runs on.
+    min_sdk=$(sed -n 's/^minSdk = "\([0-9]*\)"$/\1/p' "{{here}}/gradle/libs.versions.toml")
+    targets=()
+    for abi in {{abis}}; do targets+=(-t "$abi"); done
+    cd "{{core}}"
+    rustup target add {{rust_targets}}
+    CARGO_NDK_PLATFORM="$min_sdk" cargo ndk "${targets[@]}" -o "{{jni}}" build --release -p mm-ffi --lib
+
+# The core's size per ABI, stripped as the APK carries it, as a Markdown table (CI puts it in the run's summary)
+sizes:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
+    if [ -z "$ndk" ] && [ -n "${ANDROID_HOME:-}" ]; then
+        ndk="$ANDROID_HOME/ndk/$(sed -n 's/^ndk = "\(.*\)"$/\1/p' "{{here}}/gradle/libs.versions.toml")"
+    fi
+    strip=$(ls "$ndk"/toolchains/llvm/prebuilt/*/bin/llvm-strip 2>/dev/null | head -n 1 || true)
+    if [ -z "$strip" ]; then echo "llvm-strip not found: set ANDROID_NDK_HOME to the NDK" >&2; exit 1; fi
+    tmp=$(mktemp -d)
+    trap '/bin/rm -rf "$tmp"' EXIT
+    mib() { awk -v b="$1" 'BEGIN { printf "%.2f MiB (%d bytes)", b / 1048576, b }'; }
+    echo "| ABI | libmailmind_core.so, stripped | gzip -9 |"
+    echo "| --- | ---: | ---: |"
+    for abi in {{abis}}; do
+        # What AGP does to the libraries it packages.
+        "$strip" --strip-unneeded -o "$tmp/$abi.so" "{{jni}}/$abi/libmailmind_core.so"
+        raw=$(wc -c < "$tmp/$abi.so" | tr -d ' ')
+        packed=$(gzip -9 -c "$tmp/$abi.so" | wc -c | tr -d ' ')
+        echo "| $abi | $(mib "$raw") | $(mib "$packed") |"
+    done
