@@ -31,3 +31,67 @@ what = "load the rows around a far position, as a scrollbar drag does, 95th perc
 limit = 16.0
 measured = 0.19
 on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-12"
+
+# The shells. Each measures its own (`just apple measure`, `just web measure`, `just desktop measure`); no check reads
+# these yet. Measured on an Apple M5 Mac shared with other builds, so numbers vary by 10 to 20% run to run.
+
+[apple.mac_first_rows_ms]
+what = "launch the Mac app, release build, to the first rows applied on the main actor (warm file cache, median of 7)"
+limit = 800.0
+measured = 240.0
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-12"
+
+[apple.mac_idle_memory_mb]
+what = "the Mac app's footprint, idle with the inbox open"
+limit = 200.0
+measured = 40.8
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-12"
+
+[apple.mac_scrolled_memory_mb]
+what = "the Mac app's footprint after scrolling all 100,000 rows and 12 far jumps"
+limit = 200.0
+measured = 109.0
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-12"
+# The shell holds 100 rows; the growth is SwiftUI's List keeping state for every row it has shown.
+
+[apple.mac_frame_p95_ms]
+what = "the main thread's busy time per run-loop pass while scrolling, 95th percentile"
+limit = 8.0
+measured = 296.0
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-12"
+# Over. 13.5 to 14 ms on a fast scroll near the top; 290 to 296 ms bringing a new screen in every frame through
+# all 100,000, growing with depth. The cost is SwiftUI's List, not the core: a 50-row batch crosses in about 85 µs.
+
+[apple.core_size_mb]
+what = "what the core adds to a stripped arm64 app (iOS device and macOS)"
+limit = 8.0
+measured = 1.61
+on = "Apple M5 Mac, Xcode 26.6, release build, 2026-11-12"
+# 3.7 MB with TLS and OpenPGP key parsing, 5.0 MB with an OpenPGP round trip.
+
+[web.first_rows_ms]
+what = "navigation to the first rows painted, the fixture already in the browser's private files (median of 7)"
+limit = 800.0
+measured = 1021.0
+on = "headless Chromium on an Apple M5 Mac, 2026-11-12"
+# Over: 970 ms of it is ordering the inbox, every page decrypted without AES instructions. The partial covering
+# index (see core.open_to_first_rows_ms) is the fix.
+
+[web.wasm_compressed_mb]
+what = "the core as WebAssembly, Brotli"
+limit = 2.5
+measured = 0.50
+on = "release build, no wasm-opt, 2026-11-12"
+
+[desktop.mac_first_rows_ms]
+what = "launch the release .app to the first rows in the DOM (median of 5)"
+limit = 800.0
+measured = 724.0
+on = "Apple M5 Mac, macOS 26.4, screen locked, 2026-11-12"
+
+[desktop.mac_idle_memory_mb]
+what = "footprint of the app, its WebContent and Networking processes, idle with the inbox open"
+limit = 200.0
+measured = 83.9
+on = "Apple M5 Mac, macOS 26.4, screen locked, 2026-11-12"
+# 100.8 MB with the GPU process WebKit also starts.
