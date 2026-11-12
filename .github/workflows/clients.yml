@@ -1,0 +1,347 @@
+# Builds every MailMind client from the one Rust core: the core's checks, budgets and dependency policy, then the
+# Apple, Android, web and desktop shells. Each job writes what it measured into the run's summary, so every run
+# keeps its numbers.
+#
+# Every action is pinned to a commit, with its release in a comment. Tools come pinned too: just, cargo-deny and
+# wasm-bindgen through taiki-e/install-action, Gradle and the NDK from shells/android, Rust from
+# core/rust-toolchain.toml.
+name: clients
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "shells/**"
+      - "budgets.toml"
+      - "justfile"
+      - ".github/workflows/clients.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "shells/**"
+      - "budgets.toml"
+      - "justfile"
+      - ".github/workflows/clients.yml"
+
+permissions:
+  contents: read
+
+# One run per branch or pull request. A newer push cancels a pull request's run; on main every push finishes, so
+# each commit there keeps its measurements.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    # bash with pipefail on every runner, Windows included (Git's bash), so a failing pipe fails its step.
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  # Incremental builds only fill the cache on a runner that starts clean.
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Rust, as core/rust-toolchain.toml pins it
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0,cargo-deny@0.20.2
+
+      # Keyed on core/Cargo.lock (and the compiler), restored from the newest match when the lock changes.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      - name: Format, lints as errors, and tests
+        run: just core-verify
+
+      - name: Budgets on 100,000 fictional messages
+        run: |
+          set +e
+          just budgets > "$RUNNER_TEMP/budgets.txt" 2>&1
+          status=$?
+          cat "$RUNNER_TEMP/budgets.txt"
+          {
+            echo "### Core budgets (ubuntu-latest, release build)"
+            echo '```'
+            cat "$RUNNER_TEMP/budgets.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Licences, advisories and sources (core/deny.toml)
+        working-directory: core
+        run: cargo deny check
+
+      # A stale binding fails only at run time, on a device, with a checksum mismatch: catch it here instead.
+      - name: The committed bindings match the core
+        run: |
+          just gen-bindings
+          changed=$(git status --porcelain -- shells/apple/Generated shells/android/core/src/main/kotlin)
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            echo "::error::The generated bindings differ from the core. Run 'just gen-bindings' and commit the diff on its own."
+            exit 1
+          fi
+
+  apple:
+    # The newest macOS image, which carries Xcode 26.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: The newest Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
+          xcodebuild -version
+          xcodebuild -version | head -n 1 | grep -q '^Xcode 26' || { echo "::error::This runner has no Xcode 26"; exit 1; }
+
+      - name: Rust, as core/rust-toolchain.toml pins it (with the iOS targets)
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      # shells/apple generates its Xcode project from project.yml.
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: The XCFramework, then the iOS simulator and macOS apps
+        run: just apple build
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One place for each version: the version catalog and the wrapper's properties.
+      - name: The versions shells/android pins
+        id: pins
+        run: |
+          catalog=shells/android/gradle/libs.versions.toml
+          echo "gradle=$(sed -n 's#^distributionUrl=.*/gradle-\(.*\)-bin\.zip$#\1#p' shells/android/gradle/wrapper/gradle-wrapper.properties)" >> "$GITHUB_OUTPUT"
+          echo "ndk=$(sed -n 's/^ndk = "\(.*\)"$/\1/p' "$catalog")" >> "$GITHUB_OUTPUT"
+          echo "sdk=$(sed -n 's/^compileSdk = "\(.*\)"$/\1/p' "$catalog")" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Build tools 36.0.0 is AGP 9.5's default.
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: platform-tools platforms;android-${{ steps.pins.outputs.sdk }} build-tools;36.0.0 ndk;${{ steps.pins.outputs.ndk }}
+          log-accepted-android-sdk-licenses: false
+
+      # The runner sets ANDROID_NDK_HOME to an NDK of its own; cargo-ndk must use the pinned one.
+      - name: The pinned NDK for cargo-ndk
+        run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ steps.pins.outputs.ndk }}" >> "$GITHUB_ENV"
+
+      # No wrapper jar is committed yet (shells/android/CLAUDE.md), so the Gradle the properties name is put on the PATH.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: ${{ steps.pins.outputs.gradle }}
+          # The open-source cache, not the commercial one that is the default.
+          cache-provider: basic
+
+      - name: Rust, as core/rust-toolchain.toml pins it
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      # Not among install-action's prebuilt tools, so built here; the cache keeps it between runs.
+      - name: cargo-ndk
+        run: cargo install cargo-ndk@4.1.2 --locked
+
+      - name: The core per ABI, then the debug app
+        run: just android build
+
+      - name: The core's size per ABI
+        run: |
+          {
+            echo "### Android: the core per ABI (release, stripped as the APK carries it)"
+            just android sizes
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The browser build compiles SQLCipher's C to WebAssembly, which needs clang and llvm-ar.
+      - name: clang and LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang llvm
+
+      - name: Rust, as core/rust-toolchain.toml pins it (with the wasm target)
+        working-directory: core
+        run: rustup toolchain install
+
+      # wasm-bindgen's CLI must be the same version as the wasm-bindgen crate the core locks.
+      - name: The wasm-bindgen version in core/Cargo.lock
+        id: pins
+        run: |
+          version=$(awk '$0 == "name = \"wasm-bindgen\"" { getline; gsub(/version = |"/, ""); print; exit }' core/Cargo.lock)
+          test -n "$version"
+          echo "wasm_bindgen=$version" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0,wasm-bindgen@${{ steps.pins.outputs.wasm_bindgen }}
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: shells/web/package-lock.json
+
+      - name: The web shell
+        run: just web build
+
+      - name: The client's tests, and clippy on mm-wasm for wasm32
+        run: just web check
+
+      - name: The WebAssembly's size, raw, gzip and Brotli
+        run: |
+          shopt -s nullglob
+          files=(shells/web/dist/assets/*.wasm)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No .wasm in shells/web/dist/assets: where does 'just web build' put it now?"
+            exit 1
+          fi
+          {
+            echo "### Web: the core as WebAssembly"
+            echo "| File | Raw | gzip -9 | Brotli 11 |"
+            echo "| --- | ---: | ---: | ---: |"
+            for file in "${files[@]}"; do
+              node -e '
+                const fs = require("node:fs"), path = require("node:path"), zlib = require("node:zlib");
+                const file = process.argv[1], bytes = fs.readFileSync(file);
+                const mib = (n) => `${(n / 1048576).toFixed(2)} MiB (${n} bytes)`;
+                const gzip = zlib.gzipSync(bytes, { level: 9 }).length;
+                const brotli = zlib.brotliCompressSync(bytes, {
+                  params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
+                }).length;
+                console.log(`| ${path.basename(file)} | ${mib(bytes.length)} | ${mib(gzip)} | ${mib(brotli)} |`);
+              ' "$file"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: WebKitGTK and the other libraries Tauri links on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev \
+            libssl-dev build-essential file patchelf
+
+      # OpenSSL's build (the core's SQLCipher on Windows) needs a Windows perl; Git's bash puts its own first.
+      - name: Strawberry Perl for OpenSSL on Windows
+        if: runner.os == 'Windows'
+        run: echo "OPENSSL_SRC_PERL=C:/Strawberry/perl/bin/perl.exe" >> "$GITHUB_ENV"
+
+      # shells/desktop/src-tauri pins the same compiler as the core.
+      - name: Rust, as core/rust-toolchain.toml pins it
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0
+
+      # The desktop crate is a workspace of its own but builds into the core's target folder.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            core
+            shells/desktop/src-tauri -> ../../../core/target
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: |
+            shells/web/package-lock.json
+            shells/desktop/package-lock.json
+
+      - name: The desktop shell
+        run: just desktop build
+
+      # The app's Rust is the same on every system; Linux has the libraries it links already.
+      - name: Formatting and clippy on the app's Rust
+        if: runner.os == 'Linux'
+        run: just desktop check
+
+      - name: The binary's size
+        run: |
+          bin=core/target/release/mailmind-desktop
+          if [ "$RUNNER_OS" = Windows ]; then bin="$bin.exe"; fi
+          if [ ! -f "$bin" ]; then
+            ls -la core/target/release || true
+            echo "::error::No $bin: where does 'just desktop build' put the binary now?"
+            exit 1
+          fi
+          bytes=$(wc -c < "$bin" | tr -d ' ')
+          {
+            echo "### Desktop: ${{ matrix.os }}"
+            echo "| Binary | Size |"
+            echo "| --- | ---: |"
+            echo "| $(basename "$bin") | $(awk -v b="$bytes" 'BEGIN { printf "%.2f MiB (%d bytes)", b / 1048576, b }') |"
+          } >> "$GITHUB_STEP_SUMMARY"
