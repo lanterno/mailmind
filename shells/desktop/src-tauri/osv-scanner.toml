@@ -1,0 +1,37 @@
+# The advisories `just audit` accepts for this Cargo.lock: all come through Tauri, none has a release Tauri 2 can take.
+# Each says why it can't reach anyone, and lapses so it gets looked at again.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2027-02-12
+reason = "glib 0.18: VariantStrIter's Iterator is unsound. Linux only, through Tauri's GTK 3 stack (gtk-rs 0.18, which webkit2gtk pins); neither our code nor Tauri iterates a GLib variant's strings. Fixed in glib 0.20, which Tauri 2 can't take."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2027-02-12
+reason = "proc-macro-error is unmaintained. A build-time proc macro under glib-macros, on Linux only; nothing of it ships."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0075"
+ignoreUntil = 2027-02-12
+reason = "unic-char-range is unmaintained, no bug reported. Reached through urlpattern in tauri-utils, which matches the app's own capability URLs."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0080"
+ignoreUntil = 2027-02-12
+reason = "unic-common is unmaintained, no bug reported. Reached through urlpattern in tauri-utils, which matches the app's own capability URLs."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0081"
+ignoreUntil = 2027-02-12
+reason = "unic-char-property is unmaintained, no bug reported. Reached through urlpattern in tauri-utils, which matches the app's own capability URLs."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0098"
+ignoreUntil = 2027-02-12
+reason = "unic-ucd-version is unmaintained, no bug reported. Reached through urlpattern in tauri-utils, which matches the app's own capability URLs."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0100"
+ignoreUntil = 2027-02-12
+reason = "unic-ucd-ident is unmaintained, no bug reported. Reached through urlpattern in tauri-utils, which matches the app's own capability URLs."

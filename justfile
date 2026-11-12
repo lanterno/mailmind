@@ -122,7 +122,9 @@ audit:
     trap 'rm -f "$req"' EXIT
     uv export --frozen --format requirements-txt --all-groups --no-emit-project -q -o "$req"
     uv run pip-audit --strict --require-hashes --disable-pip --progress-spinner off -r "$req"
-    osv-scanner scan source --lockfile uv.lock --lockfile web/package-lock.json --lockfile core/Cargo.lock
+    osv-scanner scan source --lockfile uv.lock --lockfile web/package-lock.json --lockfile core/Cargo.lock \
+        --lockfile shells/web/package-lock.json --lockfile shells/desktop/package-lock.json \
+        --lockfile shells/desktop/src-tauri/Cargo.lock
 
 # Build the app, its files named by their content, into mailmind/http/dist (needs node). It doesn't exist without this:
 # with nothing built, `/` answers 404 and says to run this.
