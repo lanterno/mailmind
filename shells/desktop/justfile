@@ -1,0 +1,40 @@
+# The desktop shell: Tauri around the web shell's page, with the core running natively in the app's process. See
+# CLAUDE.md here. Run from the repo root as `just desktop <recipe>`. Paths are from this file's folder.
+# Building on Linux needs WebKitGTK's development packages; on Windows, WebView2 (part of Windows 10 and 11).
+
+here := source_directory()
+web := here / "../web"
+
+_default:
+    @just --justfile "{{source_file()}}" --unsorted --list
+
+# The page, then the app in release, unbundled: core/target/release/mailmind-desktop (.exe on Windows)
+build: _deps
+    cd "{{web}}" && npx vite build --mode desktop
+    cd "{{here}}" && npx tauri build --no-bundle
+
+# The app in release, bundled for this system (an .app and a .dmg on macOS), under core/target/release/bundle
+bundle: _deps
+    cd "{{web}}" && npx vite build --mode desktop
+    cd "{{here}}" && npx tauri build
+
+# The app in debug, on the web shell's dev server (started for it), with the page's devtools
+dev: _deps
+    cd "{{here}}" && npx tauri dev
+
+# Formatting, and clippy with warnings as errors, on the app's Rust
+check: _deps
+    cd "{{web}}" && npx vite build --mode desktop
+    cd "{{here}}/src-tauri" && cargo fmt --check && cargo clippy -- -D warnings
+
+# Launch to first rows and idle memory (app, WebContent and Networking), on the release .app (macOS)
+[macos]
+measure runs="5": _deps
+    cd "{{web}}" && npx vite build --mode desktop
+    cd "{{here}}" && npx tauri build --bundles app
+    cd "{{here}}" && node scripts/measure.mjs {{runs}}
+
+# node_modules from the lockfiles, here and in the web shell, when missing or older than them
+_deps:
+    cd "{{here}}" && (test node_modules/.package-lock.json -nt package-lock.json || npm ci --no-audit --no-fund)
+    cd "{{web}}" && (test node_modules/.package-lock.json -nt package-lock.json || npm ci --no-audit --no-fund)
