@@ -13,6 +13,7 @@ publish = false
 [workspace.dependencies]
 mm-kernel = { path = "crates/mm-kernel" }
 mm-store = { path = "crates/mm-store" }
+mm-app = { path = "crates/mm-app" }
 mm-fixtures = { path = "crates/mm-fixtures" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that

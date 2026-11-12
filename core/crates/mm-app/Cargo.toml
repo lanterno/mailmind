@@ -1,0 +1,26 @@
+[package]
+name = "mm-app"
+description = "The contract: what crosses between the core and a shell"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# TypeScript types for the web shell's client, written by `just gen`
+ts = ["dep:ts-rs", "mm-kernel/ts"]
+
+[dependencies]
+mm-kernel.workspace = true
+mm-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+mm-fixtures.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
