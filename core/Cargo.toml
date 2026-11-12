@@ -13,6 +13,7 @@ publish = false
 [workspace.dependencies]
 mm-kernel = { path = "crates/mm-kernel" }
 mm-store = { path = "crates/mm-store" }
+mm-fixtures = { path = "crates/mm-fixtures" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that
 # opens the database adds that feature for those targets), and LibTomCrypt in the browser, through sqlite-wasm-rs.

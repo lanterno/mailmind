@@ -1,0 +1,15 @@
+[package]
+name = "mm-fixtures"
+description = "A fictional mailbox, the same every time for the same seed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mm-kernel.workspace = true
+mm-store.workspace = true
+
+[lints]
+workspace = true
