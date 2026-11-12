@@ -1,0 +1,6 @@
+# One compiler for every machine and every CI runner. Change it in a commit of its own.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown", "aarch64-apple-ios", "aarch64-apple-ios-sim"]

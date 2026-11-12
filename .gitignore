@@ -50,3 +50,6 @@ web/node_modules/
 web/lint/node_modules/
 web/gen-api/node_modules/
 mailmind/http/dist/
+
+# the core's build
+core/target/
