@@ -60,4 +60,18 @@ targets:
     settings:
       base:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
-    scheme: {}
+    scheme:
+      testTargets: [MailMindTests]
+
+  # The list model's tests. They compile the model with the bindings and link the core, so no app is launched.
+  MailMindTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Sources/ListModel.swift
+      - Generated/MailMindCore.swift
+    dependencies:
+      - framework: build/MailMindCore.xcframework
+        embed: false
+      - sdk: Security.framework

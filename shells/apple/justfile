@@ -51,6 +51,11 @@ xcframework:
 project:
     cd "{{here}}" && xcodegen generate --quiet
 
+# The list model's tests, on macOS
+test: xcframework project
+    cd "{{here}}" && xcodebuild -quiet -project MailMind.xcodeproj -scheme MailMind-macOS -destination 'platform=macOS,arch=arm64' \
+        -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO test
+
 # The Mac app, on a fictional mailbox of 100,000 messages it makes on first launch
 run: build
     "{{here}}/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/MailMind"
