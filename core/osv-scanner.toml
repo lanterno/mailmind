@@ -1,0 +1,5 @@
+# The advisories `just audit` accepts for core/Cargo.lock, each with why. Keep in step with core/deny.toml's ignore list.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0374"
+reason = "basic-toml is unmaintained, with no release to move to. Only uniffi's binding generator reaches it (through askama), when bindings are written; no shell ships it. Drop this when uniffi moves off it."
