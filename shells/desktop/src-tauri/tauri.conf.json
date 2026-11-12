@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MailMind",
+  "version": "0.1.0",
+  "identifier": "test.example.mailmind",
+  "build": {
+    "devUrl": "http://localhost:5174",
+    "frontendDist": "../../web/dist-desktop",
+    "beforeDevCommand": { "script": "npm run dev:desktop", "cwd": "../web", "wait": false }
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; worker-src 'none'; style-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+  }
+}

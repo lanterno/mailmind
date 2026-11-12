@@ -1,0 +1,3 @@
+# The core's clippy settings (core/clippy.toml): this crate is outside its workspace.
+# Tests may unwrap: a failure there is the point.
+allow-unwrap-in-tests = true

@@ -1,0 +1,3 @@
+[build]
+# The core's build folder: its crates compile once for every shell, and the disk holds one copy.
+target-dir = "../../../core/target"

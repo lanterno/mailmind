@@ -1,0 +1,5 @@
+# The core's compiler (core/rust-toolchain.toml), so this shell and the core build the same way.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

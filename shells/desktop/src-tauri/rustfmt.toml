@@ -1,0 +1,3 @@
+# The core's formatting (core/rustfmt.toml): this crate is outside its workspace.
+max_width = 120
+use_small_heuristics = "Max"

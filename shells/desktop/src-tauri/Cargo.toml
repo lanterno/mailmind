@@ -1,0 +1,36 @@
+# The desktop shell's process: a Tauri window around the web shell's page, with the core running natively here.
+# It is not a member of the core's workspace (its own [workspace] table and Cargo.lock), but shares its build
+# folder (.cargo/config.toml) so the core's crates are not compiled into a second one.
+[package]
+name = "mailmind-desktop"
+description = "MailMind's desktop shell: the web page in a native window, the core in-process"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+mm-app = { path = "../../../core/crates/mm-app" }
+mm-fixtures = { path = "../../../core/crates/mm-fixtures" }
+serde_json = "1"
+# No plugins: the page reaches the core through this crate's two commands and nothing else.
+tauri = { version = "2", features = [] }
+
+[lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+dbg_macro = "deny"
+print_stdout = "warn"
+unwrap_used = "warn"
+
+[profile.release]
+strip = true
+lto = "thin"
