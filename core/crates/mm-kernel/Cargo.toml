@@ -1,0 +1,19 @@
+[package]
+name = "mm-kernel"
+description = "What every part of the core shares: names, refusals"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# TypeScript types for the web shell's client, written by `just gen`
+ts = ["dep:ts-rs"]
+
+[dependencies]
+serde.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[lints]
+workspace = true
