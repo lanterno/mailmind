@@ -6,6 +6,7 @@
 //! inside the core crosses: a shell sees message keys, never row numbers.
 
 mod list;
+pub mod wire;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, mpsc};
