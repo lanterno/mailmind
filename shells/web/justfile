@@ -1,0 +1,84 @@
+# The web shell: the core compiled to WebAssembly in the browser's dedicated worker, and a React page. See CLAUDE.md
+# here. Run from the repo root as `just web <recipe>`. Paths are from this file's folder, wherever just runs.
+
+here := source_directory()
+core := here / "../../core"
+
+_default:
+    @just --justfile "{{source_file()}}" --unsorted --list
+
+# The core's WebAssembly (mm-wasm, release), then the page, into dist/
+build: wasm _deps
+    cd "{{here}}" && npx tsc --noEmit && npx vite build
+
+# The page the desktop shell wraps, into dist-desktop/: no worker and no WebAssembly, the core is in Tauri's process
+build-desktop: _deps
+    cd "{{here}}" && npx vite build --mode desktop
+
+# The page on a dev server at http://localhost:5173, on the demo mailbox (`?messages=N` for another size)
+dev: wasm _deps
+    cd "{{here}}" && npx vite
+
+# The client's handling of the core's lines, and the types it reads them with
+test: _deps
+    cd "{{here}}" && npx tsc --noEmit && npx vitest run
+
+# Lints mm-wasm for the browser (on other targets it is empty, so `just core-verify` does not see it), then `test`
+check: test
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _wasm_env }}
+    cd "{{core}}"
+    cargo clippy -p mm-wasm --target wasm32-unknown-unknown -- -D warnings
+
+# Time to first rows, memory after open and after a far jump, in headless Chromium; and the WebAssembly's size
+measure messages="100000": build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{here}}"
+    wasm=$(ls dist/assets/mm_wasm_bg-*.wasm)
+    echo "mm-wasm: $(wc -c < "$wasm") bytes raw, $(gzip -9 -c "$wasm" | wc -c) gzip -9, $(brotli -q 11 -c "$wasm" | wc -c) brotli -q 11 (budget 2.5 MB compressed)"
+    node scripts/measure.mjs {{messages}}
+
+# The TypeScript the client reads the core's messages with, from mm-app and mm-kernel (ts-rs), into src/core/generated
+gen:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{core}}"
+    rm -f ../shells/web/src/core/generated/*.ts
+    # ts-rs writes each type when its test runs; core/.cargo/config.toml says where (TS_RS_EXPORT_DIR).
+    cargo test -q -p mm-kernel -p mm-app --features ts export_bindings
+
+# mm-wasm in release, through wasm-bindgen, into wasm/ (not committed)
+wasm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ _wasm_env }}
+    cd "{{core}}"
+    cargo build --release -q -p mm-wasm --target wasm32-unknown-unknown
+    locked=$(cargo pkgid -p wasm-bindgen | sed 's/.*[@#]//')
+    found=$(wasm-bindgen --version 2>/dev/null | awk '{print $2}' || true)
+    if [ "$found" != "$locked" ]; then
+        echo "wasm-bindgen $locked is needed (found '${found:-none}'): cargo install wasm-bindgen-cli --version $locked --locked" >&2
+        exit 1
+    fi
+    wasm-bindgen --target web --out-dir ../shells/web/wasm --out-name mm_wasm target/wasm32-unknown-unknown/release/mm_wasm.wasm
+
+# node_modules from the lockfile, when they are missing or older than it
+_deps:
+    cd "{{here}}" && (test node_modules/.package-lock.json -nt package-lock.json || npm ci --no-audit --no-fund)
+
+# SQLCipher's C compiled for wasm32 needs a clang that targets it, which Apple's does not. In order: what
+# CC_wasm32_unknown_unknown already names; WASI_SDK_PATH's clang; the newest wasi-sdk unpacked under
+# ~/.local/share/wasi-sdk; the clang on PATH (apt's clang on Ubuntu targets wasm32).
+_wasm_env := '''
+if [ -z "${CC_wasm32_unknown_unknown:-}" ]; then
+    sdk="${WASI_SDK_PATH:-$(ls -d "$HOME"/.local/share/wasi-sdk/wasi-sdk-*/ 2>/dev/null | sort -V | tail -1 || true)}"
+    if [ -n "$sdk" ]; then
+        export CC_wasm32_unknown_unknown="${sdk%/}/bin/clang" AR_wasm32_unknown_unknown="${sdk%/}/bin/llvm-ar"
+    else
+        export CC_wasm32_unknown_unknown=clang
+        export AR_wasm32_unknown_unknown="$(command -v llvm-ar || ls /usr/bin/llvm-ar-* 2>/dev/null | sort -V | tail -1)"
+    fi
+fi
+'''
