@@ -1,0 +1,19 @@
+[package]
+name = "mm-daemon"
+description = "The core as a program: the contract as JSON lines, over standard input and output or a local socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mm-app.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+mm-fixtures.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
