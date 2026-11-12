@@ -1,0 +1,68 @@
+# What `cargo deny check` holds the core's dependencies to: licences that let MailMind ship under MIT, MPL-2.0 or
+# AGPL-3.0, no known advisories, and crates from crates.io only. CI runs it on every change to core/.
+
+[graph]
+# Every platform a shell builds the core for, so a dependency only one of them pulls in is checked too.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "aarch64-linux-android",
+    "x86_64-linux-android",
+    "wasm32-unknown-unknown",
+]
+all-features = true
+
+[advisories]
+version = 2
+# Vulnerabilities, unsound code and unmaintained crates fail by default; a yanked release does too.
+yanked = "deny"
+# An advisory is ignored only with its id and a reason, in a commit that says why.
+ignore = [
+    # Unmaintained, with no release to move to. Only uniffi's binding generator (askama) uses it, when bindings are
+    # written; it is not in what a shell ships. Drop this when uniffi moves off it.
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml: unmaintained, reached only through uniffi_bindgen's askama" },
+]
+
+[licenses]
+version = 2
+# Permissive licences and MPL-2.0 (copyleft per file) fit all three. GPL-only and AGPL-only crates are left out for
+# now, because using one would decide the licence of everything built with it; that is a decision of its own.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.9
+# The list above is the policy, so a licence on it that no crate uses yet is not worth a warning.
+unused-allowed-license = "allow"
+exceptions = [
+    # SQLite's blessing and LibTomCrypt's WTFPL put their code in the public domain. The browser build compiles both
+    # from this crate, and nothing else may use either licence without being looked at first.
+    { crate = "sqlcipher-src", allow = ["blessing", "WTFPL"] },
+]
+
+[bans]
+# Two versions of one crate cost build time and size; they are worth seeing, not failing on.
+multiple-versions = "warn"
+wildcards = "deny"
+# The core's own crates name each other by path, without a version; none of them is published.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
