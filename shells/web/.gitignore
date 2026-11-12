@@ -1,0 +1,5 @@
+node_modules/
+dist/
+dist-desktop/
+# wasm-bindgen's output from mm-wasm, written by `just web wasm`
+wasm/

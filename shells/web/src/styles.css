@@ -1,0 +1,156 @@
+:root {
+  --bg: #fbfaf7;
+  --fg: #1d1d1f;
+  --muted: #6e6e73;
+  --line: #e7e5df;
+  --unread: #0b57d0;
+  --placeholder: #ecebe6;
+  color-scheme: light dark;
+  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --fg: #f2f2f4;
+    --muted: #a1a1a6;
+    --line: #2c2c2e;
+    --unread: #8ab4f8;
+    --placeholder: #2c2c2e;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bar h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.status {
+  margin: 0;
+  color: var(--muted);
+}
+
+.list {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  contain: strict;
+}
+
+.list-body {
+  position: relative;
+}
+
+.failure {
+  margin: 0;
+  padding: 12px 16px;
+  color: #b3261e;
+}
+
+.row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.sender,
+.subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sender {
+  flex: 1;
+}
+
+.unread .sender,
+.unread .subject {
+  font-weight: 600;
+}
+
+.unread .sender::before {
+  content: "●";
+  color: var(--unread);
+  margin-right: 6px;
+}
+
+.subject {
+  flex: none;
+  max-width: 50%;
+}
+
+.snippet {
+  flex: 1;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date,
+.mark {
+  color: var(--muted);
+  flex: none;
+}
+
+.flagged {
+  color: #e8710a;
+}
+
+.placeholder .bar-short,
+.placeholder .bar-long {
+  display: block;
+  height: 12px;
+  margin: 4px 0 10px;
+  border-radius: 6px;
+  background: var(--placeholder);
+}
+
+.placeholder .bar-short {
+  width: 30%;
+}
+
+.placeholder .bar-long {
+  width: 70%;
+}
