@@ -75,9 +75,15 @@ impl Store {
 
     fn keyed(conn: Connection, key: &DbKey, on_disk: bool) -> Result<Store, Refusal> {
         conn.execute_batch(&key.pragma()).map_err(storage)?;
-        // A wrong key fails on the first read of the file, and nothing else does.
-        if conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)).is_err() {
-            return Err(Refusal::KeyDoesNotFit);
+        // A wrong key fails on the first read of the file, as "not a database": SQLCipher cannot tell a wrong key
+        // from a file that is not one. Any other failure there (a lock, a read, a journal this build cannot open)
+        // is the storage's, and saying the key is wrong would send the person after the wrong cause.
+        match conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)) {
+            Ok(_) => {}
+            Err(rusqlite::Error::SqliteFailure(e, _)) if e.code == rusqlite::ErrorCode::NotADatabase => {
+                return Err(Refusal::KeyDoesNotFit);
+            }
+            Err(e) => return Err(storage(e)),
         }
         if on_disk {
             journal(&conn)?;
