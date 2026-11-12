@@ -1,0 +1,27 @@
+[package]
+name = "mm-ffi"
+description = "The contract for Swift and Kotlin, through UniFFI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+# The library the Apple and Android shells link: a static one for Apple's frameworks, a shared one for Android
+# and for generating the bindings.
+name = "mailmind_core"
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+mm-app.workspace = true
+mm-fixtures.workspace = true
+uniffi.workspace = true
+zeroize.workspace = true
+
+[lints]
+workspace = true

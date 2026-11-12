@@ -1,0 +1,10 @@
+# Names the generated bindings carry. The package and bundle names are placeholders until the company's domain is
+# settled; change them here and in the shells together.
+[bindings.swift]
+module_name = "MailMindCore"
+ffi_module_name = "MailMindCoreFFI"
+ffi_module_filename = "MailMindCoreFFI"
+
+[bindings.kotlin]
+package_name = "app.mailmind.core"
+cdylib_name = "mailmind_core"
