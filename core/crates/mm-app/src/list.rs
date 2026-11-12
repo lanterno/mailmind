@@ -267,3 +267,6 @@ fn snippet(text: &str) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests;
