@@ -1,0 +1,30 @@
+# Every version the Android shell builds with. CI reads `ndk` and the SDK levels from here too.
+[versions]
+# AGP 9 compiles Kotlin itself; the Compose compiler plugin below brings the Kotlin Gradle plugin of the same version.
+agp = "9.5.1"
+kotlin = "2.4.21"
+# Compose 1.11 (BOM 2026.06.01) is the newest that compiles against SDK 36: Compose 1.12 asks for SDK 37.
+composeBom = "2026.06.01"
+activityCompose = "1.13.0"
+lifecycle = "2.9.4"
+# UniFFI's Kotlin calls the core through JNA; its aar carries JNA's own native library per ABI.
+jna = "5.19.1"
+# The NDK that cargo-ndk builds the core with, and that AGP strips the core with. AGP 9.5's default.
+ndk = "28.2.13676358"
+minSdk = "29"
+compileSdk = "36"
+targetSdk = "36"
+
+[libraries]
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmodel", version.ref = "lifecycle" }
+# JNA is not listed here: core/build.gradle.kts asks for its aar by name with `versions.jna`.
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
