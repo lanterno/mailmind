@@ -129,6 +129,7 @@ The docs below say why. These are the ones a change can break without noticing:
 | The perimeter, TLS, the mail frame | [docs/security.md](docs/security.md) |
 | Claude calls, the cost governor, batches | [docs/ai.md](docs/ai.md) |
 | The classifier, rules, unsubscribe | [docs/classification.md](docs/classification.md) |
+| The Rust core, the shells, budgets.toml | [docs/clients.md](docs/clients.md) |
 
 ## Conventions
 
