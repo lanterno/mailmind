@@ -60,3 +60,6 @@ test: xcframework project
 run: build
     "{{here}}/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/MailMind"
 
+# The shell's budgets on this Mac, the cost of crossing into the core, and a system web view's memory
+measure: build
+    "{{here}}/Measure/measure.sh"
