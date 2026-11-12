@@ -1,0 +1,57 @@
+# The Apple shell: one SwiftUI app for iPhone, iPad and Mac over the Rust core. See CLAUDE.md here.
+# Run from the repo root as `just apple <recipe>`. Paths are from this file's folder, wherever just runs.
+
+here := source_directory()
+core := here / "../../core"
+out := here / "build"
+targets := "aarch64-apple-ios aarch64-apple-ios-sim aarch64-apple-darwin"
+
+_default:
+    @just --justfile "{{source_file()}}" --unsorted --list
+
+# The core for Apple, then the Xcode project, then the app for the iOS simulator, iOS devices and macOS (unsigned)
+build: xcframework project
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{here}}"
+    # By target and SDK rather than a destination: a destination needs the iOS platform (and its simulator runtime)
+    # installed, and building needs only the SDK.
+    for sdk in iphonesimulator iphoneos; do
+        xcodebuild -quiet -project MailMind.xcodeproj -target MailMind-iOS -configuration Release -sdk "$sdk" \
+            SYMROOT="$PWD/build/ios" OBJROOT="$PWD/build/ios-obj" CODE_SIGNING_ALLOWED=NO build
+    done
+    xcodebuild -quiet -project MailMind.xcodeproj -scheme MailMind-macOS -configuration Release -destination 'generic/platform=macOS' \
+        -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO build
+    echo "built: build/ios/Release-iphonesimulator/MailMind.app, build/ios/Release-iphoneos/MailMind.app"
+    echo "built: build/DerivedData/Build/Products/Release/MailMind.app"
+
+# The core as release static libraries for iPhone, the iOS simulator and Mac, in build/MailMindCore.xcframework
+xcframework:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    . "$HOME/.cargo/env" 2>/dev/null || true
+    # The C inside the core (SQLCipher) is compiled for the same lowest OS the app runs on.
+    export IPHONEOS_DEPLOYMENT_TARGET=26.0 MACOSX_DEPLOYMENT_TARGET=26.0
+    cd "{{core}}"
+    libs=()
+    for target in {{targets}}; do
+        # Only the static library: the cdylib and rlib the crate also declares are not needed here.
+        cargo rustc -q --release -p mm-ffi --lib --crate-type staticlib --target "$target"
+        libs+=(-library "target/$target/release/libmailmind_core.a" -headers "{{out}}/headers")
+    done
+    mkdir -p "{{out}}/headers"
+    cp "{{here}}/Generated/MailMindCoreFFI.h" "{{out}}/headers/"
+    # Xcode finds a module only by this name.
+    cp "{{here}}/Generated/MailMindCoreFFI.modulemap" "{{out}}/headers/module.modulemap"
+    /bin/rm -rf "{{out}}/MailMindCore.xcframework"
+    xcodebuild -create-xcframework "${libs[@]}" -output "{{out}}/MailMindCore.xcframework" >/dev/null
+    echo "built: build/MailMindCore.xcframework"
+
+# MailMind.xcodeproj from project.yml (generated, never committed)
+project:
+    cd "{{here}}" && xcodegen generate --quiet
+
+# The Mac app, on a fictional mailbox of 100,000 messages it makes on first launch
+run: build
+    "{{here}}/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/MailMind"
+

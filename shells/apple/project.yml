@@ -1,0 +1,63 @@
+# The Apple shell's Xcode project, for XcodeGen. `just apple project` writes MailMind.xcodeproj from it.
+# The bundle-id prefix is a placeholder until the company's domain is settled, as in core/crates/mm-ffi/uniffi.toml.
+name: MailMind
+options:
+  bundleIdPrefix: app.mailmind
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GENERATE_INFOPLIST_FILE: YES
+    # The core is built for arm64 only: Apple silicon Macs, the iOS simulator on them, and devices.
+    ARCHS: arm64
+    INFOPLIST_KEY_CFBundleDisplayName: MailMind
+    DEAD_CODE_STRIPPING: YES
+  configs:
+    # The executable is stripped in Release, as an archive for the App Store is, so its measured size is the shipped one.
+    Release:
+      DEPLOYMENT_POSTPROCESSING: YES
+      STRIP_INSTALLED_PRODUCT: YES
+      STRIP_STYLE: all
+
+# Both apps build the same sources and link the same core.
+targetTemplates:
+  App:
+    type: application
+    sources:
+      - Sources
+      - Generated/MailMindCore.swift
+    dependencies:
+      - framework: build/MailMindCore.xcframework
+        embed: false
+      # SQLCipher in the core draws its random bytes from Security.
+      - sdk: Security.framework
+    settings:
+      base:
+        PRODUCT_NAME: MailMind
+        PRODUCT_BUNDLE_IDENTIFIER: app.mailmind.MailMind
+
+targets:
+  MailMind-iOS:
+    templates: [App]
+    platform: iOS
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+    scheme: {}
+
+  MailMind-macOS:
+    templates: [App]
+    platform: macOS
+    settings:
+      base:
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+    scheme: {}

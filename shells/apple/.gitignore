@@ -1,0 +1,5 @@
+# The XCFramework, derived data and measurements: rebuilt by `just apple build`.
+build/
+# Generated from project.yml by XcodeGen.
+*.xcodeproj/
+xcuserdata/
