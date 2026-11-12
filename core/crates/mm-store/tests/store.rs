@@ -58,6 +58,28 @@ fn the_file_on_disk_is_unreadable_without_the_key() {
 }
 
 #[test]
+fn a_file_another_connection_has_locked_is_not_a_wrong_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mail.db");
+    let holder = rusqlite::Connection::open(&path).unwrap();
+    holder.execute_batch(&format!("PRAGMA key = \"x'{}'\";", "42".repeat(32))).unwrap();
+    holder.execute_batch("PRAGMA journal_mode=DELETE; CREATE TABLE t(x); BEGIN EXCLUSIVE;").unwrap();
+    let refusal = Store::open(&path, &key()).err().unwrap();
+    assert!(matches!(refusal, Refusal::Storage { .. }), "{refusal:?}");
+    holder.execute_batch("COMMIT").unwrap();
+    assert!(Store::open(&path, &key()).is_ok());
+}
+
+#[test]
+fn a_file_that_is_not_a_database_is_refused_as_the_key() {
+    // SQLCipher cannot tell the two apart, and says so the same way.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mail.db");
+    std::fs::write(&path, [0x5a; 8192]).unwrap();
+    assert_eq!(Store::open(&path, &key()).err(), Some(Refusal::KeyDoesNotFit));
+}
+
+#[test]
 fn it_runs_sqlcipher() {
     assert!(store().cipher_version().unwrap().starts_with('4'));
 }
