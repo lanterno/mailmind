@@ -1,6 +1,6 @@
 """The person's keep and block rules and each sender's shelf life, as data: what a rule covers and what a
-change leaves. A domain entry also matches its sub-domains, and one matcher serves the classifier, the
-Screener and expiry.
+change leaves. A domain entry also matches its sub-domains: `domain_covers` says so for the Screener and
+expiry, and the Rust core, which classifies, says the same of the lists it holds (`RuleSets.held`).
 
 Expiry rules are separate from keep and block: a kept sender can also expire. Keep decides what the
 classifier shows, expiry how long it stays.
@@ -8,13 +8,14 @@ classifier shows, expiry how long it stays.
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from typing import Any, Final, Literal, TypedDict, get_args
 
+import mailmind_leaves
+
 from mailmind.curation.domain import filters as filters_of_file
 from mailmind.curation.domain.filters import Filter
 from mailmind.kernel.row import Row
 from mailmind.kernel.sender_verdict import Verdict
 
 type ListKey = Literal["keep_senders", "block_senders", "keep_domains", "block_domains"]
-type RuleSets = Mapping[str, frozenset[str]]     # each of KEYS, as the classifier reads it
 
 KEYS: tuple[ListKey, ...] = ("keep_senders", "block_senders", "keep_domains", "block_domains")
 EXPIRE: Final = "expire_hours"   # {sender-or-domain: hours}
@@ -33,12 +34,36 @@ class Rules(TypedDict):
     filters: list[Filter]
 
 
+class RuleSets(Mapping[str, frozenset[str]]):
+    """The keep and block lists as frozensets, each of KEYS, as the classifier reads them. The Rust core holds the
+    same lists (`held`), sent across once, here: a message classified against them sends only itself, where sending
+    thousands of entries with each would cost hundreds of times more than classifying it."""
+    __slots__ = ("_sets", "held")
+
+    def __init__(self, lists: Mapping[str, Iterable[str]]) -> None:
+        self._sets = {k: frozenset(lists[k]) for k in KEYS}
+        self.held = mailmind_leaves.RuleSets(*(self._sets[k] for k in KEYS))
+
+    def __getitem__(self, key: str) -> frozenset[str]:
+        return self._sets[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._sets)
+
+    def __len__(self) -> int:
+        return len(self._sets)
+
+
 def empty() -> Rules:
     return {"keep_senders": [], "block_senders": [], "keep_domains": [], "block_domains": [], "expire_hours": {}, "filters": []}
 
 
+_NO_SETS = RuleSets({k: () for k in KEYS})
+
+
 def no_sets() -> RuleSets:
-    return {k: frozenset[str]() for k in KEYS}
+    """No keep or block rules: one, shared, as nothing changes it."""
+    return _NO_SETS
 
 
 def normalized(raw: Any) -> Rules:
@@ -54,8 +79,8 @@ def normalized(raw: Any) -> Rules:
 
 
 def as_sets(rules: Rules) -> RuleSets:
-    """The keep and block lists as frozensets, what the classifier reads."""
-    return {k: frozenset(rules[k]) for k in KEYS}
+    """The keep and block lists as frozensets, what the classifier reads. Made once each time the rules change."""
+    return RuleSets({k: rules[k] for k in KEYS})
 
 
 def for_saving(rules: Rules) -> Rules:
