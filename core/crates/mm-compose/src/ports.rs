@@ -18,7 +18,8 @@ pub trait StoredOutbox: Send + Sync + fmt::Debug {
     fn overdue(&self, before: i64) -> Result<Vec<Row>, Fault>;
 }
 
-/// A draft MailMind tracks (`drafts`), as a message opens.
+/// A draft MailMind starts to track (`draft.tracked`): as a message opens, or as a first save makes it, which has no
+/// copy yet.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tracked {
     pub account: String,
@@ -26,7 +27,7 @@ pub struct Tracked {
     pub uid: Option<i64>,
     pub message_id: Option<String>,
     pub uidvalidity: Option<i64>,
-    pub mode: &'static str,
+    pub mode: Option<String>,
     pub subject: Option<String>,
     /// When it was first tracked, and last changed: the same moment for a new one.
     pub at: String,

@@ -73,7 +73,7 @@ impl Drafts {
                     uid: col(row, "uid").as_i64(),
                     message_id: message_id.map(str::to_owned),
                     uidvalidity: self.stored.uidvalidity(account, folder.unwrap_or_default())?,
-                    mode: "new",
+                    mode: Some("new".to_owned()),
                     subject: col(row, "subject").as_str().map(str::to_owned),
                     at: iso(self.clock.now()),
                 };

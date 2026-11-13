@@ -5,13 +5,19 @@
 //! What it needs of the world is in `ports`, which the store implements; nothing here reads the disk, the network or
 //! the clock.
 
+pub mod attachments;
 pub mod builder;
+pub mod composition;
+pub mod draft;
+pub mod draft_journal;
 pub mod drafts;
 pub mod markdown;
 pub mod outbox;
+pub mod outbox_item;
 pub mod ports;
 pub mod quote;
 pub mod replies;
 pub mod resume;
+pub mod sending_ports;
 pub mod snippets;
 pub mod spec;
