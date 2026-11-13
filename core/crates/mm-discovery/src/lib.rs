@@ -7,11 +7,12 @@
 
 // The Document Hub, and what is said of a sender as a message opens (area B).
 pub mod documents;
+pub mod arrival;
+pub mod contacts;
+pub mod known;
 pub mod ports;
 pub mod query;
 pub mod senders;
-pub mod contacts;
-pub mod known;
 pub mod search;
 pub mod suggest;
 mod text;
