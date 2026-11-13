@@ -22,7 +22,7 @@ just gen-bindings       # Swift and Kotlin bindings, into shells/apple/Generated
 | `mm-store` | The encrypted database, and the only place the app opens a file: the database, `mailmind.config.json` and the page's build, each through `Outside`. It implements the context crates' ports, with each context's SQL in a module of its name. |
 | `mm-accounts` | The mail accounts and how MailMind reaches each: the config's entries, where a secret is, a loopback server's pinned certificate. |
 | `mm-mailbox` | The mail on each server: how its copies thread into conversations, which folder plays which part, the folder rail, and what is stored counted: each inbox by bucket, a Gmail account's labels, each account's syncs. |
-| `mm-net` | What every mail protocol shares: the TCP connection with its time limits, TLS on it (a loopback server's certificate pinned; one off this machine refused until verified TLS is here), and the stream. |
+| `mm-net` | What every mail protocol shares: the TCP connection with its time limits, TLS on it (a certificate verified on the roots the system trusts off this machine, and pinned on it), and the stream. |
 | `mm-imap` | An account's IMAP server, as the Mailbox's `MailSession`, on `mm-net`. |
 | `mm-server` | The Rust server: an HTTP adapter on axum that decodes a request, calls a context's use case and encodes the answer, behind the Python app's perimeter. `environment` is the only module that reads the environment; `app` binds the contexts. The binary is `mailmind-server`. |
 | `mm-served` | The Rust server as the served suites start it (`tests/support/served.py`'s line protocol): a frozen clock, the tripwire `guard.py` is, and `fake_keychain`'s file, through the server's seams. Never shipped. |
