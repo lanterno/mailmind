@@ -13,6 +13,7 @@ pub mod answer;
 pub mod app;
 pub mod body;
 pub mod environment;
+pub mod events;
 pub mod json;
 pub mod page;
 pub mod perimeter;

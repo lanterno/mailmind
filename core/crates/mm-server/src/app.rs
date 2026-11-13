@@ -17,6 +17,7 @@ use mm_store::places::Places;
 use mm_store::{ConfigFile, Database, DbKey, PageFiles};
 
 use crate::environment::{Environment, Settings};
+use crate::events::Hub;
 use crate::page::Page;
 use crate::serve::Work;
 use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier, Unheard};
@@ -50,6 +51,9 @@ pub struct App {
     pub clock: Arc<dyn Clock>,
     /// The places the page's URLs name.
     pub places: Places,
+    /// What the app tells the open tabs: `app.events.publish(Topic::Mute, json!({...}))`, or a use case's
+    /// `Arc<dyn Events>`.
+    pub events: Arc<Hub>,
 }
 
 impl App {
@@ -109,6 +113,7 @@ impl App {
         ));
         // The page's own state, and what the app says of itself.
         let places = Places::new(database.clone(), seams.clock.clone());
+        let events = Arc::new(Hub::new().map_err(|_| "the system's random source failed")?);
         Ok(App {
             port,
             csrf,
@@ -120,6 +125,7 @@ impl App {
             reading,
             clock: seams.clock.clone(),
             places,
+            events,
         })
     }
 }
