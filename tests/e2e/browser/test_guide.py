@@ -20,10 +20,9 @@ def clean(page):
 
 
 @pytest.fixture
-def first_run():
+def first_run(page, app):
     """A person who hasn't seen the guide: what the page fixture sets for every other test, undone."""
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences({"guide_offered": False})
+    assert app.post("/api/preferences", {"guide_offered": False}).status == 200
 
 
 def inbox(page):
@@ -31,16 +30,16 @@ def inbox(page):
     return page.get_by_role("dialog", name="Today’s brief")
 
 
-def said_in_file():
-    from mailmind.bootstrap import accounts
-    return accounts.config.preferences()["guide_offered"]
+def kept_as_offered(app):
+    """Whether the server keeps the guide as offered, as the page reads it when it opens."""
+    return app.get("/api/preferences").json["preferences"]["guide_offered"]
 
 
-def test_it_is_offered_once_and_a_reload_does_not_offer_it_again(page, world, first_run):
+def test_it_is_offered_once_and_a_reload_does_not_offer_it_again(page, app, world, first_run):
     guide = inbox(page)
     expect(guide).to_be_visible()
     expect(guide.get_by_role("button", name="Next")).to_be_focused()
-    assert said_in_file() is True            # offered, whether or not it is finished
+    assert kept_as_offered(app) is True      # offered, whether or not it is finished
     page.reload()
     expect(page.locator("#rows")).to_be_visible()
     expect(page.locator(".guide-card")).to_have_count(0)
@@ -92,18 +91,17 @@ def test_the_help_shows_it_again_from_anywhere(page, world):
     clean(page)
 
 
-def test_it_is_not_offered_while_the_inbox_is_empty(page, world, first_run):
+def test_it_is_not_offered_while_the_inbox_is_empty(page, app, world, first_run):
     page.pw.route(re.compile(r"/api/messages\?"), lambda route: route.fulfill(json={"ok": True, "items": [], "has_more": False, "total": 0}))
     page.goto(f"/m/{w.ADA}/INBOX")
     expect(page.locator("#rows")).to_be_visible()
     expect(page.locator(".guide-card")).to_have_count(0)
-    assert said_in_file() is False
+    assert kept_as_offered(app) is False
     clean(page)
 
 
-def test_it_does_not_teach_a_key_that_is_switched_off(page, world, first_run):
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences({"single_keys": False})
+def test_it_does_not_teach_a_key_that_is_switched_off(page, app, world, first_run):
+    assert app.post("/api/preferences", {"single_keys": False}).status == 200
     inbox(page).get_by_role("button", name="Next").click()
     expect(page.locator("#guideTitle")).to_have_text("Folders, and focus reading")
     expect(page.locator(".guide-b")).not_to_contain_text("↵")

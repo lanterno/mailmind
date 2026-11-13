@@ -6,7 +6,6 @@ from playwright.sync_api import expect
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
-from mailmind.platform import sse
 from mailmind.bootstrap.assistant import answers
 
 pytestmark = pytest.mark.browser
@@ -88,13 +87,11 @@ def inbox_pks():
         c.close()
 
 
-def test_a_kept_link_still_opens_its_message_after_a_renumber(page, world):
-    from mailmind.bootstrap import accounts
-    from mailmind.bootstrap.mailbox import ingest
+def test_a_kept_link_still_opens_its_message_after_a_renumber(page, app, world):
     link = f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX&uid={world.uid(RECEIPT)}"
     before = inbox_pks()
     world.server.renumber(w.ADA, "INBOX")       # UIDVALIDITY changes: every row the Inbox had goes, and comes back anew, at the uids it had
-    ingest.sync_new(accounts.get(w.ADA))
+    app.work("sync", w.ADA, "INBOX")
     assert inbox_pks() and before.isdisjoint(inbox_pks())
     page.goto(link)
     expect(page.locator(".rd-subj")).to_have_text("Your receipt for order 1042")
@@ -102,12 +99,10 @@ def test_a_kept_link_still_opens_its_message_after_a_renumber(page, world):
     clean(page)
 
 
-def test_a_kept_link_opens_nothing_once_a_renumber_gave_its_copy_another_uid(page, world):
-    from mailmind.bootstrap import accounts
-    from mailmind.bootstrap.mailbox import ingest
+def test_a_kept_link_opens_nothing_once_a_renumber_gave_its_copy_another_uid(page, app, world):
     link = f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={world.key(RECEIPT)}&folder=INBOX&uid={world.uid(RECEIPT)}"
     world.server.renumber(w.ADA, "INBOX", first=500)    # every copy in the Inbox now has a uid no link has seen
-    ingest.sync_new(accounts.get(w.ADA))
+    app.work("sync", w.ADA, "INBOX")
     page.goto(link)
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     expect(page.locator("#reader .nores")).to_have_text("not found")
@@ -398,11 +393,12 @@ def test_a_search_shows_what_it_finds_and_escape_leaves_it(page, world):
     clean(page)
 
 
-def test_new_mail_comes_into_the_list_by_itself(page, world):
+def test_new_mail_comes_into_the_list_by_itself(page, app, world):
     opened(page)
     before = page.locator("#rows .row[data-key]").count()
-    world.deliver(w.ADA, "INBOX", w.variant(RECEIPT, Message_ID="<fresh@example.test>", Subject="Fresh off the press"))
-    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
+    world.server.deliver(w.ADA, "INBOX", w.variant(RECEIPT, Message_ID="<fresh@example.test>", Subject="Fresh off the press"))
+    # The background sync's round, as another tab's Sync now starts it: it brings the mail in and says so on the event stream.
+    assert app.post("/api/refresh", {}).json["ok"]
     until(page, lambda: page.locator("#rows .row[data-key]").count() > before, "the new mail never showed")
     expect(page.locator("#rows .row[data-key]").filter(has_text="Fresh off the press")).to_have_count(1)
     clean(page)
@@ -410,8 +406,6 @@ def test_new_mail_comes_into_the_list_by_itself(page, world):
 
 def test_what_changes_elsewhere_shows_on_an_open_list(page, app, world):
     """Nothing here touches the page: each change reaches it only as its event, flags-changed, reconcile and undo-done."""
-    from mailmind.bootstrap import accounts
-    from mailmind.bootstrap.mailbox import ingest, reconciler
     old = "ada-archive-01-old-thread.eml"
     opened(page)
     page.locator('#folderrail .frow[data-folder="Archive"]').click()
@@ -424,7 +418,7 @@ def test_what_changes_elsewhere_shows_on_an_open_list(page, app, world):
 
     with world.server.lock:                               # marked unread in another client
         world.server.mailbox(w.ADA, "Archive").messages[world.uid(old)].flags.discard(w.SEEN)
-    ingest.sync_folder(accounts.get(w.ADA), "Archive")
+    app.work("sync", w.ADA, "Archive")
     expect(listed).to_have_class(re.compile(r"\bunread\b"))
 
     # Reconcile believes no empty answer, so the folder keeps something on the server.
@@ -433,7 +427,7 @@ def test_what_changes_elsewhere_shows_on_an_open_list(page, app, world):
         world.server.mailbox(w.ADA, "Archive").messages.pop(world.uid(old))
 
     def pruned():                                         # the ghost pruner's round, which yields while the page reads
-        reconciler._auto_reconcile_one(accounts.get(w.ADA))
+        app.work("reconcile", w.ADA)
         return world.pk(old) is None
     until(page, pruned, "the ghost was never pruned")
     expect(listed).to_have_count(0)
@@ -828,14 +822,16 @@ def test_a_search_saves_as_a_view_in_the_rail_and_the_view_runs_it(page, world):
     clean(page)
 
 
-def test_a_saved_summary_shows_at_once_with_no_call_and_a_full_one_comes_when_asked(page, world, ai):
+def test_a_saved_summary_shows_at_once_with_no_call_and_a_full_one_comes_when_asked(page, app, world, ai):
     from mailmind.bootstrap.mailbox import store
-    c = store.conn()
-    try:
-        answers.save_summary(c, world.pk(RECEIPT), "Saved words", 3, "personal", "Keep the receipt", "claude-opus-5-5", "2026-11-02")
-        c.commit()
-    finally:
-        c.close()
+    with app.stopped():                                  # summarized before the server started
+        c = store.conn()
+        try:
+            answers.save_summary(c, world.pk(RECEIPT), "Saved words", 3, "personal", "Keep the receipt", "claude-opus-5-5",
+                                 "2026-11-02")
+            c.commit()
+        finally:
+            c.close()
     opened(page)
     expect(page.locator(".bf-narr")).to_be_visible()   # the day's brief is written as the Inbox opens: that one call
     row(page, world, RECEIPT).click()
@@ -919,13 +915,15 @@ def test_axe_finds_nothing_with_the_palette_and_the_menus_open(page, world, ever
     assert {k: {v["id"]: [n["target"] for n in v["nodes"]] for v in vs} for k, vs in found.items() if vs} == {}
 
 
-def test_at_the_daily_limit_a_summary_goes_only_when_you_say_so(page, world, ai):
+def test_at_the_daily_limit_a_summary_goes_only_when_you_say_so(page, app, world, ai):
     import time
     from mailmind.assistant.application.gateway import local_day
     from mailmind.assistant.application.ports import Spend, Usage
     from mailmind.bootstrap import assistant
-    now = time.time()
-    assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok", Usage(), 15_000_000, int(now)))
+    now = time.time()                                    # the server's frozen time, as this process has it too
+    with app.stopped():                                  # the day's limit spent before the server started
+        assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok", Usage(), 15_000_000,
+                                      int(now)))
     ai.responder = lambda req: fa.answer({"tldr": "Over the limit, as asked.", "points": [], "action": ""})
     opened(page)
     row(page, world, RECEIPT).click()

@@ -26,6 +26,11 @@ def clean(page):
     assert page.blocked == [], page.blocked
 
 
+def blocked(app, kind="block_senders"):
+    """What the server's learned rules block, as the drawer reads them."""
+    return app.get("/api/rules").json["rules"][kind]
+
+
 def until(page, check, what):
     for _ in range(100):
         if check():
@@ -47,9 +52,8 @@ def drawer(page, where=None):
     return page.get_by_role("dialog", name="Curate")
 
 
-def test_marking_senders_cleans_them_up_as_one_and_one_undo_takes_it_back(page, world, ai):
+def test_marking_senders_cleans_them_up_as_one_and_one_undo_takes_it_back(page, app, world, ai):
     issues(world, 3)
-    from mailmind.bootstrap.curation import rules
     body = drawer(page)
     row = body.locator(f'.flood-row[data-flood="{LOOM}"]')
     expect(row).to_be_visible()
@@ -60,16 +64,16 @@ def test_marking_senders_cleans_them_up_as_one_and_one_undo_takes_it_back(page, 
     panel = page.get_by_role("dialog", name="Clean up these senders")
     expect(panel.locator(f'[data-batch-sender="{LOOM}"]')).to_contain_text("4 to Trash")
     expect(panel.locator(".batch-why")).to_contain_text("stub text")                    # the model's sentence, as the fake answers
-    assert LOOM not in rules.load()["block_senders"]                                    # a preview decides nothing
+    assert LOOM not in blocked(app)                                                     # a preview decides nothing
     panel.get_by_role("button", name="Clean up 1").click()
-    assert LOOM not in rules.load()["block_senders"]                                    # the first click only arms it
+    assert LOOM not in blocked(app)                                                     # the first click only arms it
     panel.get_by_role("button", name="Click again to confirm").click()
-    until(page, lambda: LOOM in rules.load()["block_senders"], "the block")
+    until(page, lambda: LOOM in blocked(app), "the block")
     expect(page.locator(".flood-bar")).to_have_count(0)
     until(page, lambda: not any(box == "INBOX" for _, box, *_ in world.where(NEWS)["server"]), "the sweep")
     page.keyboard.press("Escape")
     page.keyboard.press("z")
-    until(page, lambda: LOOM not in rules.load()["block_senders"], "one undo reverses the block")
+    until(page, lambda: LOOM not in blocked(app), "one undo reverses the block")
     until(page, lambda: any(box == "INBOX" for _, box, *_ in world.where(NEWS)["server"]), "one undo reverses the sweep")
     clean(page)
 
@@ -97,17 +101,16 @@ def test_a_rule_changes_how_the_mail_it_covers_reads_at_once(page, world):
     clean(page)
 
 
-def test_shift_enter_blocks_and_a_chip_removes_its_rule(page, world):
-    from mailmind.bootstrap.curation import rules
+def test_shift_enter_blocks_and_a_chip_removes_its_rule(page, app, world):
     drawer(page)
     page.locator("#ruleInput").fill("pests.example.test")
     page.locator("#ruleInput").press("Shift+Enter")
     chip = page.locator('#blockList [data-token="pests.example.test"]')
     expect(chip).to_be_visible()
-    assert "pests.example.test" in rules.load()["block_domains"]
+    assert "pests.example.test" in blocked(app, "block_domains")
     chip.click()
     expect(chip).to_have_count(0)
-    assert "pests.example.test" not in rules.load()["block_domains"]
+    assert "pests.example.test" not in blocked(app, "block_domains")
     clean(page)
 
 
@@ -129,8 +132,7 @@ def test_each_inbox_says_what_it_holds_and_a_sweep_asks_first(page, world):
     clean(page)
 
 
-def test_the_flood_list_cleans_up_a_sender_after_two_clicks_and_undo_reverses_it(page, world):
-    from mailmind.bootstrap.curation import rules
+def test_the_flood_list_cleans_up_a_sender_after_two_clicks_and_undo_reverses_it(page, app, world):
     issues(world)
     d = drawer(page)
     row = d.locator(f'.flood-row[data-flood="{LOOM}"]')
@@ -146,16 +148,16 @@ def test_the_flood_list_cleans_up_a_sender_after_two_clicks_and_undo_reverses_it
     go.click()
     expect(go).to_have_text("Click again to confirm")
     assert world.writes(before) == []
-    assert LOOM not in rules.load()["block_senders"]
+    assert LOOM not in blocked(app)
     go.click()
     expect(plan).to_have_count(0)
     expect(page.locator("#toast")).to_contain_text("Blocked · swept 3")
-    assert LOOM in rules.load()["block_senders"]
+    assert LOOM in blocked(app)
     until(page, lambda: world.where(NEWS)["server"][0][1] == "Trash", "it went to the Trash")
     expect(page.locator(f'.flood-row[data-flood="{LOOM}"]')).to_have_count(0)
     page.locator("#ufUndo").click()         # over the drawer, which stays open for the next sender
     expect(d).to_be_visible()
-    until(page, lambda: LOOM not in rules.load()["block_senders"], "the block is gone")
+    until(page, lambda: LOOM not in blocked(app), "the block is gone")
     until(page, lambda: world.where(NEWS)["server"][0][1] == "INBOX", "it came back")
     clean(page)
 

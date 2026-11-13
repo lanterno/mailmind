@@ -1,6 +1,8 @@
 """No script runs inside a mail frame, whatever a message holds. The frame's sandbox is the wall and the sanitizer is defence
-in depth, so each case runs twice, the second time with the sanitizer gone, as if it had missed everything. Each thing
-tried here would add its name to the top window's list if it ran, and the frame may ask nobody for anything.
+in depth, so each case that takes `wall` runs twice: here as the server sanitizes the mail, and again in
+in_process/test_mail_frame_scripts.py with the sanitizer gone, as if it had missed everything, which only the app in the
+test's own process can be made to do. Each thing tried here would add its name to the top window's list if it ran, and the
+frame may ask nobody for anything.
 
 Chromium only, as all of tests/e2e/browser is.
 """
@@ -11,7 +13,6 @@ from playwright.sync_api import expect
 
 from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
-from mailmind.content import sanitize
 
 pytestmark = pytest.mark.browser
 
@@ -72,11 +73,10 @@ def opening(page, copy):
     page.goto(f"/m/{w.ADA.replace('@', '%40')}/INBOX?key={key}&folder=INBOX&uid={uid}")
 
 
-@pytest.fixture(params=["sanitized", "no sanitizer"])
-def wall(request, monkeypatch):
-    if request.param == "no sanitizer":
-        monkeypatch.setattr(sanitize, "sanitize", lambda html, load_images=False: (html, {"blocked_images": 0, "blocked_css_urls": 0}))
-    return request.param
+@pytest.fixture
+def wall():
+    """The walls a message meets: here the server's sanitizer and the frame's sandbox."""
+    return "sanitized"
 
 
 @pytest.fixture
