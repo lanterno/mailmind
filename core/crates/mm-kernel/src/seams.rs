@@ -95,7 +95,33 @@ impl std::error::Error for KeychainProblem {}
 
 /// The login Keychain, where MailMind keeps its secrets as generic passwords of the service `mailmind`, each under an
 /// item's name (`account:<address>`, `anthropic-api-key`).
+///
+/// A Keychain that only reads keeps nothing and takes nothing out: `put` and `delete` say it didn't answer.
 pub trait Keychain: Send + Sync + fmt::Debug {
     /// The secret kept under `item`, or None when there is none.
     fn find(&self, item: &str) -> Result<Option<Secret>, KeychainProblem>;
+
+    /// Keep `secret` under `item`, in place of whatever was there. Done only once the Keychain holds it.
+    fn put(&self, _item: &str, _secret: &Secret) -> Result<(), KeychainProblem> {
+        Err(KeychainProblem)
+    }
+
+    /// Take `item` out: false when there was none.
+    fn delete(&self, _item: &str) -> Result<bool, KeychainProblem> {
+        Err(KeychainProblem)
+    }
+}
+
+/// Whether `name` can name an item MailMind keeps. A name goes on a command line, so it is letters, digits and
+/// `. _ % + @ : = -` alone, and starts with a letter or a digit.
+pub fn keepable_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && chars.all(|c| c.is_ascii_alphanumeric() || "._%+@:=-".contains(c))
+}
+
+/// Whether `secret` is one MailMind keeps: printable ASCII, and not empty. The Keychain gives back any other as hex,
+/// which can't be told from a secret that is hex.
+pub fn keepable_secret(secret: &str) -> bool {
+    !secret.is_empty() && secret.bytes().all(|b| (0x20..=0x7e).contains(&b))
 }
