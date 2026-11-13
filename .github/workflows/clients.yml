@@ -135,7 +135,8 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The build, then an emulator's boot and the test on it.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -149,6 +150,7 @@ jobs:
           echo "gradle=$(sed -n 's#^distributionUrl=.*/gradle-\(.*\)-bin\.zip$#\1#p' shells/android/gradle/wrapper/gradle-wrapper.properties)" >> "$GITHUB_OUTPUT"
           echo "ndk=$(sed -n 's/^ndk = "\(.*\)"$/\1/p' "$catalog")" >> "$GITHUB_OUTPUT"
           echo "sdk=$(sed -n 's/^compileSdk = "\(.*\)"$/\1/p' "$catalog")" >> "$GITHUB_OUTPUT"
+          echo "min_sdk=$(sed -n 's/^minSdk = "\(.*\)"$/\1/p' "$catalog")" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
@@ -198,6 +200,42 @@ jobs:
             echo "### Android: the core per ABI (release, stripped as the APK carries it)"
             just android sizes
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The app on an emulator (app/src/androidTest): it makes the 100,000-message demo on first launch, then its list
+      # jumps to row 90,000 and to the last, and each time a row the core sent must show. The image is x86_64, whose
+      # core the build above made, at minSdk: the oldest Android the core is compiled for.
+      - name: KVM for the emulator, as the emulator runner's README says
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: The list on an emulator, across 100,000 fictional messages
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ steps.pins.outputs.min_sdk }}
+          target: default
+          arch: x86_64
+          ram-size: 4096M
+          disk-size: 4096M
+          # The runner runs each line of a script in a shell of its own, so the test is one command.
+          script: just android test
+
+      - name: The instrumented test's results and the device's errors
+        if: failure()
+        run: |
+          shopt -s globstar nullglob
+          results=shells/android/app/build/outputs/androidTest-results
+          for file in "$results"/**/*.xml; do
+            echo "::group::$file"
+            cat "$file"
+            echo "::endgroup::"
+          done
+          for file in "$results"/**/*.txt; do
+            echo "::group::$file, errors only"
+            grep -E ' [EF] ' "$file" | head -n 400 || true
+            echo "::endgroup::"
+          done
 
   web:
     runs-on: ubuntu-latest
