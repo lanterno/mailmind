@@ -20,6 +20,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/folders", get(folders))
         .route("/api/stats", get(stats))
         .route("/api/labels", get(labels))
+        .route("/api/inboxes", get(inboxes))
 }
 
 fn query(uri: &Uri) -> Query {
@@ -62,4 +63,16 @@ async fn stats(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respons
 async fn labels(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
     let account = query(&uri).text("account").map(str::to_owned);
     super::run(&app, &method, &uri, move |app| app.labels.of_account(account.as_deref())).await
+}
+
+/// Every account's Inbox as one list. Only its arguments are read here so far, as `/api/messages` reads them: the list
+/// is that one's (`listing.listed_item` over `lists.inboxes_rows`), with a first scan started for an Inbox none has
+/// read, and neither is on the Rust server yet.
+async fn inboxes(method: Method, uri: Uri) -> Response<Body> {
+    let given = query(&uri);
+    let read = given.number("offset", 0).and_then(|_| given.number("limit", 80));
+    match read {
+        Err(problem) => answer::failure(&Failure::Problem(problem), method.as_str(), uri.path()),
+        Ok(_) => answer::not_yet(uri.path()),
+    }
 }
