@@ -12,27 +12,28 @@
 
 // What the Assistant reads: what calls cost.
 mod assistant;
-// What Compose reads: the outbox and the drafts' journal.
-mod compose;
+// What Compose keeps: the outbox and the drafts' journal, the drafts it tracks, and the snippets.
+pub mod compose;
 pub mod config;
+// What Curation reads of each stored inbox.
+mod curation_inbox;
 pub mod db;
 // What the Document Hub (Discovery's) reads: the attachments stored.
 mod documents;
 // What an export would hold, and a snapshot of the database as a download.
 pub mod export;
 mod key;
+// A Gmail account's labels.
+mod labels;
 mod mailbox;
 mod mailbox_sync;
 pub mod page;
+// The page's own state, and what the app says of itself.
+pub mod places;
 mod rule_book;
 pub mod schema;
 // What Discovery reads of a sender as a message opens.
 mod senders;
-// The page's own state, and what the app says of itself.
-pub mod compose;
-mod curation_inbox;
-mod labels;
-pub mod places;
 mod sync_state;
 
 use std::collections::HashMap;

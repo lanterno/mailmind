@@ -12,14 +12,14 @@
 mod accounts;
 mod mailbox;
 mod page;
-// The Mailbox's reads a person waits on, a message opened, the outbox, the documents and the exports (area B).
+// Compose's: the outbox tray and the snippets.
 mod compose;
+// The Mailbox's reads a person waits on, a message opened, the documents and the exports.
 mod documents;
 mod export;
 mod message;
 mod reading;
-// The page's own state: preferences, places, snippets, the event stream and what the app says of itself.
-mod compose;
+// The page's own state: preferences, places, the event stream and what the app says of itself.
 mod debug;
 mod events;
 mod places;
@@ -49,7 +49,6 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(preferences::routes())
         .merge(places::routes())
         .merge(events::routes())
-        .merge(compose::routes())
         .merge(debug::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)

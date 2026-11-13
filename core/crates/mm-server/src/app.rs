@@ -29,8 +29,6 @@ use crate::page::Page;
 use crate::serve::Work;
 use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier, Unheard};
 use crate::wiring::{CurationPlans, ImapSessions, KnownAccounts, ListedAccounts, MailboxSyncs};
-use crate::wiring::{ImapSessions, KnownAccounts, MailboxSyncs};
-use crate::wiring::{ImapSessions, KnownAccounts};
 
 /// Where the app reads the time and its secrets, and what it asks before it opens a file or reaches a host.
 #[derive(Clone, Debug)]
