@@ -92,6 +92,15 @@ impl Folders {
         Ok(())
     }
 
+    /// Whether `folder` is this account's Drafts: what the last LIST said, its SPECIAL-USE attribute first, else
+    /// what its name says on its own. Part of a name never counts: "Contract drafts" holds whatever was filed there.
+    pub fn plays_drafts(&self, account: &str, folder: &str) -> Result<bool, Fault> {
+        Ok(match self.listed.lock().map_err(|_| POISONED)?.get(account) {
+            Some(hit) => hit.folders.iter().any(|f| f.name == folder && f.role == "drafts"),
+            None => roles::names_drafts(folder),
+        })
+    }
+
     /// What is kept of the account's list, and whether it is fresh enough to serve.
     fn kept(&self, account: &str) -> Result<Option<(Listed, bool)>, Fault> {
         let hit = self.listed.lock().map_err(|_| POISONED)?.get(account).cloned();

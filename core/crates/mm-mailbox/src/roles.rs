@@ -84,6 +84,18 @@ pub fn role_by_name(name: &str, delimiter: Option<&str>) -> &'static str {
     NAMES.iter().find(|(_, pattern)| pattern.is_match(&segment)).map_or("custom", |(role, _)| role)
 }
 
+/// Whether a folder's name alone says it is the account's Drafts, with no LIST to ask: at the top of the tree, or
+/// under the parents servers keep it in. "Clients/Draft" is a folder someone made, so what it holds may be anything.
+pub fn names_drafts(name: &str) -> bool {
+    if role_by_name(name, None) != "drafts" {
+        return false;
+    }
+    let path: Vec<&str> = name.split(['/', '.']).collect();
+    path.len() == 1
+        || (path.len() == 2
+            && ["inbox", "[gmail]", "[google mail]"].contains(&text::strip(path[0]).to_lowercase().as_str()))
+}
+
 fn by_attribute(folder: &Folder) -> Option<&'static str> {
     ATTRIBUTES.iter().find(|(attribute, _)| folder.attributes.contains(*attribute)).map(|(_, role)| *role)
 }
