@@ -5,7 +5,6 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-import pytest
 import time_machine
 
 from mailmind.attention.application.snoozing import Snoozing
@@ -72,8 +71,6 @@ def test_undo_of_a_second_snooze_gives_back_the_first_time():
     assert book.snoozes == {}
 
 
-@pytest.mark.xfail(strict=True, reason="a preset is read at the offset in force when it is asked for, so across a change of the "
-                                       "clocks it wakes an hour off the wall clock")
 def test_tomorrow_at_eight_is_eight_on_the_wall_after_the_clocks_go_back():
     berlin = ZoneInfo("Europe/Berlin")
     book = Book()
