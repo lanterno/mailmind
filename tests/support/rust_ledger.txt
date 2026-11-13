@@ -61,3 +61,4 @@ tests/e2e/browser/test_filters.py::test_what_a_filter_cant_look_at_is_said_in_th
 tests/e2e/browser/test_mailbox.py::test_a_kept_link_opens_nothing_once_a_renumber_gave_its_copy_another_uid
 tests/e2e/browser/test_search_suggest.py::test_the_list_passes_axe
 tests/e2e/browser/test_status.py::test_density_tightens_the_list_and_is_there_from_the_first_paint
+tests/api/test_http_settings.py::test_accounts_add_test_edit_delete
