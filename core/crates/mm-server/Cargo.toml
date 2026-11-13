@@ -30,6 +30,8 @@ mm-imap.workspace = true
 mm-kernel.workspace = true
 mm-mailbox.workspace = true
 mm-store.workspace = true
+# Discovery's, Curation's and Attention's use cases.
+mm-discovery.workspace = true
 # An answer's JSON in the order its fields were written, as Python's dicts keep theirs.
 serde_json = { workspace = true, features = ["preserve_order"] }
 sha2.workspace = true
