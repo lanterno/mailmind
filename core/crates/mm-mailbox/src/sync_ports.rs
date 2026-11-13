@@ -136,3 +136,12 @@ pub enum MailboxEvent {
 pub trait Events: Send + Sync + fmt::Debug {
     fn publish(&self, event: MailboxEvent);
 }
+
+/// What a sync round asks of the other contexts (`Syncing`'s Attention and its kick): what is snoozed and due wakes
+/// first, and new mail is triaged after, outside the round.
+pub trait AroundSync: Send + Sync + fmt::Debug {
+    /// Wake what is snoozed and due (Attention's `wake_due`). It says nothing back: a round goes on whatever it found.
+    fn wake_due(&self);
+    /// The round brought new mail: the job that triages it runs its next round now.
+    fn new_mail(&self);
+}

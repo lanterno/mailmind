@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use mm_server::environment::{self, Environment};
 use mm_server::real::{NoKeychain, StandardError, SystemClock, Unguarded};
+use mm_server::workers::Workers;
 use mm_server::{App, Seams, Server};
 
 const DEFAULT_PORT: u16 = 8721;
@@ -44,10 +45,13 @@ async fn serve(port: u16) -> Result<(), String> {
     let server = Server::bind(port).await.map_err(|_| format!("can't listen on 127.0.0.1:{port}"))?;
     let port = server.port().map_err(|_| "can't tell which port it listens on")?;
     let dist = environment::repo_root().join("mailmind/http/dist");
-    let app = App::assemble(&environment, &settings, dist, port, &seams)?;
+    let app = Arc::new(App::assemble(&environment, &settings, dist, port, &seams)?);
+    // The background work: the change queue's worker and the jobs, which the served suites never start.
+    let workers = Workers::start(&app, environment.read_only(), environment.reconcile_secs());
     eprintln!("MailMind (Rust server) at http://127.0.0.1:{port}");
     // Nothing stops it but the process ending.
     let (_stop, stopped) = tokio::sync::watch::channel(false);
-    server.run(Arc::new(app), stopped, Duration::from_secs(3)).await;
+    server.run(app, stopped, Duration::from_secs(3)).await;
+    workers.stop();
     Ok(())
 }

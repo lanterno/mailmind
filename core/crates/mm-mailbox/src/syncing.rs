@@ -18,7 +18,7 @@ use crate::command_ports::{self, CommandStore, MoveAccounts};
 use crate::folders::Folders;
 use crate::ingest::{Ingest, SyncError};
 use crate::session::ServerError;
-use crate::sync_ports::{Events, MailboxEvent};
+use crate::sync_ports::{AroundSync, Events, MailboxEvent};
 
 const TAG: &str = "sync";
 const POISONED: Fault = Fault::new("PoisonedLock");
@@ -85,6 +85,7 @@ pub struct Syncing {
     folders: Arc<Folders>,
     events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
+    around: Arc<dyn AroundSync>,
     held: Mutex<Held>,
 }
 
@@ -97,13 +98,15 @@ pub struct SyncingParts {
     pub folders: Arc<Folders>,
     pub events: Arc<dyn Events>,
     pub clock: Arc<dyn Clock>,
+    /// What a round asks of the other contexts: snoozes woken before it, new mail triaged after.
+    pub around: Arc<dyn AroundSync>,
 }
 
 impl Syncing {
     pub fn new(parts: SyncingParts) -> Syncing {
-        let SyncingParts { ingest, accounts, store, folders, events, clock } = parts;
+        let SyncingParts { ingest, accounts, store, folders, events, clock, around } = parts;
         let held = Held { sync: SyncState { result: "idle".to_owned(), ..SyncState::default() }, ..Held::default() };
-        Syncing { ingest, accounts, store, folders, events, clock, held: Mutex::new(held) }
+        Syncing { ingest, accounts, store, folders, events, clock, around, held: Mutex::new(held) }
     }
 
     /// How each account's sync stands now.
@@ -188,12 +191,15 @@ impl Syncing {
         }
     }
 
-    /// One sync of `emails`, or of every account.
+    /// One sync of `emails`, or of every account. What is snoozed and due wakes first; new mail sets its triage
+    /// going, outside this single flight.
     fn round(&self, emails: Option<&BTreeSet<String>>) -> Result<(), Fault> {
+        self.around.wake_due();
         let new = self.sync_accounts(emails)?;
         if new > 0 {
             // New mail: the rail's unread badges now, not after their TTL.
             self.folders.invalidate(None)?;
+            self.around.new_mail();
         }
         let mut held = self.held.lock().map_err(|_| POISONED)?;
         held.sync.result = format!("{new} new");

@@ -36,13 +36,14 @@ use mm_store::{ConfigFile, Database, DbKey, PageFiles};
 use crate::command_wiring::{DirectoryMoveAccounts, RandomTokens};
 use crate::environment::{Environment, Settings};
 use crate::events::Hub;
-use crate::filing_wiring::{CurationFiling, FilingFlags, MuteReverser, SnoozeReverser, UnblockReverser};
+use crate::filing_wiring::{AroundRounds, CurationFiling, FilingFlags, MuteReverser, SnoozeReverser, UnblockReverser};
 use crate::gates::AccountGates;
 use crate::heard::Heard;
 use crate::page::Page;
 use crate::serve::Work;
 use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier};
 use crate::wiring::{CurationPlans, ImapSessions, KnownAccounts, ListedAccounts, MailboxSyncs};
+use crate::workers::Jobs;
 
 /// Where the app reads the time and its secrets, and what it asks before it opens a file or reaches a host.
 #[derive(Clone, Debug)]
@@ -91,6 +92,8 @@ pub struct App {
     pub health: Health,
     /// Each account's stored inbox counted by bucket, kept until something moves them.
     pub stats: Arc<LiveStats>,
+    /// The background jobs this process runs, which `Workers::start` schedules: none in the served suites.
+    pub jobs: Arc<Jobs>,
     /// A Gmail account's own labels.
     pub labels: Labels,
     // Discovery's, Curation's and Attention's use cases.
@@ -212,6 +215,7 @@ impl App {
                 Arc::new(UnblockReverser(curation.screener.clone())),
             ],
         );
+        let jobs = Arc::new(Jobs::new(seams.clock.clone()));
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),
@@ -220,6 +224,7 @@ impl App {
             folders: folders.clone(),
             events: mailbox_events.clone(),
             clock: seams.clock.clone(),
+            around: Arc::new(AroundRounds { snoozing: attention.snoozing.clone(), jobs: jobs.clone() }),
         }));
         let reconciler = Reconciler::new(ReconcilerParts {
             store: database.clone(),
@@ -252,6 +257,7 @@ impl App {
             snippets,
             health,
             stats,
+            jobs,
             labels,
             discovery,
             curation,

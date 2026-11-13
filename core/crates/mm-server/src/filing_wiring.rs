@@ -9,10 +9,14 @@ use mm_attention::muting::Muting;
 use mm_attention::snoozing::Snoozing;
 use mm_curation::screener::Screener;
 use mm_kernel::errors::{Failure, Fault};
+use mm_kernel::log;
 use mm_mailbox::filing::Filing;
 use mm_mailbox::stats::LiveStats;
+use mm_mailbox::sync_ports::AroundSync;
 use mm_mailbox::undo::{Reversed, Reverser};
 use serde_json::Value;
+
+use crate::workers::Jobs;
 
 /// What Attention queued on the change queue in its own block (a mute marking its thread read, a snooze waking read
 /// mail unread), told to the Mailbox's filing: the worker starts on it, and the tray shows it.
@@ -97,5 +101,29 @@ impl Reverser for UnblockReverser {
     fn reverse(&self, entry: &Value) -> Result<Reversed, Fault> {
         let token = entry.get("token").and_then(Value::as_str).unwrap_or_default();
         Ok((self.0.reverse_block(token), account(entry), None))
+    }
+}
+
+/// What a sync round asks of the others (`Syncing`'s Attention, and its kick): what is snoozed and due wakes first,
+/// and new mail kicks the job that triages it, where this process runs one.
+#[derive(Debug)]
+pub(crate) struct AroundRounds {
+    pub(crate) snoozing: Arc<Snoozing>,
+    pub(crate) jobs: Arc<Jobs>,
+}
+
+impl AroundSync for AroundRounds {
+    fn wake_due(&self) {
+        if let Err(failure) = self.snoozing.wake_due() {
+            let class = match &failure {
+                Failure::Fault(fault) => fault.class,
+                Failure::Problem(_) => "Problem",
+            };
+            log::warning("snooze", "tick error", &[], Some(class));
+        }
+    }
+
+    fn new_mail(&self) {
+        self.jobs.kick("assess");
     }
 }

@@ -9,12 +9,14 @@
 use std::sync::Arc;
 
 use mm_kernel::errors::{Failure, Problem};
+use mm_kernel::log;
 use mm_kernel::relative::{ago, rel_time};
 use mm_kernel::seams::Clock;
 use serde_json::{Value, json};
 
 use crate::events::AttentionEvent;
 use crate::ports::{Accounts, AttentionBook, Events, FollowUpChange, WaitingRow};
+use crate::snoozing::Snoozing;
 use crate::threads::{Named, Threads};
 
 /// The grace before a sent-no-reply or unanswered thread surfaces as Waiting, in days.
@@ -174,5 +176,24 @@ impl FollowUps {
         let now = self.clock.now();
         let rows = self.book.waiting_on_others(&accounts, 100)?;
         Ok(json!({"ok": true, "items": rows.iter().map(|r| waiting_item(r, now)).collect::<Vec<_>>()}))
+    }
+}
+
+/// What a failure is called in a log line: a fault's class, or what kind of refusal, never its words.
+fn class(failure: &Failure) -> &'static str {
+    match failure {
+        Failure::Fault(fault) => fault.class,
+        Failure::Problem(_) => "Problem",
+    }
+}
+
+/// The job that runs every minute (`Clocked.round`): due snoozes woken, then the follow-ups brought up to date, one
+/// step failing not stopping the other. The database alone, so it runs read-only too.
+pub fn clocked_round(snoozing: &Snoozing, follow_ups: &FollowUps) {
+    if let Err(failure) = snoozing.wake_due() {
+        log::warning("snooze", "tick error", &[], Some(class(&failure)));
+    }
+    if let Err(failure) = follow_ups.tick() {
+        log::warning("followup", "tick error", &[], Some(class(&failure)));
     }
 }

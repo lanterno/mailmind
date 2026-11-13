@@ -7,6 +7,7 @@
 
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use mm_kernel::errors::{Failure, Fault, Problem};
 use mm_kernel::events::Topic;
@@ -27,6 +28,13 @@ const TAG: &str = "reconcile";
 const TRAIL: &str = "reconcile";
 /// Seconds each step waits: a hung account mustn't pin the gate for the interactive minute.
 pub const READ_TIMEOUT: u64 = 15;
+/// Seconds between one account's reconcile and the next, however many there are.
+pub const EVERY_AT_LEAST: i64 = 30;
+
+/// Seconds until the next account's round, spreading the full `interval` across the `accounts`.
+pub fn next_round(interval: i64, accounts: usize) -> i64 {
+    EVERY_AT_LEAST.max(interval / i64::try_from(accounts.max(1)).unwrap_or(i64::MAX))
+}
 
 /// Why this folder can't be pruned, the server having renumbered it, or None when it hasn't as far as either side
 /// says.
@@ -76,6 +84,8 @@ pub struct Reconciler {
     events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
     stats: Arc<LiveStats>,
+    /// Whose turn the background round takes next, counted round the accounts.
+    turn: AtomicUsize,
 }
 
 /// What wires the Reconciler.
@@ -95,7 +105,7 @@ pub struct ReconcilerParts {
 impl Reconciler {
     pub fn new(parts: ReconcilerParts) -> Reconciler {
         let ReconcilerParts { store, accounts, servers, gates, folders, events, clock, stats } = parts;
-        Reconciler { store, accounts, servers, gates, folders, events, clock, stats }
+        Reconciler { store, accounts, servers, gates, folders, events, clock, stats, turn: AtomicUsize::new(0) }
     }
 
     /// The folders reconcile looks at: each one a sync has stored, INBOX first.
@@ -215,6 +225,25 @@ impl Reconciler {
         });
         log::info(TAG, "auto: pruned %(count)s ghost row(s)", &[(Field::Count, &res.pruned.to_string())]);
         Ok(())
+    }
+
+    /// The background round (`reconcile_rounds`): one account's prune, each account in its turn, so a hold of the
+    /// gate covers a single account and the whole cycle spans about `interval` seconds. The seconds until the next.
+    pub fn round(&self, interval: i64) -> i64 {
+        let emails = match self.accounts.emails() {
+            Ok(emails) => emails,
+            Err(fault) => {
+                log::warning(TAG, "loop error", &[], Some(fault.class));
+                return next_round(interval, 0);
+            }
+        };
+        if !emails.is_empty() {
+            let turn = self.turn.fetch_add(1, Ordering::Relaxed);
+            if let Err(fault) = self.auto_reconcile_one(&emails[turn % emails.len()]) {
+                log::warning(TAG, "loop error", &[], Some(fault.class));
+            }
+        }
+        next_round(interval, emails.len())
     }
 
     /// Reconcile the account named, or each in turn for `all` or none, every folder a sync has stored.

@@ -168,6 +168,13 @@ impl Environment {
         !(profile.is_empty() || profile == "full")
     }
 
+    /// MAILMIND_RECONCILE_SECS: about how long reconcile takes to go round every account, in seconds, 0 for never.
+    /// Unset, empty or not a whole number, 1800.
+    pub fn reconcile_secs(&self) -> i64 {
+        let given = self.raw("MAILMIND_RECONCILE_SECS").map(str::trim).filter(|v| !v.is_empty());
+        given.and_then(|v| v.parse().ok()).unwrap_or(1800)
+    }
+
     /// Whether each account's IMAP work passes a gate of its own (MAILMIND_WORKERS `account`, in any case, with
     /// spaces around); unset, or any other value, one gate is every account's.
     pub fn gate_per_account(&self) -> bool {
