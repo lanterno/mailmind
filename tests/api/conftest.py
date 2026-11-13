@@ -16,37 +16,20 @@ language keeps), and change it only while the server is stopped (`with app.stopp
 the server started. It never calls or patches a MailMind module to make the server do something: the server is another
 process, which they never reach.
 """
-import os
-
 import pytest
 
 import conftest
-import fake_keychain
 import served
 
 
 @pytest.fixture(autouse=True)
 def _keychain_shared_with_the_server(tmp_path_factory, monkeypatch):
-    """The Keychain stand-in in a file the server reads too, named before the world puts the accounts' passwords in it."""
-    monkeypatch.setenv(fake_keychain.VARIABLE, str(tmp_path_factory.mktemp("keychain") / "keychain.json"))
+    served.share_keychain(tmp_path_factory, monkeypatch)
 
 
 @pytest.fixture
 def app(request, world, tiny_build, tmp_path_factory):
-    """The server, started over this test's world with its clock at NOW, stopped when the test ends; what its own checks
-    refused during the test fails it."""
-    import time_machine
-    if "ai" in request.fixturenames:
-        request.getfixturevalue("ai")           # the key in the environment it starts with
-    env = {**os.environ, "MAILMIND_HOME": str(world.dir), "MAILMIND_TEST_DIST": str(tiny_build),
-           "MAILMIND_TEST_GUARDED": conftest._home, "PYTHONUNBUFFERED": "1"}
-    log = tmp_path_factory.mktemp("server") / "server.log"
-    with time_machine.travel(conftest.NOW, tick=False) as local:
-        server = served.Served(env, conftest.NOW, local, log).start()
-        world.sync = lambda account, folder: server.work("sync", account, folder)
-        try:
-            yield server
-            server.settle()
-            server.check()
-        finally:
-            server.stop()
+    """The server, started over this test's world with its clock at NOW and serving the tiny build, stopped when the
+    test ends."""
+    with served.serving(request, world, tiny_build, tmp_path_factory, conftest.NOW, conftest._home) as server:
+        yield server

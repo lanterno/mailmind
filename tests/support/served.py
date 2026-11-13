@@ -140,3 +140,36 @@ class Served(AppClient):
             yield
         finally:
             self.start(port)
+
+
+@contextlib.contextmanager
+def serving(request, world, dist, tmp_path_factory, now, guarded):
+    """A suite's `app`: the server started over this test's world, serving the page built in `dist`, with its clock
+    frozen at `now` and the world's folder syncs handed to it, then settled, checked and stopped as the test ends. What
+    its own checks refused during the test fails the test, and its tripwire guards `guarded` as well as the repo root.
+    A test that asks for `ai` has the key in the server's environment before it starts.
+
+    `now` and `guarded` come from the suite's conftest, which imports tests/conftest.py as pytest collects it: imported
+    here, during a test, it would run again and clear the environment the session set up."""
+    import time_machine
+    if "ai" in request.fixturenames:
+        request.getfixturevalue("ai")
+    env = {**os.environ, "MAILMIND_HOME": str(world.dir), "MAILMIND_TEST_DIST": str(dist),
+           "MAILMIND_TEST_GUARDED": guarded, "PYTHONUNBUFFERED": "1"}
+    log = tmp_path_factory.mktemp("server") / "server.log"
+    with time_machine.travel(now, tick=False) as local:
+        server = Served(env, now, local, log).start()
+        world.sync = lambda account, folder: server.work("sync", account, folder)
+        try:
+            yield server
+            server.settle()
+            server.check()
+        finally:
+            server.stop()
+
+
+def share_keychain(tmp_path_factory, monkeypatch):
+    """The Keychain stand-in in a file the server reads too. A suite's autouse fixture names it, so it is named before
+    the world puts the accounts' passwords in it."""
+    import fake_keychain
+    monkeypatch.setenv(fake_keychain.VARIABLE, str(tmp_path_factory.mktemp("keychain") / "keychain.json"))
