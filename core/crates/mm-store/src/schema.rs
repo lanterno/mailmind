@@ -1,7 +1,7 @@
-//! The tables a message list reads, exactly as a version-50 database made by the Python app holds them.
+//! The tables a message list reads, exactly as a version-51 database made by the Python app holds them.
 //!
 //! The core does not migrate yet: these are for fixtures and tests. When the core takes over the database, its
-//! migrations continue from 51 and this file goes.
+//! migrations continue from 52 and this file goes.
 
 pub const LIST_TABLES: &str = "
 CREATE TABLE IF NOT EXISTS messages (
@@ -47,4 +47,5 @@ CREATE INDEX IF NOT EXISTS idx_msg_acct_folder ON messages(account, folder, ts);
 CREATE INDEX IF NOT EXISTS idx_msg_thread ON messages(thread_id);
 CREATE INDEX IF NOT EXISTS idx_msg_acct_folder_thread ON messages(account, folder, thread_id);
 CREATE INDEX IF NOT EXISTS idx_messages_key ON messages(message_key);
+CREATE INDEX IF NOT EXISTS idx_msg_listed ON messages(folder, ts DESC, pk DESC, account) WHERE pending_removal IS NULL;
 ";

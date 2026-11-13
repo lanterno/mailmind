@@ -4,7 +4,7 @@
 //! Python app uses, so each can open what the other wrote. One `Store` is one connection.
 //!
 //! Step 0 reads only what a message list shows. The tables it creates for fixtures are the Python app's own
-//! (`schema::LIST_TABLES`, copied from a version-50 database), so what is measured here is the real table.
+//! (`schema::LIST_TABLES`, copied from a version-51 database), so what is measured here is the real table.
 
 mod key;
 pub mod schema;
@@ -109,15 +109,24 @@ impl Store {
         if accounts.is_empty() {
             return Ok(Vec::new());
         }
-        let sql = format!(
-            "SELECT pk FROM messages WHERE account IN ({}) AND folder = ? AND pending_removal IS NULL \
-             ORDER BY ts DESC, pk DESC",
-            placeholders(accounts.len())
-        );
-        let mut statement = self.conn.prepare_cached(&sql).map_err(storage)?;
+        let mut statement = self.conn.prepare_cached(&list_order_sql(accounts.len())).map_err(storage)?;
         let mut values: Vec<&dyn ToSql> = accounts.iter().map(|a| a as &dyn ToSql).collect();
         values.push(&folder);
         let rows = statement.query_map(values.as_slice(), |r| r.get::<_, i64>(0)).map_err(storage)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(storage)
+    }
+
+    /// What SQLite does to answer `list_order`, one step a line, as `EXPLAIN QUERY PLAN` says it. For tests: the
+    /// order must come from an index (m51's `idx_msg_listed`), never from sorting the folder.
+    pub fn list_order_plan(&self, accounts: &[String], folder: &str) -> Result<Vec<String>, Refusal> {
+        if accounts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let sql = format!("EXPLAIN QUERY PLAN {}", list_order_sql(accounts.len()));
+        let mut statement = self.conn.prepare(&sql).map_err(storage)?;
+        let mut values: Vec<&dyn ToSql> = accounts.iter().map(|a| a as &dyn ToSql).collect();
+        values.push(&folder);
+        let rows = statement.query_map(values.as_slice(), |r| r.get::<_, String>(3)).map_err(storage)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(storage)
     }
 
@@ -220,6 +229,15 @@ fn journal(conn: &Connection) -> Result<(), Refusal> {
 fn journal(conn: &Connection) -> Result<(), Refusal> {
     // The browser's file system has no shared memory, so no write-ahead log: a rollback journal instead.
     conn.execute_batch("PRAGMA synchronous=FULL;").map_err(storage)
+}
+
+// The order a list shows: newest first, a tie by the newer row. `idx_msg_listed` holds exactly this order.
+fn list_order_sql(accounts: usize) -> String {
+    format!(
+        "SELECT pk FROM messages WHERE account IN ({}) AND folder = ? AND pending_removal IS NULL \
+         ORDER BY ts DESC, pk DESC",
+        placeholders(accounts)
+    )
 }
 
 fn placeholders(n: usize) -> String {
