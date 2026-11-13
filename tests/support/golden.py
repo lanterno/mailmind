@@ -29,10 +29,13 @@ def _file_for(nodeid):
 
 
 class Golden:
-    def __init__(self, nodeid, update, subs, ports=None):
+    def __init__(self, nodeid, update, subs, ports=None, patterns=()):
         self.path = _file_for(nodeid)
         self.update = update
         self.subs = sorted(subs, key=lambda s: -len(s[0]))   # [(literal, placeholder)]
+        # [(compiled regex, placeholder)], after the literals: for values drawn in another process, whose literal this one
+        # never learns (the event stream's run, in a server the API suite started).
+        self.patterns = list(patterns)
         self.ports = ports or {}                             # {port number: placeholder}
         self.entries = []
 
@@ -40,6 +43,8 @@ class Golden:
         if isinstance(v, str):
             for lit, ph in self.subs:
                 v = v.replace(lit, ph)
+            for pattern, ph in self.patterns:
+                v = pattern.sub(ph, v)
             return v
         if isinstance(v, int) and not isinstance(v, bool) and "port" in key.lower() and v in self.ports:
             return self.ports[v]                             # a port number under a *port* key

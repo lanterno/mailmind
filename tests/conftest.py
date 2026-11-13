@@ -264,16 +264,20 @@ def app(world, monkeypatch):
 def golden(request, world, app):
     """Record exchanges with golden.record / golden.note; they are compared with (or, under
     --update-golden, written to) the test's file in tests/golden/ when the test passes."""
+    import re
+
     import golden as g
-    from mailmind.platform import sse
     rec = g.Golden(request.node.nodeid, request.config.getoption("--update-golden"),
                    subs=[(str(world.dir), "<data>"), (f"127.0.0.1:{app.port}", "127.0.0.1:<app>"),
-                         (f"localhost:{app.port}", "localhost:<app>"), (f"id: {sse.HUB.run}-", "id: <run>-"),
+                         (f"localhost:{app.port}", "localhost:<app>"),
                          (f"127.0.0.1:{world.server.port}", "127.0.0.1:<imap>"),
                          (f"127.0.0.1:{world.smtp.port}", "127.0.0.1:<smtp>"),
                          (world.server.cert_sha256, "<imap certificate>"),
                          (world.smtp.cert_sha256, "<smtp certificate>")],
-                   ports={world.server.port: "<imap>", world.smtp.port: "<smtp>", app.port: "<app>"})
+                   ports={world.server.port: "<imap>", world.smtp.port: "<smtp>", app.port: "<app>"},
+                   # An event's id is <run>-<n>, the run drawn by the server's process: this one's, or a server's the API
+                   # suite started.
+                   patterns=[(re.compile(r"\bid: [0-9a-f]{8}-(?=\d)"), "id: <run>-")])
     yield rec
     if request.node.stash.get(_CALL_PASSED, False):
         rec.verify()
