@@ -8,9 +8,11 @@ use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Outside, Secret};
 use mm_mailbox::ports::{MailSession, SessionError};
 use mm_mailbox::roles::Folder;
+use mm_mailbox::session::ServerError;
 use rustls::pki_types::ServerName;
 use rustls::{ClientConnection, StreamOwned};
 
+use crate::codec::{self, Said};
 use crate::list::{self, head_and_literal, strip_prefix_ignoring_case};
 use crate::tls;
 use crate::wire::{Piece, Stream, Wire};
@@ -36,6 +38,15 @@ pub enum Error {
     Refused(&'static str),
 }
 
+impl From<Error> for ServerError {
+    fn from(error: Error) -> ServerError {
+        match error {
+            Error::Unreachable(class) => ServerError::Unreachable(class),
+            Error::Refused(class) => ServerError::Refused(class),
+        }
+    }
+}
+
 impl From<Error> for SessionError {
     fn from(error: Error) -> SessionError {
         match error {
@@ -55,31 +66,57 @@ fn lost(e: &io::Error) -> Error {
 }
 
 /// A command's untagged responses, and the status of its tagged one (`OK`, `NO` or `BAD`) with the rest of its line.
-struct Answer {
-    untagged: Vec<Vec<Piece>>,
-    status: String,
+pub(crate) struct Answer {
+    pub(crate) untagged: Vec<Vec<Piece>>,
+    pub(crate) status: String,
     text: String,
+    /// The tagged line, as it came.
+    pub(crate) tagged: String,
+}
+
+impl Answer {
+    /// What each untagged response said, and then what the tagged one's code said, as imap-proto reads them.
+    pub(crate) fn said(&self) -> Vec<Said> {
+        let mut out: Vec<Said> = self.untagged.iter().map(|r| codec::read(&codec::raw(r))).collect();
+        out.push(codec::read(format!("{}\r\n", self.tagged).as_bytes()));
+        out
+    }
+
+    /// The server did it, or a refusal of `class`.
+    pub(crate) fn done(self, class: &'static str) -> Result<Answer, Error> {
+        if self.status == "OK" { Ok(self) } else { Err(Error::Refused(class)) }
+    }
 }
 
 #[derive(Debug)]
-struct Connection {
-    wire: Wire,
+pub(crate) struct Connection {
+    pub(crate) wire: Wire,
     sent: u32,
-    capabilities: Vec<String>,
+    pub(crate) capabilities: Vec<String>,
 }
 
 impl Connection {
-    fn command(&mut self, command: &[u8]) -> Result<Answer, Error> {
+    pub(crate) fn command(&mut self, command: &[u8]) -> Result<Answer, Error> {
+        self.exchange(command, None)
+    }
+
+    /// Send `command`, with `literal` after it as a literal once the server asks for it (`+`); then read to the tagged
+    /// answer. A server that refuses the literal answers before asking, and it is never sent.
+    pub(crate) fn exchange(&mut self, command: &[u8], literal: Option<&[u8]>) -> Result<Answer, Error> {
         self.sent += 1;
         let tag = format!("MM{}", self.sent);
-        let mut line = Vec::with_capacity(tag.len() + 1 + command.len());
+        let mut line = Vec::with_capacity(tag.len() + 1 + command.len() + 16);
         line.extend_from_slice(tag.as_bytes());
         line.push(b' ');
         line.extend_from_slice(command);
+        if let Some(literal) = literal {
+            line.extend_from_slice(format!(" {{{}}}", literal.len()).as_bytes());
+        }
         let sent = self.wire.send(&line);
         line.fill(0);
         sent.map_err(|e| lost(&e))?;
         let mut untagged = Vec::new();
+        let mut waiting = literal;
         loop {
             let response = self.wire.response().map_err(|e| lost(&e))?;
             let Some(Piece::Text(first)) = response.first() else {
@@ -87,7 +124,15 @@ impl Connection {
             };
             if let Some(rest) = first.strip_prefix(&tag).and_then(|r| r.strip_prefix(' ')) {
                 let (status, text) = rest.split_once(' ').unwrap_or((rest, ""));
-                return Ok(Answer { untagged, status: status.to_ascii_uppercase(), text: text.to_owned() });
+                let (status, text) = (status.to_ascii_uppercase(), text.to_owned());
+                return Ok(Answer { untagged, status, text, tagged: first.clone() });
+            }
+            if first.starts_with('+') {
+                match waiting.take() {
+                    Some(bytes) => self.wire.send(bytes).map_err(|e| lost(&e))?,
+                    None => return Err(Error::Unreachable("ProtocolError")),
+                }
+                continue;
             }
             if strip_prefix_ignoring_case(first, "* BYE").is_some() {
                 return Err(Error::Unreachable("Abort"));
@@ -124,7 +169,7 @@ fn capability_code(said: &str) -> Option<Vec<String>> {
 /// A server connected over TLS, its certificate in hand, and not logged in yet.
 #[derive(Debug)]
 pub struct Server {
-    connection: Connection,
+    pub(crate) connection: Connection,
     certificate: Vec<u8>,
 }
 
@@ -246,7 +291,7 @@ fn handshake(
 /// A logged-in connection.
 #[derive(Debug)]
 pub struct Session {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 impl Session {
