@@ -144,6 +144,12 @@ impl Environment {
         !mm_kernel::text::strip(self.raw("ANTHROPIC_API_KEY").unwrap_or_default()).is_empty()
     }
 
+    /// `TZ`, which no MailMind variable is: the zone the C library takes for the person's own, as Python's local
+    /// times read it. None when it is unset.
+    pub fn zone(&self) -> Option<&str> {
+        self.raw("TZ")
+    }
+
     /// The database key the environment gives, if it gives one.
     pub fn db_key(&self) -> Option<Secret> {
         self.raw(DB_KEY).filter(|k| !k.is_empty()).map(|k| Secret::new(k.to_owned()))

@@ -234,6 +234,13 @@ impl Rule {
     }
 }
 
+/// A rule alone is a zone, as `TZ` may name one with no file.
+impl Zone for Rule {
+    fn offset_at(&self, utc: i64) -> i64 {
+        Rule::offset_at(self, utc)
+    }
+}
+
 impl When {
     /// The moment it names in `year`, its time being local time `offset` seconds east of UTC.
     fn utc(self, year: i64, offset: i64) -> i64 {
