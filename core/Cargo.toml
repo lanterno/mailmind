@@ -18,6 +18,7 @@ mm-content = { path = "crates/mm-content" }
 mm-fixtures = { path = "crates/mm-fixtures" }
 mm-curation = { path = "crates/mm-curation" }
 mm-discovery = { path = "crates/mm-discovery" }
+mm-attention = { path = "crates/mm-attention" }
 mm-mailbox = { path = "crates/mm-mailbox" }
 mm-accounts = { path = "crates/mm-accounts" }
 mm-imap = { path = "crates/mm-imap" }
