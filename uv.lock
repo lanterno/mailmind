@@ -2,6 +2,9 @@ version = 1
 revision = 5
 requires-python = ">=3.14"
 
+[manifest]
+build-constraints = [{ name = "maturin", specifier = "==1.16.0" }]
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.5"
@@ -769,6 +772,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "icalendar" },
     { name = "imapclient" },
+    { name = "mailmind-leaves" },
     { name = "recurring-ical-events" },
     { name = "sqlcipher3" },
     { name = "uvicorn" },
@@ -795,6 +799,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.162.0" },
     { name = "icalendar", specifier = ">=7.3.0" },
     { name = "imapclient", specifier = ">=4.1.0" },
+    { name = "mailmind-leaves", directory = "core/crates/mm-py" },
     { name = "recurring-ical-events", specifier = ">=3.8.2" },
     { name = "sqlcipher3", specifier = ">=0.6.4" },
     { name = "uvicorn", specifier = ">=0.54.0" },
@@ -814,6 +819,11 @@ dev = [
     { name = "time-machine", specifier = ">=3.6.0" },
     { name = "trustme", specifier = ">=1.2.1" },
 ]
+
+[[package]]
+name = "mailmind-leaves"
+version = "0.1.0"
+source = { directory = "core/crates/mm-py" }
 
 [[package]]
 name = "markdown-it-py"
