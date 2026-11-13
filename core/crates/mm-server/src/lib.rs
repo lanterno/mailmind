@@ -1,1 +1,26 @@
-//! The Rust server.
+//! The Rust server: the Python app's HTTP API and its page, on the core's use cases.
+//!
+//! A request passes the perimeter (`perimeter`) before any route runs, and every answer carries its headers. A route
+//! (`routes`) decodes the request, calls one use case of a context crate, and encodes what it answers: it holds no
+//! SQL and no rules of its own. `app` binds the use cases to their adapters, `serve` is the accept loop, and
+//! `environment` is the one place the environment is read.
+//!
+//! The app holds no test hooks. What a test must control comes in through `Seams`: the clock, the Keychain and
+//! `Outside`, asked before a file is opened or a host reached. `mailmind-server` passes the real ones; the test
+//! launcher (`mm-served`) passes a frozen clock, a Keychain of its own and a tripwire.
+
+pub mod answer;
+pub mod app;
+pub mod environment;
+pub mod json;
+pub mod page;
+pub mod perimeter;
+pub mod problem;
+pub mod query;
+pub mod real;
+pub mod routes;
+pub mod serve;
+mod wiring;
+
+pub use app::{App, Seams};
+pub use serve::{Server, Work};
