@@ -89,6 +89,20 @@ impl Directory {
         Ok(Directory::entries(&raw)?.iter().filter_map(Account::from_entry).collect())
     }
 
+    /// Each saved entry's alias by its address, disabled ones too, so older mail still shows a friendly name: None
+    /// where it has none (`alias_map`).
+    pub fn alias_map(&self) -> Result<std::collections::BTreeMap<String, Option<String>>, Fault> {
+        let raw = self.file.read()?;
+        let mut aliases = std::collections::BTreeMap::new();
+        for entry in Directory::entries(&raw)?.iter().filter_map(Value::as_object) {
+            let Some(email) = entry.get("email").and_then(Value::as_str).filter(|e| !e.is_empty()) else { continue };
+            let alias =
+                entry.get("alias").and_then(Value::as_str).map(mm_kernel::text::strip).filter(|a| !a.is_empty());
+            aliases.insert(email.to_owned(), alias.map(str::to_owned));
+        }
+        Ok(aliases)
+    }
+
     /// The account saved under exactly `email`, or None.
     pub fn get(&self, email: &str) -> Result<Option<Account>, Fault> {
         Ok(self.accounts()?.into_iter().find(|a| a.email == email))
