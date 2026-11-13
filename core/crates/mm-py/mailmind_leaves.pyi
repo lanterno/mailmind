@@ -107,6 +107,19 @@ def thread_regroup(account: str, copies: list[ThreadCopy]) -> ThreadPlacement:
 
 # -- MIME (mm-content, src/mime.rs) ------------------------------------------------------------------------------
 
+def mime_parse(
+    raw: bytes,
+) -> tuple[str | None, str | None, list[tuple[int, str, str, int, str | None, bool, bool]], str, str, str, str]:
+    """A raw message read: (text, html, attachments, to, cc, reply_to, date), each attachment (part_id, filename,
+    content_type, size, content_id, is_inline, travels). `html` is not made safe yet."""
+    ...
 
+def mime_extract_part(raw: bytes, part_id: int) -> tuple[bytes, str] | None:
+    """The leaf `part_id` names, as mime_parse numbered it: (its bytes, its media type), or None."""
+    ...
+
+def mime_inline_parts(raw: bytes) -> list[tuple[str, str, bytes]]:
+    """Every leaf with a Content-ID, as (content_id, content_type, bytes); a Content-ID given twice is the later part's."""
+    ...
 
 # -- the HTML sanitizer (mm-content, src/sanitize.rs) ---------------------------------------------------------------
