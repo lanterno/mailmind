@@ -16,7 +16,10 @@ use crate::app::App;
 use crate::query::Query;
 
 pub(super) fn routes() -> Router<Arc<App>> {
-    Router::new().route("/api/folders", get(folders)).route("/api/stats", get(stats))
+    Router::new()
+        .route("/api/folders", get(folders))
+        .route("/api/stats", get(stats))
+        .route("/api/labels", get(labels))
 }
 
 fn query(uri: &Uri) -> Query {
@@ -53,4 +56,10 @@ fn folders_answer(found: &AccountFolders) -> Value {
 /// Each account's stored inbox counted by bucket, with its top senders, and the totals across accounts.
 async fn stats(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
     super::run(&app, &method, &uri, |app| Ok(app.stats.live()?)).await
+}
+
+/// A Gmail account's own labels and how many messages carry each: its lanes in the rail.
+async fn labels(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    let account = query(&uri).text("account").map(str::to_owned);
+    super::run(&app, &method, &uri, move |app| app.labels.of_account(account.as_deref())).await
 }

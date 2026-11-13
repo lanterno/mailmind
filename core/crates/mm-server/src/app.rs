@@ -15,6 +15,7 @@ use mm_curation::sweep_plan::StoredPlans;
 use mm_kernel::seams::{Clock, Keychain, Outside};
 use mm_mailbox::folders::Folders;
 use mm_mailbox::ingest::Ingest;
+use mm_mailbox::labels::Labels;
 use mm_mailbox::session::MailServers;
 use mm_mailbox::stats::LiveStats;
 use mm_mailbox::sync_record::SyncRecords;
@@ -68,6 +69,8 @@ pub struct App {
     pub health: Health,
     /// Each account's stored inbox counted by bucket.
     pub stats: LiveStats,
+    /// A Gmail account's own labels.
+    pub labels: Labels,
 }
 
 impl App {
@@ -133,6 +136,7 @@ impl App {
         let health = Health::new(Arc::new(syncs), seams.clock.clone());
         let plans = CurationPlans(StoredPlans::new(database.clone(), database.clone()));
         let stats = LiveStats::new(Arc::new(ListedAccounts(directory.clone())), Arc::new(plans), seams.clock.clone());
+        let labels = Labels::new(database.clone());
         Ok(App {
             port,
             csrf,
@@ -148,6 +152,7 @@ impl App {
             snippets,
             health,
             stats,
+            labels,
         })
     }
 }
