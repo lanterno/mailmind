@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod ago;
 pub mod errors;
+pub mod events;
 pub mod identity;
 pub mod log;
 pub mod seams;
