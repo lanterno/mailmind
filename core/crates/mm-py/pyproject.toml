@@ -14,14 +14,14 @@ requires-python = ">=3.14"
 locked = true
 
 [tool.uv]
-# A change to the Rust it is built from builds it again: this crate, the core crates it uses, and the lock.
+# A change to the Rust it is built from builds it again: this crate, the core's crates beside it, and the lock.
 cache-keys = [
     { file = "pyproject.toml" },
     { file = "Cargo.toml" },
     { file = "build.rs" },
     { file = "src/**/*.rs" },
-    { file = "../mm-kernel/Cargo.toml" },
-    { file = "../mm-kernel/src/**/*.rs" },
+    { file = "../*/Cargo.toml" },
+    { file = "../*/src/**/*.rs" },
     { file = "../../Cargo.toml" },
     { file = "../../Cargo.lock" },
 ]

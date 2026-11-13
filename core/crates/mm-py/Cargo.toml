@@ -15,7 +15,10 @@ test = false
 doctest = false
 
 [dependencies]
+mm-curation.workspace = true
+mm-discovery.workspace = true
 mm-kernel.workspace = true
+mm-mailbox.workspace = true
 pyo3.workspace = true
 
 [build-dependencies]

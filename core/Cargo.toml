@@ -15,6 +15,9 @@ mm-kernel = { path = "crates/mm-kernel" }
 mm-store = { path = "crates/mm-store" }
 mm-app = { path = "crates/mm-app" }
 mm-fixtures = { path = "crates/mm-fixtures" }
+mm-curation = { path = "crates/mm-curation" }
+mm-discovery = { path = "crates/mm-discovery" }
+mm-mailbox = { path = "crates/mm-mailbox" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that
 # opens the database adds that feature for those targets), and LibTomCrypt in the browser, through sqlite-wasm-rs.

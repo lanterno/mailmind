@@ -1,0 +1,13 @@
+[package]
+name = "mm-discovery"
+description = "Finding mail by what a person types: the search grammar"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
