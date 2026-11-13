@@ -11,6 +11,8 @@ publish.workspace = true
 mm-content.workspace = true
 mm-kernel.workspace = true
 regex.workspace = true
+# A row as a query gave it, and the answers built from rows, as the Python app's dicts.
+serde_json.workspace = true
 sha1.workspace = true
 
 [lints]
