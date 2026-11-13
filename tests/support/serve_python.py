@@ -15,8 +15,11 @@ each with one line:
     clock <ISO 8601>    ok: its clock stands at that time from now on
     work <job> <JSON>   ok once one pass of a background job has run, given the arguments in the JSON list; else
                         `failed <why>`. The jobs: outbox (send what is due), commands (carry queued changes to the mail
-                        servers), snoozes (wake what is due), follow-ups (note replies and expiries), assess (triage
-                        mail AI hasn't summarized), sync (one folder: ["<account>", "<folder>"])
+                        servers), drafts (put saved drafts that are due on their mail servers), snoozes (wake what is
+                        due), follow-ups (note replies and expiries), assess (triage mail AI hasn't summarized), sync
+                        (one folder: ["<account>", "<folder>"]), reconcile (the ghost pruner's round over one account,
+                        which yields to a user's change as it would: ["<account>"]), tidy (file the day's
+                        low-priority mail, for someone who turned Tidy by itself on)
     settle              ok once work the requests started has ended; `busy <what>` after 30 seconds
     check               ok, or `problems <JSON list>`: what its own checks refused since the last check
     (end of input)      it stops and exits
@@ -62,12 +65,14 @@ def settle(before, timeout=30):
 
 def jobs():
     """A pass of each background job a worker runs, by the name the protocol gives it."""
-    from mailmind.bootstrap import accounts, assistant, attention
-    from mailmind.bootstrap.compose import outbox
-    from mailmind.bootstrap.mailbox import commands, ingest
-    return {"outbox": outbox.drain, "commands": commands.drain, "snoozes": attention.snoozing.wake_due,
-            "follow-ups": attention.followups.tick, "assess": assistant.assessments.round,
-            "sync": lambda account, folder: ingest.sync_folder(accounts.get(account), folder)}
+    from mailmind.bootstrap import accounts, assistant, attention, background
+    from mailmind.bootstrap.compose import drafts, outbox
+    from mailmind.bootstrap.mailbox import commands, ingest, reconciler
+    return {"outbox": outbox.drain, "commands": commands.drain, "drafts": drafts.push_round,
+            "snoozes": attention.snoozing.wake_due, "follow-ups": attention.followups.tick, "assess": assistant.assessments.round,
+            "sync": lambda account, folder: ingest.sync_folder(accounts.get(account), folder),
+            "reconcile": lambda account: reconciler.auto_reconcile_one(accounts.get(account)),
+            "tidy": background.tidy_round}
 
 
 def main():

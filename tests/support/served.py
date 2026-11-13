@@ -100,8 +100,9 @@ class Served(AppClient):
         return super().request(method, path, body, {"X-CSRF-Token": self.csrf, **(headers or {})})
 
     def work(self, job, *args):
-        """One pass of a background job, as a worker would run it: outbox, commands, snoozes, follow-ups, or sync with
-        the account and folder."""
+        """One pass of a background job, as a worker would run it: outbox, commands, drafts, snoozes, follow-ups,
+        assess, tidy, sync with the account and folder, or reconcile with the account (serve_python.py says what
+        each does)."""
         self.ask(f"work {job} {json.dumps(list(args))}", timeout=120)
 
     def settle(self, timeout=30):
