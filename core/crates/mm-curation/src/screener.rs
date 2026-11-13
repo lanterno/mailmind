@@ -126,41 +126,46 @@ impl Screener {
         removed.is_ok() && self.reclassify(&token).is_ok()
     }
 
-    /// A rule on `token`, a sender or a domain, changed: classify again the stored mail it covers, as mail arriving
-    /// now would be. Only a row a rule decides now or decided before: what else the classifier read as it arrived
-    /// wasn't all kept, so one no rule had a say in stays as it was judged. How many rows changed.
+    /// A rule on `token`, a sender or a domain, changed: classify again the stored mail it covers (`reclassify`).
     pub fn reclassify(&self, token: &str) -> Result<usize, Failure> {
-        let token = token_of(token);
-        let sets = self.rules.load()?.sets();
-        let mut changes = Vec::new();
-        for r in self.mail.classified_from(&token)? {
-            let addr = lower(r.from_addr.as_deref().unwrap_or_default()).into_owned();
-            let has_unsub = r.list_unsub_method.as_deref().unwrap_or("none") != "none";
-            let said = classify(
-                &addr,
-                r.subject.as_deref().unwrap_or_default(),
-                r.from_name.as_deref().unwrap_or_default(),
-                has_unsub,
-                &sets,
-            );
-            if !(by_rule(Some(&said.reason)) || by_rule(r.reason.as_deref())) {
-                continue;
-            }
-            if (Some(said.bucket.name()), Some(said.reason.as_ref())) != (r.bucket.as_deref(), r.reason.as_deref()) {
-                changes.push(Reclassified {
-                    pk: r.pk,
-                    bucket: said.bucket.name(),
-                    confidence: said.confidence.name(),
-                    reason: said.reason.into_owned(),
-                    is_junk: said.bucket.is_junk(),
-                });
-            }
-        }
-        if !changes.is_empty() {
-            self.mail.set_classifications(&changes)?;
-        }
-        Ok(changes.len())
+        reclassify(&*self.rules, &*self.mail, token)
     }
+}
+
+/// A rule on `token`, a sender or a domain, changed: classify again the stored mail it covers, as mail arriving now
+/// would be. Only a row a rule decides now or decided before: what else the classifier read as it arrived wasn't all
+/// kept, so one no rule had a say in stays as it was judged. How many rows changed.
+pub fn reclassify(rules: &dyn RuleBook, mail: &dyn SenderMail, token: &str) -> Result<usize, Failure> {
+    let token = token_of(token);
+    let sets = rules.load()?.sets();
+    let mut changes = Vec::new();
+    for r in mail.classified_from(&token)? {
+        let addr = lower(r.from_addr.as_deref().unwrap_or_default()).into_owned();
+        let has_unsub = r.list_unsub_method.as_deref().unwrap_or("none") != "none";
+        let said = classify(
+            &addr,
+            r.subject.as_deref().unwrap_or_default(),
+            r.from_name.as_deref().unwrap_or_default(),
+            has_unsub,
+            &sets,
+        );
+        if !(by_rule(Some(&said.reason)) || by_rule(r.reason.as_deref())) {
+            continue;
+        }
+        if (Some(said.bucket.name()), Some(said.reason.as_ref())) != (r.bucket.as_deref(), r.reason.as_deref()) {
+            changes.push(Reclassified {
+                pk: r.pk,
+                bucket: said.bucket.name(),
+                confidence: said.confidence.name(),
+                reason: said.reason.into_owned(),
+                is_junk: said.bucket.is_junk(),
+            });
+        }
+    }
+    if !changes.is_empty() {
+        mail.set_classifications(&changes)?;
+    }
+    Ok(changes.len())
 }
 
 /// The audit trails as the page reads them (`GET /api/audit`).
