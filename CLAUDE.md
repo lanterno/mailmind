@@ -143,6 +143,7 @@ The docs below say why. These are the ones a change can break without noticing:
   hiding half the frontend from every search tool. Use escape sequences in string
   literals.
 - **`ROADMAP.md` lists only work that is still open.** When something ships, summarize it
-  into the README's Features section and delete it from the roadmap — no "✅ DONE"
-  entries. Verify status against the code, not the doc, and cite functions and symbols
-  rather than line numbers (they drift).
+  into the README's Features section, delete it from the roadmap and close its GitHub issue,
+  with no "✅ DONE" entries. A new item gets an issue, linked from its line. Verify status
+  against the code, not the doc, and cite functions and symbols rather than line numbers
+  (they drift).
