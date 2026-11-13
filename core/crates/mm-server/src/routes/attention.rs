@@ -53,7 +53,9 @@ async fn body<T>(
 type ACopy = (i64, String, Option<i64>);
 
 /// `NamesAMessage`: the key, the folder and the uid.
-fn names_a_message(body: &Posted) -> Result<(Option<i64>, Option<String>, Option<i64>), Problem> {
+type MessageNamed = (Option<i64>, Option<String>, Option<i64>);
+
+fn names_a_message(body: &Posted) -> Result<MessageNamed, Problem> {
     Ok((body.number("key")?, body.text("folder")?, body.number("uid")?))
 }
 
