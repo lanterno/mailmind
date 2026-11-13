@@ -28,8 +28,7 @@ use std::hash::Hash;
 use std::sync::LazyLock;
 
 use regex::Regex;
-
-mod sha1;
+use sha1::{Digest, Sha1};
 
 /// How many ids of a References header count, nearest first: a forged one can be as long as it likes.
 pub const REFERENCES_MAX: usize = 1000;
@@ -241,7 +240,7 @@ impl Threader {
 
     /// A brand-new thread's id: the first 16 hex digits of the SHA-1 of its root's UTF-8.
     fn minted(&self, root: &str) -> String {
-        let digest = sha1::digest(root.as_bytes());
+        let digest = Sha1::digest(root.as_bytes());
         let mut hex = String::with_capacity(16);
         for byte in &digest[..8] {
             hex.push(HEX[usize::from(byte >> 4)] as char);
