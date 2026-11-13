@@ -7,7 +7,7 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::{Method, Response, Uri};
 use axum::routing::get;
-use mm_kernel::errors::{Failure, Problem};
+use mm_kernel::errors::Problem;
 use mm_mailbox::folders::AccountFolders;
 use serde_json::{Value, json};
 
@@ -16,7 +16,7 @@ use crate::app::App;
 use crate::query::Query;
 
 pub(super) fn routes() -> Router<Arc<App>> {
-    Router::new().route("/api/folders", get(folders)).route("/api/messages", get(messages))
+    Router::new().route("/api/folders", get(folders))
 }
 
 fn query(uri: &Uri) -> Query {
@@ -48,15 +48,4 @@ fn folders_answer(found: &AccountFolders) -> Value {
         "waiting": found.counts.waiting,
         "replylater": found.counts.replylater,
     })
-}
-
-/// A folder's messages. Only its arguments are read here so far: one that isn't a number is refused as the Python
-/// app refuses it, and the list itself is not on the Rust server yet.
-async fn messages(method: Method, uri: Uri) -> Response<Body> {
-    let given = query(&uri);
-    let read = given.number("offset", 0).and_then(|_| given.number("limit", 80));
-    match read {
-        Err(problem) => answer::failure(&Failure::Problem(problem), method.as_str(), uri.path()),
-        Ok(_) => answer::not_yet(uri.path()),
-    }
 }

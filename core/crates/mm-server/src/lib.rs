@@ -17,6 +17,7 @@ pub mod page;
 pub mod perimeter;
 pub mod problem;
 pub mod query;
+pub mod reading;
 pub mod real;
 pub mod routes;
 pub mod serve;

@@ -42,6 +42,8 @@ pub struct App {
     pub ingest: Arc<Ingest>,
     /// The requests being answered now, which a stop waits for.
     pub work: Arc<Work>,
+    /// The reads a person waits on: lists, conversations, the tray of changes.
+    pub reading: crate::reading::Reading,
 }
 
 impl App {
@@ -69,6 +71,12 @@ impl App {
         let directory = Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()));
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
         let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
+        let reading = crate::reading::Reading::assemble(
+            Arc::new(KnownAccounts(directory.clone())),
+            database.clone(),
+            sessions.clone(),
+            seams.clock.clone(),
+        );
         let folders =
             Folders::new(Arc::new(KnownAccounts(directory.clone())), sessions, database.clone(), seams.clock.clone());
         let servers: Arc<dyn MailServers> = Arc::new(ImapServers {
@@ -92,6 +100,7 @@ impl App {
             folders,
             ingest,
             work: Arc::new(Work::default()),
+            reading,
         })
     }
 }
