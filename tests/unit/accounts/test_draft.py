@@ -52,6 +52,15 @@ def test_a_draft_naming_anything_but_a_typed_password_is_refused(credential):
         throwaway_account(draft(credential=credential))
 
 
+@pytest.mark.xfail(strict=True, raises=AttributeError,
+                   reason="throwaway_account reads the credential with .get, so one that is text raises AttributeError, "
+                          "and the test answers that class's name as a failed login, where any other credential that "
+                          "isn't a typed password is refused")
+def test_a_draft_whose_credential_is_text_is_refused():
+    with pytest.raises(DraftRefused, match=SAVE_FIRST):
+        throwaway_account(draft(credential="typed-password"))
+
+
 def test_a_stored_secret_named_beside_a_typed_password_is_never_what_goes():
     acct = throwaway_account(draft(credential={**TYPED, "ref": "op://Private/Dee/password", "var": "HOME", "op": "x", "env": "HOME"}))
     assert acct["credential"] == Typed("typed-password")
