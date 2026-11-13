@@ -414,3 +414,31 @@ def test_a_conversation_gives_each_message_its_own_frame(page, world):
     until(page, lambda: all(frames.nth(i).evaluate("f => !!f.contentDocument?.head?.querySelector('style')") for i in range(2)),
           "a frame was never dressed")
     clean(page)
+
+
+# CSS a sanitizer once wrote so that a browser read it otherwise than it was checked: a comment opener, a line break in
+# a selector's string or a square bracket a later selector closed let a later value's string be read as CSS.
+READ_OTHERWISE = r"""<p title="attribute" style='font-family:\/\*;font-family:"\*\/;position:fixed;top:0;left:0;width:9px;"'>a</p>
+<p style='font-family:a//**/*;font-family:"*/;position:fixed;top:0;x:"'>b</p>
+<style>p{font-family:\/\*}q{font-family:"\*\/}*{position:fixed;top:0}"}</style>
+<style>p{font-family:a//**/*}q{font-family:"*/}*{position:fixed;top:0}"}</style>
+<style>@media /*{p{font-family:"*/{*{position:fixed}}"}}</style>
+<style>a[title="x
+"]{color:red}q{font-family:"]{}*{position:fixed}"}</style>
+<style>p{font-family:[}a]{color:red}x;position:fixed;top:0;y{color:blue}</style>
+<style>p[title=sheet]{color:rgb(4, 5, 6)}</style>
+<p title="sheet">c</p>"""
+
+
+def test_no_css_in_a_message_makes_anything_fixed(page, world):
+    """Each of these made elements position:fixed, which can lay a message over the app's own page, before the sanitizer
+    wrote only CSS a browser reads as written. What it keeps of the rest still applies."""
+    pk, key = arrives(world, READ_OTHERWISE)
+    frame = reading(page, key)
+    loaded(page, frame)
+    fixed = frame.evaluate("""f => [...f.contentDocument.querySelectorAll('*')]
+        .filter(e => f.contentWindow.getComputedStyle(e).position === 'fixed').map(e => e.tagName)""")
+    assert fixed == []
+    color = frame.evaluate("f => f.contentWindow.getComputedStyle(f.contentDocument.querySelector('[title=sheet]')).color")
+    assert color == "rgb(4, 5, 6)"
+    clean(page)
