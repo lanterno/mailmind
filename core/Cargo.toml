@@ -22,6 +22,7 @@ mm-mailbox = { path = "crates/mm-mailbox" }
 mm-accounts = { path = "crates/mm-accounts" }
 mm-imap = { path = "crates/mm-imap" }
 mm-server = { path = "crates/mm-server" }
+mm-assistant = { path = "crates/mm-assistant" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that
 # opens the database adds that feature for those targets), and LibTomCrypt in the browser, through sqlite-wasm-rs.
