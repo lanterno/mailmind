@@ -18,6 +18,7 @@ getrandom.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
 mm-accounts.workspace = true
+mm-curation.workspace = true
 mm-imap.workspace = true
 mm-kernel.workspace = true
 mm-mailbox.workspace = true

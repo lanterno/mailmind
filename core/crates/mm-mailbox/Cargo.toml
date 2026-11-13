@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+mm-content.workspace = true
 mm-kernel.workspace = true
 regex.workspace = true
 sha1.workspace = true
