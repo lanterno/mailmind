@@ -53,8 +53,8 @@ a machine shared with other builds, so numbers vary by 10 to 20% run to run.
 | Mac, Tauri | Runs and scrolls; measured |
 | Browser (Chromium) | Runs and scrolls; measured, and scrolled in CI |
 | iPhone and iPad | Builds for device and simulator; CI's smoke test scrolls it in an iPhone simulator, not yet run |
-| Android | Builds in CI only (no SDK here); CI's emulator test scrolls it, not yet run |
-| Windows and Linux, Tauri | Build in CI only; CI's smoke test scrolls them, not yet run |
+| Android | Runs and scrolls on CI's emulator (API 29, x86_64); no SDK here, not measured |
+| Windows and Linux, Tauri | Run and scroll in CI; not measured |
 
 | What | Measured | Limit |
 | --- | --- | --- |
