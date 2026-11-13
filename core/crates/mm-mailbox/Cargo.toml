@@ -1,6 +1,6 @@
 [package]
 name = "mm-mailbox"
-description = "The mail on each server: how its copies thread into conversations"
+description = "The mail on each server: threading, the folders' roles, the folder rail"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+mm-kernel.workspace = true
 regex.workspace = true
 sha1.workspace = true
 

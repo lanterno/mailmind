@@ -1,6 +1,6 @@
 [package]
 name = "mm-kernel"
-description = "What every part of the core shares: names, refusals"
+description = "What every part of the core shares: names, refusals, problems and the seams to the world"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,8 +13,10 @@ ts = ["dep:ts-rs"]
 
 [dependencies]
 serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 ts-rs = { workspace = true, optional = true }
+zeroize.workspace = true
 
 [lints]
 workspace = true

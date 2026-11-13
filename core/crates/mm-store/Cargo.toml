@@ -1,6 +1,6 @@
 [package]
 name = "mm-store"
-description = "The encrypted database: the one place the core opens a file"
+description = "The encrypted database and the config file: the one place the core opens a file"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,12 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+mm-accounts.workspace = true
 mm-kernel.workspace = true
+mm-mailbox.workspace = true
 rusqlite.workspace = true
+# mailmind.config.json, written back with its keys in the order they came.
+serde_json = { workspace = true, features = ["preserve_order"] }
 zeroize.workspace = true
 
 # SQLCipher needs a crypto library: Apple systems have CommonCrypto and the browser build has LibTomCrypt.
