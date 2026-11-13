@@ -24,10 +24,11 @@ just gen-bindings       # Swift and Kotlin bindings, into shells/apple/Generated
 | `mm-mailbox` | The mail on each server: how its copies thread into conversations, which folder plays which part, the folder rail, and what is stored counted: each inbox by bucket, a Gmail account's labels, each account's syncs. |
 | `mm-net` | What every mail protocol shares: the TCP connection with its time limits, TLS on it (a certificate verified on the roots the system trusts off this machine, and pinned on it), and the stream. |
 | `mm-imap` | An account's IMAP server, as the Mailbox's `MailSession`, on `mm-net`. |
+| `mm-smtp` | An account's SMTP server, as the outbox delivers through it, on `mm-net`: the certificate handed back for the caller's pin check before the login. |
 | `mm-server` | The Rust server: an HTTP adapter on axum that decodes a request, calls a context's use case and encodes the answer, behind the Python app's perimeter. `environment` is the only module that reads the environment; `app` binds the contexts. The binary is `mailmind-server`. |
 | `mm-served` | The Rust server as the served suites start it (`tests/support/served.py`'s line protocol): a frozen clock, the tripwire `guard.py` is, and `fake_keychain`'s file, through the server's seams. Never shipped. |
 | `mm-discovery` | Finding mail by what a person types: the search grammar, the Document Hub, what is said of a sender. |
-| `mm-compose` | Drafts, building a message, the outbox and delivery: so far the outbox tray, a draft as it opens, and the snippets. |
+| `mm-compose` | Drafts, building a message, the outbox and delivery: a message built byte for byte as the Python app builds it, a send queued and delivered, a draft saved locally first and reopened from its own bytes, the outbox tray and the snippets. |
 | `mm-assistant` | Everything asked of Claude: so far how AI stands with no call made, and its daily limit. |
 | `mm-curation` | What stays in the inbox: the classifier, the rule sets it reads, and a sweep's plan from the stored inbox. |
 | `mm-content` | What a message holds: its MIME parts (on mail-parser), its HTML made safe to show (html5ever's tokenizer), and the document its frame loads. |
