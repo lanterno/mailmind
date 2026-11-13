@@ -19,6 +19,14 @@ build: libs
     # The wrapper once it is committed; until then the Gradle on the PATH, whose version CI pins.
     if [ -x ./gradlew ]; then ./gradlew assembleDebug; else gradle assembleDebug; fi
 
+# The instrumented test (app/src/androidTest) on the emulator or device adb sees: the list across the 100,000-message demo
+test: libs
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{here}}"
+    # Only the app has device tests; naming its task keeps Gradle from looking for any in `core`.
+    if [ -x ./gradlew ]; then ./gradlew :app:connectedDebugAndroidTest; else gradle :app:connectedDebugAndroidTest; fi
+
 # The core as a release shared library per ABI, in core/src/main/jniLibs where Gradle packages it from
 libs:
     #!/usr/bin/env bash
