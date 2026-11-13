@@ -2,7 +2,7 @@
 //! by sender and in each inbox, the accounts, the audit trail, and what it asks of the Mailbox and of Discovery. The store
 //! (`mm-store`) and the program implement them; Curation knows no other context.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use mm_kernel::errors::{Failure, Fault};
@@ -49,6 +49,18 @@ pub struct Reclassified {
     pub is_junk: bool,
 }
 
+/// A sender of mail the classifier put in a noisy bucket, by the numbers a cleanup ranks it on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NoisySender {
+    pub addr: String,
+    pub name: Option<String>,
+    pub n: i64,
+    pub unseen: i64,
+    pub last_ts: Option<i64>,
+    pub last_iso: Option<String>,
+    pub bucket: Option<String>,
+}
+
 /// Stored mail by sender.
 pub trait SenderMail: Send + Sync + fmt::Debug {
     /// Each sender in this account's Inbox, the latest first, junk and what is on its way out left out.
@@ -58,6 +70,11 @@ pub trait SenderMail: Send + Sync + fmt::Debug {
     fn classified_from(&self, token: &str) -> Result<Vec<Classified>, Fault>;
     /// Put each new classification in place, in one write block.
     fn set_classifications(&self, changes: &[Reclassified]) -> Result<(), Fault>;
+    /// Each sender, by lowered address, of at least `min_count` stored messages in `buckets`, every account's and
+    /// folder's.
+    fn noisy_senders(&self, buckets: &[&str], min_count: i64) -> Result<Vec<NoisySender>, Fault>;
+    /// How many messages from each of `addrs` each account holds: (account, count) by sender.
+    fn accounts_by_sender(&self, addrs: &[String]) -> Result<HashMap<String, Vec<(String, i64)>>, Fault>;
 }
 
 /// The accounts the app may use, by address.

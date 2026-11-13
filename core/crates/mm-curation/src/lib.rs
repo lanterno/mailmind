@@ -7,6 +7,7 @@
 //! server, and its tests hold each to the answers it gave.
 
 pub mod classifier;
+pub mod cleanup;
 pub mod filters;
 pub mod ports;
 pub mod rulebook;
