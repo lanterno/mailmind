@@ -216,7 +216,7 @@ class DurableQueue:
         self._worker.on = True
         with self._uow.write() as c:
             self.reset_stuck(c)
-        looked = time.time()
+        looked = 0.0                             # no drain has looked yet: a row already due is drained at once
         while True:
             self._kick.wait(timeout=self._wait(looked))
             self._kick.clear()
