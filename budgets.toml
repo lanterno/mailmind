@@ -37,29 +37,31 @@ on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-12"
 [apple.mac_first_rows_ms]
 what = "launch the Mac app, release build, to the first rows applied on the main actor (warm file cache, median of 7)"
 limit = 800.0
-measured = 240.0
-on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-12"
+measured = 217.8
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-13"
 
 [apple.mac_idle_memory_mb]
 what = "the Mac app's footprint, idle with the inbox open"
 limit = 200.0
-measured = 40.8
-on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-12"
+measured = 27.9
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-13"
 
 [apple.mac_scrolled_memory_mb]
 what = "the Mac app's footprint after scrolling all 100,000 rows and 12 far jumps"
 limit = 200.0
-measured = 109.0
-on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-12"
-# The shell holds 100 rows; the growth is SwiftUI's List keeping state for every row it has shown.
+measured = 41.4
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-13"
+# The native table reuses a screen of cells. SwiftUI's List kept state for every row it had shown: 109 MB.
 
 [apple.mac_frame_p95_ms]
 what = "the main thread's busy time per run-loop pass while scrolling, 95th percentile"
 limit = 8.0
-measured = 296.0
-on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-12"
-# Over. 13.5 to 14 ms on a fast scroll near the top; 290 to 296 ms bringing a new screen in every frame through
-# all 100,000, growing with depth. The cost is SwiftUI's List, not the core: a 50-row batch crosses in about 85 µs.
+measured = 5.85
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-13"
+# The worst of three: 3.3 ms on a fast scroll, 5.85 ms bringing a new screen in every frame through all 100,000,
+# 5.8 ms on far jumps. An NSTableView with one row height, its rows drawn with Core Text. Measured with the app held
+# awake, as a person scrolling has it in front: behind a locked screen macOS naps it to about half speed (15.6 ms).
+# SwiftUI's List, held awake the same way, took 9.2, 19.6 and 75.7 ms; the 296 ms first recorded was it napped.
 
 [apple.core_size_mb]
 what = "what the core adds to a stripped arm64 app (iOS device and macOS)"
