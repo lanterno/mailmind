@@ -19,6 +19,8 @@ mm-kernel.workspace = true
 mm-mailbox.workspace = true
 # A snapshot of the database, copied page for page (the online backup API).
 rusqlite = { workspace = true, features = ["backup"] }
+# Calendar's ports: the invites stored mail holds, what the outbox has sent and the zones a TZID names.
+mm-calendar.workspace = true
 # The ports of the contexts whose SQL is here: Discovery's, Curation's and Attention's.
 mm-attention.workspace = true
 # mailmind.config.json, written back with its keys in the order they came.

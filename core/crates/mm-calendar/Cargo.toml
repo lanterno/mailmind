@@ -1,0 +1,19 @@
+[package]
+name = "mm-calendar"
+description = "Invites, recurring series, Today & next, an answer to an invite and an event file of a person's own"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# An invite's part of a message, as opening it lists the parts.
+mm-content.workspace = true
+mm-kernel.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+# The UID of an event a person confirmed, as the Python app made it.
+sha2.workspace = true
+
+[lints]
+workspace = true

@@ -30,6 +30,8 @@ mm-imap.workspace = true
 mm-kernel.workspace = true
 mm-mailbox.workspace = true
 mm-store.workspace = true
+# Calendar's use cases: Today & next, an answer to an invite, an event file and the invite a message opens with.
+mm-calendar.workspace = true
 # Discovery's, Curation's and Attention's use cases.
 mm-attention.workspace = true
 # The outbox's sends, over each account's SMTP server.
