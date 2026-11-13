@@ -246,6 +246,29 @@ jobs:
       - name: The client's tests, and clippy on mm-wasm for wasm32
         run: just web check
 
+      - name: Chromium, as the locked playwright-core drives it
+        working-directory: shells/web
+        run: npx playwright-core install --with-deps chromium
+
+      # Step 0's check that the list opens and scrolls: first rows seven times, then a jump nine tenths down that
+      # fails the step unless real rows come there.
+      - name: Open the list in Chromium and scroll it
+        run: |
+          just web measure > measure.txt
+          cat measure.txt
+          sed -n '/^{/,$p' measure.txt > measure.json
+          node -e '
+            const m = require("./measure.json");
+            if (m.problems.length) { console.error(m.problems); process.exit(1); }
+            console.log([
+              "### Web: the list in headless Chromium, 100,000 fictional messages",
+              "| What | Measured |", "| --- | ---: |",
+              `| Navigation to first rows, median of 7 | ${m.firstRowsMs.median} ms |`,
+              `| A jump nine tenths down, to rows there | ${m.jumpToRowsMs} ms |`,
+              `| Memory after the jump (page, worker, SQLite) | ${m.afterJump.totalMb} MB |`,
+            ].join("\n"));
+          ' >> "$GITHUB_STEP_SUMMARY"
+
       - name: The WebAssembly's size, raw, gzip and Brotli
         run: |
           shopt -s nullglob
