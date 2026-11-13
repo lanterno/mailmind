@@ -67,6 +67,13 @@ impl mm_mailbox::ports::AiStatus for AssistantStatus {
     }
 }
 
+/// The accounts the Document Hub reads over: those the Directory may use.
+impl mm_discovery::ports::AccountNames for KnownAccounts {
+    fn emails(&self) -> Result<Vec<String>, Fault> {
+        Ok(self.0.accounts()?.into_iter().map(|a| a.email).collect())
+    }
+}
+
 /// Sessions over mm-imap, logged in with what the Directory keeps for each account (`imap_connection.connect`): a
 /// loopback server's certificate is checked against its pin before the password is read or sent.
 #[derive(Debug)]

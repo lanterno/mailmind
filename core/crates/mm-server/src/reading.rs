@@ -1,11 +1,12 @@
 //! The reads a person waits on, as the app holds them: the lists and a conversation, the tray of changes, the
-//! digest, an export, the outbox. `App` holds one `Reading`, which `App::assemble` makes here from the adapters it made.
+//! digest, an export, the outbox, the documents. `App` holds one `Reading`, which `App::assemble` makes here from the adapters it made.
 
 use std::sync::Arc;
 
 use mm_accounts::ports::ConfigFile;
 use mm_assistant::status::Status;
 use mm_compose::outbox::Outbox;
+use mm_discovery::documents::DocumentHub;
 use mm_mailbox::digest::{Digest, NotSyncing};
 use mm_mailbox::lists::Lists;
 use mm_mailbox::opening::StoredOnly;
@@ -25,6 +26,7 @@ pub struct Reading {
     pub digest: Digest,
     pub exports: Exports,
     pub outbox: Outbox,
+    pub documents: DocumentHub,
 }
 
 impl Reading {
@@ -47,6 +49,7 @@ impl Reading {
             exports: Exports::new(database.clone(), seams.outside.clone(), clock.clone(), environment.temporary()),
             lists: Lists::new(accounts.clone(), database.clone(), database.clone(), opening, clock.clone()),
             tray: Tray::new(database.clone()),
+            documents: DocumentHub::new(database.clone(), accounts.clone(), clock.clone()),
             outbox: Outbox::new(database.clone(), clock.clone(), environment.profile() == "full"),
             digest: Digest::new(
                 accounts,
