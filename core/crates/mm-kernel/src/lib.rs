@@ -7,6 +7,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+pub mod addresses;
 pub mod ago;
 pub mod errors;
 pub mod events;
@@ -16,6 +17,7 @@ pub mod log;
 pub mod relative;
 pub mod seams;
 pub mod text;
+pub mod verdict;
 pub mod when;
 pub mod zone;
 
