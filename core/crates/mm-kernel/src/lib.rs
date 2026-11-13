@@ -6,6 +6,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+pub mod identity;
+
 /// A message's durable name, `message_identity.key`. It survives a move and a resync, which a row number does
 /// not, so a row number never leaves the core.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
