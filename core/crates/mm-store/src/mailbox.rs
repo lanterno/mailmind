@@ -41,7 +41,8 @@ impl StoredMail for Database {
             let among = |alias: &str| format!("{alias}.account IN ({})", placeholders(accounts.len()));
             let has_mail = |alias: &str| {
                 format!(
-                    "EXISTS(SELECT 1 FROM messages m WHERE m.account={alias}.account AND m.thread_id={alias}.thread_id)"
+                    "EXISTS(SELECT 1 FROM messages m WHERE m.account={alias}.account AND m.thread_id={alias}.thread_id \
+                     AND m.pending_removal IS NULL)"
                 )
             };
             Ok(ViewCounts {

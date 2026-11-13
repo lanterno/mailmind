@@ -98,10 +98,10 @@ fn conversation_rows_sql(picked: &str, partition: &str) -> String {
     )
 }
 
-/// The latest row of each thread `f` names, joined to `f`'s table (Attention's views).
+/// The latest row of each thread `f` names, of those not on their way out, joined to `f`'s table (Attention's views).
 fn latest_of_thread() -> &'static str {
     "m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id \
-     ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)"
+     AND m2.pending_removal IS NULL ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1)"
 }
 
 fn with_page<'a>(named: &'a [&'a dyn ToSql], limit: &'a i64, offset: &'a i64) -> Vec<&'a dyn ToSql> {

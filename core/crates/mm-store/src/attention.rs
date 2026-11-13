@@ -392,7 +392,7 @@ impl AttentionBook for AttentionStore {
              FROM followups f JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id \
              WHERE f.account IN ({marks}) AND f.state='due' AND f.kind='sent' \
              AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=m.account AND m2.thread_id=m.thread_id \
-             ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) \
+             AND m2.pending_removal IS NULL ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) \
              ORDER BY m.ts, m.pk LIMIT ?"
         );
         let mut given: Vec<&dyn rusqlite::ToSql> = accounts.iter().map(|a| a as &dyn rusqlite::ToSql).collect();
