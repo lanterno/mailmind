@@ -10,6 +10,8 @@
 //! when the browser's reading wins.
 
 pub mod css;
+pub mod html;
 mod text;
 
 pub use css::{CssContext, sanitize_css_stylesheet, sanitize_inline_style};
+pub use html::{Blocked, FOLD_CLOSE, FOLD_OPEN, Read, Sanitized, read, sanitize, without_fold};
