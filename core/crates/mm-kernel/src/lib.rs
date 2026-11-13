@@ -1,4 +1,5 @@
-//! What every part of the core shares: how a message is named and how a refusal is said.
+//! What every part of the core shares: how a message is named, how a refusal and a problem are said, and the seams
+//! through which a program meets the world.
 //!
 //! Nothing here reads the disk, the network or the clock.
 
@@ -6,7 +7,12 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+pub mod errors;
 pub mod identity;
+pub mod log;
+pub mod seams;
+pub mod text;
+pub mod when;
 
 /// A message's durable name, `message_identity.key`. It survives a move and a resync, which a row number does
 /// not, so a row number never leaves the core.
