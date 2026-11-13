@@ -19,11 +19,13 @@ def in_window(until: int, now: float) -> bool:
 
 
 def wake_time(body: Mapping[str, Any], now: datetime) -> int | None:
-    """A wake time (unix secs) from {preset} or {until}, or None if it's invalid. `now` is aware, in the local zone."""
+    """A wake time (unix secs) from {preset} or {until}, or None if it's invalid. `now` is aware, in the person's zone: one
+    that knows when its clocks change (`when.LOCAL`) puts a preset at its hour on the wall that day."""
     preset = body.get("preset")
     if preset:
         if preset == "later_today":
-            t = (now + timedelta(hours=3)).replace(minute=0, second=0, microsecond=0)
+            later = datetime.fromtimestamp(now.timestamp() + 3 * 3600, now.tzinfo)    # three hours on, as the clocks read then
+            t = later.replace(minute=0, second=0, microsecond=0)
             if t.date() > now.date():           # +3h ran past midnight → "later today" shouldn't wake you
                 t = (now + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)  # at 2am; next morning instead
         elif preset == "tomorrow":

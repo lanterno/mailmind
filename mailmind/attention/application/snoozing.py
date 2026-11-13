@@ -9,7 +9,7 @@ from mailmind.attention.domain.events import SnoozeLifted, SnoozeSet, SnoozeWoke
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import Pk
 from mailmind.kernel.row import Row
-from mailmind.kernel.when import now_iso
+from mailmind.kernel.when import LOCAL, now_iso
 from mailmind.platform import bus
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -43,7 +43,7 @@ class Snoozing:
         return self._book.thread_pks(c, *thread) if thread else snooze.named_pks(body)
 
     def snooze(self, body: dict[str, Any]) -> dict[str, Any]:
-        until = snooze.wake_time(body, datetime.now().astimezone())
+        until = snooze.wake_time(body, datetime.now(LOCAL))
         if until is None:
             raise Refused("bad snooze time")
         with self._uow.write() as c:

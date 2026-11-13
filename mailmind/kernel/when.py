@@ -1,6 +1,6 @@
 """When something happened, as the app says it."""
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 
 
 def now_iso() -> str:
@@ -60,3 +60,31 @@ def rel_time_future(ts: float | str) -> str:
         return dt.strftime("%b %-d")
     except Exception:
         return ""
+
+
+_EPOCH = datetime(1970, 1, 1)
+
+
+class _Local(tzinfo):
+    """The machine's own zone, as the C library reads it, at each moment's own offset. What `astimezone()` gives holds
+    the offset in force now, so a wall-clock time worked out from it, on the other side of a change of the clocks, is
+    an hour off; one in this zone isn't. A wall time the clocks read twice is told apart by `fold`, as Python's own
+    naive times are."""
+
+    def utcoffset(self, dt: datetime | None) -> timedelta | None:
+        if dt is None:
+            return None
+        naive = dt.replace(tzinfo=None)
+        return timedelta(seconds=round((naive - _EPOCH).total_seconds() - naive.timestamp()))
+
+    def dst(self, dt: datetime | None) -> timedelta | None:
+        return None
+
+    def tzname(self, dt: datetime | None) -> str | None:
+        return None
+
+    def fromutc(self, dt: datetime) -> datetime:
+        return datetime.fromtimestamp((dt.replace(tzinfo=None) - _EPOCH).total_seconds()).replace(tzinfo=self)
+
+
+LOCAL = _Local()
