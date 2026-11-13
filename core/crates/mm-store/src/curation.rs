@@ -55,7 +55,7 @@ impl RuleBook for CurationStore {
     fn change(&self, apply: &mut dyn FnMut(&mut Rules) -> Result<(), Failure>) -> Result<(), Failure> {
         let now = mm_kernel::when::iso(self.clock.now());
         let mut failed: Option<Failure> = None;
-        let written = blocks::write(&self.db, |c| {
+        let written = self.db.write(|c| {
             let Some(mut rules) = parsed(blocks::document_text(c, RULES)?) else {
                 failed = Some(MALFORMED.into());
                 // Any error ends the block unwritten.
@@ -123,7 +123,7 @@ impl SenderMail for CurationStore {
     }
 
     fn set_classifications(&self, changes: &[Reclassified]) -> Result<(), Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             let mut update =
                 c.prepare_cached("UPDATE messages SET bucket=?, confidence=?, reason=?, is_junk=? WHERE pk=?")?;
             for ch in changes {

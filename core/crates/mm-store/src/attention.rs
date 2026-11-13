@@ -242,7 +242,7 @@ impl AttentionBook for AttentionStore {
         pks: &[i64],
         until: i64,
     ) -> Result<Vec<(i64, Option<Message>)>, Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             let mut snoozed = Vec::new();
             for pk in named(c, thread, pks)? {
                 let before = message(c, pk)?;
@@ -254,7 +254,7 @@ impl AttentionBook for AttentionStore {
     }
 
     fn unsnooze(&self, thread: Option<(&str, &str)>, pks: &[i64]) -> Result<usize, Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             let pks = named(c, thread, pks)?;
             for pk in &pks {
                 clear_snooze(c, *pk)?;
@@ -264,7 +264,7 @@ impl AttentionBook for AttentionStore {
     }
 
     fn wake_due(&self, now: i64) -> Result<Vec<Message>, Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             // A snooze come due with no copy left in its folder ends here: the message was filed, and bringing it
             // back later isn't waking it.
             c.prepare_cached(
@@ -288,7 +288,7 @@ impl AttentionBook for AttentionStore {
     }
 
     fn mute(&self, account: &str, thread_id: &str, when: &str) -> Result<Option<MuteFound>, Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             let muted = c
                 .prepare_cached("SELECT 1 FROM muted WHERE account=? AND thread_id=?")?
                 .exists([account, thread_id])?;
@@ -313,7 +313,7 @@ impl AttentionBook for AttentionStore {
     }
 
     fn unmute(&self, account: &str, thread_id: &str) -> Result<(), Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             c.prepare_cached("DELETE FROM muted WHERE account=? AND thread_id=?")?.execute([account, thread_id])?;
             Ok(())
         })
@@ -325,7 +325,7 @@ impl AttentionBook for AttentionStore {
         thread_id: &str,
         change: &mut dyn FnMut(Option<FollowUp>, Option<i64>) -> FollowUpChange,
     ) -> Result<(), Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             let current = follow_up(c, account, thread_id)?;
             let last_ts: Option<i64> = c
                 .prepare_cached("SELECT MAX(ts) FROM messages WHERE account=? AND thread_id=? AND draft=0")?
@@ -364,7 +364,7 @@ impl AttentionBook for AttentionStore {
 
     fn follow_up_round(&self, accounts: &[String], now: i64, when: &str) -> Result<bool, Fault> {
         use mm_attention::followups::{EXPIRE_DAYS, GRACE_DAYS, days_before};
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             let before = due_keys(c)?;
             // Resolve first, so what an answer met clears before anything is detected again.
             let resolve = resolve_sql();
@@ -428,7 +428,7 @@ impl AttentionBook for AttentionStore {
     }
 
     fn add_task(&self, pk: i64, title: &str, due: Option<&str>, when: &str) -> Result<Option<TaskRow>, Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             let Some(row) = message(c, pk)? else { return Ok(None) };
             let Some(key) = row.key else { return Ok(None) };
             // The same one confirmed again is the same row, with the date it was last given.
@@ -449,13 +449,13 @@ impl AttentionBook for AttentionStore {
     }
 
     fn set_task_done(&self, id: i64, done_at: Option<&str>) -> Result<bool, Fault> {
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             Ok(c.prepare_cached("UPDATE tasks SET done_at=? WHERE id=?")?.execute(params![done_at, id])? > 0)
         })
     }
 
     fn remove_task(&self, id: i64) -> Result<bool, Fault> {
-        blocks::write(&self.db, |c| Ok(c.prepare_cached("DELETE FROM tasks WHERE id=?")?.execute([id])? > 0))
+        self.db.write(|c| Ok(c.prepare_cached("DELETE FROM tasks WHERE id=?")?.execute([id])? > 0))
     }
 }
 
@@ -482,6 +482,6 @@ impl Undo for UndoStack {
         let now = self.clock.now();
         let seconds = now.whole_seconds();
         let iso = |s: i64| mm_kernel::when::iso(Moment::from_micros(now.micros() + (s - seconds) * 1_000_000));
-        blocks::write(&self.db, |c| blocks::push_undo(c, entry, group, seconds, iso))
+        self.db.write(|c| blocks::push_undo(c, entry, group, seconds, iso))
     }
 }

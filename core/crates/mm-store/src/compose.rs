@@ -12,6 +12,7 @@ use mm_kernel::when;
 use rusqlite::{Connection, OptionalExtension, named_params};
 use serde_json::Value;
 
+use crate::blocks;
 use crate::db::Database;
 use crate::mailbox::lists::rows_of;
 
@@ -91,33 +92,19 @@ impl SnippetsDocument {
 
 impl SnippetsStore for SnippetsDocument {
     fn read(&self) -> Result<Option<Value>, Fault> {
-        self.database.read(|c| document(c, SNIPPETS))
+        self.database.read(parsed)
     }
 
     fn change(&self, change: &mut dyn FnMut(Option<Value>) -> Option<Value>) -> Result<(), Fault> {
         let now = when::iso(self.clock.now());
-        self.database.write(|c| match change(document(c, SNIPPETS)?) {
-            Some(value) => write_document(c, SNIPPETS, &value, &now),
+        self.database.write(|c| match change(parsed(c)?) {
+            Some(value) => blocks::write_document(c, SNIPPETS, &value, &now),
             None => Ok(()),
         })
     }
 }
 
-/// What a document holds, as JSON parses it: None when there is none yet, or its text won't parse.
-fn document(c: &Connection, name: &str) -> rusqlite::Result<Option<Value>> {
-    let body: Option<String> =
-        c.query_row("SELECT body FROM documents WHERE name=?", [name], |r| r.get(0)).optional()?;
-    Ok(body.and_then(|body| serde_json::from_str(&body).ok()))
-}
-
-/// `value` as the whole document, a version on from the last, written as `json.dumps(value, indent=2,
-/// ensure_ascii=False)` writes it.
-fn write_document(c: &Connection, name: &str, value: &Value, now: &str) -> rusqlite::Result<()> {
-    let body = serde_json::to_string_pretty(value).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-    c.execute(
-        "INSERT INTO documents(name, body, changed_at) VALUES(?, ?, ?) ON CONFLICT(name) DO UPDATE SET \
-         body=excluded.body, version=documents.version+1, changed_at=excluded.changed_at",
-        (name, body, now),
-    )?;
-    Ok(())
+/// What the snippets document holds, as JSON parses it: None when there is none yet, or its text won't parse.
+fn parsed(c: &Connection) -> rusqlite::Result<Option<Value>> {
+    Ok(blocks::document_text(c, SNIPPETS)?.and_then(|body| serde_json::from_str(&body).ok()))
 }

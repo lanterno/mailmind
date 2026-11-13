@@ -11,19 +11,7 @@ use crate::db::Database;
 
 impl StoredBodies for Database {
     fn copy_pk(&self, key: i64, folder: &str, uid: Option<i64>) -> Result<Option<i64>, Fault> {
-        self.read(|c| match uid {
-            Some(uid) => c
-                .prepare_cached("SELECT pk FROM messages WHERE message_key=? AND folder=? AND uid=?")?
-                .query_row(params![key, folder, uid], |r| r.get(0))
-                .optional(),
-            None => {
-                let pks: Vec<i64> = c
-                    .prepare_cached("SELECT pk FROM messages WHERE message_key=? AND folder=? LIMIT 2")?
-                    .query_map(params![key, folder], |r| r.get(0))?
-                    .collect::<rusqlite::Result<_>>()?;
-                Ok(if pks.len() == 1 { pks.first().copied() } else { None })
-            }
-        })
+        self.read(|c| crate::copies::copy_pk(c, key, folder, uid))
     }
 
     fn message(&self, pk: i64) -> Result<Option<Row>, Fault> {

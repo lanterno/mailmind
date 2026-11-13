@@ -1,22 +1,8 @@
-//! What Discovery's, Curation's and Attention's adapters share: a write block (`UnitOfWork.write`), the documents a
-//! context keeps whole (`platform.db.documents`) and the undo stack (`platform.undo`).
+//! What the contexts' adapters share: the documents a context keeps whole (`platform.db.documents`) and the undo stack
+//! (`platform.undo`). A write block is `Database::write`.
 
-use mm_kernel::errors::Fault;
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
-
-use crate::db::Database;
-
-/// Run `work` in one write block: `BEGIN IMMEDIATE`, committed if it ends and rolled back if it fails, so a change
-/// reads, changes and writes with no other write between. Nothing in it may wait on a network.
-pub fn write<T>(db: &Database, work: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T, Fault> {
-    db.read(|c| {
-        let block = Transaction::new_unchecked(c, TransactionBehavior::Immediate)?;
-        let done = work(&block)?;
-        block.commit()?;
-        Ok(done)
-    })
-}
 
 /// A document's text, None when there is none yet.
 pub fn document_text(c: &Connection, name: &str) -> rusqlite::Result<Option<String>> {

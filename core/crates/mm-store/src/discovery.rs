@@ -457,7 +457,7 @@ impl ViewsStore for DiscoveryStore {
 
     fn change(&self, change: &mut dyn FnMut(Value) -> Option<Value>) -> Result<(), Fault> {
         let now = mm_kernel::when::iso(self.clock.now());
-        blocks::write(&self.db, |c| {
+        self.db.write(|c| {
             if let Some(changed) = change(blocks::document(c, VIEWS)?) {
                 blocks::write_document(c, VIEWS, &changed, &now)?;
             }

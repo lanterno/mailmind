@@ -4,7 +4,6 @@
 
 use mm_curation::ports::{RulesDocument, Stored, StoredInbox};
 use mm_kernel::errors::Fault;
-use rusqlite::OptionalExtension;
 use serde_json::Value;
 
 use crate::db::Database;
@@ -38,8 +37,7 @@ impl StoredInbox for Database {
 
 impl RulesDocument for Database {
     fn rules(&self) -> Result<Option<Value>, Fault> {
-        let body: Option<String> =
-            self.read(|c| c.query_row("SELECT body FROM documents WHERE name='rules'", [], |r| r.get(0)).optional())?;
+        let body: Option<String> = self.read(|c| crate::blocks::document_text(c, "rules"))?;
         body.map(|body| serde_json::from_str(&body).map_err(|_| Fault::new("MalformedRules"))).transpose()
     }
 }
