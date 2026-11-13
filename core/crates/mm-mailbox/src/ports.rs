@@ -184,3 +184,44 @@ pub trait StoredCommands: Send + Sync + fmt::Debug {
         pk: Option<i64>,
     ) -> Result<Option<serde_json::Value>, Fault>;
 }
+
+/// A message as stored, to open: the row of a copy, its raw bytes and what is kept of its parts.
+pub trait StoredBodies: Send + Sync + fmt::Debug {
+    /// The row the copy `key`, `folder` and `uid` names now: at that uid, or without one the only copy in that
+    /// folder (`copy_pk`).
+    fn copy_pk(&self, key: i64, folder: &str, uid: Option<i64>) -> Result<Option<i64>, Fault>;
+    /// The message's row, every column.
+    fn message(&self, pk: i64) -> Result<Option<Row>, Fault>;
+    /// Its raw RFC822 bytes, where they are stored.
+    fn raw(&self, pk: i64) -> Result<Option<Vec<u8>>, Fault>;
+    /// What is kept of one of its parts: its filename and content type.
+    fn part(&self, pk: i64, part_id: &str) -> Result<Option<Row>, Fault>;
+    /// Whether any of its parts is kept.
+    fn has_parts(&self, pk: i64) -> Result<bool, Fault>;
+    /// Keep what its parts are (`insert_attachments`).
+    fn keep_parts(&self, pk: i64, parts: &[mm_content::mime::Attachment]) -> Result<(), Fault>;
+}
+
+/// A message's body from its server where it isn't stored (`Ingest.fetch_body`).
+pub trait BodyFetch: Send + Sync + fmt::Debug {
+    /// Its raw bytes, fetched and stored first where they aren't: empty when its server has nothing, None when its
+    /// row has gone.
+    fn fetch(&self, pk: i64) -> Result<Option<Vec<u8>>, Fault>;
+    /// Fetch it in the background if the account's IMAP work can take it now: false when it is busy.
+    fn prefetch(&self, pk: i64) -> Result<bool, Fault>;
+}
+
+/// What another context adds to a message as it opens (`Reader`).
+pub trait Opening: Send + Sync + fmt::Debug {
+    /// The invite it carries, and the part that holds it, each null when it carries none.
+    fn invite_of(
+        &self,
+        pk: i64,
+        parts: &[mm_content::mime::Attachment],
+        raw: &[u8],
+    ) -> Result<(serde_json::Value, serde_json::Value), Fault>;
+    /// For a draft, its `draft_id`, `draft_mode` and `is_draft`; nothing for another message.
+    fn draft_info(&self, row: &Row) -> Result<Row, Fault>;
+    /// What is said of its sender beside their name, null for what can't be an address.
+    fn sender_facts(&self, addr: Option<&str>) -> Result<serde_json::Value, Fault>;
+}

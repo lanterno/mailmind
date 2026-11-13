@@ -16,8 +16,10 @@ pub mod sync_ports;
 pub mod threading;
 
 // The reads a person waits on: the lists and what their rows say, the tray of changes, the digest, and what a
-// folder's opening does until the sync is ported.
+// folder's opening does until the sync is ported; a message opened, and the frame it shows in.
+pub mod bodies;
 pub mod digest;
+pub mod inline_images;
 pub mod listing;
 pub mod lists;
 pub mod opening;
