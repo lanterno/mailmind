@@ -17,8 +17,9 @@ pub struct Stored {
 
 /// The mail stored in each account's inbox.
 pub trait StoredInbox: Send + Sync + fmt::Debug {
-    /// What `account`'s stored INBOX holds, mail on its way out left out.
-    fn stored_inbox(&self, account: &str) -> Result<Vec<Stored>, Fault>;
+    /// What each account's stored INBOX holds, mail on its way out left out, in the order the accounts are named. One
+    /// read of the store serves them all.
+    fn stored_inboxes(&self, accounts: &[&str]) -> Result<Vec<Vec<Stored>>, Fault>;
 }
 
 /// The rule book as it is stored.

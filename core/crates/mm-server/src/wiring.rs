@@ -189,11 +189,12 @@ impl mm_mailbox::ports::AccountList for ListedAccounts {
 pub(crate) struct CurationPlans(pub(crate) mm_curation::sweep_plan::StoredPlans);
 
 impl mm_mailbox::ports::InboxPlans for CurationPlans {
-    fn plan_stored(
+    fn plans_stored(
         &self,
-        account: &mm_mailbox::ports::Listed,
-    ) -> Result<serde_json::Map<String, serde_json::Value>, Fault> {
-        self.0.plan_stored(&account.email, &account.kind)
+        accounts: &[mm_mailbox::ports::Listed],
+    ) -> Result<Vec<serde_json::Map<String, serde_json::Value>>, Fault> {
+        let named: Vec<(&str, &str)> = accounts.iter().map(|a| (a.email.as_str(), a.kind.as_str())).collect();
+        self.0.plans_stored(&named)
     }
 
     fn buckets(&self) -> serde_json::Value {

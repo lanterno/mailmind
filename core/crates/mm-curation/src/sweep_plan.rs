@@ -108,19 +108,24 @@ impl StoredPlans {
         StoredPlans { inbox, rules }
     }
 
-    /// What a sweep of `account`'s inbox would find, from its stored mail classified again with the rules as they
-    /// stand: `account`, `kind`, the tally and no `error`.
-    pub fn plan_stored(&self, account: &str, kind: &str) -> Result<Map<String, Value>, Fault> {
-        let rows = self.inbox.stored_inbox(account)?;
+    /// What a sweep of each (account, kind)'s inbox would find, from its stored mail classified again with the rules
+    /// as they stand: `account`, `kind`, the tally and no `error`, in the order the accounts are named. The rules are
+    /// read once for them all.
+    pub fn plans_stored(&self, accounts: &[(&str, &str)]) -> Result<Vec<Map<String, Value>>, Fault> {
+        let named: Vec<&str> = accounts.iter().map(|(account, _)| *account).collect();
+        let inboxes = self.inbox.stored_inboxes(&named)?;
         let sets = match self.rules.rules()? {
             None => RuleSets::default(),
             Some(document) => sets_of(&document).ok_or(Fault::new("MalformedRules"))?,
         };
-        let mut plan = Map::new();
-        plan.insert("account".into(), json!(account));
-        plan.insert("kind".into(), json!(kind));
-        plan.extend(tally(rows.iter().map(|row| stored_bucket(row, &sets))));
-        plan.insert("error".into(), Value::Null);
-        Ok(plan)
+        let plan = |(account, kind): &(&str, &str), rows: &[Stored]| {
+            let mut plan = Map::new();
+            plan.insert("account".into(), json!(account));
+            plan.insert("kind".into(), json!(kind));
+            plan.extend(tally(rows.iter().map(|row| stored_bucket(row, &sets))));
+            plan.insert("error".into(), Value::Null);
+            plan
+        };
+        Ok(accounts.iter().zip(&inboxes).map(|(account, rows)| plan(account, rows)).collect())
     }
 }

@@ -10,22 +10,28 @@ use serde_json::Value;
 use crate::db::Database;
 
 impl StoredInbox for Database {
-    fn stored_inbox(&self, account: &str) -> Result<Vec<Stored>, Fault> {
+    fn stored_inboxes(&self, accounts: &[&str]) -> Result<Vec<Vec<Stored>>, Fault> {
         self.read(|c| {
-            c.prepare_cached(
+            let mut inbox = c.prepare_cached(
                 "SELECT from_addr, from_name, subject, bucket, list_unsub_raw FROM messages \
                  WHERE account=? AND folder='INBOX' AND deleted=0 AND pending_removal IS NULL",
-            )?
-            .query_map([account], |r| {
-                Ok(Stored {
-                    from_addr: r.get(0)?,
-                    from_name: r.get(1)?,
-                    subject: r.get(2)?,
-                    bucket: r.get(3)?,
-                    list_unsub_raw: r.get(4)?,
+            )?;
+            accounts
+                .iter()
+                .map(|account| {
+                    inbox
+                        .query_map([account], |r| {
+                            Ok(Stored {
+                                from_addr: r.get(0)?,
+                                from_name: r.get(1)?,
+                                subject: r.get(2)?,
+                                bucket: r.get(3)?,
+                                list_unsub_raw: r.get(4)?,
+                            })
+                        })?
+                        .collect()
                 })
-            })?
-            .collect()
+                .collect()
         })
     }
 }

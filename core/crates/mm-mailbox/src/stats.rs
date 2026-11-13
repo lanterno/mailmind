@@ -24,10 +24,11 @@ impl LiveStats {
 
     /// Each account's stored plan with its alias, the buckets, the totals across accounts, and when this was said.
     pub fn live(&self) -> Result<Value, Fault> {
-        let mut out = Vec::new();
+        let accounts = self.accounts.accounts()?;
+        let plans = self.curation.plans_stored(&accounts)?;
+        let mut out = Vec::with_capacity(plans.len());
         let (mut in_inbox, mut junk, mut keep) = (0, 0, 0);
-        for account in self.accounts.accounts()? {
-            let mut plan = self.curation.plan_stored(&account)?;
+        for (account, mut plan) in accounts.into_iter().zip(plans) {
             let count = |name: &str| plan.get(name).and_then(Value::as_i64).unwrap_or_default();
             in_inbox += count("in_inbox");
             junk += count("junk");

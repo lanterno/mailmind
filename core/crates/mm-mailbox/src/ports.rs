@@ -261,9 +261,9 @@ pub trait AccountList: Send + Sync + fmt::Debug {
 
 /// What the classifier makes of each account's stored inbox (`Classifier.plan_stored` and `buckets`).
 pub trait InboxPlans: Send + Sync + fmt::Debug {
-    /// How `account`'s stored inbox falls into buckets: `account`, `kind`, `in_inbox`, `by_bucket`, `junk`, `keep`,
-    /// `top_senders` and `error`, in that order.
-    fn plan_stored(&self, account: &Listed) -> Result<serde_json::Map<String, serde_json::Value>, Fault>;
+    /// How each account's stored inbox falls into buckets, in the order the accounts are named: `account`, `kind`,
+    /// `in_inbox`, `by_bucket`, `junk`, `keep`, `top_senders` and `error`, in that order.
+    fn plans_stored(&self, accounts: &[Listed]) -> Result<Vec<serde_json::Map<String, serde_json::Value>>, Fault>;
     /// Every bucket and whether it is junk.
     fn buckets(&self) -> serde_json::Value;
 }
