@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fixtures import world as w
-from mailmind.bootstrap import attention
 from mailmind.attention.domain import followups as follow_up_rules
 
 
@@ -64,7 +63,7 @@ def test_snooze_list_wake_and_undo(app, golden, world):
     listing(app, golden, "Ada's Snoozed after undo", w.ADA, "__snoozed__")
 
     app.clock.move_to(datetime(2026, 11, 2, 18, 0, 1, tzinfo=timezone.utc))
-    attention.snoozing.wake_due()
+    app.work("snoozes")
     golden.note("after 18:00 the receipt wakes unread", rows(
         """SELECT m.subject, m.seen, z.until AS snoozed_until FROM messages m
            LEFT JOIN snoozes z ON z.message_key=m.message_key AND z.folder=m.folder WHERE m.pk=?""", receipt))
@@ -125,15 +124,15 @@ def test_mute_hides_a_thread_marks_it_read_and_undo_restores_it(app, golden, wor
 # ── follow-ups and Reply Later ─────────────────────────────────────────────
 
 def test_waiting_follow_ups_and_dismissal(app, golden, world, ai):
-    from mailmind.bootstrap import assistant
     # A received thread waits on you only once AI has called it important or action-needed; the
     # fake API calls every message action-needed.
-    golden.note("messages summarized", assistant.assessments.summarize_pending(limit=100, workers=1))
-    attention.followups.tick()
+    app.work("assess")
+    golden.note("messages summarized", rows("SELECT count(*) AS n FROM assessments")[0]["n"])
+    app.work("follow-ups")
     golden.note("follow-ups at Monday noon", rows(
         "SELECT account, thread_id, kind, state, due_ts FROM followups ORDER BY account, thread_id"))
     app.clock.shift(timedelta(days=4))
-    attention.followups.tick()
+    app.work("follow-ups")
     golden.note("follow-ups four days later", rows(
         "SELECT account, thread_id, kind, state, due_ts FROM followups ORDER BY account, thread_id"))
     for acct in (w.ADA, w.BEA, w.CY):
@@ -165,12 +164,11 @@ def test_reply_later_records_when_the_thread_last_moved(app, world):
 
 
 def test_a_received_nudge_stops_after_the_expiry_window(app, world, ai):
-    from mailmind.bootstrap import assistant
-    assistant.assessments.summarize_pending(limit=100, workers=1)
+    app.work("assess")
     quilt = world.row("ada-archive-01-old-thread.eml")      # from Lin, read, unanswered, 20 Oct
-    attention.followups.tick()
+    app.work("follow-ups")
     assert rows("SELECT state FROM followups WHERE thread_id=?", quilt["thread_id"]) == [{"state": "due"}]
     app.clock.move_to(datetime.fromtimestamp(quilt["ts"], timezone.utc)
                       + timedelta(days=follow_up_rules.EXPIRE_DAYS, hours=1))
-    attention.followups.tick()
+    app.work("follow-ups")
     assert rows("SELECT state FROM followups WHERE thread_id=?", quilt["thread_id"]) == []

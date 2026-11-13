@@ -26,12 +26,18 @@ def triage(req):
                       "action": "Reply today" if urgent else ""})
 
 
-def triaged(ai):
-    from mailmind.bootstrap import assistant
+def triaged(app, ai):
+    """The server's triage pass over every message, answered by `triage`; how many it summarized, as the database
+    keeps them (the world starts with none)."""
+    from mailmind.bootstrap.mailbox import store
     ai.responder = triage
-    n = assistant.assessments.summarize_pending(limit=100, workers=1)
+    app.work("assess")
     ai.requests.clear()
-    return n
+    c = store.conn()
+    try:
+        return c.execute("SELECT count(*) FROM assessments").fetchone()[0]
+    finally:
+        c.close()
 
 
 def sent(golden, ai, label):
@@ -122,7 +128,7 @@ def test_do_plans_a_preview_and_degrades_to_search(app, golden, world, ai):
 
 @pytest.mark.parametrize("route", ["/api/briefing", "/api/review"])
 def test_briefing_and_review_are_written_once_and_a_get_only_reads(app, golden, world, ai, route):
-    golden.note("messages triaged", triaged(ai))
+    golden.note("messages triaged", triaged(app, ai))
     pk = world.pk("bea-inbox-01-client.eml")
     ai.queue(fa.answer({"narrative": "A quiet week with two threads that want you: Ivo's contract "
                                      "and Noor's design review on Tuesday.",
@@ -140,7 +146,7 @@ def test_briefing_and_review_are_written_once_and_a_get_only_reads(app, golden, 
 
 
 def test_since_you_last_looked(app, golden, world, ai):
-    triaged(ai)
+    triaged(app, ai)
     import time
     world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<lunch-4@example.test>",
                                             Subject="Re: Lunch, running late", Date="Mon, 02 Nov 2026 11:50:00 +0000"))
@@ -156,7 +162,7 @@ def test_since_you_last_looked(app, golden, world, ai):
 
 
 def test_draft_ahead_generates_once_then_serves(app, golden, world, ai):
-    triaged(ai)
+    triaged(app, ai)
     def ahead(name, **more):
         return "/api/ai/draft-ahead?" + urlencode({**world.copy(name), **more})
 
