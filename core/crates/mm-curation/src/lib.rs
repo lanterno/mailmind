@@ -16,5 +16,6 @@ pub mod rulebook;
 pub mod rules;
 pub mod screener;
 pub mod sweep_plan;
+pub mod sweeping;
 mod text;
 pub mod unsubscribe;
