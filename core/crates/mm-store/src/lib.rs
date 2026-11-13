@@ -12,12 +12,22 @@
 
 // What the Assistant reads: what calls cost.
 mod assistant;
+// Attention's: snoozes, mutes, follow-ups, Reply Later and tasks.
+pub mod attention;
+// What the contexts' adapters share: the documents a context keeps whole and the undo stack.
+pub mod blocks;
 // What Compose keeps: the outbox and the drafts' journal, the drafts it tracks, and the snippets.
 pub mod compose;
 pub mod config;
+// The stored copy a request names.
+pub mod copies;
+// Curation's: the rule book, classifications and the audit trail.
+pub mod curation;
 // What Curation reads of each stored inbox.
 mod curation_inbox;
 pub mod db;
+// Discovery's: search, saved views and contacts.
+pub mod discovery;
 // What the Document Hub (Discovery's) reads: the attachments stored.
 mod documents;
 // What an export would hold, and a snapshot of the database as a download.
@@ -35,13 +45,9 @@ pub mod schema;
 // What Discovery reads of a sender as a message opens.
 mod senders;
 mod sync_state;
-// Discovery's, Curation's and Attention's SQL, and the write block, documents and undo stack they share.
-pub mod attention;
-pub mod blocks;
-pub mod copies;
-pub mod curation;
-pub mod discovery;
+// The undo stack, as Tidy reads its groups.
 pub mod undo;
+// The person's zone, as the C library finds it.
 pub mod zone_file;
 
 use std::collections::HashMap;

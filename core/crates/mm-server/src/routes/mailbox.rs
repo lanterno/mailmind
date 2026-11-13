@@ -16,10 +16,7 @@ use crate::app::App;
 use crate::query::Query;
 
 pub(super) fn routes() -> Router<Arc<App>> {
-    Router::new()
-        .route("/api/folders", get(folders))
-        .route("/api/stats", get(stats))
-        .route("/api/labels", get(labels))
+    Router::new().route("/api/folders", get(folders)).route("/api/stats", get(stats)).route("/api/labels", get(labels))
 }
 
 fn query(uri: &Uri) -> Query {

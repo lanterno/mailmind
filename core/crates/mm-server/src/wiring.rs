@@ -110,10 +110,14 @@ impl mm_compose::ports::DraftFolders for DraftsFolder {
     }
 }
 
-/// The accounts the Document Hub reads over: those the Directory may use.
+/// The accounts the Document Hub reads over: those the Directory may use, and each one's alias.
 impl mm_discovery::ports::AccountNames for KnownAccounts {
     fn emails(&self) -> Result<Vec<String>, Fault> {
         Ok(self.0.accounts()?.into_iter().map(|a| a.email).collect())
+    }
+
+    fn aliases(&self) -> Result<std::collections::BTreeMap<String, Option<String>>, Fault> {
+        self.0.alias_map()
     }
 }
 
