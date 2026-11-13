@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use mm_kernel::seams::{Clock, Keychain, Moment, Outside, Tripped};
+use mm_kernel::seams::{Clock, Keychain, Moment, Outside, Secret, Tripped};
 use mm_served::clock::{FrozenClock, parse_iso};
 use mm_served::keychain::FakeKeychain;
 use mm_served::tripwire::Tripwire;
@@ -115,4 +115,25 @@ fn the_keychain_is_the_file_the_suite_shares() {
     std::fs::write(&file, "not json").unwrap();
     assert!(keychain.find("account:ada@example.test").is_err());
     assert!(FakeKeychain::new(None, Arc::new(Open)).find("anything").unwrap().is_none());
+}
+
+#[test]
+fn a_secret_kept_goes_in_the_file_as_the_suite_reads_it() {
+    let root = tempfile::tempdir().unwrap();
+    let file = root.path().join("keychain.json");
+    std::fs::write(&file, r#"{"account:ada@example.test": "app-password-0"}"#).unwrap();
+    let keychain = FakeKeychain::new(Some(file.clone()), Arc::new(Open));
+    keychain.put("account:dee@example.test", &Secret::new("dee-password".to_owned())).unwrap();
+    let held: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    assert_eq!(
+        held,
+        serde_json::json!({"account:ada@example.test": "app-password-0", "account:dee@example.test": "dee-password"})
+    );
+    assert!(keychain.delete("account:ada@example.test").unwrap());
+    assert!(!keychain.delete("account:ada@example.test").unwrap(), "none to take out the second time");
+    assert!(keychain.find("account:ada@example.test").unwrap().is_none());
+    assert!(keychain.put("account:two words", &Secret::new("x".to_owned())).is_err());
+    assert!(keychain.put("account:eve@example.test", &Secret::new("caf\u{e9}".to_owned())).is_err());
+    let nowhere = FakeKeychain::new(None, Arc::new(Open));
+    assert!(nowhere.put("account:dee@example.test", &Secret::new("dee-password".to_owned())).is_err());
 }
