@@ -6,8 +6,13 @@
 //! the checks only lower-cased, so nothing is written that the checks didn't see decoded. A backslash, a control
 //! character or a stray `url(` left after that drops the declaration.
 //!
-//! It is the Python app's sanitizer, answer for answer: tests/unit/content/test_sanitize_in_rust.py holds the two
-//! together. Where Python's `str` and `re` read text their own way, `super::text` reads it as they did.
+//! A browser reads what is written with the structure it was written with, so as it was checked: no comment mark, no
+//! line break, no backslash, and every string and bracket closed by its own match. See `written`, where the rule
+//! stands for all of it.
+//!
+//! It is the Python app's sanitizer, answer for answer, but for the comment marks, which that one let through:
+//! tests/unit/content/test_sanitize_in_rust.py holds the two together. Where Python's `str` and `re` read text their
+//! own way, `super::text` reads it as they did.
 
 use std::borrow::Cow;
 use std::fmt::Write as _;
@@ -266,7 +271,7 @@ pub fn sanitize_inline_style(value: &str, ctx: &mut CssContext) -> String {
     if value.is_empty() || text::length(value) > INLINE_MAX {
         return String::new();
     }
-    declarations(value, ctx, INLINE_DECLS)
+    written(declarations(value, ctx, INLINE_DECLS))
 }
 
 /// A `<style>` element's text, sanitized: rules and the at-rules kept, or empty. It holds no angle bracket, so it
@@ -278,8 +283,53 @@ pub fn sanitize_css_stylesheet(css: &str, ctx: &mut CssContext) -> String {
     let mut counted = 0;
     let mut sheet = rules(text::prefix(css, SHEET_MAX), ctx, 0, &mut counted);
     sheet.retain(|c| c != '<' && c != '>');
-    sheet
+    written(sheet)
 }
+
+/// What the CSS sanitizer writes, given a last look as a whole: a browser reads it as it was written, or nothing is
+/// written. The sanitizer writes values, selectors and conditions as it read them, and a browser that read one
+/// otherwise would read what follows otherwise too, up to where a later value's string ends, and the rest of that
+/// string as CSS no check saw: `position:fixed`, or a url() past the gate. So nothing written opens or closes a
+/// comment, which would hide what follows; breaks a line, which ends a string; or holds a backslash, which escapes
+/// what follows; and every string, brace, parenthesis and square bracket is closed by its own match. Each value,
+/// selector and condition is held to this where it is read (`sanitize_one`, `sanitize_selector`, `rules`), and what
+/// joins them (`;`, `:`, braces, a space) keeps it, so this drops nothing they kept. It is here so the rule stands in
+/// one place, over all that is written.
+fn written(css: String) -> String {
+    if reads_as_written(&css) { css } else { String::new() }
+}
+
+/// Whether a browser reads `css` with the structure it was written with: see `written`.
+fn reads_as_written(css: &str) -> bool {
+    if marks_a_comment(css) || css.contains(LINE_BREAKS) || css.contains('\\') {
+        return false;
+    }
+    let mut quote = None;
+    let mut open = Vec::new();
+    for c in css.chars() {
+        if let Some(q) = quote {
+            if c == q {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => quote = Some(c),
+            '{' | '(' | '[' => open.push(c),
+            '}' | ')' | ']' if open.pop() != Some(opener(c)) => return false,
+            _ => {}
+        }
+    }
+    quote.is_none() && open.is_empty()
+}
+
+/// Whether `css` holds a comment's opener or its closer.
+fn marks_a_comment(css: &str) -> bool {
+    css.contains("/*") || css.contains("*/")
+}
+
+/// What CSS reads as a line break, which ends a string.
+const LINE_BREAKS: [char; 3] = ['\n', '\r', '\x0C'];
 
 /// Each declaration of a block, sanitized and joined with `;`. Only the first `max` are read.
 fn declarations(block: &str, ctx: &mut CssContext, max: usize) -> String {
@@ -371,7 +421,9 @@ fn sanitize_one(prop: &str, raw: &str, ctx: &mut CssContext) -> Option<String> {
     {
         return None;
     }
-    if written.contains(['\\', '<', '>']) {
+    // Nor a comment mark, which an escape can decode to (`\/\*`), taking a comment out can join (`a//**/*` is `a/*`),
+    // and a url() can hold. In a string a browser would read it as text, but no value holds one, whatever it is in.
+    if written.contains(['\\', '<', '>']) || marks_a_comment(&written) {
         return None;
     }
     let written = text::strip(text::strip(&written).trim_end_matches(';'));
@@ -438,30 +490,43 @@ fn decode_escapes(s: &str) -> Cow<'_, str> {
     Cow::Owned(text::prefix(&decoded, DECL_VALUE_MAX * 2).to_owned())
 }
 
-/// Whether a decoded value, written as it reads, would end its declaration or its rule early: a `;` outside strings and
-/// parentheses, a brace outside a string, or a string or parenthesis left open. An escaped quote decodes to a bare
-/// one, so `"a\";position:fixed` would read as a string, then a declaration of its own.
-fn breaks_out(value: &str) -> bool {
-    let (mut quote, mut depth) = (None, 0usize);
-    for c in value.chars() {
+/// Whether a piece of CSS written as it was read, a value, a selector or a condition, would be read by a browser as
+/// more or less than that piece: a `;` outside strings and brackets, a brace outside a string, a string left open or
+/// ended by a line break, or a parenthesis or square bracket left open or closed by the other's match. A browser's `(`
+/// and `[` hold all up to their own match, a `;` and braces included, so `font-family:[` would take in what the next
+/// rule's selector holds as declarations. An escaped quote decodes to a bare one, so `"a\";position:fixed` would read
+/// as a string, then a declaration of its own.
+fn breaks_out(piece: &str) -> bool {
+    let mut quote = None;
+    let mut open = Vec::new();
+    for c in piece.chars() {
         if let Some(q) = quote {
             if c == q {
                 quote = None;
-            }
-        } else if c == '"' || c == '\'' {
-            quote = Some(c);
-        } else if c == '(' {
-            depth += 1;
-        } else if c == ')' {
-            if depth == 0 {
+            } else if LINE_BREAKS.contains(&c) {
                 return true;
             }
-            depth -= 1;
-        } else if c == '{' || c == '}' || (c == ';' && depth == 0) {
-            return true;
+            continue;
+        }
+        match c {
+            '"' | '\'' => quote = Some(c),
+            '(' | '[' => open.push(c),
+            ')' | ']' if open.pop() != Some(opener(c)) => return true,
+            '{' | '}' => return true,
+            ';' if open.is_empty() => return true,
+            _ => {}
         }
     }
-    quote.is_some() || depth != 0
+    quote.is_some() || !open.is_empty()
+}
+
+/// The bracket a closing one closes.
+fn opener(close: char) -> char {
+    match close {
+        ')' => '(',
+        ']' => '[',
+        _ => '{',
+    }
 }
 
 /// Whether a lower-cased value holds a viewport unit standing alone: `(?<![a-z])(vh|vw|...)(?![a-z])`, ignoring case.
@@ -592,7 +657,13 @@ impl<'a> Iterator for Units<'a> {
             let i = self.at;
             match css[i] {
                 b'/' if css.get(i + 1) == Some(&b'*') => match find(css, b"*/", i + 2) {
-                    Some(close) => self.at = close + 2,
+                    Some(close) => {
+                        self.at = close + 2;
+                        // A comment in front of a rule is no part of its selector.
+                        if text::strip(&self.css[self.start..i]).is_empty() {
+                            self.start = self.at;
+                        }
+                    }
                     None => self.done = true,
                 },
                 q @ (b'"' | b'\'') => match string_end(css, i + 1, q) {
@@ -703,11 +774,26 @@ fn read_block(css: &str, open: usize) -> Option<(&str, usize)> {
     None
 }
 
-/// A selector as written, or None to drop its rule.
-fn sanitize_selector(selector: &str) -> Option<&str> {
+/// A selector as written, or None to drop its rule. It is written as it was read, so one holding a comment goes,
+/// though the comment is whole: nothing written marks a comment. A line break is written as a space. A browser ends a
+/// string at one and the sanitizer reads on, so a string in a selector, `[title="x` and a line break, would take in all
+/// up to a later value's string and read what that holds as rules.
+fn sanitize_selector(selector: &str) -> Option<Cow<'_, str>> {
     let selector = text::strip(selector);
-    if selector.is_empty() || text::length(selector) > SELECTOR_MAX || BAD_SELECTOR.is_match(&text::i_folded(selector))
+    if selector.is_empty()
+        || text::length(selector) > SELECTOR_MAX
+        || BAD_SELECTOR.is_match(&text::i_folded(selector))
+        || marks_a_comment(selector)
     {
+        return None;
+    }
+    let selector = if selector.contains(LINE_BREAKS) {
+        Cow::Owned(selector.replace(LINE_BREAKS, " "))
+    } else {
+        Cow::Borrowed(selector)
+    };
+    // A browser must read it as one selector and no more: a bracket left open would take in the next rule.
+    if breaks_out(&selector) {
         return None;
     }
     Some(selector)
@@ -739,8 +825,15 @@ fn rules(css: &str, ctx: &mut CssContext, depth: usize, counted: &mut usize) -> 
                 if depth >= NEST_MAX {
                     continue;
                 }
+                // The condition is written as it was read, and may hold a `/`, a `*` and brackets: one that marks a
+                // comment or leaves a bracket open goes with its at-rule.
                 let prelude = text::strip(prelude);
-                if !prelude.is_empty() && (!PRELUDE.is_match(prelude) || text::lower(prelude).contains("url")) {
+                if !prelude.is_empty()
+                    && (!PRELUDE.is_match(prelude)
+                        || text::lower(prelude).contains("url")
+                        || marks_a_comment(prelude)
+                        || breaks_out(prelude))
+                {
                     continue;
                 }
                 let inner = rules(block, ctx, depth + 1, counted);
