@@ -19,8 +19,8 @@
 //! which characters are space and how a word is lowercased, so a saved search finds what it found there.
 
 pub use crate::text::is_space;
-pub use mm_kernel::isoformat::{Wall, seconds};
 use crate::{text, words};
+pub use mm_kernel::isoformat::{Wall, seconds};
 
 /// The most characters of a query the parser reads, after the space around it.
 pub const MAX_CHARS: usize = 512;
