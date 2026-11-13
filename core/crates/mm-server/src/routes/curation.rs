@@ -8,7 +8,6 @@ use axum::extract::{Request, State};
 use axum::http::{Method, Response, Uri};
 use axum::routing::{get, post};
 use mm_curation::filters::Change;
-use mm_curation::screener::Ruled;
 use mm_kernel::errors::{Failure, Fault, Problem};
 
 use crate::answer;
@@ -63,7 +62,7 @@ async fn rule(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
     };
     let work = {
         let app = app.clone();
-        move || -> Result<Ruled, Failure> {
+        move || -> Result<serde_json::Value, Failure> {
             let curation = &app.curation;
             // A copy that isn't there any more is no pk, and the rule still stands.
             let pk = match &asked.copy {
@@ -75,8 +74,7 @@ async fn rule(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
     };
     let done = tokio::task::spawn_blocking(work).await;
     match done.unwrap_or(Err(Failure::Fault(Fault::new("Panicked")))) {
-        Ok(Ruled::Done(value)) => answer::json(200, &value),
-        Ok(Ruled::TrashNotYet) => answer::not_yet(uri.path()),
+        Ok(value) => answer::json(200, &value),
         Err(failure) => answer::failure(&failure, method.as_str(), uri.path()),
     }
 }

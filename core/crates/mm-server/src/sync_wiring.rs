@@ -1,6 +1,6 @@
 //! The sync's ports bound to their adapters (`bootstrap.mailbox`'s ingest): sessions over mm-imap logged in with
-//! what the Directory keeps, read-only ones in a read-only process; the accounts' kinds; Curation's classifier over
-//! the rule book; and the events, which nothing hears yet.
+//! what the Directory keeps, read-only ones in a read-only process; the accounts' kinds; and Curation's classifier over
+//! the rule book. What a sync says happened is heard in `heard`.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -12,7 +12,7 @@ use mm_curation::rules::RuleSets;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::Outside;
 use mm_mailbox::session::{MailServer, MailServers, ReadOnly, ServerError};
-use mm_mailbox::sync_ports::{Classifier, Envelope, Events, MailboxEvent, SyncAccount, SyncAccounts, Verdict};
+use mm_mailbox::sync_ports::{Classifier, Envelope, SyncAccount, SyncAccounts, Verdict};
 use mm_store::Database;
 use serde_json::Value;
 
@@ -117,12 +117,4 @@ impl Classifier for RuleBookClassifier {
             })
             .collect())
     }
-}
-
-/// The Mailbox's events, which nothing hears on the Rust server yet: the event stream comes with the page's events.
-#[derive(Debug)]
-pub(crate) struct Unheard;
-
-impl Events for Unheard {
-    fn publish(&self, _event: MailboxEvent) {}
 }

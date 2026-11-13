@@ -7,6 +7,7 @@ use std::fmt;
 
 use mm_content::mime::Fields;
 use mm_kernel::errors::Fault;
+use mm_kernel::events::Topic;
 
 /// What a sync needs to know of an account.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -128,8 +129,8 @@ pub enum MailboxEvent {
     Applied { id: i64, account: String },
     /// A change won't happen, and its message is as the server has it again.
     Restored { id: i64, account: String },
-    /// What the page hears, by the name the event stream gives it (`sse.publish`), and what it says.
-    Page { name: &'static str, data: serde_json::Value },
+    /// What the page hears, on the topic the event stream names it by (`sse.publish`), and what it says.
+    Page { topic: Topic, data: serde_json::Value },
 }
 
 pub trait Events: Send + Sync + fmt::Debug {

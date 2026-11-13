@@ -7,7 +7,9 @@ use std::fmt;
 use mm_kernel::errors::Fault;
 use serde_json::Value;
 
+use crate::events::AttentionEvent;
 use crate::followups::FollowUp;
+use crate::snoozing::Restoration;
 
 /// A message's row as Attention reads one.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,8 +31,8 @@ pub struct Copy {
     pub folder: String,
 }
 
-/// What muting a thread found: its unread members, and one member whichever, which can say later which thread this
-/// has become.
+/// What muting a thread found: its unread members, which the mute marked read, and one member whichever, which can
+/// say later which thread this has become.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MuteFound {
     pub unread: Vec<Copy>,
@@ -94,13 +96,29 @@ pub trait AttentionBook: Send + Sync + fmt::Debug {
     ) -> Result<Vec<(i64, Option<Message>)>, Fault>;
     /// Wake those messages now. How many were named.
     fn unsnooze(&self, thread: Option<(&str, &str)>, pks: &[i64]) -> Result<usize, Fault>;
-    /// Every snooze come due by `now` ended: the rows it brings back. One with no copy left in its folder ends too,
-    /// bringing nothing.
-    fn wake_due(&self, now: i64) -> Result<Vec<Message>, Fault>;
+    /// Every snooze come due by `now` ended: the rows it brings back, as they were. One with no copy left in its
+    /// folder ends too, bringing nothing. What comes back read comes back unread, here and on its server, as a flag
+    /// change queued in the same block (`wake:<pk>:<now>`, at `when`), or the next sync that read its flags would
+    /// take that back. Whether a change was queued.
+    fn wake_due(&self, now: i64, when: &str) -> Result<(Vec<Message>, bool), Fault>;
+    /// Undo of a snooze: each message found again where it was, waking when it did before, or not snoozed.
+    fn restore_snoozes(&self, restored: &[Restoration]) -> Result<(), Fault>;
 
-    /// Mute the thread, unless it is muted already (None).
+    /// Mute the thread, unless it is muted already (None). Its unread members are marked read, here and on their
+    /// server, as flag changes queued in the same block (`mute:<pk>:<when>`).
     fn mute(&self, account: &str, thread_id: &str, when: &str) -> Result<Option<MuteFound>, Fault>;
     fn unmute(&self, account: &str, thread_id: &str) -> Result<(), Fault>;
+    /// Undo of a mute, in one block: the thread unmuted, and the one its `member` is in now, a merge having moved
+    /// the mute there; and each of `marked` still there unread again, here and on its server (`unmute:<pk>:<when>`).
+    /// Whether a change was queued.
+    fn unmute_reversed(
+        &self,
+        account: &str,
+        thread_id: &str,
+        member: Option<&Copy>,
+        marked: &[Copy],
+        when: &str,
+    ) -> Result<bool, Fault>;
 
     /// Change the thread's follow-up: `change` is given it as it stands and says what it becomes, None for nothing
     /// to write; `delete` true takes the row away.
@@ -110,9 +128,9 @@ pub trait AttentionBook: Send + Sync + fmt::Debug {
         thread_id: &str,
         change: &mut dyn FnMut(Option<FollowUp>, Option<i64>) -> FollowUpChange,
     ) -> Result<(), Fault>;
-    /// The minute's round over every thread: resolve, expire, promote and detect, for `accounts`, at `now`. Whether
-    /// the due follow-ups changed.
-    fn follow_up_round(&self, accounts: &[String], now: i64, when: &str) -> Result<bool, Fault>;
+    /// The minute's round over every thread: resolve, expire, promote and detect, for `accounts`, at `now`. How many
+    /// are due now, where the due ones changed, a swap included; None where they didn't.
+    fn follow_up_round(&self, accounts: &[String], now: i64, when: &str) -> Result<Option<usize>, Fault>;
     /// Each sent thread of `accounts` still with no reply, the longest wait first, at most `limit`.
     fn waiting_on_others(&self, accounts: &[String], limit: i64) -> Result<Vec<WaitingRow>, Fault>;
 
@@ -144,8 +162,14 @@ pub trait Undo: Send + Sync + fmt::Debug {
     fn push(&self, entry: &Value, group: Option<&str>) -> Result<(), Fault>;
 }
 
-/// A flag change on the mail server, through the Mailbox's queue (the SetFlags port).
+/// The Mailbox's queue, which carries a flag change to its mail server (`Messages.flags_queued`). The change itself
+/// is queued in the block that decided it (`AttentionBook`), as the Python app's `queue_flags` is.
 pub trait Flags: Send + Sync + fmt::Debug {
-    /// Mark the copies read or unread there; None where this server can't yet.
-    fn mark_seen(&self, copies: &[Copy], seen: bool) -> Result<Option<()>, Fault>;
+    /// Flag changes were queued: the queue's worker starts on them now, and the tray shows them.
+    fn flags_queued(&self);
+}
+
+/// Who hears what Attention did, once it has committed (`mailmind.platform.bus`).
+pub trait Events: Send + Sync + fmt::Debug {
+    fn publish(&self, event: AttentionEvent);
 }

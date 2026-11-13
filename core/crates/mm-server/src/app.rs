@@ -36,10 +36,12 @@ use mm_store::{ConfigFile, Database, DbKey, PageFiles};
 use crate::command_wiring::{DirectoryMoveAccounts, RandomTokens};
 use crate::environment::{Environment, Settings};
 use crate::events::Hub;
+use crate::filing_wiring::{CurationFiling, FilingFlags, MuteReverser, SnoozeReverser, UnblockReverser};
 use crate::gates::AccountGates;
+use crate::heard::Heard;
 use crate::page::Page;
 use crate::serve::Work;
-use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier, Unheard};
+use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier};
 use crate::wiring::{CurationPlans, ImapSessions, KnownAccounts, ListedAccounts, MailboxSyncs};
 
 /// Where the app reads the time and its secrets, and what it asks before it opens a file or reaches a host.
@@ -66,7 +68,7 @@ pub struct App {
     /// The change queue: a change to the mail on a server, and `work commands`.
     pub commands: Arc<MailCommands>,
     pub undo: Undo,
-    pub filing: Filing,
+    pub filing: Arc<Filing>,
     /// Each account's INBOX synced, one round at a time (`/api/refresh`).
     pub syncing: Arc<Syncing>,
     /// Ghosts pruned: mail gone from the server (`/api/reconcile`, `work reconcile`).
@@ -87,8 +89,8 @@ pub struct App {
     pub snippets: Snippets,
     /// How each account stands.
     pub health: Health,
-    /// Each account's stored inbox counted by bucket.
-    pub stats: LiveStats,
+    /// Each account's stored inbox counted by bucket, kept until something moves them.
+    pub stats: Arc<LiveStats>,
     /// A Gmail account's own labels.
     pub labels: Labels,
     // Discovery's, Curation's and Attention's use cases.
@@ -125,8 +127,6 @@ impl App {
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
-        let curation = crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone);
-        let attention = crate::bound::Attention::assemble(&database, &directory, &seams.clock, &zone);
         let tidying = crate::bound::Tidying::assemble(&database, &seams.clock);
         let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
         let folders = Arc::new(Folders::new(
@@ -151,14 +151,6 @@ impl App {
             outside: seams.outside.clone(),
             read_only: environment.read_only(),
         });
-        let ingest = Arc::new(Ingest::new(
-            Arc::new(DirectoryAccounts(directory.clone())),
-            servers.clone(),
-            database.clone(),
-            Arc::new(RuleBookClassifier { database: database.clone(), last: Mutex::new(None) }),
-            Arc::new(Unheard),
-            seams.clock.clone(),
-        ));
         // The page's own state, and what the app says of itself.
         let places = Places::new(database.clone(), seams.clock.clone());
         let events = Arc::new(Hub::new().map_err(|_| "the system's random source failed")?);
@@ -166,11 +158,21 @@ impl App {
         let syncs = MailboxSyncs(SyncRecords::new(database.clone()));
         let health = Health::new(Arc::new(syncs), seams.clock.clone());
         let plans = CurationPlans(StoredPlans::new(database.clone(), database.clone()));
-        let stats = LiveStats::new(Arc::new(ListedAccounts(directory.clone())), Arc::new(plans), seams.clock.clone());
+        let stats =
+            Arc::new(LiveStats::new(Arc::new(ListedAccounts(directory.clone())), Arc::new(plans), seams.clock.clone()));
         let labels = Labels::new(database.clone());
         let gates: Arc<dyn Gates> = Arc::new(AccountGates::new(environment.gate_per_account()));
-        // What the Mailbox's changes say, heard by no one yet.
-        let mailbox_events: Arc<dyn Events> = Arc::new(Unheard);
+        // What the Mailbox and Attention say happened, told to the open tabs.
+        let heard = Arc::new(Heard { hub: events.clone(), stats: stats.clone(), folders: folders.clone() });
+        let mailbox_events: Arc<dyn Events> = heard.clone();
+        let ingest = Arc::new(Ingest::new(
+            Arc::new(DirectoryAccounts(directory.clone())),
+            servers.clone(),
+            database.clone(),
+            Arc::new(RuleBookClassifier { database: database.clone(), last: Mutex::new(None) }),
+            mailbox_events.clone(),
+            seams.clock.clone(),
+        ));
         let tokens: Arc<dyn Tokens> = Arc::new(RandomTokens::default());
         let commands = Arc::new(MailCommands::new(CommandParts {
             store: database.clone(),
@@ -183,9 +185,7 @@ impl App {
             read_only: environment.read_only(),
         }));
         let reversals = Arc::new(Reversals::new(commands.clone(), ingest.clone()));
-        let undo =
-            Undo::new(database.clone(), gates.clone(), seams.clock.clone(), mailbox_events.clone(), vec![reversals]);
-        let filing = Filing::new(FilingParts {
+        let filing = Arc::new(Filing::new(FilingParts {
             commands: commands.clone(),
             ingest: ingest.clone(),
             folders: folders.clone(),
@@ -193,7 +193,25 @@ impl App {
             clock: seams.clock.clone(),
             events: mailbox_events.clone(),
             tokens,
-        });
+            stats: stats.clone(),
+        }));
+        // Curation's and Attention's, which file and queue through the Mailbox, and whose changes Undo takes back.
+        let curation_filing = Arc::new(CurationFiling { filing: filing.clone(), stats: stats.clone() });
+        let curation = crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone, curation_filing);
+        let flags = Arc::new(FilingFlags(filing.clone()));
+        let attention = crate::bound::Attention::assemble(&database, &directory, &seams.clock, &zone, flags, heard);
+        let undo = Undo::new(
+            database.clone(),
+            gates.clone(),
+            seams.clock.clone(),
+            mailbox_events.clone(),
+            vec![
+                reversals,
+                Arc::new(SnoozeReverser(attention.snoozing.clone())),
+                Arc::new(MuteReverser(attention.muting.clone())),
+                Arc::new(UnblockReverser(curation.screener.clone())),
+            ],
+        );
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),
@@ -211,6 +229,7 @@ impl App {
             folders: folders.clone(),
             events: mailbox_events,
             clock: seams.clock.clone(),
+            stats: stats.clone(),
         });
         Ok(App {
             port,

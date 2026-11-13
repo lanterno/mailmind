@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mm_kernel::errors::{Failure, Fault, Kind, Problem};
+use mm_kernel::events::Topic;
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::{Clock, Moment};
 use serde_json::{Value, json};
@@ -18,6 +19,7 @@ use crate::commands::MailCommands;
 use crate::folders::Folders;
 use crate::gates::{Gates, Priority, Refused, Wait, on_gate};
 use crate::ingest::Ingest;
+use crate::stats::LiveStats;
 use crate::sync_ports::{Events, MailboxEvent};
 use crate::undo;
 
@@ -104,6 +106,7 @@ pub struct Filing {
     clock: Arc<dyn Clock>,
     events: Arc<dyn Events>,
     tokens: Arc<dyn Tokens>,
+    stats: Arc<LiveStats>,
 }
 
 /// What wires Filing.
@@ -116,6 +119,8 @@ pub struct FilingParts {
     pub clock: Arc<dyn Clock>,
     pub events: Arc<dyn Events>,
     pub tokens: Arc<dyn Tokens>,
+    /// The counts the page shows, which a change that lands, or is given back, moves.
+    pub stats: Arc<LiveStats>,
 }
 
 impl Filing {
@@ -123,21 +128,27 @@ impl Filing {
     pub const PENDING_WAIT: Duration = Duration::from_secs(15);
 
     pub fn new(parts: FilingParts) -> Filing {
-        let FilingParts { commands, ingest, folders, gates, clock, events, tokens } = parts;
-        Filing { commands, ingest, folders, gates, clock, events, tokens }
+        let FilingParts { commands, ingest, folders, gates, clock, events, tokens, stats } = parts;
+        Filing { commands, ingest, folders, gates, clock, events, tokens, stats }
     }
 
-    /// The worker has it: the tray shows it.
-    fn flags_queued(&self) {
-        self.events.publish(MailboxEvent::Page { name: "outbox", data: json!({}) });
+    /// The worker has changes to carry: it starts on them now, and the tray shows them. What another context queued
+    /// on its own (a mute marking its thread read, a snooze waking read mail unread) says so here too.
+    pub fn flags_queued(&self) {
+        self.commands.kick();
+        self.stats.invalidate();
+        self.events.publish(MailboxEvent::Page { topic: Topic::Outbox, data: json!({}) });
     }
 
     /// A queued change reached the server or won't, or a person asked it again or dropped it.
-    fn settled(&self) {
-        self.events.publish(MailboxEvent::Page { name: "commands-changed", data: json!({}) });
+    pub fn settled(&self) {
+        self.stats.invalidate();
+        self.events.publish(MailboxEvent::Page { topic: Topic::CommandsChanged, data: json!({}) });
     }
 
+    /// A change landed on its server: the counts, and the rail's badges, move.
     fn invalidate(&self) {
+        self.stats.invalidate();
         if let Err(fault) = self.folders.invalidate(None) {
             log::warning(TAG, "the rail's counts kept couldn't go", &[], Some(fault.class));
         }
@@ -165,7 +176,11 @@ impl Filing {
                 Ok(json!({"ok": true, "msg": "queued", "status": outcome.name(), "undoable": accepted.undoable}))
             }
             Outcome::Cancelled => Ok(json!({"ok": true, "msg": "cancelled", "undoable": false})),
-            outcome => Err(Problem::new(Kind::Conflict, refusal(kind, outcome)).into()),
+            outcome => {
+                // The message is listed again.
+                self.stats.invalidate();
+                Err(Problem::new(Kind::Conflict, refusal(kind, outcome)).into())
+            }
         }
     }
 
@@ -181,6 +196,18 @@ impl Filing {
         let push = self.pushing(undo_group);
         let accepted = self.commands.accept_move(kind, pk, mutation_id, Some(&push), to)?;
         self.submit_move(kind, accepted.as_ref())
+    }
+
+    /// Trash message `pk` with nothing for Undo to reverse, as blocking its sender does: whether it went or will go.
+    /// One that has gone, or that its server wouldn't take, is where it was.
+    pub fn trash_now(&self, pk: i64) -> Result<bool, Fault> {
+        let accepted = self.commands.accept_move("trash", pk, None, None, None)?;
+        match self.submit_move("trash", accepted.as_ref()) {
+            Ok(_) => Ok(true),
+            Err(Failure::Problem(no)) if matches!(no.kind, Kind::NotFound | Kind::Conflict) => Ok(false),
+            Err(Failure::Problem(_)) => Err(Fault::new("Problem")),
+            Err(Failure::Fault(fault)) => Err(fault),
+        }
     }
 
     /// A flag change, through the command path: what the person hears of it.

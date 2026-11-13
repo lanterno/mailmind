@@ -13,7 +13,8 @@ use mm_kernel::relative::{ago, rel_time};
 use mm_kernel::seams::Clock;
 use serde_json::{Value, json};
 
-use crate::ports::{Accounts, AttentionBook, FollowUpChange, WaitingRow};
+use crate::events::AttentionEvent;
+use crate::ports::{Accounts, AttentionBook, Events, FollowUpChange, WaitingRow};
 use crate::threads::{Named, Threads};
 
 /// The grace before a sent-no-reply or unanswered thread surfaces as Waiting, in days.
@@ -104,12 +105,18 @@ pub struct FollowUps {
     book: Arc<dyn AttentionBook>,
     threads: Threads,
     accounts: Arc<dyn Accounts>,
+    events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
 }
 
 impl FollowUps {
-    pub fn new(book: Arc<dyn AttentionBook>, accounts: Arc<dyn Accounts>, clock: Arc<dyn Clock>) -> FollowUps {
-        FollowUps { threads: Threads::new(book.clone(), accounts.clone()), book, accounts, clock }
+    pub fn new(
+        book: Arc<dyn AttentionBook>,
+        accounts: Arc<dyn Accounts>,
+        events: Arc<dyn Events>,
+        clock: Arc<dyn Clock>,
+    ) -> FollowUps {
+        FollowUps { threads: Threads::new(book.clone(), accounts.clone()), book, accounts, events, clock }
     }
 
     fn now_iso(&self) -> String {
@@ -123,7 +130,9 @@ impl FollowUps {
         accounts.sort();
         accounts.dedup();
         let now = self.clock.now().whole_seconds();
-        Ok(self.book.follow_up_round(&accounts, now, &self.now_iso())?)
+        let Some(count) = self.book.follow_up_round(&accounts, now, &self.now_iso())? else { return Ok(false) };
+        self.events.publish(AttentionEvent::FollowUpsChanged { count });
+        Ok(true)
     }
 
     /// `POST /api/followups/dismiss`.
@@ -136,6 +145,7 @@ impl FollowUps {
             Some(f) => FollowUpChange::Settle(f),
             None => FollowUpChange::Nothing,
         })?;
+        self.events.publish(AttentionEvent::FollowUpDismissed { account, thread_id: thread_id.clone() });
         Ok(json!({"ok": true, "thread_id": thread_id}))
     }
 
@@ -154,6 +164,7 @@ impl FollowUps {
                 FollowUpChange::Nothing
             }
         })?;
+        self.events.publish(AttentionEvent::ReplyLaterChanged { account, thread_id: thread_id.clone() });
         Ok(json!({"ok": true, "thread_id": thread_id, "on": on}))
     }
 

@@ -82,10 +82,12 @@ pub trait Mailboxes: Send + Sync + fmt::Debug {
     fn known(&self) -> Result<HashSet<String>, Fault>;
 }
 
-/// What Curation asks of the Mailbox that reaches a mail server.
+/// What Curation asks of the Mailbox: a change that reaches a mail server, and the counts it keeps.
 pub trait Filing: Send + Sync + fmt::Debug {
-    /// Trash the stored copy `pk` now, whether it went; None where this server can't yet.
-    fn trash_now(&self, pk: i64) -> Result<Option<bool>, Fault>;
+    /// Trash the stored copy `pk` now, with nothing for Undo to reverse: whether it went or will go.
+    fn trash_now(&self, pk: i64) -> Result<bool, Fault>;
+    /// What is stored was classified again: the counts the page shows have moved.
+    fn stats_changed(&self);
 }
 
 /// Whether a search can be judged of mail as it arrives: Discovery's to say.

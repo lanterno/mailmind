@@ -31,6 +31,9 @@ mod wiring;
 // Discovery's, Curation's and Attention's use cases bound, and a POST's body as their routes read it.
 pub mod bound;
 pub mod posted;
+// What the contexts ask of the Mailbox's filing, and what they say happened.
+mod filing_wiring;
+mod heard;
 
 pub use app::{App, Seams};
 pub use serve::{Server, Work};

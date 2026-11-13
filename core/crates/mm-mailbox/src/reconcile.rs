@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use mm_kernel::errors::{Failure, Fault, Problem};
+use mm_kernel::events::Topic;
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_kernel::when;
@@ -18,6 +19,7 @@ use crate::command_ports::{self, CommandStore, MoveAccounts};
 use crate::folders::Folders;
 use crate::gates::{Gates, Priority, Refused, Wait, on_gate};
 use crate::session::{MailServers, Search, ServerError};
+use crate::stats::LiveStats;
 use crate::sync_ports::{Events, MailboxEvent};
 
 const TAG: &str = "reconcile";
@@ -73,6 +75,7 @@ pub struct Reconciler {
     folders: Arc<Folders>,
     events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
+    stats: Arc<LiveStats>,
 }
 
 /// What wires the Reconciler.
@@ -85,12 +88,14 @@ pub struct ReconcilerParts {
     pub folders: Arc<Folders>,
     pub events: Arc<dyn Events>,
     pub clock: Arc<dyn Clock>,
+    /// The counts the page shows, which a prune moves.
+    pub stats: Arc<LiveStats>,
 }
 
 impl Reconciler {
     pub fn new(parts: ReconcilerParts) -> Reconciler {
-        let ReconcilerParts { store, accounts, servers, gates, folders, events, clock } = parts;
-        Reconciler { store, accounts, servers, gates, folders, events, clock }
+        let ReconcilerParts { store, accounts, servers, gates, folders, events, clock, stats } = parts;
+        Reconciler { store, accounts, servers, gates, folders, events, clock, stats }
     }
 
     /// The folders reconcile looks at: each one a sync has stored, INBOX first.
@@ -202,9 +207,12 @@ impl Reconciler {
         }
         // Committed before the next turn asks a server anything.
         self.trail(&[&res], true)?;
+        self.stats.invalidate();
         self.folders.invalidate(Some(email))?;
-        self.events
-            .publish(MailboxEvent::Page { name: "reconcile", data: json!({"account": email, "pruned": res.pruned}) });
+        self.events.publish(MailboxEvent::Page {
+            topic: Topic::Reconcile,
+            data: json!({"account": email, "pruned": res.pruned}),
+        });
         log::info(TAG, "auto: pruned %(count)s ghost row(s)", &[(Field::Count, &res.pruned.to_string())]);
         Ok(())
     }
@@ -230,6 +238,7 @@ impl Reconciler {
                 // After every account's server, committed as it ends.
                 self.trail(&pruned, false)?;
             }
+            self.stats.invalidate();
         }
         Ok(json!({"ok": true, "dry_run": dry_run, "results": results.iter().map(Pruned::to_json).collect::<Vec<_>>(),
                   "total_ghosts": results.iter().map(|r| r.ghosts).sum::<usize>(),

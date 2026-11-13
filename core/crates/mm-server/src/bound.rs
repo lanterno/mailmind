@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use mm_accounts::Directory;
 use mm_attention::followups::FollowUps;
-use mm_attention::muting::Muting;
-use mm_attention::ports::{Accounts, Copy, Flags};
-use mm_attention::snoozing::Snoozing;
+use mm_attention::muting::{Muting, MutingParts};
+use mm_attention::ports::{Accounts, Events as AttentionEvents, Flags};
+use mm_attention::snoozing::{Snoozing, SnoozingParts};
 use mm_attention::tasks::Tasks;
 use mm_curation::cleanup::Cleanup;
 use mm_curation::filters::Filters;
@@ -137,16 +137,6 @@ impl Accounts for Enabled {
     }
 }
 
-/// Trashing a copy now is a change on its mail server, which this server makes no change on yet.
-#[derive(Debug)]
-pub(crate) struct NoFiling;
-
-impl Filing for NoFiling {
-    fn trash_now(&self, _pk: i64) -> Result<Option<bool>, Fault> {
-        Ok(None)
-    }
-}
-
 /// Whether a search can be a filter, as Discovery judges one, with a date that names no zone placed in the person's.
 #[derive(Debug)]
 pub(crate) struct ArrivalConditions(pub(crate) Arc<dyn Zone>);
@@ -181,7 +171,7 @@ impl FilterIds for Drawn {
 /// Curation's use cases.
 #[derive(Debug)]
 pub struct Curation {
-    pub screener: Screener,
+    pub screener: Arc<Screener>,
     pub filters: Filters,
     pub audit: Audit,
     pub cleanup: Cleanup,
@@ -195,16 +185,17 @@ impl Curation {
         directory: &Arc<Directory>,
         clock: &Arc<dyn Clock>,
         zone: &Arc<dyn Zone>,
+        filing: Arc<dyn Filing>,
     ) -> Curation {
         let store = Arc::new(CurationStore::new(database.clone(), clock.clone()));
         Curation {
-            screener: Screener::new(
+            screener: Arc::new(Screener::new(
                 store.clone(),
                 store.clone(),
                 Arc::new(Enabled(directory.clone())),
-                Arc::new(NoFiling),
+                filing,
                 clock.clone(),
-            ),
+            )),
             filters: Filters::new(store.clone(), Arc::new(ArrivalConditions(zone.clone())), Arc::new(Drawn)),
             audit: Audit::new(store.clone()),
             cleanup: Cleanup::new(store.clone(), store, clock.clone()),
@@ -218,21 +209,11 @@ impl Curation {
     }
 }
 
-/// A flag change on a mail server goes through the Mailbox's queue, which this server has none of yet.
-#[derive(Debug)]
-pub(crate) struct NoFlags;
-
-impl Flags for NoFlags {
-    fn mark_seen(&self, _copies: &[Copy], _seen: bool) -> Result<Option<()>, Fault> {
-        Ok(None)
-    }
-}
-
 /// Attention's use cases.
 #[derive(Debug)]
 pub struct Attention {
-    pub snoozing: Snoozing,
-    pub muting: Muting,
+    pub snoozing: Arc<Snoozing>,
+    pub muting: Arc<Muting>,
     pub follow_ups: FollowUps,
     pub tasks: Tasks,
     /// The database, for the copies and the message a request names.
@@ -245,16 +226,31 @@ impl Attention {
         directory: &Arc<Directory>,
         clock: &Arc<dyn Clock>,
         zone: &Arc<dyn Zone>,
+        flags: Arc<dyn Flags>,
+        events: Arc<dyn AttentionEvents>,
     ) -> Attention {
         let book = Arc::new(AttentionStore::new(database.clone()));
         let accounts = Arc::new(Enabled(directory.clone()));
         let undo = Arc::new(UndoStack::new(database.clone(), clock.clone()));
-        let flags = Arc::new(NoFlags);
         Attention {
-            snoozing: Snoozing::new(book.clone(), undo.clone(), flags.clone(), clock.clone(), zone.clone()),
-            muting: Muting::new(book.clone(), accounts.clone(), undo, flags, clock.clone()),
-            follow_ups: FollowUps::new(book.clone(), accounts.clone(), clock.clone()),
-            tasks: Tasks::new(book, accounts, clock.clone(), zone.clone()),
+            snoozing: Arc::new(Snoozing::new(SnoozingParts {
+                book: book.clone(),
+                undo: undo.clone(),
+                flags: flags.clone(),
+                events: events.clone(),
+                clock: clock.clone(),
+                zone: zone.clone(),
+            })),
+            muting: Arc::new(Muting::new(MutingParts {
+                book: book.clone(),
+                accounts: accounts.clone(),
+                undo,
+                flags,
+                events: events.clone(),
+                clock: clock.clone(),
+            })),
+            follow_ups: FollowUps::new(book.clone(), accounts.clone(), events.clone(), clock.clone()),
+            tasks: Tasks::new(book, accounts, events, clock.clone(), zone.clone()),
             database: database.clone(),
         }
     }

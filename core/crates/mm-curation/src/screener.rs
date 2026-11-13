@@ -17,15 +17,6 @@ use crate::text::lower;
 /// The most the queue lists, of however many are left to decide on.
 pub const SHOWN: usize = 100;
 
-/// What a verdict on a sender came to.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Ruled {
-    Done(Value),
-    /// The rule is saved and the mail it covers classified again, but trashing the message named is a change on
-    /// its mail server, which this server can't make yet.
-    TrashNotYet,
-}
-
 #[derive(Debug)]
 pub struct Screener {
     rules: Arc<dyn RuleBook>,
@@ -84,7 +75,7 @@ impl Screener {
 
     /// A keep, block or remove from the person, on a sender or a domain; a block with `pk` trashes that copy too.
     /// `verdict` is what the request said, if anything.
-    pub fn rule(&self, token: Option<&str>, verdict: Option<&str>, pk: Option<i64>) -> Result<Ruled, Failure> {
+    pub fn rule(&self, token: Option<&str>, verdict: Option<&str>, pk: Option<i64>) -> Result<Value, Failure> {
         let token = token_of(token.unwrap_or_default());
         if !is_token(&token) {
             return Err(Problem::refused("invalid token (need a domain or an address)").into());
@@ -108,26 +99,31 @@ impl Screener {
             _ => return Err(Problem::refused("verdict must be keep|block|remove").into()),
         };
         let trashed = match (verdict, pk) {
-            // Block closes the loop: it trashes the message too, and isn't undone.
-            (Some("block"), Some(pk)) => match self.filing.trash_now(pk) {
-                Ok(Some(trashed)) => trashed,
-                Ok(None) => {
-                    self.reclassify(&token)?;
-                    return Ok(Ruled::TrashNotYet);
-                }
-                Err(_) => false,
-            },
+            // Block closes the loop: it trashes the message too, and isn't undone. However that goes, the rule stands.
+            (Some("block"), Some(pk)) => self.filing.trash_now(pk).unwrap_or(false),
             _ => false,
         };
         let reclassified = self.reclassify(&token)?;
-        Ok(Ruled::Done(json!({
+        self.filing.stats_changed();
+        Ok(json!({
             "ok": true,
             "token": token,
             "placed_in": placed,
             "reclassified": reclassified,
             "trashed": trashed,
             "rules": self.rules.load()?.to_json(),
-        })))
+        }))
+    }
+
+    /// Undo of a block (`Cleanup.reverse_block`, an `unblock` entry): the rule on `token` goes, and the mail it
+    /// decided is classified again. Whether that went.
+    pub fn reverse_block(&self, token: &str) -> bool {
+        let token = token_of(token);
+        let removed = self.rules.change(&mut |rules| {
+            rules.remove(&token);
+            Ok(())
+        });
+        removed.is_ok() && self.reclassify(&token).is_ok()
     }
 
     /// A rule on `token`, a sender or a domain, changed: classify again the stored mail it covers, as mail arriving

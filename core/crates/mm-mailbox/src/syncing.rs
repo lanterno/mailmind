@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use mm_kernel::errors::{Failure, Fault, Problem};
+use mm_kernel::events::Topic;
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_kernel::when;
@@ -120,8 +121,8 @@ impl Syncing {
         Ok(())
     }
 
-    fn page(&self, name: &'static str, data: serde_json::Value) {
-        self.events.publish(MailboxEvent::Page { name, data });
+    fn page(&self, topic: Topic, data: serde_json::Value) {
+        self.events.publish(MailboxEvent::Page { topic, data });
     }
 
     /// Sync the INBOX of each account named, or every account's: how many new messages it kept. The caller holds
@@ -139,9 +140,9 @@ impl Syncing {
                     self.set_status(&email, "ok", format!("+{kept}"))?;
                     let at = when::iso(self.clock.now());
                     command_ports::write(&*self.store, |tx| tx.record_sync_result(&email, None, &at))?;
-                    self.page("sync-done", json!({"account": email, "kept": kept, "junk": junk}));
+                    self.page(Topic::SyncDone, json!({"account": email, "kept": kept, "junk": junk}));
                     if kept > 0 {
-                        self.page("new-mail", json!({"account": email, "folder": "INBOX", "count": kept}));
+                        self.page(Topic::NewMail, json!({"account": email, "folder": "INBOX", "count": kept}));
                     }
                 }
                 Err(error) => {

@@ -9,6 +9,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use mm_kernel::errors::{Failure, Fault, Kind, Problem};
+use mm_kernel::events::Topic;
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::{Clock, Moment};
 use mm_kernel::when;
@@ -246,7 +247,7 @@ impl Undo {
             }
             return Err(Problem::new(Kind::Conflict, COULDNT).into());
         }
-        self.events.publish(MailboxEvent::Page { name: "undo-done", data: json!({}) });
+        self.events.publish(MailboxEvent::Page { topic: Topic::UndoDone, data: json!({}) });
         answer["remaining"] = json!(self.entries()?.len());
         Ok(answer)
     }

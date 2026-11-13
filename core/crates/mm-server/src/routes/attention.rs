@@ -8,7 +8,6 @@ use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::http::{Method, Response, Uri};
 use axum::routing::{get, post};
-use mm_attention::muting::Muted;
 use mm_attention::snoozing::{BULK_CAP, PRESETS, Target, Until};
 use mm_attention::threads::Named;
 use mm_kernel::errors::{Failure, Fault, Problem};
@@ -180,11 +179,10 @@ async fn mute(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
     };
     let work = {
         let app = app.clone();
-        move || -> Result<Muted, Failure> { app.attention.muting.mute(&named(&app, asked)?, group.as_deref()) }
+        move || -> Result<Value, Failure> { app.attention.muting.mute(&named(&app, asked)?, group.as_deref()) }
     };
     match tokio::task::spawn_blocking(work).await.unwrap_or(Err(Failure::Fault(Fault::new("Panicked")))) {
-        Ok(Muted::Done(value)) => answer::json(200, &value),
-        Ok(Muted::MarkNotYet) => answer::not_yet(uri.path()),
+        Ok(value) => answer::json(200, &value),
         Err(failure) => answer::failure(&failure, method.as_str(), uri.path()),
     }
 }

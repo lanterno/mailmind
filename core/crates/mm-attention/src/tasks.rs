@@ -11,7 +11,8 @@ use mm_kernel::when::{civil, days_from_civil};
 use mm_kernel::zone::{self, Zone};
 use serde_json::{Value, json};
 
-use crate::ports::{Accounts, AttentionBook, TaskRow};
+use crate::events::AttentionEvent;
+use crate::ports::{Accounts, AttentionBook, Events, TaskRow};
 
 /// The longest title a task keeps, in characters.
 pub const TITLE_MAX: usize = 200;
@@ -118,6 +119,7 @@ pub fn as_listed(row: &TaskRow) -> Value {
 pub struct Tasks {
     book: Arc<dyn AttentionBook>,
     accounts: Arc<dyn Accounts>,
+    events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
     zone: Arc<dyn Zone>,
 }
@@ -126,10 +128,11 @@ impl Tasks {
     pub fn new(
         book: Arc<dyn AttentionBook>,
         accounts: Arc<dyn Accounts>,
+        events: Arc<dyn Events>,
         clock: Arc<dyn Clock>,
         zone: Arc<dyn Zone>,
     ) -> Tasks {
-        Tasks { book, accounts, clock, zone }
+        Tasks { book, accounts, events, clock, zone }
     }
 
     fn now_iso(&self) -> String {
@@ -158,6 +161,7 @@ impl Tasks {
         let Some(task) = self.book.add_task(pk, &title, due.as_deref(), &self.now_iso())? else {
             return Err(Problem::not_found("not found").into());
         };
+        self.events.publish(AttentionEvent::TasksChanged);
         Ok(json!({"ok": true, "task": as_listed(&task)}))
     }
 
@@ -172,18 +176,19 @@ impl Tasks {
     /// `POST /api/tasks/done`: done, or with `done` false open again.
     pub fn mark(&self, id: i64, done: Option<bool>) -> Result<Value, Failure> {
         let done_at = (done != Some(false)).then(|| self.now_iso());
-        Self::said(self.book.set_task_done(id, done_at.as_deref())?)
+        self.said(self.book.set_task_done(id, done_at.as_deref())?)
     }
 
     /// `POST /api/tasks/remove`.
     pub fn remove(&self, id: i64) -> Result<Value, Failure> {
-        Self::said(self.book.remove_task(id)?)
+        self.said(self.book.remove_task(id)?)
     }
 
-    fn said(found: bool) -> Result<Value, Failure> {
+    fn said(&self, found: bool) -> Result<Value, Failure> {
         if !found {
             return Err(Problem::not_found("that task is gone").into());
         }
+        self.events.publish(AttentionEvent::TasksChanged);
         Ok(json!({"ok": true}))
     }
 }

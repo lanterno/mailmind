@@ -1,5 +1,7 @@
 //! Attention's tables (`mailmind.attention.adapters.sqlite`): `snoozes`, `muted`, `followups` and `tasks`, and the
-//! undo stack its use cases push on (`platform.undo`). Each call is one block.
+//! undo stack its use cases push on (`platform.undo`). Each call is one block. A mute marking its thread read, and a
+//! snooze waking read mail unread, queue that flag change for the server in their own block, as the Python app's
+//! `queue_flags` does in the use case's transaction.
 //!
 //! The minute's round of follow-ups runs as SQL over every thread at once. Each statement is built, condition by
 //! condition, in the order `mailmind.attention.domain.followups` names them.
@@ -10,6 +12,7 @@ use std::sync::Arc;
 
 use mm_attention::followups::FollowUp;
 use mm_attention::ports::{AttentionBook, Copy, FollowUpChange, Message, MuteFound, TaskRow, Undo, WaitingRow};
+use mm_attention::snoozing::Restoration;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment};
 use rusqlite::{Connection, OptionalExtension, Row, named_params, params};
@@ -18,6 +21,7 @@ use serde_json::Value;
 use crate::blocks;
 use crate::db::Database;
 use crate::discovery::not_snoozed_sql;
+use crate::mailbox_sync::{index_message, queue_flags};
 
 /// Attention's view of the database.
 pub struct AttentionStore {
@@ -92,6 +96,14 @@ fn clear_snooze(c: &Connection, pk: i64) -> rusqlite::Result<()> {
 
 fn copy_of(r: &Row) -> rusqlite::Result<Copy> {
     Ok(Copy { key: r.get("message_key")?, folder: r.get("folder")? })
+}
+
+/// The pk the message with this key has now in `folder`, the newest where there are two, or None
+/// (`messages.copy_in_folder`).
+fn copy_in_folder(c: &Connection, copy: &Copy) -> rusqlite::Result<Option<i64>> {
+    c.prepare_cached("SELECT pk FROM messages WHERE message_key=? AND folder=? ORDER BY pk DESC LIMIT 1")?
+        .query_row(params![copy.key, copy.folder], |r| r.get(0))
+        .optional()
 }
 
 fn follow_up(c: &Connection, account: &str, thread_id: &str) -> rusqlite::Result<Option<FollowUp>> {
@@ -263,7 +275,7 @@ impl AttentionBook for AttentionStore {
         })
     }
 
-    fn wake_due(&self, now: i64) -> Result<Vec<Message>, Fault> {
+    fn wake_due(&self, now: i64, when: &str) -> Result<(Vec<Message>, bool), Fault> {
         self.db.write(|c| {
             // A snooze come due with no copy left in its folder ends here: the message was filed, and bringing it
             // back later isn't waking it.
@@ -280,10 +292,33 @@ impl AttentionBook for AttentionStore {
                 )?
                 .query_map([now], message_of)?
                 .collect::<rusqlite::Result<_>>()?;
+            let mut marked = false;
             for r in &due {
                 clear_snooze(c, r.pk)?;
+                // What wakes comes back unread; one already unread asks nothing of its server.
+                if r.seen {
+                    marked |= queue_flags(c, r.pk, &[("seen", false)], &format!("wake:{}:{now}", r.pk), when)?;
+                }
             }
-            Ok(due)
+            Ok((due, marked))
+        })
+    }
+
+    fn restore_snoozes(&self, restored: &[Restoration]) -> Result<(), Fault> {
+        self.db.write(|c| {
+            for r in restored {
+                let pk = match &r.place {
+                    Some(place) => copy_in_folder(c, place)?,
+                    None => Some(r.pk),
+                };
+                let Some(pk) = pk else { continue };
+                match r.until {
+                    Some(until) => set_snooze(c, pk, until)?,
+                    None => clear_snooze(c, pk)?,
+                }
+                index_message(c, pk)?;
+            }
+            Ok(())
         })
     }
 
@@ -295,10 +330,16 @@ impl AttentionBook for AttentionStore {
             if muted {
                 return Ok(None);
             }
-            let unread = c
-                .prepare_cached("SELECT message_key, folder FROM messages WHERE account=? AND thread_id=? AND seen=0")?
-                .query_map([account, thread_id], copy_of)?
+            let unread: Vec<(i64, Copy)> = c
+                .prepare_cached(
+                    "SELECT pk, message_key, folder FROM messages WHERE account=? AND thread_id=? AND seen=0",
+                )?
+                .query_map([account, thread_id], |r| Ok((r.get("pk")?, copy_of(r)?)))?
                 .collect::<rusqlite::Result<_>>()?;
+            for (pk, _) in &unread {
+                queue_flags(c, *pk, &[("seen", true)], &format!("mute:{pk}:{when}"), when)?;
+            }
+            let unread = unread.into_iter().map(|(_, copy)| copy).collect();
             let member = c
                 .prepare_cached(
                     "SELECT message_key, folder FROM messages WHERE account=? AND thread_id=? \
@@ -316,6 +357,36 @@ impl AttentionBook for AttentionStore {
         self.db.write(|c| {
             c.prepare_cached("DELETE FROM muted WHERE account=? AND thread_id=?")?.execute([account, thread_id])?;
             Ok(())
+        })
+    }
+
+    fn unmute_reversed(
+        &self,
+        account: &str,
+        thread_id: &str,
+        member: Option<&Copy>,
+        marked: &[Copy],
+        when: &str,
+    ) -> Result<bool, Fault> {
+        self.db.write(|c| {
+            // A merge moves a mute to the thread that took this one in, and the entry doesn't hear of it: ask the
+            // member which thread it is in now. One filed elsewhere since can't say.
+            let mut threads = BTreeSet::from([thread_id.to_owned()]);
+            if let Some(pk) = member.map(|m| copy_in_folder(c, m)).transpose()?.flatten()
+                && let Some(now) = message(c, pk)?.and_then(|m| m.thread_id).filter(|t| !t.is_empty())
+            {
+                threads.insert(now);
+            }
+            for thread in &threads {
+                c.prepare_cached("DELETE FROM muted WHERE account=? AND thread_id=?")?.execute([account, thread])?;
+            }
+            let mut queued = false;
+            for copy in marked {
+                if let Some(pk) = copy_in_folder(c, copy)? {
+                    queued |= queue_flags(c, pk, &[("seen", false)], &format!("unmute:{pk}:{when}"), when)?;
+                }
+            }
+            Ok(queued)
         })
     }
 
@@ -362,7 +433,7 @@ impl AttentionBook for AttentionStore {
         })
     }
 
-    fn follow_up_round(&self, accounts: &[String], now: i64, when: &str) -> Result<bool, Fault> {
+    fn follow_up_round(&self, accounts: &[String], now: i64, when: &str) -> Result<Option<usize>, Fault> {
         use mm_attention::followups::{EXPIRE_DAYS, GRACE_DAYS, days_before};
         self.db.write(|c| {
             let before = due_keys(c)?;
@@ -380,7 +451,8 @@ impl AttentionBook for AttentionStore {
                 ":cutoff": days_before(now, GRACE_DAYS),
                 ":floor": days_before(now, EXPIRE_DAYS),
             })?;
-            Ok(due_keys(c)? != before)
+            let after = due_keys(c)?;
+            Ok((after != before).then_some(after.len()))
         })
     }
 

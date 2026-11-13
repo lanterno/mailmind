@@ -15,14 +15,7 @@ pub fn work(app: &App, argument: &str) -> String {
     let text = |i: usize| args.get(i).and_then(Value::as_str).unwrap_or_default();
     let done = match job {
         "sync" => app.ingest.sync_folder(text(0), text(1), false, None).map(|_| ()).map_err(|e| e.class().to_owned()),
-        "snoozes" => match app.attention.snoozing.wake_due() {
-            // What wakes read comes back unread on its server too, which takes the Mailbox's queue.
-            Ok(woken) if woken.left_read > 0 => {
-                return format!("failed not on the Rust server yet: {} woken message(s) left read", woken.left_read);
-            }
-            Ok(_) => Ok(()),
-            Err(failure) => Err(failure.to_string()),
-        },
+        "snoozes" => app.attention.snoozing.wake_due().map(|_| ()).map_err(|failure| failure.to_string()),
         "follow-ups" => app.attention.follow_ups.tick().map(|_| ()).map_err(|failure| failure.to_string()),
         "commands" => app.commands.drain().map_err(|fault| fault.class.to_owned()),
         "reconcile" => app.reconciler.auto_reconcile_one(text(0)).map_err(|fault| fault.class.to_owned()),
