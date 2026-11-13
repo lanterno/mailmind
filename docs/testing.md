@@ -42,9 +42,10 @@ rule, an adapter against a fake server. `tests/integration/<context>/` holds the
 `golden` fixture, directly or through another): a route as a browser calls it, or the app over the fake servers. A file whose
 tests go both ways keeps its name in each, so `tests/{unit,integration}/http/test_problems.py` runs both halves. A rule a use case
 decides is tested in `unit/`, and `integration/` holds the route that reaches it. `contract/` holds one promise through every
-adapter (and the fakes against themselves), `security/` what must never get through, `characterization/` the app as it answers
-(goldens and, in a folder per context, the hard-won fixes by subject) and `e2e/` the whole program. `support/` holds the helpers,
-on pytest's path, so a test says `import problems`.
+adapter (and the fakes against themselves), `security/` what must never get through, `api/` what any MailMind server answers
+over HTTP (the golden suites, run against the server as a program), `characterization/` the app as it answers, in a folder per
+context (the hard-won fixes by subject), and `e2e/` the whole program. `support/` holds the helpers, on pytest's path, so a test
+says `import problems`.
 
 They pin today's behaviour ahead of the refactor. Each test sees only fictional
 data (`example.test` addresses) in a temp directory. `tests/conftest.py` sets that up before any
@@ -89,6 +90,23 @@ The fixtures, from the bottom up:
   paths and random ids. `uv run pytest --update-golden` rewrites the files; review the diff like
   code. `tests/golden/schema_v<N>.sql` is the schema snapshot: rename it in the commit that adds
   migration N.
+
+`tests/api/` holds the golden suites as a contract any MailMind server keeps, so a server written in another language can be held
+to the Python one's answers (docs/clients.md, step 1). Its `app` fixture (`tests/api/conftest.py`) starts the server as a program
+over the test's world: `tests/support/serve_python.py`, or the command `MAILMIND_TEST_SERVER` names. The test reaches it over HTTP,
+with the CSRF token its page carries, and over a line protocol on its standard input that every such server speaks:
+
+- `clock` moves its frozen time, beside the test's own (`app.clock.shift`).
+- `work` runs one pass of a background job, since no worker runs on its own there: `app.work("outbox")`, `"commands"`,
+  `"snoozes"`, `"follow-ups"`, or `app.work("sync", account, folder)`, which `world.deliver` runs after delivering.
+- `settle` waits for the work requests started (`app.settle()`), and `check` fails the test on what the server's own checks refused:
+  a schema an answer broke, the tripwire.
+- The end of its input stops it; `app.restart()` starts it again on the same port, over what it stored.
+
+A test there may read the database file, whose schema the golden `schema_v<N>.sql` pins, and change it only while the server is
+stopped (`with app.stopped():`), as the world was made before it started. It never calls or patches a MailMind module to make the
+server do something: the server is another process, which that never reaches. A test that can only pin the
+Python app's insides stays in-process, in `tests/characterization/`. Each test starts a server, which takes about a second.
 
 Under `-n`, each worker is a pytest session of its own: it installs the tripwire, runs its own fake Claude API and makes its own
 `world` template and new database, under a temp directory of its own. A test keeps to its temp directory and every server takes
