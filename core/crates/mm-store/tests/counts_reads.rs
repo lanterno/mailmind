@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use mm_curation::ports::{RuleBook, Stored, StoredInbox};
+use mm_curation::ports::{RulesDocument, Stored, StoredInbox};
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Outside, Tripped};
 use mm_mailbox::ports::{StoredLabels, StoredSyncs};

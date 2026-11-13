@@ -2,7 +2,7 @@
 //! inbox (`curation.adapters.sqlite.stored_inbox`), and the rule book, the `rules` row of `documents`
 //! (`curation.adapters.rules_document`).
 
-use mm_curation::ports::{RuleBook, Stored, StoredInbox};
+use mm_curation::ports::{RulesDocument, Stored, StoredInbox};
 use mm_kernel::errors::Fault;
 use rusqlite::OptionalExtension;
 use serde_json::Value;
@@ -36,7 +36,7 @@ impl StoredInbox for Database {
     }
 }
 
-impl RuleBook for Database {
+impl RulesDocument for Database {
     fn rules(&self) -> Result<Option<Value>, Fault> {
         let body: Option<String> =
             self.read(|c| c.query_row("SELECT body FROM documents WHERE name='rules'", [], |r| r.get(0)).optional())?;

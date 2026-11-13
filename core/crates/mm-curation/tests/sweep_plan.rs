@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use mm_curation::classifier::Bucket;
-use mm_curation::ports::{RuleBook, Stored, StoredInbox};
+use mm_curation::ports::{RulesDocument, Stored, StoredInbox};
 use mm_curation::rules::RuleSets;
 use mm_curation::sweep_plan::{self, StoredPlans};
 use mm_kernel::errors::Fault;
@@ -147,7 +147,7 @@ impl StoredInbox for Inbox {
 #[derive(Debug)]
 struct Book(Option<Value>);
 
-impl RuleBook for Book {
+impl RulesDocument for Book {
     fn rules(&self) -> Result<Option<Value>, Fault> {
         Ok(self.0.clone())
     }

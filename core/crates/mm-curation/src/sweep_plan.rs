@@ -8,7 +8,7 @@ use mm_kernel::errors::Fault;
 use serde_json::{Map, Value, json};
 
 use crate::classifier::{self, Bucket};
-use crate::ports::{RuleBook, Stored, StoredInbox};
+use crate::ports::{RulesDocument, Stored, StoredInbox};
 use crate::rules::RuleSets;
 use crate::text;
 
@@ -100,11 +100,11 @@ pub fn buckets() -> Value {
 #[derive(Debug)]
 pub struct StoredPlans {
     inbox: Arc<dyn StoredInbox>,
-    rules: Arc<dyn RuleBook>,
+    rules: Arc<dyn RulesDocument>,
 }
 
 impl StoredPlans {
-    pub fn new(inbox: Arc<dyn StoredInbox>, rules: Arc<dyn RuleBook>) -> StoredPlans {
+    pub fn new(inbox: Arc<dyn StoredInbox>, rules: Arc<dyn RulesDocument>) -> StoredPlans {
         StoredPlans { inbox, rules }
     }
 
