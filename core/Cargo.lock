@@ -787,6 +787,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mm-compose"
+version = "0.1.0"
+dependencies = [
+ "mm-kernel",
+ "serde_json",
+]
+
+[[package]]
 name = "mm-content"
 version = "0.1.0"
 dependencies = [
@@ -903,6 +911,7 @@ dependencies = [
  "hyper-util",
  "mm-accounts",
  "mm-assistant",
+ "mm-compose",
  "mm-curation",
  "mm-imap",
  "mm-kernel",
@@ -921,6 +930,7 @@ version = "0.1.0"
 dependencies = [
  "mm-accounts",
  "mm-assistant",
+ "mm-compose",
  "mm-kernel",
  "mm-mailbox",
  "rusqlite",
