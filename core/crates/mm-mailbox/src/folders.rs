@@ -101,6 +101,30 @@ impl Folders {
         })
     }
 
+    /// Refuse a move a person asked for into anything but a folder of this account's own that takes filing. What
+    /// the last LIST said is enough, however old, then what is stored; only a folder neither knows (made since, on
+    /// another client) waits for a LIST. A folder gone by then is the server's to refuse.
+    pub fn ensure_takes_filing(&self, account: &str, folder: &str) -> Result<(), Failure> {
+        let known = match self.kept(account)? {
+            Some((hit, _)) => hit.folders,
+            None => roles::stored_rail(&self.stored.stored_folder_counts(account)?),
+        };
+        let mut found = known.into_iter().find(|f| f.name == folder);
+        if found.is_none() {
+            if !self.accounts.known(account)? {
+                return Err(Problem::refused("unknown account").into());
+            }
+            found = self.kept_or_live(account)?.into_iter().find(|f| f.name == folder);
+        }
+        match found {
+            None => Err(Problem::refused("no such folder on this account").into()),
+            Some(f) if !roles::takes_filing(f.role) => {
+                Err(Problem::refused("mail can't be moved into that folder").into())
+            }
+            Some(_) => Ok(()),
+        }
+    }
+
     /// What is kept of the account's list, and whether it is fresh enough to serve.
     fn kept(&self, account: &str) -> Result<Option<(Listed, bool)>, Fault> {
         let hit = self.listed.lock().map_err(|_| POISONED)?.get(account).cloned();
