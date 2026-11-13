@@ -103,6 +103,8 @@ pub struct App {
     pub tidying: crate::bound::Tidying,
     // Accounts' changes, and their test login.
     pub connections: mm_accounts::connections::Connections,
+    /// Compose's: a send, a draft, the outbox (`work outbox`) and the drafts' pushes (`work drafts`).
+    pub compose: crate::compose_wiring::Compose,
 }
 
 impl App {
@@ -247,6 +249,24 @@ impl App {
             Arc::new(crate::account_wiring::NoOneListens),
             seams.clock.clone(),
         );
+        // Compose's, over sessions of its own and the config file as it is when each send goes.
+        let compose = crate::compose_wiring::Compose::assemble(crate::compose_wiring::Parts {
+            database: database.clone(),
+            directory: directory.clone(),
+            config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
+            outside: seams.outside.clone(),
+            servers: Arc::new(ImapServers {
+                directory: directory.clone(),
+                outside: seams.outside.clone(),
+                read_only: environment.read_only(),
+            }),
+            gates: gates.clone(),
+            folders: folders.clone(),
+            events: events.clone(),
+            ingest: ingest.clone(),
+            clock: seams.clock.clone(),
+            read_only: environment.read_only(),
+        });
         Ok(App {
             port,
             csrf,
@@ -275,6 +295,7 @@ impl App {
             attention,
             tidying,
             connections,
+            compose,
         })
     }
 }

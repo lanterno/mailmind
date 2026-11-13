@@ -38,6 +38,8 @@ pub mod workers;
 // The login Keychain, through /usr/bin/security; and the accounts' changes and their test login.
 mod account_wiring;
 pub mod login_keychain;
+// Compose's use cases bound: the sends, the drafts and the outbox that delivers them.
+pub mod compose_wiring;
 
 // Whether the database is at the version this server reads.
 mod database_version;

@@ -13,7 +13,7 @@ mod accounts;
 mod filing;
 mod mailbox;
 mod page;
-// Compose's: the outbox tray and the snippets.
+// Compose's: a send, a draft, the outbox and the snippets.
 mod compose;
 // The Mailbox's reads a person waits on, a message opened, the documents and the exports.
 mod documents;
