@@ -461,8 +461,8 @@ impl AttentionBook for AttentionStore {
 
 /// The undo stack, as a use case pushes on it (`platform.undo.Undo.push`).
 pub struct UndoStack {
-    db: Arc<Database>,
-    clock: Arc<dyn Clock>,
+    pub(crate) db: Arc<Database>,
+    pub(crate) clock: Arc<dyn Clock>,
 }
 
 impl fmt::Debug for UndoStack {

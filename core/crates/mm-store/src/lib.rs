@@ -41,6 +41,7 @@ pub mod blocks;
 pub mod copies;
 pub mod curation;
 pub mod discovery;
+pub mod undo;
 pub mod zone_file;
 
 use std::collections::HashMap;
