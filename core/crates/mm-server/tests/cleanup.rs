@@ -1,4 +1,4 @@
-//! A sender's cleanup and a sweep over a socket, as far as the served suites (tests/api) don't reach:
+//! A sender's cleanup, a sweep and Tidy's Undo over a socket, as far as the served suites (tests/api) don't reach:
 //! what each refuses before it looks anything up, and a sweep in a read-only process.
 
 #![allow(clippy::unwrap_used)]
@@ -127,6 +127,7 @@ fn a_field_its_schema_refuses_is_the_bad_request_400_before_anything_is_looked_u
         ("/api/cleanup/batch/preview", json!({"senders": "news@loom.example.test"})),
         ("/api/cleanup/batch", json!({"senders": ["news@loom.example.test"], "undo_group": 3})),
         ("/api/sweep", json!({"dry_run": "yes"})),
+        ("/api/tidy/undo", json!({"group": 3})),
     ] {
         assert_eq!(server.post(path, &body), (400, bad_request()), "{path} {body}");
     }
@@ -141,4 +142,12 @@ fn what_names_no_sender_is_refused_in_words() {
     assert_eq!(server.post("/api/cleanup/execute", &json!({"from_addr": "loom"})), (400, refused("bad address")));
     assert_eq!(server.post("/api/cleanup/batch/preview", &json!({"senders": []})), (400, refused("bad senders")));
     assert_eq!(server.post("/api/cleanup/batch", &json!({"senders": ["loom"]})), (400, refused("bad senders")));
+}
+
+#[test]
+fn tidys_undo_takes_back_only_a_run_of_tidys() {
+    let server = running("full");
+    for group in [json!(null), json!("cleanup:abc"), json!("")] {
+        assert_eq!(server.post("/api/tidy/undo", &json!({"group": group})), (400, bad_request()), "{group}");
+    }
 }
