@@ -1,0 +1,16 @@
+[package]
+name = "mm-smtp"
+description = "The network: an account's SMTP server, over TLS, for the outbox's sends"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mm-kernel.workspace = true
+mm-net.workspace = true
+rustls.workspace = true
+
+[lints]
+workspace = true
