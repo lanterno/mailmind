@@ -54,3 +54,10 @@ tests/api/test_http_events.py::test_every_stream_names_the_build_being_served
 tests/api/test_http_local.py::test_mute_hides_a_thread_marks_it_read_and_undo_restores_it
 tests/api/test_http_local.py::test_snooze_list_wake_and_undo
 tests/api/test_http_settings.py::test_sender_rules
+tests/e2e/browser/test_compose.py::test_saving_a_snippet_it_cant_keep_says_why_and_keeps_the_form
+tests/e2e/browser/test_details.py::test_a_digest_that_wont_come_is_tried_again_by_itself
+tests/e2e/browser/test_filters.py::test_a_filter_has_to_do_something
+tests/e2e/browser/test_filters.py::test_what_a_filter_cant_look_at_is_said_in_the_dialog
+tests/e2e/browser/test_mailbox.py::test_a_kept_link_opens_nothing_once_a_renumber_gave_its_copy_another_uid
+tests/e2e/browser/test_search_suggest.py::test_the_list_passes_axe
+tests/e2e/browser/test_status.py::test_density_tightens_the_list_and_is_there_from_the_first_paint
