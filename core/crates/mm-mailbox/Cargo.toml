@@ -9,7 +9,7 @@ publish.workspace = true
 
 [dependencies]
 regex.workspace = true
-sha2.workspace = true
+sha1.workspace = true
 
 [lints]
 workspace = true
