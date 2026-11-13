@@ -902,6 +902,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mm-calendar"
+version = "0.1.0"
+dependencies = [
+ "mm-content",
+ "mm-kernel",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "mm-compose"
 version = "0.1.0"
 dependencies = [
@@ -1050,6 +1060,7 @@ dependencies = [
  "mm-accounts",
  "mm-assistant",
  "mm-attention",
+ "mm-calendar",
  "mm-compose",
  "mm-content",
  "mm-curation",
@@ -1084,6 +1095,7 @@ dependencies = [
  "mm-accounts",
  "mm-assistant",
  "mm-attention",
+ "mm-calendar",
  "mm-compose",
  "mm-content",
  "mm-curation",
