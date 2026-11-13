@@ -7,6 +7,7 @@ import email
 import email.policy
 import re
 from datetime import timedelta
+from urllib.parse import urlsplit
 
 import pytest
 from playwright.sync_api import expect
@@ -14,6 +15,7 @@ from playwright.sync_api import expect
 from fakes import anthropic_api as fa
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
+from mailmind.compose.domain import outbox_item
 
 pytestmark = pytest.mark.browser
 
@@ -22,6 +24,8 @@ LUNCH = ("ada-inbox-01-lunch.eml", "ada-inbox-02-lunch-confirm.eml")
 INVITE = "ada-inbox-06-outlook-invite.eml"
 FORWARD = "ada-inbox-07-forward-rfc822.eml"
 LIN = "lin@example.test"
+# What the page sends through: each answer says how long the server holds the message for Undo.
+SENDS = ("/api/send", "/api/invite/rsvp")
 
 
 def clean(page):
@@ -38,6 +42,8 @@ def until(page, check, what):
 
 
 def opened(page):
+    page.sends = []
+    page.pw.on("response", lambda r: page.sends.append(r) if urlsplit(r.url).path in SENDS else None)
     page.goto("/")
     page.get_by_role("tab", name=re.compile("^Everything")).click()
     expect(page.get_by_role("option").first).to_be_visible()
@@ -92,10 +98,11 @@ def seconds_left(float_):
     return int(re.search(r"Sending in (\d+)s", float_.inner_text())[1])
 
 
-def due(app):
-    from mailmind.bootstrap.compose import outbox
-    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
-    outbox.drain()
+def due(app, page):
+    """The Undo window the page's last send was answered with passes on the server's clock, and the server runs an
+    outbox pass."""
+    app.clock.shift(timedelta(seconds=page.sends[-1].json()["undo_seconds"] + 1))
+    app.work("outbox")
 
 
 def copies(world, subj):
@@ -127,13 +134,16 @@ def open_folder(page, account, folder):
     page.goto(f"/m/{account}/{folder}")
 
 
-def spent_the_daily_limit():
+def spent_the_daily_limit(app):
+    """Today's spend at the $15 limit, in the ledger the database keeps, so written while the server is stopped."""
     import time
     from mailmind.assistant.application.gateway import local_day
     from mailmind.assistant.application.ports import Spend, Usage
     from mailmind.bootstrap import assistant
     now = time.time()
-    assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok", Usage(), 15_000_000, int(now)))
+    with app.stopped():
+        assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok", Usage(), 15_000_000,
+                                      int(now)))
 
 
 # ── sending ─────────────────────────────────────────────────────────────
@@ -149,7 +159,7 @@ def test_compose_send_undo_then_send(page, app, world):
     assert [o["state"] for o in app.get("/api/outbox").json["items"]] == []
     send_button(page).click()
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     [sent] = world.smtp.messages
     assert sent.rcpts == [LIN] and b"Subject: Fabric order" in sent.data
     clean(page)
@@ -189,7 +199,7 @@ def test_a_reply_answers_the_sender_and_threads(page, app, world):
     body(page).fill("See you there.")
     send_button(page).click()
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     [sent] = world.smtp.messages
     assert b"In-Reply-To:" in sent.data and b"See you there." in sent.data
     clean(page)
@@ -240,22 +250,20 @@ def test_a_forward_saved_once_shows_its_files_as_its_own(page, world):
 
 
 def test_a_reply_saved_once_goes_out_after_its_originals_row_went(page, app, world):
-    from mailmind.bootstrap.mailbox import store
     opened(page)
-    pk = world.pk(LUNCH[1])
     row(page, world, LUNCH[1]).click()
     expect(page.locator(".rd-subj")).to_be_visible()
     page.keyboard.press("r")
     body(page).fill("See you there.")
     page.keyboard.press("Control+s")
     expect(page.locator("#cmpSaved")).to_contain_text("Saved")
-    c = store.conn()
-    store.delete_message(c, pk)
-    c.commit()
-    c.close()
+    # Filed from another tab: its row goes once the server holds the move, and no folder stored has a copy.
+    assert app.post("/api/archive", world.copy(LUNCH[1])).status == 200
+    app.work("commands")
+    assert world.where(LUNCH[1])["db"] == []
     send_button(page).click()
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     [sent] = world.smtp.messages
     assert b"In-Reply-To:" in sent.data and b"See you there." in sent.data
     clean(page)
@@ -314,7 +322,6 @@ def test_a_message_whose_closing_save_fails_stays_a_click_away(page, world):
 
 
 def test_a_draft_the_server_wont_take_waits_in_the_tray_and_opens_from_it(page, app, world):
-    from mailmind.bootstrap.compose import drafts
     opened(page)
     world.server.fail("APPEND", user=w.ADA, times=None)
     writing(page, LIN, "Thread colours", "Which blue did you mean?")
@@ -332,7 +339,7 @@ def test_a_draft_the_server_wont_take_waits_in_the_tray_and_opens_from_it(page, 
     app.clock.shift(timedelta(minutes=2))
 
     def pushed():                                          # the closing save may still be on its way
-        drafts.push_round()
+        app.work("drafts")
         return len(copies(world, "Thread colours")) == 1
     until(page, pushed, "the job pushed it")
     expect(button).to_be_hidden()
@@ -403,21 +410,20 @@ def test_a_send_during_a_first_save_leaves_no_copy_behind(page, app, world):
     until(page, lambda: asked, "the send went")
     assert asked[0]["draft_id"]
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     assert copies(world, "Thread colours") == []
     assert [m.rcpts for m in world.smtp.messages] == [[LIN]]
     clean(page)
 
 
 def test_autosave_writes_it_down_here_and_the_server_gets_it_a_minute_on(page, app, world):
-    from mailmind.bootstrap.compose import drafts
     opened(page)
     writing(page, LIN, "Thread colours", "Which blue did you mean?")
     page.clock.run_for(8_500)
     expect(page.locator("#cmpSaved")).to_contain_text("Saved")
     assert copies(world, "Thread colours") == []
     app.clock.shift(timedelta(minutes=2))
-    drafts.push_round()
+    app.work("drafts")
     assert len(copies(world, "Thread colours")) == 1
     clean(page)
 
@@ -508,7 +514,7 @@ def test_an_empty_subject_is_asked_about_and_send_anyway_arms_after_a_moment(pag
     go.click()
     expect(body(page)).to_be_hidden()
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     assert len(world.smtp.messages) == 1
     clean(page)
 
@@ -527,21 +533,19 @@ def test_a_mention_of_an_attachment_with_none_is_asked_about_and_an_edit_retires
 # ── later ───────────────────────────────────────────────────────────────
 
 def test_a_send_that_failed_says_its_retrying_and_the_tray_tries_it_now(page, app, world):
-    from mailmind.bootstrap.compose import outbox
     opened(page)
     writing(page, LIN, "Fabric order", "Hi Lin")
     send_button(page).click()
     until(page, lambda: app.get("/api/outbox").json["items"], "it's queued")
     world.smtp.fail("MAIL")
-    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
-    outbox.drain()
+    due(app, page)
     page.locator("#outboxBtn").click()
     fly = page.locator("#outboxFly")
     expect(fly).to_contain_text("retrying")
     expect(fly.get_by_role("button", name="Cancel")).to_be_visible()
     fly.get_by_role("button", name="Try now").click()
     until(page, lambda: not app.get("/api/outbox").json["items"][0]["retrying"], "it's asked for now")
-    outbox.drain()
+    app.work("outbox")
     assert len(world.smtp.messages) == 1
     clean(page)
 
@@ -578,12 +582,11 @@ def test_a_digit_picks_a_later_time(page, world):
 # ── the tray ────────────────────────────────────────────────────────────
 
 def test_a_send_with_no_answer_says_it_may_have_gone_and_only_a_person_sends_it_again(page, app, world):
-    from mailmind.bootstrap.compose import outbox
     world.smtp.drop_after_data()
     opened(page)
     compose(page, LIN, "Thread colours", "Which blue did you mean?")
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     assert len(world.smtp.messages) == 1
     button = page.locator("#outboxBtn")
     expect(button).to_be_visible()
@@ -591,12 +594,12 @@ def test_a_send_with_no_answer_says_it_may_have_gone_and_only_a_person_sends_it_
     fly = page.locator("#outboxFly")
     expect(fly).to_contain_text("May have gone out")
     expect(fly).to_contain_text("unsure")
-    app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP + 1))
-    outbox.drain()
+    app.clock.shift(timedelta(seconds=outbox_item.BACKOFF_CAP + 1))
+    app.work("outbox")
     assert len(world.smtp.messages) == 1
     fly.get_by_role("button", name="Send again").click()
     until(page, lambda: app.get("/api/outbox").json["items"][0]["state"] == "queued", "queued again")
-    outbox.drain()
+    app.work("outbox")
     assert len(world.smtp.messages) == 2
     page.locator("#listTitle").click()                    # the tray stays up while it's open, whatever it holds
     expect(fly).to_be_hidden()
@@ -605,21 +608,19 @@ def test_a_send_with_no_answer_says_it_may_have_gone_and_only_a_person_sends_it_
 
 
 def give_up_on_a_send(page, app, world):
-    from mailmind.bootstrap.compose import outbox
     world.smtp.fail("RCPT", "451 4.3.0 try again later", times=None)
     opened(page)
     compose(page, LIN, "Thread colours", "Which blue did you mean?")
     let_undo_pass(page)
-    due(app)
-    for _ in range(outbox.MAX_ATTEMPTS - 1):
-        app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP))
-        outbox.drain()
+    due(app, page)
+    for _ in range(outbox_item.MAX_ATTEMPTS - 1):
+        app.clock.shift(timedelta(seconds=outbox_item.BACKOFF_CAP))
+        app.work("outbox")
     assert [o["state"] for o in app.get("/api/outbox").json["items"]] == ["error"]
     return page.locator("#outboxBtn")
 
 
 def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
-    from mailmind.bootstrap.compose import outbox
     button = give_up_on_a_send(page, app, world)
     expect(button).to_have_class(re.compile("has-fail"), timeout=3000)
     button.click()
@@ -629,7 +630,7 @@ def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
     world.smtp.clear_faults()
     fly.get_by_role("button", name="Retry").click()
     expect(fly).to_contain_text("queued")
-    outbox.drain()
+    app.work("outbox")
     [sent] = world.smtp.messages
     assert b"Subject: Thread colours" in sent.data
     page.locator("#listTitle").click()                    # the tray stays up while it's open, whatever it holds
@@ -639,7 +640,6 @@ def test_a_failed_send_offers_retry_and_retry_sends(page, app, world):
 
 
 def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_it_back(page, app, world):
-    from mailmind.bootstrap.mailbox import commands
     opened(page)
     receipt = row(page, world, RECEIPT)
     receipt.click()
@@ -658,7 +658,7 @@ def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_
     world.server.clear_faults()
     world.server.fail("UID MOVE", user=w.ADA, times=None)
     world.server.fail("UID COPY", user=w.ADA, times=None)
-    commands.drain()
+    app.work("commands")
     expect(fly).to_contain_text("stuck")                  # told by the event, with the panel open
     expect(fly).to_contain_text("the server refused it")
     expect(receipt).to_have_count(1)
@@ -670,8 +670,7 @@ def test_a_change_that_cant_reach_the_server_waits_in_the_tray_and_discard_puts_
     clean(page)
 
 
-def test_retry_in_the_tray_sends_the_change_again(page, world):
-    from mailmind.bootstrap.mailbox import commands
+def test_retry_in_the_tray_sends_the_change_again(page, app, world):
     opened(page)
     receipt = row(page, world, RECEIPT)
     receipt.click()
@@ -684,7 +683,7 @@ def test_retry_in_the_tray_sends_the_change_again(page, world):
     world.server.clear_faults()
     world.server.fail("UID MOVE", user=w.ADA, times=1)
     world.server.fail("UID COPY", user=w.ADA, times=1)
-    commands.drain()
+    app.work("commands")
     button.click()
     fly = page.locator("#outboxFly")
     expect(fly).to_contain_text("stuck")
@@ -693,7 +692,7 @@ def test_retry_in_the_tray_sends_the_change_again(page, world):
     fly.get_by_role("button", name="Retry").click()
     expect(fly).to_contain_text("waiting")
     expect(receipt).to_have_count(0)
-    commands.drain()
+    app.work("commands")
     until(page, lambda: world.where(RECEIPT)["server"][0][1] == "Archive", "archived on the server")
     page.locator("#listTitle").click()                    # the tray stays up while it's open, whatever it holds
     expect(fly).to_be_hidden()
@@ -750,7 +749,7 @@ def test_a_file_attaches_and_goes_out_with_the_mail(page, app, world):
     expect(page.locator("#cmpAttach .cmp-att")).to_contain_text("order.txt")
     send_button(page).click()
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     [sent] = world.smtp.messages
     assert b'filename="order.txt"' in sent.data or b"filename=order.txt" in sent.data
     clean(page)
@@ -797,8 +796,8 @@ def test_a_rewrite_acts_on_the_message_and_undo_puts_it_back(page, world, ai):
     clean(page)
 
 
-def test_at_the_limit_a_rewrite_goes_only_when_you_say_so(page, world, ai):
-    spent_the_daily_limit()
+def test_at_the_limit_a_rewrite_goes_only_when_you_say_so(page, app, world, ai):
+    spent_the_daily_limit(app)
     ai.responder = lambda req: fa.answer({"text": "Over the limit, as asked."})
     opened(page)
     writing(page, LIN, "Fabric order", "confirm pls")
@@ -839,18 +838,22 @@ def test_no_quick_replies_on_a_receipt(page, world):
     clean(page)
 
 
-def lunch_needs_a_reply(world):
+def lunch_needs_a_reply(app, world):
+    """Triaged as needing a reply, as the database keeps it, so written while the server is stopped."""
     from mailmind.bootstrap.mailbox import store
-    c = store.conn()
-    try:
-        answers.save_summary(c, world.pk(LUNCH[1]), "Lin confirms lunch on Thursday.", 5, "action-needed", "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
-        c.commit()
-    finally:
-        c.close()
+    pk = world.pk(LUNCH[1])
+    with app.stopped():
+        c = store.conn()
+        try:
+            answers.save_summary(c, pk, "Lin confirms lunch on Thursday.", 5, "action-needed", "Reply", "claude-opus-5-5",
+                                 "2026-11-02T11:00:00+00:00")
+            c.commit()
+        finally:
+            c.close()
 
 
-def test_a_draft_written_ahead_shows_on_the_reply_button_and_opens_for_review(page, world, ai):
-    lunch_needs_a_reply(world)
+def test_a_draft_written_ahead_shows_on_the_reply_button_and_opens_for_review(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
     ai.responder = lambda req: fa.answer({"body": "Written ahead: Thursday works."})
     page.goto(f"/m/{w.ADA}/INBOX?key={world.key(LUNCH[1])}&folder=INBOX&uid={world.uid(LUNCH[1])}")
     expect(page.locator(".rd-subj")).to_be_visible()
@@ -867,8 +870,7 @@ def test_a_draft_written_ahead_shows_on_the_reply_button_and_opens_for_review(pa
 # ── an invitation ───────────────────────────────────────────────────────
 
 def test_a_chosen_undo_window_is_what_the_float_counts_down(page, app, world):
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences({"undo_send_seconds": 30})
+    assert app.post("/api/preferences", {"undo_send_seconds": 30}).status == 200
     opened(page)
     compose(page, LIN, "Fabric order", "Hi Lin, the linen came in.")
     expect(page.locator("#sendFloat")).to_contain_text("Sending in 30s")
@@ -879,8 +881,7 @@ def test_a_chosen_undo_window_is_what_the_float_counts_down(page, app, world):
 
 def test_a_new_send_counts_what_preferences_says_now_though_the_page_loaded_before(page, app, world):
     opened(page)
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences({"undo_send_seconds": 7})
+    assert app.post("/api/preferences", {"undo_send_seconds": 7}).status == 200
     compose(page, LIN, "Fabric order", "Hi Lin, the linen came in.")
     expect(page.locator("#sendFloat")).to_contain_text("Sending in 7s")
     clean(page)
@@ -898,7 +899,7 @@ def test_rsvp_goes_out_after_its_ten_seconds_and_undo_stops_it(page, app, world)
     float_.get_by_role("button", name="Undo").click()
     expect(page.locator("#toast")).to_contain_text("RSVP not sent")
     until(page, lambda: app.get("/api/outbox").json["items"] == [], "the row went")
-    due(app)
+    due(app, page)
     assert world.smtp.messages == []
     clean(page)
 
@@ -1008,7 +1009,7 @@ def test_a_picture_goes_into_the_text_shows_in_the_preview_and_goes_out_inline(p
     assert page.problems == [] and page.blocked == []    # the frame's policy lets a picture's data in, and nothing else
     send_button(page).click()
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     [sent] = world.smtp.messages
     m = email.message_from_bytes(sent.data, policy=email.policy.default)
     assert m.get_content_type() == "multipart/alternative"
@@ -1160,7 +1161,7 @@ def test_a_markdown_message_goes_out_as_text_and_html_and_reopens_as_typed(page,
     expect(page.locator("#cmpPreview iframe")).to_have_attribute("srcdoc", re.compile("<strong>Linen</strong>"))
     send_button(page).click()
     let_undo_pass(page)
-    due(app)
+    due(app, page)
     [sent] = world.smtp.messages
     m = email.message_from_bytes(sent.data, policy=email.policy.default)
     assert m.get_content_type() == "multipart/alternative"

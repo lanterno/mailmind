@@ -3,14 +3,11 @@ import pytest
 from playwright.sync_api import expect
 
 from fixtures import world as w
-from mailmind.bootstrap import accounts
-from mailmind.bootstrap.mailbox import store
-from mailmind.bootstrap import mailbox
-from mailmind.platform import sse
 
 pytestmark = pytest.mark.browser
 
 CY = "cy-inbox-03-unrelated.eml"
+TICKETS = "Your train tickets"
 
 
 def clean(page):
@@ -19,15 +16,11 @@ def clean(page):
 
 
 def labelled(world):
-    next(m for m in world.server.messages(w.CY, "INBOX").values() if (m.headers().get("Message-ID") or "").strip() == w.message_id(CY)
-         ).labels.add("Travel")
-    c = store.conn()
-    try:
-        c.execute("UPDATE sync_state SET last_uid=0 WHERE account=? AND folder='INBOX'", (w.CY,))
-        c.commit()
-    finally:
-        c.close()
-    mailbox.ingest.sync_new(accounts.get(w.CY))
+    """One more message in Cy's Gmail INBOX, carrying the label Travel as Gmail's own page left it, for the next sync to
+    bring in. A sync reads the labels of mail it hasn't read, so the label comes on a new message."""
+    uid = world.server.deliver(w.CY, "INBOX", w.variant(CY, Message_ID="<tickets-12@rail.example.test>", Subject=TICKETS))
+    with world.server.lock:
+        world.server.mailbox(w.CY, "INBOX").messages[uid].labels.add("Travel")
 
 
 def accounts_inbox(page, who):
@@ -35,30 +28,32 @@ def accounts_inbox(page, who):
     expect(page.locator('#folderrail .frow[data-folder="INBOX"]')).to_have_attribute("aria-current", "page")
 
 
-def test_a_gmail_accounts_labels_are_lanes_that_open_what_carries_each(page, world):
+def test_a_gmail_accounts_labels_are_lanes_that_open_what_carries_each(page, app, world):
     labelled(world)
+    app.work("sync", w.CY, "INBOX")
     accounts_inbox(page, w.CY)
     lane = page.locator("#folderrail a.frow", has_text="Travel")
     expect(lane.locator(".unread")).to_have_text("1")
     lane.click()
     expect(page.locator("#clientCtx b")).to_have_text('label:"Travel"')
-    expect(page.locator(f'#rows .row[data-key="{world.key(CY)}"]')).to_be_visible()
+    expect(page.locator("#rows .row[data-key]", has_text=TICKETS)).to_be_visible()
     expect(lane).to_have_attribute("aria-current", "page")
     clean(page)
 
 
-def test_a_label_a_sync_brought_shows_in_a_tab_already_open(page, world):
+def test_a_label_a_sync_brought_shows_in_a_tab_already_open(page, app, world):
     accounts_inbox(page, w.CY)
     lane = page.locator("#folderrail a.frow", has_text="Travel")
     expect(lane).to_have_count(0)
     labelled(world)
-    sse.publish("sync-done", {"account": w.CY})
+    assert app.post("/api/refresh", {}).status == 200     # a sync of every account, which tells the page as each ends
     expect(lane.locator(".unread")).to_have_text("1")
     clean(page)
 
 
-def test_another_kind_of_account_shows_no_labels(page, world):
+def test_another_kind_of_account_shows_no_labels(page, app, world):
     labelled(world)
+    app.work("sync", w.CY, "INBOX")
     accounts_inbox(page, w.ADA)
     expect(page.locator("#folderrail .frail-acct", has_text="Labels")).to_have_count(0)
     clean(page)

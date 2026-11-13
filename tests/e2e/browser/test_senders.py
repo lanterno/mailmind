@@ -41,9 +41,8 @@ def screener(page):
     return page
 
 
-def rules_now():
-    from mailmind.bootstrap.curation import rules
-    return rules.load()
+def rules_now(app):
+    return app.get("/api/rules").json["rules"]
 
 
 def test_the_rail_counts_senders_to_screen_and_the_list_names_them(page, world):
@@ -56,41 +55,41 @@ def test_the_rail_counts_senders_to_screen_and_the_list_names_them(page, world):
     clean(page)
 
 
-def test_the_ai_suggests_on_a_click_and_only_a_click_on_a_row_decides(page, world, ai):
+def test_the_ai_suggests_on_a_click_and_only_a_click_on_a_row_decides(page, app, world, ai):
     screener(page)
     assert ai.requests == []
-    before = rules_now()
+    before = rules_now(app)
     first = page.locator(".scr-row").first
     addr = first.get_attribute("data-scr")
     page.get_by_role("button", name=re.compile("Suggest")).click()
     expect(first.locator(".scr-hint")).to_contain_text("Allow? stub why")
     expect(first.locator(".scr-allow")).to_have_class(re.compile("suggested"))
-    assert (rules_now(), len(ai.requests)) == (before, 1)
+    assert (rules_now(app), len(ai.requests)) == (before, 1)
     expect(page.locator(".scr-bar")).to_contain_text("for 1 of these")
     first.locator(".scr-allow").click()
     expect(page.locator(f'.scr-row[data-scr="{addr}"]')).to_have_count(0)
-    until(page, lambda: addr in rules_now()["keep_senders"], "the click wrote the rule")
+    until(page, lambda: addr in rules_now(app)["keep_senders"], "the click wrote the rule")
     clean(page)
 
 
-def test_allowing_a_sender_keeps_them_and_takes_them_off_the_list(page, world):
+def test_allowing_a_sender_keeps_them_and_takes_them_off_the_list(page, app, world):
     screener(page)
     n = page.locator(".scr-row").count()
     page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Allow").click()
     expect(page.locator(f'.scr-row[data-scr="{THIMBLE}"]')).to_have_count(0)
     expect(page.locator("#toast")).to_contain_text("Allowed orders")
-    assert THIMBLE in rules_now()["keep_senders"]
+    assert THIMBLE in rules_now(app)["keep_senders"]
     expect(page.locator("#count")).to_have_text(f"{n - 1} to screen")
     expect(page.locator('a.frow[data-folder="__screener__"] .unread')).to_have_text(str(n - 1))
     clean(page)
 
 
-def test_screening_out_blocks_the_sender(page, world):
+def test_screening_out_blocks_the_sender(page, app, world):
     screener(page)
     page.locator(f'.scr-row[data-scr="{THIMBLE}"]').get_by_role("button", name="Screen out").click()
     expect(page.locator(f'.scr-row[data-scr="{THIMBLE}"]')).to_have_count(0)
     expect(page.locator("#toast")).to_contain_text("Screened out orders")
-    assert THIMBLE in rules_now()["block_senders"]
+    assert THIMBLE in rules_now(app)["block_senders"]
     clean(page)
 
 
