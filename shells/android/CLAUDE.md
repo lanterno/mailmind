@@ -17,6 +17,7 @@ JDK 17, `cargo install cargo-ndk --locked`, and Gradle until the wrapper is comm
 
 ```bash
 just android build     # the core per ABI (arm64-v8a, x86_64), then the debug app
+just android test      # the core per ABI, then the instrumented test on the emulator or device adb sees
 just android libs      # only the core per ABI, into core/src/main/jniLibs (ignored by git)
 just android sizes     # the core's stripped size per ABI, as a Markdown table
 just gen-bindings      # rewrite core/src/main/kotlin from the core (with the Swift bindings)
@@ -27,6 +28,11 @@ both. There is no wrapper jar yet, since none can be made without a JDK: CI runs
 through `gradle/actions/setup-gradle`. To add the wrapper, run `gradle wrapper` once here with that Gradle and
 commit `gradlew`, `gradlew.bat` and `gradle/wrapper/gradle-wrapper.jar` on their own; `just android build` then
 uses it.
+
+The instrumented test (`app/src/androidTest`) launches the app on the demo mailbox and jumps its list to row
+90,000 and to the last row, waiting each time for the row the core sends. A row the core sent carries a test tag
+naming its position (`messageRowTag`); a placeholder carries none. CI runs it on an x86_64 emulator at `minSdk`, the
+oldest Android the core is compiled for.
 
 ## Rules
 
