@@ -1,5 +1,6 @@
 //! `work <job> <JSON>`: one pass of a background job, as a worker would run it, given the arguments in the JSON list
-//! (`serve_python.py` says what each does). A job the Rust server doesn't run yet says so.
+//! (`serve_python.py` says what each does). Those this server has yet: a folder's sync, waking what is snoozed, and
+//! the minute's round of follow-ups. A job the Rust server doesn't run yet says so.
 
 use mm_server::App;
 use serde_json::Value;
@@ -12,11 +13,20 @@ pub fn work(app: &App, argument: &str) -> String {
     };
     let text = |i: usize| args.get(i).and_then(Value::as_str).unwrap_or_default();
     let done = match job {
-        "sync" => app.ingest.sync_folder(text(0), text(1), false, None).map(|_| ()).map_err(|e| e.class()),
+        "sync" => app.ingest.sync_folder(text(0), text(1), false, None).map(|_| ()).map_err(|e| e.class().to_owned()),
+        "snoozes" => match app.attention.snoozing.wake_due() {
+            // What wakes read comes back unread on its server too, which takes the Mailbox's queue.
+            Ok(woken) if woken.left_read > 0 => {
+                return format!("failed not on the Rust server yet: {} woken message(s) left read", woken.left_read);
+            }
+            Ok(_) => Ok(()),
+            Err(failure) => Err(failure.to_string()),
+        },
+        "follow-ups" => app.attention.follow_ups.tick().map(|_| ()).map_err(|failure| failure.to_string()),
         _ => return format!("failed {job}: not on the Rust server yet"),
     };
     match done {
         Ok(()) => "ok".to_owned(),
-        Err(class) => format!("failed {job}: {class}"),
+        Err(why) => format!("failed {job}: {why}"),
     }
 }
