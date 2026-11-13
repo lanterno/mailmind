@@ -26,6 +26,9 @@ pub mod schema;
 pub mod serve;
 mod sync_wiring;
 mod wiring;
+// Discovery's, Curation's and Attention's use cases bound, and a POST's body as their routes read it.
+pub mod bound;
+pub mod posted;
 
 pub use app::{App, Seams};
 pub use serve::{Server, Work};

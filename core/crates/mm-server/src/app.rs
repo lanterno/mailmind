@@ -69,6 +69,8 @@ pub struct App {
     pub stats: LiveStats,
     /// A Gmail account's own labels.
     pub labels: Labels,
+    // Discovery's, Curation's and Attention's use cases.
+    pub discovery: crate::bound::Discovery,
 }
 
 impl App {
@@ -95,6 +97,9 @@ impl App {
         let config = Arc::new(ConfigFile::new(settings.config(), seams.outside.clone()));
         let directory = Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()));
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
+        // Discovery's, Curation's and Attention's, in the person's own zone.
+        let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
+        let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
         let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
         let folders = Arc::new(Folders::new(
             Arc::new(KnownAccounts(directory.clone())),
@@ -151,6 +156,7 @@ impl App {
             health,
             stats,
             labels,
+            discovery,
         })
     }
 }
