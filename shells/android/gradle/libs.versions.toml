@@ -9,6 +9,9 @@ activityCompose = "1.13.0"
 lifecycle = "2.9.4"
 # UniFFI's Kotlin calls the core through JNA; its aar carries JNA's own native library per ABI.
 jna = "5.19.1"
+# AndroidX Test, for the instrumented test (app/src/androidTest); Compose's test rule comes with the BOM.
+androidxTestRunner = "1.7.0"
+androidxTestJunit = "1.3.0"
 # The NDK that cargo-ndk builds the core with, and that AGP strips the core with. AGP 9.5's default.
 ndk = "28.2.13676358"
 minSdk = "29"
@@ -22,6 +25,9 @@ compose-foundation = { group = "androidx.compose.foundation", name = "foundation
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmodel", version.ref = "lifecycle" }
+compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
 # JNA is not listed here: core/build.gradle.kts asks for its aar by name with `versions.jna`.
 
 [plugins]
