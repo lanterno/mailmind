@@ -926,6 +926,7 @@ dependencies = [
 name = "mm-curation"
 version = "0.1.0"
 dependencies = [
+ "mm-content",
  "mm-kernel",
  "regex",
  "serde_json",
