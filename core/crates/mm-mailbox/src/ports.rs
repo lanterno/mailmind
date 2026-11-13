@@ -65,3 +65,86 @@ pub trait MailSessions: Send + Sync + fmt::Debug {
     /// A logged-in session on `account`'s server.
     fn open(&self, account: &str) -> Result<Box<dyn MailSession>, SessionError>;
 }
+
+// ── The reads a person waits on: the lists, a conversation, the tray of changes ────────────────────────────────
+
+/// A row as a query gave it: each column by its name, its value as SQLite held it (`kernel.row.Row`). A row
+/// number may be among them, for the use case to tell rows apart by; none leaves the core.
+pub type Row = serde_json::Map<String, serde_json::Value>;
+
+/// The class of a fault that stands for a part of a route the Rust server can't do yet: its route answers it as
+/// one it doesn't implement (`answer::not_yet`).
+pub const NOT_YET: Fault = Fault::new("NotOnTheRustServerYet");
+
+/// A page of a list, and how many rows the whole list holds.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Page {
+    pub rows: Vec<Row>,
+    pub total: i64,
+}
+
+/// What the lists read of the database (`mailbox.adapters.sqlite.lists`, and Attention's lists beside them). No list
+/// holds a row on its way out (`pending_removal`), and a folder's or the Inboxes' leaves out what is snoozed or muted.
+pub trait StoredLists: Send + Sync + fmt::Debug {
+    /// A folder's rows, newest first, or one a conversation (its latest) if `grouped`.
+    fn folder_page(&self, account: &str, folder: &str, grouped: bool, limit: i64, offset: i64) -> Result<Page, Fault>;
+    /// The Inboxes of `accounts` as one list, as `folder_page` gives one.
+    fn inboxes_page(&self, accounts: &[String], grouped: bool, limit: i64, offset: i64) -> Result<Page, Fault>;
+    /// What is snoozed in `accounts`, soonest wake first.
+    fn snoozed_page(&self, accounts: &[String], limit: i64, offset: i64) -> Result<Page, Fault>;
+    /// Each muted thread of `accounts`, by its latest message, newest first.
+    fn muted(&self, accounts: &[String]) -> Result<Vec<Row>, Fault>;
+    /// Each thread of `accounts` with a follow-up due, by its latest message, the latest due first.
+    fn waiting(&self, accounts: &[String]) -> Result<Vec<Row>, Fault>;
+    /// Each thread of `accounts` pinned to reply to later, by its latest message, the newest pin first.
+    fn reply_later(&self, accounts: &[String]) -> Result<Vec<Row>, Fault>;
+    /// A conversation's messages in the account, oldest first, every copy of each.
+    fn thread(&self, account: &str, thread_id: &str) -> Result<Vec<Row>, Fault>;
+    /// Whether a scan has read the whole folder (`sync_state.scan_state`).
+    fn scanned_whole(&self, account: &str, folder: &str) -> Result<bool, Fault>;
+}
+
+/// How a folder's sync went as it opened, for its list to say.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Opened {
+    /// Synced, or caught up: the list is what is stored.
+    Done,
+    /// Its first scan is still reading: what is stored now, then `folder-synced`.
+    Syncing,
+    /// Its first scan failed.
+    SyncFailed,
+    /// A catch-up is still reading.
+    CatchingUp,
+}
+
+/// The sync a folder's opening starts (`mailbox.application.folders.on_open`, `scanning_first`).
+pub trait FolderSyncs: Send + Sync + fmt::Debug {
+    /// A folder opens: its first scan, or a catch-up if one is due, waited for a moment.
+    fn on_open(&self, account: &str, folder: &str) -> Result<Opened, Fault>;
+    /// Whether a first scan of the folder is still to finish, starting one if none runs.
+    fn scanning_first(&self, account: &str, folder: &str) -> Result<bool, Fault>;
+}
+
+/// The accounts as the Mailbox's reads name them.
+pub trait AccountBook: Send + Sync + fmt::Debug {
+    /// The accounts the app may use, by address, in the file's order.
+    fn emails(&self) -> Result<Vec<String>, Fault>;
+}
+
+/// The changes that haven't reached a server, newest first, and how many there are in each state.
+pub type OpenCommands = (Vec<Row>, Vec<(String, i64)>);
+
+/// What the tray of changes reads (`mailbox.adapters.sqlite.command_log`).
+pub trait StoredCommands: Send + Sync + fmt::Debug {
+    /// The changes that haven't reached a server, newest first, and how many there are in each state.
+    fn open_commands(&self, limit: i64) -> Result<OpenCommands, Fault>;
+    /// The subject of the message a change is for, None when it has no row: its newest copy in `folder` with the
+    /// Message-ID, else the newest with it anywhere, and with no Message-ID the row `pk` names.
+    fn command_subject(
+        &self,
+        account: &str,
+        folder: &str,
+        message_id: Option<&str>,
+        pk: Option<i64>,
+    ) -> Result<Option<serde_json::Value>, Fault>;
+}

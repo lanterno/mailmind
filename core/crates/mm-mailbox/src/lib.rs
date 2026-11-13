@@ -14,3 +14,10 @@ pub mod session;
 pub mod sync_plan;
 pub mod sync_ports;
 pub mod threading;
+
+// The reads a person waits on: the lists and what their rows say, the tray of changes, and what a folder's
+// opening does until the sync is ported.
+pub mod listing;
+pub mod lists;
+pub mod opening;
+pub mod tray;
