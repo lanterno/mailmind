@@ -1,13 +1,11 @@
 """Today's brief: what the Inbox opens on, and the lists and panels it opens."""
 import re
-import time
 
 import pytest
 from playwright.sync_api import expect
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
-from mailmind.platform import sse
 from mailmind.bootstrap.assistant import answers
 
 pytestmark = pytest.mark.browser
@@ -31,19 +29,22 @@ def until(page, check, what):
     assert check(), what
 
 
-def judge(world, *verdicts):
+def judge(app, world, *verdicts):
+    """What triage said of just these messages. They are stored while the server is stopped, since a triage pass would
+    say something of every message."""
     from mailmind.bootstrap.mailbox import store
-    c = store.conn()
-    try:
-        for name, importance, category, action in verdicts:
-            answers.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5", NOW)
-        c.commit()
-    finally:
-        c.close()
+    with app.stopped():
+        c = store.conn()
+        try:
+            for name, importance, category, action in verdicts:
+                answers.save_summary(c, world.pk(name), "A summary.", importance, category, action, "claude-opus-5-5", NOW)
+            c.commit()
+        finally:
+            c.close()
 
 
-def lunch_needs_a_reply(world):
-    judge(world, (LUNCH[1], 5, "action-needed", "Reply"))
+def lunch_needs_a_reply(app, world):
+    judge(app, world, (LUNCH[1], 5, "action-needed", "Reply"))
 
 
 def brief_replies(ai, groups=()):
@@ -55,12 +56,19 @@ def briefs(ai):
     return [r for r in ai.requests if "narrative" in ((r.schema or {}).get("properties") or {})]
 
 
-def spent_the_daily_limit():
-    from mailmind.assistant.application.gateway import local_day
-    from mailmind.assistant.application.ports import Spend, Usage
-    from mailmind.bootstrap import assistant
-    now = time.time()
-    assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok", Usage(), 15_000_000, int(now)))
+def spent_the_daily_limit(app, ai):
+    """The day's $15 spent, by one call the fake API says read 3.75 million tokens, at $4 a million."""
+    status, reply = fa.answer({"text": "the"})
+    ai.queue((status, {**reply, "usage": {"input_tokens": 3_750_000, "output_tokens": 0}}))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 200
+    ai.requests.clear()
+
+
+def tidied(app):
+    """A run of Tidy by itself, for someone who turned it on: the worker's pass, with the moves it queued carried out."""
+    assert app.post("/api/preferences", {"auto_tidy": True}).status == 200
+    app.work("tidy")
+    app.settle()
 
 
 def card(page, world, name):
@@ -71,8 +79,8 @@ def box(world, name):
     return world.where(name)["server"][0][1]
 
 
-def test_the_brief_is_written_once_when_the_inbox_opens(page, world, ai):
-    lunch_needs_a_reply(world)
+def test_the_brief_is_written_once_when_the_inbox_opens(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
     brief_replies(ai)
     page.goto("/")
     expect(page.locator(".bf-narr")).to_have_text(BRIEF)
@@ -84,9 +92,9 @@ def test_the_brief_is_written_once_when_the_inbox_opens(page, world, ai):
     clean(page)
 
 
-def test_at_the_daily_limit_the_brief_waits_for_a_click(page, world, ai):
-    lunch_needs_a_reply(world)
-    spent_the_daily_limit()
+def test_at_the_daily_limit_the_brief_waits_for_a_click(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
+    spent_the_daily_limit(app, ai)
     brief_replies(ai)
     page.goto("/")
     expect(page.locator(".bf-wait")).to_contain_text("Today’s AI limit is reached, so the brief isn’t written yet.")
@@ -102,8 +110,8 @@ def test_at_the_daily_limit_the_brief_waits_for_a_click(page, world, ai):
     clean(page)
 
 
-def test_with_ai_off_the_brief_and_the_review_say_so_and_ask_for_nothing(page, world, anthropic_api):
-    lunch_needs_a_reply(world)
+def test_with_ai_off_the_brief_and_the_review_say_so_and_ask_for_nothing(page, app, world, anthropic_api):
+    lunch_needs_a_reply(app, world)
     page.goto("/")
     expect(page.locator(".bf-aioff")).to_contain_text("AI is off.")
     page.get_by_role("button", name="Your week").click()
@@ -116,8 +124,8 @@ def test_with_ai_off_the_brief_and_the_review_say_so_and_ask_for_nothing(page, w
     clean(page)
 
 
-def test_refresh_writes_it_again(page, world, ai):
-    lunch_needs_a_reply(world)
+def test_refresh_writes_it_again(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
     brief_replies(ai)
     page.goto("/")
     expect(page.locator(".bf-narr")).to_have_text(BRIEF)
@@ -127,8 +135,8 @@ def test_refresh_writes_it_again(page, world, ai):
     clean(page)
 
 
-def test_a_card_answers_snoozes_and_files_without_opening_the_message(page, world, ai):
-    judge(world, (LUNCH[1], 5, "action-needed", "Reply"), (RECEIPT, 4, "finance", "Check the total"))
+def test_a_card_answers_snoozes_and_files_without_opening_the_message(page, app, world, ai):
+    judge(app, world, (LUNCH[1], 5, "action-needed", "Reply"), (RECEIPT, 4, "finance", "Check the total"))
     brief_replies(ai)
     page.goto("/")
     lunch, receipt = card(page, world, LUNCH[1]), card(page, world, RECEIPT)
@@ -152,8 +160,8 @@ def test_a_card_answers_snoozes_and_files_without_opening_the_message(page, worl
     clean(page)
 
 
-def test_read_opens_the_message_and_escape_comes_back_to_the_brief(page, world, ai):
-    lunch_needs_a_reply(world)
+def test_read_opens_the_message_and_escape_comes_back_to_the_brief(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
     brief_replies(ai)
     page.goto("/")
     card(page, world, LUNCH[1]).get_by_role("button", name="Read").click()
@@ -164,8 +172,8 @@ def test_read_opens_the_message_and_escape_comes_back_to_the_brief(page, world, 
     clean(page)
 
 
-def test_k_above_the_first_row_comes_back_to_the_brief(page, world, ai):
-    lunch_needs_a_reply(world)
+def test_k_above_the_first_row_comes_back_to_the_brief(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
     brief_replies(ai)
     page.goto("/")
     expect(page.locator("#rows .row[data-key]").first).to_be_visible()
@@ -176,8 +184,8 @@ def test_k_above_the_first_row_comes_back_to_the_brief(page, world, ai):
     clean(page)
 
 
-def test_needs_you_opens_a_list_of_its_own_with_a_way_back(page, world, ai):
-    judge(world, (LUNCH[1], 5, "action-needed", "Reply"), (RECEIPT, 4, "finance", "Check the total"))
+def test_needs_you_opens_a_list_of_its_own_with_a_way_back(page, app, world, ai):
+    judge(app, world, (LUNCH[1], 5, "action-needed", "Reply"), (RECEIPT, 4, "finance", "Check the total"))
     brief_replies(ai)
     page.goto("/")
     page.locator(".bf-tally[data-brief='needs']").click()
@@ -193,8 +201,8 @@ def test_needs_you_opens_a_list_of_its_own_with_a_way_back(page, world, ai):
     clean(page)
 
 
-def test_a_topic_from_the_brief_lists_its_mail(page, world, ai):
-    lunch_needs_a_reply(world)
+def test_a_topic_from_the_brief_lists_its_mail(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
     brief_replies(ai, [{"label": "Lunch", "count": 1, "pks": [world.pk(LUNCH[1])]}])
     page.goto("/")
     page.locator(".bf-topic").click()
@@ -206,8 +214,8 @@ def test_a_topic_from_the_brief_lists_its_mail(page, world, ai):
     clean(page)
 
 
-def test_tidy_asks_first_and_files_under_one_undo(page, world, ai):
-    judge(world, (RECEIPT, 1, "info", ""), ("ada-inbox-03-newsletter.eml", 1, "info", ""))
+def test_tidy_asks_first_and_files_under_one_undo(page, app, world, ai):
+    judge(app, world, (RECEIPT, 1, "info", ""), ("ada-inbox-03-newsletter.eml", 1, "info", ""))
     brief_replies(ai)
     page.goto("/")
     tidy = page.locator(".bf-tidy")
@@ -227,8 +235,8 @@ def test_tidy_asks_first_and_files_under_one_undo(page, world, ai):
     clean(page)
 
 
-def test_commitments_lists_the_to_dos_and_done_files_one(page, world, ai):
-    judge(world, (RECEIPT, 4, "finance", "Check the total"))
+def test_commitments_lists_the_to_dos_and_done_files_one(page, app, world, ai):
+    judge(app, world, (RECEIPT, 4, "finance", "Check the total"))
     brief_replies(ai)
     page.goto("/")
     page.locator(".bf-tally[data-brief='commits']").click()
@@ -244,7 +252,7 @@ def test_commitments_lists_the_to_dos_and_done_files_one(page, world, ai):
 
 
 def test_the_week_says_what_went_to_archive_and_what_the_invites_hold(page, app, world, ai):
-    lunch_needs_a_reply(world)
+    lunch_needs_a_reply(app, world)
     assert app.post("/api/archive", world.copy(RECEIPT)).status == 200
     app.settle()
     page.goto("/")
@@ -256,10 +264,8 @@ def test_the_week_says_what_went_to_archive_and_what_the_invites_hold(page, app,
 
 
 def test_the_brief_says_what_tidy_filed_shows_it_and_takes_it_all_back(page, app, world, ai):
-    from mailmind.bootstrap import mailbox
-    judge(world, (LUNCH[0], 1, "info", ""), (LUNCH[1], 1, "info", ""))
-    mailbox.tidying.round()
-    app.settle()
+    judge(app, world, (LUNCH[0], 1, "info", ""), (LUNCH[1], 1, "info", ""))
+    tidied(app)
     assert not any(box == "INBOX" for _, box, *_ in world.where(LUNCH[0])["server"])
     page.goto("/")
     run = page.locator("[data-tidy-run]")
@@ -273,10 +279,8 @@ def test_the_brief_says_what_tidy_filed_shows_it_and_takes_it_all_back(page, app
 
 
 def test_the_keys_undo_of_a_run_of_tidy_clears_the_strip(page, app, world, ai):
-    from mailmind.bootstrap import mailbox
-    judge(world, (LUNCH[0], 1, "info", ""))
-    mailbox.tidying.round()
-    app.settle()
+    judge(app, world, (LUNCH[0], 1, "info", ""))
+    tidied(app)
     page.goto("/")
     run = page.locator("[data-tidy-run]")
     expect(run).to_be_visible()
@@ -287,10 +291,8 @@ def test_the_keys_undo_of_a_run_of_tidy_clears_the_strip(page, app, world, ai):
 
 
 def test_a_dismissed_run_of_tidy_stays_dismissed(page, app, world, ai):
-    from mailmind.bootstrap import mailbox
-    judge(world, (LUNCH[0], 1, "info", ""))
-    mailbox.tidying.round()
-    app.settle()
+    judge(app, world, (LUNCH[0], 1, "info", ""))
+    tidied(app)
     page.goto("/")
     run = page.locator("[data-tidy-run]")
     run.get_by_role("button", name="Dismiss").click()
@@ -301,8 +303,8 @@ def test_a_dismissed_run_of_tidy_stays_dismissed(page, app, world, ai):
     clean(page)
 
 
-def test_your_week_is_written_when_you_open_it_and_an_item_opens(page, world, ai):
-    lunch_needs_a_reply(world)
+def test_your_week_is_written_when_you_open_it_and_an_item_opens(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
     page.goto("/")
     page.get_by_role("button", name="Your week").click()
     panel = page.get_by_role("dialog", name="Weekly review")
@@ -317,7 +319,7 @@ def test_your_week_is_written_when_you_open_it_and_an_item_opens(page, world, ai
 
 def test_your_week_read_on_a_later_day_says_the_week_it_looked_back_on(page, app, world, ai):
     from datetime import datetime, timezone
-    lunch_needs_a_reply(world)
+    lunch_needs_a_reply(app, world)
     assert app.post("/api/preferences", {"weekly_review": True}).status == 200
     assert app.post("/api/review", {}).status == 200          # Monday's, as one written ahead would be
     wednesday = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
@@ -333,12 +335,14 @@ def test_your_week_read_on_a_later_day_says_the_week_it_looked_back_on(page, app
     clean(page)
 
 
-def test_mail_landing_elsewhere_says_so_and_takes_you_there(page, world, ai):
+def test_mail_landing_elsewhere_says_so_and_takes_you_there(page, app, world, ai):
     brief_replies(ai)
     page.goto("/")
     page.locator('.frow[data-folder="Sent"]').first.click()
     expect(page.locator("#listTitle")).not_to_have_text("Inbox")
-    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 2})
+    for n in (1, 2):
+        world.server.deliver(w.ADA, "INBOX", w.variant(LUNCH[1], Message_ID=f"<lunch-later-{n}@example.test>"))
+    assert app.post("/api/refresh", {}).status == 200      # Sync now, which brings both and says so
     pill = page.locator("#newPill")
     expect(pill).to_contain_text("2 new")
     pill.click()
@@ -347,8 +351,8 @@ def test_mail_landing_elsewhere_says_so_and_takes_you_there(page, world, ai):
     clean(page)
 
 
-def test_the_page_has_nothing_axe_finds(page, world, ai, every_theme):
-    judge(world, (LUNCH[1], 5, "action-needed", "Reply"), (RECEIPT, 1, "info", ""))
+def test_the_page_has_nothing_axe_finds(page, app, world, ai, every_theme):
+    judge(app, world, (LUNCH[1], 5, "action-needed", "Reply"), (RECEIPT, 1, "info", ""))
     brief_replies(ai)
     page.goto("/")
     expect(page.locator(".bf-narr")).to_have_text(BRIEF)

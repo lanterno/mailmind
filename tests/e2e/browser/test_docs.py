@@ -3,6 +3,7 @@ import re
 import struct
 import zlib
 from email.message import EmailMessage
+from urllib.parse import urlencode
 
 import pytest
 from axe_playwright_python.sync_playwright import Axe
@@ -25,6 +26,11 @@ FADES_DONE = """Promise.all(document.getAnimations()
 def clean(page):
     assert page.problems == [], page.problems
     assert page.blocked == [], page.blocked
+
+
+# The hub's files are rows of the attachments table, which opening a message writes. A test that wants hundreds of them, a
+# file on a corpus message that holds none, or a sender changed writes them itself while the server is stopped
+# (`with app.stopped():`). A file that comes while the page is open comes as mail does: a_stored_file.
 
 
 def hub_files(world, n):
@@ -73,25 +79,26 @@ def a_png(side=24):
             chunk(b"IDAT", zlib.compress(pixels)) + chunk(b"IEND", b""))
 
 
-def a_stored_file(world, data, filename, maintype, subtype):
-    """A message that really holds the file, with its body stored as the backfill would."""
+def a_stored_file(app, world, data, filename, maintype, subtype):
+    """A message that really holds the file, delivered and synced, with its body stored as opening it stores it."""
     m = EmailMessage()
     m["From"], m["To"], m["Subject"] = "Dee <dee@example.test>", w.ADA, "A file for you"
     m["Message-ID"], m["Date"] = f"<hub-{filename}@example.test>", "Mon, 02 Nov 2026 09:00:00 +0000"
     m.set_content("Attached.")
     m.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
     uid = world.deliver(w.ADA, "INBOX", m.as_bytes())
-    from mailmind.bootstrap.mailbox import ingest, store
+    from mailmind.bootstrap.mailbox import store
     c = store.conn()
     try:
-        pk = c.execute("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND uid=?", (w.ADA, uid)).fetchone()["pk"]
+        key = c.execute("SELECT message_key FROM messages WHERE account=? AND folder='INBOX' AND uid=?",
+                        (w.ADA, uid)).fetchone()["message_key"]
     finally:
         c.close()
-    ingest.fetch_body(pk)
+    assert app.get("/api/message/body?" + urlencode({"key": key, "folder": "INBOX", "uid": uid})).status == 200
 
 
-def test_an_image_previews_in_place_in_a_frame_that_can_do_nothing(page, world):
-    a_stored_file(world, a_png(), "photo.png", "image", "png")
+def test_an_image_previews_in_place_in_a_frame_that_can_do_nothing(page, app, world):
+    a_stored_file(app, world, a_png(), "photo.png", "image", "png")
     docs(page)
     button = page.get_by_role("button", name="Preview photo.png")
     expect(button).to_have_attribute("aria-expanded", "false")
@@ -109,18 +116,18 @@ def test_an_image_previews_in_place_in_a_frame_that_can_do_nothing(page, world):
     clean(page)
 
 
-def test_a_file_that_isnt_an_image_offers_no_preview(page, world):
-    a_stored_file(world, b"%PDF-1.4 x", "paper.pdf", "application", "pdf")
-    a_stored_file(world, b'<svg xmlns="http://www.w3.org/2000/svg"/>', "logo.svg", "image", "svg+xml")
+def test_a_file_that_isnt_an_image_offers_no_preview(page, app, world):
+    a_stored_file(app, world, b"%PDF-1.4 x", "paper.pdf", "application", "pdf")
+    a_stored_file(app, world, b'<svg xmlns="http://www.w3.org/2000/svg"/>', "logo.svg", "image", "svg+xml")
     docs(page)
     expect(page.locator(".doc-row", has_text="paper.pdf")).to_have_count(1)
     expect(page.get_by_role("button", name=re.compile("Preview"))).to_have_count(0)
     clean(page)
 
 
-def test_only_one_image_previews_at_a_time(page, world):
-    a_stored_file(world, a_png(), "one.png", "image", "png")
-    a_stored_file(world, a_png(30), "two.png", "image", "png")
+def test_only_one_image_previews_at_a_time(page, app, world):
+    a_stored_file(app, world, a_png(), "one.png", "image", "png")
+    a_stored_file(app, world, a_png(30), "two.png", "image", "png")
     docs(page)
     page.get_by_role("button", name="Preview one.png").click()
     expect(page.locator("iframe.doc-preview")).to_have_attribute("title", "Preview of one.png")
@@ -140,13 +147,14 @@ def from_someone(world, name, sender, addr):
         c.close()
 
 
-def test_the_hub_opens_in_sections_by_sender_and_shows_by_type_or_newest_when_asked(page, world):
+def test_the_hub_opens_in_sections_by_sender_and_shows_by_type_or_newest_when_asked(page, app, world):
     other = "ada-inbox-03-newsletter.eml"
-    one_file(world, RECEIPT, "dee-a.pdf", "a")
-    one_file(world, RECEIPT, "dee-b.png", "b", "image/png")
-    one_file(world, other, "eli-a.pdf", "c")
-    from_someone(world, RECEIPT, "Dee", "dee@example.test")
-    from_someone(world, other, "Eli", "eli@example.test")
+    with app.stopped():
+        one_file(world, RECEIPT, "dee-a.pdf", "a")
+        one_file(world, RECEIPT, "dee-b.png", "b", "image/png")
+        one_file(world, other, "eli-a.pdf", "c")
+        from_someone(world, RECEIPT, "Dee", "dee@example.test")
+        from_someone(world, other, "Eli", "eli@example.test")
     docs(page)
     headings = page.locator("#docList .doc-sec")
     expect(headings.filter(has_text="Dee")).to_have_text(re.compile(r"Dee\s*2"))
@@ -162,16 +170,18 @@ def test_the_hub_opens_in_sections_by_sender_and_shows_by_type_or_newest_when_as
     clean(page)
 
 
-def test_a_section_with_nobody_named_says_so(page, world):
-    one_file(world, RECEIPT, "anon.pdf")
-    from_someone(world, RECEIPT, None, None)
+def test_a_section_with_nobody_named_says_so(page, app, world):
+    with app.stopped():
+        one_file(world, RECEIPT, "anon.pdf")
+        from_someone(world, RECEIPT, None, None)
     docs(page)
     expect(page.locator("#docList .doc-sec").filter(has_text="No sender")).to_have_count(1)
     clean(page)
 
 
-def test_the_hub_shows_more_and_keeps_your_place(page, world):
-    hub_files(world, 450)
+def test_the_hub_shows_more_and_keeps_your_place(page, app, world):
+    with app.stopped():
+        hub_files(world, 450)
     docs(page)
     rows = page.locator("#docList .doc-row")
     expect(rows).to_have_count(200)
@@ -187,9 +197,10 @@ def test_the_hub_shows_more_and_keeps_your_place(page, world):
     clean(page)
 
 
-def test_the_hub_searches_files_it_has_not_loaded(page, world):
-    hub_files(world, 450)
-    one_file(world, "ada-inbox-09-rfc2047-folded.eml", "needle.pdf")
+def test_the_hub_searches_files_it_has_not_loaded(page, app, world):
+    with app.stopped():
+        hub_files(world, 450)
+        one_file(world, "ada-inbox-09-rfc2047-folded.eml", "needle.pdf")
     docs(page)
     expect(page.locator("#docList .doc-row")).to_have_count(200)
     page.locator("#docSearch").fill("needle")
@@ -200,22 +211,14 @@ def test_the_hub_searches_files_it_has_not_loaded(page, world):
     clean(page)
 
 
-def test_the_hub_shows_a_file_once_when_new_mail_moves_the_list(page, world):
-    hub_files(world, 250)
+def test_the_hub_shows_a_file_once_when_new_mail_moves_the_list(page, app, world):
+    with app.stopped():
+        hub_files(world, 250)
     docs(page)
     rows = page.locator("#docList .doc-row")
     expect(rows).to_have_count(200)
     every = matched(page)
-    from mailmind.bootstrap.mailbox import store
-    c = store.conn()
-    try:
-        newer = c.execute("SELECT pk FROM messages WHERE ts > (SELECT ts FROM messages WHERE pk=?) ORDER BY ts DESC LIMIT 1",
-                          (world.pk(RECEIPT),)).fetchone()["pk"]
-        c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
-                  "VALUES (?,'new','arrived.pdf','application/pdf',1000,0)", (newer,))
-        c.commit()
-    finally:
-        c.close()
+    a_stored_file(app, world, b"%PDF-1.4 x", "arrived.pdf", "application", "pdf")   # newer than all it has shown
     page.get_by_role("button", name=re.compile(r"Show more")).click()
     expect(rows).to_have_count(every)                                   # all it had, each once
     expect(page.get_by_role("button", name=re.compile(r"Show more|Loading"))).to_have_count(0)
@@ -224,8 +227,9 @@ def test_the_hub_shows_a_file_once_when_new_mail_moves_the_list(page, world):
     clean(page)
 
 
-def test_a_slow_answer_does_not_overwrite_a_newer_search(page, world):
-    hub_files(world, 3)
+def test_a_slow_answer_does_not_overwrite_a_newer_search(page, app, world):
+    with app.stopped():
+        hub_files(world, 3)
     docs(page)
     expect(page.locator("#docList .doc-fn").first).to_be_visible()
     held = []
@@ -242,8 +246,9 @@ def test_a_slow_answer_does_not_overwrite_a_newer_search(page, world):
     clean(page)
 
 
-def test_when_showing_more_fails_the_hub_keeps_what_it_has(page, world):
-    hub_files(world, 250)
+def test_when_showing_more_fails_the_hub_keeps_what_it_has(page, app, world):
+    with app.stopped():
+        hub_files(world, 250)
     docs(page)
     rows = page.locator("#docList .doc-row")
     expect(rows).to_have_count(200)
@@ -260,9 +265,10 @@ def test_when_showing_more_fails_the_hub_keeps_what_it_has(page, world):
     clean(page)
 
 
-def test_the_hub_filters_by_kind(page, world):
-    hub_files(world, 3)
-    one_file(world, RECEIPT, "photo.png", "pic", "image/png")
+def test_the_hub_filters_by_kind(page, app, world):
+    with app.stopped():
+        hub_files(world, 3)
+        one_file(world, RECEIPT, "photo.png", "pic", "image/png")
     docs(page)
     expect(page.locator("#docList .doc-fn").first).to_be_visible()
     page.locator("#docFilters button", has_text="Images").click()
@@ -272,8 +278,9 @@ def test_the_hub_filters_by_kind(page, world):
     clean(page)
 
 
-def test_a_file_opens_its_mail_and_downloads_from_its_link(page, world):
-    one_file(world, RECEIPT, "invoice.pdf")
+def test_a_file_opens_its_mail_and_downloads_from_its_link(page, app, world):
+    with app.stopped():
+        one_file(world, RECEIPT, "invoice.pdf")
     docs(page)
     row = page.locator(".doc-row", has_text="invoice.pdf")
     link = row.get_by_role("link", name="Download invoice.pdf")
@@ -285,13 +292,14 @@ def test_a_file_opens_its_mail_and_downloads_from_its_link(page, world):
     clean(page)
 
 
-def test_opening_the_hub_again_reads_it_again(page, world):
-    hub_files(world, 1)
+def test_opening_the_hub_again_reads_it_again(page, app, world):
+    with app.stopped():
+        hub_files(world, 1)
     docs(page)
     expect(page.locator("#docList .doc-fn").filter(has_text="report-")).to_have_count(1)
     page.keyboard.press("Escape")
     expect(page.locator("#docSearch")).to_have_count(0)
-    one_file(world, RECEIPT, "later.pdf")
+    a_stored_file(app, world, b"%PDF-1.4 x", "later.pdf", "application", "pdf")
     page.keyboard.press("ControlOrMeta+k")
     page.get_by_role("combobox", name="Command").fill("Documents")
     page.keyboard.press("Enter")
@@ -299,8 +307,9 @@ def test_opening_the_hub_again_reads_it_again(page, world):
     clean(page)
 
 
-def test_the_hub_is_a_place_in_the_rail_that_a_reload_and_back_come_back_to(page, world):
-    hub_files(world, 2)
+def test_the_hub_is_a_place_in_the_rail_that_a_reload_and_back_come_back_to(page, app, world):
+    with app.stopped():
+        hub_files(world, 2)
     page.goto(f"/m/{w.BEA}/INBOX")
     lane = page.locator('#folderrail .frow:has-text("Documents")')
     expect(lane).to_have_attribute("href", "/documents")
@@ -321,19 +330,21 @@ def test_the_hub_is_a_place_in_the_rail_that_a_reload_and_back_come_back_to(page
     clean(page)
 
 
-def test_a_sync_shows_new_files_on_an_open_hub(page, world):
-    hub_files(world, 1)
+def test_a_sync_shows_new_files_on_an_open_hub(page, app, world):
+    with app.stopped():
+        hub_files(world, 1)
     docs(page)
     expect(page.locator("#docList .doc-fn").filter(has_text="report-")).to_have_count(1)
-    one_file(world, RECEIPT, "arrived.pdf")
-    from mailmind.platform import sse
-    sse.publish("sync-done", {})
+    a_stored_file(app, world, b"%PDF-1.4 x", "arrived.pdf", "application", "pdf")
+    expect(page.locator("#docList .doc-fn").filter(has_text="arrived.pdf")).to_have_count(0)
+    assert app.post("/api/refresh", {}).status == 200      # Sync now, which says when it is done
     expect(page.locator("#docList .doc-fn").filter(has_text="arrived.pdf")).to_have_count(1)
     clean(page)
 
 
-def test_the_hub_passes_axe(page, world, every_theme):
-    hub_files(world, 3)
+def test_the_hub_passes_axe(page, app, world, every_theme):
+    with app.stopped():
+        hub_files(world, 3)
     docs(page)
     expect(page.locator("#docList .doc-row").first).to_be_visible()
     page.pw.evaluate(FADES_DONE)

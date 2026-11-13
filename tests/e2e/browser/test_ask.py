@@ -1,6 +1,5 @@
 """Ask and Do: a question changes nothing, and a bulk action passes its preview."""
 import re
-import time
 from datetime import timedelta
 
 import pytest
@@ -41,12 +40,12 @@ def mailboxes(world, names):
     return [mailbox(world, n) for n in names]
 
 
-def spent_the_daily_limit():
-    from mailmind.assistant.application.gateway import local_day
-    from mailmind.assistant.application.ports import Spend, Usage
-    from mailmind.bootstrap import assistant
-    now = time.time()
-    assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok", Usage(), 15_000_000, int(now)))
+def spent_the_daily_limit(app, ai):
+    """The day's $15 spent, by one call the fake API says read 3.75 million tokens, at $4 a million."""
+    status, reply = fa.answer({"text": "the"})
+    ai.queue((status, {**reply, "usage": {"input_tokens": 3_750_000, "output_tokens": 0}}))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 200
+    ai.requests.clear()
 
 
 def type_in_search(page, words):
@@ -80,8 +79,8 @@ def test_ask_answers_cites_and_changes_nothing(page, world, ai):
     clean(page)
 
 
-def test_at_the_daily_limit_an_ask_goes_only_when_you_say_so(page, world, ai):
-    spent_the_daily_limit()
+def test_at_the_daily_limit_an_ask_goes_only_when_you_say_so(page, app, world, ai):
+    spent_the_daily_limit(app, ai)
     ai.responder = lambda req: fa.answer({"answer": "Lunch is on Thursday at noon.", "cited_pks": []})
     opened(page)
     dialog = page.get_by_role("alertdialog", name="Today’s AI limit is reached")

@@ -42,13 +42,15 @@ def holds_nothing_personal(url):
     assert WRITTEN_AS_ITSELF.fullmatch(where) or re.fullmatch(r"/p/[A-Za-z0-9_-]{22}", where), url
 
 
-def the_brief_has_a_topic(world, ai):
-    c = store.conn()
-    try:
-        answers.save_summary(c, world.pk(LUNCH[1]), "A summary.", 5, "action-needed", "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
-        c.commit()
-    finally:
-        c.close()
+def the_brief_has_a_topic(app, world, ai):
+    with app.stopped():                 # what triage said of the lunch confirmation and nothing else, as no pass would
+        c = store.conn()
+        try:
+            answers.save_summary(c, world.pk(LUNCH[1]), "A summary.", 5, "action-needed", "Reply", "claude-opus-5-5",
+                                 "2026-11-02T11:00:00+00:00")
+            c.commit()
+        finally:
+            c.close()
     groups = [{"label": TOPIC, "count": 1, "pks": [world.pk(LUNCH[1])]}]
     ai.responder = lambda req: (fa.answer({"narrative": "Lin is waiting on lunch.", "groups": groups})
                                 if "narrative" in ((req.schema or {}).get("properties") or {}) else None)
@@ -81,8 +83,8 @@ def stored(page):
     return page.pw.evaluate("JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), history.state])")
 
 
-def test_walking_the_app_puts_nothing_personal_in_a_url_or_in_storage(page, world, ai):
-    the_brief_has_a_topic(world, ai)
+def test_walking_the_app_puts_nothing_personal_in_a_url_or_in_storage(page, app, world, ai):
+    the_brief_has_a_topic(app, world, ai)
     urls = every_url(page)
     page.goto("/")
     title(page, "Inbox")
@@ -109,12 +111,18 @@ def test_walking_the_app_puts_nothing_personal_in_a_url_or_in_storage(page, worl
     clean(page)
 
 
+def on_its_first_message(page):
+    expect(page.locator(".rd-subj")).to_be_visible()      # a folder opens its first message, at a place of its own
+    page.where()                                          # which has reached the server, as it would long before a person goes on
+
+
 def test_a_place_reloaded_or_opened_in_another_tab_is_the_same_view(page, world):
     page.goto("/")
     title(page, "Inbox")
     page.locator('#folderrail .frow[data-folder="Archive"]').click()
     title(page, "Archive")
     assert page.where() == f"/m/{w.ADA.replace('@', '%40')}/Archive"
+    on_its_first_message(page)
     at_a_place(page)
     at = page.url
     page.reload()
@@ -146,8 +154,7 @@ def test_a_message_and_a_search_open_again_from_their_place(page, world):
 
 def at_sent(page):
     title(page, "Sent")
-    expect(page.locator(".rd-subj")).to_be_visible()      # it opens its first message, at a place of its own
-    page.where()                                          # which has reached the server, as it would long before a person goes on
+    on_its_first_message(page)
 
 
 def test_back_after_a_reload_comes_back_to_the_place_before(page, world):
@@ -157,7 +164,7 @@ def test_back_after_a_reload_comes_back_to_the_place_before(page, world):
     at_sent(page)
     page.locator('#folderrail .frow[data-folder="Archive"]').click()
     title(page, "Archive")
-    page.where()
+    on_its_first_message(page)
     at_a_place(page)
     page.reload()
     title(page, "Archive")

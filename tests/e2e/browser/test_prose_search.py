@@ -1,7 +1,5 @@
 """A sentence in the search box: searched as written, then as the search it reads as, under a chip that takes that back. The model
 is asked on Enter and only then, and a plain keyword search never asks it."""
-import time
-
 import pytest
 from playwright.sync_api import expect
 
@@ -167,16 +165,16 @@ def test_a_planner_that_fails_leaves_the_literal_search(page, world, ai):
     clean(page)
 
 
-def spent_the_daily_limit():
-    from mailmind.assistant.application.gateway import local_day
-    from mailmind.assistant.application.ports import Spend, Usage
-    from mailmind.bootstrap import assistant
-    now = time.time()
-    assistant.LEDGER.record(Spend(local_day(now), "ask", "claude-opus-5-5", "claude-opus-5-5", "ok", Usage(), 15_000_000, int(now)))
+def spent_the_daily_limit(app, ai):
+    """The day's $15 spent, by one call the fake API says read 3.75 million tokens, at $4 a million."""
+    status, reply = fa.answer({"text": "the"})
+    ai.queue((status, {**reply, "usage": {"input_tokens": 3_750_000, "output_tokens": 0}}))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 200
+    ai.requests.clear()
 
 
-def test_over_the_days_limit_it_asks_nobody_and_stays_literal(page, world, ai):
-    spent_the_daily_limit()
+def test_over_the_days_limit_it_asks_nobody_and_stays_literal(page, app, world, ai):
+    spent_the_daily_limit(app, ai)
     translating_to(ai)
     inbox(page)
     search(page, SENTENCE)

@@ -1,14 +1,13 @@
 """The status pill, the help overlay and Settings."""
 import json
 import re
-import time
 import zipfile
 
 import pytest
 from playwright.sync_api import expect
 
+from fakes import anthropic_api as fa
 from fixtures import world as w
-from mailmind.bootstrap import mailbox
 
 pytestmark = pytest.mark.browser
 
@@ -33,13 +32,10 @@ def opened(page):
     return page
 
 
-def test_the_sync_menu_says_what_ai_cost_today_and_sync_now_syncs(page, world, ai):
-    from mailmind.assistant.application.gateway import local_day
-    from mailmind.assistant.application.ports import Spend, Usage
-    from mailmind.bootstrap import assistant
-    now = time.time()
-    assistant.LEDGER.record(Spend(local_day(now), "triage", "claude-opus-5-5", "claude-opus-5-5", "ok",
-                                  Usage(input_tokens=3000, output_tokens=200), 16_000, int(now)))
+def test_the_sync_menu_says_what_ai_cost_today_and_sync_now_syncs(page, app, world, ai):
+    status, reply = fa.answer({"text": "the"})          # a call that read 3000 tokens and wrote 200: 1.6 cents
+    ai.queue((status, {**reply, "usage": {"input_tokens": 3000, "output_tokens": 200}}))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 200
     opened(page)
     page.locator("#statusBtn").click()
     menu = page.get_by_role("dialog", name="Sync status")
@@ -60,16 +56,17 @@ def test_reconcile_says_when_theres_nothing_to_do(page, world):
     clean(page)
 
 
-def test_an_account_that_cant_connect_says_so_and_settings_trusts_a_new_certificate(page, world):
-    from mailmind.bootstrap.accounts import config
+def test_an_account_that_cant_connect_says_so_and_settings_trusts_a_new_certificate(page, app, world):
     where = f"127.0.0.1:{world.server.port}"
 
     def bea(raw):
         return next(a for a in raw["accounts"] if a["email"] == w.BEA)
-    raw = config._raw()
-    bea(raw)["tls_pins"] = {where: "sha256:" + "0" * 64}
-    config.save(raw)                                      # as if Bridge had been reinstalled
-    mailbox.syncing.sync_accounts({w.BEA})
+    with app.stopped():                                   # as if Bridge had been reinstalled
+        raw = file_of(world)
+        bea(raw)["tls_pins"] = {where: "sha256:" + "0" * 64}
+        (world.dir / "mailmind.config.json").write_text(json.dumps(raw, indent=2))
+    assert app.post("/api/refresh", {}).status == 200     # Sync now, which Bea's server fails
+    app.settle()
     opened(page)
     page.locator("#settingsBtn").click()
     row = page.locator(f'.set-row[data-email="{w.BEA}"]')
@@ -77,7 +74,7 @@ def test_an_account_that_cant_connect_says_so_and_settings_trusts_a_new_certific
     expect(row).to_contain_text("MailMind sent no password")
     row.get_by_role("button", name="Trust it").click()
     expect(row).to_contain_text("✓ synced", timeout=10_000)
-    assert bea(config._raw())["tls_pins"] == {where: "sha256:" + world.server.cert_sha256}
+    assert bea(file_of(world))["tls_pins"] == {where: "sha256:" + world.server.cert_sha256}
     clean(page)
 
 
@@ -119,7 +116,6 @@ def test_settings_adds_edits_tests_and_removes_a_connection(page, world):
 
 
 def test_a_password_typed_into_settings_goes_to_the_keychain_and_never_to_the_file(page, world, fake_keychain):
-    from mailmind.bootstrap.accounts import config
     entry = world.server.add_account("dee@example.test", password="dee-password")
     fake_keychain.delete("account:dee@example.test")      # what the fake server's own entry kept
     opened(page)
@@ -137,7 +133,7 @@ def test_a_password_typed_into_settings_goes_to_the_keychain_and_never_to_the_fi
     row = dialog.locator('.set-row[data-email="dee@example.test"]')
     expect(row).to_contain_text("in the Keychain")
     assert fake_keychain.find("account:dee@example.test") == "dee-password"
-    written = next(a for a in config._raw()["accounts"] if a["email"] == "dee@example.test")
+    written = next(a for a in file_of(world)["accounts"] if a["email"] == "dee@example.test")
     assert written["credential"] == {"keychain": "account:dee@example.test", "version": 1}
     assert "dee-password" not in (world.dir / "mailmind.config.json").read_text()
     row.get_by_role("button", name="Test").click()
@@ -270,10 +266,11 @@ def test_a_preference_is_saved_to_the_file_and_outlives_a_browser_data_clear(pag
     clean(page)
 
 
-def test_a_page_opened_with_no_block_and_nothing_held_writes_no_block(page, world):
-    held = file_of(world)
-    del held["preferences"]                         # the page fixture's, which keeps the guide off every other page
-    (world.dir / "mailmind.config.json").write_text(json.dumps(held))
+def test_a_page_opened_with_no_block_and_nothing_held_writes_no_block(page, app, world):
+    with app.stopped():
+        held = file_of(world)
+        del held["preferences"]                     # the page fixture's, which keeps the guide off every other page
+        (world.dir / "mailmind.config.json").write_text(json.dumps(held))
     page.goto(f"/m/{w.ADA}/Sent")                   # the Inbox would offer the guide, and having offered it is a write
     expect(page.locator("#rows")).to_be_visible()
     until(page, lambda: page.pw.evaluate("Boolean(localStorage.getItem('mm_prefs'))"), "the page read its preferences")
@@ -343,9 +340,8 @@ def test_density_tightens_the_list_and_is_there_from_the_first_paint(page, world
     expect(page.locator("body")).to_have_attribute("data-density", "cozy")
 
 
-def test_compact_clamps_the_gist_to_a_line_and_hides_the_chip(page, world):
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences({"density": "compact"})
+def test_compact_clamps_the_gist_to_a_line_and_hides_the_chip(page, app, world):
+    assert app.post("/api/preferences", {"density": "compact"}).status == 200
     opened(page)
     probe = page.locator("#rows .row.cmsg").first.evaluate("""row => {
       const gist = document.createElement('div'), chip = document.createElement('div');
@@ -375,11 +371,10 @@ def test_high_contrast_changes_every_theme_and_is_kept(page, world):
     clean(page)
 
 
-def test_axe_finds_nothing_on_high_contrast(page, world, every_theme):
+def test_axe_finds_nothing_on_high_contrast(page, app, world, every_theme):
     from axe_playwright_python.sync_playwright import Axe
     found = lambda: {v["id"]: [n["target"] for n in v["nodes"]] for v in Axe().run(page.pw, options={"iframes": False}).response["violations"]}
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences({"high_contrast": True})
+    assert app.post("/api/preferences", {"high_contrast": True}).status == 200
     opened(page)
     expect(page.locator("body")).to_have_class(re.compile(r"\bhc\b"))
     assert found() == {}
