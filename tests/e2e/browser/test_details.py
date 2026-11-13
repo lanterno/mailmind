@@ -1,17 +1,26 @@
 """The small things across the app that no feature's own suite says, each found by an audit: what it says when something fails
 or is slow, where a key or a click leaves you, and what the rail, the palette and help name."""
+import contextlib
+import itertools
 import json
 import re
+import threading
+from datetime import timedelta
+from urllib.parse import urlencode
 
 import pytest
 from playwright.sync_api import expect
 
 from fixtures import world as w
-from mailmind.platform import sse
+from waiting import wait_until
 
 pytestmark = pytest.mark.browser
 
 RECEIPT = "ada-inbox-05-receipt.eml"
+# The server waits a while for a folder's first read before it answers with what it has, so a list said to be on its first
+# read comes no sooner than that (8 s, the Python server's).
+FIRST_READ = 30_000
+_arrivals = itertools.count(1)
 
 # Stands in for the browser's Notification, and lets a test say the tab is in the background.
 AWAY = """
@@ -66,9 +75,56 @@ def row(page, world, name):
     return page.locator('#rows .row[data-key="{key}"][data-folder="{folder}"]'.format(**world.copy(name)))
 
 
-def test_read_only_says_what_it_files_waits_for(page, world, monkeypatch):
-    monkeypatch.delenv("MAILMIND_NOSYNC", raising=False)
+def new_mail(app, world, count, account=w.ADA):
+    """`count` messages arrive in the account's inbox and the server's sync of every account finds them, as it does in the
+    background: it says new-mail for them, and sync-done for each account. Returns once it has."""
+    for _ in range(count):
+        n = next(_arrivals)
+        world.server.deliver(account, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID=f"<arrival-{n}@example.test>"))
+    assert app.post("/api/refresh", {}).json["ok"]
+    app.settle()
+
+
+def snooze(app, world, *names, minutes):
+    """Snoozes each message for `minutes` of the server's clock, as the page's snooze menu does."""
+    until = int((app.clock.now + timedelta(minutes=minutes)).timestamp())
+    for name in names:
+        assert app.post("/api/snooze", {**world.copy(name), "until": until}).json["ok"]
+
+
+def wake(app, minutes):
+    """The server's clock goes on `minutes`, and its worker wakes what is due: it says snooze-wake for it."""
+    app.clock.shift(timedelta(minutes=minutes))
+    app.work("snoozes")
+
+
+@contextlib.contextmanager
+def held_elsewhere(app, world, account=w.ADA, folder="Sent"):
+    """The account's IMAP gate held on the server until the block ends, as a long mail operation would: a catch-up of `folder`,
+    asked for over HTTP, whose mail server doesn't answer it. As the block ends that connection drops, so that catch-up fails,
+    which nothing here reads."""
+    def examining(args):
+        return bool(args) and str(args[0]) == folder
+    world.server.stall("EXAMINE", user=account, when=examining, times=1)
+    opening = threading.Thread(target=app.get, args=("/api/messages?" + urlencode({"account": account, "folder": folder}),),
+                               name="opens-another-folder", daemon=True)
+    opening.start()
+    try:
+        assert wait_until(lambda: any(examining(c["args"]) for c in world.server.commands_for(account, "EXAMINE"))), \
+            "the long operation never reached the mail server"
+        yield
+    finally:
+        world.server.release_stalls()
+        opening.join(60)
+
+
+@pytest.fixture
+def read_only(monkeypatch):
+    """The server runs read-only: named before `page`, it is in the environment the server starts with."""
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
+
+
+def test_read_only_says_what_it_files_waits_for(read_only, page, world):
     opened(page)
     expect(page.locator("#statusTxt")).to_have_text("Read-only")
     receipt = row(page, world, RECEIPT)
@@ -161,10 +217,9 @@ def test_asking_for_the_folders_leaves_focus_reading_and_focus_reading_closes_th
     clean(page)
 
 
-def test_changing_from_swaps_the_signature_and_leaves_one_you_edited(page, world):
-    from mailmind.bootstrap.accounts import config
-    config.update_account(w.ADA, {"signature": "Ada at Quilt"})
-    config.update_account(w.BEA, {"signature": "Bea at Quilt"})
+def test_changing_from_swaps_the_signature_and_leaves_one_you_edited(page, app, world):
+    for who, signature in ((w.ADA, "Ada at Quilt"), (w.BEA, "Bea at Quilt")):
+        assert app.post("/api/accounts/edit", {"email": who, "signature": signature}).json["ok"]
     opened(page)
     page.keyboard.press("c")
     text = page.get_by_role("textbox", name="message body")
@@ -181,19 +236,20 @@ def test_changing_from_swaps_the_signature_and_leaves_one_you_edited(page, world
     clean(page)
 
 
-def test_new_mail_in_the_background_notifies_and_counts_in_the_title_and_here_it_is_said(page, world):
-    page.pw.add_init_script(AWAY)
+def test_new_mail_in_the_background_notifies_and_counts_in_the_title_and_here_it_is_said(page, app, world):
+    page.pw.add_init_script(AWAY + STREAM)
     opened(page)
+    stream_open(page)
     page.pw.evaluate("window.away = true")
-    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 2})
+    new_mail(app, world, 2)
     expect(page.pw).to_have_title("(2) MailMind")
-    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
+    new_mail(app, world, 1)
     expect(page.pw).to_have_title("(3) MailMind")
     first = page.pw.evaluate("({ title: notes[0].title, body: notes[0].body, tag: notes[0].tag })")
     assert first == {"title": "New mail · Ada", "body": "2 new messages", "tag": f"mailmind-{w.ADA}"}
     page.pw.evaluate("window.away = false; document.dispatchEvent(new Event('visibilitychange'))")
     expect(page.pw).to_have_title("MailMind")
-    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
+    new_mail(app, world, 1)
     expect(page.locator("#srLive")).to_have_text("1 new message arrived in Ada")
     assert page.pw.evaluate("notes.length") == 2               # with someone here, no desktop notification
     clean(page)
@@ -205,13 +261,13 @@ def test_new_mail_in_the_background_notifies_and_counts_in_the_title_and_here_it
     ({"quiet_hours": True, "quiet_from": "13:00", "quiet_until": "14:00"}, 1),
     ({"notify_meetings": False}, 1),
 ], ids=["turned off", "in quiet hours", "outside them", "the other kind off"])
-def test_new_mail_notifies_as_the_preferences_say_and_the_title_counts_it_anyway(page, world, preferences, notes):
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences(preferences)
-    page.pw.add_init_script(AWAY)
+def test_new_mail_notifies_as_the_preferences_say_and_the_title_counts_it_anyway(page, app, world, preferences, notes):
+    assert app.post("/api/preferences", preferences).status == 200
+    page.pw.add_init_script(AWAY + STREAM)
     opened(page)
+    stream_open(page)
     page.pw.evaluate("window.away = true")
-    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 2})
+    new_mail(app, world, 2)
     expect(page.pw).to_have_title("(2) MailMind")
     assert page.pw.evaluate("notes.length") == notes
     clean(page)
@@ -245,9 +301,8 @@ def test_a_star_says_so_either_way(page, world):
     clean(page)
 
 
-def test_with_single_keys_off_help_still_opens(page, world):
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences({"single_keys": False})
+def test_with_single_keys_off_help_still_opens(page, app, world):
+    assert app.post("/api/preferences", {"single_keys": False}).status == 200
     opened(page)
     receipt = row(page, world, RECEIPT)
     receipt.click()
@@ -506,9 +561,8 @@ def test_a_meeting_about_to_start_notifies_with_where_and_a_click_opens_the_invi
     clean(page)
 
 
-def test_a_meeting_about_to_start_stays_on_the_pill_when_its_notification_is_turned_off(page, world):
-    from mailmind.bootstrap import accounts
-    accounts.config.set_preferences({"notify_meetings": False})
+def test_a_meeting_about_to_start_stays_on_the_pill_when_its_notification_is_turned_off(page, app, world):
+    assert app.post("/api/preferences", {"notify_meetings": False}).status == 200
     page.pw.add_init_script(AWAY + "window.away = true;")
     page.pw.route("**/api/upcoming", lambda route: route.fulfill(json={"ok": True, "items": [
         {"key": world.key(RECEIPT), "folder": "INBOX", "uid": world.uid(RECEIPT), "account": w.ADA, "start": "2026-11-02T12:05:00+00:00", "end": "2026-11-02T12:35:00+00:00", "summary": "Standup", "location": "Room 1", "organizer": "", "all_day": False}]}))
@@ -519,17 +573,19 @@ def test_a_meeting_about_to_start_stays_on_the_pill_when_its_notification_is_tur
     clean(page)
 
 
-def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
+def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, app, world):
+    snooze(app, world, RECEIPT, minutes=10)
+    snooze(app, world, "ada-inbox-03-newsletter.eml", "ada-inbox-09-rfc2047-folded.eml", minutes=20)
     page.pw.add_init_script(STREAM)
     opened(page)
     stream_open(page)
     with page.pw.expect_request(re.compile(r"/api/(messages|inboxes)\?")):    # the list is read again: the event was heard here
-        sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
+        wake(app, minutes=11)
     expect(page.locator("#newPill")).to_have_count(0)     # it's on the list you're looking at
     page.locator("#search").fill("from:lin")
     page.keyboard.press("Enter")
     expect(page.locator("#clientCtx")).to_be_visible()
-    sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 2})
+    wake(app, minutes=10)
     pill = page.locator("#newPill")
     expect(pill).to_contain_text("2 back from snooze")
     page.pw.clock.run_for(10_000)                          # no toast's life: it stays said until it's looked at
@@ -540,21 +596,27 @@ def test_mail_back_from_snooze_says_so_where_no_list_shows_it(page, world):
     clean(page)
 
 
-def test_mail_back_from_snooze_is_said_over_another_folder_of_its_account(page, world):
+def test_mail_back_from_snooze_is_said_over_another_folder_of_its_account(page, app, world):
+    snooze(app, world, RECEIPT, minutes=10)
+    page.pw.add_init_script(STREAM)
     opened(page)
+    stream_open(page)
     page.locator('.frow[data-folder="Sent"]').first.click()
     page.expect_where(r"/Sent")
-    sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
+    wake(app, minutes=11)
     expect(page.locator("#newPill")).to_contain_text("1 back from snooze")
     clean(page)
 
 
-def test_new_mail_and_mail_back_from_snooze_share_the_pill(page, world):
+def test_new_mail_and_mail_back_from_snooze_share_the_pill(page, app, world):
+    snooze(app, world, RECEIPT, minutes=10)
+    page.pw.add_init_script(STREAM)
     opened(page)
+    stream_open(page)
     page.locator('.frow[data-folder="Sent"]').first.click()
     page.expect_where(r"/Sent")
-    sse.publish("snooze-wake", {"accounts": [w.ADA], "count": 1})
-    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 3})
+    wake(app, minutes=11)
+    new_mail(app, world, 3)
     expect(page.locator("#newPill")).to_contain_text("3 new, 1 back from snooze")
     clean(page)
 
@@ -677,13 +739,14 @@ def test_a_card_on_the_brief_says_where_it_filed_the_mail(page, app, world, ai):
     from mailmind.bootstrap.assistant import answers
     from mailmind.bootstrap.mailbox import store
     lunch, receipt = "ada-inbox-01-lunch.eml", RECEIPT
-    c = store.conn()
-    try:
-        for name in (lunch, receipt):
-            answers.save_summary(c, world.pk(name), "A summary.", 5, "action-needed", "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
-        c.commit()
-    finally:
-        c.close()
+    with app.stopped():                                         # triaged, so the brief has cards
+        c = store.conn()
+        try:
+            for name in (lunch, receipt):
+                answers.save_summary(c, world.pk(name), "A summary.", 5, "action-needed", "Reply", "claude-opus-5-5", "2026-11-02T11:00:00+00:00")
+            c.commit()
+        finally:
+            c.close()
     ai.responder = lambda req: (fa.answer({"narrative": "Lin is waiting.", "groups": []})
                                 if "narrative" in ((req.schema or {}).get("properties") or {}) else None)
     page.goto("/")
@@ -695,68 +758,47 @@ def test_a_card_on_the_brief_says_where_it_filed_the_mail(page, app, world, ai):
     expect(page.locator("#undoFloat")).to_contain_text("Deleted")
     clean(page)
 
-def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world, monkeypatch):
-    from gate import held_elsewhere
-    from mailmind.bootstrap import mailbox
-    monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
+def test_a_folder_opened_again_shows_what_its_catch_up_brings(page, app, world):
     page.goto(f"/m/{w.ADA}/INBOX")
     folder = lambda name: page.locator("#folderrail .frow", has_text=re.compile(f"^{name}"))
     rows = page.locator("#rows .row[data-key]")
-    folder("Archive").click()
-    expect(rows).to_have_count(1)
-    folder("Inbox").click()
     expect(page.locator("#listTitle")).to_have_text("Inbox")
     world.server.deliver(w.ADA, "Archive", w.variant("ada-inbox-03-newsletter.eml", Message_ID="<issue-219@example.test>"))
-    monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 0)
-    with held_elsewhere(w.ADA):                                 # the catch-up waits behind a long op
+    # Archive was read as the world was made, and not since by this server, so opening it is due a catch-up.
+    with held_elsewhere(app, world):                            # the catch-up waits behind a long op
         folder("Archive").click()
         expect(rows).to_have_count(1)
-        monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 60)   # that open was due one; the reads after it aren't
     expect(rows).to_have_count(2)
     clean(page)
 
 
-def test_a_catch_up_that_fails_stops_saying_its_reading_and_keeps_the_list(page, world, monkeypatch):
-    from gate import held_elsewhere
-    from mailmind.bootstrap import mailbox
-    monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
+def test_a_catch_up_that_fails_stops_saying_its_reading_and_keeps_the_list(page, app, world):
     opened(page)
     rows = page.locator("#rows .row[data-key]")
-    page.locator('#folderrail .frow[data-folder="Archive"]').click()
-    expect(rows).to_have_count(1)
-    page.locator('#folderrail .frow[data-folder="INBOX"]').click()
-    expect(page.locator("#listTitle")).to_have_text("Inbox")
     world.server.fail("UID SEARCH", user=w.ADA, times=None)
-    monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 0)
-    with held_elsewhere(w.ADA):
+    # Archive was read as the world was made, and not since by this server, so opening it is due a catch-up.
+    with held_elsewhere(app, world):
         page.locator('#folderrail .frow[data-folder="Archive"]').click()
         expect(page.locator("#list")).to_contain_text("reading the rest")
-        monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 60)
     expect(page.locator("#list")).not_to_contain_text("reading the rest")
     expect(rows).to_have_count(1)
     clean(page)
 
 
-def test_a_folder_still_on_its_first_read_says_so_then_fills_in_by_itself(page, world, monkeypatch):
-    from gate import held_elsewhere
-    from mailmind.bootstrap import mailbox
-    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
+def test_a_folder_still_on_its_first_read_says_so_then_fills_in_by_itself(page, app, world):
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
     rows = page.locator("#rows .row[data-key]")
-    with held_elsewhere(w.ADA):
+    with held_elsewhere(app, world):
         page.locator('#folderrail .frow[data-folder="Junk"]').click()
-        expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…")
+        expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…", timeout=FIRST_READ)
         expect(rows).to_have_count(0)
     expect(rows).to_have_count(1)
     expect(page.locator("#rows")).not_to_contain_text("Reading this folder for the first time…")
     clean(page)
 
 
-def test_a_first_read_counts_what_it_has_read_beside_the_sentence_and_goes_when_it_is_done(page, world, monkeypatch):
-    from gate import held_elsewhere
-    from mailmind.bootstrap import mailbox
-    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
+def test_a_first_read_counts_what_it_has_read_beside_the_sentence_and_goes_when_it_is_done(page, app, world):
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
     stored = {"total": 100}
@@ -767,10 +809,10 @@ def test_a_first_read_counts_what_it_has_read_beside_the_sentence_and_goes_when_
         route.fulfill(json=answer)
     page.pw.route("**/api/digest", digest)
     count, sentence = page.locator("#firstReadCount"), page.locator("#rows [role=status]")
-    with held_elsewhere(w.ADA):
+    with held_elsewhere(app, world):
         with page.pw.expect_response("**/api/digest"):   # where it counts from
             page.locator('#folderrail .frow[data-folder="Junk"]').click()
-        expect(sentence).to_have_text("Reading this folder for the first time…")
+        expect(sentence).to_have_text("Reading this folder for the first time…", timeout=FIRST_READ)
         expect(count).to_have_count(0)
         stored["total"] = 101
         page.clock.run_for(3100)
@@ -797,16 +839,13 @@ def test_a_folder_whose_first_read_fails_says_so_and_retry_reads_it(page, world)
     clean(page)
 
 
-def test_a_first_read_that_fails_after_saying_its_reading_says_so_and_only_a_person_tries_again(page, world, monkeypatch):
-    from gate import held_elsewhere
-    from mailmind.bootstrap import mailbox
-    monkeypatch.setattr(mailbox.folders, "FIRST_SYNC_WAIT", 0.2)
+def test_a_first_read_that_fails_after_saying_its_reading_says_so_and_only_a_person_tries_again(page, app, world):
     opened(page)
     world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
     world.server.fail("UID SEARCH", user=w.ADA, times=None)
-    with held_elsewhere(w.ADA):
+    with held_elsewhere(app, world):
         page.locator('#folderrail .frow[data-folder="Junk"]').click()
-        expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…")
+        expect(page.locator("#rows")).to_contain_text("Reading this folder for the first time…", timeout=FIRST_READ)
     expect(page.locator("#rows")).to_contain_text("Couldn’t sync this folder.")
     page.wait_for_timeout(500)      # this watches for a loop: one that went round would have logged in many times by now
     assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "Junk"]) == 1
@@ -816,17 +855,17 @@ def test_a_first_read_that_fails_after_saying_its_reading_says_so_and_only_a_per
     clean(page)
 
 
-def test_an_inbox_whose_first_read_fails_stops_all_inboxes_saying_its_reading_and_isnt_read_again(page, world):
-    from gate import held_elsewhere
+def test_an_inbox_whose_first_read_fails_stops_all_inboxes_saying_its_reading_and_isnt_read_again(page, app, world):
     from mailmind.bootstrap.mailbox import store
-    c = store.conn()
-    try:
-        store.set_scan_state(c, w.ADA, "INBOX", "never")
-        c.commit()
-    finally:
-        c.close()
+    with app.stopped():                                         # an inbox never read yet
+        c = store.conn()
+        try:
+            store.set_scan_state(c, w.ADA, "INBOX", "never")
+            c.commit()
+        finally:
+            c.close()
     world.server.fail("UID SEARCH", user=w.ADA, times=None)
-    with held_elsewhere(w.ADA):
+    with held_elsewhere(app, world):
         page.goto("/all")
         expect(page.locator("#list")).to_contain_text("reading the rest")
     expect(page.locator("#list")).not_to_contain_text("reading the rest")
@@ -849,17 +888,24 @@ def test_a_browser_gone_offline_still_reaches_its_own_server(page, app, world):
 def test_a_tab_nobody_is_looking_at_counts_as_no_one_and_reads_what_it_missed_on_return(page, app, world, ai):
     from urllib.parse import urlsplit
     from mailmind.http.shared import UI_QUIET
-    page.pw.add_init_script(AWAY)
+    page.pw.add_init_script(AWAY + STREAM)
     with page.pw.expect_response("**/api/digest*"):
         page.goto(f"/m/{w.ADA}/Archive")
     expect(page.frame_locator("iframe.rd-iframe").locator("body")).to_contain_text("log cabin")   # the folder opened its first message
+    stream_open(page)
+    page.evaluate("window.heard = []; for (const t of ['sync-done', 'folder-synced', 'new-mail']) "
+                  "window.stream.addEventListener(t, () => window.heard.push(t))")
     page.evaluate("window.away = true")
     asked = []
     page.on("request", lambda r: asked.append(urlsplit(r.url).path))
-    sse.publish("sync-done", {"account": w.ADA})
-    sse.publish("folder-synced", {"account": w.ADA, "folder": "Archive", "ok": True, "new": 1})
-    sse.publish("new-mail", {"account": w.ADA, "folder": "INBOX", "count": 1})
-    expect(page.pw).to_have_title("(1) MailMind")                # all three have arrived
+    # A folder's first read ends in folder-synced, and the sync of every account in sync-done for each and new-mail for Ada.
+    world.server.deliver(w.ADA, "Junk", w.raw("ada-inbox-12-scam.eml"))
+    assert app.get("/api/messages?" + urlencode({"account": w.ADA, "folder": "Junk"})).status == 200
+    app.settle()
+    new_mail(app, world, 1)
+    page.pw.wait_for_function("() => ['folder-synced', 'new-mail'].every((t) => heard.includes(t)) "
+                              "&& heard.filter((t) => t === 'sync-done').length >= 3")      # all of them have arrived
+    expect(page.pw).to_have_title("(1) MailMind")
     page.clock.run_for(61_000)                                  # the digest's delay, the headline's, and a minute of timers
     page.heard_all_asked()
     assert [p for p in asked if p.startswith("/api/") and p not in UI_QUIET] == []
