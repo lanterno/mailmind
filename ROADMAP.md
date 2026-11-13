@@ -90,9 +90,6 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   from its name only (`bound::NamedRoles`), not from what LIST said; a domain that isn't ASCII is lowered and punycoded with
   no nameprep; a failed sync or reconcile keeps Rust's class name (`Timeout`, `ConnectionRefused`) where Python kept its
   exception's, and its log line names no account; a snooze commits twice, its undo entry in a block of its own.
-- **Deep pages of a long list** · low value · effort S · [#34](https://github.com/lanterno/mailmind/issues/34) — `/api/messages` at offset 50,000 of a 100,000-message
-  folder takes about 217 ms on the Rust server against 106 ms on Python's, with the same query plan and the same SQLite
-  time in both, so the rest goes in the route. Profile it.
 - **The login Keychain in the Rust server** · high value · effort S · [#7](https://github.com/lanterno/mailmind/issues/7) — `mailmind-server` reads secrets through
   `NoKeychain` (`mm-server/src/real.rs`), so it needs `MAILMIND_DB_KEY` and can't log in to an account whose password the
   Keychain keeps. Port `platform.keychain`: `/usr/bin/security`, with the secret on standard input.
@@ -104,6 +101,11 @@ served tests it passes against the same scripts. Until the flip, the Python app 
 - **The in-process browser tests on the Rust server** · medium value · effort M · [#10](https://github.com/lanterno/mailmind/issues/10) — `tests/e2e/browser/in_process/` patches
   the Python app's internals, so the ledger can't hold them. Each needs a way in through the Rust server's seams
   (`Clock`, `Outside`, `Keychain`), or a served test that states the same thing.
+- **The Rust server and the database's version** · high value · effort M · [#35](https://github.com/lanterno/mailmind/issues/35) — `mailmind-server`
+  opens a database at any schema version and checks none. On a mailbox `mm-fixtures` made (version 0) it answered 500 on
+  a folder's first page and gave rows no thread id, where the Python app upgraded the same file to 51 at its start. Until
+  the core migrates, it opens only version 51 and refuses any other, saying what to do; before the flip it takes the
+  migrations over from 52, upgrading a copy first as `db check-upgrade` does.
 - **The flip** · high value · effort M · [#11](https://github.com/lanterno/mailmind/issues/11) — Step 4: when the served suites pass against both servers and the owner has used
   the Rust server daily for two weeks, the Python server goes. Then step 5 moves the page from routes to the core's
   views and commands, screen by screen, starting with the message list.
