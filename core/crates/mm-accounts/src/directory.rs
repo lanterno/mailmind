@@ -11,6 +11,7 @@ use serde_json::{Map, Value, json};
 use crate::account::{self, Account, truthy};
 use crate::credential::{CredentialRef, Style};
 use crate::ports::ConfigFile;
+use crate::preferences;
 
 const MALFORMED: Fault = Fault::new("MalformedConfig");
 const NO_CREDENTIAL: Fault = Fault::new("NoCredential");
@@ -173,5 +174,53 @@ impl Directory {
         pins.insert(endpoint.to_owned(), json!(seen));
         self.file.write(&raw)?;
         Ok(Pin::Kept)
+    }
+}
+
+/// A person's preferences (`Directory.preferences` and its changes): what the Settings page shows and changes.
+impl Directory {
+    /// Every preference as it stands, and the AI's daily limit. Reading one writes nothing, so a file with no block
+    /// keeps none.
+    pub fn preferences(&self) -> Result<Value, Failure> {
+        let raw = self.file.read()?;
+        let read = preferences::read(&raw);
+        Ok(Directory::preferences_answer(read, &self.file.read()?))
+    }
+
+    /// Keep what `asked` changes (named in the order `preferences::changeable` gives), and leave every other key in
+    /// the file as it was. A value none can be, refused whole, writes nothing. The answer is each preference as it
+    /// stands now.
+    pub fn set_preferences(&self, asked: &Map<String, Value>) -> Result<Value, Failure> {
+        self.change_preferences(|_| preferences::changes(asked).map_err(Failure::Problem))
+    }
+
+    /// What a browser held under its old keys, once, for what the file doesn't say yet. When there is nothing to
+    /// take, nothing is written. The answer is each preference as it stands now.
+    pub fn import_preferences(&self, held: &Map<String, Value>) -> Result<Value, Failure> {
+        self.change_preferences(|raw| Ok(preferences::importable(held, raw)))
+    }
+
+    fn change_preferences(
+        &self,
+        wanted_of: impl FnOnce(&Map<String, Value>) -> Result<Map<String, Value>, Failure>,
+    ) -> Result<Value, Failure> {
+        let read = {
+            let _writing = self.write.lock().map_err(|_| Fault::new("PoisonedLock"))?;
+            let mut raw = self.file.read()?;
+            let wanted = wanted_of(&raw)?;
+            if !wanted.is_empty() {
+                raw.entry("accounts").or_insert_with(|| json!([]));
+                preferences::apply(&mut raw, &wanted);
+                self.file.write(&raw)?;
+            }
+            preferences::read(&raw)
+        };
+        Ok(Directory::preferences_answer(read, &self.file.read()?))
+    }
+
+    /// The preferences, with the AI's daily limit as the Assistant reads it from the file as it is now.
+    fn preferences_answer(mut read: Map<String, Value>, raw: &Map<String, Value>) -> Value {
+        read.insert(preferences::AI_DAILY_LIMIT.to_owned(), preferences::dollars(preferences::daily_limit_usd(raw)));
+        json!({"ok": true, "preferences": read})
     }
 }

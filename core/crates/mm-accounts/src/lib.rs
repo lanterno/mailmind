@@ -10,6 +10,7 @@ pub mod account;
 pub mod credential;
 pub mod directory;
 pub mod ports;
+pub mod preferences;
 pub mod tls_pin;
 
 pub use account::Account;
