@@ -9,6 +9,7 @@
 pub mod account;
 pub mod credential;
 pub mod directory;
+pub mod health;
 pub mod ports;
 pub mod preferences;
 pub mod tls_pin;

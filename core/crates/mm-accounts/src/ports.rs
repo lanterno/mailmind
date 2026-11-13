@@ -12,3 +12,23 @@ pub trait ConfigFile: Send + Sync + std::fmt::Debug {
     /// Replace the file with `raw`, atomically and readable by its owner only.
     fn write(&self, raw: &Map<String, Value>) -> Result<(), Fault>;
 }
+
+/// What an account's syncs came to, as the Mailbox recorded them, and how its sync stands now. Of an error it holds
+/// the class's name and its kind, never what it said.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Synced {
+    pub account: String,
+    pub last_ok_ts: Option<String>,
+    pub last_error_ts: Option<String>,
+    /// As stored, so an older row may say what no kind says now.
+    pub last_error_kind: Option<String>,
+    pub last_error: Option<String>,
+    pub sync_count: i64,
+    /// "ok", "syncing", "error", or "" when none has run since the start.
+    pub live: String,
+}
+
+/// The Mailbox's record of each account's syncs.
+pub trait SyncRecord: Send + Sync + std::fmt::Debug {
+    fn sync_record(&self) -> Result<Vec<Synced>, Fault>;
+}
