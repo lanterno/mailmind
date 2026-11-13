@@ -73,6 +73,7 @@ pub struct App {
     pub discovery: crate::bound::Discovery,
     pub curation: crate::bound::Curation,
     pub attention: crate::bound::Attention,
+    pub tidying: crate::bound::Tidying,
 }
 
 impl App {
@@ -104,6 +105,7 @@ impl App {
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
         let curation = crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone);
         let attention = crate::bound::Attention::assemble(&database, &directory, &seams.clock, &zone);
+        let tidying = crate::bound::Tidying::assemble(&database, &seams.clock);
         let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
         let folders = Arc::new(Folders::new(
             Arc::new(KnownAccounts(directory.clone())),
@@ -163,6 +165,7 @@ impl App {
             discovery,
             curation,
             attention,
+            tidying,
         })
     }
 }

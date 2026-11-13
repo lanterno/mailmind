@@ -28,6 +28,7 @@ mod preferences;
 mod attention;
 mod curation;
 mod discovery;
+mod tidy;
 
 use std::sync::Arc;
 
@@ -58,6 +59,7 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(discovery::routes())
         .merge(curation::routes())
         .merge(attention::routes())
+        .merge(tidy::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

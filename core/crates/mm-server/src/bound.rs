@@ -269,3 +269,26 @@ impl Attention {
         self.database.read(|c| mm_store::copies::message_pk(c, key, folder, uid))
     }
 }
+
+/// Tidy's runs, as the brief's strip reads the newest (the Mailbox's `tidying.latest`).
+#[derive(Debug)]
+pub struct Tidying {
+    stack: Arc<UndoStack>,
+}
+
+impl Tidying {
+    pub(crate) fn assemble(database: &Arc<Database>, clock: &Arc<dyn Clock>) -> Tidying {
+        Tidying { stack: Arc::new(UndoStack::new(database.clone(), clock.clone())) }
+    }
+
+    /// `GET /api/tidy`: the newest run a person can still take back, and what it filed, the last first.
+    pub fn latest(&self) -> Result<serde_json::Value, Fault> {
+        Ok(match mm_mailbox::tidy::latest(&*self.stack)? {
+            Some(run) => serde_json::json!({
+                "ok": true, "group": run.group, "filed": run.filed.len(),
+                "items": run.filed.iter().map(|d| serde_json::json!({"subject": d.subject, "who": d.who})).collect::<Vec<_>>(),
+            }),
+            None => serde_json::json!({"ok": true, "group": null, "filed": 0, "items": []}),
+        })
+    }
+}
