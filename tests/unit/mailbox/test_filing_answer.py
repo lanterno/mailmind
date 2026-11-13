@@ -50,6 +50,12 @@ def test_any_queued_says_so():
     assert said["msg"] == "queued" and said["queued"] == 1
 
 
+def test_one_the_worker_took_over_counts_as_queued():
+    waiting = {"ok": True, "msg": "queued", "status": "waiting", "undoable": True}
+    said = filing_answer.of_many(accepted(1, 2), {1: FILED, 2: waiting}, NAMES)
+    assert said["msg"] == "queued" and said["queued"] == 1
+
+
 def test_undoable_if_any_was():
     assert not filing_answer.of_many(accepted(1), {1: QUEUED}, NAMES)["undoable"]
 
