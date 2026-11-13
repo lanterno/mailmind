@@ -6,6 +6,8 @@
 //! of a mail server in `session`, which the store, the network and the program implement; nothing here reads the
 //! disk, the network or the clock.
 
+pub mod command;
+pub mod destination;
 pub mod folders;
 pub mod gates;
 pub mod ingest;
