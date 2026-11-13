@@ -109,6 +109,19 @@ fn a_disabled_account_is_none_the_app_may_use() {
 }
 
 #[test]
+fn an_accounts_trash_is_its_entrys_or_its_types() {
+    let (directory, _) = directory(json!([
+        ada(),
+        {"email": "bea@example.test", "type": "proton", "trash": "Bin"},
+        {"email": "cy@example.test", "type": "gmail", "trash": ""},
+    ]));
+    let trash = |email: &str| directory.get(email).unwrap().unwrap().trash;
+    assert_eq!(trash("ada@example.test"), "Trash");
+    assert_eq!(trash("bea@example.test"), "Bin");
+    assert_eq!(trash("cy@example.test"), "[Gmail]/Trash", "an empty one is the type's");
+}
+
+#[test]
 fn the_password_comes_from_the_keychain_item_the_credential_names() {
     let (directory, _) = directory(json!([ada()]));
     let account = directory.get("ada@example.test").unwrap().unwrap();
