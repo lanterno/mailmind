@@ -41,3 +41,23 @@ def test_hwf_a_dismissed_reply_later_thread_leaves_the_stack(db):
     assert attention.book.replylater_count(db, A) == 0           # nor counted on the rail
     attention.book.set_replylater(db, A, "T", "later")     # pinned again, it's back
     assert ([r["thread_id"] for r in attention.book.list_replylater(db, A)], attention.book.replylater_count(db, A)) == (["T"], 1)
+
+
+def test_hwf_a_listed_thread_shows_its_latest_message_not_on_its_way_out(db):
+    kept = put(db, "<1@example.test>", thread_id="T", ts=100)
+    put(db, "<2@example.test>", thread_id="T", ts=200, pending_removal=1)
+    put(db, "<3@example.test>", thread_id="GOING", ts=300, pending_removal=1)
+    waiting = put(db, "<4@example.test>", thread_id="W", ts=100)
+    put(db, "<5@example.test>", thread_id="W", ts=200, pending_removal=1)
+    put(db, "<6@example.test>", thread_id="WGONE", ts=300, pending_removal=1)
+    for t in ("T", "GOING"):
+        attention.book.mute_thread(db, A, t, "now")
+        attention.book.set_replylater(db, A, t, "now")
+    db.executemany("INSERT INTO followups(account, thread_id, kind, state, due_ts) VALUES (?,?,?,?,?)",
+                   [(A, "W", "sent", "due", 1), (A, "WGONE", "sent", "due", 2)])
+    assert [r["pk"] for r in attention.book.list_muted(db, A)] == [kept]
+    assert [r["pk"] for r in attention.book.list_replylater(db, A)] == [kept]
+    assert [r["pk"] for r in attention.book.list_waiting(db, A)] == [waiting]
+    assert [r["pk"] for r in attention.book.waiting_on_others(db, [A], 10)] == [waiting]
+    counts = attention.book.muted_count(db, A), attention.book.replylater_count(db, A), attention.book.waiting_count(db, A)
+    assert counts == (1, 1, 1)
