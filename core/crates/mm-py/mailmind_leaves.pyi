@@ -103,3 +103,10 @@ def thread_place(
 def thread_regroup(account: str, copies: list[ThreadCopy]) -> ThreadPlacement:
     """Every copy an account holds, regrouped from what each names."""
     ...
+
+
+# -- MIME (mm-content, src/mime.rs) ------------------------------------------------------------------------------
+
+
+
+# -- the HTML sanitizer (mm-content, src/sanitize.rs) ---------------------------------------------------------------

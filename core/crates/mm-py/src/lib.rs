@@ -11,7 +11,9 @@
 use pyo3::prelude::*;
 
 mod classifier;
+mod mime;
 mod query;
+mod sanitize;
 mod threading;
 
 /// A message's identity: its Message-ID without whitespace, or `~` and the SHA-256 of its envelope.
@@ -32,5 +34,7 @@ fn mailmind_leaves(m: &Bound<'_, PyModule>) -> PyResult<()> {
     query::register(m)?;
     classifier::register(m)?;
     threading::register(m)?;
+    mime::register(m)?;
+    sanitize::register(m)?;
     Ok(())
 }

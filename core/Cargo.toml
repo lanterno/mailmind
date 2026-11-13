@@ -14,6 +14,7 @@ publish = false
 mm-kernel = { path = "crates/mm-kernel" }
 mm-store = { path = "crates/mm-store" }
 mm-app = { path = "crates/mm-app" }
+mm-content = { path = "crates/mm-content" }
 mm-fixtures = { path = "crates/mm-fixtures" }
 mm-curation = { path = "crates/mm-curation" }
 mm-discovery = { path = "crates/mm-discovery" }

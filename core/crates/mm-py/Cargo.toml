@@ -15,6 +15,7 @@ test = false
 doctest = false
 
 [dependencies]
+mm-content.workspace = true
 mm-curation.workspace = true
 mm-discovery.workspace = true
 mm-kernel.workspace = true
