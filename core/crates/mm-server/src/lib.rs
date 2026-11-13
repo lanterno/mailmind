@@ -11,6 +11,7 @@
 
 pub mod answer;
 pub mod app;
+pub mod body;
 pub mod environment;
 pub mod json;
 pub mod page;
@@ -20,6 +21,7 @@ pub mod query;
 pub mod reading;
 pub mod real;
 pub mod routes;
+pub mod schema;
 pub mod serve;
 mod sync_wiring;
 mod wiring;
