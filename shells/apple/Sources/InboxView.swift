@@ -26,69 +26,15 @@ struct InboxView: View {
 }
 
 /// The list holds positions only: each row is its position, and shows what the core sent for it or a placeholder.
+/// The table is AppKit's or UIKit's (`MessageTable`): SwiftUI's `List` could not keep a deep scroll within a frame.
 struct MessageList: View {
     let model: ListModel
 
     var body: some View {
-        ScrollViewReader { scroller in
-            List(0..<model.total, id: \.self) { index in
-                MessageRowView(row: model.held[index])
-                    .onAppear { model.appeared(index) }
-                    .onDisappear { model.disappeared(index) }
-            }
-            .listStyle(.plain)
+        MessageTable(model: model)
             .task(id: model.firstRowsAt) {
-                if model.firstRowsAt != nil { await Measure.shared.firstRowsShown(model, scroller) }
+                if model.firstRowsAt != nil { await Measure.shared.firstRowsShown(model) }
             }
-        }
-    }
-}
-
-struct MessageRowView: View {
-    let row: MessageRow?
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Circle()
-                .fill(row?.unread == true ? Color.accentColor : .clear)
-                .frame(width: 8, height: 8)
-            if let row {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(row.sender)
-                            .fontWeight(row.unread ? .semibold : .regular)
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        if row.attachment { Image(systemName: "paperclip").foregroundStyle(.secondary) }
-                        if row.flagged { Image(systemName: "flag.fill").foregroundStyle(.orange) }
-                        Text(RowDate.text(row.date))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(row.subject).font(.subheadline).lineLimit(1)
-                    Text(row.snippet).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-            } else {
-                Placeholder()
-            }
-        }
-        .frame(height: 56)
-    }
-}
-
-/// Grey bars where a row's text will go, until its batch arrives.
-private struct Placeholder: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            bar(width: 140)
-            bar(width: 240)
-            bar(width: 320)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func bar(width: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 3).fill(.quaternary).frame(maxWidth: width).frame(height: 9)
     }
 }
 

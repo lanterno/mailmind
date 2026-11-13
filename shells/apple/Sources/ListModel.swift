@@ -29,6 +29,24 @@ struct HeldRows: Equatable {
         first = held.lowerBound
         rows = kept
     }
+
+    /// The positions whose row is not what `before` had there: rows a batch brought, replaced or dropped.
+    func changes(since before: HeldRows) -> IndexSet {
+        var changed = IndexSet()
+        for index in before.range where before[index] != self[index] {
+            changed.insert(index)
+        }
+        for index in range where !before.range.contains(index) && self[index] != nil {
+            changed.insert(index)
+        }
+        return changed
+    }
+}
+
+/// What draws the list. It hears which positions a batch changed, so it redraws only those of them it shows.
+@MainActor
+protocol ListDisplay: AnyObject {
+    func rowsChanged(_ positions: IndexSet, totalChanged: Bool)
 }
 
 /// One open list as the screen sees it: how many rows there are, and the few near the screen.
@@ -36,22 +54,17 @@ struct HeldRows: Equatable {
 @MainActor
 @Observable
 final class ListModel {
-    private(set) var total = 0
-    private(set) var held = HeldRows()
+    // The table hears of a batch through `display`, so a batch redraws nothing through SwiftUI.
+    @ObservationIgnored private(set) var total = 0
+    @ObservationIgnored private(set) var held = HeldRows()
     /// Set once, when the first rows reach the screen; measure mode times it.
     private(set) var firstRowsAt: Date?
 
+    @ObservationIgnored weak var display: (any ListDisplay)?
     @ObservationIgnored private var view: (any ListViewProtocol)?
-    @ObservationIgnored private var onScreen = Set<Int>()
-    @ObservationIgnored private var lastShown = 0
     @ObservationIgnored private var asked: Range<Int>?
-    @ObservationIgnored private var reportQueued = false
 
-    /// No screen shows more rows than this at once. A wider window is rows that appeared before the old
-    /// ones disappeared during a jump, so only the rows around the newest one count.
-    nonisolated static let widest = 300
-
-    /// Start showing `view`. The first screen is asked for at once rather than after its rows appear.
+    /// Start showing `view`. The first screen is asked for at once rather than after the table has laid out.
     func attach(_ view: any ListViewProtocol, firstScreen: Int = 40) {
         self.view = view
         total = Int(view.total())
@@ -59,44 +72,60 @@ final class ListModel {
     }
 
     func apply(_ batch: ViewBatch) {
-        // Setting an observed property redraws whatever reads it, even to the same value: the list reads the total.
-        if total != Int(batch.total) { total = Int(batch.total) }
+        let before = held
+        let totalChanged = total != Int(batch.total)
+        total = Int(batch.total)
         held.apply(batch)
         if firstRowsAt == nil, !batch.ranges.isEmpty {
             firstRowsAt = Date()
         }
+        let changed = held.changes(since: before)
+        if totalChanged || !changed.isEmpty {
+            display?.rowsChanged(changed, totalChanged: totalChanged)
+        }
     }
 
-    func appeared(_ index: Int) {
-        onScreen.insert(index)
-        lastShown = index
-        queueReport()
-    }
-
-    func disappeared(_ index: Int) {
-        onScreen.remove(index)
-        queueReport()
-    }
-
-    /// Rows appear and disappear one call at a time; the window is reported once they have all landed,
-    /// so the core never sees the half-way window of a jump.
-    private func queueReport() {
-        guard !reportQueued else { return }
-        reportQueued = true
-        Task { @MainActor [weak self] in self?.report() }
-    }
-
-    func report() {
-        reportQueued = false
-        let near = onScreen.filter { abs($0 - lastShown) < Self.widest }
-        guard let low = near.min(), let high = near.max() else { return }
-        ask(low..<(high + 1))
+    /// The rows the table's scroll position shows. The table calls this at most once a frame, and the core hears
+    /// of a window only when it moves.
+    func setVisible(_ rows: Range<Int>) {
+        ask(rows.clamped(to: 0..<total))
     }
 
     private func ask(_ window: Range<Int>) {
         guard window != asked, !window.isEmpty else { return }
         asked = window
         view?.setVisible(first: UInt32(window.lowerBound), count: UInt32(window.count))
+    }
+}
+
+/// Runs its work soon after a request, and at most once a frame however often it is asked: a table asks on every
+/// scroll event, and the core needs the window once a frame. Frames are counted by the clock, not by a display link,
+/// which never fires while no display is drawing: a locked or sleeping screen, or a Mac without one.
+@MainActor
+final class OncePerFrame {
+    private let work: @MainActor () -> Void
+    private var queued = false
+    private var ranAt: UInt64 = 0
+
+    init(_ work: @escaping @MainActor () -> Void) {
+        self.work = work
+    }
+
+    func request(framesPerSecond: Int) {
+        guard !queued else { return }
+        queued = true
+        let frame = 1_000_000_000 / UInt64(max(framesPerSecond, 1))
+        let now = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        let wait = ranAt + frame > now ? ranAt + frame - now : 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(wait))) { [weak self] in
+            MainActor.assumeIsolated { self?.run() }
+        }
+    }
+
+    private func run() {
+        queued = false
+        ranAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        work()
     }
 }
 

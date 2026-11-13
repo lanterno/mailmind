@@ -1,20 +1,22 @@
 import Foundation
-import SwiftUI
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 /// Measure mode, for `just apple measure`. With MAILMIND_MEASURE=start the app prints how long it took from process
 /// start to the first rows and quits. With MAILMIND_MEASURE=all it then waits idle, scrolls fast for ten seconds,
 /// scrolls through the whole list, jumps around it, prints its memory and the main thread's time per run-loop pass,
 /// and quits. MAILMIND_MEASURE=scroll stops after the fast scroll. Without it, nothing here runs.
+/// It moves the table's scroll view as a trackpad or a finger does, so the table hears of it as it would of a person.
 @MainActor
 final class Measure {
     static let shared = Measure()
     private let mode = ProcessInfo.processInfo.environment["MAILMIND_MEASURE"]
     private var started = false
 
-    func firstRowsShown(_ model: ListModel, _ scroller: ScrollViewProxy) async {
+    func firstRowsShown(_ model: ListModel) async {
         guard let mode, !started, let shown = model.firstRowsAt else { return }
         started = true
         emit("first_rows_ms", shown.timeIntervalSince(Self.processStart()) * 1000)
@@ -25,16 +27,14 @@ final class Measure {
         await pause("idle")
 
         // A fast flick's speed, held for ten seconds: the frames a person sees while scrolling.
-        #if os(macOS)
-        emit("list_height_points", Double(scrollView?.documentView?.frame.height ?? 0))
-        #endif
+        emit("list_height_points", Double(contentHeight))
         let fling = MainThreadBusy()
         fling.start()
         // Ten seconds of ticks, or twenty of wall time when the main thread cannot keep up.
         let deadline = ContinuousClock.now + .seconds(20)
         var ticks = 0
         while ticks < 600, ContinuousClock.now < deadline {
-            scroll(by: 200, rows: model.total, scroller)
+            scroll(by: 200)
             ticks += 1
             try? await Task.sleep(for: .milliseconds(16))
         }
@@ -50,7 +50,7 @@ final class Measure {
         var row = 0
         while row < model.total {
             row += 50
-            scroll(toRow: row, rows: model.total, scroller)
+            scroll(toRow: row, rows: model.total)
             try? await Task.sleep(for: .milliseconds(16))
         }
         sweep.stop()
@@ -58,11 +58,11 @@ final class Measure {
         try? await Task.sleep(for: .seconds(1))
         emit("after_scroll_footprint_mb", Self.footprintMB())
 
-        // Jumps through SwiftUI's own scrollTo, as a jump to a date would make them.
+        // Jumps far up and down, as a jump to a date would make them: the row straight to the top.
         let jumps = MainThreadBusy()
         jumps.start()
         for target in [0, 99_950, 50_000, 12_345, 87_654, 25_000, 75_000, 1_000, 99_000, 60_000, 33_333, 0] {
-            scroller.scrollTo(min(target, model.total - 1), anchor: .top)
+            scroll(toRow: min(target, model.total - 1), rows: model.total)
             try? await Task.sleep(for: .milliseconds(300))
         }
         jumps.stop()
@@ -76,7 +76,7 @@ final class Measure {
 
     #if os(macOS)
     /// The list's scroll view. Moving its clip view is what a trackpad does, so scrolling is measured the way a
-    /// person scrolls, not through scrollTo, which looks the row up first.
+    /// person scrolls.
     private lazy var scrollView: NSScrollView? = NSApp.windows.compactMap { window in window.contentView.flatMap { Self.tallest(in: $0) } }.first
 
     private static func tallest(in view: NSView) -> NSScrollView? {
@@ -85,26 +85,61 @@ final class Measure {
         return nil
     }
 
-    private func scroll(by points: CGFloat, rows: Int, _ scroller: ScrollViewProxy) {
+    private var contentHeight: CGFloat { scrollView?.documentView?.frame.height ?? 0 }
+
+    private func scroll(by points: CGFloat) {
+        guard let scrollView else { return }
+        let clip = scrollView.contentView
+        move(clip.bounds.origin.y + points)
+    }
+
+    /// The row at the top, where the table itself says the row is.
+    private func scroll(toRow row: Int, rows: Int) {
+        guard let scrollView, let document = scrollView.documentView else { return }
+        let y = (document as? NSTableView)?.rect(ofRow: min(row, rows - 1)).minY
+            ?? document.frame.height * CGFloat(row) / CGFloat(max(rows, 1))
+        move(y)
+    }
+
+    private func move(_ y: CGFloat) {
         guard let scrollView, let document = scrollView.documentView else { return }
         let clip = scrollView.contentView
         let bottom = max(0, document.frame.height - clip.bounds.height)
-        clip.scroll(to: NSPoint(x: 0, y: min(bottom, clip.bounds.origin.y + points)))
-        scrollView.reflectScrolledClipView(clip)
-    }
-
-    private func scroll(toRow row: Int, rows: Int, _ scroller: ScrollViewProxy) {
-        guard let scrollView, let document = scrollView.documentView else { return }
-        let clip = scrollView.contentView
-        let y = document.frame.height * CGFloat(row) / CGFloat(max(rows, 1))
-        clip.scroll(to: NSPoint(x: 0, y: min(max(0, document.frame.height - clip.bounds.height), y)))
+        clip.scroll(to: NSPoint(x: 0, y: min(bottom, max(0, y))))
         scrollView.reflectScrolledClipView(clip)
     }
     #else
-    private func scroll(by points: CGFloat, rows: Int, _ scroller: ScrollViewProxy) {}
+    /// The list's scroll view. Setting its offset is what a finger's drag does.
+    private lazy var scrollView: UIScrollView? = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }.flatMap(\.windows).compactMap { Self.tallest(in: $0) }.first
 
-    private func scroll(toRow row: Int, rows: Int, _ scroller: ScrollViewProxy) {
-        scroller.scrollTo(min(row, rows - 1), anchor: .top)
+    private static func tallest(in view: UIView) -> UIScrollView? {
+        if let scroll = view as? UIScrollView, scroll.contentSize.height > 100_000 { return scroll }
+        for child in view.subviews { if let found = tallest(in: child) { return found } }
+        return nil
+    }
+
+    private var contentHeight: CGFloat { scrollView?.contentSize.height ?? 0 }
+
+    private func scroll(by points: CGFloat) {
+        guard let scrollView else { return }
+        move(scrollView.contentOffset.y + points)
+    }
+
+    /// The row at the top, where the collection view itself says the row is.
+    private func scroll(toRow row: Int, rows: Int) {
+        guard let scrollView else { return }
+        let item = IndexPath(item: min(row, rows - 1), section: 0)
+        let y = (scrollView as? UICollectionView)?.layoutAttributesForItem(at: item)?.frame.minY
+            ?? scrollView.contentSize.height * CGFloat(row) / CGFloat(max(rows, 1))
+        move(y)
+    }
+
+    private func move(_ y: CGFloat) {
+        guard let scrollView else { return }
+        let top = -scrollView.adjustedContentInset.top
+        let bottom = max(top, scrollView.contentSize.height + scrollView.adjustedContentInset.bottom - scrollView.bounds.height)
+        scrollView.contentOffset.y = min(bottom, max(top, y))
     }
     #endif
 
