@@ -31,6 +31,8 @@ mod curation;
 mod discovery;
 mod syncing;
 mod tidy;
+// A sender's cleanup and a sweep.
+mod cleanup;
 
 use std::sync::Arc;
 
@@ -64,6 +66,8 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(tidy::routes())
         .merge(filing::routes())
         .merge(syncing::routes())
+        // A sender's cleanup and a sweep.
+        .merge(cleanup::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

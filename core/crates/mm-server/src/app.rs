@@ -110,6 +110,8 @@ pub struct App {
     pub compose: crate::compose_wiring::Compose,
     /// Which logins are held back after their server refused them (`/api/sync-retry-account` lets one go).
     pub logins: Arc<mm_accounts::logins::Logins>,
+    /// A sender's cleanup and a sweep.
+    pub cleanups: crate::cleanup_wiring::Cleanups,
 }
 
 impl App {
@@ -237,6 +239,26 @@ impl App {
             ],
         );
         let jobs = Arc::new(Jobs::new(seams.clock.clone()));
+        // A sender's cleanup and a sweep, with a filing of their own.
+        let cleanups = crate::cleanup_wiring::Cleanups::assemble(crate::cleanup_wiring::CleanupsParts {
+            database: database.clone(),
+            directory: directory.clone(),
+            servers: servers.clone(),
+            gates: gates.clone(),
+            filing: Filing::new(FilingParts {
+                commands: commands.clone(),
+                ingest: ingest.clone(),
+                folders: folders.clone(),
+                gates: gates.clone(),
+                clock: seams.clock.clone(),
+                events: mailbox_events.clone(),
+                tokens: Arc::new(RandomTokens::default()),
+                stats: stats.clone(),
+            }),
+            clock: seams.clock.clone(),
+            secret: csrf.clone(),
+            read_only: environment.read_only(),
+        });
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),
@@ -312,6 +334,7 @@ impl App {
             connections,
             compose,
             logins,
+            cleanups,
         })
     }
 }

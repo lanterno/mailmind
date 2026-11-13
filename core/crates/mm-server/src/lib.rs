@@ -13,6 +13,8 @@
 pub mod answer;
 pub mod app;
 pub mod body;
+// A sender's cleanup, its unsubscribe and a sweep, bound.
+pub mod cleanup_wiring;
 mod command_wiring;
 pub mod environment;
 pub mod events;
