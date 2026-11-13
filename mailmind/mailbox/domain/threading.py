@@ -113,7 +113,9 @@ class Threader:
         """Copies that belong together, with the threads they touch: `touching` says, for each name the arrivals
         name, the ids of the threads that hold a copy naming it. Two threads touched by one conversation are one
         thread from now on. An arrival's own id counts as touched, so one whose references changed stays in its
-        thread, with or without a Message-ID for its links to find it by."""
+        thread, with or without a Message-ID for its links to find it by, and so does its Gmail thread's. Arrivals
+        that touch one thread are one conversation, so `place` never absorbs an id it gives, nor one into an id it
+        absorbs too."""
         arrivals = list(arrivals)
         found = thread_conversations(self._account, [_plain(m) for m in arrivals],
                                      [(name, list(ids)) for name, ids in touching.items()])

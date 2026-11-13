@@ -219,7 +219,8 @@ pub struct Placement {
     /// Each copy's thread id now, by pk, each pk once, in the order a Python dict would hold them.
     pub given: Vec<(i64, String)>,
     /// Each id absorbed, and the id that absorbed it, each absorbed id once, in the order a Python dict would hold
-    /// them. Whoever keeps state under an absorbed id moves it to its survivor.
+    /// them. Whoever keeps state under an absorbed id moves it to its survivor. No survivor is absorbed itself, and
+    /// `given` names none absorbed, so the merges can be applied in any order.
     pub merged: Vec<(String, String)>,
 }
 
@@ -252,7 +253,11 @@ impl Threader {
     /// Copies that belong together, with the threads they touch: `touching` says, for each name the arrivals name,
     /// the ids of the threads that hold a copy naming it. Two threads touched by one conversation are one thread
     /// from now on. An arrival's own id counts as touched, so one whose references changed stays in its thread,
-    /// with or without a Message-ID for its links to find it by.
+    /// with or without a Message-ID for its links to find it by, and so does its Gmail thread's.
+    ///
+    /// Arrivals that touch one thread are one conversation, however else they connect. Placed apart, each would
+    /// choose its own survivor, so one could absorb the id another gives, or absorb an id into one that is absorbed
+    /// in turn.
     ///
     /// The conversations come in the order their first copies arrived.
     pub fn conversations<'c>(
@@ -260,7 +265,10 @@ impl Threader {
         arrivals: &'c [StoredCopy],
         touching: &[(String, Vec<String>)],
     ) -> Vec<Conversation<'c>> {
-        group(arrivals.iter(), touching)
+        group(arrivals.iter(), touching, |m| {
+            let gmail = Some(m.thrid()).filter(|thrid| !thrid.is_empty()).map(|thrid| self.gmail_id(thrid));
+            m.held().map(str::to_owned).into_iter().chain(gmail).collect()
+        })
     }
 
     fn gmail_ids(&self, conversation: &Conversation<'_>) -> BTreeSet<String> {
@@ -340,7 +348,8 @@ impl Threader {
         let mut rows: Vec<&StoredCopy> = copies.iter().collect();
         in_store_order(&mut rows);
         let mut given = Ordered::new();
-        for mut conversation in group(rows.iter().copied(), &[]) {
+        // Only what the copies name groups them here: the ids they hold are what the repair re-decides.
+        for mut conversation in group(rows.iter().copied(), &[], |_| Vec::new()) {
             conversation.held.retain(|tid| tid.starts_with("rf:"));
             let survivor = self.survivor(&conversation, &[]);
             for m in &conversation.arrivals {
@@ -359,10 +368,12 @@ impl Threader {
     }
 }
 
-/// The union-find over what the arrivals name and the threads that touches, cut into conversations.
+/// The union-find over what the arrivals name and the threads that touches, cut into conversations. `meets` says
+/// which threads an arrival meets besides those: each joins its conversation as a thread `touching` names does.
 fn group<'c>(
     arrivals: impl Iterator<Item = &'c StoredCopy>,
     touching: &[(String, Vec<String>)],
+    meets: impl Fn(&StoredCopy) -> Vec<String>,
 ) -> Vec<Conversation<'c>> {
     let arrivals: Vec<&'c StoredCopy> = arrivals.collect();
     let mut uf = UnionFind::default();
@@ -379,6 +390,10 @@ fn group<'c>(
         if !thrid.is_empty() {
             let name = uf.node(Cow::Owned(format!("{GMAIL_NAME}{thrid}")));
             uf.union(key, name);
+        }
+        for tid in meets(m) {
+            let thread = uf.node(Cow::Owned(format!("{THREAD_NODE}{tid}")));
+            uf.union(key, thread);
         }
     }
     for (name, tids) in touching {

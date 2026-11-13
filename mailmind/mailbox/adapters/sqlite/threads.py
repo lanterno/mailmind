@@ -72,6 +72,7 @@ def thread_stored(c, account, pks=()):
     c.executemany("UPDATE messages SET thread_id=? WHERE pk=?",
                   [(placed.given[m.pk], m.pk) for m in arrivals.values() if m.thread_id != placed.given[m.pk]])
     _write_links(c, list(arrivals.values()))
+    # No survivor is absorbed itself, so these go in any order.
     for absorbed, survivor in placed.merged.items():
         c.execute("UPDATE messages INDEXED BY idx_msg_thread SET thread_id=? WHERE thread_id=? AND account=?",
                   (survivor, absorbed, account))
