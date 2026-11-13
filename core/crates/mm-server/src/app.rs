@@ -101,6 +101,8 @@ pub struct App {
     pub curation: crate::bound::Curation,
     pub attention: crate::bound::Attention,
     pub tidying: crate::bound::Tidying,
+    // Accounts' changes, and their test login.
+    pub connections: mm_accounts::connections::Connections,
 }
 
 impl App {
@@ -236,6 +238,14 @@ impl App {
             clock: seams.clock.clone(),
             stats: stats.clone(),
         });
+        // Accounts' changes, and their test login.
+        let probe = crate::account_wiring::ImapProbe { directory: directory.clone(), outside: seams.outside.clone() };
+        let connections = mm_accounts::connections::Connections::new(
+            directory.clone(),
+            Arc::new(probe),
+            Arc::new(crate::account_wiring::NoOneListens),
+            seams.clock.clone(),
+        );
         Ok(App {
             port,
             csrf,
@@ -263,6 +273,7 @@ impl App {
             curation,
             attention,
             tidying,
+            connections,
         })
     }
 }
