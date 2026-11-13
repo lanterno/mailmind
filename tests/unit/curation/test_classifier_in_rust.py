@@ -133,10 +133,10 @@ MONEY = re.compile(r"(\$\s?\d|\d\s?\$|usd|\bbtc\b|bitcoin|\beuros?\b|€|\bcash\
 GOV_RE = re.compile(r"(\.gov(\.[a-z]{2})?$|\.gouv\.[a-z]{2}$|\.go\.[a-z]{2}$|\.gob\.[a-z]{2}$|"
                     r"\.admin\.[a-z]{2}$|\.gc\.ca$|\.govt\.|\bgov\.)", re.I)
 EDU_RE = re.compile(r"(\.edu$|\.edu\.[a-z]{2}$|\.ac\.[a-z]{2}$|\.uni-[a-z]+\.)", re.I)
-# Fixed since: `\bmedi` took media and medium for medical.
-HEALTH_RE = re.compile(r"(sante|\bsanté|health|clinic|hospital|\bmedi(?!a|um)|patient|doctolib|dentist)", re.I)
-# Fixed since: `wise\.com` matched likewise.com, and `stripe\.com$` pinstripe.com.
-FINANCE_RE = re.compile(r"(\bbank\b|\bbanque\b|paypal|(^|\.)wise\.com(\.|$)|revolut|\bn26\b|"
+# Fixed since: `\bmedi` took media and medium for medical, and `hospital` hospitality.
+HEALTH_RE = re.compile(r"(sante|\bsanté|health|clinic|hospital(?!ity)|\bmedi(?!a|um)|patient|doctolib|dentist)", re.I)
+# Fixed since: `wise\.com` matched likewise.com, `stripe\.com$` pinstripe.com, and `revolut` revolution.
+FINANCE_RE = re.compile(r"(\bbank\b|\bbanque\b|paypal|(^|\.)wise\.com(\.|$)|revolut\b|\bn26\b|"
                         r"(^|\.)stripe\.com$|\bvisa\b|mastercard)", re.I)
 
 
@@ -287,7 +287,9 @@ DOMAINS = sorted(FREE_MAIL) + [f"x.{m}.example.test" for m in ESP_MARKERS] + [
     "example.test", "mail.example.test",
     # Domains that only look like a protected one's.
     "medium.example", "mediaplayer.example", "x.medi", "x.mediu", "mediumx.example", "likewise.com", "wise.company",
-    "x.wise.com", "wise.com.au", "wise.comx", "pinstripe.com", "x.stripe.com", "stripe.com.example"]
+    "x.wise.com", "wise.com.au", "wise.comx", "pinstripe.com", "x.stripe.com", "stripe.com.example", "hospitality.example",
+    "x.hospitals", "x.hospitali", "x.hospitalit", "hospitalitx.example", "revolution.example", "revolut.example",
+    "x.revolut", "revolut_x.example"]
 # A piece of every pattern's alternatives, and of the words around them.
 PHRASES = [
     "receipt", "invoice", "payment received", "your payment", "you paid", "amount paid", "your bill", "e-statement",

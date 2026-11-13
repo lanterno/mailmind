@@ -323,6 +323,22 @@ fn wise_com_and_stripe_com_are_whole_labels() {
 }
 
 #[test]
+fn no_hospitality_is_a_hospital_and_no_revolution_is_revolut() {
+    // Fixed in the core: Python's `hospital` and `revolut` matched both.
+    const PROTECTED: [&str; 3] = ["personal/protected", "high", "government/education/medical/financial domain"];
+    const UNCLASSIFIED: [&str; 3] = ["other/personal-ish", "low", "unclassified \u{2014} review"];
+    for domain in ["cityhospital.example", "x.hospital", "x.hospitali", "x.hospitalit", "hospitalitx.example"] {
+        assert_eq!(said(&format!("lin@{domain}"), "hi", "", false, &NONE), PROTECTED, "{domain}");
+    }
+    for domain in ["revolut.com", "x.revolut", "revolut-business.example"] {
+        assert_eq!(said(&format!("lin@{domain}"), "hi", "", false, &NONE), PROTECTED, "{domain}");
+    }
+    for domain in ["grand-hospitality.example", "HOSPITALITY.example", "revolution.example", "revolut_x.example"] {
+        assert_eq!(said(&format!("lin@{domain}"), "hi", "", false, &NONE), UNCLASSIFIED, "{domain}");
+    }
+}
+
+#[test]
 fn a_matrix_counts_glued_into_a_name_and_a_cycler_where_a_word_starts() {
     // Fixed in the core: Python's `matrix` and `cycler` counted anywhere, so a person's word was fraud.
     const SPAM: [&str; 3] = ["spam/scam", "high", "fraud/MLM pattern"];

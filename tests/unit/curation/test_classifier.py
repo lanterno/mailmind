@@ -87,6 +87,17 @@ def test_a_medical_sender_is_still_protected(frm):
     assert m.classify(frm, "Your weekly digest", "", False, rules=RULES)[0] == m.PROTECTED
 
 
+@pytest.mark.parametrize("frm", ["offers@grand-hospitality.example", "hello@revolutionbeauty.example"])
+def test_a_word_that_only_starts_like_a_protected_one_is_not_protected(frm):
+    assert m.classify(frm, "Our news", "", False, rules=RULES)[0] != m.PROTECTED
+
+
+@pytest.mark.parametrize("frm", ["portal@cityhospital.example", "portal@hospitals.example", "hello@revolut.com",
+                                 "hello@email.revolut.com"])
+def test_a_hospital_and_revolut_still_are(frm):
+    assert m.classify(frm, "Our news", "", False, rules=RULES)[0] == m.PROTECTED
+
+
 @pytest.mark.parametrize("frm", ["hello@likewise.com", "hello@pinstripe.com", "hello@wise.company.example"])
 def test_a_domain_that_only_ends_like_a_protected_one_is_not_protected(frm):
     assert m.classify(frm, "Our news", "", False, rules=RULES)[0] != m.PROTECTED
