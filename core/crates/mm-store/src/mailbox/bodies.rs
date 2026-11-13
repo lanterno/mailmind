@@ -56,26 +56,23 @@ impl StoredBodies for Database {
     }
 
     fn keep_parts(&self, pk: i64, parts: &[Attachment]) -> Result<(), Fault> {
-        self.read(|c| {
-            let tx = c.unchecked_transaction()?;
-            {
-                let mut insert = tx.prepare_cached(
-                    "INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline) \
-                     VALUES(?,?,?,?,?,?,?)",
-                )?;
-                for a in parts {
-                    insert.execute(params![
-                        pk,
-                        a.part_id.to_string(),
-                        a.filename,
-                        a.content_type,
-                        i64::try_from(a.size).unwrap_or(i64::MAX),
-                        a.content_id,
-                        i64::from(a.is_inline),
-                    ])?;
-                }
+        self.write(|c| {
+            let mut insert = c.prepare_cached(
+                "INSERT INTO attachments(message_pk,part_id,filename,content_type,size,content_id,is_inline) \
+                 VALUES(?,?,?,?,?,?,?)",
+            )?;
+            for a in parts {
+                insert.execute(params![
+                    pk,
+                    a.part_id.to_string(),
+                    a.filename,
+                    a.content_type,
+                    i64::try_from(a.size).unwrap_or(i64::MAX),
+                    a.content_id,
+                    i64::from(a.is_inline),
+                ])?;
             }
-            tx.commit()
+            Ok(())
         })
     }
 }

@@ -43,7 +43,7 @@ impl StoredDrafts for Database {
     }
 
     fn track(&self, draft: &Tracked) -> Result<i64, Fault> {
-        self.read(|c| {
+        self.write(|c| {
             c.prepare_cached(
                 "INSERT INTO drafts(account,folder,uid,message_id,uidvalidity,mode,subject,created_at,updated_at) \
                  VALUES(:account,:folder,:uid,:message_id,:uidvalidity,:mode,:subject,:at,:at) RETURNING id",
