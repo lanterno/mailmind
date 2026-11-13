@@ -12,6 +12,8 @@
 
 // What the Assistant reads: what calls cost.
 mod assistant;
+// What Compose reads: the outbox and the drafts' journal.
+mod compose;
 pub mod config;
 pub mod db;
 // What an export would hold, and a snapshot of the database as a download.
