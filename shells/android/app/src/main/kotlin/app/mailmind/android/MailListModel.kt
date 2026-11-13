@@ -3,6 +3,7 @@ package app.mailmind.android
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,9 +58,13 @@ class MailListModel(application: Application) : AndroidViewModel(application) {
                 val words = words(refusal)
                 main.post { problem = words }
             } catch (missing: LinkageError) {
-                // JNA loads the core when the bindings are first used: a missing library surfaces here.
+                // JNA loads the core when the bindings are first used: a missing library surfaces here, and so does
+                // one that will not link (a symbol the device lacks). The log says which, as the screen cannot.
+                Log.e(TAG, "The core did not load", missing)
                 main.post { problem = "The core is not in this build. Run `just android build`." }
             } catch (failure: Exception) {
+                // Only the demo is made here, and its mail is fictional, so the trace may be logged whole.
+                Log.e(TAG, "The demo mailbox could not be made", failure)
                 main.post { problem = "The demo mailbox could not be made." }
             }
         }
@@ -110,6 +115,8 @@ class MailListModel(application: Application) : AndroidViewModel(application) {
         session = null
     }
 }
+
+private const val TAG = "MailMind"
 
 /** Hears the core on its thread and hands every call to the main thread, keeping their order. */
 private class OnMainThread(private val model: MailListModel) : ViewObserver {
