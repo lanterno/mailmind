@@ -9,6 +9,7 @@ use crate::db::Database;
 use crate::placeholders;
 
 // The lists the page shows, a conversation and the tray of changes; the digest.
+mod bodies;
 mod digest;
 pub(crate) mod lists;
 

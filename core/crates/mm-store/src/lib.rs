@@ -26,6 +26,8 @@ mod mailbox_sync;
 pub mod page;
 mod rule_book;
 pub mod schema;
+// What Discovery reads of a sender as a message opens.
+mod senders;
 
 use std::collections::HashMap;
 use std::fmt;

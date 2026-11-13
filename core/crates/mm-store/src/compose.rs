@@ -1,7 +1,9 @@
-//! What Compose reads of the database (`compose.adapters.sqlite`): the outbox and the drafts' journal.
+//! What Compose reads of the database (`compose.adapters.sqlite`): the outbox and the drafts' journal, and the
+//! drafts it tracks, one of which a message opening tracks.
 
-use mm_compose::ports::{Row, StoredOutbox};
+use mm_compose::ports::{Row, StoredDrafts, StoredOutbox, Tracked};
 use mm_kernel::errors::Fault;
+use rusqlite::{OptionalExtension, named_params};
 
 use crate::db::Database;
 use crate::mailbox::lists::rows_of;
@@ -23,5 +25,44 @@ impl StoredOutbox for Database {
 
     fn overdue(&self, before: i64) -> Result<Vec<Row>, Fault> {
         self.read(|c| rows_of(c, OVERDUE, [before]))
+    }
+}
+
+impl StoredDrafts for Database {
+    fn by_message_id(&self, account: &str, message_id: Option<&str>) -> Result<Option<Row>, Fault> {
+        let Some(message_id) = message_id.filter(|m| !m.is_empty()) else { return Ok(None) };
+        let sql = "SELECT * FROM drafts WHERE account=? AND message_id=?";
+        self.read(|c| Ok(rows_of(c, sql, [account, message_id])?.into_iter().next()))
+    }
+
+    fn track(&self, draft: &Tracked) -> Result<i64, Fault> {
+        self.read(|c| {
+            c.prepare_cached(
+                "INSERT INTO drafts(account,folder,uid,message_id,uidvalidity,mode,subject,created_at,updated_at) \
+                 VALUES(:account,:folder,:uid,:message_id,:uidvalidity,:mode,:subject,:at,:at) RETURNING id",
+            )?
+            .query_row(
+                named_params! {
+                    ":account": draft.account,
+                    ":folder": draft.folder,
+                    ":uid": draft.uid,
+                    ":message_id": draft.message_id,
+                    ":uidvalidity": draft.uidvalidity,
+                    ":mode": draft.mode,
+                    ":subject": draft.subject,
+                    ":at": draft.at,
+                },
+                |r| r.get(0),
+            )
+        })
+    }
+
+    fn uidvalidity(&self, account: &str, folder: &str) -> Result<Option<i64>, Fault> {
+        self.read(|c| {
+            c.prepare_cached("SELECT uidvalidity FROM sync_state WHERE account=? AND folder=?")?
+                .query_row([account, folder], |r| r.get::<_, Option<i64>>(0))
+                .optional()
+                .map(Option::flatten)
+        })
     }
 }
