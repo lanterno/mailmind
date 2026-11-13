@@ -6,11 +6,13 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment, Outside};
 use mm_kernel::when::civil;
-use rusqlite::params;
+use rusqlite::Connection;
+use rusqlite::backup::Backup;
 use serde_json::{Value, json};
 
 use crate::db::Database;
@@ -123,24 +125,20 @@ impl Exports {
     }
 
     /// A consistent snapshot of the database, its log checkpointed into it first, encrypted with the database's key:
-    /// it opens on this computer, or wherever that key is given (MAILMIND_DB_KEY). It copies every table and the
-    /// schema's version, through SQLCipher's export, and writes nothing to the database itself.
+    /// it opens on this computer, or wherever that key is given (MAILMIND_DB_KEY). SQLite's online backup copies it
+    /// page for page into a file keyed as the database is, and writes nothing to the database itself.
     pub fn snapshot(&self) -> Result<Download, Fault> {
         let mut download =
             self.folder("application/octet-stream", format!("mailmind-{}.db", stamp(self.clock.now())))?;
         drop(self.create(&download.file)?);
-        let path = download.file.to_str().ok_or(UNWRITABLE)?.to_owned();
-        let key = self.database.key().raw();
+        let mut copy = Connection::open(&download.file).map_err(|_| UNWRITABLE)?;
+        copy.execute_batch(&self.database.key().pragma()).map_err(|_| UNWRITABLE)?;
         self.database.read(|c| {
             c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
-            let version: i64 = c.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-            c.execute("ATTACH DATABASE ?1 AS export KEY ?2", params![path, key.as_str()])?;
-            let copied = c
-                .query_row("SELECT sqlcipher_export('export')", [], |_| Ok(()))
-                .and_then(|()| c.execute_batch(&format!("PRAGMA export.user_version = {version};")));
-            let detached = c.execute_batch("DETACH DATABASE export");
-            copied.and(detached)
+            // Every page in one step, as Python's does, trying again a quarter second after the database was busy.
+            Backup::new(c, &mut copy)?.run_to_completion(i32::MAX, Duration::from_millis(250), None)
         })?;
+        drop(copy);
         download.size = fs::metadata(&download.file).map_err(|_| UNWRITABLE)?.len();
         Ok(download)
     }
