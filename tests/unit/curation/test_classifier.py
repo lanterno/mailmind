@@ -87,14 +87,18 @@ def test_a_medical_sender_is_still_protected(frm):
     assert m.classify(frm, "Your weekly digest", "", False, rules=RULES)[0] == m.PROTECTED
 
 
+@pytest.mark.parametrize("frm", ["hello@likewise.com", "hello@pinstripe.com", "hello@wise.company.example"])
+def test_a_domain_that_only_ends_like_a_protected_one_is_not_protected(frm):
+    assert m.classify(frm, "Our news", "", False, rules=RULES)[0] != m.PROTECTED
+
+
+@pytest.mark.parametrize("frm", ["hello@wise.com", "hello@mail.wise.com", "hello@wise.com.example", "hello@stripe.com",
+                                 "hello@e.stripe.com"])
+def test_a_protected_domain_and_its_sub_domains_still_are(frm):
+    assert m.classify(frm, "Our news", "", False, rules=RULES)[0] == m.PROTECTED
+
+
 # Known bugs, each the right answer the classifier doesn't give yet: its patterns match inside longer words.
-
-
-@pytest.mark.xfail(strict=True, reason="wise\\.com matches inside likewise.com")
-def test_a_domain_that_only_ends_like_a_protected_one_is_not_protected():
-    assert m.classify("hello@likewise.com", "Our news", "", False, rules=RULES)[0] != m.PROTECTED
-
-
 @pytest.mark.xfail(strict=True, reason="matrix and cycler match inside other words")
 @pytest.mark.parametrize("subject", ["Join our Matrix room", "Selling my bike to a recycler"])
 def test_a_person_writing_an_ordinary_word_is_not_a_scam(subject):

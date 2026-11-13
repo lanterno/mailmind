@@ -310,6 +310,19 @@ fn medi_is_medical_but_media_and_medium_are_not() {
 }
 
 #[test]
+fn wise_com_and_stripe_com_are_whole_labels() {
+    // Fixed in the core: Python's `wise\.com` matched likewise.com, and `stripe\.com$` pinstripe.com.
+    const PROTECTED: [&str; 3] = ["personal/protected", "high", "government/education/medical/financial domain"];
+    const UNCLASSIFIED: [&str; 3] = ["other/personal-ish", "low", "unclassified \u{2014} review"];
+    for domain in ["wise.com", "x.wise.com", "wise.com.au", "stripe.com", "x.stripe.com", "WISE.COM"] {
+        assert_eq!(said(&format!("lin@{domain}"), "hi", "", false, &NONE), PROTECTED, "{domain}");
+    }
+    for domain in ["likewise.com", "wise.company", "x-wise.com.example", "pinstripe.com", "stripe.com.example"] {
+        assert_eq!(said(&format!("lin@{domain}"), "hi", "", false, &NONE), UNCLASSIFIED, "{domain}");
+    }
+}
+
+#[test]
 fn an_address_is_read_as_python_lower_cased_and_stripped_it() {
     assert_eq!(
         said("  Lin@Studio.Example.Test\u{9}", "hi", "", false, &NONE),
