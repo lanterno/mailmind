@@ -35,6 +35,8 @@ pub mod posted;
 mod filing_wiring;
 mod heard;
 pub mod workers;
+// The login Keychain, through /usr/bin/security; and the accounts' changes and their test login.
+pub mod login_keychain;
 
 pub use app::{App, Seams};
 pub use serve::{Server, Work};

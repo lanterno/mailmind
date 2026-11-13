@@ -1,12 +1,12 @@
-//! The seams as `mailmind-server` runs: the system's clock, nothing between the app and its files or hosts, and the
-//! Keychain, which isn't on the Rust server yet. Lines of the log go to standard error.
+//! The seams as `mailmind-server` runs: the system's clock and nothing between the app and its files, hosts and
+//! programs. Its Keychain is the login Keychain (`login_keychain`). Lines of the log go to standard error.
 
 use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mm_kernel::log::{Line, Sink};
-use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret, Tripped};
+use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
 
 /// The system's clock.
 #[derive(Debug, Default)]
@@ -34,16 +34,6 @@ impl Outside for Unguarded {
 
     fn run(&self, _program: &str) -> Result<(), Tripped> {
         Ok(())
-    }
-}
-
-/// The login Keychain, which the Rust server can't read yet: every secret kept there is one it can't find.
-#[derive(Debug, Default)]
-pub struct NoKeychain;
-
-impl Keychain for NoKeychain {
-    fn find(&self, _item: &str) -> Result<Option<Secret>, KeychainProblem> {
-        Err(KeychainProblem)
     }
 }
 

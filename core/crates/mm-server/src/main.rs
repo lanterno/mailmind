@@ -6,7 +6,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mm_server::environment::{self, Environment};
-use mm_server::real::{NoKeychain, StandardError, SystemClock, Unguarded};
+use mm_server::login_keychain::LoginKeychain;
+use mm_server::real::{StandardError, SystemClock, Unguarded};
 use mm_server::workers::Workers;
 use mm_server::{App, Seams, Server};
 
@@ -41,7 +42,8 @@ fn main() -> ExitCode {
 async fn serve(port: u16) -> Result<(), String> {
     let environment = Environment::of_process();
     let settings = environment.settings()?;
-    let seams = Seams { clock: Arc::new(SystemClock), outside: Arc::new(Unguarded), keychain: Arc::new(NoKeychain) };
+    let keychain = Arc::new(LoginKeychain::new(Arc::new(Unguarded)));
+    let seams = Seams { clock: Arc::new(SystemClock), outside: Arc::new(Unguarded), keychain };
     let server = Server::bind(port).await.map_err(|_| format!("can't listen on 127.0.0.1:{port}"))?;
     let port = server.port().map_err(|_| "can't tell which port it listens on")?;
     let dist = environment::repo_root().join("mailmind/http/dist");
