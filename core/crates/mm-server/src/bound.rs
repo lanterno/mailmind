@@ -1,14 +1,19 @@
-//! Discovery's and Curation's use cases bound to their adapters (`mailmind.bootstrap.discovery` and `.curation`), with
-//! the glue they need from the other contexts: which folder plays which part (the Mailbox's), the accounts' names
-//! (the Directory's), whom the rule book keeps (Curation's) and whether a search can be a filter (Discovery's). A
-//! context never names another, so it is answered here.
+//! Discovery's, Curation's and Attention's use cases bound to their adapters (`mailmind.bootstrap.discovery`,
+//! `.curation` and `.attention`), with the glue they need from the other contexts: which folder plays which part (the
+//! Mailbox's), the accounts' names (the Directory's), whom the rule book keeps (Curation's) and whether a search can
+//! be a filter (Discovery's). A context never names another, so it is answered here.
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use mm_accounts::Directory;
+use mm_attention::followups::FollowUps;
+use mm_attention::muting::Muting;
+use mm_attention::ports::{Accounts, Copy, Flags};
+use mm_attention::snoozing::Snoozing;
+use mm_attention::tasks::Tasks;
 use mm_curation::filters::Filters;
-use mm_curation::ports::{Conditions, FilterIds, Filing, Mailboxes, RuleBook as _};
+use mm_curation::ports::{Conditions, Filing, FilterIds, Mailboxes, RuleBook as _};
 use mm_curation::screener::{Audit, Screener};
 use mm_discovery::contacts::Contacts;
 use mm_discovery::known::KnownContacts;
@@ -20,6 +25,7 @@ use mm_kernel::errors::Fault;
 use mm_kernel::seams::Clock;
 use mm_kernel::zone::Zone;
 use mm_store::Database;
+use mm_store::attention::{AttentionStore, UndoStack};
 use mm_store::curation::CurationStore;
 use mm_store::discovery::DiscoveryStore;
 
@@ -104,10 +110,12 @@ impl Discovery {
             views: SavedViews::new(store.clone(), Arc::new(Drawn)),
             contacts: Contacts::new(store.clone(), clock.clone()),
             suggesting: Suggesting::new(store.clone()),
-            known: KnownContacts::new(store, names, roles, Arc::new(Kept(Arc::new(CurationStore::new(
-                database.clone(),
-                clock.clone(),
-            ))))),
+            known: KnownContacts::new(
+                store,
+                names,
+                roles,
+                Arc::new(Kept(Arc::new(CurationStore::new(database.clone(), clock.clone())))),
+            ),
         }
     }
 }
@@ -118,6 +126,12 @@ pub(crate) struct Enabled(pub(crate) Arc<Directory>);
 
 impl Mailboxes for Enabled {
     fn known(&self) -> Result<HashSet<String>, Fault> {
+        Ok(self.0.accounts()?.into_iter().map(|a| a.email).collect())
+    }
+}
+
+impl Accounts for Enabled {
+    fn emails(&self) -> Result<Vec<String>, Fault> {
         Ok(self.0.accounts()?.into_iter().map(|a| a.email).collect())
     }
 }
@@ -198,5 +212,57 @@ impl Curation {
     /// The pk the copy `key`, `folder` and `uid` name has now, or None where that copy isn't there.
     pub(crate) fn copy_pk(&self, key: i64, folder: &str, uid: Option<i64>) -> Result<Option<i64>, Fault> {
         self.database.read(|c| mm_store::copies::copy_pk(c, key, folder, uid))
+    }
+}
+
+/// A flag change on a mail server goes through the Mailbox's queue, which this server has none of yet.
+#[derive(Debug)]
+pub(crate) struct NoFlags;
+
+impl Flags for NoFlags {
+    fn mark_seen(&self, _copies: &[Copy], _seen: bool) -> Result<Option<()>, Fault> {
+        Ok(None)
+    }
+}
+
+/// Attention's use cases.
+#[derive(Debug)]
+pub struct Attention {
+    pub snoozing: Snoozing,
+    pub muting: Muting,
+    pub follow_ups: FollowUps,
+    pub tasks: Tasks,
+    /// The database, for the copies and the message a request names.
+    pub(crate) database: Arc<Database>,
+}
+
+impl Attention {
+    pub(crate) fn assemble(
+        database: &Arc<Database>,
+        directory: &Arc<Directory>,
+        clock: &Arc<dyn Clock>,
+        zone: &Arc<dyn Zone>,
+    ) -> Attention {
+        let book = Arc::new(AttentionStore::new(database.clone()));
+        let accounts = Arc::new(Enabled(directory.clone()));
+        let undo = Arc::new(UndoStack::new(database.clone(), clock.clone()));
+        let flags = Arc::new(NoFlags);
+        Attention {
+            snoozing: Snoozing::new(book.clone(), undo.clone(), flags.clone(), clock.clone(), zone.clone()),
+            muting: Muting::new(book.clone(), accounts.clone(), undo, flags, clock.clone()),
+            follow_ups: FollowUps::new(book.clone(), accounts.clone(), clock.clone()),
+            tasks: Tasks::new(book, accounts, clock.clone(), zone.clone()),
+            database: database.clone(),
+        }
+    }
+
+    /// The pk the copy `key`, `folder` and `uid` name has now, or None where that copy isn't there.
+    pub(crate) fn copy_pk(&self, key: i64, folder: &str, uid: Option<i64>) -> Result<Option<i64>, Fault> {
+        self.database.read(|c| mm_store::copies::copy_pk(c, key, folder, uid))
+    }
+
+    /// A copy of message `key` now: the one at `uid` in `folder`, else in `folder`, else another; None where none is left.
+    pub(crate) fn message_pk(&self, key: i64, folder: Option<&str>, uid: Option<i64>) -> Result<Option<i64>, Fault> {
+        self.database.read(|c| mm_store::copies::message_pk(c, key, folder, uid))
     }
 }

@@ -72,6 +72,7 @@ pub struct App {
     // Discovery's, Curation's and Attention's use cases.
     pub discovery: crate::bound::Discovery,
     pub curation: crate::bound::Curation,
+    pub attention: crate::bound::Attention,
 }
 
 impl App {
@@ -102,6 +103,7 @@ impl App {
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
         let curation = crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone);
+        let attention = crate::bound::Attention::assemble(&database, &directory, &seams.clock, &zone);
         let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
         let folders = Arc::new(Folders::new(
             Arc::new(KnownAccounts(directory.clone())),
@@ -160,6 +162,7 @@ impl App {
             labels,
             discovery,
             curation,
+            attention,
         })
     }
 }

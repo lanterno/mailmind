@@ -25,6 +25,7 @@ mod events;
 mod places;
 mod preferences;
 // Discovery's, Curation's and Attention's.
+mod attention;
 mod curation;
 mod discovery;
 
@@ -56,6 +57,7 @@ pub fn router(app: Arc<App>) -> Router {
         // Discovery's, Curation's and Attention's.
         .merge(discovery::routes())
         .merge(curation::routes())
+        .merge(attention::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)
