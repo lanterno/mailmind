@@ -823,6 +823,10 @@ dependencies = [
 [[package]]
 name = "mm-discovery"
 version = "0.1.0"
+dependencies = [
+ "mm-kernel",
+ "serde_json",
+]
 
 [[package]]
 name = "mm-ffi"
@@ -913,6 +917,7 @@ dependencies = [
  "mm-assistant",
  "mm-compose",
  "mm-curation",
+ "mm-discovery",
  "mm-imap",
  "mm-kernel",
  "mm-mailbox",
@@ -931,6 +936,7 @@ dependencies = [
  "mm-accounts",
  "mm-assistant",
  "mm-compose",
+ "mm-discovery",
  "mm-kernel",
  "mm-mailbox",
  "rusqlite",
