@@ -338,6 +338,13 @@ impl Threader {
                 merged.set(tid.clone(), survivor.clone());
             }
         }
+        // A brand-new thread's id is minted from its root, and a thread minted from that root before can still be
+        // held by copies that name it no more. When another conversation absorbs that id, these go where it goes.
+        for (_, tid) in &mut given.pairs {
+            if let Some(&at) = merged.at.get(tid) {
+                tid.clone_from(&merged.pairs[at].1);
+            }
+        }
         Placement { given: given.pairs, merged: merged.pairs }
     }
 
