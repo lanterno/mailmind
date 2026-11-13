@@ -173,6 +173,8 @@ pub struct Account {
     pub strip_spaces: bool,
     /// The name the page shows for it, when the entry gives one that isn't blank.
     pub alias: Option<String>,
+    /// Its Trash folder: the entry's, or its type's (`accounts.trash_folder`).
+    pub trash: String,
 }
 
 impl Account {
@@ -210,6 +212,10 @@ impl Account {
                 .and_then(Value::as_str)
                 .map(|a| text::strip(a).to_owned())
                 .filter(|a| !a.is_empty()),
+            trash: match entry.get("trash") {
+                Some(Value::String(t)) if !t.is_empty() => t.clone(),
+                _ => defaults(entry).trash.to_owned(),
+            },
         })
     }
 
