@@ -16,11 +16,15 @@ STARTTLS is required before LOGIN (the app must never send a password in the cle
 throwaway certificate from trustme. The app trusts any certificate on loopback, as it does for
 Bridge.
 
+It imports nothing of MailMind, so it serves the Python app and the Rust server alike. An account's
+password goes where `keychain` keeps it (the tests' stand-in for the login Keychain, `fake_keychain`), under the
+item MailMind names it by.
+
 Tests script trouble with `fail`, `drop` and `drop_after`, change a folder's UIDVALIDITY with
 `renumber`, and read every command the app sent from `commands`, with passwords redacted; a line
 the fake couldn't read as a command is there too, as command "?".
 
-    with FakeIMAPServer() as srv:
+    with FakeIMAPServer(keychain=guard.KEYCHAIN) as srv:
         acct = srv.add_account("ada@example.test", "pw")
         srv.deliver("ada@example.test", "INBOX", raw_bytes)
         srv.fail("UID MOVE", "NO [CANNOT] not today")
@@ -42,6 +46,7 @@ from datetime import datetime, timezone
 import trustme
 
 KINDS = ("imap", "proton", "gmail")
+ITEM = "account:{}"         # the Keychain item MailMind keeps an account's password in (credential.account_item)
 
 FOLDERS = {
     "imap":   [("INBOX", ""), ("Sent", "\\Sent"), ("Drafts", "\\Drafts"), ("Trash", "\\Trash"),
@@ -825,10 +830,13 @@ class _TCP(socketserver.ThreadingTCPServer):
 
 
 class FakeIMAPServer:
-    def __init__(self, *, kind="imap", require_tls=True, implicit_tls=False, without=()):
+    def __init__(self, *, kind="imap", require_tls=True, implicit_tls=False, without=(), keychain=None):
         """kind: the default account kind (imap, proton, gmail). without: capabilities or
-        commands to leave out, e.g. ("MOVE",) or ("UIDPLUS", "EXPUNGE")."""
+        commands to leave out, e.g. ("MOVE",) or ("UIDPLUS", "EXPUNGE"). keychain: where each
+        account's password is kept, anything with fake_keychain.FakeKeychain's `add`; None keeps
+        it nowhere, for a test that never logs in as the app does."""
         assert kind in KINDS
+        self.keychain = keychain
         self.default_kind = kind
         self.require_tls, self.implicit_tls = require_tls, implicit_tls
         self.without = set(without)
@@ -904,14 +912,14 @@ class FakeIMAPServer:
                 acct.mailboxes[name] = Mailbox(name, special, uidvalidity=next(self._uidv))
 
     def config_entry(self, user):
-        """The MailMind config entry for `user`, its password kept in the Keychain: the tests' stand-in for it, which the
-        guard puts in the login Keychain's place."""
-        from mailmind.accounts.domain.credential import account_item
-        from mailmind.platform import keychain
+        """The MailMind config entry for `user`, its password kept in `keychain`, where the app reads it: the tests'
+        stand-in for the login Keychain, which the guard puts in the real one's place."""
         acct = self.accounts[user]
-        keychain.put(account_item(user), acct.password)
+        item = ITEM.format(user)
+        if self.keychain is not None:
+            self.keychain.add(item, acct.password, replace=True)
         return {"email": user, "type": acct.kind, "host": "127.0.0.1", "port": self.port,
-                "starttls": not self.implicit_tls, "credential": {"keychain": account_item(user)},
+                "starttls": not self.implicit_tls, "credential": {"keychain": item},
                 "smtp_host": "127.0.0.1", "smtp_port": 9}   # SMTP is another fake's job
 
     def deliver(self, user, mailbox, raw, flags=(), when=None, thread_of=None):

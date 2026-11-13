@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import guard
 import problems
 from fixtures import world as w
 from mailmind.accounts.domain import tls_pin
@@ -137,7 +138,7 @@ def test_bridge_set_to_ssl_connects_and_is_pinned(world):
     from mailmind.bootstrap import accounts
     from mailmind.bootstrap.accounts import config
     from fakes.imap_server import FakeIMAPServer
-    with FakeIMAPServer(kind="proton", implicit_tls=True) as srv:
+    with FakeIMAPServer(kind="proton", implicit_tls=True, keychain=guard.KEYCHAIN) as srv:
         entry = srv.add_account("dee@example.test")
         config.add_account({**entry, "credential": {"style": "keychain", "value": "app-password"}})
         M = accounts.connect(accounts.get("dee@example.test"), timeout=10)

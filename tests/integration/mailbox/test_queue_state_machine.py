@@ -15,6 +15,7 @@ import pytest
 from hypothesis import HealthCheck, settings as hsettings, strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule, run_state_machine_as_test
 
+import guard
 from answered import answered
 from fixtures import world as w
 from mailmind.bootstrap import mailbox
@@ -44,7 +45,7 @@ class Machine(RuleBasedStateMachine):
             if p.exists():
                 p.unlink()
         shutil.copyfile(path, self.data_dir / "mailmind.db")
-        self.server = FakeIMAPServer()
+        self.server = FakeIMAPServer(keychain=guard.KEYCHAIN)
         self.server.__enter__()
         assert w.populate(self.server) == placed
         w.write_config(self.server, str(self.data_dir))

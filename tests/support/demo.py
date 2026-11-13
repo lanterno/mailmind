@@ -57,7 +57,7 @@ def populate(server):
 
 def main():
     argv = ["mailmind", "serve", *sys.argv[1:2]]
-    with tempfile.TemporaryDirectory(prefix="mailmind-demo-") as home, FakeIMAPServer() as imap, FakeSMTPServer() as smtp, \
+    with tempfile.TemporaryDirectory(prefix="mailmind-demo-") as home, FakeIMAPServer(keychain=guard.KEYCHAIN) as imap, FakeSMTPServer() as smtp, \
             FakeAnthropic() as claude:
         os.environ[fake_keychain.VARIABLE] = os.path.join(home, "keychain.json")   # shared with the server, which reads it
         populate(imap)

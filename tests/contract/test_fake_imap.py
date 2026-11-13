@@ -10,6 +10,7 @@ import threading
 
 import pytest
 
+import guard
 from answered import answered
 from fakes.imap_server import FakeIMAPServer
 from mailmind.accounts.domain.credential import Typed
@@ -27,7 +28,7 @@ def _mail(n, *, frm="Grace <grace@example.test>", subject=None, mid=None, extra=
 
 @pytest.fixture
 def srv():
-    with FakeIMAPServer() as s:
+    with FakeIMAPServer(keychain=guard.KEYCHAIN) as s:
         yield s
 
 
@@ -148,7 +149,7 @@ def test_move_lands_the_message_in_the_destination(srv, app):
 
 
 def test_without_move_the_app_copies_then_expunges_only_that_uid(app):
-    with FakeIMAPServer(without=("MOVE",)) as srv:
+    with FakeIMAPServer(without=("MOVE",), keychain=guard.KEYCHAIN) as srv:
         entry = srv.add_account(ADA)
         app = {**app, "port": entry["port"]}
         keep = srv.deliver(ADA, "INBOX", _mail(1), flags=["\\Deleted"])   # another client's pending delete
@@ -164,7 +165,7 @@ def test_without_move_the_app_copies_then_expunges_only_that_uid(app):
 
 
 def test_without_uidplus_the_message_is_left_flagged_deleted(app):
-    with FakeIMAPServer(without=("MOVE", "UIDPLUS")) as srv:
+    with FakeIMAPServer(without=("MOVE", "UIDPLUS"), keychain=guard.KEYCHAIN) as srv:
         entry = srv.add_account(ADA)
         app = {**app, "port": entry["port"]}
         uid = srv.deliver(ADA, "INBOX", _mail(1))
@@ -289,7 +290,7 @@ def test_idle_hears_new_mail(srv, app):
 
 def test_proton_marks_mail_read_on_its_way_to_trash(data_dir):
     from mailmind.bootstrap import accounts
-    with FakeIMAPServer(kind="proton") as srv:
+    with FakeIMAPServer(kind="proton", keychain=guard.KEYCHAIN) as srv:
         entry = srv.add_account(ADA)
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
         uid = srv.deliver(ADA, "INBOX", _mail(1))
@@ -303,7 +304,7 @@ def test_proton_marks_mail_read_on_its_way_to_trash(data_dir):
 def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
     from mailmind.bootstrap import accounts
     from mailmind.mailbox.adapters.imap.imaplib_session import ImaplibSession
-    with FakeIMAPServer(kind="gmail") as srv:
+    with FakeIMAPServer(kind="gmail", keychain=guard.KEYCHAIN) as srv:
         entry = srv.add_account(ADA)
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
         first = _mail(1)
@@ -325,7 +326,7 @@ def test_gmail_threads_archive_by_label_and_get_their_inbox_uid_back(data_dir):
 
 def test_gmail_trash_and_spam_are_outside_all_mail(data_dir):
     from mailmind.bootstrap import accounts
-    with FakeIMAPServer(kind="gmail") as srv:
+    with FakeIMAPServer(kind="gmail", keychain=guard.KEYCHAIN) as srv:
         entry = srv.add_account(ADA)
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [entry]}))
         a = srv.deliver(ADA, "INBOX", _mail(1))

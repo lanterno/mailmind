@@ -235,7 +235,7 @@ def world_template(tmp_path_factory):
     from mailmind.bootstrap.mailbox import store
     d = tmp_path_factory.mktemp("world-template")
     import time_machine
-    with settings.use(settings.Settings(home=str(d))), FakeIMAPServer() as srv, \
+    with settings.use(settings.Settings(home=str(d))), FakeIMAPServer(keychain=guard.KEYCHAIN) as srv, \
             time_machine.travel(NOW, tick=False):
         placed = world.populate(srv)
         world.write_config(srv, str(d))
@@ -262,7 +262,7 @@ def world(world_template, data_dir):
         if p.exists():
             p.unlink()
     shutil.copyfile(template, data_dir / "mailmind.db")
-    with FakeIMAPServer() as srv, FakeSMTPServer() as smtp:
+    with FakeIMAPServer(keychain=guard.KEYCHAIN) as srv, FakeSMTPServer() as smtp:
         assert w.populate(srv) == placed
         w.connect_smtp(srv, smtp)
         w.write_config(srv, str(data_dir), smtp)
