@@ -7,7 +7,9 @@
 //! server, and its tests hold each to the answers it gave.
 
 pub mod classifier;
+pub mod cleaning;
 pub mod cleanup;
+pub mod cleanup_ports;
 pub mod filters;
 pub mod ports;
 pub mod rulebook;
@@ -15,3 +17,4 @@ pub mod rules;
 pub mod screener;
 pub mod sweep_plan;
 mod text;
+pub mod unsubscribe;
