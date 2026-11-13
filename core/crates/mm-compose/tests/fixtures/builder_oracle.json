@@ -1,0 +1,3434 @@
+[
+ {
+  "name": "plain",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "reply_references_fold",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "lin@example.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Re: Lunch on Thursday?",
+   "text": "Great, see you then.\n\nOn Tue, 27 Oct 2026 10:40:00 +0000, Lin Mori <lin@example.test> wrote:\n> 12:30 is perfect. See you there.",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": "<lunch-3@lin.example.test>",
+   "references": [
+    "<lunch-1@lin.example.test>",
+    "<lunch-2@ada.example.test>",
+    "<lunch-3@lin.example.test>"
+   ]
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: lin@example.test\r\nSubject: Re: Lunch on Thursday?\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nIn-Reply-To: <lunch-3@lin.example.test>\r\nReferences: <lunch-1@lin.example.test> <lunch-2@ada.example.test>\r\n <lunch-3@lin.example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nGreat, see you then.\r\n\r\nOn Tue, 27 Oct 2026 10:40:00 +0000, Lin Mori <lin@example.test> wrote:\r\n> 12:30 is perfect. See you there.\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "text_html",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": "<div>Hi Lin,</div><div><br></div><div>The linen came in. <b>Want half?</b></div><div><br></div><div>Ada</div>",
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\n<div>Hi Lin,</div><div><br></div><div>The linen came in. <b>Want half?</b></d=\r\niv><div><br></div><div>Ada</div>\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "text_html_picture",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\n![swatch](cid:sw1)\n\nAda",
+   "html": "<div>Hi Lin,</div><img src=\"cid:sw1@mailmind\" alt=\"swatch\"><div>Ada</div>",
+   "attachments": [
+    {
+     "filename": "swatch.png",
+     "content_type": "image/png",
+     "data": "PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015Ä",
+     "cid": "sw1"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============0040992764608243447==\"\r\n\r\n--===============0040992764608243447==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\n[swatch]\r\n\r\nAda\r\n\r\n--===============0040992764608243447==\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n<div>Hi Lin,</div><img src=3D\"cid:sw1@mailmind\" alt=3D\"swatch\"><div>Ada</div>\r\n\r\n--===============4410622890980378624==\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: inline; filename=\"swatch.png\"\r\nContent-ID: <sw1@mailmind>\r\nMIME-Version: 1.0\r\n\r\niVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ\r\n\r\n--===============4410622890980378624==--\r\n\r\n--===============0040992764608243447==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 4
+  }
+ },
+ {
+  "name": "draft_keeps_picture_mark",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\n![swatch](cid:sw1)\n\nAda",
+   "html": "<div>Hi Lin,</div><img src=\"cid:sw1@mailmind\" alt=\"swatch\"><div>Ada</div>",
+   "attachments": [
+    {
+     "filename": "swatch.png",
+     "content_type": "image/png",
+     "data": "PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015Ä",
+     "cid": "sw1"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": true,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============0040992764608243447==\"\r\n\r\n--===============0040992764608243447==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\n![swatch](cid:sw1)\r\n\r\nAda\r\n\r\n--===============0040992764608243447==\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n<div>Hi Lin,</div><img src=3D\"cid:sw1@mailmind\" alt=3D\"swatch\"><div>Ada</div>\r\n\r\n--===============4410622890980378624==\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: inline; filename=\"swatch.png\"\r\nContent-ID: <sw1@mailmind>\r\nMIME-Version: 1.0\r\n\r\niVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ\r\n\r\n--===============4410622890980378624==--\r\n\r\n--===============0040992764608243447==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 4
+  }
+ },
+ {
+  "name": "picture_not_shown_is_a_file",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": "<div>no picture</div>",
+   "attachments": [
+    {
+     "filename": "swatch.png",
+     "content_type": "image/png",
+     "data": "PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015Ä",
+     "cid": "sw1"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============0040992764608243447==\"\r\n\r\n--===============0040992764608243447==\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\n<div>no picture</div>\r\n\r\n--===============4410622890980378624==--\r\n\r\n--===============0040992764608243447==\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"swatch.png\"\r\nMIME-Version: 1.0\r\n\r\niVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ\r\n\r\n--===============0040992764608243447==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 4
+  }
+ },
+ {
+  "name": "text_file",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [
+    "noor@studio.example.test"
+   ],
+   "bcc": [
+    "ada.archive@example.test"
+   ],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "order.pdf",
+     "content_type": "application/pdf",
+     "data": "%PDF-1.4\n% a fictional order form\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nCc: noor@studio.example.test\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"order.pdf\"\r\nMIME-Version: 1.0\r\n\r\nJVBERi0xLjQKJSBhIGZpY3Rpb25hbCBvcmRlciBmb3JtCg==\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test",
+    "noor@studio.example.test",
+    "ada.archive@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [
+    "noor@studio.example.test"
+   ],
+   "bcc_disp": [
+    "ada.archive@example.test"
+   ],
+   "left": 5
+  }
+ },
+ {
+  "name": "text_html_files",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": "<div>Hi Lin,</div><div><br></div><div>The linen came in. <b>Want half?</b></div><div><br></div><div>Ada</div>",
+   "attachments": [
+    {
+     "filename": "order.pdf",
+     "content_type": "application/pdf",
+     "data": "%PDF-1.4\n% a fictional order form\n"
+    },
+    {
+     "filename": "notes.txt",
+     "content_type": "text/plain",
+     "data": "linen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\nlinen\nwool\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============0040992764608243447==\"\r\n\r\n--===============0040992764608243447==\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\n<div>Hi Lin,</div><div><br></div><div>The linen came in. <b>Want half?</b></d=\r\niv><div><br></div><div>Ada</div>\r\n\r\n--===============4410622890980378624==--\r\n\r\n--===============0040992764608243447==\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"order.pdf\"\r\nMIME-Version: 1.0\r\n\r\nJVBERi0xLjQKJSBhIGZpY3Rpb25hbCBvcmRlciBmb3JtCg==\r\n\r\n--===============0040992764608243447==\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"notes.txt\"\r\nMIME-Version: 1.0\r\n\r\nbGluZW4Kd29vbApsaW5lbgp3b29sCmxpbmVuCndvb2wKbGluZW4Kd29vbApsaW5lbgp3b29sCmxp\r\nbmVuCndvb2wKbGluZW4Kd29vbApsaW5lbgp3b29sCmxpbmVuCndvb2wKbGluZW4Kd29vbApsaW5l\r\nbgp3b29sCmxpbmVuCndvb2wKbGluZW4Kd29vbApsaW5lbgp3b29sCmxpbmVuCndvb2wKbGluZW4K\r\nd29vbApsaW5lbgp3b29sCmxpbmVuCndvb2wKbGluZW4Kd29vbApsaW5lbgp3b29sCg==\r\n\r\n--===============0040992764608243447==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 4
+  }
+ },
+ {
+  "name": "html_pictures_and_files",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "![a](cid:a1) and ![b](cid:b2)",
+   "html": "<img src=\"cid:a1@mailmind\"><img src=\"cid:b2@mailmind\">",
+   "attachments": [
+    {
+     "filename": "a.png",
+     "content_type": "image/png",
+     "data": "PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015Ä",
+     "cid": "a1"
+    },
+    {
+     "filename": "order.pdf",
+     "content_type": "application/pdf",
+     "data": "%PDF-1.4\n% a fictional order form\n"
+    },
+    {
+     "filename": "b.gif",
+     "content_type": "image/gif",
+     "data": "GIF89a",
+     "cid": "b2"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4012468253418652812==\"\r\n\r\n--===============4012468253418652812==\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============0040992764608243447==\"\r\n\r\n--===============0040992764608243447==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n[a] and [b]\r\n\r\n--===============0040992764608243447==\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n<img src=3D\"cid:a1@mailmind\"><img src=3D\"cid:b2@mailmind\">\r\n\r\n--===============4410622890980378624==\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: inline; filename=\"a.png\"\r\nContent-ID: <a1@mailmind>\r\nMIME-Version: 1.0\r\n\r\niVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ\r\n\r\n--===============4410622890980378624==\r\nContent-Type: image/gif\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: inline; filename=\"b.gif\"\r\nContent-ID: <b2@mailmind>\r\nMIME-Version: 1.0\r\n\r\nR0lGODlh\r\n\r\n--===============4410622890980378624==--\r\n\r\n--===============0040992764608243447==--\r\n\r\n--===============4012468253418652812==\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"order.pdf\"\r\nMIME-Version: 1.0\r\n\r\nJVBERi0xLjQKJSBhIGZpY3Rpb25hbCBvcmRlciBmb3JtCg==\r\n\r\n--===============4012468253418652812==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 3
+  }
+ },
+ {
+  "name": "forward_with_pdf",
+  "spec": {
+   "account": "bea@example.test",
+   "account_name": "Bea",
+   "to": [
+    "ivo@harbor.example.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fwd: Re: Contract draft v2",
+   "text": "As promised.\n\n---------- Forwarded message ----------\nFrom: Bea Novak <bea@example.test>\nDate: Sun, 01 Nov 2026 20:00:00 +0000\nSubject: Re: Contract draft v2\nTo: Ivo Brandt <ivo@harbor.example.test>\n\nHi Ivo, my comments are in the attached file. Two points stand out.",
+   "html": "<div>As promised.</div><br><div>---------- Forwarded message ----------<br>From: Bea Novak &lt;bea@example.test&gt;<br>Date: Sun, 01 Nov 2026 20:00:00 +0000<br>Subject: Re: Contract draft v2<br>To: Ivo Brandt &lt;ivo@harbor.example.test&gt;</div><hr><div>Hi Ivo, my comments are in the attached file. <b>Two points</b> stand out.</div>",
+   "attachments": [
+    {
+     "filename": "comments.pdf",
+     "content_type": "application/pdf",
+     "data": "%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Bea <bea@example.test>\r\nTo: ivo@harbor.example.test\r\nSubject: Fwd: Re: Contract draft v2\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============0040992764608243447==\"\r\n\r\n--===============0040992764608243447==\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nAs promised.\r\n\r\n---------- Forwarded message ----------\r\nFrom: Bea Novak <bea@example.test>\r\nDate: Sun, 01 Nov 2026 20:00:00 +0000\r\nSubject: Re: Contract draft v2\r\nTo: Ivo Brandt <ivo@harbor.example.test>\r\n\r\nHi Ivo, my comments are in the attached file. Two points stand out.\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\n<div>As promised.</div><br><div>---------- Forwarded message ----------<br>Fr=\r\nom: Bea Novak &lt;bea@example.test&gt;<br>Date: Sun, 01 Nov 2026 20:00:00 +00=\r\n00<br>Subject: Re: Contract draft v2<br>To: Ivo Brandt &lt;ivo@harbor.example=\r\n.test&gt;</div><hr><div>Hi Ivo, my comments are in the attached file. <b>Two =\r\npoints</b> stand out.</div>\r\n\r\n--===============4410622890980378624==--\r\n\r\n--===============0040992764608243447==\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"comments.pdf\"\r\nMIME-Version: 1.0\r\n\r\nJVBERi0xLjQKMSAwIG9iajw8Pj5lbmRvYmoKdHJhaWxlcjw8Pj4KJSVFT0YK\r\n\r\n--===============0040992764608243447==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "ivo@harbor.example.test"
+   ],
+   "to_disp": [
+    "ivo@harbor.example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 4
+  }
+ },
+ {
+  "name": "rsvp",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada Park",
+   "to": [
+    "noor@studio.example.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Accepted: Design review",
+   "text": "Ada Park has responded \"Accepted\" to the invitation “Design review”.\n\n— sent from MailMind",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "invite.ics",
+     "content_type": "text/calendar",
+     "data": "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//MailMind//iMIP//EN\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:review-1@studio.example.test\r\nSUMMARY:Design review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\nBEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//MailMind//iMIP//EN\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:review-1@studio.example.test\r\nSUMMARY:Design review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\nBEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//MailMind//iMIP//EN\r\nMETHOD:REPLY\r\nBEGIN:VEVENT\r\nUID:review-1@studio.example.test\r\nSUMMARY:Design review\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+     "params": [
+      [
+       "method",
+       "REPLY"
+      ],
+      [
+       "charset",
+       "UTF-8"
+      ]
+     ]
+    }
+   ],
+   "in_reply_to": "<DB9P250MB0001.review@studio.example.test>",
+   "references": [
+    "<DB9P250MB0001.review@studio.example.test>"
+   ]
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada Park <ada@example.test>\r\nTo: noor@studio.example.test\r\nSubject: Accepted: Design review\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nIn-Reply-To: <DB9P250MB0001.review@studio.example.test>\r\nReferences: <DB9P250MB0001.review@studio.example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nAda Park has responded \"Accepted\" to the invitation =E2=80=9CDesign review=E2=\r\n=80=9D.\r\n\r\n=E2=80=94 sent from MailMind\r\n\r\n--===============4410622890980378624==\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"invite.ics\"\r\nContent-Type: text/calendar; method=\"REPLY\"; charset=\"UTF-8\"\r\nMIME-Version: 1.0\r\n\r\nQkVHSU46VkNBTEVOREFSDQpWRVJTSU9OOjIuMA0KUFJPRElEOi0vL01haWxNaW5kLy9pTUlQLy9F\r\nTg0KTUVUSE9EOlJFUExZDQpCRUdJTjpWRVZFTlQNClVJRDpyZXZpZXctMUBzdHVkaW8uZXhhbXBs\r\nZS50ZXN0DQpTVU1NQVJZOkRlc2lnbiByZXZpZXcNCkVORDpWRVZFTlQNCkVORDpWQ0FMRU5EQVIN\r\nCkJFR0lOOlZDQUxFTkRBUg0KVkVSU0lPTjoyLjANClBST0RJRDotLy9NYWlsTWluZC8vaU1JUC8v\r\nRU4NCk1FVEhPRDpSRVBMWQ0KQkVHSU46VkVWRU5UDQpVSUQ6cmV2aWV3LTFAc3R1ZGlvLmV4YW1w\r\nbGUudGVzdA0KU1VNTUFSWTpEZXNpZ24gcmV2aWV3DQpFTkQ6VkVWRU5UDQpFTkQ6VkNBTEVOREFS\r\nDQpCRUdJTjpWQ0FMRU5EQVINClZFUlNJT046Mi4wDQpQUk9ESUQ6LS8vTWFpbE1pbmQvL2lNSVAv\r\nL0VODQpNRVRIT0Q6UkVQTFkNCkJFR0lOOlZFVkVOVA0KVUlEOnJldmlldy0xQHN0dWRpby5leGFt\r\ncGxlLnRlc3QNClNVTU1BUlk6RGVzaWduIHJldmlldw0KRU5EOlZFVkVOVA0KRU5EOlZDQUxFTkRB\r\nUg0K\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "noor@studio.example.test"
+   ],
+   "to_disp": [
+    "noor@studio.example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "draft_no_recipients",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [],
+   "cc": [],
+   "bcc": [],
+   "subject": "Half-written",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": true,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nSubject: Half-written\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [],
+   "to_disp": [],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_accented_short",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Café au lait",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: =?utf-8?q?Caf=C3=A9?= au lait\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_accented_long",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Réunion de l'équipe produit — ordre du jour détaillé pour la semaine prochaine, avec toutes les pièces jointes et les notes",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: =?utf-8?b?UsOpdW5pb24gZGUgbCfDqXF1aXBlIHByb2R1aXQg4oCU?= ordre du\r\n jour =?utf-8?q?d=C3=A9taill=C3=A9?= pour la semaine prochaine, avec toutes\r\n les =?utf-8?q?pi=C3=A8ces?= jointes et les notes\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_japanese",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "会議の議題について確認をお願いします。来週の打ち合わせの資料を添付しました。よろしくお願いいたします。",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: =?utf-8?b?5Lya6K2w44Gu6K2w6aGM44Gr44Gk44GE44Gm56K66KqN44KS44GK6aGY?=\r\n =?utf-8?b?44GE44GX44G+44GZ44CC5p2l6YCx44Gu5omT44Gh5ZCI44KP44Gb44Gu6LOH5paZ?=\r\n =?utf-8?b?44KS5re75LuY44GX44G+44GX44Gf44CC44KI44KN44GX44GP44GK6aGY44GE44GE?=\r\n =?utf-8?b?44Gf44GX44G+44GZ44CC?=\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_emoji",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Linen 🧵 arrived 🎉",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Linen =?utf-8?b?8J+ntSBhcnJpdmVkIPCfjok=?=\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_mixed_runs",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Re: Ünïcödé and ASCII words alternating Ünïcödé and ASCII words alternating Ünïcödé again",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Re: =?utf-8?q?=C3=9Cn=C3=AFc=C3=B6d=C3=A9_and_ASCII_words_alternati?=\r\n =?utf-8?b?bmcgw5xuw69jw7Zkw6kgYW5kIEFTQ0lJIHdvcmRzIGFsdGVybmF0aW5nIMOcbsOv?=\r\n =?utf-8?b?Y8O2ZMOp?= again\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "names_accented",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Zoë Ångström",
+   "to": [
+    "José Núñez <jose@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: =?utf-8?b?Wm/DqyDDhW5nc3Ryw7Zt?= <ada@example.test>\r\nTo: =?utf-8?b?Sm9zw6kgTsO6w7Fleg==?= <jose@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "jose@example.test"
+   ],
+   "to_disp": [
+    "jose@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "name_with_comma",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "\"Mori, Lin\" <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: \"Mori, Lin\" <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "name_accented_with_comma",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "\"Núñez, José\" <jose@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: =?utf-8?b?TsO6w7FleiwgSm9zw6k=?= <jose@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "jose@example.test"
+   ],
+   "to_disp": [
+    "jose@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "name_with_quotes",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "\"Lin \\\"the\\\" Mori\" <lin@example.test>",
+    "\"back\\\\slash\" <bs@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: \"Lin \\\"the\\\" Mori\" <lin@example.test>, \"back\\\\slash\" <bs@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test",
+    "bs@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test",
+    "bs@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "header_break_in_subject",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Hi\r\nBcc: everyone@example.test",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: HiBcc: everyone@example.test\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "long_to_list",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>",
+    "Noor Haddad <noor@example.test>",
+    "Ivo Brandt <ivo@example.test>",
+    "Bea Novak <bea@example.test>",
+    "Cy Park <cy@example.test>",
+    "Mae Lindqvist <mae@example.test>",
+    "Ada Park <ada@example.test>",
+    "Tom Vale <tom@example.test>"
+   ],
+   "cc": [
+    "noor@studio.example.test",
+    "guild@example.test",
+    "mae@guild.example.test"
+   ],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>, Noor Haddad <noor@example.test>,\r\n Ivo Brandt <ivo@example.test>, Bea Novak <bea@example.test>,\r\n Cy Park <cy@example.test>, Mae Lindqvist <mae@example.test>,\r\n Ada Park <ada@example.test>, Tom Vale <tom@example.test>\r\nCc: noor@studio.example.test, guild@example.test, mae@guild.example.test\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test",
+    "noor@example.test",
+    "ivo@example.test",
+    "bea@example.test",
+    "cy@example.test",
+    "mae@example.test",
+    "ada@example.test",
+    "tom@example.test",
+    "noor@studio.example.test",
+    "guild@example.test",
+    "mae@guild.example.test"
+   ],
+   "to_disp": [
+    "lin@example.test",
+    "noor@example.test",
+    "ivo@example.test",
+    "bea@example.test",
+    "cy@example.test",
+    "mae@example.test",
+    "ada@example.test",
+    "tom@example.test"
+   ],
+   "cc_disp": [
+    "noor@studio.example.test",
+    "guild@example.test",
+    "mae@guild.example.test"
+   ],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "long_references",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": "<r9@ex.example.test>",
+   "references": [
+    "<thread-0-a-rather-long-local-part@mail.example.test>",
+    "<thread-1-a-rather-long-local-part@mail.example.test>",
+    "<thread-2-a-rather-long-local-part@mail.example.test>",
+    "<thread-3-a-rather-long-local-part@mail.example.test>",
+    "<thread-4-a-rather-long-local-part@mail.example.test>",
+    "<thread-5-a-rather-long-local-part@mail.example.test>",
+    "<thread-6-a-rather-long-local-part@mail.example.test>",
+    "<thread-7-a-rather-long-local-part@mail.example.test>",
+    "<thread-8-a-rather-long-local-part@mail.example.test>",
+    "<thread-9-a-rather-long-local-part@mail.example.test>"
+   ]
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nIn-Reply-To: <r9@ex.example.test>\r\nReferences: <thread-0-a-rather-long-local-part@mail.example.test>\r\n <thread-1-a-rather-long-local-part@mail.example.test>\r\n <thread-2-a-rather-long-local-part@mail.example.test>\r\n <thread-3-a-rather-long-local-part@mail.example.test>\r\n <thread-4-a-rather-long-local-part@mail.example.test>\r\n <thread-5-a-rather-long-local-part@mail.example.test>\r\n <thread-6-a-rather-long-local-part@mail.example.test>\r\n <thread-7-a-rather-long-local-part@mail.example.test>\r\n <thread-8-a-rather-long-local-part@mail.example.test>\r\n <thread-9-a-rather-long-local-part@mail.example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "cc_bcc_dedupe",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin <lin@example.test>",
+    "LIN@example.test"
+   ],
+   "cc": [
+    "lin@EXAMPLE.test",
+    "noor@studio.example.test"
+   ],
+   "bcc": [
+    "Noor@studio.example.test",
+    "ada.archive@example.test"
+   ],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin <lin@example.test>\r\nCc: lin@EXAMPLE.test, noor@studio.example.test\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test",
+    "noor@studio.example.test",
+    "ada.archive@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [
+    "lin@EXAMPLE.test",
+    "noor@studio.example.test"
+   ],
+   "bcc_disp": [
+    "Noor@studio.example.test",
+    "ada.archive@example.test"
+   ],
+   "left": 6
+  }
+ },
+ {
+  "name": "filename_accented",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "résumé café.pdf",
+     "content_type": "application/pdf",
+     "data": "%PDF-1.4\n% a fictional order form\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment;\r\n filename*=utf-8''r%C3%A9sum%C3%A9%20caf%C3%A9.pdf\r\nMIME-Version: 1.0\r\n\r\nJVBERi0xLjQKJSBhIGZpY3Rpb25hbCBvcmRlciBmb3JtCg==\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "filename_long",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "a-very-long-file-name-for-the-quarterly-fabric-order-and-the-swatches-2026.pdf",
+     "content_type": "application/pdf",
+     "data": "%PDF-1.4\n% a fictional order form\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment;\r\n filename*0*=us-ascii''a-very-long-file-name-for-the-quarterly-fabric-order-a;\r\n filename*1*=nd-the-swatches-2026.pdf\r\nMIME-Version: 1.0\r\n\r\nJVBERi0xLjQKJSBhIGZpY3Rpb25hbCBvcmRlciBmb3JtCg==\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "filename_long_accented",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "Été-très-long-nom-de-fichier-pour-la-commande-trimestrielle-de-tissus-et-échantillons.pdf",
+     "content_type": "application/pdf",
+     "data": "%PDF-1.4\n% a fictional order form\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment;\r\n filename*0*=utf-8''%C3%89t%C3%A9-tr%C3%A8s-long-nom-de-fichier-pour-la-comma;\r\n filename*1*=nde-trimestrielle-de-tissus-et-%C3%A9chantillons.pdf\r\nMIME-Version: 1.0\r\n\r\nJVBERi0xLjQKJSBhIGZpY3Rpb25hbCBvcmRlciBmb3JtCg==\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "docx_type",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "plan.docx",
+     "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+     "data": "PK\u0003\u0004xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"plan.docx\"\r\nMIME-Version: 1.0\r\n\r\nUEsDBHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4\r\neHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4\r\neHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4\r\neHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "empty_subject_and_text",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "",
+   "text": "",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject:\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\n\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "quoted_printable_edges",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "trailing space \nand tab\t\nequals = sign\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy=\nzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz= done\nCRLF line\r\nlone CR\rnon-ascii: naïve façade — ok\néééééééééééééééééééééééééééééééééééééééé\nwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww \nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv \nuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu \n",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\ntrailing space=20\r\nand tab=09\r\nequals =3D sign\r\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\r\nxxx\r\nyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy=\r\n=3D\r\nzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\n=3D done\r\nCRLF line\r\nlone CR\r\nnon-ascii: na=C3=AFve fa=C3=A7ade =E2=80=94 ok\r\n=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=\r\n=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=\r\n=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=A9=C3=\r\n=A9=C3=A9=C3=A9\r\nwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww=\r\n=20\r\nvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv =\r\n\r\nuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu=20\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "empty_attachment",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "empty.bin",
+     "content_type": "",
+     "data": ""
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"empty.bin\"\r\nMIME-Version: 1.0\r\n\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "attached_message",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fwd: Linen",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "linen.eml",
+     "content_type": "message/rfc822",
+     "data": "From: Lin Mori <lin@example.test>\r\nTo: Ada <ada@example.test>\r\nSubject: Linen\r\nDate: Sun, 01 Nov 2026 20:00:00 +0000\r\nMessage-ID: <linen-1@example.test>\r\n\r\nThe linen came in.\r\nWant half?\r\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fwd: Linen\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: message/rfc822\r\nContent-Transfer-Encoding: 8bit\r\nContent-Disposition: attachment; filename=\"linen.eml\"\r\nMIME-Version: 1.0\r\n\r\nFrom: Lin Mori <lin@example.test>\r\nTo: Ada <ada@example.test>\r\nSubject: Linen\r\nDate: Sun, 01 Nov 2026 20:00:00 +0000\r\nMessage-ID: <linen-1@example.test>\r\n\r\nThe linen came in.\r\nWant half?\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "attached_multipart_message",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fwd: Swatches",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "swatches.eml",
+     "content_type": "message/rfc822",
+     "data": "From: Lin Mori <lin@example.test>\nTo: Ada <ada@example.test>\nSubject: Swatches\nMIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=\"b1\"\n\nThis is a multipart message.\n--b1\nContent-Type: text/plain; charset=us-ascii\n\nTwo swatches.\n\n--b1\nContent-Type: text/plain; name=\"notes.txt\"\nContent-Disposition: attachment; filename=\"notes.txt\"\n\nlinen, wool\n--b1--\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fwd: Swatches\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: message/rfc822\r\nContent-Transfer-Encoding: 8bit\r\nContent-Disposition: attachment; filename=\"swatches.eml\"\r\nMIME-Version: 1.0\r\n\r\nFrom: Lin Mori <lin@example.test>\r\nTo: Ada <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b1\"\r\n\r\nThis is a multipart message.\r\n--b1\r\nContent-Type: text/plain; charset=us-ascii\r\n\r\nTwo swatches.\r\n\r\n--b1\r\nContent-Type: text/plain; name=\"notes.txt\"\r\nContent-Disposition: attachment; filename=\"notes.txt\"\r\n\r\nlinen, wool\r\n--b1--\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "attached_long_headers",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fwd: long",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "long.eml",
+     "content_type": "message/rfc822",
+     "data": "From: Lin Mori <lin@example.test>\r\nTo: Ada <ada@example.test>, Noor Haddad <noor@studio.example.test>, Ivo Brandt <ivo@harbor.example.test>\r\nSubject: A subject that runs on well past the seventy-eight columns a header line may hold\r\nContent-Type: multipart/alternative; boundary=\"----=_Part_123456_7890.1234567890123\"\r\n\r\n------=_Part_123456_7890.1234567890123\r\nContent-Type: text/plain\r\n\r\nPlain.\r\n------=_Part_123456_7890.1234567890123\r\nContent-Type: text/html\r\n\r\n<p>Html.</p>\r\n------=_Part_123456_7890.1234567890123--\r\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fwd: long\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: message/rfc822\r\nContent-Transfer-Encoding: 8bit\r\nContent-Disposition: attachment; filename=\"long.eml\"\r\nMIME-Version: 1.0\r\n\r\nFrom: Lin Mori <lin@example.test>\r\nTo: Ada <ada@example.test>, Noor Haddad <noor@studio.example.test>,\r\n Ivo Brandt <ivo@harbor.example.test>\r\nSubject: A subject that runs on well past the seventy-eight columns a header\r\n line may hold\r\nContent-Type: multipart/alternative;\r\n boundary=\"----=_Part_123456_7890.1234567890123\"\r\n\r\n------=_Part_123456_7890.1234567890123\r\nContent-Type: text/plain\r\n\r\nPlain.\r\n------=_Part_123456_7890.1234567890123\r\nContent-Type: text/html\r\n\r\n<p>Html.</p>\r\n------=_Part_123456_7890.1234567890123--\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "attached_nested",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fwd: nested",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "nested.eml",
+     "content_type": "message/rfc822",
+     "data": "Subject: nested\r\nContent-Type: multipart/mixed; boundary=outer\r\n\r\n--outer\r\nContent-Type: multipart/alternative; boundary=\"inner\"\r\n\r\n--inner\r\nContent-Type: text/plain\r\n\r\nhi\r\n--inner\r\nContent-Type: text/html\r\n\r\n<b>hi</b>\r\n--inner--\r\n\r\n--outer\r\nContent-Type: message/rfc822\r\n\r\nSubject: inside\r\n\r\nbody inside\r\n--outer--\r\nepilogue text\r\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fwd: nested\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: message/rfc822\r\nContent-Transfer-Encoding: 8bit\r\nContent-Disposition: attachment; filename=\"nested.eml\"\r\nMIME-Version: 1.0\r\n\r\nSubject: nested\r\nContent-Type: multipart/mixed; boundary=outer\r\n\r\n--outer\r\nContent-Type: multipart/alternative; boundary=\"inner\"\r\n\r\n--inner\r\nContent-Type: text/plain\r\n\r\nhi\r\n--inner\r\nContent-Type: text/html\r\n\r\n<b>hi</b>\r\n--inner--\r\n\r\n--outer\r\nContent-Type: message/rfc822\r\n\r\nSubject: inside\r\n\r\nbody inside\r\n--outer--\r\nepilogue text\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "uppercase_message_type",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "x.eml",
+     "content_type": "Message/RFC822",
+     "data": "From: Lin Mori <lin@example.test>\r\nTo: Ada <ada@example.test>\r\nSubject: Linen\r\nDate: Sun, 01 Nov 2026 20:00:00 +0000\r\nMessage-ID: <linen-1@example.test>\r\n\r\nThe linen came in.\r\nWant half?\r\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: Message/RFC822\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"x.eml\"\r\nMIME-Version: 1.0\r\n\r\nRnJvbTogTGluIE1vcmkgPGxpbkBleGFtcGxlLnRlc3Q+DQpUbzogQWRhIDxhZGFAZXhhbXBsZS50\nZXN0Pg0KU3ViamVjdDogTGluZW4NCkRhdGU6IFN1biwgMDEgTm92IDIwMjYgMjA6MDA6MDAgKzAw\nMDANCk1lc3NhZ2UtSUQ6IDxsaW5lbi0xQGV4YW1wbGUudGVzdD4NCg0KVGhlIGxpbmVuIGNhbWUg\naW4uDQpXYW50IGhhbGY/DQo=\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "message_global_type",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "x.eml",
+     "content_type": "message/global",
+     "data": "From: Lin Mori <lin@example.test>\r\nTo: Ada <ada@example.test>\r\nSubject: Linen\r\nDate: Sun, 01 Nov 2026 20:00:00 +0000\r\nMessage-ID: <linen-1@example.test>\r\n\r\nThe linen came in.\r\nWant half?\r\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: message/global\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"x.eml\"\r\nMIME-Version: 1.0\r\n\r\nRnJvbTogTGluIE1vcmkgPGxpbkBleGFtcGxlLnRlc3Q+DQpUbzogQWRhIDxhZGFAZXhhbXBsZS50\nZXN0Pg0KU3ViamVjdDogTGluZW4NCkRhdGU6IFN1biwgMDEgTm92IDIwMjYgMjA6MDA6MDAgKzAw\nMDANCk1lc3NhZ2UtSUQ6IDxsaW5lbi0xQGV4YW1wbGUudGVzdD4NCg0KVGhlIGxpbmVuIGNhbWUg\naW4uDQpXYW50IGhhbGY/DQo=\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "delivery_status_type",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "x.txt",
+     "content_type": "message/delivery-status",
+     "data": "Reporting-MTA: dns; x\n"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "exception": "AttributeError",
+   "words": "'str' object has no attribute 'policy'"
+  }
+ },
+ {
+  "name": "multipart_type_file",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "x.mht",
+     "content_type": "multipart/related",
+     "data": "<html/>"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: multipart/related\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"x.mht\"\r\nMIME-Version: 1.0\r\n\r\nPGh0bWwvPg==\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "params_accented",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "note.txt",
+     "content_type": "text/plain",
+     "data": "hi",
+     "params": [
+      [
+       "name",
+       "café.txt"
+      ]
+     ]
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"note.txt\"\r\nContent-Type: text/plain; name*=utf-8''caf%C3%A9.txt\r\nMIME-Version: 1.0\r\n\r\naGk=\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "long_name_ascii",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Bartholomew Alexander Fitzgerald-Wolverhampton Montgomery Junior Esquire <bart@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Bartholomew Alexander Fitzgerald-Wolverhampton Montgomery Junior Esquire\r\n <bart@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "bart@example.test"
+   ],
+   "to_disp": [
+    "bart@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "long_name_quoted",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "\"Fitzgerald-Wolverhampton, Bartholomew Alexander (Logistics and Fabric Sourcing)\" <bart@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: \"Fitzgerald-Wolverhampton, Bartholomew Alexander (Logistics and Fabric\r\n Sourcing)\" <bart@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "bart@example.test"
+   ],
+   "to_disp": [
+    "bart@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "local_part_accented",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "josé@example.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: =?utf-8?q?jos=C3=A9?=@example.test\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "josé@example.test"
+   ],
+   "to_disp": [
+    "josé@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "idn_domain",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin <lin@bücher.example>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin <lin@xn--bcher-kva.example>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@xn--bcher-kva.example"
+   ],
+   "to_disp": [
+    "lin@xn--bcher-kva.example"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "exactly_100",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "p0@example.test",
+    "p1@example.test",
+    "p2@example.test",
+    "p3@example.test",
+    "p4@example.test",
+    "p5@example.test",
+    "p6@example.test",
+    "p7@example.test",
+    "p8@example.test",
+    "p9@example.test",
+    "p10@example.test",
+    "p11@example.test",
+    "p12@example.test",
+    "p13@example.test",
+    "p14@example.test",
+    "p15@example.test",
+    "p16@example.test",
+    "p17@example.test",
+    "p18@example.test",
+    "p19@example.test",
+    "p20@example.test",
+    "p21@example.test",
+    "p22@example.test",
+    "p23@example.test",
+    "p24@example.test",
+    "p25@example.test",
+    "p26@example.test",
+    "p27@example.test",
+    "p28@example.test",
+    "p29@example.test",
+    "p30@example.test",
+    "p31@example.test",
+    "p32@example.test",
+    "p33@example.test",
+    "p34@example.test",
+    "p35@example.test",
+    "p36@example.test",
+    "p37@example.test",
+    "p38@example.test",
+    "p39@example.test",
+    "p40@example.test",
+    "p41@example.test",
+    "p42@example.test",
+    "p43@example.test",
+    "p44@example.test",
+    "p45@example.test",
+    "p46@example.test",
+    "p47@example.test",
+    "p48@example.test",
+    "p49@example.test",
+    "p50@example.test",
+    "p51@example.test",
+    "p52@example.test",
+    "p53@example.test",
+    "p54@example.test",
+    "p55@example.test",
+    "p56@example.test",
+    "p57@example.test",
+    "p58@example.test",
+    "p59@example.test",
+    "p60@example.test",
+    "p61@example.test",
+    "p62@example.test",
+    "p63@example.test",
+    "p64@example.test",
+    "p65@example.test",
+    "p66@example.test",
+    "p67@example.test",
+    "p68@example.test",
+    "p69@example.test",
+    "p70@example.test",
+    "p71@example.test",
+    "p72@example.test",
+    "p73@example.test",
+    "p74@example.test",
+    "p75@example.test",
+    "p76@example.test",
+    "p77@example.test",
+    "p78@example.test",
+    "p79@example.test",
+    "p80@example.test",
+    "p81@example.test",
+    "p82@example.test",
+    "p83@example.test",
+    "p84@example.test",
+    "p85@example.test",
+    "p86@example.test",
+    "p87@example.test",
+    "p88@example.test",
+    "p89@example.test",
+    "p90@example.test",
+    "p91@example.test",
+    "p92@example.test",
+    "p93@example.test",
+    "p94@example.test",
+    "p95@example.test",
+    "p96@example.test",
+    "p97@example.test",
+    "p98@example.test",
+    "p99@example.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: p0@example.test, p1@example.test, p2@example.test, p3@example.test,\r\n p4@example.test, p5@example.test, p6@example.test, p7@example.test,\r\n p8@example.test, p9@example.test, p10@example.test, p11@example.test,\r\n p12@example.test, p13@example.test, p14@example.test, p15@example.test,\r\n p16@example.test, p17@example.test, p18@example.test, p19@example.test,\r\n p20@example.test, p21@example.test, p22@example.test, p23@example.test,\r\n p24@example.test, p25@example.test, p26@example.test, p27@example.test,\r\n p28@example.test, p29@example.test, p30@example.test, p31@example.test,\r\n p32@example.test, p33@example.test, p34@example.test, p35@example.test,\r\n p36@example.test, p37@example.test, p38@example.test, p39@example.test,\r\n p40@example.test, p41@example.test, p42@example.test, p43@example.test,\r\n p44@example.test, p45@example.test, p46@example.test, p47@example.test,\r\n p48@example.test, p49@example.test, p50@example.test, p51@example.test,\r\n p52@example.test, p53@example.test, p54@example.test, p55@example.test,\r\n p56@example.test, p57@example.test, p58@example.test, p59@example.test,\r\n p60@example.test, p61@example.test, p62@example.test, p63@example.test,\r\n p64@example.test, p65@example.test, p66@example.test, p67@example.test,\r\n p68@example.test, p69@example.test, p70@example.test, p71@example.test,\r\n p72@example.test, p73@example.test, p74@example.test, p75@example.test,\r\n p76@example.test, p77@example.test, p78@example.test, p79@example.test,\r\n p80@example.test, p81@example.test, p82@example.test, p83@example.test,\r\n p84@example.test, p85@example.test, p86@example.test, p87@example.test,\r\n p88@example.test, p89@example.test, p90@example.test, p91@example.test,\r\n p92@example.test, p93@example.test, p94@example.test, p95@example.test,\r\n p96@example.test, p97@example.test, p98@example.test, p99@example.test\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "p0@example.test",
+    "p1@example.test",
+    "p2@example.test",
+    "p3@example.test",
+    "p4@example.test",
+    "p5@example.test",
+    "p6@example.test",
+    "p7@example.test",
+    "p8@example.test",
+    "p9@example.test",
+    "p10@example.test",
+    "p11@example.test",
+    "p12@example.test",
+    "p13@example.test",
+    "p14@example.test",
+    "p15@example.test",
+    "p16@example.test",
+    "p17@example.test",
+    "p18@example.test",
+    "p19@example.test",
+    "p20@example.test",
+    "p21@example.test",
+    "p22@example.test",
+    "p23@example.test",
+    "p24@example.test",
+    "p25@example.test",
+    "p26@example.test",
+    "p27@example.test",
+    "p28@example.test",
+    "p29@example.test",
+    "p30@example.test",
+    "p31@example.test",
+    "p32@example.test",
+    "p33@example.test",
+    "p34@example.test",
+    "p35@example.test",
+    "p36@example.test",
+    "p37@example.test",
+    "p38@example.test",
+    "p39@example.test",
+    "p40@example.test",
+    "p41@example.test",
+    "p42@example.test",
+    "p43@example.test",
+    "p44@example.test",
+    "p45@example.test",
+    "p46@example.test",
+    "p47@example.test",
+    "p48@example.test",
+    "p49@example.test",
+    "p50@example.test",
+    "p51@example.test",
+    "p52@example.test",
+    "p53@example.test",
+    "p54@example.test",
+    "p55@example.test",
+    "p56@example.test",
+    "p57@example.test",
+    "p58@example.test",
+    "p59@example.test",
+    "p60@example.test",
+    "p61@example.test",
+    "p62@example.test",
+    "p63@example.test",
+    "p64@example.test",
+    "p65@example.test",
+    "p66@example.test",
+    "p67@example.test",
+    "p68@example.test",
+    "p69@example.test",
+    "p70@example.test",
+    "p71@example.test",
+    "p72@example.test",
+    "p73@example.test",
+    "p74@example.test",
+    "p75@example.test",
+    "p76@example.test",
+    "p77@example.test",
+    "p78@example.test",
+    "p79@example.test",
+    "p80@example.test",
+    "p81@example.test",
+    "p82@example.test",
+    "p83@example.test",
+    "p84@example.test",
+    "p85@example.test",
+    "p86@example.test",
+    "p87@example.test",
+    "p88@example.test",
+    "p89@example.test",
+    "p90@example.test",
+    "p91@example.test",
+    "p92@example.test",
+    "p93@example.test",
+    "p94@example.test",
+    "p95@example.test",
+    "p96@example.test",
+    "p97@example.test",
+    "p98@example.test",
+    "p99@example.test"
+   ],
+   "to_disp": [
+    "p0@example.test",
+    "p1@example.test",
+    "p2@example.test",
+    "p3@example.test",
+    "p4@example.test",
+    "p5@example.test",
+    "p6@example.test",
+    "p7@example.test",
+    "p8@example.test",
+    "p9@example.test",
+    "p10@example.test",
+    "p11@example.test",
+    "p12@example.test",
+    "p13@example.test",
+    "p14@example.test",
+    "p15@example.test",
+    "p16@example.test",
+    "p17@example.test",
+    "p18@example.test",
+    "p19@example.test",
+    "p20@example.test",
+    "p21@example.test",
+    "p22@example.test",
+    "p23@example.test",
+    "p24@example.test",
+    "p25@example.test",
+    "p26@example.test",
+    "p27@example.test",
+    "p28@example.test",
+    "p29@example.test",
+    "p30@example.test",
+    "p31@example.test",
+    "p32@example.test",
+    "p33@example.test",
+    "p34@example.test",
+    "p35@example.test",
+    "p36@example.test",
+    "p37@example.test",
+    "p38@example.test",
+    "p39@example.test",
+    "p40@example.test",
+    "p41@example.test",
+    "p42@example.test",
+    "p43@example.test",
+    "p44@example.test",
+    "p45@example.test",
+    "p46@example.test",
+    "p47@example.test",
+    "p48@example.test",
+    "p49@example.test",
+    "p50@example.test",
+    "p51@example.test",
+    "p52@example.test",
+    "p53@example.test",
+    "p54@example.test",
+    "p55@example.test",
+    "p56@example.test",
+    "p57@example.test",
+    "p58@example.test",
+    "p59@example.test",
+    "p60@example.test",
+    "p61@example.test",
+    "p62@example.test",
+    "p63@example.test",
+    "p64@example.test",
+    "p65@example.test",
+    "p66@example.test",
+    "p67@example.test",
+    "p68@example.test",
+    "p69@example.test",
+    "p70@example.test",
+    "p71@example.test",
+    "p72@example.test",
+    "p73@example.test",
+    "p74@example.test",
+    "p75@example.test",
+    "p76@example.test",
+    "p77@example.test",
+    "p78@example.test",
+    "p79@example.test",
+    "p80@example.test",
+    "p81@example.test",
+    "p82@example.test",
+    "p83@example.test",
+    "p84@example.test",
+    "p85@example.test",
+    "p86@example.test",
+    "p87@example.test",
+    "p88@example.test",
+    "p89@example.test",
+    "p90@example.test",
+    "p91@example.test",
+    "p92@example.test",
+    "p93@example.test",
+    "p94@example.test",
+    "p95@example.test",
+    "p96@example.test",
+    "p97@example.test",
+    "p98@example.test",
+    "p99@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_long_word",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: =?utf-8?q?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?=\r\n =?utf-8?q?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?=\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_encoded_word_typed",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "=?utf-8?q?caf=C3=A9?= time",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: =?utf-8?q?caf=C3=A9?= time\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "reference_not_ascii",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": [
+    "<é@example.test>"
+   ]
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "'ascii' codec can't encode character '\\xe9' in position 13: ordinal not in range(128)"
+  }
+ },
+ {
+  "name": "subject_spaces_runs",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "  lots   of    space   between   words  ",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: lots   of    space   between   words\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "name_with_dot",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "A. Park",
+   "to": [
+    "Dr. Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: \"A. Park\" <ada@example.test>\r\nTo: \"Dr. Lin Mori\" <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_exact_fit",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "subject_one_over",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject:\r\n ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "html_only_whitespace_lines",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": "<p>a</p>\n\n<p>b</p>\n",
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: Lin Mori <lin@example.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative;\r\n boundary=\"===============4410622890980378624==\"\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n\r\n--===============4410622890980378624==\r\nContent-Type: text/html; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\n<p>a</p>\r\n\r\n<p>b</p>\r\n\r\n--===============4410622890980378624==--\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@example.test"
+   ],
+   "to_disp": [
+    "lin@example.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 5
+  }
+ },
+ {
+  "name": "cid_with_break",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": "<img src=\"cid:a\nb@mailmind\">",
+   "attachments": [
+    {
+     "filename": "a.png",
+     "content_type": "image/png",
+     "data": "PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0001\u0000\u0000\u0000\u0001\b\u0006\u0000\u0000\u0000\u001f\u0015Ä",
+     "cid": "a\nb"
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "Header values may not contain linefeed or carriage return characters"
+  }
+ },
+ {
+  "name": "param_with_break",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [
+    {
+     "filename": "a.ics",
+     "content_type": "text/calendar",
+     "data": "x",
+     "params": [
+      [
+       "method",
+       "RE\nPLY"
+      ]
+     ]
+    }
+   ],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "Header values may not contain linefeed or carriage return characters"
+  }
+ },
+ {
+  "name": "refuse_no_recipient",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "at least one recipient is required"
+  }
+ },
+ {
+  "name": "refuse_too_many",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "p0@example.test",
+    "p1@example.test",
+    "p2@example.test",
+    "p3@example.test",
+    "p4@example.test",
+    "p5@example.test",
+    "p6@example.test",
+    "p7@example.test",
+    "p8@example.test",
+    "p9@example.test",
+    "p10@example.test",
+    "p11@example.test",
+    "p12@example.test",
+    "p13@example.test",
+    "p14@example.test",
+    "p15@example.test",
+    "p16@example.test",
+    "p17@example.test",
+    "p18@example.test",
+    "p19@example.test",
+    "p20@example.test",
+    "p21@example.test",
+    "p22@example.test",
+    "p23@example.test",
+    "p24@example.test",
+    "p25@example.test",
+    "p26@example.test",
+    "p27@example.test",
+    "p28@example.test",
+    "p29@example.test",
+    "p30@example.test",
+    "p31@example.test",
+    "p32@example.test",
+    "p33@example.test",
+    "p34@example.test",
+    "p35@example.test",
+    "p36@example.test",
+    "p37@example.test",
+    "p38@example.test",
+    "p39@example.test",
+    "p40@example.test",
+    "p41@example.test",
+    "p42@example.test",
+    "p43@example.test",
+    "p44@example.test",
+    "p45@example.test",
+    "p46@example.test",
+    "p47@example.test",
+    "p48@example.test",
+    "p49@example.test",
+    "p50@example.test",
+    "p51@example.test",
+    "p52@example.test",
+    "p53@example.test",
+    "p54@example.test",
+    "p55@example.test",
+    "p56@example.test",
+    "p57@example.test",
+    "p58@example.test",
+    "p59@example.test",
+    "p60@example.test",
+    "p61@example.test",
+    "p62@example.test",
+    "p63@example.test",
+    "p64@example.test",
+    "p65@example.test",
+    "p66@example.test",
+    "p67@example.test",
+    "p68@example.test",
+    "p69@example.test",
+    "p70@example.test",
+    "p71@example.test",
+    "p72@example.test",
+    "p73@example.test",
+    "p74@example.test",
+    "p75@example.test",
+    "p76@example.test",
+    "p77@example.test",
+    "p78@example.test",
+    "p79@example.test",
+    "p80@example.test",
+    "p81@example.test",
+    "p82@example.test",
+    "p83@example.test",
+    "p84@example.test",
+    "p85@example.test",
+    "p86@example.test",
+    "p87@example.test",
+    "p88@example.test",
+    "p89@example.test",
+    "p90@example.test",
+    "p91@example.test",
+    "p92@example.test",
+    "p93@example.test",
+    "p94@example.test",
+    "p95@example.test",
+    "p96@example.test",
+    "p97@example.test",
+    "p98@example.test",
+    "p99@example.test",
+    "p100@example.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "too many recipients (max 100)"
+  }
+ },
+ {
+  "name": "refuse_not_an_address",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "lin"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "not a valid address: 'lin'"
+  }
+ },
+ {
+  "name": "refuse_two_ats",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "\"a@b\"@example.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "not a valid address: '\"a@b\"@example.test'"
+  }
+ },
+ {
+  "name": "refuse_unsafe",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "li​n@example.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "unsafe characters in address: 'li\\u200bn@example.test'"
+  }
+ },
+ {
+  "name": "refuse_domain_no_dot",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "lin@example"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "invalid domain"
+  }
+ },
+ {
+  "name": "refuse_domain_empty_label",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "lin@ex..ample.test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "invalid domain: 'ex..ample.test'"
+  }
+ },
+ {
+  "name": "refuse_domain_bad_chars",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "lin@exam(ple).test"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "raw": "From: Ada <ada@example.test>\r\nTo: ple <lin@exam.test>\r\nSubject: Fabric order\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <179362080000.4242.2102120316588816134@example.test>\r\nUser-Agent: MailMind\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nHi Lin,\r\n\r\nThe linen came in. Want half?\r\n\r\nAda\r\n",
+   "message_id": "<179362080000.4242.2102120316588816134@example.test>",
+   "envelope": [
+    "lin@exam.test"
+   ],
+   "to_disp": [
+    "lin@exam.test"
+   ],
+   "cc_disp": [],
+   "bcc_disp": [],
+   "left": 6
+  }
+ },
+ {
+  "name": "refuse_from",
+  "spec": {
+   "account": "ada",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "not a valid address: 'ada'"
+  }
+ },
+ {
+  "name": "refuse_quote_in_repr",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "it's"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "not a valid address: \"it's\""
+  }
+ },
+ {
+  "name": "refuse_bcc_bad",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin Mori <lin@example.test>"
+   ],
+   "cc": [],
+   "bcc": [
+    "nobody"
+   ],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "not a valid address: 'nobody'"
+  }
+ },
+ {
+  "name": "refuse_empty_angle",
+  "spec": {
+   "account": "ada@example.test",
+   "account_name": "Ada",
+   "to": [
+    "Lin <>"
+   ],
+   "cc": [],
+   "bcc": [],
+   "subject": "Fabric order",
+   "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda",
+   "html": null,
+   "attachments": [],
+   "in_reply_to": null,
+   "references": []
+  },
+  "draft": false,
+  "now": 1793620800000000,
+  "pid": 4242,
+  "draws": [
+   2102120316588816134,
+   8821245781960757249,
+   81985529216486895,
+   8024936506837305624,
+   3689348814741910323,
+   1084818905618843912,
+   6510615555426900570
+  ],
+  "expected": {
+   "error": "not a valid address: ''"
+  }
+ }
+]
