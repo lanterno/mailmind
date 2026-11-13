@@ -1,6 +1,6 @@
 [package]
 name = "mm-compose"
-description = "Drafts, building a message, the outbox and delivery: so far, what the outbox tray lists and the snippets"
+description = "Drafts, building a message, the outbox and delivery"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,16 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+# A reply's quote and a forward's banner made safe, and the original's parts read.
+mm-content.workspace = true
 mm-kernel.workspace = true
+# The charsets the encoded words in a saved draft's headers name, as a reopened draft decodes them.
+mail-parser.workspace = true
+# The Markdown a person types, and the threading ids a message names.
+regex.workspace = true
 serde_json.workspace = true
+# What a save records of the very bytes it saved.
+sha2.workspace = true
 
 [lints]
 workspace = true
