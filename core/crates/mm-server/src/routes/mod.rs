@@ -12,7 +12,8 @@
 mod accounts;
 mod mailbox;
 mod page;
-// The Mailbox's reads a person waits on (area B).
+// The Mailbox's reads a person waits on, and the exports (area B).
+mod export;
 mod reading;
 
 use std::sync::Arc;
@@ -32,6 +33,7 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(accounts::routes())
         .merge(mailbox::routes())
         .merge(reading::routes())
+        .merge(export::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

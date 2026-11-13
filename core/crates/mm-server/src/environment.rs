@@ -129,6 +129,16 @@ impl Environment {
         }
     }
 
+    /// The folder for temporary files, as `tempfile.gettempdir` finds it: TMPDIR, TEMP or TMP, else `/tmp`.
+    pub fn temporary(&self) -> PathBuf {
+        ["TMPDIR", "TEMP", "TMP"]
+            .iter()
+            .filter_map(|name| self.raw(name).filter(|v| !v.is_empty()))
+            .map(PathBuf::from)
+            .find(|folder| folder.is_dir())
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+    }
+
     /// Whether ANTHROPIC_API_KEY gives a key: set, and not blank.
     pub fn gives_anthropic_key(&self) -> bool {
         !mm_kernel::text::strip(self.raw("ANTHROPIC_API_KEY").unwrap_or_default()).is_empty()
