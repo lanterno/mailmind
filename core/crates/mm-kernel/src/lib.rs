@@ -14,6 +14,7 @@ pub mod events;
 pub mod identity;
 pub mod isoformat;
 pub mod log;
+pub mod parsed;
 pub mod relative;
 pub mod seams;
 pub mod text;
