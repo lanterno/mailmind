@@ -67,17 +67,55 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if item.get_closest_marker(marker):
                 item.add_marker(skip)
+    _hold_to_the_ledger(items)
+
+
+# The Rust server's ledger (support/rust_ledger.txt): the served tests that pass on it, one node id a line. While
+# MAILMIND_TEST_LEDGER names it, every served test not on it is expected to fail, strictly, so one that starts passing
+# fails the run until it is listed. `just test-rust` runs the ledger's tests; `just test-rust-all` every served test.
+LEDGER_VARIABLE = "MAILMIND_TEST_LEDGER"
+NOT_YET = "not on the Rust server yet"
+_TESTS = os.path.dirname(os.path.abspath(__file__))
+
+
+def _is_served(item):
+    """A test of a server the suite starts as a program: tests/api's, and tests/e2e/browser's but in_process/."""
+    parts = os.path.relpath(str(item.path), _TESTS).split(os.sep)
+    return parts[0] == "api" or (parts[:2] == ["e2e", "browser"] and "in_process" not in parts)
+
+
+def _hold_to_the_ledger(items):
+    path = os.environ.get(LEDGER_VARIABLE)
+    if not path:
+        return
+    with open(path, encoding="utf-8") as f:
+        listed = {line.strip() for line in f if line.strip() and not line.lstrip().startswith("#")}
+    for item in items:
+        if _is_served(item) and item.nodeid not in listed:
+            item.add_marker(pytest.mark.xfail(strict=True, reason=NOT_YET))
+            item.stash[_OFF_THE_LEDGER] = True
 
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_makereport(item, call):
     rep = yield
     if rep.when == "call":
-        item.stash[_CALL_PASSED] = rep.passed
+        # A strict xfail's body that passed reads as failed here: it still passed, and its golden file is still compared.
+        body_passed = rep.passed or (rep.failed and str(rep.longrepr).startswith("[XPASS(strict)]"))
+        item.stash[_CALL_PASSED] = body_passed
+        if body_passed and item.stash.get(_OFF_THE_LEDGER, False):
+            # A served test passes only once its teardown has compared its golden file and checked the server, so
+            # the verdict waits for that: expected to fail until then.
+            rep.outcome, rep.longrepr, rep.wasxfail = "skipped", None, NOT_YET
+            item.stash[_PASSING_SO_FAR] = True
+    elif rep.when == "teardown" and item.stash.get(_PASSING_SO_FAR, False) and rep.passed:
+        rep.outcome, rep.longrepr = "failed", f"[XPASS(strict)] {NOT_YET}: add it to the ledger"
     return rep
 
 
 _CALL_PASSED = pytest.StashKey[bool]()
+_OFF_THE_LEDGER = pytest.StashKey[bool]()
+_PASSING_SO_FAR = pytest.StashKey[bool]()
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -1,0 +1,11 @@
+# The served tests that pass on the Rust server (core/crates/mm-served), one node id a line. `just test-rust` runs
+# them; with MAILMIND_TEST_LEDGER naming this file, every other served test is expected to fail (tests/conftest.py),
+# so one that starts passing fails until it is listed here. `just test-rust-all` finds what has.
+tests/api/test_http_get.py::test_the_page_carries_this_processes_csrf_token
+tests/api/test_http_get.py::test_guards_refuse_foreign_hosts_and_cross_site_reads
+tests/api/test_http_get.py::test_folders
+tests/api/test_http_post_guards.py::test_the_guards
+tests/api/test_http_post_guards.py::test_a_length_that_isnt_one_is_refused_before_any_route_runs[-1]
+tests/api/test_http_post_guards.py::test_a_length_that_isnt_one_is_refused_before_any_route_runs[lots]
+tests/api/test_http_post_guards.py::test_a_guarded_post_changes_nothing_on_the_server
+tests/api/test_http_post_guards.py::test_a_post_is_refused_before_its_body_is_read
