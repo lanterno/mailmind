@@ -10,6 +10,8 @@
 //! database, the SQL each context reads is in a module of its name (`mailbox`), `config` is
 //! `mailmind.config.json` and `page` the page's build. Every file goes through `Outside` before it is opened.
 
+// What the Assistant reads: what calls cost.
+mod assistant;
 pub mod config;
 pub mod db;
 mod key;

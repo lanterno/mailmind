@@ -8,7 +8,8 @@ use rusqlite::{Connection, params_from_iter};
 use crate::db::Database;
 use crate::placeholders;
 
-// The lists the page shows, a conversation and the tray of changes.
+// The lists the page shows, a conversation and the tray of changes; the digest.
+mod digest;
 pub(crate) mod lists;
 
 impl StoredMail for Database {
