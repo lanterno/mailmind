@@ -10,6 +10,7 @@
 //! doesn't implement.
 
 mod accounts;
+mod filing;
 mod mailbox;
 mod page;
 // Compose's: the outbox tray and the snippets.
@@ -60,6 +61,7 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(curation::routes())
         .merge(attention::routes())
         .merge(tidy::routes())
+        .merge(filing::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)
