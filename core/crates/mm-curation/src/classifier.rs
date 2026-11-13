@@ -443,7 +443,8 @@ static HEALTH: LazyLock<Regex> = LazyLock::new(|| {
 
 static FINANCE: LazyLock<Regex> = LazyLock::new(|| {
     pattern(concat!(
-        r"(?i)paypal|wise\.com|revolut|stripe\.com\n?\z|mastercard|",
+        // wise.com and stripe.com as whole labels, and their sub-domains: likewise.com is someone else's.
+        r"(?i)paypal|(?:\A|\.)wise\.com(?:\.|\n?\z)|revolut|(?:\A|\.)stripe\.com\n?\z|mastercard|",
         word_starts!(),
         r"(?:bank|banque|n26|visa)",
         word_ends!(),
