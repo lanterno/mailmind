@@ -1,5 +1,5 @@
 //! The Mailbox's filing routes (`mailmind.http.routers.mailbox`): a flag, a move of one message, of a conversation
-//! or of marked rows, Undo, and the tray's Retry and Discard.
+//! or of marked rows, Undo, and the tray of what hasn't reached a server, with its Retry and Discard.
 //!
 //! Each reads its body as its Python schema does, so a field the schema refuses is the `bad request` 400 before
 //! anything is looked up. A copy the page names by key, folder and uid is then the row it is now
@@ -10,8 +10,8 @@ use std::sync::Arc;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::State;
-use axum::http::{Request, Response};
-use axum::routing::post;
+use axum::http::{Method, Request, Response, Uri};
+use axum::routing::{get, post};
 use mm_kernel::errors::{Failure, Problem};
 use mm_mailbox::command_ports;
 use mm_mailbox::filing::{BULK_MAX, FILING_VERBS, FLAG_NAMES, GONE, NamedCopy};
@@ -36,6 +36,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/bulk/file", post(bulk_file))
         .route("/api/bulk/move", post(bulk_move))
         .route("/api/undo", post(undo))
+        .route("/api/pending", get(pending))
         .route("/api/pending/retry", post(pending_retry))
         .route("/api/pending/discard", post(pending_discard))
 }
@@ -232,6 +233,11 @@ async fn undo(State(app): State<Arc<App>>, request: Request<Body>) -> Response<B
 /// `NamesAPending`: the change by its id.
 fn pending_id(fields: &Fields) -> Result<i64, Problem> {
     fields.required_number("id")
+}
+
+/// The pending-changes tray: what hasn't reached a server, and how many wait and were given up on.
+async fn pending(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    super::run(&app, &method, &uri, |app| Ok(app.commands.list_open(100)?)).await
 }
 
 async fn pending_retry(State(app): State<Arc<App>>, request: Request<Body>) -> Response<Body> {
