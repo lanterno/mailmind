@@ -72,9 +72,8 @@ pub trait MailSessions: Send + Sync + fmt::Debug {
 /// number may be among them, for the use case to tell rows apart by; none leaves the core.
 pub type Row = serde_json::Map<String, serde_json::Value>;
 
-/// The class of a fault that stands for a part of a route the Rust server can't do yet: its route answers it as
-/// one it doesn't implement (`answer::not_yet`).
-pub const NOT_YET: Fault = Fault::new("NotOnTheRustServerYet");
+/// A part of a route the Rust server can't do yet: its route answers it as one it doesn't implement.
+pub use mm_kernel::errors::NOT_YET;
 
 /// A page of a list, and how many rows the whole list holds.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -129,6 +128,43 @@ pub trait FolderSyncs: Send + Sync + fmt::Debug {
 pub trait AccountBook: Send + Sync + fmt::Debug {
     /// The accounts the app may use, by address, in the file's order.
     fn emails(&self) -> Result<Vec<String>, Fault>;
+    /// What the page names each account by, disabled ones too.
+    fn faces(&self) -> Result<Faces, Fault>;
+}
+
+/// Each account's alias, webmail and signature (the default where it has none), by address, and the default.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Faces {
+    pub aliases: Vec<(String, Option<String>)>,
+    pub webmail: Vec<(String, Option<String>)>,
+    pub signatures: Vec<(String, String)>,
+    pub signature_default: String,
+}
+
+/// What the digest reads of the database, together (`lists.digest`, `stored_accounts`, `stats`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StoredDigest {
+    /// The kept mail the AI found worth something, the most important first, then the newest.
+    pub rows: Vec<Row>,
+    /// Each account that has mail stored.
+    pub accounts: Vec<String>,
+    /// How many messages are stored, kept, summarized, verified, and kept with no summary yet.
+    pub stats: [(&'static str, i64); 5],
+}
+
+pub trait DigestReads: Send + Sync + fmt::Debug {
+    fn digest(&self, limit: i64) -> Result<StoredDigest, Fault>;
+}
+
+/// How the sync stands now (`Syncing.status`, each account's, and `Syncing.sync`, the whole one's).
+pub trait SyncStatus: Send + Sync + fmt::Debug {
+    fn status(&self) -> serde_json::Value;
+    fn sync(&self) -> serde_json::Value;
+}
+
+/// How AI stands, with no call made (`assistant.status.report`).
+pub trait AiStatus: Send + Sync + fmt::Debug {
+    fn report(&self) -> Result<serde_json::Value, Fault>;
 }
 
 /// The changes that haven't reached a server, newest first, and how many there are in each state.

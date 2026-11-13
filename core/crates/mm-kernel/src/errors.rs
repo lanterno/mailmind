@@ -76,6 +76,10 @@ impl Fault {
     }
 }
 
+/// A part of what was asked that the Rust server can't do yet, while the Python app does it: the server answers it
+/// as a route it doesn't implement.
+pub const NOT_YET: Fault = Fault::new("NotOnTheRustServerYet");
+
 /// What a use case answers when it can't do what was asked.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Failure {
