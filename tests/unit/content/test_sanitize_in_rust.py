@@ -32,13 +32,14 @@ from mailmind.content.sanitize import html as sanitizer
 
 # Tags whose CONTENT is also dropped (containers — wait for the close tag).
 DROP_WITH_CONTENT = {
-    "script", "head", "title", "iframe", "object", "embed", "applet",   # "style" captured + sanitized
+    "script", "head", "title", "iframe", "object", "applet",   # "style" captured + sanitized
     "form", "button", "select", "textarea", "noscript", "template",
     "svg", "math", "frameset", "xml",
 }
 # Dangerous VOID/empty tags — drop the tag itself but NEVER enter skip mode
 # (they have no end tag; skipping-until-close would swallow the whole document).
-DROP_VOID = {"meta", "link", "base", "input", "frame", "source", "param", "keygen"}
+DROP_VOID = {"meta", "link", "base", "input", "frame", "source", "param", "keygen",
+             "embed"}   # the core now: <embed> is void, so it swallowed the rest of the message
 # Allowed tags (everything else is unwrapped: tag dropped, text kept).
 ALLOWED = {
     "p", "br", "hr", "div", "span", "a", "b", "i", "u", "s", "strike", "em",
@@ -1323,6 +1324,13 @@ def test_whatever_a_message_holds_what_is_written_is_safe_and_reads_back_to_itse
 def test_nothing_is_sanitized_to_nothing():
     assert sanitizer.sanitize(None) == sanitizer.sanitize("") == ("", NOTHING_BLOCKED)
     assert sanitizer.sanitize_inline_style(None, Ctx(False)) == sanitizer.sanitize_css_stylesheet(None, Ctx(False)) == ""
+
+
+def test_the_text_after_an_embed_is_kept():
+    """<embed> has no end tag, so dropping it with all it held up to one dropped the rest of the message."""
+    html = '<p>Before</p><embed src="https://e.example.test/x.swf" type="application/x-shockwave-flash"><p>After</p>'
+    assert sanitizer.sanitize(html) == ("<p>Before</p><p>After</p>", NOTHING_BLOCKED)
+    assert_html_as_python_wrote_it(html, load_images=False)
 
 
 def test_a_blocked_url_adds_to_what_the_caller_counted_as_python_did():

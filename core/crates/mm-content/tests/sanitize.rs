@@ -222,8 +222,16 @@ fn nothing_of_a_dropped_element_is_shown() {
         ("<script>if (a < b) { x = '</scr' + 'ipt>' }</script>after", false, true, "after", [0, 0, 0]),
         ("<!doctype html><html><head><title>T</title></head><body>B</body></html>", false, true, "B", [0, 0, 0]),
         ("<head><style>p{color:red}</style></head><body><p>x</p></body>", false, true, "<p>x</p>", [0, 0, 0]),
-        // <embed> holds nothing, but the allowlist drops it with what follows to an end tag that never comes.
-        ("<embed src=x>after", false, true, "", [0, 0, 0]),
+        // <embed> holds nothing and has no end tag: the tag goes and what follows it stays.
+        ("<embed src=x>after", false, true, "after", [0, 0, 0]),
+        (
+            "<p>a<embed src='https://e.example.test/x.swf' type=application/x-shockwave-flash>b</p>c",
+            false,
+            true,
+            "<p>ab</p>c",
+            [0, 0, 0],
+        ),
+        ("<embed src=x></embed>after<embed>", false, true, "after", [0, 0, 0]),
     ]);
 }
 
