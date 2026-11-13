@@ -3,9 +3,12 @@ delivers it through the fake SMTP server, files the Sent copy, flags the origina
 cleans up the draft it came from. Each step pins the answer, the outbox row, the bytes on the wire
 and what changed on the IMAP server. The golden files are in tests/golden/http_send/.
 
-The outbox worker doesn't run here: a test lets the clock pass the Undo Send window and calls
-outbox.drain() itself, so every step happens in a known order. Message-IDs, MIME boundaries and
-idempotency keys the app draws at random are named in the record.
+No outbox worker runs on its own: a test lets the clock pass the Undo Send window and has the server
+run one outbox pass (app.work), so every step happens in a known order. Message-IDs, MIME boundaries and
+idempotency keys the server draws at random are named in the record.
+
+Whether the outbox publishes Sent or Failed on the in-process bus is pinned in
+tests/characterization/test_http_send_in_process.py: no answer over HTTP tells the two apart.
 """
 import base64
 import email
@@ -16,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from fixtures import world as w
-from mailmind.compose.api import Sent
+from mailmind.compose.domain import outbox_item
 
 OUTBOX_COLS = ("id", "account", "state", "attempts", "last_error", "delivered", "sent_appended",
                "answered_set", "followup_recorded", "draft_deleted", "subject", "envelope", "recipients",
@@ -40,11 +43,15 @@ class Sender:
         self.mark = world.mark()
         self.wire = 0
         self.named = set()
+        self.window = None
 
     def post(self, label, path, body):
         r = self.golden.record(label, self.app.post(path, body))
         if isinstance(r.json, dict) and r.json.get("message_id"):      # a saved draft's
             self.name("msg", r.json["message_id"])
+        if isinstance(r.json, dict) and "undo_seconds" in r.json:
+            # The Undo Send window is the server's to say, in each send's answer, as the page reads it.
+            self.window = r.json["undo_seconds"]
         return r
 
     def name(self, kind, value):
@@ -65,11 +72,10 @@ class Sender:
         self.golden.note(label, out)
 
     def drain(self, label, seconds=None):
-        """Let the Undo Send window pass (or `seconds`), run one outbox pass, and note what went
-        over the wire and what changed on the IMAP server."""
-        from mailmind.bootstrap.compose import outbox
-        self.app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1 if seconds is None else seconds))
-        outbox.drain()
+        """Let the Undo Send window pass (or `seconds`), have the server run one outbox pass, and note
+        what went over the wire and what changed on the IMAP server."""
+        self.app.clock.shift(timedelta(seconds=self.window + 1 if seconds is None else seconds))
+        self.app.work("outbox")
         sent = self.world.smtp.messages[self.wire:]
         self.wire = len(self.world.smtp.messages)
         for d in sent:
@@ -176,57 +182,36 @@ def test_send_now_skips_the_window_and_a_resubmit_dedupes(send):
 # ── when SMTP fails ──────────────────────────────────────────────────────
 
 def test_a_temporary_failure_backs_off_then_gives_up_then_retries(send):
-    from mailmind.bootstrap.compose import outbox
     send.world.smtp.fail("RCPT", "451 4.3.0 try again later", times=None)
     send.post("send", "/api/send", new(idempotency_key="k-fail"))
     send.drain("first attempt")
-    for attempt in range(2, outbox.MAX_ATTEMPTS + 1):
-        send.drain(f"attempt {attempt}", seconds=outbox._BACKOFF_CAP)
+    for attempt in range(2, outbox_item.MAX_ATTEMPTS + 1):
+        send.drain(f"attempt {attempt}", seconds=outbox_item.BACKOFF_CAP)
     send.world.smtp.clear_faults()
-    send.drain("after giving up, nothing more", seconds=outbox._BACKOFF_CAP)
+    send.drain("after giving up, nothing more", seconds=outbox_item.BACKOFF_CAP)
     send.post("retry", "/api/outbox/retry", {"id": 1})
     send.drain("after retry", seconds=0)
     send.post("retry a sent one", "/api/outbox/retry", {"id": 1})
 
 
-def test_a_send_is_published_once_it_goes_out_and_not_while_it_fails(app, world):
-    from mailmind.bootstrap.compose import outbox
-    from mailmind.platform import bus
-    heard = []
-    stop = bus.subscribe(Sent, heard.append)
-    try:
-        world.smtp.fail("RCPT", "451 4.3.0 try again later")
-        oid = app.post("/api/send", new(idempotency_key="k-heard")).json["outbox_id"]
-        app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
-        outbox.drain()
-        assert heard == []
-        app.clock.shift(timedelta(seconds=outbox._BACKOFF_CAP))
-        outbox.drain()
-        outbox.drain()
-    finally:
-        stop()
-    assert heard == [Sent(oid, w.ADA)]
-
-
 def test_a_refused_login_and_a_rejected_message_give_up_at_once(send):
-    from mailmind.bootstrap.compose import outbox
     send.world.smtp.users[w.ADA] = "changed"
     send.post("send with a password the server no longer takes", "/api/send", new(idempotency_key="k-auth"))
     send.drain("login refused")
-    send.drain("not tried again", seconds=outbox._BACKOFF_CAP)
+    send.drain("not tried again", seconds=outbox_item.BACKOFF_CAP)
     send.world.smtp.users[w.ADA] = send.world.server.accounts[w.ADA].password
     send.world.smtp.fail("DATA-END", "554 5.7.1 message rejected as spam")
     send.post("retry, the password put right", "/api/outbox/retry", {"id": 1})
     send.drain("message rejected", seconds=0)
-    send.drain("not sent again", seconds=outbox._BACKOFF_CAP)
+    send.drain("not sent again", seconds=outbox_item.BACKOFF_CAP)
 
 
 def test_a_recipient_refused_for_good_is_given_up_at_once(app, world):
-    from mailmind.bootstrap.compose import outbox
     world.smtp.fail("RCPT", "550 5.1.1 no such user", times=None)
-    oid = app.post("/api/send", new(idempotency_key="k-nobody")).json["outbox_id"]
-    app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
-    outbox.drain()
+    sent = app.post("/api/send", new(idempotency_key="k-nobody")).json
+    oid = sent["outbox_id"]
+    app.clock.shift(timedelta(seconds=sent["undo_seconds"] + 1))
+    app.work("outbox")
     [row] = rows("SELECT state, attempts, last_error FROM outbox")
     assert (row["state"], row["attempts"], row["last_error"]) == ("error", 1, "recipient refused")
     assert len([c for c in world.smtp.commands if c["command"] == "RCPT"]) == 1
@@ -282,9 +267,7 @@ def test_save_resave_resume_send_and_delete_drafts(send):
     send.golden.note("drafts", rows("SELECT id, account, folder, uid, mode, subject, own_text, bcc FROM drafts"))
     send.golden.note("Ada's Drafts on the server", sorted(
         str(m.headers()["Subject"]) for m in send.world.server.messages(w.ADA, "Drafts").values()))
-    from mailmind.bootstrap import accounts
-    from mailmind.bootstrap.mailbox import ingest
-    ingest.sync_folder(accounts.get(w.ADA), "Drafts")      # the Drafts list shows it, as a sync would
+    send.app.work("sync", w.ADA, "Drafts")      # the Drafts list shows it, as a sync would
     [draft] = rows("SELECT m.pk FROM drafts d JOIN messages m ON m.account=d.account AND m.folder=d.folder "
                    "AND m.uid=d.uid WHERE d.id=?", did)
     resumed = send.post("reopen it", "/api/draft/resume", w.copy_of(draft["pk"])).json
