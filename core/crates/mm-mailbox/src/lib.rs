@@ -11,6 +11,7 @@ pub mod ingest;
 pub mod ports;
 pub mod roles;
 pub mod session;
+pub mod stats;
 pub mod sync_plan;
 pub mod sync_ports;
 pub mod sync_record;

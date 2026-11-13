@@ -244,3 +244,26 @@ pub trait StoredSyncs: Send + Sync + fmt::Debug {
     /// Every (account, folder)'s sync health, by account, then folder.
     fn sync_health(&self) -> Result<Vec<SyncHealth>, Fault>;
 }
+
+/// An account as the per-account counts name it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Listed {
+    pub email: String,
+    pub kind: String,
+    pub alias: Option<String>,
+}
+
+/// Every account the app may use (`Accounts.accounts`).
+pub trait AccountList: Send + Sync + fmt::Debug {
+    /// The accounts, in the order the config names them, disabled ones left out.
+    fn accounts(&self) -> Result<Vec<Listed>, Fault>;
+}
+
+/// What the classifier makes of each account's stored inbox (`Classifier.plan_stored` and `buckets`).
+pub trait InboxPlans: Send + Sync + fmt::Debug {
+    /// How `account`'s stored inbox falls into buckets: `account`, `kind`, `in_inbox`, `by_bucket`, `junk`, `keep`,
+    /// `top_senders` and `error`, in that order.
+    fn plan_stored(&self, account: &Listed) -> Result<serde_json::Map<String, serde_json::Value>, Fault>;
+    /// Every bucket and whether it is junk.
+    fn buckets(&self) -> serde_json::Value;
+}
