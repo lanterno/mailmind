@@ -525,9 +525,21 @@ fn word_boundaries_are_pythons() {
         said("lin@example.test", "Order #123", "", false, &NONE),
         ["receipts/transactional", "med", "transactional/receipt signal"]
     );
-    // `order #` and `order no.` want a word after them.
+    // Fixed in the core: Python's `\b` after `order #` wanted a word right after the sign, so an order number
+    // written with a space wasn't a receipt. `order no.` still wants a word after it.
+    for subject in ["Order # 123", "order #: 5", "Your order #", "order #\u{301}"] {
+        assert_eq!(
+            said("lin@example.test", subject, "", false, &NONE),
+            ["receipts/transactional", "med", "transactional/receipt signal"],
+            "{subject:?}"
+        );
+    }
     assert_eq!(
-        said("lin@example.test", "Order # 123", "", false, &NONE),
+        said("no-reply@shop.example", "Your Order # 123", "", false, &NONE),
+        ["receipts/transactional", "med", "transactional/receipt signal"]
+    );
+    assert_eq!(
+        said("lin@example.test", "reorder #5", "", false, &NONE),
         ["other/personal-ish", "low", "unclassified \u{2014} review"]
     );
     assert_eq!(

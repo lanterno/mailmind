@@ -43,6 +43,7 @@ CASES = [
 
     # --- receipts / transactional ---
     ("failed-payments@mail.acme.example", "your payment was unsuccessful", False, m.RECEIPT, "billing local-part"),
+    ("no-reply@shop.example", "Your Order # 123", False, m.RECEIPT, "an order number written with a space"),
     ("invoice+statements@mail.acme.example", "Your receipt", False, m.RECEIPT, "transactional"),
 
     # --- protected institutional domains (generic) ---

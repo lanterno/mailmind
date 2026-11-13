@@ -96,11 +96,12 @@ SUSPICIOUS_TLDS = {
 }
 
 # --- subject-side signal vocabularies ----------------------------------------
+# Fixed since: `order #` wanted a word right after the sign, so "Order # 123" wasn't a receipt.
 TRANSACTIONAL = re.compile(
     r"\b(receipt|invoice|payment received|your payment|you paid|amount paid|"
     r"your bill|e-?statement|statement is|e-?ticket|boarding pass|itinerary|"
-    r"booking (confirm|reference|is)|reservation confirm|order (confirm|#|no\.?|placed|shipped|dispatched)|"
-    r"has shipped|out for delivery|refund|tax invoice|\bvat\b|charged|transaction (receipt|confirm))\b",
+    r"booking (confirm|reference|is)|reservation confirm|order (confirm|no\.?|placed|shipped|dispatched)|"
+    r"has shipped|out for delivery|refund|tax invoice|\bvat\b|charged|transaction (receipt|confirm))\b|\border #",
     re.I)
 
 # Unambiguous fraud: fires regardless of who sent it.
