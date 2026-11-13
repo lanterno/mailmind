@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A `justfile` wraps everything below — `just` alone lists the recipes. The raw commands
 work identically if `just` isn't installed. The recipes and every command need
-[uv](https://docs.astral.sh/uv/) (`brew install uv`); `uv run` installs the runtime packages and
-the dev tools on first use.
+[uv](https://docs.astral.sh/uv/) (`brew install uv`) and [Rust](https://rustup.rs); `uv run` installs the runtime packages and
+the dev tools on first use, and builds the leaves the app shares with the Rust core (`core/crates/mm-py`).
 
 ```bash
 just verify                       # lint + compile + all tests + frontend check + audit — run before committing
@@ -44,7 +44,8 @@ test name; `just test -n0` runs them in one process.
 ## Constraints
 
 - **Runtime packages are declared and locked.** The app uses FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and
-  recurring-ical-events so far, each declared in `pyproject.toml` and locked with hashes in `uv.lock`. Each dependency change is its
+  recurring-ical-events so far, each declared in `pyproject.toml` and locked with hashes in `uv.lock`, and
+  `mailmind-leaves`, the Rust core's pure functions the app calls, built from `core/crates/mm-py` and its `Cargo.lock`. Each dependency change is its
   own commit, and the `uv.lock` change goes in the next. The sanitizer, the IMAP handling and the route tables are hand-rolled on the
   standard library, and most of the package still is.
 - **The app exists only as built.** `web/index.html` and `web/src/main.tsx` are the React app, and `just build-web` writes it to

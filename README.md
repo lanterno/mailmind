@@ -565,6 +565,9 @@ automatically.
   server and every command run on, FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and
   recurring-ical-events, from `pyproject.toml` on first run. Every command is
   `uv run python -m mailmind ...`.
+- **[Rust](https://rustup.rs)** (`rustup`), which builds the leaves the app shares with the Rust core
+  (`core/crates/mm-py`) when uv first installs the packages, and again when their Rust changes.
+  `core/rust-toolchain.toml` names the version, which rustup fetches by itself.
 - **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
   builds it first.
 - **A Claude API key**, for summaries and the other AI features, kept in the Keychain with

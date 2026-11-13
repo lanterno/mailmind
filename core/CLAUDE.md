@@ -22,6 +22,7 @@ just gen-bindings       # Swift and Kotlin bindings, into shells/apple/Generated
 | `mm-store` | The encrypted database, and the only place a file is opened. |
 | `mm-app` | The contract: `Session`, `ListView`, `ViewObserver`. `mm_app::wire` is the same contract as JSON lines. |
 | `mm-ffi` | The contract for Swift and Kotlin, through UniFFI. The only crate that knows UniFFI exists. |
+| `mm-py` | The leaves for the Python app, as the module `mailmind_leaves` (PyO3), until the Rust server replaces it. The only crate that knows Python exists. |
 | `mm-fixtures` | The fictional mailbox the tests, the budgets and the shells' demo modes use. |
 | `mm-daemon` | The core as a program: JSON lines over standard input and output, or a Unix socket. |
 | `mm-budgets` | Measures the core against `../budgets.toml` and fails when it is over. |
