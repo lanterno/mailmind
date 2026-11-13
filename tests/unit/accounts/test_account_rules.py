@@ -84,6 +84,19 @@ def test_an_account_with_a_type_of_its_own_can_lose_that_type_only_by_naming_a_h
     assert directory.update_account("bea@example.test", {"type": "imap", "host": "imap.example.test"})["type"] == "imap"
 
 
+@pytest.mark.xfail(strict=True, raises=TypeError,
+                   reason="validate_new looks the type up in TYPE_DEFAULTS, where a list or an object isn't hashable, so "
+                          "adding or editing an account to such a type answers 500 where any other type it doesn't know "
+                          "is refused in words of its own")
+@pytest.mark.parametrize("kind", [["imap"], {"imap": True}], ids=repr)
+def test_a_type_that_isnt_text_is_refused_as_any_type_it_doesnt_know_is(directory, data_dir, kind):
+    with pytest.raises(ValueError, match="type must be gmail, imap, or proton"):
+        directory.add_account({"email": "bea@example.test", "type": kind, "host": "imap.example.test", "credential": TYPED})
+    with pytest.raises(ValueError, match="type must be gmail, imap, or proton"):
+        directory.update_account("ada@example.test", {"type": kind})
+    assert stored(data_dir) == [ADA]
+
+
 def test_an_edit_cannot_blank_a_host(directory, data_dir):
     directory.update_account("ada@example.test", {"host": "", "smtp_host": None})
     assert stored(data_dir)[0]["host"] == "imap.example.test"

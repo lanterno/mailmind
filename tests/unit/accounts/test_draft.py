@@ -81,6 +81,16 @@ def test_what_is_left_out_comes_from_the_type(kind, host, port, starttls):
     assert (acct["host"], acct["port"], acct["starttls"]) == (host, port, starttls)
 
 
+@pytest.mark.xfail(strict=True, raises=TypeError,
+                   reason="TYPE_DEFAULTS.get can't look up a list or an object, so a draft whose type is one is never "
+                          "tried and the test answers `TypeError` as a failed login, where a type it doesn't know is "
+                          "tried with generic IMAP's defaults")
+@pytest.mark.parametrize("kind", [["imap"], {"imap": True}], ids=repr)
+def test_a_draft_whose_type_isnt_text_is_tried_as_generic_imap(kind):
+    acct = throwaway_account(draft(type=kind))
+    assert (acct["host"], acct["port"], acct["starttls"]) == ("imap.example.test", 993, False)
+
+
 def test_a_host_typed_wins_over_the_types():
     assert throwaway_account(draft(type="proton", host="bridge.example.test"))["host"] == "bridge.example.test"
 
