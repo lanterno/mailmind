@@ -15,10 +15,14 @@ final class Measure {
     static let shared = Measure()
     private let mode = ProcessInfo.processInfo.environment["MAILMIND_MEASURE"]
     private var started = false
+    /// Held while measuring. A window nobody can see, as behind a locked screen, lets macOS nap the app, which
+    /// about halves its speed; a person scrolling has it in front, where it is never napped.
+    private var awake: (any NSObjectProtocol)?
 
     func firstRowsShown(_ model: ListModel) async {
         guard let mode, !started, let shown = model.firstRowsAt else { return }
         started = true
+        awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "measuring")
         emit("first_rows_ms", shown.timeIntervalSince(Self.processStart()) * 1000)
         if mode == "start" { exit(0) }
 
