@@ -863,6 +863,7 @@ dependencies = [
  "imap-proto",
  "mm-kernel",
  "mm-mailbox",
+ "mm-net",
  "regex",
  "rustls",
 ]
@@ -887,6 +888,13 @@ dependencies = [
  "regex",
  "serde_json",
  "sha1",
+]
+
+[[package]]
+name = "mm-net"
+version = "0.1.0"
+dependencies = [
+ "rustls",
 ]
 
 [[package]]
