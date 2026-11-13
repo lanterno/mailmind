@@ -58,7 +58,8 @@ pub fn refusal(kind: &str, outcome: Outcome) -> &'static str {
 type Said = Result<Value, Problem>;
 
 /// What the person hears of many moves: one the server refused went back alone, and the rest stay filed, named by
-/// their key, folder and uid as they were. With none filed, what the first raised, or NotFound with none to file.
+/// their key, folder and uid as they were. With none filed, what the first raised, or NotFound with none to file. A
+/// move the worker has, queued or waiting on its account's gate, counts as queued, as it does when it is the only one.
 pub fn of_many(
     accepted: &[(i64, Option<Accepted>)],
     results: &HashMap<i64, Said>,
@@ -70,7 +71,10 @@ pub fn of_many(
         let first = accepted.iter().find_map(|(p, _)| results.get(p).and_then(|r| r.as_ref().err()));
         return Err(first.cloned().unwrap_or_else(|| Problem::not_found(GONE)));
     }
-    let queued = filed.iter().filter(|(_, said)| said.get("status").and_then(Value::as_str) == Some("queued")).count();
+    let queued = filed
+        .iter()
+        .filter(|(_, said)| matches!(said.get("status").and_then(Value::as_str), Some("queued" | "waiting")))
+        .count();
     let named: Vec<Value> = filed
         .iter()
         .filter_map(|(p, _)| names.get(p))
