@@ -267,3 +267,10 @@ pub trait InboxPlans: Send + Sync + fmt::Debug {
     /// Every bucket and whether it is junk.
     fn buckets(&self) -> serde_json::Value;
 }
+
+/// A Gmail account's own labels as the store keeps them.
+pub trait StoredLabels: Send + Sync + fmt::Debug {
+    /// Each of `account`'s own labels (none of Gmail's system ones) and how many messages carry it, a message once
+    /// however many copies it has, by name with case ignored.
+    fn labels_of_account(&self, account: &str) -> Result<Vec<(String, i64)>, Fault>;
+}

@@ -8,6 +8,7 @@
 
 pub mod folders;
 pub mod ingest;
+pub mod labels;
 pub mod ports;
 pub mod roles;
 pub mod session;
