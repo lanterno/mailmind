@@ -392,7 +392,15 @@ static WEAK_SCAM: LazyLock<Regex> = LazyLock::new(|| {
         space!(),
         r"*% (?:per|a) (?:day|month|return)|",
         r"work from home|passive income|be your own boss|financial freedom|",
-        r"revenue share|traffic exchange|paid to click|downline|matrix|cycler|",
+        r"revenue share|traffic exchange|paid to click|downline|",
+        // A matrix is an everyday word, so it counts only glued into a scheme's name, as in Matrixforall. A cycler
+        // counts where a word starts, so a recycler doesn't.
+        word!(),
+        r"matrix|matrix",
+        word!(),
+        r"|",
+        word_starts!(),
+        r"cycler|",
         r"cash ?club|instant ?cash|join asap|going viral|pre-?launch|profit system|",
         r"risk[- ]free.{0,20}(?:invest|profit|return)|100% (?:guarantee|profit)|",
         r"urgent.{0,15}(?:transfer|fund)|",
