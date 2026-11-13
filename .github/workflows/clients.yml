@@ -232,6 +232,23 @@ jobs:
           # The runner runs each line of a script in a shell of its own, so the test is one command.
           script: just android test
 
+      # Gradle prints no count of the tests it ran, so a run with none in it would pass as well as one that scrolled.
+      - name: What ran on the emulator
+        run: |
+          shopt -s globstar nullglob
+          python3 -I - shells/android/app/build/outputs/androidTest-results/**/TEST-*.xml <<'EOF'
+          import os, sys, xml.etree.ElementTree as ET
+          cases = [case for path in sys.argv[1:] for case in ET.parse(path).getroot().iter("testcase")]
+          ran = [case for case in cases if case.find("skipped") is None]
+          failed = [case for case in cases if case.find("failure") is not None or case.find("error") is not None]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("| Android, on the emulator | Seconds |\n| --- | --- |\n")
+              for case in cases:
+                  summary.write(f"| {case.get('classname')}.{case.get('name')} | {case.get('time')} |\n")
+          print(f"{len(ran)} ran, {len(failed)} failed")
+          sys.exit(0 if ran and not failed else 1)
+          EOF
+
       - name: The instrumented test's results and the device's errors
         if: failure()
         run: |
