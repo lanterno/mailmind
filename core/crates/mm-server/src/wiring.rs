@@ -167,3 +167,36 @@ impl mm_accounts::ports::SyncRecord for MailboxSyncs {
             .collect())
     }
 }
+
+/// The Mailbox's list of accounts, for its counts: the Directory's (`bootstrap.mailbox`'s `accounts`).
+#[derive(Debug)]
+pub(crate) struct ListedAccounts(pub(crate) Arc<Directory>);
+
+impl mm_mailbox::ports::AccountList for ListedAccounts {
+    fn accounts(&self) -> Result<Vec<mm_mailbox::ports::Listed>, Fault> {
+        Ok(self
+            .0
+            .accounts()?
+            .into_iter()
+            .map(|a| mm_mailbox::ports::Listed { email: a.email, kind: a.kind, alias: a.alias })
+            .collect())
+    }
+}
+
+/// What the Mailbox's counts ask of the classifier: Curation's stored plans (`bootstrap.mailbox`'s `plan_stored`
+/// and `buckets`).
+#[derive(Debug)]
+pub(crate) struct CurationPlans(pub(crate) mm_curation::sweep_plan::StoredPlans);
+
+impl mm_mailbox::ports::InboxPlans for CurationPlans {
+    fn plan_stored(
+        &self,
+        account: &mm_mailbox::ports::Listed,
+    ) -> Result<serde_json::Map<String, serde_json::Value>, Fault> {
+        self.0.plan_stored(&account.email, &account.kind)
+    }
+
+    fn buckets(&self) -> serde_json::Value {
+        mm_curation::sweep_plan::buckets()
+    }
+}

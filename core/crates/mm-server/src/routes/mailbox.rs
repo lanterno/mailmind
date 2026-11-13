@@ -16,7 +16,7 @@ use crate::app::App;
 use crate::query::Query;
 
 pub(super) fn routes() -> Router<Arc<App>> {
-    Router::new().route("/api/folders", get(folders))
+    Router::new().route("/api/folders", get(folders)).route("/api/stats", get(stats))
 }
 
 fn query(uri: &Uri) -> Query {
@@ -48,4 +48,9 @@ fn folders_answer(found: &AccountFolders) -> Value {
         "waiting": found.counts.waiting,
         "replylater": found.counts.replylater,
     })
+}
+
+/// Each account's stored inbox counted by bucket, with its top senders, and the totals across accounts.
+async fn stats(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    super::run(&app, &method, &uri, |app| Ok(app.stats.live()?)).await
 }

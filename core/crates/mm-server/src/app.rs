@@ -11,10 +11,12 @@ use mm_accounts::Directory;
 use mm_accounts::credential::DATABASE_KEY_ITEM;
 use mm_accounts::health::Health;
 use mm_compose::snippets::Snippets;
+use mm_curation::sweep_plan::StoredPlans;
 use mm_kernel::seams::{Clock, Keychain, Outside};
 use mm_mailbox::folders::Folders;
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::session::MailServers;
+use mm_mailbox::stats::LiveStats;
 use mm_mailbox::sync_record::SyncRecords;
 use mm_store::compose::SnippetsDocument;
 use mm_store::places::Places;
@@ -25,6 +27,7 @@ use crate::events::Hub;
 use crate::page::Page;
 use crate::serve::Work;
 use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier, Unheard};
+use crate::wiring::{CurationPlans, ImapSessions, KnownAccounts, ListedAccounts, MailboxSyncs};
 use crate::wiring::{ImapSessions, KnownAccounts, MailboxSyncs};
 use crate::wiring::{ImapSessions, KnownAccounts};
 
@@ -63,6 +66,8 @@ pub struct App {
     pub snippets: Snippets,
     /// How each account stands.
     pub health: Health,
+    /// Each account's stored inbox counted by bucket.
+    pub stats: LiveStats,
 }
 
 impl App {
@@ -126,6 +131,8 @@ impl App {
         let snippets = Snippets::new(Arc::new(SnippetsDocument::new(database.clone(), seams.clock.clone())));
         let syncs = MailboxSyncs(SyncRecords::new(database.clone()));
         let health = Health::new(Arc::new(syncs), seams.clock.clone());
+        let plans = CurationPlans(StoredPlans::new(database.clone(), database.clone()));
+        let stats = LiveStats::new(Arc::new(ListedAccounts(directory.clone())), Arc::new(plans), seams.clock.clone());
         Ok(App {
             port,
             csrf,
@@ -140,6 +147,7 @@ impl App {
             events,
             snippets,
             health,
+            stats,
         })
     }
 }
