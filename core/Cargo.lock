@@ -807,7 +807,9 @@ dependencies = [
 name = "mm-curation"
 version = "0.1.0"
 dependencies = [
+ "mm-kernel",
  "regex",
+ "serde_json",
 ]
 
 [[package]]
@@ -938,6 +940,7 @@ dependencies = [
  "mm-assistant",
  "mm-compose",
  "mm-content",
+ "mm-curation",
  "mm-discovery",
  "mm-kernel",
  "mm-mailbox",
