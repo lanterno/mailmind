@@ -145,3 +145,32 @@ fn a_key_is_64_hex_digits_and_never_prints() {
     let key = DbKey::from_hex(&"ab".repeat(32)).unwrap();
     assert_eq!(format!("{key:?}"), "DbKey(..)");
 }
+
+#[test]
+fn a_list_is_read_in_its_order_and_never_sorted() {
+    let store = store();
+    let accounts = vec!["a@example.test".to_owned(), "b@example.test".to_owned()];
+    let plan = store.list_order_plan(&accounts, "INBOX").unwrap();
+    assert!(plan[0].contains("USING INDEX idx_msg_listed"), "{plan:?}");
+    assert!(!plan.iter().any(|step| step.contains("TEMP B-TREE")), "{plan:?}");
+}
+
+#[test]
+fn the_list_tables_index_them_as_the_python_app_does() {
+    // Each index here is in the newest schema golden of the Python app, written the same way.
+    let golden_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tests/golden");
+    let newest = std::fs::read_dir(&golden_dir)
+        .unwrap()
+        .filter_map(|e| {
+            let name = e.unwrap().file_name().into_string().unwrap();
+            let version: u32 = name.strip_prefix("schema_v")?.strip_suffix(".sql")?.parse().ok()?;
+            Some((version, name))
+        })
+        .max()
+        .unwrap();
+    let golden = std::fs::read_to_string(golden_dir.join(newest.1)).unwrap();
+    for line in mm_store::schema::LIST_TABLES.lines().filter(|l| l.starts_with("CREATE INDEX")) {
+        let statement = line.replace("IF NOT EXISTS ", "");
+        assert!(golden.lines().any(|g| g == statement), "not in the golden: {statement}");
+    }
+}
