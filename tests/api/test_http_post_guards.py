@@ -4,12 +4,14 @@ tests/golden/http_post_guards/.
 """
 import http.client
 import json
+from datetime import timedelta
+from urllib.parse import urlencode
 
 import pytest
 
-import app_client
 import problems
 from fixtures import world as w
+from mailmind.assistant.application.governor import PRESENCE_SECONDS
 
 # The routes that send mail or act on queued sends, where a POST the page didn't make costs most.
 SENDS = ("/api/send", "/api/draft", "/api/invite/rsvp", "/api/outbox/retry", "/api/outbox/cancel",
@@ -18,7 +20,7 @@ SENDS = ("/api/send", "/api/draft", "/api/invite/rsvp", "/api/outbox/retry", "/a
 
 def raw_post(app, path, body=b"{}", headers=()):
     """A POST whose headers the test writes itself, Content-Length included."""
-    h = {"Host": f"127.0.0.1:{app.port}", "Origin": app.origin, "X-CSRF-Token": app_client.CSRF,
+    h = {"Host": f"127.0.0.1:{app.port}", "Origin": app.origin, "X-CSRF-Token": app.csrf,
          "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json", "Content-Length": str(len(body)),
          **dict(headers)}
     conn = http.client.HTTPConnection("127.0.0.1", app.port, timeout=30)
@@ -84,19 +86,26 @@ def test_a_guarded_post_changes_nothing_on_the_server(app, world):
     assert world.where("ada-inbox-05-receipt.eml")["server"] == [[w.ADA, "INBOX", 5, []]]
 
 
-def test_only_a_post_that_gets_past_the_guards_counts_as_someone_at_the_screen(app, world, monkeypatch):
-    """Presence keeps the AI pre-drafting replies, so another site's refused POSTs mustn't."""
-    import time
-    from mailmind.bootstrap import assistant
-    governor = assistant.governor()
-    monkeypatch.setattr(governor, "_last_seen", 0.0)
-    seen = {**world.copy("ada-inbox-02-lunch-confirm.eml"), "seen": True}
+def test_only_a_post_that_gets_past_the_guards_counts_as_someone_at_the_screen(app, world, ai):
+    """Presence keeps the AI pre-drafting replies, so another site's refused POSTs mustn't. A reply drafted ahead goes
+    only while someone is at the screen, so whether the fake API hears of one says whether the server counted someone."""
+    lunch = "ada-inbox-02-lunch-confirm.eml"
+    app.work("assess")                          # the fake's verdict on each message asks for a reply
+    ai.requests.clear()
+    app.clock.shift(timedelta(seconds=PRESENCE_SECONDS + 60))     # no one has been at the screen for that long
+    ahead = "/api/ai/draft-ahead?" + urlencode(world.copy(lunch))
+    seen = {**world.copy(lunch), "seen": True}
     assert app.post("/api/seen", seen, headers={"X-CSRF-Token": None}).status == 403
     assert app.post("/api/seen", seen, headers={"Host": "evil.example.test"}).status == 403
     assert app.post("/api/send", {}, headers={"Origin": None}).status == 403
-    assert governor._last_seen == 0.0
+    assert app.get(ahead).json["status"] == "generating"          # asked for, and held back: no one is here
+    app.settle()
+    assert ai.requests == []
     assert app.post("/api/seen", seen).status == 200
-    assert governor._last_seen == time.time()
+    assert app.get(ahead).json["status"] == "generating"
+    app.settle()
+    assert len(ai.requests) == 1
+    assert app.get(ahead).json["status"] == "ready"
 
 
 def test_a_post_is_refused_before_its_body_is_read(app):
