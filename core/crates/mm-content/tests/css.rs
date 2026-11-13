@@ -1,7 +1,9 @@
 //! The CSS sanitizer, as the Python app ran it: every expected value here is what `sanitize_inline_style` or
 //! `sanitize_css_stylesheet` in mailmind/content/sanitize/html.py gave for the same input, before it called this
-//! crate, with how many declarations a remote url() dropped. The Python suite holds the two to the same answers over
-//! many more (tests/unit/content/test_sanitize_in_rust.py).
+//! crate, with how many declarations a remote url() dropped, but where Python wrote what a browser would read
+//! otherwise than it was checked: a comment mark, a line break, or a bracket a later piece closed. The core writes
+//! none (`nothing_written_opens_or_closes_a_comment`, `a_browser_reads_what_is_written_as_it_was_written`). The
+//! Python suite holds the two to the same answers over many more (tests/unit/content/test_sanitize_in_rust.py).
 
 use mm_content::sanitize::css::{
     DECL_VALUE_MAX, INLINE_DECLS, INLINE_MAX, NEST_MAX, SELECTOR_MAX, SHEET_DECLS, SHEET_MAX, SHEET_RULES,
@@ -343,13 +345,104 @@ fn the_sheet_reads_each_rule_whole() {
             ("@media 'x'{p{color:red}}", false, "", 0),
             ("@{p{color:red}}", false, "", 0),
             ("@ media{p{color:red}}q{color:blue}", false, "q{color:blue}", 0),
-            ("a /* x */ b{color:red}", false, "a /* x */ b{color:red}", 0),
+            // Python kept the selector as it read it, comment and all. Nothing written marks a comment now.
+            ("a /* x */ b{color:red}", false, "", 0),
             ("p:hover{color:red}q::before{color:blue}", false, "p:hover{color:red}q::before{color:blue}", 0),
             ("x{expression:1}", false, "", 0),
             ("p\\{color:red}", false, "", 0),
             ("{color:red}", false, "", 0),
             ("p{}", false, "", 0),
             ("p{color:red;margin:0;;padding:0}", false, "p{color:red;margin:0;padding:0}", 0),
+        ],
+    );
+}
+
+/// Python wrote a comment mark wherever a value, a selector or a condition came to hold one. A browser then read what
+/// followed an opener as a comment, up to a closer a later value's string held, and the rest of that string as CSS:
+/// in Chromium each attack here made elements `position:fixed`. Nothing written holds either mark now, and the rest
+/// of what was written stays.
+#[test]
+fn nothing_written_opens_or_closes_a_comment() {
+    holds(
+        inline,
+        &[
+            // An escape decodes to the opener.
+            ("font-family:\\/\\*;font-family:\"\\*\\/;position:fixed;top:0;left:0;width:100px;\"", false, "", 0),
+            ("color:red;font-family:\\2f\\2a", false, "color:red", 0),
+            // Taking a comment out joins a slash and a star.
+            ("font-family:a//**/*;font-family:\"*/;position:fixed;top:0;x:\"", false, "", 0),
+            ("color:red;font-family:a//**/*", false, "color:red", 0),
+            // A url() rebuilt past the gate, from a value that ends `ur/*` and a string that begins `*/l(`.
+            ("background:ur//**/*;font-family:\"*/l(https://t.example.test/x);x:\"", false, "", 0),
+            // A closer alone, and either mark in a url() as it is written.
+            ("color:red;width:1px*/2", false, "color:red", 0),
+            ("color:red;font-family:\"*/\"", false, "color:red", 0),
+            ("color:red;background:url(https://e.example.test/a\\/\\*b)", true, "color:red", 0),
+            ("color:red;background:url(https://e.example.test/a*\\/b)", true, "color:red", 0),
+            // A whole comment, taken out, is no mark.
+            ("color:/* x */red", false, "color:red", 0),
+        ],
+    );
+    holds(
+        sheet,
+        &[
+            ("p{font-family:\\/\\*}q{font-family:\"\\*\\/}*{position:fixed;top:0}\"}", false, "", 0),
+            ("p{font-family:a//**/*}q{font-family:\"*/}*{position:fixed;top:0}\"}", false, "", 0),
+            ("p{color:red;font-family:a//**/*}", false, "p{color:red}", 0),
+            // A condition holding a mark goes with its at-rule.
+            ("@media /*{p{font-family:\"*/{*{position:fixed}}\"}}", false, "", 0),
+            ("@media a*/b{p{color:red}}q{color:red}", false, "q{color:red}", 0),
+            ("@media a/**/b{p{color:red}}q{color:red}", false, "q{color:red}", 0),
+            // A selector holding one goes with its rule, the rest stays.
+            ("a/**/b{color:red}q{color:blue}", false, "q{color:blue}", 0),
+            ("a[title=\"/*\"]{color:red}q{color:blue}", false, "q{color:blue}", 0),
+            ("*{color:red}p *{color:blue}", false, "*{color:red}p *{color:blue}", 0),
+            // A comment in front of a rule is read past, and no part of its selector, which Python wrote it as.
+            ("p{color:red}/* x */q{color:blue}", false, "p{color:red}q{color:blue}", 0),
+            ("/* a */ /* b */\np{color:red}", false, "p{color:red}", 0),
+        ],
+    );
+}
+
+/// What is written reads whole, as a browser reads it, so a browser can't read what follows otherwise than it was
+/// checked. Python wrote each of these attacks as it read it, and in Chromium each made elements `position:fixed`.
+#[test]
+fn a_browser_reads_what_is_written_as_it_was_written() {
+    holds(
+        inline,
+        &[
+            // A bracket or parenthesis left open, or closed by the other's match, takes in what follows.
+            ("color:red;font-family:[", false, "color:red", 0),
+            ("color:red;font-family:a]", false, "color:red", 0),
+            ("color:red;font-family:([)]", false, "color:red", 0),
+            ("color:red;font-family:a[b]", false, "color:red;font-family:a[b]", 0),
+        ],
+    );
+    holds(
+        sheet,
+        &[
+            // A value opens a bracket and a selector closes it, so the next selector was read as declarations.
+            ("p{font-family:[}a]{color:red}x;position:fixed;top:0;y{color:blue}", false, "", 0),
+            ("a[{color:red}b]{color:red}q{color:blue}", false, "q{color:blue}", 0),
+            ("a:not({color:red}b){color:red}q{color:blue}", false, "q{color:blue}", 0),
+            ("x;position:fixed;y{color:red}q{color:blue}", false, "q{color:blue}", 0),
+            ("@media ({p{color:red}}q{color:blue}", false, "q{color:blue}", 0),
+            // A browser ends a string at a line break, and the sanitizer read on: in a selector one is a space now.
+            (
+                "a[title=\"x\ny\"]{color:red}q{font-family:\"]{}*{position:fixed}\"}",
+                false,
+                "a[title=\"x y\"]{color:red}q{font-family:\"]{}*{position:fixed}\"}",
+                0,
+            ),
+            ("a[title=\"x\u{c}y\"]{color:red}", false, "a[title=\"x y\"]{color:red}", 0),
+            ("body,\ntable,\ntd{color:red}", false, "body, table, td{color:red}", 0),
+            // What reads whole stays.
+            (
+                "p:not(.a){color:red}a[href^=\"https\"]{color:blue}@media (min-width:1px){p{color:red}}",
+                false,
+                "p:not(.a){color:red}a[href^=\"https\"]{color:blue}@media (min-width:1px){p{color:red}}",
+                0,
+            ),
         ],
     );
 }

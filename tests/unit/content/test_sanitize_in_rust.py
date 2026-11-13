@@ -1,8 +1,10 @@
 """The HTML sanitizer, now the Rust core's, writes what the Python app's sanitizer wrote before it wherever the two read
 a message alike, and wherever they don't, writes nothing a browser would run or fetch unasked.
 
-The Python sanitizer is kept below as it was, as the oracle. Its CSS sanitizer reads text alone, so the core's answers
-as it did for any text at all: the tests generate it, take each cap to its edge, and go through every character there
+The Python sanitizer is kept below as the oracle: as it was, but for what the core has changed since, each change marked
+`the core now`. Python's CSS sanitizer wrote values, selectors and conditions a browser could read otherwise than it
+checked them, so now nothing written marks a comment, breaks a line or leaves a bracket open. It reads text alone, so
+the core's answers as it does for any text at all: the tests generate it, take each cap to its edge, and go through every character there
 is where Python's `str` and `re` read characters their own way (spaces, word characters, lower-casing, ignored case).
 Its HTML went through Python's html.parser, which reads some broken markup otherwise than a browser does. The core reads
 it with html5ever's tokenizer, the one browsers' parsing follows, and its readings win: where the two parsers agree the
@@ -26,7 +28,7 @@ from hypothesis import strategies as st
 
 from mailmind.content.sanitize import html as sanitizer
 
-# ── the oracle: mailmind/content/sanitize/html.py as it was ──────────────────────────────────────────────────────
+# ── the oracle: mailmind/content/sanitize/html.py as it was, and what the core changed since ──────────────────────────
 
 # Tags whose CONTENT is also dropped (containers — wait for the close tag).
 DROP_WITH_CONTENT = {
@@ -218,22 +220,46 @@ def _css_breaks_out(value: str) -> bool:
     """Whether a decoded value, written out as it reads, would end its declaration or its rule early: a `;` outside any
     string or parentheses, a brace outside a string, or a string or parenthesis left open. An escaped quote decodes to a
     bare one, so `"a\\";position:fixed` would read as a string, then a declaration of its own. Fail closed."""
-    quote, depth = "", 0
+    # the core now: a square bracket is held as a parenthesis is, each closed by its own match, and a line break in a
+    # string breaks out, as a browser ends the string there. Selectors and conditions are held to it too.
+    quote, opened = "", []
     for ch in value:
+        if quote:
+            if ch == quote:
+                quote = ""
+            elif ch in "\n\r\f":
+                return True
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "([":
+            opened.append(ch)
+        elif ch in ")]":
+            if not opened or opened.pop() != "(["[")]".index(ch)]:
+                return True
+        elif ch in "{}" or (ch == ";" and not opened):
+            return True
+    return bool(quote) or bool(opened)
+
+
+def _css_written(css: str) -> str:
+    """the core now: what a style attribute or a sheet is about to be is written only if a browser reads it as written:
+    no comment mark, line break or backslash, and every string, brace, parenthesis and square bracket closed by its own
+    match."""
+    if "/*" in css or "*/" in css or any(ch in css for ch in "\n\r\f\\"):
+        return ""
+    quote, opened = "", []
+    for ch in css:
         if quote:
             if ch == quote:
                 quote = ""
         elif ch in "\"'":
             quote = ch
-        elif ch == "(":
-            depth += 1
-        elif ch == ")":
-            if not depth:
-                return True
-            depth -= 1
-        elif ch in "{}" or (ch == ";" and not depth):
-            return True
-    return bool(quote) or depth != 0
+        elif ch in "{([":
+            opened.append(ch)
+        elif ch in "})]":
+            if not opened or opened.pop() != "{(["["})]".index(ch)]:
+                return ""
+    return "" if quote or opened else css
 
 
 def _css_strip_comments(s: str) -> str:
@@ -367,7 +393,7 @@ def _css_sanitize_one(prop: str, raw_val: str, ctx: CssContext) -> str | None:
         residue = _CSS_CANON_URL.sub("", emitted)
         if "url(" in residue.lower():
             return None
-    if "\\" in emitted or "<" in emitted or ">" in emitted:
+    if "\\" in emitted or "<" in emitted or ">" in emitted or "/*" in emitted or "*/" in emitted:   # the core now: /* */
         return None
     emitted = emitted.strip().rstrip(";").strip()
     if not emitted:
@@ -431,7 +457,7 @@ def python_sanitize_inline_style(value: str | None, ctx: CssContext) -> str:
     try:
         if not value or len(value) > _CSS_INLINE_MAX:
             return ""
-        return _css_sanitize_declarations(value, ctx, _CSS_INLINE_DECLS)
+        return _css_written(_css_sanitize_declarations(value, ctx, _CSS_INLINE_DECLS))      # the core now: written
     except Exception:
         return ""
 
@@ -449,6 +475,8 @@ def _css_tokenize_rules(css: str) -> Iterator[_CssUnit]:
             k = css.find("*/", i + 2)
             if k < 0:
                 return
+            if not css[seg_start:i].strip():
+                seg_start = k + 2       # the core now: a comment in front of a rule is no part of its selector
             i = k + 2; continue
         if ch in "\"'":
             j = i + 1
@@ -539,7 +567,11 @@ def _css_sanitize_selector(sel: str) -> str | None:
         return None
     if _CSS_SEL_BAD.search(sel):
         return None
-    return sel
+    # the core now: no comment mark, a line break written as a space, and read whole on its own
+    if "/*" in sel or "*/" in sel:
+        return None
+    sel = sel.replace("\n", " ").replace("\r", " ").replace("\f", " ")
+    return None if _css_breaks_out(sel) else sel
 
 
 def _css_sanitize_rules(css: str, ctx: CssContext, depth: int, counter: list[int]) -> str:
@@ -569,6 +601,8 @@ def _css_sanitize_rules(css: str, ctx: CssContext, depth: int, counter: list[int
                     pre = prelude.strip()
                     if pre and (not _CSS_PRELUDE_OK.match(pre) or "url" in pre.lower()):
                         continue
+                    if "/*" in pre or "*/" in pre or _css_breaks_out(pre):     # the core now
+                        continue
                     inner = _css_sanitize_rules(blk, ctx, depth + 1, counter)
                     if inner:
                         out.append("@%s %s{%s}" % (kw, pre, inner))
@@ -587,7 +621,7 @@ def python_sanitize_css_stylesheet(css: str | None, ctx: CssContext) -> str:
         if len(css) > _CSS_SHEET_MAX:
             css = css[:_CSS_SHEET_MAX]
         result = _css_sanitize_rules(css, ctx, 0, [0])
-        return result.replace("<", "").replace(">", "")
+        return _css_written(result.replace("<", "").replace(">", ""))      # the core now: written
     except Exception:
         return ""
 
@@ -859,7 +893,7 @@ PROPERTIES = ["color", "background", "background-image", "list-style", "list-sty
               "colo\\72 ", "-moz-binding", "behavior", "x-unknown"]
 CSS_WORDS = [
     *PROPERTIES,
-    ":", ";", "{", "}", "(", ")", '"', "'", "\\", "/*", "*/", "/", "*", ",", "!important", "@", "&{", "<", ">",
+    ":", ";", "{", "}", "(", ")", "[", "]", '"', "'", "\\", "/*", "*/", "/", "*", ",", "!important", "@", "&{", "<", ">",
     "</style", "<style", "@media", "@MEDIA", "@import", "@font-face", "@supports", "@layer", "@page", "@charset",
     "@namespace", "@keyframes", "@-webkit-keyframes", "screen", "(min-width:1px)", "and", "p", ".a", "#b", "a:hover",
     "[x]", "td>p", "p q", "url(", "URL(", "https://e.example.test/a.png", "HTTPS://e.example.test", "http:",
@@ -898,6 +932,14 @@ def test_any_style_text_is_written_as_python_wrote_it(css, load_images):
 @given(sheets, st.booleans())
 def test_any_style_sheet_is_written_as_python_wrote_it(css, load_images):
     assert_css_as_python_wrote_it(css, load_images)
+
+
+@settings(max_examples=2000, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(css_text | declarations | sheets, st.booleans())
+def test_whatever_css_is_written_a_browser_reads_as_written(css, load_images):
+    """Neither a style attribute nor a style sheet the sanitizer writes opens or closes a comment, or reads otherwise."""
+    assert_reads_as_written(sanitizer.sanitize_inline_style(css, Ctx(load_images)))
+    assert_reads_as_written(sanitizer.sanitize_css_stylesheet(css, Ctx(load_images)))
 
 
 # A pad and how many characters of a declaration's value each one leaves once comments, escapes and spaces are read.
@@ -1112,8 +1154,7 @@ def test_the_fold_comes_out_as_python_took_it_out(html):
 
 # ── the HTML sanitizer, on any markup at all ─────────────────────────────────────────────────────────────────────
 
-# Pieces of a message meant to end, open or hide something. None holds a `*`, or anything read as one: with one, a value
-# can write a comment opener, which test_no_written_css_opens_a_comment holds against.
+# Pieces of a message meant to end, open or hide something, CSS's comment marks and square brackets among them.
 HOSTILE = [
     "<script>", "</script>", "<SCRIPT>", "<script/>", "<style>", "</style>", "<style/>", "<title>", "</title>",
     "<textarea>", "</textarea>", "<xmp>", "</xmp>", "<iframe>", "</iframe>", "<noembed>", "</noembed>", "<noframes>",
@@ -1142,8 +1183,9 @@ HOSTILE = [
     "\\22", "\\27", "\\3c", "\\5c", "\\0", "\\D800", "\\/", "\\a", "@media screen", "@import", "@font-face",
     "@supports", "@layer", "p", ".a", "font-family:", "expression", "behavior:", "-moz-binding", "var(", "image-set(",
     "&{", "\u0130", "\u0131", "\u017f", "\u212a", "\xe9", "\U0001f600",
+    "*", "/*", "*/", "\\*", "\\2a", "\\2f", "//**/*", "[", "]", "a[title=", "]{",
 ]
-hostile = st.lists(st.sampled_from(HOSTILE) | st.text("abcxyz ABC\xe9\u0130\u017f\u3000", max_size=4),
+hostile = st.lists(st.sampled_from(HOSTILE) | st.text("abcxyz ABC\xe9\u0130\u017f\u3000*/[]", max_size=4),
                    max_size=40).map("".join)
 
 
@@ -1216,12 +1258,26 @@ def assert_fetches_nothing_unasked(css, load_images):
         assert raster_image(url) or (load_images and scheme(url) in ("http", "https")), css
 
 
+def assert_reads_as_written(css):
+    """A browser reads `css` with the structure it was written with: no comment mark, line break or backslash, and
+    each string, brace, parenthesis and square bracket closed by its own match. Otherwise it could read a later value's
+    string as CSS that no check saw."""
+    assert "/*" not in css and "*/" not in css, css
+    assert not set(css) & set("\n\r\f\\"), css
+    unquoted = re.sub(r"\"[^\"]*\"|'[^']*'", "", css)
+    assert not set(unquoted) & set("\"'"), css
+    while (shorter := re.sub(r"\{[^{}()\[\]]*\}|\([^{}()\[\]]*\)|\[[^{}()\[\]]*\]", "", unquoted)) != unquoted:
+        unquoted = shorter
+    assert not set(unquoted) & set("{}()[]"), css
+
+
 def assert_safe(read, load_images, fold):
     for token in read:
         assert token[0] != "comment"
         if token[0] == "style text":
             assert "<" not in token[1]
             assert_fetches_nothing_unasked(token[1], load_images)
+            assert_reads_as_written(token[1])
         if token[0] != "start":
             continue
         _, tag, attrs = token
@@ -1243,6 +1299,7 @@ def assert_safe(read, load_images, fold):
             assert scheme(attrs["src"]) in (None, "http", "https", "cid") or raster_image(attrs["src"]), attrs
         if "style" in attrs:
             assert_fetches_nothing_unasked(attrs["style"], load_images)
+            assert_reads_as_written(attrs["style"])
 
 
 @settings(max_examples=2000, deadline=None)
@@ -1306,26 +1363,35 @@ def test_an_escape_naming_a_surrogate_is_written_as_the_replacement_character():
     assert sanitizer.sanitize_inline_style("font-family:\\D800", Ctx(False)) == "font-family:\ufffd"
 
 
-OPENING_A_COMMENT = [
-    # An escape decodes to the opener; a later value's string closes it, and what the string held is read as CSS.
+# CSS that Python wrote so that a browser read it otherwise than Python checked it: up to where a later value's string
+# ended, and the rest of that string as CSS. In Chromium each made an element position:fixed.
+READ_OTHERWISE = [
+    # An escape decodes to a comment opener; a later value's string closes it.
     'font-family:\\/\\*;font-family:"\\*\\/;position:fixed;top:0;left:0;width:100px;"',
     'p{font-family:\\/\\*}q{font-family:"\\*\\/}*{position:fixed;top:0}"}',
     # Taking a comment out joins a slash and a star.
     'font-family:a//**/*;font-family:"*/;position:fixed;top:0;x:"',
     'background:ur//**/*;font-family:"*/l(https://t.example.test/x);x:"',
+    'p{font-family:a//**/*}q{font-family:"*/}*{position:fixed;top:0}"}',
     # An at-rule's condition may hold one.
     '@media /*{p{font-family:"*/{*{position:fixed}}"}}',
+    # A line break ends a selector's string there.
+    'a[title="x\n"]{color:red}q{font-family:"]{}*{position:fixed}"}',
+    # A value opens a square bracket and a selector closes it, so the next selector is read as declarations.
+    'p{font-family:[}a]{color:red}x;position:fixed;top:0;y{color:blue}',
+    'p{color:red}a[{color:red}b]{color:red}x;position:fixed;top:0;y{color:blue}',
 ]
 
 
-@pytest.mark.parametrize("css", OPENING_A_COMMENT)
-def test_css_opening_a_comment_is_written_as_python_wrote_it(css):
+@pytest.mark.parametrize("css", READ_OTHERWISE)
+def test_css_a_browser_would_read_otherwise_is_written_as_the_oracle_writes_it(css):
     assert_css_as_python_wrote_it(css, load_images=False)
 
 
-@pytest.mark.xfail(strict=True, reason="kept as the Python sanitizer had it: a value can write a comment opener, so a "
-                                       "browser reads what follows otherwise than the sanitizer checked it")
-@pytest.mark.parametrize("css", OPENING_A_COMMENT)
+@pytest.mark.parametrize("css", READ_OTHERWISE)
 def test_no_written_css_opens_a_comment(css):
-    entry = sanitizer.sanitize_css_stylesheet if css.startswith(("p{", "@")) else sanitizer.sanitize_inline_style
-    assert "/*" not in entry(css, Ctx(False))
+    """Nor reads otherwise: what is written in its place is read as it was written, `position:fixed` inside a string."""
+    for entry in (sanitizer.sanitize_inline_style, sanitizer.sanitize_css_stylesheet):
+        written = entry(css, Ctx(False))
+        assert_reads_as_written(written)
+        assert "position" not in re.sub(r"\"[^\"]*\"|'[^']*'", "", written), written
