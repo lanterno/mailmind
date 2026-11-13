@@ -31,12 +31,12 @@ use super::text::{self, pattern, space};
 
 /// Tags dropped with all they hold, to their end tag.
 const DROP_WITH_CONTENT: &[&str] = &[
-    "script", "head", "title", "iframe", "object", "embed", "applet", "form", "button", "select", "textarea",
-    "noscript", "template", "svg", "math", "frameset", "xml",
+    "script", "head", "title", "iframe", "object", "applet", "form", "button", "select", "textarea", "noscript",
+    "template", "svg", "math", "frameset", "xml",
 ];
 
 /// Tags dropped that hold nothing, so they never start a skip that would swallow the rest of the message.
-const DROP_VOID: &[&str] = &["meta", "link", "base", "input", "frame", "source", "param", "keygen"];
+const DROP_VOID: &[&str] = &["meta", "link", "base", "input", "frame", "source", "param", "keygen", "embed"];
 
 /// The tags written. Any other is unwrapped: the tag goes, its text stays.
 #[rustfmt::skip]
