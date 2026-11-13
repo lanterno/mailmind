@@ -13,6 +13,7 @@ pub mod roles;
 pub mod session;
 pub mod sync_plan;
 pub mod sync_ports;
+pub mod sync_record;
 pub mod threading;
 
 // The reads a person waits on: the lists and what their rows say, the tray of changes, the digest, and what a

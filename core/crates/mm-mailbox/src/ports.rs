@@ -225,3 +225,22 @@ pub trait Opening: Send + Sync + fmt::Debug {
     /// What is said of its sender beside their name, null for what can't be an address.
     fn sender_facts(&self, addr: Option<&str>) -> Result<serde_json::Value, Fault>;
 }
+
+/// One (account, folder)'s sync health as the store keeps it: its last sync that worked and its last that failed, the
+/// failure's class and kind, never what it said.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SyncHealth {
+    pub account: String,
+    pub folder: String,
+    pub last_ok_ts: Option<String>,
+    pub last_error: Option<String>,
+    pub last_error_ts: Option<String>,
+    pub last_error_kind: Option<String>,
+    pub sync_count: i64,
+}
+
+/// What each folder's syncs have come to, as the store keeps it.
+pub trait StoredSyncs: Send + Sync + fmt::Debug {
+    /// Every (account, folder)'s sync health, by account, then folder.
+    fn sync_health(&self) -> Result<Vec<SyncHealth>, Fault>;
+}
