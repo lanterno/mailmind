@@ -241,3 +241,24 @@ fn written(stamp: &Stamp) -> String {
         zone
     )
 }
+
+/// A Date header as (ISO time, Unix time), as `mailbox.domain.ingested.dated` reads one: `datetime.isoformat()`
+/// with the zone it gave, -0000 or no zone read as UTC; None when it doesn't read as a date.
+pub(super) fn dated(value: &str) -> Option<(String, i64)> {
+    let stamp = read(value).filter(valid)?;
+    let zone = stamp.zone.unwrap_or(0);
+    let local = days_from_civil(stamp.year, stamp.month, stamp.day) * 86_400
+        + stamp.hour * 3600
+        + stamp.minute * 60
+        + stamp.second;
+    let sign = if zone < 0 { '-' } else { '+' };
+    let mut offset = format!("{sign}{:02}:{:02}", zone.abs() / 3600, zone.abs() % 3600 / 60);
+    if zone.abs() % 60 != 0 {
+        offset.push_str(&format!(":{:02}", zone.abs() % 60));
+    }
+    let iso = format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}{offset}",
+        stamp.year, stamp.month, stamp.day, stamp.hour, stamp.minute, stamp.second
+    );
+    Some((iso, local - zone))
+}
