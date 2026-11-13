@@ -4,6 +4,10 @@
 tests/api/test_http_get.py::test_the_page_carries_this_processes_csrf_token
 tests/api/test_http_get.py::test_guards_refuse_foreign_hosts_and_cross_site_reads
 tests/api/test_http_get.py::test_folders
+tests/api/test_http_get.py::test_export_plan_and_database_export
+tests/api/test_http_get.py::test_digest
+tests/api/test_http_get.py::test_message_lists
+tests/api/test_http_get.py::test_threads
 tests/api/test_http_post_guards.py::test_the_guards
 tests/api/test_http_post_guards.py::test_a_length_that_isnt_one_is_refused_before_any_route_runs[-1]
 tests/api/test_http_post_guards.py::test_a_length_that_isnt_one_is_refused_before_any_route_runs[lots]
