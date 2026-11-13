@@ -1059,6 +1059,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mm-smtp"
+version = "0.1.0"
+dependencies = [
+ "mm-kernel",
+ "mm-net",
+ "rustls",
+]
+
+[[package]]
 name = "mm-store"
 version = "0.1.0"
 dependencies = [
