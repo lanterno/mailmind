@@ -3,6 +3,7 @@
 Only outstanding work is listed, re-verified against the tree on 2026-11-10: shipped behaviour is
 described in the README and in the code itself, not here. The app is the React one in `web/src`, at `/`,
 served by `uv run python -m mailmind serve`. Each item says what is still missing there or on the server.
+The Rust core's items, the clients' and those on showing and sorting mail were added on 2026-11-13, from the tree.
 
 Items cite functions and symbols rather than line numbers, which drift. Value and effort are
 relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
@@ -46,6 +47,65 @@ relative to this codebase — S = an afternoon, M = a few days, L = a week-plus.
   catch-all, so it has to be listed by address); extend borrowing to mutations (only reads borrow
   today); and default it on.
 
+## The move to the Rust core
+
+Step 3 of the "MailMind client architecture" document is under way ([docs/clients.md](docs/clients.md)): the Rust server
+(`core/crates/mm-server`) takes over the Python app's routes one by one, and `tests/support/rust_ledger.txt` lists the
+served tests it passes against the same scripts. Until the flip, the Python app gets fixes only.
+
+- **Port the rest of the routes** · high value · effort L — In progress by area: the page and settings, the mailbox's
+  reads, search, rules and the local states, and IMAP, sync and the change queue. After those: sending (the outbox,
+  drafts and RSVP, over SMTP), cleanup and unsubscribe (SMTP and one-click HTTPS), the assistant (the Claude API client,
+  the cost governor, batches) and accounts (add, edit, test, delete, trust-cert). `just test-rust-all` says what passes.
+- **The login Keychain in the Rust server** · high value · effort S — `mailmind-server` reads secrets through
+  `NoKeychain` (`mm-server/src/real.rs`), so it needs `MAILMIND_DB_KEY` and can't log in to an account whose password the
+  Keychain keeps. Port `platform.keychain`: `/usr/bin/security`, with the secret on standard input.
+- **Verified TLS to mail servers off this machine** · high value · effort M — `mm_imap::Server::connect` refuses them
+  (`VerifiedTlsNotOnTheRustServerYet`); only loopback servers with a pinned certificate are reached. It needs the system's
+  roots and tests of its own.
+- **Fakes that stand alone** · medium value · effort S — `tests/fakes/imap_server.py` imports `mailmind` (the Keychain
+  item's name and `platform.keychain`). Before the flip, the fakes must run with no Python app beside them.
+- **The in-process browser tests on the Rust server** · medium value · effort M — `tests/e2e/browser/in_process/` patches
+  the Python app's internals, so the ledger can't hold them. Each needs a way in through the Rust server's seams
+  (`Clock`, `Outside`, `Keychain`), or a served test that states the same thing.
+- **The flip** · high value · effort M — Step 4: when the served suites pass against both servers and the owner has used
+  the Rust server daily for two weeks, the Python server goes. Then step 5 moves the page from routes to the core's
+  views and commands, screen by screen, starting with the message list.
+
+## The clients
+
+- **Measure the desktop app on Windows and Linux** · high value · effort S — CI shows only that their lists open and
+  scroll (`just desktop smoke`). Measure launch, idle memory and frame times on the runners, add budgets for each to
+  `budgets.toml`, and decide each platform's shell from them (see Open decisions).
+- **Measure the Mac's Tauri build with the screen awake** · low value · effort S — `desktop.mac_first_rows_ms` and
+  `desktop.mac_idle_memory_mb` were taken behind a locked screen, where macOS runs the app at about half speed.
+- **Run the iPhone smoke check once** · medium value · effort S — `just apple smoke` scrolls the list in an iPhone
+  simulator on CI's Mac, and has yet to complete there.
+- **Real app identifiers** · medium value · effort S — `app.mailmind` is a placeholder (`shells/apple/project.yml`,
+  `shells/android/app/build.gradle.kts`). The real ones need the domain and the entity the store listings will name.
+- **Tauri's accepted advisories** · medium value · effort S — `shells/desktop/src-tauri/osv-scanner.toml` ignores seven
+  until 2027-02-12. Upgrade past them, or look at each again, before then.
+
+## Showing and sorting mail
+
+- **Keep a message's head styles** · medium value · effort S — `mm_content::sanitize` drops a `<head>` with all it holds,
+  its `<style>` elements included, so newsletters styled from the head show plainer than they were sent. Keep those
+  sheets, sanitized as any other `<style>` is.
+- **End nested dropped elements where a browser ends them** · low value · effort S — a `<form>` inside a `<form>`, a
+  `<button>` inside a `<button>` or a `<select>` inside a `<select>` loses the text after it (`DROP_WITH_CONTENT` in
+  `sanitize/html.rs`). The head's fix (`HEAD_HOLDS`) is the mechanism.
+- **Show what a browser shows of dropped elements** · low value · effort M — `<noscript>` (the frame runs no script), an
+  `<object>`'s fallback, an unclosed `<xml>`, and the HTML a browser breaks out of `<svg>` and `<math>` to show are dropped
+  whole.
+- **Reclassify mail sorted under the old patterns** · medium value · effort S — the core's classifier
+  (`mm_curation::classifier`) no longer matches its patterns inside longer words, but mail sorted before keeps its bucket:
+  only rows a rule covers are sorted again.
+- **A lone surrogate in a sender's name** · low value · effort S — the core reads one as U+FFFD where Python read it as
+  itself (the strict xfail in `tests/unit/curation/test_classifier_in_rust.py`).
+- **Simplify the search grammar after the flip** · low value · effort S — `mm_discovery` copies Python's quirks (its
+  `fromisoformat`, a Unicode 16 case table) only so the two answer alike. Once Python goes, keep strict `before:` and
+  `after:` dates and Rust's own Unicode.
+
 ## The desktop app
 
 - **Proton Mail goes with the desktop app** — decided on 2026-11-08. Proton offers IMAP only through its Bridge, which has
@@ -63,8 +123,16 @@ implementation.
   folder, where it has always been. Left for later on 2026-11-03.
 - **Default remote-image policy** — block-by-default with per-message "Load images" (current, and the
   privacy-preserving choice) vs. allowing images for known/personal senders.
+- **Native shells on the desktop** — on the Mac the native list opens in 218 ms and idles at 28 MB; the same page in
+  Tauri, 724 ms and 83.9 MB (`budgets.toml`). The recommendation: commit to the native Mac app, shipped after the Tauri
+  one once the iPad shell has the screens, and keep the web shell on Windows and Linux unless their measurements miss a
+  budget, with a GTK4 shell in Rust as Linux's fallback.
+- **The client's licence, a legal entity, and who runs the push relay** — the architecture document's risks section
+  recommends an answer for each. The push relay waits on the iPhone app; the other two on the first store listing.
 
 ## Next up
 
-1. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
+1. **Step 3: the Rust server on every route** (high) — the areas in progress, then sending, cleanup, the assistant and
+   accounts, with the Keychain and verified TLS beside them. See The move to the Rust core.
+2. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
