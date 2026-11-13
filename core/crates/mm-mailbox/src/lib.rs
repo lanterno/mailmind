@@ -15,6 +15,7 @@ pub mod ingest;
 pub mod labels;
 pub mod ports;
 pub mod roles;
+pub mod server_ops;
 pub mod session;
 pub mod stats;
 pub mod sync_plan;
