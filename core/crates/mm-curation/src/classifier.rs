@@ -10,7 +10,8 @@
 //!   unless they're fraud.
 //!
 //! The Python app wrote these rules against Python's `str` and `re`, and the buckets they gave are stored, so each
-//! comparison here answers as Python did. `crate::text` says how.
+//! comparison here answers as Python did, but where a comment says what a pattern keeps out: a longer word, or a
+//! domain that only ends like the one meant, which Python's took in. `crate::text` says how.
 
 use std::borrow::Cow;
 use std::sync::LazyLock;

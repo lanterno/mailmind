@@ -2,8 +2,8 @@
 List-Unsubscribe or List-ID header, it returns a bucket, a confidence, and a short human-readable reason.
 
 The Rust core decides (`mm_curation::classifier`), as every client does, and answers as the Python
-classifier it replaced did, which the suite holds it to. Its documentation says what hand-sweeping six
-inboxes taught it.
+classifier it replaced did, but where the core has fixed a pattern since: the suite holds it to that
+classifier, with each fix. Its documentation says what hand-sweeping six inboxes taught it.
 
 Buckets:
   spam/scam                 -> junk, high confidence
