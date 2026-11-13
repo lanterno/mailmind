@@ -71,6 +71,7 @@ pub struct App {
     pub labels: Labels,
     // Discovery's, Curation's and Attention's use cases.
     pub discovery: crate::bound::Discovery,
+    pub curation: crate::bound::Curation,
 }
 
 impl App {
@@ -100,6 +101,7 @@ impl App {
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
+        let curation = crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone);
         let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
         let folders = Arc::new(Folders::new(
             Arc::new(KnownAccounts(directory.clone())),
@@ -157,6 +159,7 @@ impl App {
             stats,
             labels,
             discovery,
+            curation,
         })
     }
 }

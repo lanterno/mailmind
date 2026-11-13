@@ -25,6 +25,7 @@ mod events;
 mod places;
 mod preferences;
 // Discovery's, Curation's and Attention's.
+mod curation;
 mod discovery;
 
 use std::sync::Arc;
@@ -54,6 +55,7 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(debug::routes())
         // Discovery's, Curation's and Attention's.
         .merge(discovery::routes())
+        .merge(curation::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

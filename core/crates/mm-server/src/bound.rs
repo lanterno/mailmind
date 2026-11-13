@@ -1,11 +1,15 @@
-//! Discovery's use cases bound to their adapters (`mailmind.bootstrap.discovery`), with the glue they need from the
-//! other contexts: which folder plays which part (the Mailbox's), the accounts' names (the Directory's) and whom the
-//! rule book keeps (Curation's). A context never names another, so it is answered here.
+//! Discovery's and Curation's use cases bound to their adapters (`mailmind.bootstrap.discovery` and `.curation`), with
+//! the glue they need from the other contexts: which folder plays which part (the Mailbox's), the accounts' names
+//! (the Directory's), whom the rule book keeps (Curation's) and whether a search can be a filter (Discovery's). A
+//! context never names another, so it is answered here.
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use mm_accounts::Directory;
+use mm_curation::filters::Filters;
+use mm_curation::ports::{Conditions, FilterIds, Filing, Mailboxes, RuleBook as _};
+use mm_curation::screener::{Audit, Screener};
 use mm_discovery::contacts::Contacts;
 use mm_discovery::known::KnownContacts;
 use mm_discovery::ports::{AccountNames, FolderRoles, KeptSenders};
@@ -16,8 +20,8 @@ use mm_kernel::errors::Fault;
 use mm_kernel::seams::Clock;
 use mm_kernel::zone::Zone;
 use mm_store::Database;
+use mm_store::curation::CurationStore;
 use mm_store::discovery::DiscoveryStore;
-use serde_json::Value;
 
 /// Which folder plays which part, by its name. What the last LIST said of an account's folders isn't asked yet:
 /// the Mailbox keeps it inside `Folders`, which says nothing of one folder.
@@ -48,18 +52,13 @@ impl AccountNames for Names {
     }
 }
 
-/// Whom the rule book keeps, as the `rules` document holds them.
+/// Whom the rule book keeps.
 #[derive(Debug)]
-pub(crate) struct RuleBook(pub(crate) Arc<Database>);
+pub(crate) struct Kept(pub(crate) Arc<CurationStore>);
 
-impl KeptSenders for RuleBook {
+impl KeptSenders for Kept {
     fn kept(&self) -> Result<HashSet<String>, Fault> {
-        let rules = self.0.read(|c| mm_store::blocks::document(c, "rules"))?;
-        Ok(rules
-            .get("keep_senders")
-            .and_then(Value::as_array)
-            .map(|kept| kept.iter().filter_map(Value::as_str).map(str::to_owned).collect())
-            .unwrap_or_default())
+        Ok(self.0.load()?.list("keep_senders").iter().cloned().collect())
     }
 }
 
@@ -105,7 +104,99 @@ impl Discovery {
             views: SavedViews::new(store.clone(), Arc::new(Drawn)),
             contacts: Contacts::new(store.clone(), clock.clone()),
             suggesting: Suggesting::new(store.clone()),
-            known: KnownContacts::new(store, names, roles, Arc::new(RuleBook(database.clone()))),
+            known: KnownContacts::new(store, names, roles, Arc::new(Kept(Arc::new(CurationStore::new(
+                database.clone(),
+                clock.clone(),
+            ))))),
         }
+    }
+}
+
+/// The accounts the app may use, by address: disabled ones left out.
+#[derive(Debug)]
+pub(crate) struct Enabled(pub(crate) Arc<Directory>);
+
+impl Mailboxes for Enabled {
+    fn known(&self) -> Result<HashSet<String>, Fault> {
+        Ok(self.0.accounts()?.into_iter().map(|a| a.email).collect())
+    }
+}
+
+/// Trashing a copy now is a change on its mail server, which this server makes no change on yet.
+#[derive(Debug)]
+pub(crate) struct NoFiling;
+
+impl Filing for NoFiling {
+    fn trash_now(&self, _pk: i64) -> Result<Option<bool>, Fault> {
+        Ok(None)
+    }
+}
+
+/// Whether a search can be a filter, as Discovery judges one, with a date that names no zone placed in the person's.
+#[derive(Debug)]
+pub(crate) struct ArrivalConditions(pub(crate) Arc<dyn Zone>);
+
+impl Conditions for ArrivalConditions {
+    fn refusal(&self, q: &str) -> Option<String> {
+        mm_discovery::arrival::refusal(q, |wall| mm_discovery::search::placed(&*self.0, wall))
+    }
+}
+
+/// `n` random bytes in URL-safe base64 without padding, as Python's `secrets.token_urlsafe(n)`.
+pub(crate) fn token_urlsafe(n: usize) -> Result<String, Fault> {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let bytes = drawn(n)?;
+    let mut out = String::with_capacity(n.div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], chunk.get(1).copied().unwrap_or(0), chunk.get(2).copied().unwrap_or(0)];
+        let word = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..=chunk.len() {
+            out.push(char::from(ALPHABET[((word >> (18 - 6 * i)) & 63) as usize]));
+        }
+    }
+    Ok(out)
+}
+
+impl FilterIds for Drawn {
+    fn filter_id(&self) -> Result<String, Fault> {
+        Ok(format!("f-{}", token_urlsafe(8)?))
+    }
+}
+
+/// Curation's use cases.
+#[derive(Debug)]
+pub struct Curation {
+    pub screener: Screener,
+    pub filters: Filters,
+    pub audit: Audit,
+    /// The database, for the copy a request names.
+    pub(crate) database: Arc<Database>,
+}
+
+impl Curation {
+    pub(crate) fn assemble(
+        database: &Arc<Database>,
+        directory: &Arc<Directory>,
+        clock: &Arc<dyn Clock>,
+        zone: &Arc<dyn Zone>,
+    ) -> Curation {
+        let store = Arc::new(CurationStore::new(database.clone(), clock.clone()));
+        Curation {
+            screener: Screener::new(
+                store.clone(),
+                store.clone(),
+                Arc::new(Enabled(directory.clone())),
+                Arc::new(NoFiling),
+                clock.clone(),
+            ),
+            filters: Filters::new(store.clone(), Arc::new(ArrivalConditions(zone.clone())), Arc::new(Drawn)),
+            audit: Audit::new(store),
+            database: database.clone(),
+        }
+    }
+
+    /// The pk the copy `key`, `folder` and `uid` name has now, or None where that copy isn't there.
+    pub(crate) fn copy_pk(&self, key: i64, folder: &str, uid: Option<i64>) -> Result<Option<i64>, Fault> {
+        self.database.read(|c| mm_store::copies::copy_pk(c, key, folder, uid))
     }
 }
