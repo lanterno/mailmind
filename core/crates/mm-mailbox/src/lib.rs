@@ -34,3 +34,4 @@ pub mod opening;
 pub mod tray;
 // Tidy's runs, as the brief reads the newest.
 pub mod tidy;
+pub mod undo;
