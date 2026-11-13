@@ -165,7 +165,7 @@ allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 # tests/test_architecture.py says the same of the standard library's I/O, which the graph doesn't hold.
-name = "a domain imports only the standard library, the kernel and content"
+name = "a domain imports only the standard library, the kernel, content and the core's leaves"
 type = "forbidden"
 source_modules = ["mailmind.accounts.domain",
                  "mailmind.assistant.domain",
