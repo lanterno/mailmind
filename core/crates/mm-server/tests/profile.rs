@@ -1,4 +1,4 @@
-//! Which profile the environment selects: a full process, or one that only reads.
+//! Which profile the environment selects, a full process or one that only reads, and the background work's pace.
 
 use mm_server::environment::Environment;
 
@@ -12,6 +12,16 @@ fn a_process_is_full_unless_told_otherwise() {
     assert!(!read_only(&[("MAILMIND_PROFILE", "")]));
     assert!(!read_only(&[("MAILMIND_PROFILE", " Full ")]));
     assert!(!read_only(&[("MAILMIND_NOSYNC", "0"), ("MAILMIND_PROFILE", "full")]));
+}
+
+#[test]
+fn reconcile_goes_round_every_half_hour_unless_told_otherwise() {
+    let secs = |pairs: &[(&str, &str)]| Environment::from_pairs(pairs.iter().copied()).reconcile_secs();
+    assert_eq!(secs(&[]), 1800);
+    assert_eq!(secs(&[("MAILMIND_RECONCILE_SECS", " ")]), 1800);
+    assert_eq!(secs(&[("MAILMIND_RECONCILE_SECS", "soon")]), 1800);
+    assert_eq!(secs(&[("MAILMIND_RECONCILE_SECS", " 600 ")]), 600);
+    assert_eq!(secs(&[("MAILMIND_RECONCILE_SECS", "0")]), 0);
 }
 
 #[test]

@@ -5,10 +5,18 @@ use std::collections::BTreeSet;
 
 use mm_kernel::errors::Fault;
 use mm_mailbox::ingest::SyncError;
-use mm_mailbox::reconcile::{Pruned, empty_search, renumbered};
+use mm_mailbox::reconcile::{EVERY_AT_LEAST, Pruned, empty_search, next_round, renumbered};
 use mm_mailbox::session::ServerError;
 use mm_mailbox::syncing::{asked_again, error_kind};
 use serde_json::json;
+
+#[test]
+fn one_cycle_of_reconcile_spreads_across_the_accounts_a_round_at_least_thirty_seconds_apart() {
+    assert_eq!(next_round(1800, 3), 600);
+    assert_eq!(next_round(1800, 0), 1800);
+    assert_eq!(next_round(1800, 1), 1800);
+    assert_eq!(next_round(60, 7), EVERY_AT_LEAST);
+}
 
 #[test]
 fn a_folder_the_server_renumbered_is_never_pruned() {
