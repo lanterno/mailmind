@@ -4,12 +4,13 @@
 #![allow(clippy::unwrap_used)]
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use mm_kernel::errors::{Failure, Fault, Kind};
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::labels::Labels;
 use mm_mailbox::ports::{AccountList, InboxPlans, Listed, StoredLabels, StoredSyncs, SyncHealth};
-use mm_mailbox::stats::LiveStats;
+use mm_mailbox::stats::{self, LiveStats};
 use mm_mailbox::sync_record::SyncRecords;
 use serde_json::{Map, Value, json};
 
@@ -63,6 +64,52 @@ fn the_counts_name_each_account_s_plan_with_its_alias_and_the_totals() {
     assert_eq!((&accounts[0]["alias"], &accounts[1]["alias"]), (&json!("Ada"), &Value::Null));
     assert_eq!((&accounts[1]["kind"], &accounts[1]["in_inbox"]), (&json!("proton"), &json!(2)));
     assert_eq!(accounts[0].as_object().unwrap().len(), 9);
+}
+
+/// A clock a test moves on, from the frozen moment.
+#[derive(Debug, Default)]
+struct Moving(AtomicI64);
+
+impl Clock for Moving {
+    fn now(&self) -> Moment {
+        Moment::from_micros(1_793_620_800_000_000 + self.0.load(Ordering::SeqCst))
+    }
+}
+
+/// The plans, counting how often they are read.
+#[derive(Debug, Default)]
+struct Counting(AtomicUsize);
+
+impl InboxPlans for Counting {
+    fn plans_stored(&self, accounts: &[Listed]) -> Result<Vec<Map<String, Value>>, Fault> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Plans.plans_stored(accounts)
+    }
+
+    fn buckets(&self) -> Value {
+        Plans.buckets()
+    }
+}
+
+#[test]
+fn the_counts_are_kept_until_something_moves_them_or_they_go_stale() {
+    let (clock, plans) = (Arc::new(Moving::default()), Arc::new(Counting::default()));
+    let stats = LiveStats::new(Arc::new(Two), plans.clone(), clock.clone());
+    let read = || plans.0.load(Ordering::SeqCst);
+    let first = stats.live().unwrap();
+    assert_eq!(stats.live().unwrap(), first);
+    assert_eq!(read(), 1);
+    // Something said they moved: the next read counts afresh.
+    stats.invalidate();
+    stats.live().unwrap();
+    assert_eq!(read(), 2);
+    // Nothing did: kept for TTL, then counted again.
+    clock.0.store(stats::TTL - 1, Ordering::SeqCst);
+    stats.live().unwrap();
+    assert_eq!(read(), 2);
+    clock.0.store(stats::TTL, Ordering::SeqCst);
+    assert_eq!(stats.live().unwrap()["generated"], json!("2026-11-02T12:01:30+00:00"));
+    assert_eq!(read(), 3);
 }
 
 #[derive(Debug)]

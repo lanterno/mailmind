@@ -1,12 +1,13 @@
 //! Attention's rules with no database: when a snooze wakes, how a person's task reads, and what a follow-up becomes.
 
 use mm_attention::followups::{self, FollowUp, dismissed, pinned, unpinning_ends, waiting_item};
-use mm_attention::ports::WaitingRow;
-use mm_attention::snoozing::{Until, in_window, wake_time};
+use mm_attention::ports::{Copy, WaitingRow};
+use mm_attention::snoozing::{Restoration, Until, copy_named, in_window, restorations, wake_time};
 use mm_attention::tasks::{one_line, read_date};
 use mm_kernel::seams::Moment;
 use mm_kernel::when::days_from_civil;
 use mm_kernel::zone::{Rule, Utc};
+use serde_json::json;
 
 fn at(y: i64, mo: u32, d: u32, h: i64, mi: i64) -> i64 {
     days_from_civil(y, mo, d) * 86_400 + h * 3600 + mi * 60
@@ -176,4 +177,27 @@ fn a_sent_thread_waits_on_its_first_recipient() {
     assert_eq!(item["from_name"], "ada@example.test");
     assert_eq!(item["subject"], "(no subject)");
     assert_eq!(item["when"], "3d ago");
+}
+
+#[test]
+fn an_undone_snooze_gives_each_message_back_where_it_is_now() {
+    let entry = json!({
+        "kind": "snooze",
+        "pks": [11, 12, 13, 14],
+        // 12 had no row when it was snoozed; 14 is from before entries named where a copy was.
+        "where": [[701, "INBOX"], null, [703, "Archive"]],
+        "prev_until": [0, 1_793_700_000, 1_793_620_800],
+    });
+    let place = |key: i64, folder: &str| Some(Copy { key: Some(key), folder: folder.to_owned() });
+    assert_eq!(
+        restorations(&entry),
+        [
+            Restoration { pk: 11, place: place(701, "INBOX"), until: None },
+            Restoration { pk: 13, place: place(703, "Archive"), until: Some(1_793_620_800) },
+            Restoration { pk: 14, place: None, until: None },
+        ]
+    );
+    assert_eq!(copy_named(&json!([5, "Sent"])), place(5, "Sent"));
+    assert_eq!(copy_named(&json!([null, "Sent"])), Some(Copy { key: None, folder: "Sent".to_owned() }));
+    assert_eq!(copy_named(&json!([5])), None);
 }
