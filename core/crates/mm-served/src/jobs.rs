@@ -23,6 +23,7 @@ pub fn work(app: &App, argument: &str) -> String {
             Err(failure) => Err(failure.to_string()),
         },
         "follow-ups" => app.attention.follow_ups.tick().map(|_| ()).map_err(|failure| failure.to_string()),
+        "commands" => app.commands.drain().map_err(|fault| fault.class.to_owned()),
         _ => return format!("failed {job}: not on the Rust server yet"),
     };
     match done {
