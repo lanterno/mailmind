@@ -84,7 +84,7 @@ fn run() -> Result<(), String> {
                 }
                 None => "failed clock: not a time".to_owned(),
             },
-            "work" => "failed not on the Rust server yet".to_owned(),
+            "work" => mm_served::jobs::work(&app, argument),
             "settle" => match app.work.settle(SETTLE) {
                 0 => "ok".to_owned(),
                 n => format!("busy {n} request(s) still being answered"),

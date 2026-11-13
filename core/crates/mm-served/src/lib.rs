@@ -2,5 +2,6 @@
 //! tripwire for its files, hosts and programs, and the fake Keychain. Never shipped.
 
 pub mod clock;
+pub mod jobs;
 pub mod keychain;
 pub mod tripwire;
