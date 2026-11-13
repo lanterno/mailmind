@@ -24,6 +24,7 @@ just desktop build      # the page, then the app in release, unbundled (core/tar
 just desktop bundle     # the installers for this system, under core/target/release/bundle
 just desktop dev        # the app in debug, on the web shell's dev server
 just desktop check      # rustfmt and clippy on the app's Rust
+just desktop smoke      # the release app opens its list, scrolls nine tenths down and exits 0 once rows came
 just desktop measure    # macOS: launch to first rows and idle memory, on the release .app
 ```
 
@@ -39,4 +40,6 @@ just desktop measure    # macOS: launch to first rows and idle memory, on the re
 - **Keys never cross the page.** The core opens the database in this process; a real profile's key will come
   from the platform's key store here, never from the page.
 - **The page's title is a signal.** It changes once the first rows are in the DOM; `src-tauri/src/measure.rs`
-  reports that with `MAILMIND_MEASURE` set, for `just desktop measure`.
+  reports that with `MAILMIND_MEASURE` set, for `just desktop measure`. With `MAILMIND_MEASURE=scroll` it then
+  scrolls the list from the webview itself and exits with what came (`just desktop smoke`, which CI runs on every
+  system). A window nobody sees, as on a locked Mac, may never scroll: run it with the screen on.
