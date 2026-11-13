@@ -3,6 +3,9 @@
 `curation.domain.classifier` assigns one of seven buckets (`SPAM`, `BLOCKED`, `MKT`, `NOTIF`,
 `RECEIPT`, `PROTECTED`, `PERSONAL`); `JUNK_BUCKETS` decides what ingest drops. It's a pure function of a
 message's headers and the rule book's lists, and `bootstrap.curation.classify` calls it with the rules as they stand.
+The Rust core computes it (`mm_curation::classifier`, through `mailmind_leaves`), as every client will; the Python
+module keeps the bucket names and builds the core's copy of the rule sets once each time the rules change
+(`rulebook.as_sets`), so classifying a message costs under a microsecond however many rules there are.
 `curation.domain.rulebook` is a learned per-sender/domain keep/block list on top, kept in the database, which is encrypted
 ([At rest](security.md#at-rest)), as the `rules` document (`platform.db.documents`, migration 48). Its body is the JSON
 the rule book's old file held; nothing reads or writes a file of it any more. The same
