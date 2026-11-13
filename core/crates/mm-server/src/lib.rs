@@ -12,6 +12,7 @@
 pub mod answer;
 pub mod app;
 pub mod body;
+mod command_wiring;
 pub mod environment;
 pub mod events;
 pub mod gates;

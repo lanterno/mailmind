@@ -13,18 +13,28 @@ use mm_accounts::health::Health;
 use mm_compose::snippets::Snippets;
 use mm_curation::sweep_plan::StoredPlans;
 use mm_kernel::seams::{Clock, Keychain, Outside};
+use mm_mailbox::command_ports::Tokens;
+use mm_mailbox::commands::{CommandParts, MailCommands};
+use mm_mailbox::filing::{Filing, FilingParts};
 use mm_mailbox::folders::Folders;
+use mm_mailbox::gates::Gates;
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::labels::Labels;
+use mm_mailbox::reversal::Reversals;
+use mm_mailbox::server_ops::ServerOps;
 use mm_mailbox::session::MailServers;
 use mm_mailbox::stats::LiveStats;
+use mm_mailbox::sync_ports::Events;
 use mm_mailbox::sync_record::SyncRecords;
+use mm_mailbox::undo::Undo;
 use mm_store::compose::SnippetsDocument;
 use mm_store::places::Places;
 use mm_store::{ConfigFile, Database, DbKey, PageFiles};
 
+use crate::command_wiring::{DirectoryMoveAccounts, RandomTokens};
 use crate::environment::{Environment, Settings};
 use crate::events::Hub;
+use crate::gates::AccountGates;
 use crate::page::Page;
 use crate::serve::Work;
 use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier, Unheard};
@@ -49,6 +59,12 @@ pub struct App {
     pub folders: Arc<Folders>,
     /// The sync: a folder's mail into the database (`work sync`, Undo's way back).
     pub ingest: Arc<Ingest>,
+    /// Each account's IMAP gate, which every job that talks to its server holds.
+    pub gates: Arc<dyn Gates>,
+    /// The change queue: a change to the mail on a server, and `work commands`.
+    pub commands: Arc<MailCommands>,
+    pub undo: Undo,
+    pub filing: Filing,
     /// The requests being answered now, which a stop waits for.
     pub work: Arc<Work>,
     /// The reads a person waits on: lists, conversations, the tray of changes.
@@ -124,6 +140,10 @@ impl App {
             environment,
             seams,
         );
+            sessions,
+            database.clone(),
+            seams.clock.clone(),
+        ));
         let servers: Arc<dyn MailServers> = Arc::new(ImapServers {
             directory: directory.clone(),
             outside: seams.outside.clone(),
@@ -131,7 +151,7 @@ impl App {
         });
         let ingest = Arc::new(Ingest::new(
             Arc::new(DirectoryAccounts(directory.clone())),
-            servers,
+            servers.clone(),
             database.clone(),
             Arc::new(RuleBookClassifier { database: database.clone(), last: Mutex::new(None) }),
             Arc::new(Unheard),
@@ -146,6 +166,30 @@ impl App {
         let plans = CurationPlans(StoredPlans::new(database.clone(), database.clone()));
         let stats = LiveStats::new(Arc::new(ListedAccounts(directory.clone())), Arc::new(plans), seams.clock.clone());
         let labels = Labels::new(database.clone());
+        let gates: Arc<dyn Gates> = Arc::new(AccountGates::new(environment.gate_per_account()));
+        let events: Arc<dyn Events> = Arc::new(Unheard);
+        let tokens: Arc<dyn Tokens> = Arc::new(RandomTokens::default());
+        let commands = Arc::new(MailCommands::new(CommandParts {
+            store: database.clone(),
+            accounts: Arc::new(DirectoryMoveAccounts(directory.clone())),
+            server: ServerOps::new(servers, environment.read_only()),
+            gates: gates.clone(),
+            clock: seams.clock.clone(),
+            events: events.clone(),
+            tokens: tokens.clone(),
+            read_only: environment.read_only(),
+        }));
+        let reversals = Arc::new(Reversals::new(commands.clone(), ingest.clone()));
+        let undo = Undo::new(database.clone(), gates.clone(), seams.clock.clone(), events.clone(), vec![reversals]);
+        let filing = Filing::new(FilingParts {
+            commands: commands.clone(),
+            ingest: ingest.clone(),
+            folders: folders.clone(),
+            gates: gates.clone(),
+            clock: seams.clock.clone(),
+            events,
+            tokens,
+        });
         Ok(App {
             port,
             csrf,
@@ -153,6 +197,10 @@ impl App {
             directory,
             folders,
             ingest,
+            gates,
+            commands,
+            undo,
+            filing,
             work: Arc::new(Work::default()),
             reading,
             clock: seams.clock.clone(),
