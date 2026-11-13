@@ -323,6 +323,21 @@ fn wise_com_and_stripe_com_are_whole_labels() {
 }
 
 #[test]
+fn a_matrix_counts_glued_into_a_name_and_a_cycler_where_a_word_starts() {
+    // Fixed in the core: Python's `matrix` and `cycler` counted anywhere, so a person's word was fraud.
+    const SPAM: [&str; 3] = ["spam/scam", "high", "fraud/MLM pattern"];
+    const PERSON: [&str; 3] = ["other/personal-ish", "med", "person on a personal mailbox"];
+    for subject in ["Matrixforall", "the CashMatrix", "matrix_plan", "matrix2", "2matrix", "Cycler", "1-up cycler"] {
+        assert_eq!(said("lin@gmail.com", subject, "", false, &NONE), SPAM, "{subject}");
+    }
+    for subject in ["Join our Matrix room", "matrix", "the matrix\u{301}", "a recycler", "bicycler", "_cycler"] {
+        assert_eq!(said("lin@gmail.com", subject, "", false, &NONE), PERSON, "{subject}");
+    }
+    // The name is read too.
+    assert_eq!(said("lin@gmail.com", "hi", "Matrix4All", false, &NONE), SPAM);
+}
+
+#[test]
 fn an_address_is_read_as_python_lower_cased_and_stripped_it() {
     assert_eq!(
         said("  Lin@Studio.Example.Test\u{9}", "hi", "", false, &NONE),

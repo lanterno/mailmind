@@ -113,11 +113,12 @@ STRONG_SCAM = re.compile(
     re.I)
 # Money-making / MLM / HYIP / urgency: only counts when the SENDER is sketchy
 # (free webmail or a junk TLD). Legit brands use this language in marketing too.
+# Fixed since: `matrix` and `cycler` counted anywhere, a person's Matrix room and a recycler among them.
 WEAK_SCAM = re.compile(
     r"(get paid|getpaid|make money|earn money|earn \$?\d|make \$?\d|"
     r"\$\d[\d,]*\s*(a|per|/)\s*(day|week|month)|[0-9]{2,}\s*% (per|a) (day|month|return)|"
     r"work from home|passive income|be your own boss|financial freedom|"
-    r"revenue share|traffic exchange|paid to click|\bptc\b|downline|matrix|cycler|"
+    r"revenue share|traffic exchange|paid to click|\bptc\b|downline|\Bmatrix|matrix\B|\bcycler|"
     r"\bm2m\b|cash ?club|instant ?cash|join asap|going viral|pre-?launch|profit system|"
     r"risk[- ]free.{0,20}(invest|profit|return)|100% (guarantee|profit)|"
     r"urgent.{0,15}(transfer|fund))",
@@ -299,8 +300,8 @@ PHRASES = [
     "nigerian prince", "viagra", "cialis", "penis enlargement", "double your money", "double your btc", "get paid",
     "getpaid", "make money", "earn money", "earn $5", "earn 5", "make $5", "$5 a day", "$1,000 per month", "$5/week",
     "50 % per day", "20% a return", "work from home", "passive income", "be your own boss", "financial freedom",
-    "revenue share", "traffic exchange", "paid to click", "ptc", "downline", "matrix", "cycler", "m2m", "cash club",
-    "cashclub", "instant cash", "join asap", "going viral", "prelaunch", "pre-launch", "profit system", "risk-free",
+    "revenue share", "traffic exchange", "paid to click", "ptc", "downline", "matrix", "matrixforall", "cashmatrix",
+    "cycler", "recycler", "m2m", "cash club", "cashclub", "instant cash", "join asap", "going viral", "prelaunch", "pre-launch", "profit system", "risk-free",
     "risk free", "invest", "profit", "return", "100% guarantee", "100% profit", "urgent", "transfer", "fund", "$5", "5$",
     "$ 5", "usd", "btc", "bitcoin", "euro", "euros", "€", "cash", "million", "!!!", "!", "WINNER", "FREE MONEY", "Re:",
     "RE :", "Fwd:", "Fw:", "AW:", "WG:", "TR:", "RV:", "Réf:", "Ref:", "re", "lunch", "hi"]
