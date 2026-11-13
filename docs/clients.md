@@ -116,21 +116,31 @@ and an `<embed>` or an unclosed `<head>` taking the rest of a message with it.
 (`tests/api`, `tests/e2e/browser`) through `core/crates/mm-served`. A test it passes goes on the ledger,
 `tests/support/rust_ledger.txt`, and `just test-rust` runs those against it (see [testing.md](testing.md)).
 
-The first slice is the perimeter, ported check for check with the same statuses and problem documents, the page and
-its files, `/api/accounts` and `/api/folders` (the folder rail, over a loopback IMAP server). Any other route answers
-as no route does. How a slice is built:
+The first slice was the perimeter, ported check for check with the same statuses and problem documents, the page and
+its files, `/api/accounts` and `/api/folders`. The second, four areas side by side, brought the Mailbox's reads, a
+message opened, search, rules and the Screener, the local states (snooze, mute, follow-ups, Reply Later, tasks), and
+IMAP with the sync and the change queue: on 2026-11-13 the server answered 64 of the Python app's 103 routes, and the
+ledger held 44 served tests. Any other route answers as no route does. How a slice is built:
 
-- **A use case goes in its context's crate** (`mm-mailbox`, `mm-accounts`), with what it needs of the world as traits
-  in that crate's `ports`. Its SQL goes in `mm-store`, in a module named for the context; the network in `mm-imap`.
-- **A route is a plain `async fn` on a literal path** in `mm-server/src/routes/<context>.rs`, merged in
-  `routes::router`. It reads its arguments with `query::Query`, runs the use case through `routes::run` (on the
-  blocking pool, off the async threads) and answers its value as JSON or its refusal as a problem document. A route
-  that answers only some of what the Python one does answers the rest with `answer::not_yet`, a 501.
-- **Contexts meet in `mm-server`**: `wiring` adapts one context's use case to another's port, and `App::assemble`
-  builds them all.
+- **A use case goes in its context's crate** (`mm-mailbox`, `mm-discovery`, `mm-curation`, `mm-attention`,
+  `mm-compose`, `mm-accounts`), with what it needs of the world as traits in that crate's `ports`. Its SQL goes in
+  `mm-store`, in a module named for the context. A network protocol has a crate of its own (`mm-imap`), on `mm-net`,
+  which holds the TCP connection and the TLS every protocol shares.
+- **One write block is `Database::write`**, BEGIN IMMEDIATE as `UnitOfWork.write` is; `Database::read` never writes.
+  The documents a context keeps whole and the undo stack are `mm_store::blocks`.
+- **A route is a plain `async fn` on a literal path** in `mm-server/src/routes/<context>.rs`, merged once in
+  `routes::router` (axum refuses a path routed twice when the server starts). It reads a query with `query::Query` and
+  a POST's body with `body::read`, runs the use case through `routes::run` (on the blocking pool, off the async
+  threads) and answers its value as JSON or its refusal as a problem document. A route that answers only some of what
+  the Python one does answers the rest with `answer::not_yet`, a 501.
+- **A change to mail on a server goes through `MailCommands`** (`mm_mailbox::commands`), and IMAP work through the
+  account's gate (`mm_mailbox::gates`), as the Python app's `mailbox.commands` and `gates.run` do. The page hears of a
+  change on the event stream (`mm-server/src/events.rs`).
+- **Contexts meet in `mm-server`**: `wiring`, `sync_wiring` and `bound` adapt one context's use case to another's
+  port, and `App::assemble` builds them all.
 - **A test reaches the server only through `Seams`** (`Clock`, `Outside`, `Keychain`), which `mm-served` fills with
-  the frozen clock, the tripwire and the fake Keychain. The server has no test hooks; a `work` job not ported yet
-  answers `failed not on the Rust server yet`.
+  the frozen clock, the tripwire and the fake Keychain. The server has no test hooks; the served suites' `work` line
+  runs one pass of a job (`mm-served/src/jobs.rs`), and one not ported yet answers `failed not on the Rust server yet`.
 
 ## The six questions
 
