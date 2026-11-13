@@ -144,3 +144,26 @@ impl MailSessions for ImapSessions {
         Ok(Box::new(server.login(&account.email, &password)?))
     }
 }
+
+/// The Accounts' record of each account's syncs: the Mailbox's (`bootstrap.accounts._sync_record`).
+#[derive(Debug)]
+pub(crate) struct MailboxSyncs(pub(crate) mm_mailbox::sync_record::SyncRecords);
+
+impl mm_accounts::ports::SyncRecord for MailboxSyncs {
+    fn sync_record(&self) -> Result<Vec<mm_accounts::ports::Synced>, Fault> {
+        Ok(self
+            .0
+            .sync_record()?
+            .into_iter()
+            .map(|r| mm_accounts::ports::Synced {
+                account: r.health.account,
+                last_ok_ts: r.health.last_ok_ts,
+                last_error_ts: r.health.last_error_ts,
+                last_error_kind: r.health.last_error_kind,
+                last_error: r.health.last_error,
+                sync_count: r.health.sync_count,
+                live: r.live.to_owned(),
+            })
+            .collect())
+    }
+}

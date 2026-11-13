@@ -9,11 +9,13 @@ use std::sync::{Arc, Mutex};
 
 use mm_accounts::Directory;
 use mm_accounts::credential::DATABASE_KEY_ITEM;
+use mm_accounts::health::Health;
 use mm_compose::snippets::Snippets;
 use mm_kernel::seams::{Clock, Keychain, Outside};
 use mm_mailbox::folders::Folders;
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::session::MailServers;
+use mm_mailbox::sync_record::SyncRecords;
 use mm_store::compose::SnippetsDocument;
 use mm_store::places::Places;
 use mm_store::{ConfigFile, Database, DbKey, PageFiles};
@@ -23,6 +25,7 @@ use crate::events::Hub;
 use crate::page::Page;
 use crate::serve::Work;
 use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier, Unheard};
+use crate::wiring::{ImapSessions, KnownAccounts, MailboxSyncs};
 use crate::wiring::{ImapSessions, KnownAccounts};
 
 /// Where the app reads the time and its secrets, and what it asks before it opens a file or reaches a host.
@@ -58,6 +61,8 @@ pub struct App {
     pub events: Arc<Hub>,
     /// The words a person keeps for the composer.
     pub snippets: Snippets,
+    /// How each account stands.
+    pub health: Health,
 }
 
 impl App {
@@ -119,6 +124,8 @@ impl App {
         let places = Places::new(database.clone(), seams.clock.clone());
         let events = Arc::new(Hub::new().map_err(|_| "the system's random source failed")?);
         let snippets = Snippets::new(Arc::new(SnippetsDocument::new(database.clone(), seams.clock.clone())));
+        let syncs = MailboxSyncs(SyncRecords::new(database.clone()));
+        let health = Health::new(Arc::new(syncs), seams.clock.clone());
         Ok(App {
             port,
             csrf,
@@ -132,6 +139,7 @@ impl App {
             places,
             events,
             snippets,
+            health,
         })
     }
 }
