@@ -67,6 +67,49 @@ impl mm_mailbox::ports::AiStatus for AssistantStatus {
     }
 }
 
+/// What Compose and Discovery add to a message as it opens: a draft's id, and what is said of its sender. An invite
+/// it carries isn't read on the Rust server yet.
+#[derive(Debug)]
+pub(crate) struct MessageOpening {
+    pub(crate) drafts: mm_compose::drafts::Drafts,
+    pub(crate) senders: mm_discovery::senders::SenderFacts,
+}
+
+impl mm_mailbox::ports::Opening for MessageOpening {
+    fn invite_of(
+        &self,
+        _pk: i64,
+        parts: &[mm_content::mime::Attachment],
+        raw: &[u8],
+    ) -> Result<(serde_json::Value, serde_json::Value), Fault> {
+        let invite = parts
+            .iter()
+            .any(|a| a.content_type.to_lowercase().contains("calendar") || a.filename.to_lowercase().ends_with(".ics"));
+        if invite && !raw.is_empty() {
+            return Err(mm_mailbox::ports::NOT_YET);
+        }
+        Ok((serde_json::Value::Null, serde_json::Value::Null))
+    }
+
+    fn draft_info(&self, row: &mm_mailbox::ports::Row) -> Result<mm_mailbox::ports::Row, Fault> {
+        self.drafts.info(row)
+    }
+
+    fn sender_facts(&self, addr: Option<&str>) -> Result<serde_json::Value, Fault> {
+        self.senders.facts(addr)
+    }
+}
+
+/// Which folder is an account's Drafts, as the Mailbox's folder rail last listed them.
+#[derive(Debug)]
+pub(crate) struct DraftsFolder(pub(crate) Arc<mm_mailbox::folders::Folders>);
+
+impl mm_compose::ports::DraftFolders for DraftsFolder {
+    fn plays_drafts(&self, account: &str, folder: &str) -> Result<bool, Fault> {
+        self.0.plays_drafts(account, folder)
+    }
+}
+
 /// The accounts the Document Hub reads over: those the Directory may use.
 impl mm_discovery::ports::AccountNames for KnownAccounts {
     fn emails(&self) -> Result<Vec<String>, Fault> {

@@ -12,10 +12,11 @@
 mod accounts;
 mod mailbox;
 mod page;
-// The Mailbox's reads a person waits on, the outbox, the documents and the exports (area B).
+// The Mailbox's reads a person waits on, a message opened, the outbox, the documents and the exports (area B).
 mod compose;
 mod documents;
 mod export;
+mod message;
 mod reading;
 
 use std::sync::Arc;
@@ -38,6 +39,7 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(export::routes())
         .merge(compose::routes())
         .merge(documents::routes())
+        .merge(message::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

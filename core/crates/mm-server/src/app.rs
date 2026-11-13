@@ -37,7 +37,7 @@ pub struct App {
     pub csrf: String,
     pub page: Page,
     pub directory: Arc<Directory>,
-    pub folders: Folders,
+    pub folders: Arc<Folders>,
     /// The sync: a folder's mail into the database (`work sync`, Undo's way back).
     pub ingest: Arc<Ingest>,
     /// The requests being answered now, which a stop waits for.
@@ -71,16 +71,23 @@ impl App {
         let directory = Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()));
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
         let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
-        let reading = crate::reading::Reading::assemble(
+        let folders = Arc::new(Folders::new(
             Arc::new(KnownAccounts(directory.clone())),
-            database.clone(),
             sessions.clone(),
-            Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
+            database.clone(),
+            seams.clock.clone(),
+        ));
+        let reading = crate::reading::Reading::assemble(
+            crate::reading::Adapters {
+                accounts: Arc::new(KnownAccounts(directory.clone())),
+                database: database.clone(),
+                sessions,
+                config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
+                folders: folders.clone(),
+            },
             environment,
             seams,
         );
-        let folders =
-            Folders::new(Arc::new(KnownAccounts(directory.clone())), sessions, database.clone(), seams.clock.clone());
         let servers: Arc<dyn MailServers> = Arc::new(ImapServers {
             directory: directory.clone(),
             outside: seams.outside.clone(),
