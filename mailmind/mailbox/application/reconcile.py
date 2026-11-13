@@ -112,7 +112,7 @@ class Reconciler:
         return out
 
 
-    def _auto_reconcile_one(self, acct: Account) -> None:
+    def auto_reconcile_one(self, acct: Account) -> None:
         """Prune one account's ghosts, folder by folder, yielding to any live user op: its IMAP gate
         is taken without waiting (skip this tick if a user op holds it — caught next cycle), then
         publish so open lists drop the pruned phantoms."""
@@ -144,7 +144,7 @@ class Reconciler:
             accts = self._accounts.accounts()
             if accts:
                 try:
-                    self._auto_reconcile_one(accts[rr % len(accts)])
+                    self.auto_reconcile_one(accts[rr % len(accts)])
                 except Exception as e:
                     reconcile_log.warning("loop error", exc_info=e)
                 rr += 1
