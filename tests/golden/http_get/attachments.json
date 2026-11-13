@@ -36,7 +36,7 @@
   "status": 200
  },
  {
-  "bytes": 246,
+  "bytes": 254,
   "headers": {
    "cache-control": "no-store",
    "content-disposition": "attachment; filename*=UTF-8''Fabric%20samples.eml",
@@ -50,7 +50,7 @@
    "x-frame-options": "DENY"
   },
   "request": "GET attachment 2 of ada-inbox-07-forward-rfc822.eml",
-  "sha256": "f627bed780680ae3b30b93d6fdf253ad954833ef34eed0fd5c03329f14084f53",
+  "sha256": "d9a34b2710b4918581aff6567d02622b8ae3d8cd248646a6cee762b952c93c06",
   "status": 200
  },
  {
