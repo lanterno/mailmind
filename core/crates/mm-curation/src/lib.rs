@@ -5,5 +5,7 @@
 //! `mm-py` while it is still the server, and its tests hold each to the answers it gave.
 
 pub mod classifier;
+pub mod ports;
 pub mod rules;
+pub mod sweep_plan;
 mod text;
