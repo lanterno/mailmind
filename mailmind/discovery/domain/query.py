@@ -1,6 +1,6 @@
 """The search grammar, parsed.
 
-Grammar (tokenized with shlex so "quoted phrases" stay intact):
+Grammar (read into words as shlex reads them, so "quoted phrases" stay intact):
   from:VALUE subject:VALUE body:VALUE to:VALUE cc:VALUE  -> full-text, in that field
   "a phrase"  bareword                            -> full-text, anywhere
   is:unread|read|flagged|answered|junk            -> a flag
@@ -15,14 +15,26 @@ Grammar (tokenized with shlex so "quoted phrases" stay intact):
 
 The parser is total: no input raises, and input past MAX_CHARS is cut. A `QuerySpec` is what search,
 saved views and a bulk command's plan all read a query as, and only an adapter turns one into SQL.
+
+The Rust core parses it (`mm_discovery::query`), as every client does, so a query reads the same in each. A date
+with no zone is this machine's, as the person typing it means: before:2026-11-02 ends at that midnight here.
 """
-import shlex
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum
 from typing import Self
 
-MAX_CHARS = 512
+from mailmind_leaves import (
+    QUERY_BUCKET_ALIAS,
+    QUERY_FIELDS,
+    QUERY_FLAGS,
+    QUERY_HAS_OFFERED,
+    QUERY_IS_OFFERED,
+    QUERY_MAX_CHARS,
+    QUERY_OPERATORS,
+    parse_query,
+)
+
+MAX_CHARS = QUERY_MAX_CHARS
 
 
 class Kind(Enum):
@@ -40,27 +52,14 @@ class Kind(Enum):
     AFTER = "after"            # value: seconds
 
 
-FIELDS = frozenset({"from", "subject", "body", "to", "cc"})
-FLAGS = frozenset({"unread", "read", "flagged", "answered", "junk"})
-BUCKET_ALIAS = {                                  # shorthand -> the real classifier bucket string
-    "newsletter": "newsletters/marketing", "newsletters": "newsletters/marketing",
-    "marketing": "newsletters/marketing",
-    "receipt": "receipts/transactional", "receipts": "receipts/transactional",
-    "transactional": "receipts/transactional",
-    "notification": "automated-notifications", "notifications": "automated-notifications",
-    "automated": "automated-notifications",
-    "spam": "spam/scam", "scam": "spam/scam", "blocked": "blocked",
-    "personal": "personal/protected", "protected": "personal/protected", "other": "other/personal-ish",
-}
+FIELDS = frozenset(QUERY_FIELDS)
+FLAGS = frozenset(QUERY_FLAGS)
+BUCKET_ALIAS = dict(QUERY_BUCKET_ALIAS)           # shorthand -> the real classifier bucket string
 # What the search box offers as you type (domain.suggest), in the order it offers them: the operators this parser reads, and
 # the is: and has: values worth a line. BUCKET_ALIAS has several words for most buckets, and one of each is enough to offer.
-OPERATORS = ("from", "to", "cc", "subject", "body", "is", "has", "in", "label", "account", "before", "after", "bucket", "category")
-IS_OFFERED = ("unread", "read", "flagged", "answered", "junk", "snoozed", "newsletter", "receipt", "notification")
-HAS_OFFERED = ("attachment",)
-# is:<x> values that pick out part of the mailbox: a content lane or a minority flag. Not "read", which
-# is usually most mail, though its inverse "unread" is.
-_NARROW_IS = frozenset({"newsletter", "newsletters", "marketing", "receipt", "receipts", "transactional",
-                        "notification", "notifications", "automated", "spam", "scam", "flagged", "unread", "junk"})
+OPERATORS = QUERY_OPERATORS
+IS_OFFERED = QUERY_IS_OFFERED
+HAS_OFFERED = QUERY_HAS_OFFERED
 
 
 @dataclass(frozen=True)
@@ -72,63 +71,14 @@ class Clause:
     narrows: bool = False       # asked for, it picks out part of the mailbox
 
 
-def _seconds(text: str) -> int | None:
-    """A date or time as seconds. With no zone it means this machine's, as the person typing it does:
-    before:2026-11-02 ends at that midnight here, not at UTC's."""
-    try:
-        return int(datetime.fromisoformat(text).timestamp())
-    except Exception:
-        return None
-
-
-def _clause(token: str) -> Clause | None:
-    negated = token.startswith("-") and len(token) > 1
-    if negated:
-        token = token[1:]
-    name, sep, value = token.partition(":")
-    name, lower = name.lower(), value.lower()
-    if sep and name in FIELDS and value:
-        return Clause(Kind.FIELD, value, name, negated, narrows=True)
-    if sep and name == "is" and lower in FLAGS:
-        return Clause(Kind.FLAG, None, lower, negated, narrows=lower in _NARROW_IS)
-    if sep and name == "is" and lower == "snoozed":
-        return Clause(Kind.SNOOZED, negated=negated)
-    if sep and name == "is" and lower in BUCKET_ALIAS:
-        return Clause(Kind.BUCKET, BUCKET_ALIAS[lower], None, negated, narrows=lower in _NARROW_IS)
-    if sep and name == "bucket" and value:
-        return Clause(Kind.BUCKET, BUCKET_ALIAS.get(lower, lower), None, negated, narrows=True)
-    if sep and name == "category" and value:
-        return Clause(Kind.CATEGORY, lower, None, negated, narrows=True)
-    if sep and name == "has" and lower == "attachment":
-        return Clause(Kind.ATTACHMENT, negated=negated, narrows=True)
-    if sep and name == "in" and value:
-        return Clause(Kind.FOLDER, value, None, negated)
-    if sep and name == "label" and value:
-        return Clause(Kind.LABEL, value, None, negated, narrows=True)
-    if sep and name == "account" and value:
-        return Clause(Kind.ACCOUNT, value, None, negated)
-    if sep and name in ("before", "after") and value:
-        seconds = _seconds(value)
-        if seconds is None:                 # says nothing: not a word to search for either
-            return None
-        return Clause(Kind.BEFORE if name == "before" else Kind.AFTER, seconds, None, negated, narrows=True)
-    if token.strip():
-        return Clause(Kind.TEXT, token, None, negated, narrows=True)
-    return None
-
-
 @dataclass(frozen=True)
 class QuerySpec:
     clauses: tuple[Clause, ...] = ()
 
     @classmethod
     def parse(cls, text: str | None) -> Self:
-        text = (text or "").strip()[:MAX_CHARS]
-        try:
-            tokens = shlex.split(text)
-        except ValueError:                  # an unbalanced quote and the like
-            tokens = text.split()
-        return cls(tuple(c for c in map(_clause, tokens) if c))
+        return cls(tuple(Clause(Kind(kind), value, field, negated, narrows)
+                         for kind, value, field, negated, narrows in parse_query(text)))
 
     def narrows(self) -> bool:
         """Whether it picks out part of the mailbox, which a bulk command must. A folder or an account
