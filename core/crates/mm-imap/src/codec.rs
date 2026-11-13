@@ -128,3 +128,6 @@ fn search_with_modseq(raw: &[u8]) -> Option<Said> {
     let uids: Option<Vec<u32>> = numbers.split_whitespace().map(|n| n.parse().ok()).collect();
     uids.map(Said::Search)
 }
+
+#[cfg(test)]
+mod tests;

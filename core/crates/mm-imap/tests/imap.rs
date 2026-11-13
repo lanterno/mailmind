@@ -8,7 +8,7 @@ use std::net::TcpListener;
 use std::path::Path;
 use std::time::Duration;
 
-use mm_imap::{Endpoint, Error, Server, mailbox_arg, parse_list};
+use mm_imap::{Endpoint, Error, Server, gmail_labels, imap_quote, label_name, mailbox_arg, parse_list};
 use mm_kernel::seams::{Outside, Tripped};
 
 fn listed(lines: &[&str]) -> Vec<(String, Option<String>)> {
@@ -144,4 +144,33 @@ fn a_server_that_says_bye_is_left() {
     let (port, serving) = greeting("* BYE too busy\r\n");
     assert_eq!(Server::connect(&Open, at(port, true), QUICK).unwrap_err(), Error::Unreachable("Abort"));
     assert_eq!(serving.join().unwrap(), b"");
+}
+
+#[test]
+fn any_other_value_goes_quoted_unless_it_holds_a_line_break_or_nul() {
+    assert_eq!(imap_quote("<a@example.test>").as_deref(), Some(r#""<a@example.test>""#));
+    assert_eq!(imap_quote(r#"<b'A"B'\c@example.test>"#).as_deref(), Some(r#""<b'A\"B'\\c@example.test>""#));
+    for unsendable in ["<a\r\n@example.test>", "<a\n@example.test>", "nul\0"] {
+        assert_eq!(imap_quote(unsendable), None, "{unsendable:?}");
+    }
+}
+
+#[test]
+fn gmail_labels_go_as_a_list_with_system_ones_unquoted() {
+    assert_eq!(gmail_labels(&["\\Inbox"]).as_deref(), Some("(\\Inbox)"));
+    assert_eq!(
+        gmail_labels(&["\\Inbox", "Work/Plans", "\\Not a system"]).as_deref(),
+        Some(r#"(\Inbox "Work/Plans" "\\Not a system")"#)
+    );
+    assert_eq!(gmail_labels(&["two\r\nlines"]), None);
+}
+
+#[test]
+fn a_label_is_read_unescaped_and_decoded() {
+    assert_eq!(label_name("\\Important"), "\\Important");
+    assert_eq!(label_name(r#"say \"hi\""#), r#"say "hi""#);
+    assert_eq!(label_name("Caf&AOk-"), "Caf\u{e9}");
+    assert_eq!(label_name("Tom &- Jerry"), "Tom & Jerry");
+    assert_eq!(label_name("&Jjo-!"), "\u{263a}!");
+    assert_eq!(label_name("broken &***-"), "broken &***-");
 }
