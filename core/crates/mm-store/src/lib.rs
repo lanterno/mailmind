@@ -5,8 +5,16 @@
 //!
 //! Step 0 reads only what a message list shows. The tables it creates for fixtures are the Python app's own
 //! (`schema::LIST_TABLES`, copied from a version-51 database), so what is measured here is the real table.
+//!
+//! For the Rust server, the store implements the context crates' ports: `Database` (`db`) is the Python app's
+//! database, the SQL each context reads is in a module of its name (`mailbox`), `config` is
+//! `mailmind.config.json` and `page` the page's build. Every file goes through `Outside` before it is opened.
 
+pub mod config;
+pub mod db;
 mod key;
+mod mailbox;
+pub mod page;
 pub mod schema;
 
 use std::collections::HashMap;
@@ -16,7 +24,10 @@ use std::path::Path;
 use mm_kernel::{MessageKey, Refusal};
 use rusqlite::{Connection, ToSql, params};
 
+pub use config::ConfigFile;
+pub use db::Database;
 pub use key::DbKey;
+pub use page::PageFiles;
 
 /// One open, keyed database.
 pub struct Store {
