@@ -9,5 +9,4 @@ pub mod ports;
 pub mod query;
 pub mod senders;
 mod text;
-mod when;
 mod words;

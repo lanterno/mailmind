@@ -11,6 +11,7 @@ pub mod ago;
 pub mod errors;
 pub mod events;
 pub mod identity;
+pub mod isoformat;
 pub mod log;
 pub mod seams;
 pub mod text;

@@ -1,5 +1,6 @@
-//! What follows `before:` and `after:`, read as Python's `datetime.fromisoformat` read it and counted in seconds as
-//! `int(....timestamp())` counted them.
+//! A time written as text, read as Python's `datetime.fromisoformat` read it and counted in seconds as
+//! `int(....timestamp())` counted them: what follows a search's `before:` and `after:`, a snooze's `until`, and a
+//! stored `date_iso` as a list says how long ago it was.
 //!
 //! That reader is CPython's C code (Modules/_datetimemodule.c, 3.14), and it reads more than ISO 8601: any one
 //! character between the date and the time, week dates, 24:00, an offset to the microsecond, and anything after a
@@ -33,15 +34,18 @@ pub fn seconds(written: &str, zone: impl Fn(Wall) -> Option<i64>) -> Option<i64>
     }
 }
 
-struct Time {
-    wall: Wall,
-    microsecond: u32,
+/// A time as `datetime.fromisoformat` read it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Time {
+    pub wall: Wall,
+    pub microsecond: u32,
     /// Microseconds east of UTC, when it was written with one.
-    offset: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 impl Time {
-    fn micros_since_epoch(&self) -> i64 {
+    /// The wall-clock time and its microseconds, counted as though it were UTC.
+    pub fn micros_since_epoch(&self) -> i64 {
         let w = self.wall;
         let days = i64::from(ordinal(w.year, w.month, w.day)) - EPOCH_ORDINAL;
         let seconds = days * 86_400 + i64::from(w.hour * 3600 + w.minute * 60 + w.second);
@@ -53,8 +57,8 @@ const MICROS: i64 = 1_000_000;
 /// 1970-01-01 counted from 0001-01-01 as day 1.
 const EPOCH_ORDINAL: i64 = 719_163;
 
-/// `datetime_fromisoformat`.
-fn read(written: &str) -> Option<Time> {
+/// `datetime_fromisoformat`: the time `written` says, or None where Python raised.
+pub fn read(written: &str) -> Option<Time> {
     // `_sanitize_isoformat_str` turns away fewer than seven characters, counted as characters.
     if written.chars().count() < 7 {
         return None;
