@@ -173,8 +173,8 @@ pub struct Server {
 impl Server {
     /// Connect to `endpoint` through `outside` and start TLS. Nothing that names the account is sent.
     pub fn connect(outside: &dyn Outside, endpoint: Endpoint<'_>, timeout: Duration) -> Result<Server, Error> {
-        let config = mm_net::tls::config(endpoint.loopback)?;
         outside.reach(endpoint.host).map_err(|_| Error::Unreachable("Tripped"))?;
+        let config = mm_net::tls::config(endpoint.loopback)?;
         let tcp = mm_net::connect(endpoint.host, endpoint.port, timeout)?;
         let name = mm_net::server_name(endpoint.host)?;
         let starttls = endpoint.starttls;

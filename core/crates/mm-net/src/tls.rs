@@ -1,13 +1,14 @@
-//! TLS to a mail server, on ring. On loopback the certificate's chain isn't checked, since Proton Bridge signs its
-//! own: the caller checks its pin before a credential is sent. Its signatures still are, so the server proves it holds
-//! the certificate's key.
+//! TLS to a mail server, on ring (`imap_connection.tls_context`). Off this machine a server's certificate is verified:
+//! a chain to a root the system trusts, for the name the account gives, as the Python app's OpenSSL verifies it. On
+//! loopback the chain isn't checked, since Proton Bridge signs its own: the caller checks its pin before a credential
+//! is sent. Its signatures still are, so the server proves it holds the certificate's key.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
+use rustls::{ClientConfig, DigitallySignedStruct, RootCertStore, SignatureScheme};
 
 use crate::Lost;
 
@@ -53,12 +54,31 @@ impl ServerCertVerifier for PinnedAfter {
 }
 
 /// The TLS a server gets: on this machine, its certificate pinned rather than verified, the pin checked by the caller
-/// before a credential is sent; off it, none yet, since verified TLS isn't on the Rust server.
+/// before a credential is sent; off it, verified on the roots the system trusts. Those are read once, at the first
+/// connection that needs them.
 pub fn config(loopback: bool) -> Result<Arc<ClientConfig>, Lost> {
-    if !loopback {
-        return Err(Lost("VerifiedTlsNotOnTheRustServerYet"));
+    if loopback {
+        return pinned_after().map_err(|_| Lost("TlsError"));
     }
-    pinned_after().map_err(|_| Lost("TlsError"))
+    static SYSTEM: OnceLock<Result<Arc<ClientConfig>, Lost>> = OnceLock::new();
+    SYSTEM.get_or_init(|| verified(rustls_native_certs::load_native_certs().certs)).clone()
+}
+
+/// TLS that verifies a server's certificate on `roots` alone. `config` gives it the system's; a test gives it a
+/// root of its own, which signed the certificates its server presents, so it never reaches the system's store.
+pub fn verified(roots: Vec<CertificateDer<'static>>) -> Result<Arc<ClientConfig>, Lost> {
+    let mut store = RootCertStore::empty();
+    let (added, _unreadable) = store.add_parsable_certificates(roots);
+    if added == 0 {
+        return Err(Lost("NoTrustedRoots"));
+    }
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|_| Lost("TlsError"))?
+        .with_root_certificates(store)
+        .with_no_client_auth();
+    Ok(Arc::new(config))
 }
 
 fn pinned_after() -> Result<Arc<ClientConfig>, rustls::Error> {

@@ -5,9 +5,9 @@
 //! both `mm-net`'s, and
 //! hands back the server's certificate before anything is sent, so the caller can check its pin; `login` then gives
 //! a `Session`, which implements the Mailbox's `MailSession` and `MailServer`: the folder rail, and the commands a
-//! sync, a filing and an undo send (`commands`), their answers read by imap-proto (`codec`). Only a loopback server
-//! is reached for now: its certificate is pinned rather than verified, as Proton Bridge's must be. A server off this
-//! machine needs a verified certificate, which is still to come.
+//! sync, a filing and an undo send (`commands`), their answers read by imap-proto (`codec`). A server off this
+//! machine presents a certificate verified on the roots the system trusts; a loopback one's is pinned rather than
+//! verified, as Proton Bridge's must be.
 
 mod codec;
 mod commands;

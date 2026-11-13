@@ -1,5 +1,6 @@
 //! The network every mail protocol shares (`mm-imap`'s, and the protocols to come): a TCP connection with its time
-//! limits, TLS on it from the first byte or after the protocol's STARTTLS, and the stream a protocol reads and writes.
+//! limits, TLS on it from the first byte or after the protocol's STARTTLS (`tls`: verified off this machine, pinned
+//! by the caller on it), and the stream a protocol reads and writes.
 //!
 //! What goes wrong is named by its class alone (`Lost`), never by what a server said. Reaching a host is asked of
 //! `Outside` by the caller, before `connect`.
@@ -52,13 +53,21 @@ pub fn server_name(host: &str) -> Result<ServerName<'static>, Lost> {
     ServerName::try_from(host.to_owned()).map_err(|_| Lost("BadServerName"))
 }
 
-/// TLS on `tcp`, the handshake done.
+/// TLS on `tcp`, the handshake done. A certificate that didn't verify is `CertificateNotVerified`, apart from TLS
+/// that failed otherwise.
 pub fn handshake(config: Arc<ClientConfig>, name: ServerName<'static>, mut tcp: TcpStream) -> Result<Stream, Lost> {
     let mut connection = ClientConnection::new(config, name).map_err(|_| Lost("TlsError"))?;
     while connection.is_handshaking() {
-        connection.complete_io(&mut tcp).map_err(|_| Lost("TlsError"))?;
+        connection.complete_io(&mut tcp).map_err(|e| tls_lost(&e))?;
     }
     Ok(Stream::Tls(Box::new(StreamOwned::new(connection, tcp))))
+}
+
+fn tls_lost(e: &io::Error) -> Lost {
+    match e.get_ref().and_then(|inner| inner.downcast_ref::<rustls::Error>()) {
+        Some(rustls::Error::InvalidCertificate(_)) => Lost("CertificateNotVerified"),
+        _ => Lost("TlsError"),
+    }
 }
 
 /// The connection, before TLS starts and after.
