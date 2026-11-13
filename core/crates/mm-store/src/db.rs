@@ -45,4 +45,9 @@ impl Database {
         })?;
         work(&store.conn).map_err(|_| STORAGE)
     }
+
+    /// The key it opens with, for a copy made with it (an export).
+    pub(crate) fn key(&self) -> &DbKey {
+        &self.key
+    }
 }

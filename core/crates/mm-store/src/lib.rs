@@ -14,6 +14,8 @@
 mod assistant;
 pub mod config;
 pub mod db;
+// What an export would hold, and a snapshot of the database as a download.
+pub mod export;
 mod key;
 mod mailbox;
 mod mailbox_sync;

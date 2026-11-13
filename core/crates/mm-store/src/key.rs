@@ -39,6 +39,19 @@ impl DbKey {
         text.push_str("'\";");
         text
     }
+
+    /// The raw key as SQLCipher takes it in place of a passphrase, `x'…'`, for a statement that binds it (an
+    /// ATTACH's KEY) rather than writing it into the SQL.
+    pub(crate) fn raw(&self) -> Zeroizing<String> {
+        let mut text = Zeroizing::new(String::with_capacity(67));
+        text.push_str("x'");
+        for byte in self.0.iter() {
+            text.push(hex(byte >> 4));
+            text.push(hex(byte & 0x0f));
+        }
+        text.push('\'');
+        text
+    }
 }
 
 impl fmt::Debug for DbKey {
