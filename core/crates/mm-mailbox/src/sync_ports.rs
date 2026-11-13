@@ -124,6 +124,12 @@ pub trait SyncStore: Send + Sync + fmt::Debug {
 pub enum MailboxEvent {
     /// A read of the server's flags changed this many rows of a folder.
     FlagsChanged { account: String, folder: String, changed: usize },
+    /// The worker carried a queued change to its server.
+    Applied { id: i64, account: String },
+    /// A change won't happen, and its message is as the server has it again.
+    Restored { id: i64, account: String },
+    /// What the page hears, by the name the event stream gives it (`sse.publish`), and what it says.
+    Page { name: &'static str, data: serde_json::Value },
 }
 
 pub trait Events: Send + Sync + fmt::Debug {
