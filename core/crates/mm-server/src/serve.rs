@@ -45,6 +45,19 @@ impl Work {
         Running(self)
     }
 
+    /// Run `job` on a thread of its own, counted as a request being answered until it ends: work a request sets
+    /// going and answers before it is done (`/api/refresh`'s sync), which a stop and `settle` wait for too.
+    pub fn spawn(self: &Arc<Self>, job: impl FnOnce() + Send + 'static) {
+        if let Ok(mut running) = self.running.lock() {
+            *running += 1;
+        }
+        let work = self.clone();
+        std::thread::spawn(move || {
+            let _running = Running(&work);
+            job();
+        });
+    }
+
     /// Wait until nothing is being answered, for at most `timeout`; how many requests still are.
     pub fn settle(&self, timeout: Duration) -> usize {
         let deadline = Instant::now() + timeout;
