@@ -3,7 +3,9 @@ snooze set over another goes back to the time the first one had, found by the me
 snoozed, in every list, is tests/integration/attention/test_snooze_reads.py's."""
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
+import pytest
 import time_machine
 
 from mailmind.attention.application.snoozing import Snoozing
@@ -68,3 +70,13 @@ def test_undo_of_a_second_snooze_gives_back_the_first_time():
     assert book.snoozes == {LUNCH["pk"]: FIRST}
     use.reverse(undo.stack.pop())
     assert book.snoozes == {}
+
+
+@pytest.mark.xfail(strict=True, reason="a preset is read at the offset in force when it is asked for, so across a change of the "
+                                       "clocks it wakes an hour off the wall clock")
+def test_tomorrow_at_eight_is_eight_on_the_wall_after_the_clocks_go_back():
+    berlin = ZoneInfo("Europe/Berlin")
+    book = Book()
+    with time_machine.travel(datetime(2026, 10, 24, 12, 0, tzinfo=berlin), tick=False):     # the clocks go back that night
+        said = Snoozing(Uow(), book, Mail(book), Undo()).snooze({"preset": "tomorrow"})
+    assert said["until"] == int(datetime(2026, 10, 25, 8, 0, tzinfo=berlin).timestamp())
