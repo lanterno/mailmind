@@ -23,8 +23,8 @@ const MALFORMED: Fault = Fault::new("MalformedRules");
 
 /// Curation's view of the database.
 pub struct CurationStore {
-    db: Arc<Database>,
-    clock: Arc<dyn Clock>,
+    pub(crate) db: Arc<Database>,
+    pub(crate) clock: Arc<dyn Clock>,
 }
 
 impl fmt::Debug for CurationStore {

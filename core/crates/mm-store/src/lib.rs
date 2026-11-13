@@ -25,6 +25,8 @@ pub mod copies;
 pub mod curation;
 // What Curation reads of each stored inbox.
 mod curation_inbox;
+// What a sender's cleanup, its unsubscribe and a sweep read and write.
+mod curation_cleanup;
 pub mod db;
 // Discovery's: search, saved views and contacts.
 pub mod discovery;
