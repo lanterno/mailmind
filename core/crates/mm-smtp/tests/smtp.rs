@@ -720,16 +720,12 @@ fn serving(greeting: &'static str, ehlo: &'static str) -> (u16, std::thread::Joi
 }
 
 #[test]
-fn a_server_off_this_machine_waits_for_verified_tls() {
-    let remote = Endpoint { host: "smtp.example.test", port: 465, starttls: false, loopback: false };
-    let e = Server::connect(&Open, remote, QUICK).unwrap_err();
-    assert_eq!((&e, e.said()), (&Error::Tls(Lost("VerifiedTlsNotOnTheRustServerYet")), "tls error"));
-}
-
-#[test]
 fn a_host_outside_refuses_is_never_reached() {
     let e = Server::connect(&Refusing, at(1, true), QUICK).unwrap_err();
     assert_eq!((&e, e.said(), e.unreachable()), (&Error::Tripped, "send failed", false));
+    // Nor is the TLS for one off this machine made ready: the system's roots aren't read for it.
+    let remote = Endpoint { host: "smtp.example.test", port: 465, starttls: false, loopback: false };
+    assert_eq!(Server::connect(&Refusing, remote, QUICK).unwrap_err(), Error::Tripped);
 }
 
 #[test]
