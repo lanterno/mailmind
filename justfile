@@ -121,7 +121,8 @@ audit:
     command -v osv-scanner >/dev/null || { echo "audit: osv-scanner is missing: brew install osv-scanner" >&2; exit 1; }
     req=$(mktemp)
     trap 'rm -f "$req"' EXIT
-    uv export --frozen --format requirements-txt --all-groups --no-emit-project -q -o "$req"
+    # Not the leaves built from core/crates/mm-py, which has no hash to check: their Rust is in core/Cargo.lock below.
+    uv export --frozen --format requirements-txt --all-groups --no-emit-project --no-emit-local -q -o "$req"
     uv run pip-audit --strict --require-hashes --disable-pip --progress-spinner off -r "$req"
     osv-scanner scan source --lockfile uv.lock --lockfile web/package-lock.json --lockfile core/Cargo.lock \
         --lockfile shells/web/package-lock.json --lockfile shells/desktop/package-lock.json \
