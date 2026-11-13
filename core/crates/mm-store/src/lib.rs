@@ -31,6 +31,7 @@ mod senders;
 // The page's own state, and what the app says of itself.
 pub mod compose;
 pub mod places;
+mod sync_state;
 
 use std::collections::HashMap;
 use std::fmt;
