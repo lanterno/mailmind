@@ -8,6 +8,7 @@
 
 pub mod command;
 pub mod command_ports;
+pub mod commands;
 pub mod destination;
 pub mod folders;
 pub mod gates;
