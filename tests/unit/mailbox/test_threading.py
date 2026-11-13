@@ -48,7 +48,6 @@ def test_touching_two_threads_merges_them_into_the_smaller_id():
     assert placed.given == {1: "rf:a"} and placed.merged == {"rf:b": "rf:a"}
 
 
-@pytest.mark.xfail(strict=True, reason="place merges each conversation on its own, so two that share a thread chain")
 def test_two_conversations_that_share_a_thread_end_in_one():
     """New mail that threads b and c hold, and a copy stored again in b whose message thread a holds: the three are one
     thread now. Merging each conversation on its own puts c into b and b into a, a chain whose outcome hangs on the
@@ -315,6 +314,24 @@ def test_a_mute_stays_with_the_last_copy_of_a_gmail_thread_when_it_names_somethi
     store.recompute_threads(db, A)
     db.commit()
     assert tid(db, other) == minted("<elsewhere@example.test>") and muted() == [tid(db, other)]
+
+
+def test_new_mail_and_a_copy_stored_again_that_meet_one_thread_end_in_one_with_its_state(db):
+    """New Gmail mail that replies into thread b, and a copy of b with no Message-ID stored again naming thread a's mail,
+    in one sync: a, b and the new mail are one thread now, and b's mute goes with it."""
+    a = add(db, "<a@example.test>")
+    b = add(db, "<b@example.test>")
+    again = add(db, "", refs="<b@example.test>")
+    thread(db)
+    db.execute("UPDATE messages SET thread_id='rf:a' WHERE pk=?", (a,))
+    db.execute("UPDATE messages SET thread_id='rf:b' WHERE pk IN (?,?)", (b, again))
+    db.execute("INSERT INTO muted(account, thread_id, muted_at) VALUES (?,?,?)", (A, "rf:b", "2026-11-01"))
+    db.commit()
+    new = add(db, "<n@example.test>", gm="1781", irt="<b@example.test>")
+    db.execute("UPDATE messages SET refs='<a@example.test>' WHERE pk=?", (again,))
+    thread(db, pks=[again])
+    assert {tid(db, pk) for pk in (a, b, again, new)} == {f"gm:{A}:1781"}
+    assert [r[0] for r in db.execute("SELECT thread_id FROM muted")] == [f"gm:{A}:1781"]
 
 
 def test_with_nothing_to_do_no_transaction_opens(db):

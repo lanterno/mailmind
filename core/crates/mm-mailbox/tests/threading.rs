@@ -1,6 +1,6 @@
 //! Threading, as the Python app decided it: the expected values here are what `mailmind.mailbox.domain.threading`
-//! returned for the same copies before the core decided. The Python suite holds the two to the same answers over
-//! many more (tests/unit/mailbox/test_threading_in_rust.py).
+//! returned for the same copies before the core decided, but where a test says the core fixed a bug since. The
+//! Python suite holds the two to the same answers over many more (tests/unit/mailbox/test_threading_in_rust.py).
 
 use mm_mailbox::threading::{Conversation, Placement, REFERENCES_MAX, StoredCopy, Threader};
 
@@ -146,6 +146,38 @@ fn touching_two_threads_merges_them_into_the_smaller_id() {
     let joined = referring(copy(1, "<j@example.test>"), "<p@example.test> <q@example.test>");
     let placed = place(&[joined], &[("<p@example.test>", &["rf:b"]), ("<q@example.test>", &["rf:a"])], &[]);
     assert_eq!(placed, placement(&[(1, "rf:a")], &[("rf:b", "rf:a")]));
+}
+
+#[test]
+fn conversations_that_meet_one_thread_are_one_merged_into_the_smallest_id() {
+    // Python placed these apart, merging c into b and b into a: a chain whose outcome hung on the order a store
+    // applied it in, and which gave the new mail b, which was gone. Fixed here, so Python never answered this.
+    let arrivals = [copy(1, "<n@example.test>"), holding(copy(2, "<o@example.test>"), "rf:b")];
+    let placed = place(&arrivals, &[("<n@example.test>", &["rf:b", "rf:c"]), ("<o@example.test>", &["rf:a"])], &[]);
+    assert_eq!(placed, placement(&[(1, "rf:a"), (2, "rf:a")], &[("rf:b", "rf:a"), ("rf:c", "rf:a")]));
+}
+
+#[test]
+fn an_arrival_meets_the_conversation_holding_its_gmail_thread() {
+    // Python placed these apart too: the first arrival took gm:1781, which the second's conversation absorbed into
+    // gm:1799. Fixed here, so Python never answered this.
+    let threader = Threader::new(A);
+    let arrivals = [
+        at(replying(in_gmail(copy(1, "<n@example.test>"), "1781"), "<p@example.test>"), "", Some(300)),
+        at(holding(replying(copy(2, ""), "<q@example.test>"), &gm("1781")), "", Some(250)),
+    ];
+    let touching = touching(&[("<p@example.test>", &["rf:b"]), ("<q@example.test>", &[&gm("1799")])]);
+    let conversations = threader.conversations(&arrivals, &touching);
+    assert_eq!(conversations.len(), 1);
+    assert_eq!(threader.contested(&conversations).into_iter().collect::<Vec<_>>(), [gm("1781"), gm("1799")]);
+    let members = [
+        at(holding(in_gmail(copy(3, "<g1@example.test>"), "1781"), &gm("1781")), "", Some(100)),
+        at(holding(in_gmail(copy(4, "<g2@example.test>"), "1799"), &gm("1799")), "", Some(200)),
+    ];
+    assert_eq!(
+        threader.place(&conversations, &members),
+        placement(&[(1, &gm("1799")), (2, &gm("1799"))], &[(&gm("1781"), &gm("1799")), ("rf:b", &gm("1799"))])
+    );
 }
 
 #[test]

@@ -2,8 +2,8 @@
 conversations and the same thread ids, in the same order, or every thread the database already holds would be
 split, merged or renamed under the person reading it.
 
-`python` below is that code as it stood, kept here as the oracle. core/crates/mm-mailbox/tests/threading.rs pins a
-few of its answers on the Rust side.
+`python` below is that code as it stood, kept here as the oracle, changed only where the core fixed a bug since, each
+change saying so. core/crates/mm-mailbox/tests/threading.rs pins a few of its answers on the Rust side.
 """
 import hashlib
 import re
@@ -105,13 +105,19 @@ def _oracle():
             h = hashlib.sha1(root.encode("utf-8", "replace")).hexdigest()[:16]
             return f"rf:{self._account}:{h}"
 
-        def conversations(self, arrivals: Iterable, touching: Mapping[str, Collection[str]]):
+        def conversations(self, arrivals: Iterable, touching: Mapping[str, Collection[str]], meeting=True):
             arrivals = list(arrivals)
             uf = _UF()
             for m in arrivals:
                 uf.union(m.key, m.key)
                 for name in m.names():
                     uf.union(m.key, name)
+                # Since the core joined them: arrivals that meet one thread, by the id one holds or its Gmail
+                # thread's, are one conversation. Placed apart, their merges chained.
+                if meeting and m.thread_id:
+                    uf.union(m.key, _THREAD_NODE + m.thread_id)
+                if meeting and m.thrid:
+                    uf.union(m.key, _THREAD_NODE + self._gmail_id(m.thrid))
             for name, ids in touching.items():
                 for tid in ids:
                     uf.union(name, _THREAD_NODE + tid)
@@ -161,7 +167,7 @@ def _oracle():
         def regroup(self, copies):
             rows = _in_store_order(copies)
             given = {}
-            for conversation in self.conversations(rows, {}):
+            for conversation in self.conversations(rows, {}, meeting=False):
                 conversation.held = {tid for tid in conversation.held if tid.startswith("rf:")}
                 survivor = self._survivor(conversation)
                 given.update((m.pk, survivor) for m in conversation.arrivals)
@@ -269,6 +275,25 @@ def test_rust_places_every_sync_as_python_did(who, arrivals, touched, members):
 def test_rust_regroups_every_account_as_python_did(who, rows):
     old, new = both(rows)
     assert items(threading.Threader(who).regroup(new)) == items(python.Threader(who).regroup(old))
+
+
+def absorbs_nothing_it_keeps(placed):
+    """No id goes to one absorbed in turn, and none given is absorbed: a store may apply the merges in any order."""
+    return not set(placed.merged) & (set(placed.merged.values()) | set(placed.given.values()))
+
+
+@CASES
+@given(account, copies, touching, copies)
+def test_a_sync_absorbs_no_id_it_keeps(who, arrivals, touched, members):
+    threader = threading.Threader(who)
+    new, new_members = both(arrivals)[1], both(members)[1]
+    assert absorbs_nothing_it_keeps(threader.place(threader.conversations(new, touched), new_members))
+
+
+@CASES
+@given(account, copies)
+def test_the_repair_absorbs_no_id_it_keeps(who, rows):
+    assert absorbs_nothing_it_keeps(threading.Threader(who).regroup(both(rows)[1]))
 
 
 # -- what the generator might not reach -------------------------------------------------------------------------
