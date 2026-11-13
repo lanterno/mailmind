@@ -64,3 +64,8 @@ run: build
 # The shell's budgets on this Mac, the cost of crossing into the core, and a system web view's memory
 measure: build
     "{{here}}/Measure/measure.sh"
+
+# The Mac app, then the iPhone app in a simulator (`smoke mac`, `smoke ios`): each jumps nine tenths down its list
+# and waits for mail in the rows there
+smoke which="all": build
+    "{{here}}/Measure/smoke.sh" {{which}}
