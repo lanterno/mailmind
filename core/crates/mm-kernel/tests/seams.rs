@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use mm_kernel::errors::{Failure, Fault, Kind, Problem};
 use mm_kernel::log::{self, Field, Line, Sink};
-use mm_kernel::seams::{Moment, Secret};
+use mm_kernel::seams::{Keychain, KeychainProblem, Moment, Secret, keepable_name, keepable_secret};
 use mm_kernel::text::{is_printable, is_space, strip};
 use mm_kernel::when::iso;
 use serde_json::json;
@@ -47,6 +47,35 @@ fn a_secret_never_prints() {
     let secret = Secret::new("app-password-0".to_owned());
     assert_eq!(format!("{secret:?}"), "Secret(..)");
     assert_eq!(secret.expose(), "app-password-0");
+}
+
+#[test]
+fn a_keychain_item_is_named_and_kept_as_the_security_program_can_take_it() {
+    for name in ["account:ada@example.test", "anthropic-api-key", "database-key", "a.b_c%d+e=f-g"] {
+        assert!(keepable_name(name), "{name:?}");
+    }
+    for name in ["", "-a", ":lead", "two words", "line\nbreak", "caf\u{e9}", "semi;colon", "quote\""] {
+        assert!(!keepable_name(name), "{name:?}");
+    }
+    assert!(keepable_secret("a pass \"word\" ~ with spaces"));
+    for secret in ["", "tab\there", "line\nbreak", "caf\u{e9}", "nul\0"] {
+        assert!(!keepable_secret(secret), "{secret:?}");
+    }
+}
+
+#[derive(Debug)]
+struct OnlyReads;
+
+impl Keychain for OnlyReads {
+    fn find(&self, _item: &str) -> Result<Option<Secret>, KeychainProblem> {
+        Ok(None)
+    }
+}
+
+#[test]
+fn a_keychain_that_only_reads_keeps_nothing() {
+    assert_eq!(OnlyReads.put("account:ada@example.test", &Secret::new("pw".to_owned())), Err(KeychainProblem));
+    assert_eq!(OnlyReads.delete("account:ada@example.test"), Err(KeychainProblem));
 }
 
 #[test]
