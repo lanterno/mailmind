@@ -36,6 +36,7 @@ pub mod schema;
 mod senders;
 mod sync_state;
 // Discovery's, Curation's and Attention's SQL, and the write block, documents and undo stack they share.
+pub mod attention;
 pub mod blocks;
 pub mod copies;
 pub mod curation;
