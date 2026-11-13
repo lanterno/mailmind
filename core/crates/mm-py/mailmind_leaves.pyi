@@ -123,3 +123,41 @@ def mime_inline_parts(raw: bytes) -> list[tuple[str, str, bytes]]:
     ...
 
 # -- the HTML sanitizer (mm-content, src/sanitize.rs) ---------------------------------------------------------------
+# The HTML crosses as a string and comes back with what was blocked: `(html, images, links, css_urls)`. The CSS
+# sanitizer's two entries give their CSS and how many declarations a remote url() dropped.
+
+CSS_INLINE_MAX: int
+"""A `style` attribute longer than this, in characters, keeps nothing."""
+CSS_DECL_VALUE_MAX: int
+CSS_PROP_MAX: int
+CSS_INLINE_DECLS: int
+CSS_SHEET_MAX: int
+"""How much of a `<style>` element is read, in characters."""
+CSS_SHEET_RULES: int
+"""How many rules of a sheet are read, nested ones included."""
+CSS_SHEET_DECLS: int
+CSS_NEST_MAX: int
+CSS_SELECTOR_MAX: int
+CSS_URL_ARG_MAX: int
+
+def sanitize_html(html: str, load_images: bool, fold: bool) -> tuple[str, int, int, int]:
+    """`(html, blocked_images, blocked_links, blocked_css_urls)` for a message's HTML, read as a browser reads it and
+    written again from the allowlist. `fold` puts a quoted reply behind a toggle, for reading."""
+    ...
+
+def without_fold(html: str) -> str:
+    """Sanitized HTML from before replies stopped carrying the fold, without it."""
+    ...
+
+def sanitize_inline_style(value: str, load_images: bool) -> tuple[str, int]:
+    """`(css, blocked_css_urls)` for a `style` attribute's value."""
+    ...
+
+def sanitize_css_stylesheet(css: str, load_images: bool) -> tuple[str, int]:
+    """`(css, blocked_css_urls)` for a `<style>` element's text. It holds no `<` or `>`."""
+    ...
+
+def html_tokens(html: str) -> list[tuple[str, str, list[tuple[str, str]]]]:
+    """What a browser's tokenizer reads of `html`, as the sanitizer reads it: `("start", name, attrs)`, `("end", name,
+    [])`, `("text", text, [])` and `("comment", text, [])`, in order. For reading back what the sanitizer wrote."""
+    ...
