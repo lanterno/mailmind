@@ -51,8 +51,8 @@ a machine shared with other builds, so numbers vary by 10 to 20% run to run.
 | --- | --- |
 | Mac, native table | Runs and scrolls; measured |
 | Mac, Tauri | Runs and scrolls; measured |
-| Browser (Chromium) | Runs and scrolls; measured |
-| iPhone and iPad | Builds and links for device and simulator; not run (no simulator runtime or device here) |
+| Browser (Chromium) | Runs and scrolls; measured, and scrolled in CI |
+| iPhone and iPad | Builds for device and simulator; CI's smoke test scrolls it in an iPhone simulator, not yet run |
 | Android | Builds in CI only (no SDK here); CI's emulator test scrolls it, not yet run |
 | Windows and Linux, Tauri | Build in CI only; CI's smoke test scrolls them, not yet run |
 
@@ -81,7 +81,7 @@ What the numbers say:
   and a `UICollectionView` on iPhone and iPad, each with one row height, behind a thin representable. Deep in the
   list it takes 5.9 ms a frame at p95 and 41 MB after scrolling everything; the `List` took 19.6 ms and 116 MB under
   the same conditions. Both were measured held awake: behind a locked screen macOS naps an app to about half speed,
-  which is where the first recorded 296 ms came from. The iOS table builds but has not run.
+  which is where the first recorded 296 ms came from. The iOS table has not run here: there is no simulator runtime.
 - **The crossing is not a cost.** A 50-row batch through UniFFI takes about 85 µs, about 1% of a frame.
 
 ## The six questions
@@ -106,8 +106,9 @@ What the numbers say:
    CORS answers `*`. One named origin works only through static response headers, which cannot serve two origins.
 
 CI runs a check that each list opens and scrolls: Chromium jumps nine tenths down, the desktop app scrolls itself
-(`just desktop smoke`) on macOS, Windows and Linux, and Android's instrumented test jumps to row 90,000 and the last
-on an emulator.
+(`just desktop smoke`) on macOS, Windows and Linux, the Apple app does on the Mac and in an iPhone simulator
+(`just apple smoke`), and Android's instrumented test jumps to row 90,000 and the last on an emulator. Each waits for
+mail in the rows it lands on, not just for the scroll.
 
 ## Commands
 
@@ -115,7 +116,7 @@ on an emulator.
 just core-verify          # the core: format, clippy as errors, every test
 just budgets              # the core against budgets.toml
 just gen-bindings         # Swift and Kotlin bindings from the core
-just apple build|test|run|measure
+just apple build|test|run|smoke|measure
 just android build|test|sizes
 just web build|dev|test|check|measure|gen
 just desktop build|dev|check|smoke|measure

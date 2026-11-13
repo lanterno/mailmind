@@ -12,13 +12,14 @@ From the repo root (`just apple` lists them; recipes run from here whatever the 
 just apple build        # the core as build/MailMindCore.xcframework, the Xcode project, then the iOS simulator and macOS apps
 just apple test         # the list model's tests, on macOS
 just apple run          # the Mac app
+just apple smoke        # the Mac app, then the iPhone app in a simulator: each jumps nine tenths down and waits for mail
 just apple measure      # cold start, memory, main-thread time, crossing cost, sizes, a web view's memory: build/measure/results.txt
 just gen-bindings       # after a change to the core's contract: rewrites Generated/ (commit that diff on its own)
 ```
 
 Needs Xcode 26 with the iOS and macOS 26 SDKs, XcodeGen (`brew install xcodegen`), and the core's Rust toolchain
 with the `aarch64-apple-ios`, `aarch64-apple-ios-sim` and `aarch64-apple-darwin` targets. iOS builds compile without a
-simulator runtime; running one needs a simulator or a device.
+simulator runtime; running one needs a simulator or a device (`just apple smoke ios` uses the newest iPhone simulator).
 
 ## What is where
 
@@ -32,7 +33,7 @@ simulator runtime; running one needs a simulator or a device.
 | `Sources/MessageTable+macOS.swift` | The Mac's list: an `NSTableView` with one row height, its rows and placeholders drawn with Core Text. |
 | `Sources/MessageTable+iOS.swift` | The iPhone and iPad list: a `UICollectionView` over a fixed-row layout, its rows and placeholders. |
 | `Sources/Measure.swift` | Measure mode, run only when `MAILMIND_MEASURE` is set. |
-| `Measure/` | `measure.sh`, and the probes it compiles: the crossing cost and a web view's memory. |
+| `Measure/` | `measure.sh` and the probes it compiles (the crossing cost, a web view's memory), and `smoke.sh`, which CI runs. |
 | `build/` | The XCFramework, derived data and measurements. Ignored by git. |
 
 ## Rules
