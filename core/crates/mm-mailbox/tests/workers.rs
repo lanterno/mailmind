@@ -117,3 +117,59 @@ fn a_worker_started_after_the_stop_ends_at_once() {
     run_forever(&queue, &stop);
     assert_eq!(queue.drained.load(Ordering::SeqCst), 0);
 }
+
+/// One row, due before the worker starts, answering `until_due` as the change queue does.
+#[derive(Debug, Default)]
+struct DueAlready {
+    kicked: Arc<Kick>,
+    drained: AtomicUsize,
+}
+
+impl DueAlready {
+    const NOW: i64 = 1_793_620_800;
+    const DUE: i64 = DueAlready::NOW - 5;
+    const POLL: i64 = 3600;
+}
+
+impl Queue for DueAlready {
+    fn tag(&self) -> &'static str {
+        "test"
+    }
+
+    fn kicked(&self) -> Arc<Kick> {
+        self.kicked.clone()
+    }
+
+    fn recover(&self) -> Result<(), Fault> {
+        Ok(())
+    }
+
+    fn now(&self) -> i64 {
+        DueAlready::NOW
+    }
+
+    fn until_due(&self, looked: i64) -> i64 {
+        let waiting = self.drained.load(Ordering::SeqCst) == 0 && DueAlready::DUE > looked;
+        if waiting { (DueAlready::DUE - DueAlready::NOW).clamp(0, DueAlready::POLL) } else { DueAlready::POLL }
+    }
+
+    fn drain(&self) -> Result<(), Fault> {
+        self.drained.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+#[test]
+fn a_row_already_due_when_the_worker_starts_is_taken_at_once_not_at_its_first_poll() {
+    // Queued while nothing ran (the server stopped, a send's Undo window ending meanwhile): no kick is coming for it.
+    let queue = Arc::new(DueAlready::default());
+    let stop = Arc::new(Stop::default());
+    let worker = {
+        let (queue, stop) = (queue.clone(), stop.clone());
+        std::thread::spawn(move || run_forever(&*queue, &stop))
+    };
+    until(|| queue.drained.load(Ordering::SeqCst) == 1);
+    stop.stop();
+    worker.join().unwrap();
+    assert_eq!(queue.drained.load(Ordering::SeqCst), 1);
+}
