@@ -44,8 +44,8 @@ A shell opens a list with a query and says which rows are visible; the core answ
 ## Step 0: the walking skeleton
 
 One message list from a 100,000-message fictional mailbox (`mm-fixtures`, every address at example.test), on
-every target, with the budgets measured. Measured on an Apple silicon Mac (M5, macOS 26.4), 2026-11-12, on a
-machine shared with other builds, so numbers vary by 10 to 20% run to run.
+every target, with the budgets measured. Measured on an Apple silicon Mac (M5, macOS 26.4), 2026-11-12 and 13, on
+a machine shared with other builds, so numbers vary by 10 to 20% run to run.
 
 | Target | Status |
 | --- | --- |
@@ -58,7 +58,7 @@ machine shared with other builds, so numbers vary by 10 to 20% run to run.
 
 | What | Measured | Limit |
 | --- | --- | --- |
-| Core: open and first rows of 100,000 | 121.8 ms | 150 ms |
+| Core: open and first rows of 100,000 | 10.7 ms | 150 ms |
 | Core: idle memory | 3.5 MB | 40 MB |
 | Core: next page while scrolling, p95 | 0.05 ms | 3 ms |
 | Mac (SwiftUI): launch to first rows | 240 ms | 800 ms |
@@ -66,16 +66,17 @@ machine shared with other builds, so numbers vary by 10 to 20% run to run.
 | Mac (SwiftUI): main thread per frame, p95, fast scroll and whole-list sweep | 14 ms, 296 ms | 8 ms |
 | Mac (Tauri): launch to first rows, screen locked | 724 ms | 800 ms |
 | Mac (Tauri): memory idle, app and its web view's processes, screen locked | 83.9 MB | 200 MB |
-| Browser: navigation to first rows | 1,021 ms | 800 ms |
-| Browser: the core as WebAssembly, Brotli | 0.50 MB | 2.5 MB |
+| Browser: navigation to first rows | 99 ms | 800 ms |
+| Browser: the core as WebAssembly, Brotli | 0.51 MB | 2.5 MB |
 | Apple: what the core adds to a stripped app | 1.61 MB | 8 MB |
 
 What the numbers say:
 
-- **Ordering the inbox is nearly all of opening it.** Version 50's indexes leave SQLite sorting all 100,000 rows:
-  122 ms natively and 970 ms in WebAssembly, where every page is decrypted without AES instructions. A partial
-  covering index, `messages(folder, ts DESC, pk DESC, account) WHERE pending_removal IS NULL`, takes the native
-  open to 9.6 ms. It is the next migration; the browser's first rows are over their limit until it lands.
+- **Ordering the inbox was nearly all of opening it.** Version 50's indexes left SQLite sorting all 100,000 rows
+  before the first page: 122 ms natively and 1,021 ms in the browser, where every page is decrypted without AES
+  instructions. Version 51 adds `idx_msg_listed`, `messages(folder, ts DESC, pk DESC, account) WHERE
+  pending_removal IS NULL`, the order a list shows, so the first page is the first rows read: 10.7 ms natively,
+  99 ms in the browser. The Python app's combined inbox gains the same, about 120 ms to under 1 ms a page.
 - **SwiftUI's `List` is the Mac's bottleneck, not the core.** Normal scrolling is near the 8 ms frame budget, but
   bringing a new screen in every frame deep in the list costs up to 296 ms at p95, and the `List` keeps about 65 MB
   for rows it has shown. No variant of `List` or `LazyVStack` fixed it. The next try is an `NSTableView` or
@@ -95,7 +96,7 @@ What the numbers say:
    unmeasured.
 4. **How large is the core per architecture?** On Apple, 1.61 MB added to a stripped app (SQLCipher's C is 1.09 MB
    of it); 3.7 MB with TLS (rustls, aws-lc) and OpenPGP key parsing; 5.0 MB with a full OpenPGP round trip. The
-   WebAssembly is 1.61 MB raw, 0.50 MB Brotli. Android's per-ABI sizes and the Windows and Linux binaries come from
+   WebAssembly is 1.61 MB raw, 0.51 MB Brotli. Android's per-ABI sizes and the Windows and Linux binaries come from
    CI's run summaries.
 5. **How much memory does a system web view use for one HTML message?** On the Mac, WKWebView starts about 24 MB of
    WebContent, 5.6 MB of Networking and 16 MB of GPU process for one 50 KB message. iOS, Android's WebView,
