@@ -13,7 +13,8 @@
 //! see `raw_state`. What it does with each token is the Python app's sanitizer's: keep, drop, unwrap (drop the tag,
 //! keep its text), drop with all it holds, fold the quoted reply, count what it blocked. Where a browser's tree
 //! builder would do more (close a `<p>`, move a table's text), the sanitizer doesn't: it skips a dropped element to
-//! its end tag, and leaves unclosed what the message left unclosed, for the browser to close.
+//! its end tag, and leaves unclosed what the message left unclosed, for the browser to close. The one exception is
+//! `<head>`, whose end tag a message may leave out: a dropped head ends where a browser ends it (`HEAD_HOLDS`).
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -29,7 +30,8 @@ use regex::Regex;
 use super::css::{self, CssContext, DATA_IMAGE, SAFE_URL};
 use super::text::{self, pattern, space};
 
-/// Tags dropped with all they hold, to their end tag.
+/// Tags dropped with all they hold, to their end tag, but `<head>`, whose end tag a message may leave out: see
+/// `HEAD_HOLDS`.
 const DROP_WITH_CONTENT: &[&str] = &[
     "script", "head", "title", "iframe", "object", "applet", "form", "button", "select", "textarea", "noscript",
     "template", "svg", "math", "frameset", "xml",
@@ -37,6 +39,17 @@ const DROP_WITH_CONTENT: &[&str] = &[
 
 /// Tags dropped that hold nothing, so they never start a skip that would swallow the rest of the message.
 const DROP_VOID: &[&str] = &["meta", "link", "base", "input", "frame", "source", "param", "keygen", "embed"];
+
+/// The tags a browser keeps in a `<head>`. It ends the head at any other start tag, at text that isn't space outside
+/// a raw text element, and at `</body>`, `</html>` and `</br>` as at `</head>`, and reads what ended it as the body's.
+/// A `<template>` holds anything, and nothing in it ends the head.
+const HEAD_HOLDS: &[&str] = &[
+    "base", "basefont", "bgsound", "link", "meta", "title", "noscript", "noframes", "style", "script", "template",
+    "head", "html",
+];
+
+/// The characters a browser reads as space in a `<head>`.
+const HTML_SPACE: [char; 5] = ['\t', '\n', '\x0C', '\r', ' '];
 
 /// The tags written. Any other is unwrapped: the tag goes, its text stays.
 #[rustfmt::skip]
@@ -298,6 +311,10 @@ struct Sanitizer {
     skip: usize,
     /// The tag being dropped with its content.
     skip_tag: Option<&'static str>,
+    /// How deep inside `<template>`s in the `<head>` being dropped.
+    head_templates: usize,
+    /// Whether the tokenizer is reading raw text, which only its end tag ends.
+    raw: bool,
     /// How deep inside `<blockquote>`s.
     quote_depth: usize,
     /// Whether the fold has opened.
@@ -318,6 +335,8 @@ impl Sanitizer {
             blocked_links: 0,
             skip: 0,
             skip_tag: None,
+            head_templates: 0,
+            raw: false,
             quote_depth: 0,
             folded: false,
             has_content: false,
@@ -331,16 +350,38 @@ impl Sanitizer {
         self.skip > 0 && matches!(self.skip_tag, Some("svg" | "math"))
     }
 
+    /// Whether a `<head>` is being dropped.
+    fn in_head(&self) -> bool {
+        self.skip_tag == Some("head")
+    }
+
+    /// Ends the `<head>` being dropped, as a browser ends it, so what follows is read as the body's.
+    fn leave_head(&mut self) {
+        self.skip = 0;
+        self.skip_tag = None;
+        self.head_templates = 0;
+    }
+
     fn start(&mut self, tag: &Tag) -> TokenSinkResult<()> {
         let foreign = self.in_foreign_content();
         self.open(tag, foreign);
-        if foreign { TokenSinkResult::Continue } else { raw_state(&tag.name) }
+        let state = if foreign { TokenSinkResult::Continue } else { raw_state(&tag.name) };
+        self.raw = !matches!(state, TokenSinkResult::Continue);
+        state
     }
 
     fn open(&mut self, tag: &Tag, foreign: bool) {
         let name = &*tag.name;
+        if self.in_head() {
+            if name == "template" {
+                self.head_templates += 1;
+            } else if self.head_templates == 0 && !HEAD_HOLDS.contains(&name) {
+                self.leave_head();
+            }
+        }
         if self.skip > 0 {
-            if self.skip_tag == Some(name) && !(foreign && tag.self_closing) {
+            // A browser ignores a <head> inside one, so it never needs a second </head>.
+            if self.skip_tag == Some(name) && !self.in_head() && !(foreign && tag.self_closing) {
                 self.skip += 1;
             }
             return;
@@ -375,9 +416,19 @@ impl Sanitizer {
     }
 
     fn end(&mut self, name: &str) {
+        // In raw text the tokenizer reads no end tag but the one that ends it.
+        self.raw = false;
         if name == "style" {
             if let Some(sheet) = self.style.take() {
                 self.style_sheet(&sheet);
+            }
+            return;
+        }
+        if self.in_head() {
+            match name {
+                "template" if self.head_templates > 0 => self.head_templates -= 1,
+                "head" | "body" | "html" | "br" if self.head_templates == 0 => self.leave_head(),
+                _ => {}
             }
             return;
         }
@@ -404,6 +455,14 @@ impl Sanitizer {
         if let Some(sheet) = &mut self.style {
             sheet.push_str(data);
             return;
+        }
+        let mut data = data;
+        if self.in_head() && self.head_templates == 0 && !self.raw {
+            let body = data.trim_start_matches(HTML_SPACE);
+            if !body.is_empty() {
+                self.leave_head();
+                data = body;
+            }
         }
         if self.skip > 0 {
             return;
