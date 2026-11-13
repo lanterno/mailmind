@@ -244,6 +244,22 @@ def test_the_worker_wakes_when_a_row_comes_due_not_at_its_next_poll(laned):
     assert not worker.is_alive()
 
 
+def test_a_row_already_due_when_the_worker_starts_is_drained_at_once_not_at_its_first_poll(laned):
+    # Queued while nothing ran (the app stopped, a send's Undo window ending meanwhile): no kick is coming for it.
+    handled, stop = [], threading.Event()
+    due = add(laned, "due", next_attempt_at=int(time.time()) - 5)
+    worker = threading.Thread(target=lambda: laned.run_forever(
+        lambda: laned.drain(handled.append, int(time.time())), stop), daemon=True)
+    worker.start()                                               # its poll is an hour
+    try:
+        assert wait_until(lambda: handled == [due])
+    finally:
+        stop.set()
+        laned.kick()
+        worker.join(30)
+    assert not worker.is_alive()
+
+
 def test_a_row_that_comes_due_as_a_drain_ends_is_not_left_for_the_next_poll(laned):
     # The drain looks just before the row is due and is still going when it comes due. It didn't take
     # the row, and nothing will kick the queue for it.
