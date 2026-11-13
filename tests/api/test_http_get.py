@@ -13,6 +13,7 @@ from urllib.parse import quote, urlencode
 import pytest
 
 import problems
+import served
 from fixtures import world as w
 from mailmind.bootstrap.assistant import answers
 from mailmind.platform.db import database
@@ -34,12 +35,13 @@ def attachment_of(copy, part_id):
 # ── the page and the guards every GET passes ─────────────────────────────────
 
 def test_the_page_carries_this_processes_csrf_token(app, golden):
-    import app_client
     r = app.get("/")
     golden.record("GET /", r, body=False)
     page = r.body.decode("utf-8")
     assert "__CSRF_TOKEN__" not in page
-    assert f'content="{app_client.CSRF}"' in page
+    # The token every request of the suite sends, and every write of it gets through with: drawn by the server, at length.
+    token = served.CSRF_META.search(page).group(1)
+    assert token == app.csrf and len(token) >= 32
 
 
 def test_guards_refuse_foreign_hosts_and_cross_site_reads(app, golden):
@@ -147,10 +149,11 @@ def test_documents_and_cleanup(app, golden, world):
             "ada-inbox-03-newsletter.eml", Message_ID=f"<issue-{n}@loom.example.test>",
             Date=f"Wed, {day} Oct 2026 07:00:00 +0000", Subject=f"Issue {n}: weaving notes"))
     fetch(app, golden, "/api/cleanup/senders")
-    fetch(app, golden, "/api/cleanup/sender?addr=news@loom.example.test")
-    fetch(app, golden, "/api/cleanup/sender?addr=deals@spindle.example.test")
-    fetch(app, golden, "/api/cleanup/sender?addr=nobody@example.test")
-    fetch(app, golden, "/api/cleanup/sender?addr=not-an-address")
+    for addr in ("news@loom.example.test", "deals@spindle.example.test", "nobody@example.test", "not-an-address"):
+        answer = fetch(app, golden, "/api/cleanup/sender?addr=" + addr).body
+        # Keyed with a secret the server draws as it starts, so it is a different token from each one.
+        if isinstance(answer, dict) and answer.get("confirm_token"):
+            golden.alias(answer["confirm_token"], "<confirm token>")
 
 
 # ── search ─────────────────────────────────────────────────────────────────
@@ -259,13 +262,14 @@ def test_without_a_key_every_ai_request_says_ai_is_off(app, world, anthropic_api
     lunch = world.pk(LUNCH)
     if body.get("key") == LUNCH:                       # the lunch confirmation, by its key and folder
         body = {**body, **world.copy(LUNCH)}
-    c = store.conn()
-    try:                                               # triaged, so the brief has something to say
-        answers.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",
-                           "2026-11-02T11:00:00+00:00")
-        c.commit()
-    finally:
-        c.close()
+    with app.stopped():                                # triaged, so the brief has something to say
+        c = store.conn()
+        try:
+            answers.save_summary(c, lunch, "Lin confirms lunch.", 5, "action-needed", "Reply", "claude-opus-5-5",
+                                 "2026-11-02T11:00:00+00:00")
+            c.commit()
+        finally:
+            c.close()
     r = app.post(path, body)
     assert (r.status, r.json) == (409, problems.ai_off())
     assert anthropic_api.requests == []
