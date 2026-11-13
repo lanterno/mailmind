@@ -171,6 +171,8 @@ pub struct Account {
     pub starttls: bool,
     pub credential: Value,
     pub strip_spaces: bool,
+    /// The name the page shows for it, when the entry gives one that isn't blank.
+    pub alias: Option<String>,
 }
 
 impl Account {
@@ -203,6 +205,11 @@ impl Account {
             starttls: truthy(&imap.starttls),
             credential: entry.get("credential").cloned().unwrap_or_else(|| json!({})),
             strip_spaces: entry.get("strip_spaces").map_or(defaults(entry).strip_spaces, truthy),
+            alias: entry
+                .get("alias")
+                .and_then(Value::as_str)
+                .map(|a| text::strip(a).to_owned())
+                .filter(|a| !a.is_empty()),
         })
     }
 
