@@ -98,17 +98,10 @@ fn at(port: u16, starttls: bool) -> Endpoint<'static> {
 const QUICK: Duration = Duration::from_secs(5);
 
 #[test]
-fn a_server_off_this_machine_waits_for_verified_tls() {
-    let remote = Endpoint { host: "imap.example.test", port: 993, starttls: false, loopback: false };
-    assert_eq!(
-        Server::connect(&Open, remote, QUICK).unwrap_err(),
-        Error::Unreachable("VerifiedTlsNotOnTheRustServerYet")
-    );
-}
-
-#[test]
 fn a_host_outside_refuses_is_never_reached() {
     assert_eq!(Server::connect(&Refusing, at(1, true), QUICK).unwrap_err(), Error::Unreachable("Tripped"));
+    let remote = Endpoint { host: "imap.example.test", port: 993, starttls: false, loopback: false };
+    assert_eq!(Server::connect(&Refusing, remote, QUICK).unwrap_err(), Error::Unreachable("Tripped"));
 }
 
 #[test]
