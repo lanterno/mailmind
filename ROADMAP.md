@@ -54,10 +54,45 @@ Step 3 of the "MailMind client architecture" document is under way ([docs/client
 (`core/crates/mm-server`) takes over the Python app's routes one by one, and `tests/support/rust_ledger.txt` lists the
 served tests it passes against the same scripts. Until the flip, the Python app gets fixes only.
 
-- **Port the rest of the routes** · high value · effort L · [#6](https://github.com/lanterno/mailmind/issues/6) — In progress by area: the page and settings, the mailbox's
-  reads, search, rules and the local states, and IMAP, sync and the change queue. After those: sending (the outbox,
-  drafts and RSVP, over SMTP), cleanup and unsubscribe (SMTP and one-click HTTPS), the assistant (the Claude API client,
-  the cost governor, batches) and accounts (add, edit, test, delete, trust-cert). `just test-rust-all` says what passes.
+- **Port the rest of the routes** · high value · effort L · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers 64 of the Python app's 103
+  routes: the page and settings, the Mailbox's lists, a conversation, a message opened, the digest and the Document Hub;
+  search, saved views and contacts; rules, filters, the Screener, the audit trail and Tidy; snooze, mute, follow-ups,
+  Reply Later and tasks; filing, Undo and the tray of changes; sync, refresh and reconcile. `just test-rust` holds 44 of
+  `tests/api`'s 149 served tests. Still Python's: sending (`/api/send`, drafts, the outbox's retry, cancel and send-now,
+  RSVP), cleanup (`/api/cleanup/*`, `/api/sweep`, `/api/tidy/undo`, unsubscribe over SMTP and one-click HTTPS), the
+  assistant (`/api/ai/*`, the briefing, the review, the Claude API client, the cost governor, batches), accounts (add,
+  edit, test, delete, trust-cert), the calendar (`/api/upcoming`, `/api/calendar/event`, which need an ICS reader and
+  recurrence), the export's archive (`/api/export/archive` answers that it isn't served yet), and `/api/debug/health`
+  and `/api/debug/jobs`. `just test-rust-all` says what passes.
+- **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — Nothing on the Rust server runs on its
+  own: the change queue drains, a sync round runs, a snooze wakes and a follow-up comes due only through the served
+  suites' `work` line (`mm_served::jobs`) or a request. Port the workers (`platform.workers`): the queue's worker and its
+  kick, the sync round and what it starts (`attention.wake_due`, the `assess` job, `warm_tick`), and IDLE.
+- **What Attention and Curation ask of the change queue** · high value · effort S · [#29](https://github.com/lanterno/mailmind/issues/29) — The queue is on the
+  Rust server, but `bound::NoFlags` (Attention's `Flags::mark_seen`: a mute marking unread mail read, a snooze waking
+  read mail unread) and `bound::NoFiling` (Curation's `Filing::trash_now`: a rule that blocks a copy) still answer that
+  it can't. `/api/undo` has no reverser for `snooze`, `mute` or `unblock` (`Undo::new`'s list; the Python app's
+  `Snoozing.reverse` and `Muting.reverse`).
+- **Every change tells the page** · medium value · effort S · [#30](https://github.com/lanterno/mailmind/issues/30) — The Mailbox's events (`MailboxEvent`) go to
+  `Unheard`, the writes of Discovery, Curation and Attention publish nothing, and `/api/stats` is counted afresh at every
+  read. Forward each to the event stream (`events::Hub`) under the Python app's names (`outbox`, `commands-changed`,
+  `undo-done`, `sync-done`, `new-mail`, `reconcile`), and keep the counts until an event says they moved.
+- **The sync's remaining parts** · medium value · effort M · [#31](https://github.com/lanterno/mailmind/issues/31) — `mm_mailbox::ingest` leaves out a person's
+  arrival filters (Curation's `arrival_flags`), the invite a message carries kept with its body, and holding back a login
+  a server refused (`accounts.logins`, with its `forget` on a retry). A move's folder catch-up (`Folders.touched`) and the
+  1Password preload aren't ported either.
+- **One adapter for each port** · low value · effort S · [#32](https://github.com/lanterno/mailmind/issues/32) — The areas ported side by side left doubles: three
+  readers of the rule book (`Database::rules_document`, `RulesDocument`, the Curation store's `RuleBook`), three ways of
+  reading a POST's fields (`body::Fields`, `posted`, `schema`), two adapters naming the accounts (`wiring::KnownAccounts`,
+  `bound::Names`), two tallies of a sender (`StoredTally`, `ContactMail::card`), and two writers of the undo stack
+  (`blocks::push_undo`, `mailbox_commands`). Keep one of each.
+- **Where the Rust server still answers apart** · low value · effort S · [#33](https://github.com/lanterno/mailmind/issues/33) — Discovery reads a folder's part
+  from its name only (`bound::NamedRoles`), not from what LIST said; a domain that isn't ASCII is lowered and punycoded with
+  no nameprep; a failed sync or reconcile keeps Rust's class name (`Timeout`, `ConnectionRefused`) where Python kept its
+  exception's, and its log line names no account; a snooze commits twice, its undo entry in a block of its own.
+- **Deep pages of a long list** · low value · effort S · [#34](https://github.com/lanterno/mailmind/issues/34) — `/api/messages` at offset 50,000 of a 100,000-message
+  folder takes about 217 ms on the Rust server against 106 ms on Python's, with the same query plan and the same SQLite
+  time in both, so the rest goes in the route. Profile it.
 - **The login Keychain in the Rust server** · high value · effort S · [#7](https://github.com/lanterno/mailmind/issues/7) — `mailmind-server` reads secrets through
   `NoKeychain` (`mm-server/src/real.rs`), so it needs `MAILMIND_DB_KEY` and can't log in to an account whose password the
   Keychain keeps. Port `platform.keychain`: `/usr/bin/security`, with the secret on standard input.
@@ -133,7 +168,8 @@ implementation.
 
 ## Next up
 
-1. **Step 3: the Rust server on every route** (high) — the areas in progress, then sending, cleanup, the assistant and
-   accounts, with the Keychain and verified TLS beside them. See The move to the Rust core.
+1. **Step 3: the Rust server on every route** (high) — its background work and what the local writes ask of the change
+   queue, then sending, cleanup, the assistant, accounts and the calendar, with the Keychain and verified TLS beside
+   them. See The move to the Rust core.
 2. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
