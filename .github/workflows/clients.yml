@@ -133,6 +133,17 @@ jobs:
       - name: The XCFramework, then the iOS simulator and macOS apps
         run: just apple build
 
+      - name: The list model's tests
+        run: just apple test
+
+      # The runner's image carries an iPhone simulator for its Xcode; the Mac app runs in the runner's own session.
+      - name: Open the list on the Mac and in an iPhone simulator, and scroll it
+        run: just apple smoke
+
+      - name: The iPhone app's output, when the check failed
+        if: failure()
+        run: cat shells/apple/build/smoke/ios.log 2>/dev/null || true
+
   android:
     runs-on: ubuntu-latest
     # The build, then an emulator's boot and the test on it.
