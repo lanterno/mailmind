@@ -232,10 +232,17 @@ def world(world_template, data_dir):
 
 
 @pytest.fixture
-def app(world, monkeypatch):
+def app(in_process_app):
+    """The app in this process (`in_process_app`). The API and browser suites start a server as a program instead."""
+    return in_process_app
+
+
+@pytest.fixture
+def in_process_app(world, monkeypatch):
     """The app as `python -m mailmind serve` builds it, over this test's world and the new set of objects `_fresh_app`
     assembled, with the clock frozen at NOW. Yields an AppClient; its .clock moves the frozen time (clock.shift(timedelta(...)),
-    clock.move_to(datetime))."""
+    clock.move_to(datetime)). Named as well as `app`, so a folder whose suite serves the app as a program can keep a test
+    that must patch the app's insides on this one."""
     import dataclasses
     import time_machine
     import app_client
