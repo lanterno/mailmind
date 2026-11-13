@@ -11,6 +11,8 @@ publish.workspace = true
 mm-accounts.workspace = true
 mm-assistant.workspace = true
 mm-compose.workspace = true
+# A message's parts, as opening it keeps them.
+mm-content.workspace = true
 mm-discovery.workspace = true
 mm-kernel.workspace = true
 mm-mailbox.workspace = true

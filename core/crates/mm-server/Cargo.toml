@@ -23,6 +23,8 @@ mm-accounts.workspace = true
 mm-assistant.workspace = true
 mm-compose.workspace = true
 mm-curation.workspace = true
+# A message's parts, which what opens it reads.
+mm-content.workspace = true
 mm-discovery.workspace = true
 mm-imap.workspace = true
 mm-kernel.workspace = true

@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+# A message opened: its parts, its HTML made safe and the document its frame loads.
 mm-content.workspace = true
 mm-kernel.workspace = true
 regex.workspace = true
