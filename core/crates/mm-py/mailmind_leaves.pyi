@@ -9,6 +9,17 @@ def identity_of(message_id: str | None, from_addr: str | None, date_iso: str | N
 
 # -- the search grammar (mm-discovery, src/query.rs) ---------------------------------------------------------------
 
+QUERY_MAX_CHARS: int
+QUERY_FIELDS: tuple[str, ...]
+QUERY_FLAGS: tuple[str, ...]
+QUERY_BUCKET_ALIAS: dict[str, str]
+QUERY_OPERATORS: tuple[str, ...]
+QUERY_IS_OFFERED: tuple[str, ...]
+QUERY_HAS_OFFERED: tuple[str, ...]
+
+def parse_query(text: str | None) -> list[tuple[str, str | int | None, str | None, bool, bool]]:
+    """A query's clauses, each (kind, value, field, negated, narrows). A date with no zone is in this process's own."""
+    ...
 
 
 # -- the classifier (mm-curation, src/classifier.rs) ---------------------------------------------------------------
