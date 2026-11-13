@@ -1,0 +1,93 @@
+# The served suites on one commit, against both servers: the Python app's (tests/api, and tests/e2e/browser but
+# in_process/), then the Rust server's ledger (tests/support/rust_ledger.txt) through `just test-rust`. A test moves to
+# the Rust server only by passing against both.
+#
+# Every action is pinned to a commit, with its release in a comment. Tools come pinned too: just and uv through
+# taiki-e/install-action, Rust from core/rust-toolchain.toml, Python from .python-version, Chromium from the locked
+# playwright.
+name: served
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mailmind/**"
+      - "tests/**"
+      - "web/**"
+      - "core/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "justfile"
+      - ".github/workflows/served.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "mailmind/**"
+      - "tests/**"
+      - "web/**"
+      - "core/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".python-version"
+      - "justfile"
+      - ".github/workflows/served.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  served:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The leaves the Python app shares with the core (core/crates/mm-py) and the Rust server both build from core/.
+      - name: Rust, as core/rust-toolchain.toml pins it
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: just@1.59.0,uv@0.13.5
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+
+      # The browser suites build the page with vite from web/.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: The page's node_modules
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      - name: The Python packages, and Chromium as the locked playwright drives it
+        run: |
+          uv sync --frozen
+          uv run playwright install --with-deps chromium
+
+      - name: The served suites against the Python app
+        run: uv run pytest -n 4 --browser tests/api tests/e2e/browser --ignore=tests/e2e/browser/in_process
+
+      - name: The ledger's tests against the Rust server
+        run: just test-rust
