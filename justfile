@@ -39,7 +39,7 @@ run-fast port="": build-web
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Everything a change should pass before committing
-verify: lint compile test check-frontend check-web core-verify audit
+verify: lint compile test check-frontend check-web core-verify test-rust audit
 
 # Every test but the browser's and Dovecot's, a process for each core (pytest-xdist). Pick some with `just test -k hardening`;
 # `just test -n0` runs them in this one process
@@ -59,6 +59,26 @@ test-browser *args: setup
 # Needs Docker running; the first run pulls the image. One process, as one container serves the run.
 test-dovecot *args:
     uv run pytest --dovecot tests/contract/test_mail_session_dovecot.py {{args}}
+
+# The served tests on the Rust server's ledger (tests/support/rust_ledger.txt), against the Rust server: mm-served, the
+# launcher that runs core/crates/mm-server behind the suites' line protocol
+test-rust *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build -q --manifest-path core/Cargo.toml -p mm-served
+    export MAILMIND_TEST_SERVER="$PWD/core/target/debug/mm-served" MAILMIND_TEST_LEDGER="$PWD/tests/support/rust_ledger.txt"
+    listed=()
+    while IFS= read -r test; do listed+=("$test"); done < <(grep -v '^#' tests/support/rust_ledger.txt | grep .)
+    uv run pytest -n 4 --browser "${listed[@]}" {{args}}
+
+# Every served test (tests/api, and tests/e2e/browser but in_process/) against the Rust server, with those off the ledger
+# expected to fail: one that passes errors with XPASS(strict), and goes on the ledger
+test-rust-all *args: setup
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build -q --manifest-path core/Cargo.toml -p mm-served
+    export MAILMIND_TEST_SERVER="$PWD/core/target/debug/mm-served" MAILMIND_TEST_LEDGER="$PWD/tests/support/rust_ledger.txt"
+    uv run pytest -n 4 --browser -rfE tests/api tests/e2e/browser --ignore=tests/e2e/browser/in_process {{args}}
 
 # Undefined names, unused imports and pyflakes' other checks, run by ruff; then the import rules
 # between the mailmind package's layers (import-linter; the contracts are in pyproject.toml), then types (pyright)
