@@ -92,6 +92,15 @@ def test_a_post_needs_the_host_then_the_token():
             perimeter.Refusal(403, "bad or missing CSRF token")
 
 
+@pytest.mark.xfail(strict=True, raises=TypeError,
+                   reason="secrets.compare_digest raises TypeError on a str that isn't ASCII, so a POST carrying such a "
+                          "token is answered 500, without the headers every answer carries, where a wrong one gets 403")
+def test_a_token_that_isnt_ascii_is_refused_as_any_wrong_one_is():
+    h = headers(**POSTED, X_CSRF_Token="t\xe9st")
+    assert perimeter.refuse_mutation("/api/seen", h, port=PORT, token=TOKEN) == \
+        perimeter.Refusal(403, "bad or missing CSRF token")
+
+
 @pytest.mark.parametrize("path", ["/api/seen", "/api/send"])
 def test_every_post_also_needs_this_servers_origin(path):
     """A browser sends an Origin with every POST; one without came from no page."""
