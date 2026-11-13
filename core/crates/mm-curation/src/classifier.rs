@@ -266,7 +266,6 @@ const ESP_MARKERS: &[&str] = &[
     "sparkpostmail",
     "everestengagement",
     "convertkit",
-    "ck.page",
     "drip.com",
     "activecampaign",
     "getresponse",
@@ -282,6 +281,18 @@ const ESP_MARKERS: &[&str] = &[
 /// Markers too short to find inside a word: each counts only as a whole label, and never the last one (.sg is
 /// Singapore's top-level domain).
 const ESP_LABELS: &[&str] = &["sg"];
+
+/// Markers whose first label is too short to find inside a word: each counts only as whole labels, so nick.page is
+/// a person's.
+const ESP_DOMAINS: &[&str] = &["ck.page"];
+
+/// Whether `labels` stand in `domain` as whole labels: `ck.page` does in `x.ck.page` and `ck.page.example`, and not
+/// in `nick.page`.
+fn holds_labels(domain: &str, labels: &str) -> bool {
+    domain.match_indices(labels).any(|(at, _)| {
+        (at == 0 || domain[..at].ends_with('.')) && domain[at + labels.len()..].chars().next().is_none_or(|c| c == '.')
+    })
+}
 
 /// The first label of a domain that sends in bulk.
 const BULK_SUBDOMAINS: &[&str] = &[
@@ -518,7 +529,10 @@ pub fn classify(from_addr: &str, subject: &str, from_name: &str, has_list_unsub:
     if has_list_unsub {
         return verdict(Bucket::Marketing, Confidence::High, "List-Unsubscribe header");
     }
-    if ESP_MARKERS.iter().any(|m| domain.contains(m)) || domain.rsplit('.').skip(1).any(|l| ESP_LABELS.contains(&l)) {
+    if ESP_MARKERS.iter().any(|m| domain.contains(m))
+        || ESP_DOMAINS.iter().any(|d| holds_labels(domain, d))
+        || domain.rsplit('.').skip(1).any(|l| ESP_LABELS.contains(&l))
+    {
         return verdict(Bucket::Marketing, Confidence::High, "bulk email-service-provider domain");
     }
     let first_label = domain.split('.').next().unwrap_or("");
