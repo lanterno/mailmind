@@ -18,11 +18,12 @@ just gen-bindings       # Swift and Kotlin bindings, into shells/apple/Generated
 
 | Crate | What it is |
 | --- | --- |
-| `mm-kernel` | Names, refusals and a message's identity. Nothing in it reads the disk, the network or the clock; nor do the context crates (`mm-mailbox`, `mm-discovery`, `mm-curation`). |
+| `mm-kernel` | Names, refusals and a message's identity. Nothing in it reads the disk, the network or the clock; nor do the context crates (`mm-mailbox`, `mm-discovery`, `mm-curation`) or `mm-content`. |
 | `mm-store` | The encrypted database, and the only place a file is opened. |
 | `mm-mailbox` | The mail on each server: how its copies thread into conversations. |
 | `mm-discovery` | Finding mail by what a person types: the search grammar. |
 | `mm-curation` | What stays in the inbox: the classifier and the rule sets it reads. |
+| `mm-content` | What a message holds: its MIME parts (on mail-parser) and its HTML made safe to show (html5ever's tokenizer). |
 | `mm-app` | The contract: `Session`, `ListView`, `ViewObserver`. `mm_app::wire` is the same contract as JSON lines. |
 | `mm-ffi` | The contract for Swift and Kotlin, through UniFFI. The only crate that knows UniFFI exists. |
 | `mm-py` | The leaves for the Python app, as the module `mailmind_leaves` (PyO3), until the Rust server replaces it. The only crate that knows Python exists. |

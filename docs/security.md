@@ -62,7 +62,12 @@ attaches it to every request, GETs included.
 
 Mail bodies render in a sandboxed iframe with a deny-all CSP. `mailmind.content.sanitize` is
 defense in depth — **the iframe sandbox is the actual boundary**, so a sanitizer miss
-alone cannot execute script. Preserve that ordering when touching either.
+alone cannot execute script. Preserve that ordering when touching either. The sanitizer runs in the Rust core
+(`mm_content::sanitize`): it reads a body with html5ever's tokenizer, as a browser with scripting off reads it, and
+writes everything itself, every tag from the allowlist and every value escaped, so what it returns is safe however the
+input was written. The CSS it writes reads in a browser as it was checked: no comment mark, line break or backslash,
+and every string and bracket closed by its own match. One check over all it writes holds that (`written`, in
+`sanitize/css.rs`), and writes nothing where it fails.
 
 The reader's frame loads `GET /api/message/body.html?key=<key>&folder=<folder>&uid=<uid>&images=0|1`
 (`Bodies.copy_document`), the same sanitized HTML as `/api/message/body` or the plain text escaped, under

@@ -135,10 +135,10 @@ A test passes or fails on what happened, never on how long it took. Other suites
 - In the browser, wait with Playwright's `expect` and `wait_for`. Move the page's timers with `page.clock.run_for`.
   `page.heard_all_asked()` comes before saying that a request wasn't made.
 
-A leaf the Rust core now computes for the Python app (identity, the search grammar, the classifier, threading) has a
-`test_<leaf>_in_rust.py` beside its tests, which keeps the Python it replaced as the oracle and holds the core to its answers
-with Hypothesis, over every character where Python and Rust read text differently. A behaviour change to a leaf is made in
-the core, and changes the oracle in the same commit as the test that states it.
+A leaf the Rust core now computes for the Python app (identity, the search grammar, the classifier, threading, MIME, the
+sanitizer) has a `test_<leaf>_in_rust.py` beside its tests, which keeps the Python it replaced as the oracle and holds
+the core to its answers with Hypothesis, over every character where Python and Rust read text differently. A behaviour
+change to a leaf is made in the core, and changes the oracle in the same commit as the test that states it.
 
 `tests/integration/mailbox/test_queue_state_machine.py` runs Hypothesis over the command path and Undo: random moves, flag
 changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo, Retry and Discard. It runs 12 fixed cases in the suite;
