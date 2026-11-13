@@ -145,3 +145,19 @@ fn a_loopback_certificate_is_pinned_on_first_use_and_held_to_after() {
         tls_pin::is_loopback("LOCALHOST") && tls_pin::is_loopback("::1") && !tls_pin::is_loopback("imap.example.test")
     );
 }
+
+#[test]
+fn an_account_s_alias_is_what_its_entry_names_stripped_and_none_when_blank() {
+    let alias = |given: Value| {
+        let mut entry = ada();
+        entry["alias"] = given;
+        mm_accounts::Account::from_entry(&entry).unwrap().alias
+    };
+    assert_eq!(alias(json!(" Ada ")), Some("Ada".to_owned()));
+    for blank in [json!("  "), json!(""), Value::Null, json!(7)] {
+        assert_eq!(alias(blank), None);
+    }
+    let mut unnamed = ada();
+    unnamed.as_object_mut().unwrap().remove("alias");
+    assert_eq!(mm_accounts::Account::from_entry(&unnamed).unwrap().alias, None);
+}
