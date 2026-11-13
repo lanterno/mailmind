@@ -66,7 +66,7 @@ pub trait MailSessions: Send + Sync + fmt::Debug {
     fn open(&self, account: &str) -> Result<Box<dyn MailSession>, SessionError>;
 }
 
-// ── The reads a person waits on: the lists, a conversation, the tray of changes ────────────────────────────────
+// ── The reads a person waits on: the lists and a conversation ────────────────────────────────────────────────────────
 
 /// A row as a query gave it: each column by its name, its value as SQLite held it (`kernel.row.Row`). A row
 /// number may be among them, for the use case to tell rows apart by; none leaves the core.
@@ -165,24 +165,6 @@ pub trait SyncStatus: Send + Sync + fmt::Debug {
 /// How AI stands, with no call made (`assistant.status.report`).
 pub trait AiStatus: Send + Sync + fmt::Debug {
     fn report(&self) -> Result<serde_json::Value, Fault>;
-}
-
-/// The changes that haven't reached a server, newest first, and how many there are in each state.
-pub type OpenCommands = (Vec<Row>, Vec<(String, i64)>);
-
-/// What the tray of changes reads (`mailbox.adapters.sqlite.command_log`).
-pub trait StoredCommands: Send + Sync + fmt::Debug {
-    /// The changes that haven't reached a server, newest first, and how many there are in each state.
-    fn open_commands(&self, limit: i64) -> Result<OpenCommands, Fault>;
-    /// The subject of the message a change is for, None when it has no row: its newest copy in `folder` with the
-    /// Message-ID, else the newest with it anywhere, and with no Message-ID the row `pk` names.
-    fn command_subject(
-        &self,
-        account: &str,
-        folder: &str,
-        message_id: Option<&str>,
-        pk: Option<i64>,
-    ) -> Result<Option<serde_json::Value>, Fault>;
 }
 
 /// A message as stored, to open: the row of a copy, its raw bytes and what is kept of its parts.

@@ -8,7 +8,7 @@ use rusqlite::{Connection, params_from_iter};
 use crate::db::Database;
 use crate::placeholders;
 
-// The lists the page shows, a conversation and the tray of changes; the digest.
+// The lists the page shows and a conversation; the digest.
 mod bodies;
 mod digest;
 pub(crate) mod lists;

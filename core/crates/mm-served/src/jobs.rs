@@ -1,6 +1,7 @@
 //! `work <job> <JSON>`: one pass of a background job, as a worker would run it, given the arguments in the JSON list
 //! (`serve_python.py` says what each does). Those this server has yet: a folder's sync, waking what is snoozed, the
-//! minute's round of follow-ups, a pass of the change queue and an account's reconcile. A job the Rust server doesn't run yet says so.
+//! minute's round of follow-ups, a pass of the change queue and an account's reconcile. A job the Rust server doesn't
+//! run yet says so.
 
 use mm_server::App;
 use serde_json::Value;

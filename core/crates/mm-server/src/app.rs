@@ -146,10 +146,6 @@ impl App {
             environment,
             seams,
         );
-            sessions,
-            database.clone(),
-            seams.clock.clone(),
-        ));
         let servers: Arc<dyn MailServers> = Arc::new(ImapServers {
             directory: directory.clone(),
             outside: seams.outside.clone(),
@@ -173,7 +169,8 @@ impl App {
         let stats = LiveStats::new(Arc::new(ListedAccounts(directory.clone())), Arc::new(plans), seams.clock.clone());
         let labels = Labels::new(database.clone());
         let gates: Arc<dyn Gates> = Arc::new(AccountGates::new(environment.gate_per_account()));
-        let events: Arc<dyn Events> = Arc::new(Unheard);
+        // What the Mailbox's changes say, heard by no one yet.
+        let mailbox_events: Arc<dyn Events> = Arc::new(Unheard);
         let tokens: Arc<dyn Tokens> = Arc::new(RandomTokens::default());
         let commands = Arc::new(MailCommands::new(CommandParts {
             store: database.clone(),
@@ -181,19 +178,20 @@ impl App {
             server: ServerOps::new(servers.clone(), environment.read_only()),
             gates: gates.clone(),
             clock: seams.clock.clone(),
-            events: events.clone(),
+            events: mailbox_events.clone(),
             tokens: tokens.clone(),
             read_only: environment.read_only(),
         }));
         let reversals = Arc::new(Reversals::new(commands.clone(), ingest.clone()));
-        let undo = Undo::new(database.clone(), gates.clone(), seams.clock.clone(), events.clone(), vec![reversals]);
+        let undo =
+            Undo::new(database.clone(), gates.clone(), seams.clock.clone(), mailbox_events.clone(), vec![reversals]);
         let filing = Filing::new(FilingParts {
             commands: commands.clone(),
             ingest: ingest.clone(),
             folders: folders.clone(),
             gates: gates.clone(),
             clock: seams.clock.clone(),
-            events: events.clone(),
+            events: mailbox_events.clone(),
             tokens,
         });
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
@@ -202,7 +200,7 @@ impl App {
             accounts: move_accounts.clone(),
             store: database.clone(),
             folders: folders.clone(),
-            events: events.clone(),
+            events: mailbox_events.clone(),
             clock: seams.clock.clone(),
         }));
         let reconciler = Reconciler::new(ReconcilerParts {
@@ -211,7 +209,7 @@ impl App {
             servers,
             gates: gates.clone(),
             folders: folders.clone(),
-            events,
+            events: mailbox_events,
             clock: seams.clock.clone(),
         });
         Ok(App {

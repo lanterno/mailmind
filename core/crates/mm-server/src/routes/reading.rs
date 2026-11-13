@@ -1,4 +1,4 @@
-//! The Mailbox's lists, a conversation and the tray of changes (`mailmind.http.routers.mailbox`): what the page
+//! The Mailbox's lists and a conversation (`mailmind.http.routers.mailbox`): what the page
 //! reads as it opens a folder, the Inboxes, a view that isn't a folder, or a conversation.
 //!
 //! A part of a route the Rust server can't do yet comes back from its use case as the `NOT_YET` fault, and answers
@@ -26,7 +26,6 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/inboxes", get(inboxes))
         .route("/api/thread", get(thread))
         .route("/api/folders/across", get(folders_across))
-        .route("/api/pending", get(pending))
         .route("/api/digest", get(digest))
 }
 
@@ -97,11 +96,6 @@ async fn thread(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respon
 /// Snoozed, Muted, Waiting and Reply Later counted over every account, for the rail on All inboxes.
 async fn folders_across(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
     run(&app, &method, &uri, |app| app.reading.lists.across_accounts()).await
-}
-
-/// The changes that haven't reached a server.
-async fn pending(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
-    run(&app, &method, &uri, |app| app.reading.tray.list_open(100)).await
 }
 
 /// The items the brief is built from, and what the page needs as it opens: the identities to send from, the sync's

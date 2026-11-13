@@ -1,5 +1,5 @@
-//! The reads a person waits on, as the app holds them: the lists and a conversation, a message opened, the tray of
-//! changes, the digest, an export, the outbox, the documents. `App` holds one `Reading`, which `App::assemble` makes
+//! The reads a person waits on, as the app holds them: the lists and a conversation, a message opened, the digest,
+//! an export, the outbox, the documents. `App` holds one `Reading`, which `App::assemble` makes
 //! here from the adapters it made.
 
 use std::sync::Arc;
@@ -16,7 +16,6 @@ use mm_mailbox::folders::Folders;
 use mm_mailbox::lists::Lists;
 use mm_mailbox::opening::{StoredBody, StoredOnly};
 use mm_mailbox::ports::MailSessions;
-use mm_mailbox::tray::Tray;
 use mm_store::Database;
 use mm_store::export::Exports;
 
@@ -28,7 +27,6 @@ use crate::wiring::{AiConfig, AssistantStatus, DraftsFolder, KnownAccounts, Mess
 pub struct Reading {
     pub lists: Lists,
     pub bodies: Bodies,
-    pub tray: Tray,
     pub digest: Digest,
     pub exports: Exports,
     pub outbox: Outbox,
@@ -62,7 +60,6 @@ impl Reading {
             exports: Exports::new(database.clone(), seams.outside.clone(), clock.clone(), environment.temporary()),
             lists: Lists::new(accounts.clone(), database.clone(), database.clone(), syncs, clock.clone()),
             bodies: Bodies::new(database.clone(), Arc::new(StoredBody::new(database.clone())), Arc::new(opening)),
-            tray: Tray::new(database.clone()),
             documents: DocumentHub::new(database.clone(), accounts.clone(), clock.clone()),
             outbox: Outbox::new(database.clone(), clock.clone(), environment.profile() == "full"),
             digest: Digest::new(

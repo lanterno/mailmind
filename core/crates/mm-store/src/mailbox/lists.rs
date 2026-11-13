@@ -1,9 +1,8 @@
-//! What the page lists (`mailbox.adapters.sqlite.lists`, Attention's lists in `attention.adapters.sqlite`, and the
-//! tray's in `command_log`): none holds a row on its way out (`pending_removal`), and a folder's or the Inboxes'
+//! What the page lists (`mailbox.adapters.sqlite.lists`, and Attention's lists in `attention.adapters.sqlite`): none holds a row on its way out (`pending_removal`), and a folder's or the Inboxes'
 //! none snoozed or muted. Each read is one connection, its rows and its total read together.
 
 use mm_kernel::errors::Fault;
-use mm_mailbox::ports::{OpenCommands, Page, Row, StoredCommands, StoredLists};
+use mm_mailbox::ports::{Page, Row, StoredLists};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, Params, ToSql, params, params_from_iter};
 use serde_json::Value;
@@ -256,59 +255,6 @@ impl StoredLists for Database {
                 .next()
                 .transpose()?;
             Ok(state.as_deref() == Some("synced"))
-        })
-    }
-}
-
-impl StoredCommands for Database {
-    fn open_commands(&self, limit: i64) -> Result<OpenCommands, Fault> {
-        self.read(|c| {
-            let rows = rows_of(
-                c,
-                "SELECT * FROM mail_commands WHERE applied=0 AND state IN ('queued', 'running', 'error') \
-                 ORDER BY id DESC LIMIT ?",
-                [limit],
-            )?;
-            let counts = c
-                .prepare_cached(
-                    "SELECT state, COUNT(*) n FROM mail_commands WHERE applied=0 \
-                     AND state IN ('queued', 'running', 'error') GROUP BY state",
-                )?
-                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-                .collect::<Result<_, _>>()?;
-            Ok((rows, counts))
-        })
-    }
-
-    fn command_subject(
-        &self,
-        account: &str,
-        folder: &str,
-        message_id: Option<&str>,
-        pk: Option<i64>,
-    ) -> Result<Option<Value>, Fault> {
-        self.read(|c| {
-            let first = |sql: &str, values: &[&dyn ToSql]| -> rusqlite::Result<Option<Value>> {
-                Ok(rows_of(c, sql, values)?.into_iter().next().and_then(|mut r| r.remove("subject")))
-            };
-            match (message_id, pk) {
-                (Some(id), _) => {
-                    let there = first(
-                        "SELECT subject FROM messages WHERE account=? AND folder=? AND message_id=? \
-                         ORDER BY pk DESC LIMIT 1",
-                        &[&account, &folder, &id],
-                    )?;
-                    match there {
-                        Some(subject) => Ok(Some(subject)),
-                        None => first(
-                            "SELECT subject FROM messages WHERE account=? AND message_id=? ORDER BY pk DESC LIMIT 1",
-                            &[&account, &id],
-                        ),
-                    }
-                }
-                (None, Some(pk)) => first("SELECT subject FROM messages WHERE pk=?", &[&pk]),
-                (None, None) => Ok(None),
-            }
         })
     }
 }

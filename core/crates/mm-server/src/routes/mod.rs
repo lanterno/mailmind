@@ -29,8 +29,8 @@ mod preferences;
 mod attention;
 mod curation;
 mod discovery;
-mod tidy;
 mod syncing;
+mod tidy;
 
 use std::sync::Arc;
 
