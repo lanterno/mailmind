@@ -29,7 +29,8 @@ build: xcframework project
 xcframework:
     #!/usr/bin/env bash
     set -euo pipefail
-    . "$HOME/.cargo/env" 2>/dev/null || true
+    # rustup's env file, where rustup put one. Sourcing a missing file ends bash at once, `|| true` or not.
+    if [ -f "$HOME/.cargo/env" ]; then . "$HOME/.cargo/env"; fi
     # The C inside the core (SQLCipher) is compiled for the same lowest OS the app runs on.
     export IPHONEOS_DEPLOYMENT_TARGET=26.0 MACOSX_DEPLOYMENT_TARGET=26.0
     cd "{{core}}"

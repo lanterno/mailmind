@@ -31,7 +31,8 @@ test: libs
 libs:
     #!/usr/bin/env bash
     set -euo pipefail
-    . "$HOME/.cargo/env" 2>/dev/null || true
+    # rustup's env file, where rustup put one. Sourcing a missing file ends bash at once, `|| true` or not.
+    if [ -f "$HOME/.cargo/env" ]; then . "$HOME/.cargo/env"; fi
     command -v cargo-ndk >/dev/null || { echo "cargo-ndk is missing: cargo install cargo-ndk --locked" >&2; exit 1; }
     # The C inside the core (SQLCipher, OpenSSL) is compiled for the oldest Android the app runs on.
     min_sdk=$(sed -n 's/^minSdk = "\([0-9]*\)"$/\1/p' "{{here}}/gradle/libs.versions.toml")
