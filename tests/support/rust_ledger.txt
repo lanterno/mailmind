@@ -40,3 +40,8 @@ tests/api/test_http_mail.py::test_a_refused_move_keeps_the_message
 tests/api/test_http_mail.py::test_a_server_without_move_gets_copy_store_expunge
 tests/api/test_http_mail.py::test_an_unreachable_server_queues_the_move
 tests/api/test_http_mail.py::test_archive_and_trash_a_whole_conversation
+tests/api/test_http_local.py::test_reply_later_pins_and_unpins
+tests/api/test_http_settings.py::test_reconcile_prunes_what_the_server_no_longer_has
+tests/api/test_http_settings.py::test_sync_retry_runs_a_sync_for_that_account
+tests/api/test_http_settings.py::test_refresh_syncs_every_account
+tests/api/test_http_get.py::test_accounts_rules_views_and_audit
