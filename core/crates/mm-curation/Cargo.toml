@@ -8,6 +8,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The headers a sender's mail offers a way out in, and those a sweep reads of a live inbox.
+mm-content.workspace = true
 mm-kernel.workspace = true
 regex.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
