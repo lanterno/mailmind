@@ -174,6 +174,9 @@ class World:
 
     def __init__(self, server, placed, data_dir, smtp=None):
         self.server, self.placed, self.dir, self.smtp = server, placed, data_dir, smtp
+        # How a folder is synced after `deliver`: the app's ingest in this process, unless the API suite has a server
+        # of its own do it (served.Served.work).
+        self.sync = None
 
     def uid(self, name):
         return self.placed[name][2]
@@ -209,10 +212,13 @@ class World:
     def deliver(self, acct, folder, data, flags=()):
         """Put one more message on the server and run the app's own incremental sync of that
         folder, as the background sync would. Returns its UID."""
-        from mailmind.bootstrap import accounts
-        from mailmind.bootstrap.mailbox import ingest
         uid = self.server.deliver(acct, folder, data, flags=flags)
-        ingest.sync_folder(accounts.get(acct), folder)
+        if self.sync is not None:
+            self.sync(acct, folder)
+        else:
+            from mailmind.bootstrap import accounts
+            from mailmind.bootstrap.mailbox import ingest
+            ingest.sync_folder(accounts.get(acct), folder)
         return uid
 
     def mark(self):
