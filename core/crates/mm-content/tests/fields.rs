@@ -33,10 +33,7 @@ fn the_fields_a_sync_stores_are_read_as_pythons_email_read_them() {
         f.unsub_raw,
         "<mailto:leave@example.test?subject=bye>, <https://example.test/u?x=1> | POST:list-unsubscribe=one-click"
     );
-    assert_eq!(
-        f.recipient_addrs,
-        ["bea@example.test", "cy@example.test", "dee@example.test", "eve@example.test"]
-    );
+    assert_eq!(f.recipient_addrs, ["bea@example.test", "cy@example.test", "dee@example.test", "eve@example.test"]);
     assert_eq!(
         f.recipients,
         "Bea <bea@example.test>, \"Cy, Esq.\" <CY@example.test> team: dee@example.test, 'eve@example.test'.;"
@@ -50,7 +47,10 @@ fn what_is_missing_or_wont_read_is_empty() {
     assert_eq!((f.date_iso, f.ts), (None, 0));
     assert!(f.has_list_unsub);
     assert_eq!((f.unsub_method, f.unsub_raw.as_str()), ("none", ""));
-    assert_eq!(fields(b"Date: Mon, 2 Nov 2026 09:30:00 -0000\r\n\r\n").date_iso.as_deref(), Some("2026-11-02T09:30:00+00:00"));
+    assert_eq!(
+        fields(b"Date: Mon, 2 Nov 2026 09:30:00 -0000\r\n\r\n").date_iso.as_deref(),
+        Some("2026-11-02T09:30:00+00:00")
+    );
 }
 
 #[test]
