@@ -4,7 +4,7 @@
    "accounts": [
     "ada@example.test"
    ],
-   "confirm_token": "1793620800.68590e72e18533fa",
+   "confirm_token": "<confirm token>",
    "count": 1,
    "domain": "spindle.example.test",
    "from_addr": "deals@spindle.example.test",

@@ -4,7 +4,7 @@
    "accounts": [
     "ada@example.test"
    ],
-   "confirm_token": "1793620800.841647d6a4ac6882",
+   "confirm_token": "<confirm token>",
    "count": 2,
    "domain": "loom.example.test",
    "from_addr": "news@loom.example.test",
