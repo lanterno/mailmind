@@ -29,6 +29,7 @@ pub mod schema;
 // What Discovery reads of a sender as a message opens.
 mod senders;
 // The page's own state, and what the app says of itself.
+pub mod compose;
 pub mod places;
 
 use std::collections::HashMap;

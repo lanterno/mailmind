@@ -1,9 +1,16 @@
-//! What Compose reads of the database (`compose.adapters.sqlite`): the outbox and the drafts' journal, and the
-//! drafts it tracks, one of which a message opening tracks.
+//! What Compose keeps in the database (`compose.adapters.sqlite`): the outbox and the drafts' journal, the drafts it
+//! tracks, one of which a message opening tracks, and the snippets, as the `snippets` document
+//! (`mailmind.compose.adapters.snippets_store`), a row of `documents` (migration 48) as
+//! `mailmind.platform.db.documents` reads and writes one.
 
-use mm_compose::ports::{Row, StoredDrafts, StoredOutbox, Tracked};
+use std::sync::Arc;
+
+use mm_compose::ports::{Row, SnippetsStore, StoredDrafts, StoredOutbox, Tracked};
 use mm_kernel::errors::Fault;
-use rusqlite::{OptionalExtension, named_params};
+use mm_kernel::seams::Clock;
+use mm_kernel::when;
+use rusqlite::{Connection, OptionalExtension, named_params};
+use serde_json::Value;
 
 use crate::db::Database;
 use crate::mailbox::lists::rows_of;
@@ -65,4 +72,52 @@ impl StoredDrafts for Database {
                 .map(Option::flatten)
         })
     }
+}
+
+const SNIPPETS: &str = "snippets";
+
+/// The snippets document, written at the time `clock` tells.
+#[derive(Debug)]
+pub struct SnippetsDocument {
+    database: Arc<Database>,
+    clock: Arc<dyn Clock>,
+}
+
+impl SnippetsDocument {
+    pub fn new(database: Arc<Database>, clock: Arc<dyn Clock>) -> SnippetsDocument {
+        SnippetsDocument { database, clock }
+    }
+}
+
+impl SnippetsStore for SnippetsDocument {
+    fn read(&self) -> Result<Option<Value>, Fault> {
+        self.database.read(|c| document(c, SNIPPETS))
+    }
+
+    fn change(&self, change: &mut dyn FnMut(Option<Value>) -> Option<Value>) -> Result<(), Fault> {
+        let now = when::iso(self.clock.now());
+        self.database.write(|c| match change(document(c, SNIPPETS)?) {
+            Some(value) => write_document(c, SNIPPETS, &value, &now),
+            None => Ok(()),
+        })
+    }
+}
+
+/// What a document holds, as JSON parses it: None when there is none yet, or its text won't parse.
+fn document(c: &Connection, name: &str) -> rusqlite::Result<Option<Value>> {
+    let body: Option<String> =
+        c.query_row("SELECT body FROM documents WHERE name=?", [name], |r| r.get(0)).optional()?;
+    Ok(body.and_then(|body| serde_json::from_str(&body).ok()))
+}
+
+/// `value` as the whole document, a version on from the last, written as `json.dumps(value, indent=2,
+/// ensure_ascii=False)` writes it.
+fn write_document(c: &Connection, name: &str, value: &Value, now: &str) -> rusqlite::Result<()> {
+    let body = serde_json::to_string_pretty(value).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+    c.execute(
+        "INSERT INTO documents(name, body, changed_at) VALUES(?, ?, ?) ON CONFLICT(name) DO UPDATE SET \
+         body=excluded.body, version=documents.version+1, changed_at=excluded.changed_at",
+        (name, body, now),
+    )?;
+    Ok(())
 }
