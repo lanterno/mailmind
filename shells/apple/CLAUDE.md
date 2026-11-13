@@ -26,9 +26,11 @@ simulator runtime; running one needs a simulator or a device.
 | --- | --- |
 | `project.yml` | The Xcode project for XcodeGen. `MailMind.xcodeproj` is generated from it and never committed. |
 | `Generated/` | The UniFFI bindings `just gen-bindings` writes. Never edit them by hand. |
-| `Sources/ListModel.swift` | `HeldRows`, `ListModel` and `Relay`: the rows near the screen, and the core's batches handed to the main actor. |
+| `Sources/ListModel.swift` | `HeldRows`, `ListModel`, `OncePerFrame` and `Relay`: the rows near the screen, the window asked for at most once a frame, and the core's batches handed to the main actor. |
 | `Sources/Demo.swift` | Makes the fictional mailbox on first launch, then opens the session and the list off the main thread. |
-| `Sources/InboxView.swift` | The list, its rows and their placeholders, and how a row's date is shown. |
+| `Sources/InboxView.swift` | The inbox screen, the list in it, and how a row's date is shown. |
+| `Sources/MessageTable+macOS.swift` | The Mac's list: an `NSTableView` with one row height, its rows and placeholders drawn with Core Text. |
+| `Sources/MessageTable+iOS.swift` | The iPhone and iPad list: a `UICollectionView` over a fixed-row layout, its rows and placeholders. |
 | `Sources/Measure.swift` | Measure mode, run only when `MAILMIND_MEASURE` is set. |
 | `Measure/` | `measure.sh`, and the probes it compiles: the crossing cost and a web view's memory. |
 | `build/` | The XCFramework, derived data and measurements. Ignored by git. |
@@ -39,6 +41,9 @@ simulator runtime; running one needs a simulator or a device.
   sends them. The shell formats a date and draws. Anything two platforms would have to agree on goes in the core.
 - **The core's thread is never the main thread.** Observer calls arrive on the core's thread and hop to the main
   actor in order (`DispatchQueue.main.async`). Opening the database and ordering the list run in a detached task.
+- **The list is a native table with one row height.** Row n is at n times the height, so the table asks only for
+  the rows on screen, and a batch redraws only the rows it changed. SwiftUI's `List` spent up to 20 ms a frame deep in
+  the list and kept memory for every row it had shown.
 - **The shell holds no list of its own.** It keeps only the rows in the range the latest batch says to hold, and drops
   the rest when a batch arrives.
 - **Generated files are never edited by hand.** Change the core, run `just gen-bindings`, commit the diff on its own.
