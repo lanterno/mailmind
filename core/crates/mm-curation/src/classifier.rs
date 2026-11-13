@@ -433,7 +433,12 @@ static EDU: LazyLock<Regex> =
     LazyLock::new(|| pattern(r"(?i)\.edu(?:\.[a-z]{2})?\n?\z|\.ac\.[a-z]{2}\n?\z|\.uni-[a-z]+\."));
 
 static HEALTH: LazyLock<Regex> = LazyLock::new(|| {
-    pattern(concat!(r"(?i)sante|health|clinic|hospital|patient|doctolib|dentist|", word_starts!(), r"(?:santé|medi)"))
+    pattern(concat!(
+        r"(?i)sante|health|clinic|hospital|patient|doctolib|dentist|",
+        word_starts!(),
+        // `medi` but never `media` or `medium`, which a publisher's or a media player's domain holds.
+        r"(?:santé|medi(?:u?\z|u[^m]|[^au]))",
+    ))
 });
 
 static FINANCE: LazyLock<Regex> = LazyLock::new(|| {
