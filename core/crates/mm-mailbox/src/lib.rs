@@ -27,3 +27,5 @@ pub mod listing;
 pub mod lists;
 pub mod opening;
 pub mod tray;
+// Tidy's runs, as the brief reads the newest.
+pub mod tidy;
