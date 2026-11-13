@@ -3,10 +3,11 @@
 //! `classified_from_address`, `classified_from_domain` and `set_classification`) and the audit trails
 //! (`platform.db.audit`).
 
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use mm_curation::ports::{AuditTrail, Classified, InboxSender, Reclassified, RuleBook, SenderMail};
+use mm_curation::ports::{AuditTrail, Classified, InboxSender, NoisySender, Reclassified, RuleBook, SenderMail};
 use mm_curation::rulebook::Rules;
 use mm_kernel::errors::{Failure, Fault};
 use mm_kernel::seams::Clock;
@@ -130,6 +131,52 @@ impl SenderMail for CurationStore {
             }
             Ok(())
         })
+    }
+
+    fn noisy_senders(&self, buckets: &[&str], min_count: i64) -> Result<Vec<NoisySender>, Fault> {
+        let marks = vec!["?"; buckets.len()].join(",");
+        let sql = format!(
+            "SELECT lower(from_addr) addr, MAX(from_name) name, COUNT(*) n, \
+             SUM(CASE WHEN seen=0 THEN 1 ELSE 0 END) unseen, MAX(ts) last_ts, MIN(ts) first_ts, \
+             MAX(date_iso) last_iso, MAX(bucket) bucket \
+             FROM messages WHERE from_addr!='' AND bucket IN ({marks}) GROUP BY lower(from_addr) HAVING n>=?"
+        );
+        let mut given: Vec<&dyn rusqlite::ToSql> = buckets.iter().map(|b| b as &dyn rusqlite::ToSql).collect();
+        given.push(&min_count);
+        self.db.read(|c| {
+            c.prepare_cached(&sql)?
+                .query_map(given.as_slice(), |r| {
+                    Ok(NoisySender {
+                        addr: r.get("addr")?,
+                        name: r.get("name")?,
+                        n: r.get("n")?,
+                        unseen: r.get::<_, Option<i64>>("unseen")?.unwrap_or(0),
+                        last_ts: r.get("last_ts")?,
+                        last_iso: r.get("last_iso")?,
+                        bucket: r.get("bucket")?,
+                    })
+                })?
+                .collect()
+        })
+    }
+
+    fn accounts_by_sender(&self, addrs: &[String]) -> Result<HashMap<String, Vec<(String, i64)>>, Fault> {
+        let marks = vec!["?"; addrs.len()].join(",");
+        let sql = format!(
+            "SELECT lower(from_addr) addr, account, COUNT(*) n FROM messages WHERE lower(from_addr) IN ({marks}) \
+             GROUP BY lower(from_addr), account"
+        );
+        let given: Vec<&dyn rusqlite::ToSql> = addrs.iter().map(|a| a as &dyn rusqlite::ToSql).collect();
+        let rows: Vec<(String, String, i64)> = self.db.read(|c| {
+            c.prepare(&sql)?
+                .query_map(given.as_slice(), |r| Ok((r.get("addr")?, r.get("account")?, r.get("n")?)))?
+                .collect()
+        })?;
+        let mut by_sender: HashMap<String, Vec<(String, i64)>> = HashMap::new();
+        for (addr, account, n) in rows {
+            by_sender.entry(addr).or_default().push((account, n));
+        }
+        Ok(by_sender)
     }
 }
 
