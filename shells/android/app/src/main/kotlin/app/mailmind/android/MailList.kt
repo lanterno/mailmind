@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,6 +50,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** Every row is the same height, so the list has its full length before its rows arrive. */
 private val RowHeight = 80.dp
+
+/** The list's tag, for the instrumented test (src/androidTest). */
+const val MessageListTag = "message-list"
+
+/** A row the core sent, by its position: a placeholder has no tag, so a test can tell the two apart. */
+fun messageRowTag(position: Int): String = "message-row-$position"
 
 @Composable
 fun MailListScreen(model: MailListModel) {
@@ -80,20 +87,24 @@ private fun MessageList(model: MailListModel, view: ListView) {
             .collect { window -> view.setVisible(window.first.toUInt(), window.second.toUInt()) }
     }
     val dates = remember { DateLabels() }
-    LazyColumn(state = state, modifier = Modifier.fillMaxSize()) {
+    LazyColumn(state = state, modifier = Modifier.fillMaxSize().testTag(MessageListTag)) {
         items(count = model.total) { position ->
             val row = model.rows[position]
-            if (row == null) PlaceholderRow() else MessageRowView(row, dates)
+            if (row == null) {
+                PlaceholderRow()
+            } else {
+                MessageRowView(row, dates, Modifier.testTag(messageRowTag(position)))
+            }
         }
     }
 }
 
 @Composable
-private fun MessageRowView(row: MessageRow, dates: DateLabels) {
+private fun MessageRowView(row: MessageRow, dates: DateLabels, modifier: Modifier = Modifier) {
     val weight = if (row.unread) FontWeight.SemiBold else FontWeight.Normal
     val quiet = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(RowHeight)
             .padding(horizontal = 16.dp, vertical = 8.dp),
