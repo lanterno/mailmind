@@ -49,21 +49,21 @@ a machine shared with other builds, so numbers vary by 10 to 20% run to run.
 
 | Target | Status |
 | --- | --- |
-| Mac, SwiftUI | Runs and scrolls; measured |
+| Mac, native table | Runs and scrolls; measured |
 | Mac, Tauri | Runs and scrolls; measured |
 | Browser (Chromium) | Runs and scrolls; measured |
 | iPhone and iPad | Builds and links for device and simulator; not run (no simulator runtime or device here) |
-| Android | Builds in CI only (no SDK here); not run |
-| Windows and Linux, Tauri | Build in CI only; not run |
+| Android | Builds in CI only (no SDK here); CI's emulator test scrolls it, not yet run |
+| Windows and Linux, Tauri | Build in CI only; CI's smoke test scrolls them, not yet run |
 
 | What | Measured | Limit |
 | --- | --- | --- |
 | Core: open and first rows of 100,000 | 10.7 ms | 150 ms |
 | Core: idle memory | 3.5 MB | 40 MB |
 | Core: next page while scrolling, p95 | 0.05 ms | 3 ms |
-| Mac (SwiftUI): launch to first rows | 240 ms | 800 ms |
-| Mac (SwiftUI): memory idle, and after scrolling all 100,000 | 41 MB, 109 MB | 200 MB |
-| Mac (SwiftUI): main thread per frame, p95, fast scroll and whole-list sweep | 14 ms, 296 ms | 8 ms |
+| Mac: launch to first rows | 218 ms | 800 ms |
+| Mac: memory idle, and after scrolling all 100,000 | 28 MB, 41 MB | 200 MB |
+| Mac: main thread per frame, p95, fast scroll, whole-list sweep and far jumps | 3.3, 5.9, 5.8 ms | 8 ms |
 | Mac (Tauri): launch to first rows, screen locked | 724 ms | 800 ms |
 | Mac (Tauri): memory idle, app and its web view's processes, screen locked | 83.9 MB | 200 MB |
 | Browser: navigation to first rows | 99 ms | 800 ms |
@@ -77,10 +77,11 @@ What the numbers say:
   instructions. Version 51 adds `idx_msg_listed`, `messages(folder, ts DESC, pk DESC, account) WHERE
   pending_removal IS NULL`, the order a list shows, so the first page is the first rows read: 10.7 ms natively,
   99 ms in the browser. The Python app's combined inbox gains the same, about 120 ms to under 1 ms a page.
-- **SwiftUI's `List` is the Mac's bottleneck, not the core.** Normal scrolling is near the 8 ms frame budget, but
-  bringing a new screen in every frame deep in the list costs up to 296 ms at p95, and the `List` keeps about 65 MB
-  for rows it has shown. No variant of `List` or `LazyVStack` fixed it. The next try is an `NSTableView` or
-  `UICollectionView` with fixed row heights behind a thin representable.
+- **A native table keeps the Mac within a frame; SwiftUI's `List` did not.** The list is an `NSTableView` on the Mac
+  and a `UICollectionView` on iPhone and iPad, each with one row height, behind a thin representable. Deep in the
+  list it takes 5.9 ms a frame at p95 and 41 MB after scrolling everything; the `List` took 19.6 ms and 116 MB under
+  the same conditions. Both were measured held awake: behind a locked screen macOS naps an app to about half speed,
+  which is where the first recorded 296 ms came from. The iOS table builds but has not run.
 - **The crossing is not a cost.** A 50-row batch through UniFFI takes about 85 µs, about 1% of a frame.
 
 ## The six questions
@@ -104,6 +105,10 @@ What the numbers say:
 6. **Does Stalwart let a browser in from one named origin, or only any origin?** Only any origin: its permissive
    CORS answers `*`. One named origin works only through static response headers, which cannot serve two origins.
 
+CI runs a check that each list opens and scrolls: Chromium jumps nine tenths down, the desktop app scrolls itself
+(`just desktop smoke`) on macOS, Windows and Linux, and Android's instrumented test jumps to row 90,000 and the last
+on an emulator.
+
 ## Commands
 
 ```bash
@@ -111,9 +116,9 @@ just core-verify          # the core: format, clippy as errors, every test
 just budgets              # the core against budgets.toml
 just gen-bindings         # Swift and Kotlin bindings from the core
 just apple build|test|run|measure
-just android build|sizes
+just android build|test|sizes
 just web build|dev|test|check|measure|gen
-just desktop build|dev|check|measure
+just desktop build|dev|check|smoke|measure
 ```
 
 `just verify` runs `core-verify`. The workflow `.github/workflows/clients.yml` builds every shell and writes what
