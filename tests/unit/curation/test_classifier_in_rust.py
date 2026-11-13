@@ -113,15 +113,16 @@ STRONG_SCAM = re.compile(
     re.I)
 # Money-making / MLM / HYIP / urgency: only counts when the SENDER is sketchy
 # (free webmail or a junk TLD). Legit brands use this language in marketing too.
-# Fixed since: `matrix` and `cycler` counted anywhere, a person's Matrix room and a recycler among them.
+# Fixed since: `matrix` and `cycler` counted anywhere, a person's Matrix room and a recycler among them, and each
+# phrase inside a longer word: a budget paid, learn 5, a nonprofit system, an urgent refund, $40 per weekend.
 WEAK_SCAM = re.compile(
-    r"(get paid|getpaid|make money|earn money|earn \$?\d|make \$?\d|"
-    r"\$\d[\d,]*\s*(a|per|/)\s*(day|week|month)|[0-9]{2,}\s*% (per|a) (day|month|return)|"
+    r"(\b(get paid|getpaid|make money|earn money|earn \$?\d|make \$?\d|"
     r"work from home|passive income|be your own boss|financial freedom|"
-    r"revenue share|traffic exchange|paid to click|\bptc\b|downline|\Bmatrix|matrix\B|\bcycler|"
-    r"\bm2m\b|cash ?club|instant ?cash|join asap|going viral|pre-?launch|profit system|"
-    r"risk[- ]free.{0,20}(invest|profit|return)|100% (guarantee|profit)|"
-    r"urgent.{0,15}(transfer|fund))",
+    r"revenue share|traffic exchange|paid to click|ptc\b|downline|cycler|"
+    r"m2m\b|cash ?club|instant ?cash|join asap|going viral|pre-?launch|profit system|"
+    r"risk[- ]free.{0,20}(invest|profit|return)|urgent.{0,15}\b(transfer|fund))|"
+    r"\$\d[\d,]*\s*(a|per|/)\s*(day|week|month)\b|[0-9]{2,}\s*% (per|a) (day|month|return)|"
+    r"\Bmatrix|matrix\B|100% (guarantee|profit))",
     re.I)
 SHOUTY = re.compile(r"[A-Z]{6,}")
 MONEY = re.compile(r"(\$\s?\d|\d\s?\$|usd|\bbtc\b|bitcoin|\beuros?\b|€|\bcash\b|\bprofit\b|million)", re.I)
@@ -306,7 +307,9 @@ PHRASES = [
     "cycler", "recycler", "m2m", "cash club", "cashclub", "instant cash", "join asap", "going viral", "prelaunch", "pre-launch", "profit system", "risk-free",
     "risk free", "invest", "profit", "return", "100% guarantee", "100% profit", "urgent", "transfer", "fund", "$5", "5$",
     "$ 5", "usd", "btc", "bitcoin", "euro", "euros", "€", "cash", "million", "!!!", "!", "WINNER", "FREE MONEY", "Re:",
-    "RE :", "Fwd:", "Fw:", "AW:", "WG:", "TR:", "RV:", "Réf:", "Ref:", "re", "lunch", "hi"]
+    "RE :", "Fwd:", "Fw:", "AW:", "WG:", "TR:", "RV:", "Réf:", "Ref:", "re", "lunch", "hi", "budget paid", "learn 5",
+    "nonprofit system", "maybe your own boss", "ongoing viral", "network from home", "urgent refund", "urgent\ntransfer",
+    "insurgent", "$40 per weekend", "$5 a dayx", "weekend"]
 SEPARATORS = ["", " ", "  ", "\t", "\n", "\r", "\x1c", "\u3000", "\u200b", ".", ",", ":", "-", "1", "a", *EDGES]
 
 

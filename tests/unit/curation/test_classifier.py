@@ -118,3 +118,16 @@ def test_a_person_writing_an_ordinary_word_is_not_a_scam(subject):
                                      "cyclers pay daily"])
 def test_a_scheme_named_for_a_matrix_or_a_cycler_still_is(subject):
     assert m.classify("sam@gmail.com", subject, "", False, rules=RULES)[0] == m.SPAM
+
+
+@pytest.mark.parametrize("subject", ["The budget paid for the trip", "Learn 5 chords tonight", "Our nonprofit system is down",
+                                     "Maybe your own boss can sign it", "The ongoing viral trend", "Urgent: my refund",
+                                     "Parking is $40 per weekend", "I network from home on Fridays"])
+def test_a_phrase_inside_a_persons_word_is_not_a_scam(subject):
+    assert m.classify("sam@gmail.com", subject, "", False, rules=RULES)[0] in (m.PERSONAL, m.RECEIPT)
+
+
+@pytest.mark.parametrize("subject", ["Get paid to click", "Earn $500 today", "Be your own boss!", "URGENT fund transfer",
+                                     "$40 per week, guaranteed", "Our profit system", "Going viral: join asap"])
+def test_a_scheme_still_is(subject):
+    assert m.classify("sam@gmail.com", subject, "", False, rules=RULES)[0] == m.SPAM

@@ -354,6 +354,47 @@ fn a_matrix_counts_glued_into_a_name_and_a_cycler_where_a_word_starts() {
 }
 
 #[test]
+fn a_weak_phrase_counts_where_a_word_starts() {
+    // Fixed in the core: Python found each inside a longer word.
+    const SPAM: [&str; 3] = ["spam/scam", "high", "fraud/MLM pattern"];
+    const PERSON: [&str; 3] = ["other/personal-ish", "med", "person on a personal mailbox"];
+    for subject in ["get paid", "(earn $5)", "-be your own boss"] {
+        assert_eq!(said("lin@gmail.com", subject, "", false, &NONE), SPAM, "{subject:?}");
+    }
+    for subject in [
+        "_maybe your own boss",
+        "\u{b2}work from home",
+        "nonprofit system",
+        "budget paid",
+        "learn 5 chords",
+        "ongoing viral",
+        "insurgent transfer",
+        "urgent\u{a}transfer",
+        "urgenttransfer",
+        "$40 per weekend",
+        "$40 a day_",
+    ] {
+        assert_eq!(said("lin@gmail.com", subject, "", false, &NONE), PERSON, "{subject:?}");
+    }
+    assert_eq!(
+        said("lin@gmail.com", "urgent refund", "", false, &NONE),
+        ["receipts/transactional", "med", "transactional/receipt signal"]
+    );
+    // What comes before the word is one character `.` takes: no line feed, and a mark isn't part of a word.
+    for subject in [
+        "urgent: transfer",
+        "urgent\u{d}fund",
+        "urgent\u{301}fund",
+        "urgent 1234567890123 transfer",
+        "$40 per week\u{301}",
+        "$40 per week!",
+    ] {
+        assert_eq!(said("lin@gmail.com", subject, "", false, &NONE), SPAM, "{subject:?}");
+    }
+    assert_eq!(said("lin@gmail.com", "urgent 12345678901234 transfer", "", false, &NONE), PERSON);
+}
+
+#[test]
 fn an_address_is_read_as_python_lower_cased_and_stripped_it() {
     assert_eq!(
         said("  Lin@Studio.Example.Test\u{9}", "hi", "", false, &NONE),
