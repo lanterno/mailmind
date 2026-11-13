@@ -66,7 +66,7 @@
    "from_addr": "noor@studio.example.test",
    "from_name": "Noor Haddad",
    "has_html": true,
-   "html": "<p>Let's walk through the new layouts.</p>\r\n",
+   "html": "<p>Let's walk through the new layouts.</p>\n",
    "in_reply_to": "",
    "invite": {
     "all_day": false,
@@ -248,7 +248,7 @@
    "from_addr": "lin@example.test",
    "from_name": "Lin Mori",
    "has_html": true,
-   "html": "<p>It's done!</p><img alt=\"quilt\"/>\r\n",
+   "html": "<p>It's done!</p><img alt=\"quilt\"/>\n",
    "in_reply_to": "",
    "invite": null,
    "invite_part": null,
