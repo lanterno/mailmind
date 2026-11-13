@@ -13,9 +13,11 @@ pub mod events;
 pub mod identity;
 pub mod isoformat;
 pub mod log;
+pub mod relative;
 pub mod seams;
 pub mod text;
 pub mod when;
+pub mod zone;
 
 /// A message's durable name, `message_identity.key`. It survives a move and a resync, which a row number does
 /// not, so a row number never leaves the core.
