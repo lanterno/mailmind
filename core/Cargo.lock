@@ -905,8 +905,12 @@ dependencies = [
 name = "mm-compose"
 version = "0.1.0"
 dependencies = [
+ "mail-parser",
+ "mm-content",
  "mm-kernel",
+ "regex",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1050,6 +1054,7 @@ dependencies = [
  "mm-imap",
  "mm-kernel",
  "mm-mailbox",
+ "mm-smtp",
  "mm-store",
  "serde_json",
  "sha2",
