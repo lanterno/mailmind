@@ -27,6 +27,20 @@ check: _deps
     cd "{{web}}" && npx vite build --mode desktop
     cd "{{here}}/src-tauri" && cargo fmt --check && cargo clippy -- -D warnings
 
+# Launch the release app, scroll its list nine tenths down, and exit 0 once rows came there (CI runs it on each system)
+smoke: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin="{{here}}/../../core/target/release/mailmind-desktop"
+    if [ -f "$bin.exe" ]; then bin="$bin.exe"; fi
+    run=()
+    # Five minutes at most: a list that never scrolls must not hold a CI job for its whole hour.
+    if command -v timeout >/dev/null; then run=(timeout 300); elif command -v perl >/dev/null; then run=(perl -e 'alarm shift; exec @ARGV' 300); fi
+    # Linux CI has no display: a virtual one, in which the window is shown and its page renders.
+    if [ "$(uname)" = Linux ] && [ -z "${DISPLAY:-}" ]; then run+=(xvfb-run -a); fi
+    MAILMIND_MEASURE=scroll ${run[@]+"${run[@]}"} "$bin"
+    echo "smoke: the list opened and scrolled nine tenths down"
+
 # Launch to first rows and idle memory (app, WebContent and Networking), on the release .app (macOS)
 [macos]
 measure runs="5": _deps
