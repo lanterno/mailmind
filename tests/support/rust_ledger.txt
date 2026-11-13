@@ -13,3 +13,6 @@ tests/api/test_http_post_guards.py::test_a_length_that_isnt_one_is_refused_befor
 tests/api/test_http_post_guards.py::test_a_length_that_isnt_one_is_refused_before_any_route_runs[lots]
 tests/api/test_http_post_guards.py::test_a_guarded_post_changes_nothing_on_the_server
 tests/api/test_http_post_guards.py::test_a_post_is_refused_before_its_body_is_read
+tests/api/test_http_get.py::test_account_health_and_stats
+tests/api/test_http_events.py::test_a_stream_answers_as_an_event_stream
+tests/api/test_http_events.py::test_a_cross_site_listener_is_refused
