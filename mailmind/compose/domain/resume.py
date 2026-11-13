@@ -173,6 +173,9 @@ def resume_files(msg: EmailMessage, parsed: Parsed) -> tuple[list[ResumedFile], 
            for p in walk(msg)):                          # data in a "container" with no boundary: no reader lists it
         raise Unreadable(lost)
     leaves = [p for p in walk(msg) if p.get_content_maintype() != "multipart"]    # parse()'s part_id order
+    if any(not 0 < int(a["part_id"]) <= len(leaves) or leaves[int(a["part_id"]) - 1].get_content_type() != a["content_type"]
+           for a in parsed["attachments"]):
+        raise Unreadable(lost)                           # the core read its parts otherwise than Python does here
     if any(p.get_content_maintype() == "message" and p.get_content_type() != "message/rfc822" for p in leaves):
         raise Unreadable(lost)                           # a delivery report and the like: its file wouldn't be whole
     listed = {int(a["part_id"]) for a in parsed["attachments"]}

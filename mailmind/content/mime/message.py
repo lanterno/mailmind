@@ -1,4 +1,4 @@
-"""Parse a raw RFC822 message into renderable parts — stdlib email only.
+"""Parse a raw RFC822 message into renderable parts.
 
 parse(raw_bytes) -> {
   "text": plain-text body or None,
@@ -9,16 +9,19 @@ parse(raw_bytes) -> {
 }
 The body is chosen from multipart/alternative the way a client does (prefer html).
 cid: inline images are surfaced so the sanitizer/UI can resolve them later.
+
+`parse`, `extract_part` and `inline_parts` read raw bytes in the core (mm-content, src/mime.rs), on mail-parser, with
+the interpreter released. What reads a Python `email` message a caller already holds stays here.
 """
-import email
 import re
 import urllib.parse
 from collections.abc import Iterator
-from email import policy
 from email.header import Header, decode_header
 from email.message import Message
 from email.utils import getaddresses, parseaddr
 from typing import Any, TypedDict, TypeIs
+
+import mailmind_leaves
 
 _FOLD = re.compile(r"\r?\n[ \t]+")
 
@@ -44,7 +47,7 @@ class Parsed(TypedDict):
     attachments: list[Attachment]
     to: str
     cc: str
-    reply_to: str                # the bare address, read as `reply_to_of` does
+    reply_to: str                # the bare address, read before any encoded word is decoded
     date: str
 
 
@@ -135,13 +138,6 @@ def recipient_addrs(msg: AnyMessage) -> list[str]:
     return sorted({a.strip(".'").lower() for _, a in getaddresses(values, strict=False) if "@" in a})
 
 
-def reply_to_of(msg: AnyMessage) -> str:
-    """The address a reply goes to: the first of a message's Reply-To, bare, or "". Read before any encoded word is decoded, under
-    any policy, so a display name holding an address can't pass for the one that follows it. Case as the header wrote it."""
-    values = [str(_unfold(v)) for name, v in msg.raw_items() if name.lower() == "reply-to"]
-    return next((a.strip(".'") for _, a in getaddresses(values, strict=False) if "@" in a), "")
-
-
 def sender_of(msg: AnyMessage) -> tuple[str, str]:
     """(name, address) from a compat32 message's From. The name still holds its encoded words."""
     sender = msg.get("From", "")
@@ -196,16 +192,6 @@ def _hdr(msg: AnyMessage, name: str) -> str:
     return dec(v)
 
 
-def _decode(part: AnyMessage) -> str:
-    try:
-        payload = decoded(part)
-        if payload is None:
-            return ""
-        return payload.decode(part.get_content_charset() or "utf-8", "replace")
-    except Exception:
-        return ""
-
-
 _SIGNATURE = "-- "
 
 
@@ -249,118 +235,38 @@ def as_written(part: AnyMessage, text: str) -> str:
     return _unflowed(text, delsp)
 
 
+def _raw(raw_bytes: bytes | None) -> bytes:
+    """The bytes the core reads: a bytes object as it is, without a copy."""
+    return raw_bytes if type(raw_bytes) is bytes else bytes(raw_bytes or b"")
+
+
 def parse(raw_bytes: bytes) -> Parsed:
-    try:
-        msg: AnyMessage = email.message_from_bytes(raw_bytes, policy=policy.default)
-    except Exception:
-        msg = email.message_from_bytes(raw_bytes or b"")
-    text: str | None = None
-    html: str | None = None
-    cal: tuple[int, AnyMessage] | None = None
-    attachments: list[Attachment] = []
-    idx = 0
-    for part in walk(msg):
-        if part.get_content_maintype() == "multipart":
-            if holds_no_parts(part) and text is None:
-                text = _decode(part)
-            continue
-        idx += 1
-        ctype = (part.get_content_type() or "").lower()
-        disp = (part.get_content_disposition() or "").lower()
-        filename = part.get_filename()
-        cid = _hdr(part, "Content-ID").strip("<>")
-        is_attachment = disp == "attachment" or (filename and disp != "inline") or ctype == "message/rfc822"
-        if is_attachment or (filename and not cid):
-            payload = part_bytes(part)
-            attachments.append({
-                "part_id": str(idx),
-                "filename": _decode_fn(filename) or ("message.eml" if ctype == "message/rfc822" else f"part-{idx}"),
-                "content_type": ctype, "size": len(payload),
-                "content_id": cid or None, "is_inline": int(disp == "inline" or bool(cid)), "travels": travels(part),
-            })
-            continue
-        if cid:  # an inline image referenced by cid: — record it, don't inline the body
-            payload = decoded(part) or b""
-            attachments.append({
-                "part_id": str(idx), "filename": _decode_fn(filename) or f"inline-{idx}",
-                "content_type": ctype, "size": len(payload),
-                "content_id": cid, "is_inline": 1, "travels": False,
-            })
-            continue
-        if ctype == "text/plain" and text is None:
-            text = as_written(part, _decode(part))
-        elif ctype == "text/html" and html is None:
-            html = _decode(part)
-        elif ctype == "text/calendar" and cal is None:
-            cal = (idx, part)
-    # Outlook sends an invite only as an unnamed inline text/calendar part; record it like the
-    # invite.ics file other clients attach (and only when no such file carries the invite already)
-    if cal and not any("calendar" in a["content_type"] or a["content_type"] == "application/ics"
-                       or a["filename"].lower().endswith(".ics") for a in attachments):
-        attachments.append({
-            "part_id": str(cal[0]), "filename": "invite.ics", "content_type": "text/calendar",
-            "size": len(decoded(cal[1]) or b""), "content_id": None, "is_inline": 1, "travels": False,
-        })
-    return {
-        "text": text, "html": html, "attachments": attachments,
-        "to": _hdr(msg, "To"), "cc": _hdr(msg, "Cc"),
-        "reply_to": reply_to_of(msg), "date": _hdr(msg, "Date"),
-    }
-
-
-def _decode_fn(name: str | None) -> str | None:
-    if not name:
-        return None
-    try:
-        return "".join(
-            (p.decode(e or "utf-8", "replace") if isinstance(p, bytes) else p)
-            for p, e in decode_header(name))
-    except Exception:
-        return name
+    text, html, found, to, cc, reply_to, date = mailmind_leaves.mime_parse(_raw(raw_bytes))
+    attachments: list[Attachment] = [
+        {"part_id": str(part_id), "filename": filename, "content_type": content_type, "size": size,
+         "content_id": content_id, "is_inline": int(is_inline), "travels": goes}
+        for part_id, filename, content_type, size, content_id, is_inline, goes in found]
+    return {"text": text, "html": html, "attachments": attachments, "to": to, "cc": cc, "reply_to": reply_to, "date": date}
 
 
 def extract_part(raw_bytes: bytes, part_id: str | int) -> tuple[bytes, str] | tuple[None, None]:
-    """Re-walk a raw RFC822 message EXACTLY like parse() and return
-    (payload_bytes, content_type) for the non-multipart part whose running 1-based
-    index == int(part_id), else (None, None). Stays in lockstep with parse()'s idx
-    scheme so any part_id parse() emitted resolves to the same bytes."""
+    """(payload_bytes, content_type) for the part `parse` numbered `part_id`, else (None, None): the same walk, so
+    any part_id parse() emitted resolves to the same bytes. An attached email comes as it was sent."""
     try:
         want = int(part_id)
     except (TypeError, ValueError):
         return None, None
-    try:
-        msg: AnyMessage = email.message_from_bytes(raw_bytes, policy=policy.default)
-    except Exception:
-        msg = email.message_from_bytes(raw_bytes or b"")
-    idx = 0
-    for part in walk(msg):
-        if part.get_content_maintype() == "multipart":
-            continue                       # IDENTICAL skip to parse(): multiparts never increment idx
-        idx += 1
-        if idx == want:
-            data = part_bytes(part)
-            ctype = (part.get_content_type() or "application/octet-stream").lower()
-            return data, ctype
-    return None, None
+    if not 0 < want < 2**32:
+        return None, None
+    found = mailmind_leaves.mime_extract_part(_raw(raw_bytes), want)
+    return (None, None) if found is None else found
 
 
 def inline_parts(raw_bytes: bytes) -> dict[str, tuple[str, bytes]]:
     """{content_id: (content_type, bytes)} for cid-referenced inline images, so the
     server can rewrite cid: -> data: in the sanitized body. Raster images only is
     enforced by the caller; here we just surface every cid part's bytes."""
-    out: dict[str, tuple[str, bytes]] = {}
-    try:
-        msg = email.message_from_bytes(raw_bytes, policy=policy.default)
-    except Exception:
-        return out
-    for part in walk(msg):
-        if part.get_content_maintype() == "multipart":
-            continue
-        cid = _hdr(part, "Content-ID").strip("<>")
-        if cid:
-            out[cid] = ((part.get_content_type() or "").lower(),
-                        decoded(part) or b"")
-    return out
+    return {cid: (content_type, data) for cid, content_type, data in mailmind_leaves.mime_inline_parts(_raw(raw_bytes))}
 
 
 def has_invite(msg: AnyMessage) -> bool:
