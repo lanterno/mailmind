@@ -1,6 +1,6 @@
 """A blind copy goes in the envelope and nowhere else. Whichever way a message leaves, the person Bcc'd is in RCPT TO, and in
 no byte the other recipients get, in no copy a server keeps and in no answer for someone else's eyes. test_hardening.py
-has what happens if a header ever gets in (the build refuses), and test_http_send.py the bytes in full, as golden files.
+has what happens if a header ever gets in (the build refuses), and api/test_http_send.py the bytes in full, as golden files.
 """
 import base64
 import re

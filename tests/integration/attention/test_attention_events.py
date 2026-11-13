@@ -1,6 +1,6 @@
 """That the app hears what Attention tells it, once wired. What each use case says, and when it says nothing,
 tests/unit/attention/test_attention_events.py holds; what the tabs then hear, frame by frame,
-tests/characterization/test_http_events.py and its goldens."""
+tests/api/test_http_events.py and its goldens."""
 from mailmind.attention.domain.events import (FollowUpDismissed, FollowUpsChanged, ReplyLaterChanged, SnoozeLifted, SnoozeSet,
                                               SnoozeWoke, ThreadMuted, ThreadUnmuted)
 from mailmind.bootstrap import wiring

@@ -1,5 +1,5 @@
 """What trying to leave a list comes to, with no database, no server and no I/O. That a repeat never fires again, on the wire,
-is tests/characterization/test_http_cleanup.py."""
+is tests/api/test_http_cleanup.py."""
 import pytest
 
 from mailmind.curation.domain import unsubscribe

@@ -1,5 +1,5 @@
 """What a cleanup is before anything happens, with no database and no I/O. What it does, in order, is
-tests/characterization/test_http_cleanup.py."""
+tests/api/test_http_cleanup.py."""
 import pytest
 
 from mailmind.curation.domain import cleanup_plan

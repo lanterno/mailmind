@@ -1,5 +1,5 @@
 """A bulk command's confirm carries out what its preview froze: by message key, once, within ten minutes, and
-never what a request names. The preview's own guards are in characterization/assistant/test_do_plan.py and test_http_ai.py,
+never what a request names. The preview's own guards are in characterization/assistant/test_do_plan.py and api/test_http_ai.py,
 and the plan book's, once and within ten minutes, in tests/unit/assistant/test_do_plans.py."""
 import pytest
 

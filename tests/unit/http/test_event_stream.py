@@ -1,5 +1,5 @@
 """The event stream as the server runs it: what a tab holds, and every way a stream ends. What a stream says is
-tests/characterization/test_http_events.py, and the hub's own part tests/unit/platform/test_sse.py.
+tests/api/test_http_events.py, and the hub's own part tests/unit/platform/test_sse.py.
 """
 import asyncio
 import dataclasses
