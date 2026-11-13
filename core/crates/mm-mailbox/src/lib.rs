@@ -7,6 +7,7 @@
 //! disk, the network or the clock.
 
 pub mod command;
+pub mod command_ports;
 pub mod destination;
 pub mod folders;
 pub mod gates;

@@ -36,6 +36,7 @@ mod key;
 // A Gmail account's labels.
 mod labels;
 mod mailbox;
+mod mailbox_commands;
 mod mailbox_sync;
 pub mod page;
 // The page's own state, and what the app says of itself.
