@@ -50,4 +50,20 @@ impl Database {
     pub(crate) fn key(&self) -> &DbKey {
         &self.key
     }
+
+    /// Run `work` holding the database's one write lock (`UnitOfWork.write`): BEGIN IMMEDIATE, committed when `work`
+    /// returns, rolled back when it fails. A refusal `work` decides on goes in its value, so what it read stays true
+    /// until it has decided.
+    pub fn write<T>(&self, work: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T, Fault> {
+        self.read(|c| {
+            c.execute_batch("BEGIN IMMEDIATE")?;
+            match work(c) {
+                Ok(value) => c.execute_batch("COMMIT").map(|()| value),
+                Err(e) => {
+                    let _ = c.execute_batch("ROLLBACK");
+                    Err(e)
+                }
+            }
+        })
+    }
 }

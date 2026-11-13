@@ -25,25 +25,6 @@ const LABEL_ROWS_MAX: usize = 1000;
 const SLICE: usize = 500;
 const THREADING: &str = "pk, message_id, gmail_thread, in_reply_to, refs, thread_id, folder, ts";
 
-impl Database {
-    /// `work` in one write transaction: committed when it answers, rolled back when it fails.
-    pub(crate) fn write<T>(&self, work: impl FnOnce(&Connection) -> rusqlite::Result<T>) -> Result<T, Fault> {
-        self.read(|c| {
-            c.execute_batch("BEGIN IMMEDIATE")?;
-            match work(c) {
-                Ok(done) => {
-                    c.execute_batch("COMMIT")?;
-                    Ok(done)
-                }
-                Err(e) => {
-                    let _ = c.execute_batch("ROLLBACK");
-                    Err(e)
-                }
-            }
-        })
-    }
-}
-
 /// (Re)index one message for search from its columns (`fts.index_message`).
 pub(crate) fn index_message(c: &Connection, pk: i64) -> rusqlite::Result<()> {
     let row: Option<[Option<String>; 6]> = c
