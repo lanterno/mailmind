@@ -12,7 +12,8 @@
 mod accounts;
 mod mailbox;
 mod page;
-// The Mailbox's reads a person waits on, and the exports (area B).
+// The Mailbox's reads a person waits on, the outbox and the exports (area B).
+mod compose;
 mod export;
 mod reading;
 
@@ -34,6 +35,7 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(mailbox::routes())
         .merge(reading::routes())
         .merge(export::routes())
+        .merge(compose::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)
