@@ -20,12 +20,14 @@ use mm_mailbox::folders::Folders;
 use mm_mailbox::gates::Gates;
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::labels::Labels;
+use mm_mailbox::reconcile::{Reconciler, ReconcilerParts};
 use mm_mailbox::reversal::Reversals;
 use mm_mailbox::server_ops::ServerOps;
 use mm_mailbox::session::MailServers;
 use mm_mailbox::stats::LiveStats;
 use mm_mailbox::sync_ports::Events;
 use mm_mailbox::sync_record::SyncRecords;
+use mm_mailbox::syncing::{Syncing, SyncingParts};
 use mm_mailbox::undo::Undo;
 use mm_store::compose::SnippetsDocument;
 use mm_store::places::Places;
@@ -65,6 +67,10 @@ pub struct App {
     pub commands: Arc<MailCommands>,
     pub undo: Undo,
     pub filing: Filing,
+    /// Each account's INBOX synced, one round at a time (`/api/refresh`).
+    pub syncing: Arc<Syncing>,
+    /// Ghosts pruned: mail gone from the server (`/api/reconcile`, `work reconcile`).
+    pub reconciler: Reconciler,
     /// The requests being answered now, which a stop waits for.
     pub work: Arc<Work>,
     /// The reads a person waits on: lists, conversations, the tray of changes.
@@ -172,7 +178,7 @@ impl App {
         let commands = Arc::new(MailCommands::new(CommandParts {
             store: database.clone(),
             accounts: Arc::new(DirectoryMoveAccounts(directory.clone())),
-            server: ServerOps::new(servers, environment.read_only()),
+            server: ServerOps::new(servers.clone(), environment.read_only()),
             gates: gates.clone(),
             clock: seams.clock.clone(),
             events: events.clone(),
@@ -187,8 +193,26 @@ impl App {
             folders: folders.clone(),
             gates: gates.clone(),
             clock: seams.clock.clone(),
-            events,
+            events: events.clone(),
             tokens,
+        });
+        let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
+        let syncing = Arc::new(Syncing::new(SyncingParts {
+            ingest: ingest.clone(),
+            accounts: move_accounts.clone(),
+            store: database.clone(),
+            folders: folders.clone(),
+            events: events.clone(),
+            clock: seams.clock.clone(),
+        }));
+        let reconciler = Reconciler::new(ReconcilerParts {
+            store: database.clone(),
+            accounts: move_accounts,
+            servers,
+            gates: gates.clone(),
+            folders: folders.clone(),
+            events,
+            clock: seams.clock.clone(),
         });
         Ok(App {
             port,
@@ -201,6 +225,8 @@ impl App {
             commands,
             undo,
             filing,
+            syncing,
+            reconciler,
             work: Arc::new(Work::default()),
             reading,
             clock: seams.clock.clone(),
