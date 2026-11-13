@@ -1,6 +1,7 @@
 //! The classifier, as the Python app ran it: every expected value here is what
-//! `mailmind.curation.domain.classifier.classify` returned for the same arguments, before it called this crate. The
-//! Python suite holds the two to the same answers over many more (tests/unit/curation/test_classifier_in_rust.py).
+//! `mailmind.curation.domain.classifier.classify` returned for the same arguments, before it called this crate, but
+//! where a test says the core fixed a bug since. The Python suite holds the two to the same answers over many more
+//! (tests/unit/curation/test_classifier_in_rust.py).
 
 use std::sync::LazyLock;
 
@@ -292,6 +293,20 @@ fn rules_come_first_in_their_order() {
         said("deals@sg.example.test", "Lunch on Thursday?", "", false, &PRECEDENCE),
         ["newsletters/marketing", "high", "bulk email-service-provider domain"]
     );
+}
+
+#[test]
+fn medi_is_medical_but_media_and_medium_are_not() {
+    // Fixed in the core: Python's `\bmedi` took both for medical, so their mail was never junk.
+    const PROTECTED: [&str; 3] = ["personal/protected", "high", "government/education/medical/financial domain"];
+    const NOTIFIED: [&str; 3] = ["automated-notifications", "med", "no-reply / notification address"];
+    assert_eq!(said("noreply@medium.example", "Your weekly digest", "", false, &NONE), NOTIFIED);
+    assert_eq!(said("alerts@mediaplayer.example", "Your weekly digest", "", false, &NONE), NOTIFIED);
+    assert_eq!(said("noreply@mediums.example", "hi", "", false, &NONE), NOTIFIED);
+    assert_eq!(said("noreply@medical.example", "hi", "", false, &NONE), PROTECTED);
+    assert_eq!(said("noreply@x.medi", "hi", "", false, &NONE), PROTECTED);
+    assert_eq!(said("noreply@x.mediu", "hi", "", false, &NONE), PROTECTED);
+    assert_eq!(said("noreply@mediu-m.example", "hi", "", false, &NONE), PROTECTED);
 }
 
 #[test]

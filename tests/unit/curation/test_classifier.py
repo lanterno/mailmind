@@ -75,11 +75,19 @@ def test_a_non_ascii_subject_does_not_crash():
     assert m.classify("user@example.test", "新年快乐 🎉 здравей", "", False, rules=RULES)[0] == m.PERSONAL
 
 
-# Known bugs, each the right answer the classifier doesn't give yet: its patterns match inside longer words.
-@pytest.mark.xfail(strict=True, reason="\\bmedi takes media and medium for medical")
+# Patterns that matched inside longer words.
 @pytest.mark.parametrize("frm", ["noreply@medium.example", "alerts@mediaplayer.example"])
 def test_a_media_sender_is_not_protected_as_medical(frm):
     assert m.classify(frm, "Your weekly digest", "", False, rules=RULES)[0] != m.PROTECTED
+
+
+@pytest.mark.parametrize("frm", ["noreply@medical-centre.example", "alerts@medicare.example", "x@medi.example",
+                                 "noreply@my-medic.example"])
+def test_a_medical_sender_is_still_protected(frm):
+    assert m.classify(frm, "Your weekly digest", "", False, rules=RULES)[0] == m.PROTECTED
+
+
+# Known bugs, each the right answer the classifier doesn't give yet: its patterns match inside longer words.
 
 
 @pytest.mark.xfail(strict=True, reason="wise\\.com matches inside likewise.com")

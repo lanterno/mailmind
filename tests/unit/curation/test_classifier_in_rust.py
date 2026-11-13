@@ -2,8 +2,8 @@
 confidence and reason for the same message. Ingest stores them, and a rule change classifies stored mail again, so an
 answer that drifted would move mail a person never touched.
 
-The Python classifier is kept below as it was, as the oracle. core/crates/mm-curation/tests/classifier.rs pins a few
-of its answers on the Rust side. Python's `str` and `re` read Unicode their own way (word characters, whitespace,
+The Python classifier is kept below as it was, as the oracle, changed only where the core fixed a bug since, each change
+saying so. core/crates/mm-curation/tests/classifier.rs pins a few of its answers on the Rust side. Python's `str` and `re` read Unicode their own way (word characters, whitespace,
 digits, lower-casing, ignored case), so besides the generated messages, the tests at the end go through every
 character there is.
 """
@@ -132,7 +132,8 @@ MONEY = re.compile(r"(\$\s?\d|\d\s?\$|usd|\bbtc\b|bitcoin|\beuros?\b|€|\bcash\
 GOV_RE = re.compile(r"(\.gov(\.[a-z]{2})?$|\.gouv\.[a-z]{2}$|\.go\.[a-z]{2}$|\.gob\.[a-z]{2}$|"
                     r"\.admin\.[a-z]{2}$|\.gc\.ca$|\.govt\.|\bgov\.)", re.I)
 EDU_RE = re.compile(r"(\.edu$|\.edu\.[a-z]{2}$|\.ac\.[a-z]{2}$|\.uni-[a-z]+\.)", re.I)
-HEALTH_RE = re.compile(r"(sante|\bsanté|health|clinic|hospital|\bmedi|\bmedic|patient|doctolib|dentist)", re.I)
+# Fixed since: `\bmedi` took media and medium for medical.
+HEALTH_RE = re.compile(r"(sante|\bsanté|health|clinic|hospital|\bmedi(?!a|um)|patient|doctolib|dentist)", re.I)
 FINANCE_RE = re.compile(r"(\bbank\b|\bbanque\b|paypal|wise\.com|revolut|\bn26\b|"
                         r"stripe\.com$|\bvisa\b|mastercard)", re.I)
 
@@ -281,7 +282,9 @@ DOMAINS = sorted(FREE_MAIL) + [f"x.{m}.example.test" for m in ESP_MARKERS] + [
     "x.go.jp", "x.gob.mx", "x.admin.ch", "canada.gc.ca", "x.govt.nz", "gov.example.test", "stanford.edu", "x.edu.au",
     "x.ac.uk", "x.uni-berlin.de", "myclinic-health.example", "santé.example", "medica.example", "bank.example.test",
     "banque.example", "n26.example", "paypal.example", "wise.com", "stripe.com", "visa.example", "mastercard.example",
-    "example.test", "mail.example.test"]
+    "example.test", "mail.example.test",
+    # Domains that only look like a protected one's.
+    "medium.example", "mediaplayer.example", "x.medi", "x.mediu", "mediumx.example"]
 # A piece of every pattern's alternatives, and of the words around them.
 PHRASES = [
     "receipt", "invoice", "payment received", "your payment", "you paid", "amount paid", "your bill", "e-statement",
