@@ -8,11 +8,10 @@
 [core.open_to_first_rows_ms]
 what = "open the database, order an inbox of 100,000 messages and load its first rows"
 limit = 150.0
-measured = 121.8
-on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-12"
-# Nearly all of it is ordering the inbox: version 50's indexes leave SQLite sorting all 100,000 rows. A partial
-# covering index on messages(folder, ts DESC, pk DESC, account) WHERE pending_removal IS NULL took it to 9.6 ms in
-# the same run. It is the first migration the core adds; then this limit drops.
+measured = 10.7
+on = "Apple silicon Mac, macOS 26.4, release build, 2026-11-13"
+# Version 51's idx_msg_listed holds a folder in the order a list shows it, so the first page is the first rows read.
+# Before it, SQLite sorted all 100,000 rows first: 121.8 ms on 2026-11-12.
 
 [core.idle_memory_mb]
 what = "the core's heap and SQLite's memory with that inbox open and idle"
@@ -72,16 +71,16 @@ on = "Apple M5 Mac, Xcode 26.6, release build, 2026-11-12"
 [web.first_rows_ms]
 what = "navigation to the first rows painted, the fixture already in the browser's private files (median of 7)"
 limit = 800.0
-measured = 1021.0
-on = "headless Chromium on an Apple M5 Mac, 2026-11-12"
-# Over: 970 ms of it is ordering the inbox, every page decrypted without AES instructions. The partial covering
-# index (see core.open_to_first_rows_ms) is the fix.
+measured = 99.0
+on = "headless Chromium on an Apple M5 Mac, 2026-11-13"
+# 1,021 ms before version 51's index (see core.open_to_first_rows_ms), nearly all of it sorting the inbox with every
+# page decrypted without AES instructions.
 
 [web.wasm_compressed_mb]
 what = "the core as WebAssembly, Brotli"
 limit = 2.5
-measured = 0.50
-on = "release build, no wasm-opt, 2026-11-12"
+measured = 0.51
+on = "release build, no wasm-opt, 2026-11-13"
 
 [desktop.mac_first_rows_ms]
 what = "launch the release .app to the first rows in the DOM (median of 5)"
