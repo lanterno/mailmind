@@ -442,7 +442,8 @@ static EDU: LazyLock<Regex> =
 
 static HEALTH: LazyLock<Regex> = LazyLock::new(|| {
     pattern(concat!(
-        r"(?i)sante|health|clinic|hospital|patient|doctolib|dentist|",
+        // A hospital, but no hotel's hospitality.
+        r"(?i)sante|health|clinic|hospital(?:\z|[^i]|i(?:\z|[^t]|t(?:\z|[^y])))|patient|doctolib|dentist|",
         word_starts!(),
         // `medi` but never `media` or `medium`, which a publisher's or a media player's domain holds.
         r"(?:santé|medi(?:u?\z|u[^m]|[^au]))",
@@ -451,8 +452,11 @@ static HEALTH: LazyLock<Regex> = LazyLock::new(|| {
 
 static FINANCE: LazyLock<Regex> = LazyLock::new(|| {
     pattern(concat!(
-        // wise.com and stripe.com as whole labels, and their sub-domains: likewise.com is someone else's.
-        r"(?i)paypal|(?:\A|\.)wise\.com(?:\.|\n?\z)|revolut|(?:\A|\.)stripe\.com\n?\z|mastercard|",
+        // wise.com and stripe.com as whole labels, and their sub-domains: likewise.com is someone else's. Revolut
+        // where its word ends, so no revolution.
+        r"(?i)paypal|(?:\A|\.)wise\.com(?:\.|\n?\z)|revolut",
+        word_ends!(),
+        r"|(?:\A|\.)stripe\.com\n?\z|mastercard|",
         word_starts!(),
         r"(?:bank|banque|n26|visa)",
         word_ends!(),
