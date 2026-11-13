@@ -4,3 +4,10 @@
 //!
 //! Nothing here reads the disk, the network or the clock: the use cases reach the world through `ports`, which the
 //! store and the program implement.
+
+pub mod followups;
+pub mod muting;
+pub mod ports;
+pub mod snoozing;
+pub mod tasks;
+pub mod threads;
