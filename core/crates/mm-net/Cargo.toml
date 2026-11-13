@@ -11,5 +11,8 @@ publish.workspace = true
 rustls.workspace = true
 rustls-native-certs.workspace = true
 
+[dev-dependencies]
+rcgen.workspace = true
+
 [lints]
 workspace = true
