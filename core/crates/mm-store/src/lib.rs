@@ -16,6 +16,8 @@ mod assistant;
 mod compose;
 pub mod config;
 pub mod db;
+// What the Document Hub (Discovery's) reads: the attachments stored.
+mod documents;
 // What an export would hold, and a snapshot of the database as a download.
 pub mod export;
 mod key;
