@@ -40,6 +40,9 @@ CREATE INDEX idx_msg_acct_folder_thread ON messages(account, folder, thread_id);
 -- index idx_msg_junk
 CREATE INDEX idx_msg_junk ON messages(is_junk);
 
+-- index idx_msg_listed
+CREATE INDEX idx_msg_listed ON messages(folder, ts DESC, pk DESC, account) WHERE pending_removal IS NULL;
+
 -- index idx_msg_thread
 CREATE INDEX idx_msg_thread ON messages(thread_id);
 
@@ -175,4 +178,4 @@ CREATE TABLE undo_entries ( id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT, -- t
 -- table unsub_log
 CREATE TABLE unsub_log( id INTEGER PRIMARY KEY, from_addr TEXT, method TEXT, status TEXT, http_status INTEGER, ts TEXT, idempotency_key TEXT UNIQUE, accounts TEXT);
 
-PRAGMA user_version=50;
+PRAGMA user_version=51;
