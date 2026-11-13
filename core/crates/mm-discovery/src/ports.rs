@@ -19,3 +19,9 @@ pub trait AccountNames: Send + Sync + fmt::Debug {
 pub trait StoredDocuments: Send + Sync + fmt::Debug {
     fn attachments(&self, accounts: &[String]) -> Result<Vec<Row>, Fault>;
 }
+
+/// What the mail says of one sender, by their lowercase address (`tally`): `n` messages, `replied` of them
+/// answered, the `first` and `last` times one came, and the `name` they wrote under.
+pub trait StoredTally: Send + Sync + fmt::Debug {
+    fn tally(&self, address: &str) -> Result<Row, Fault>;
+}
