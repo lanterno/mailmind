@@ -19,6 +19,7 @@ mod export;
 mod message;
 mod reading;
 // The page's own state: preferences, places, snippets, the event stream and what the app says of itself.
+mod compose;
 mod events;
 mod places;
 mod preferences;
@@ -47,6 +48,7 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(preferences::routes())
         .merge(places::routes())
         .merge(events::routes())
+        .merge(compose::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

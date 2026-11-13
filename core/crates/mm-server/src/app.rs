@@ -9,10 +9,12 @@ use std::sync::{Arc, Mutex};
 
 use mm_accounts::Directory;
 use mm_accounts::credential::DATABASE_KEY_ITEM;
+use mm_compose::snippets::Snippets;
 use mm_kernel::seams::{Clock, Keychain, Outside};
 use mm_mailbox::folders::Folders;
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::session::MailServers;
+use mm_store::compose::SnippetsDocument;
 use mm_store::places::Places;
 use mm_store::{ConfigFile, Database, DbKey, PageFiles};
 
@@ -54,6 +56,8 @@ pub struct App {
     /// What the app tells the open tabs: `app.events.publish(Topic::Mute, json!({...}))`, or a use case's
     /// `Arc<dyn Events>`.
     pub events: Arc<Hub>,
+    /// The words a person keeps for the composer.
+    pub snippets: Snippets,
 }
 
 impl App {
@@ -114,6 +118,7 @@ impl App {
         // The page's own state, and what the app says of itself.
         let places = Places::new(database.clone(), seams.clock.clone());
         let events = Arc::new(Hub::new().map_err(|_| "the system's random source failed")?);
+        let snippets = Snippets::new(Arc::new(SnippetsDocument::new(database.clone(), seams.clock.clone())));
         Ok(App {
             port,
             csrf,
@@ -126,6 +131,7 @@ impl App {
             clock: seams.clock.clone(),
             places,
             events,
+            snippets,
         })
     }
 }
