@@ -448,6 +448,26 @@ impl MailCommands {
 
     // ── the tray ──
 
+    /// What the pending-changes tray shows: the changes that haven't reached a server, newest first, and how many
+    /// wait and how many were given up on. A subject the row doesn't hold comes from its message.
+    pub fn list_open(&self, limit: i64) -> Result<Value, Fault> {
+        command_ports::read(&*self.store, |tx| {
+            let mut items = Vec::new();
+            for row in tx.open_commands(limit)? {
+                let subject = match row.param("subject") {
+                    Some(subject) => subject.clone(),
+                    None => match Self::flagged_row(tx, &row)? {
+                        Some(pk) => tx.message(pk)?.map_or(json!(""), |m| json!(m.subject)),
+                        None => json!(""),
+                    },
+                };
+                items.push(command::tray_item(&row, &subject));
+            }
+            let (waiting, stuck) = command::tray_counts(&tx.open_counts()?);
+            Ok(json!({"items": items, "waiting": waiting, "stuck": stuck}))
+        })
+    }
+
     /// Ask again for a change given up on. False when it isn't one.
     pub fn retry(&self, id: i64) -> Result<bool, Fault> {
         command_ports::write(&*self.store, |tx| {
