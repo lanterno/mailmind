@@ -110,6 +110,28 @@ classifier patterns matching inside longer words; a forwarded email's attachment
 otherwise than the sanitizer had checked it, so that a message could make its frame's elements `position: fixed`;
 and an `<embed>` or an unclosed `<head>` taking the rest of a message with it.
 
+## Step 3: the Rust server, a route at a time
+
+`core/crates/mm-server` is the server the Python app becomes, built a slice at a time and held to the served suites
+(`tests/api`, `tests/e2e/browser`) through `core/crates/mm-served`. A test it passes goes on the ledger,
+`tests/support/rust_ledger.txt`, and `just test-rust` runs those against it (see [testing.md](testing.md)).
+
+The first slice is the perimeter, ported check for check with the same statuses and problem documents, the page and
+its files, `/api/accounts` and `/api/folders` (the folder rail, over a loopback IMAP server). Any other route answers
+as no route does. How a slice is built:
+
+- **A use case goes in its context's crate** (`mm-mailbox`, `mm-accounts`), with what it needs of the world as traits
+  in that crate's `ports`. Its SQL goes in `mm-store`, in a module named for the context; the network in `mm-imap`.
+- **A route is a plain `async fn` on a literal path** in `mm-server/src/routes/<context>.rs`, merged in
+  `routes::router`. It reads its arguments with `query::Query`, runs the use case through `routes::run` (on the
+  blocking pool, off the async threads) and answers its value as JSON or its refusal as a problem document. A route
+  that answers only some of what the Python one does answers the rest with `answer::not_yet`, a 501.
+- **Contexts meet in `mm-server`**: `wiring` adapts one context's use case to another's port, and `App::assemble`
+  builds them all.
+- **A test reaches the server only through `Seams`** (`Clock`, `Outside`, `Keychain`), which `mm-served` fills with
+  the frozen clock, the tripwire and the fake Keychain. The server has no test hooks; a `work` job not ported yet
+  answers `failed not on the Rust server yet`.
+
 ## The six questions
 
 1. **Does a SQLCipher file written natively open unchanged in the browser?** Not as written: native builds use a

@@ -110,6 +110,14 @@ stopped (`with app.stopped():`), as the world was made before it started. It nev
 server do something: the server is another process, which that never reaches. A test that can only pin the
 Python app's insides stays in-process, in `tests/characterization/`. Each test starts a server, which takes about a second.
 
+The Rust server (`core/crates/mm-server`) is held to the same suites through `core/crates/mm-served`, its launcher for them: the
+frozen clock, a tripwire equal to `guard.py`, and `fake_keychain`'s file, each handed to the server through its seams. What it
+answers yet is on the ledger, `tests/support/rust_ledger.txt`, one test id a line. `just test-rust` builds the launcher and runs
+the ledger's tests against it; `just verify` runs it. When `MAILMIND_TEST_LEDGER` names the ledger, every served test (`tests/api`,
+and `tests/e2e/browser` but `in_process/`) not on it is `xfail(strict=True, reason="not on the Rust server yet")`, so
+`just test-rust-all` runs them all against the Rust server and one that passes errors with `XPASS(strict)`: put it on the
+ledger. A test goes on the ledger only once it passes against both servers, and the `served` workflow runs both on one commit.
+
 Under `-n`, each worker is a pytest session of its own: it installs the tripwire, runs its own fake Claude API and makes its own
 `world` template and new database, under a temp directory of its own. A test keeps to its temp directory and every server takes
 a port the system picks, so no two workers share a file or a port, and a test passes in any worker, in any company.
