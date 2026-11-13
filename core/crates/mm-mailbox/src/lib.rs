@@ -7,6 +7,7 @@
 //! disk, the network or the clock.
 
 pub mod folders;
+pub mod gates;
 pub mod ingest;
 pub mod labels;
 pub mod ports;

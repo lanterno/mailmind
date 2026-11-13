@@ -167,4 +167,10 @@ impl Environment {
         let profile = given("MAILMIND_PROFILE");
         !(profile.is_empty() || profile == "full")
     }
+
+    /// Whether each account's IMAP work passes a gate of its own (MAILMIND_WORKERS `account`, in any case, with
+    /// spaces around); unset, or any other value, one gate is every account's.
+    pub fn gate_per_account(&self) -> bool {
+        self.raw("MAILMIND_WORKERS").unwrap_or_default().trim().eq_ignore_ascii_case("account")
+    }
 }
