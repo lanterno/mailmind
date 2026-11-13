@@ -116,6 +116,24 @@ impl Environment {
         Ok(Settings { home })
     }
 
+    /// How the process runs (`profile.current`): `read-only` when MAILMIND_NOSYNC is on, or is a value it doesn't
+    /// take, or MAILMIND_PROFILE names no profile; else MAILMIND_PROFILE's, `full` when unset.
+    pub fn profile(&self) -> &'static str {
+        let given = |name: &str| mm_kernel::text::strip(self.raw(name).unwrap_or_default()).to_lowercase();
+        if !matches!(given("MAILMIND_NOSYNC").as_str(), "" | "0" | "false" | "no" | "off") {
+            return "read-only";
+        }
+        match given("MAILMIND_PROFILE").as_str() {
+            "" | "full" => "full",
+            _ => "read-only",
+        }
+    }
+
+    /// Whether ANTHROPIC_API_KEY gives a key: set, and not blank.
+    pub fn gives_anthropic_key(&self) -> bool {
+        !mm_kernel::text::strip(self.raw("ANTHROPIC_API_KEY").unwrap_or_default()).is_empty()
+    }
+
     /// The database key the environment gives, if it gives one.
     pub fn db_key(&self) -> Option<Secret> {
         self.raw(DB_KEY).filter(|k| !k.is_empty()).map(|k| Secret::new(k.to_owned()))

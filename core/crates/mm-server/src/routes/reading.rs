@@ -27,6 +27,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/thread", get(thread))
         .route("/api/folders/across", get(folders_across))
         .route("/api/pending", get(pending))
+        .route("/api/digest", get(digest))
 }
 
 pub(super) fn query(uri: &Uri) -> Query {
@@ -101,4 +102,10 @@ async fn folders_across(State(app): State<Arc<App>>, method: Method, uri: Uri) -
 /// The changes that haven't reached a server.
 async fn pending(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
     run(&app, &method, &uri, |app| app.reading.tray.list_open(100)).await
+}
+
+/// The items the brief is built from, and what the page needs as it opens: the identities to send from, the sync's
+/// state and the AI's.
+async fn digest(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    run(&app, &method, &uri, |app| app.reading.digest.answer()).await
 }

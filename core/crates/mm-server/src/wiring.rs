@@ -23,10 +23,47 @@ impl Accounts for KnownAccounts {
     }
 }
 
-/// The accounts the Mailbox's lists read over: those the Directory may use.
+/// The accounts the Mailbox's lists read over: those the Directory may use; and what the page names each by.
 impl mm_mailbox::ports::AccountBook for KnownAccounts {
     fn emails(&self) -> Result<Vec<String>, Fault> {
         Ok(self.0.accounts()?.into_iter().map(|a| a.email).collect())
+    }
+
+    fn faces(&self) -> Result<mm_mailbox::ports::Faces, Fault> {
+        let faces = self.0.faces()?;
+        Ok(mm_mailbox::ports::Faces {
+            aliases: faces.aliases,
+            webmail: faces.webmail,
+            signatures: faces.signatures,
+            signature_default: faces.signature_default,
+        })
+    }
+}
+
+/// AI's settings: the config file's, and whether the environment gives a key.
+#[derive(Debug)]
+pub(crate) struct AiConfig {
+    pub(crate) file: Arc<dyn mm_accounts::ports::ConfigFile>,
+    pub(crate) environment_key: bool,
+}
+
+impl mm_assistant::ports::AiSettings for AiConfig {
+    fn key_named(&self) -> Result<bool, Fault> {
+        Ok(self.environment_key || self.file.read()?.get("anthropic_api_key").is_some_and(mm_accounts::account::truthy))
+    }
+
+    fn daily_limit(&self) -> Result<Option<serde_json::Value>, Fault> {
+        Ok(self.file.read()?.remove("ai_daily_limit_usd"))
+    }
+}
+
+/// How AI stands, as the Assistant reports it, for the digest.
+#[derive(Debug)]
+pub(crate) struct AssistantStatus(pub(crate) mm_assistant::status::Status);
+
+impl mm_mailbox::ports::AiStatus for AssistantStatus {
+    fn report(&self) -> Result<serde_json::Value, Fault> {
+        self.0.report()
     }
 }
 

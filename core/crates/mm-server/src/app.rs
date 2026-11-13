@@ -75,6 +75,8 @@ impl App {
             Arc::new(KnownAccounts(directory.clone())),
             database.clone(),
             sessions.clone(),
+            Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
+            environment,
             seams.clock.clone(),
         );
         let folders =
