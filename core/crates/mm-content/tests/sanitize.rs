@@ -235,6 +235,38 @@ fn nothing_of_a_dropped_element_is_shown() {
     ]);
 }
 
+/// A message may leave its `</head>` out. Python dropped all after the `<head>` then; a browser ends the head at the
+/// first tag that can't be in one, or at text, and shows the rest. Chromium shows the text of each written here.
+#[test]
+fn a_head_ends_where_a_browser_ends_it() {
+    holds(&[
+        ("<html><head><meta charset=utf-8><title>T</title><body><p>Hello</p>", false, true, "<p>Hello</p>", [0, 0, 0]),
+        ("<head><title>T</title><p>Hello", false, true, "<p>Hello", [0, 0, 0]),
+        (
+            "<head><meta name=x><link rel=icon href=x><base href=x>\n<div>D</div>",
+            false,
+            true,
+            "<div>D</div>",
+            [0, 0, 0],
+        ),
+        // Text ends it, past the spaces that lead it; a character reference is text.
+        ("<head>  \n Hello <b>x</b>", false, true, "Hello <b>x</b>", [0, 0, 0]),
+        ("<head><script>a</script>&nbsp;Hi", false, true, "\u{a0}Hi", [0, 0, 0]),
+        // Raw text and a template don't.
+        ("<head><title>a</head>b</title>c", false, true, "c", [0, 0, 0]),
+        ("<head><template><p>t</p></template><p>y", false, true, "<p>y", [0, 0, 0]),
+        ("<head><template></head><p>t</p></template>z", false, true, "z", [0, 0, 0]),
+        // The frame runs no script, so a <noscript> holds markup, and a tag a head can't hold ends both.
+        ("<head><noscript><p>n</p></noscript>after", false, true, "<p>n</p>after", [0, 0, 0]),
+        // An end tag but these four is ignored, and so is a second <head>.
+        ("<head></p>Hello", false, true, "Hello", [0, 0, 0]),
+        ("<head><style>p{}</style></body>Hello", false, true, "Hello", [0, 0, 0]),
+        ("<head><head></head>Hello", false, true, "Hello", [0, 0, 0]),
+        ("<p>a<head><title>t</title>b", false, true, "<p>ab", [0, 0, 0]),
+        ("<head><title>T</title></head><body>B</body>", false, true, "B", [0, 0, 0]),
+    ]);
+}
+
 #[test]
 fn safe_content_is_kept() {
     holds(&[

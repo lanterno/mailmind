@@ -40,6 +40,10 @@ DROP_WITH_CONTENT = {
 # (they have no end tag; skipping-until-close would swallow the whole document).
 DROP_VOID = {"meta", "link", "base", "input", "frame", "source", "param", "keygen",
              "embed"}   # the core now: <embed> is void, so it swallowed the rest of the message
+# the core now: a dropped <head> ends where a browser ends it, at any tag but these, at text that isn't space, and at
+# </body>, </html> and </br>, since a message may leave its </head> out; nothing in a <template> ends it.
+HEAD_HOLDS = {"base", "basefont", "bgsound", "link", "meta", "title", "noscript", "noframes", "style", "script",
+              "template", "head", "html"}
 # Allowed tags (everything else is unwrapped: tag dropped, text kept).
 ALLOWED = {
     "p", "br", "hr", "div", "span", "a", "b", "i", "u", "s", "strike", "em",
@@ -654,11 +658,22 @@ class _San(HTMLParser):
         self.blocked_css_urls = 0  # remote url() blocked in CSS while load_images=False
         self._in_style = 0      # inside a <style> being captured
         self._style_buf: list[str] = []    # buffered raw CSS text
+        self._head_templates = 0    # the core now: how deep inside <template>s in a dropped <head>
+        self._raw = False           # the core now: inside raw text, which only its end tag ends
+
+    def _leave_head(self) -> None:
+        self._skip, self._skip_tag, self._head_templates = 0, None, 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
+        self._raw = tag in self.CDATA_CONTENT_ELEMENTS + self.RCDATA_CONTENT_ELEMENTS    # the core now
+        if self._skip_tag == "head":                                                    # the core now
+            if tag == "template":
+                self._head_templates += 1
+            elif not self._head_templates and tag not in HEAD_HOLDS:
+                self._leave_head()
         if self._skip:
-            if tag == self._skip_tag:
+            if tag == self._skip_tag and tag != "head":     # the core now: a <head> in a head is ignored
                 self._skip += 1
             return
         if tag in DROP_VOID:
@@ -691,6 +706,7 @@ class _San(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
+        self._raw = False       # the core now
         if tag == "style":
             if self._in_style:
                 css = python_sanitize_css_stylesheet("".join(self._style_buf), self)
@@ -698,6 +714,12 @@ class _San(HTMLParser):
                     self.out.append("<style>" + css + "</style>")
                 self._in_style = 0
                 self._style_buf = []
+            return
+        if self._skip_tag == "head":    # the core now
+            if tag == "template" and self._head_templates:
+                self._head_templates -= 1
+            elif tag in ("head", "body", "html", "br") and not self._head_templates:
+                self._leave_head()
             return
         if self._skip:
             if tag == self._skip_tag:
@@ -714,6 +736,11 @@ class _San(HTMLParser):
         if self._in_style:
             self._style_buf.append(data)
             return                       # never escape/measure buffered CSS
+        if self._skip_tag == "head" and not self._head_templates and not self._raw:  # the core now
+            body = data.lstrip("\t\n\f\r ")
+            if body:
+                self._leave_head()
+                data = body
         if self._skip:
             return
         if data.strip() and self._bq_depth == 0 and not self._folded:
@@ -1330,6 +1357,28 @@ def test_the_text_after_an_embed_is_kept():
     """<embed> has no end tag, so dropping it with all it held up to one dropped the rest of the message."""
     html = '<p>Before</p><embed src="https://e.example.test/x.swf" type="application/x-shockwave-flash"><p>After</p>'
     assert sanitizer.sanitize(html) == ("<p>Before</p><p>After</p>", NOTHING_BLOCKED)
+    assert_html_as_python_wrote_it(html, load_images=False)
+
+
+@pytest.mark.parametrize(("html", "written"), [
+    ("<html><head><meta charset=utf-8><title>T</title><body><p>Hello</p>", "<p>Hello</p>"),
+    ("<head><title>T</title><p>Hello", "<p>Hello"),
+    ("<head>  \n Hello <b>x</b>", "Hello <b>x</b>"),
+    ("<head><script>a</script>&nbsp;Hi", "\xa0Hi"),
+    ("<head><title>a</head>b</title>c", "c"),
+    ("<head><template><p>t</p></template><p>y", "<p>y"),
+    ("<head><template></head><p>t</p></template>z", "z"),
+    ("<head><noscript><p>n</p></noscript>after", "<p>n</p>after"),
+    ("<head></p>Hello", "Hello"),
+    ("<head><style>p{}</style></body>Hello", "Hello"),
+    ("<head><head></head>Hello", "Hello"),
+    ("<p>a<head><title>t</title>b", "<p>ab"),
+    ("<head><title>T</title></head><body>B</body>", "B"),
+])
+def test_a_head_ends_where_a_browser_ends_it(html, written):
+    """A message may leave its </head> out, and Python then dropped all after the <head>. A browser ends the head at
+    the first tag that can't be in one, or at text, and Chromium shows the text of each as written here."""
+    assert sanitizer.sanitize(html) == (written, NOTHING_BLOCKED)
     assert_html_as_python_wrote_it(html, load_images=False)
 
 
