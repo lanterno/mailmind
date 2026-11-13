@@ -21,6 +21,10 @@ mm-mailbox = { path = "crates/mm-mailbox" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that
 # opens the database adds that feature for those targets), and LibTomCrypt in the browser, through sqlite-wasm-rs.
+# The HTML tokenizer browsers' parsing follows, for the sanitizer (mm-content).
+html5ever = "0.40.1"
+# A message's MIME structure, with the legacy charsets mail still arrives in.
+mail-parser = { version = "1.0.0", features = ["full_encoding"] }
 # The Python app's bindings to the leaves the core shares with it (mm-py), until the Rust server replaces it.
 pyo3 = { version = "0.30.1", features = ["abi3-py314"] }
 pyo3-build-config = "0.30.1"
