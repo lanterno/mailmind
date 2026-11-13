@@ -77,7 +77,9 @@ impl Screener {
             })
             .collect();
         let total = items.len();
-        Ok(json!({"ok": true, "account": account, "items": items.into_iter().take(SHOWN).collect::<Vec<_>>(), "total": total}))
+        Ok(
+            json!({"ok": true, "account": account, "items": items.into_iter().take(SHOWN).collect::<Vec<_>>(), "total": total}),
+        )
     }
 
     /// A keep, block or remove from the person, on a sender or a domain; a block with `pk` trashes that copy too.

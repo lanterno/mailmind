@@ -13,9 +13,20 @@ use crate::text::strip;
 /// What `/api/filters` may be asked to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Change {
-    Create { q: Option<String>, star: bool, read: bool },
-    Update { id: Option<String>, q: Option<String>, star: bool, read: bool },
-    Delete { id: Option<String> },
+    Create {
+        q: Option<String>,
+        star: bool,
+        read: bool,
+    },
+    Update {
+        id: Option<String>,
+        q: Option<String>,
+        star: bool,
+        read: bool,
+    },
+    Delete {
+        id: Option<String>,
+    },
     /// Any other verb, or none.
     Other,
 }

@@ -17,10 +17,12 @@ pub fn refusal(text: &str, zone: impl Fn(Wall) -> Option<i64>) -> Option<String>
     let spec = QuerySpec::parse(text, zone);
     for c in &spec.clauses {
         let unknown_yet = match c.kind {
-            Kind::Attachment => {
-                Some("A filter reads mail as it arrives, before its attachments are known, so it can't use has:attachment.")
+            Kind::Attachment => Some(
+                "A filter reads mail as it arrives, before its attachments are known, so it can't use has:attachment.",
+            ),
+            Kind::Category => {
+                Some("A filter reads mail as it arrives, before the AI has read it, so it can't use category:.")
             }
-            Kind::Category => Some("A filter reads mail as it arrives, before the AI has read it, so it can't use category:."),
             Kind::Snoozed => Some("New mail isn't snoozed, so a filter can't use is:snoozed."),
             Kind::Before => Some("A filter reads mail as it arrives, so a date says nothing of it. Take out before:."),
             Kind::After => Some("A filter reads mail as it arrives, so a date says nothing of it. Take out after:."),
@@ -35,9 +37,13 @@ pub fn refusal(text: &str, zone: impl Fn(Wall) -> Option<i64>) -> Option<String>
             );
         }
         if c.kind == Kind::Folder && !c.negated && c.value != Some(Value::Text(INBOX.to_owned())) {
-            return Some(format!("Filters read mail arriving in the Inbox, so the only folder one can name is in:{INBOX}."));
+            return Some(format!(
+                "Filters read mail arriving in the Inbox, so the only folder one can name is in:{INBOX}."
+            ));
         }
     }
-    let looks_for = spec.clauses.iter().any(|c| matches!(c.kind, Kind::Text | Kind::Field | Kind::Bucket) && !c.negated);
-    (!looks_for).then(|| "A filter needs something to look for: a sender, a subject, words, or a kind of mail.".to_owned())
+    let looks_for =
+        spec.clauses.iter().any(|c| matches!(c.kind, Kind::Text | Kind::Field | Kind::Bucket) && !c.negated);
+    (!looks_for)
+        .then(|| "A filter needs something to look for: a sender, a subject, words, or a kind of mail.".to_owned())
 }
