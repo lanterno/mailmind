@@ -395,6 +395,19 @@ fn a_weak_phrase_counts_where_a_word_starts() {
 }
 
 #[test]
+fn ck_page_is_whole_labels() {
+    // Fixed in the core: Python found the marker inside nick.page, a person's domain.
+    const BULK: [&str; 3] = ["newsletters/marketing", "high", "bulk email-service-provider domain"];
+    const UNCLASSIFIED: [&str; 3] = ["other/personal-ish", "low", "unclassified \u{2014} review"];
+    for domain in ["ck.page", "x.ck.page", "ck.page.example", "x.CK.Page"] {
+        assert_eq!(said(&format!("lin@{domain}"), "hi", "", false, &NONE), BULK, "{domain}");
+    }
+    for domain in ["nick.page", "x.ck.pages", "ck.pagex.example", "x-ck.page"] {
+        assert_eq!(said(&format!("lin@{domain}"), "hi", "", false, &NONE), UNCLASSIFIED, "{domain}");
+    }
+}
+
+#[test]
 fn an_address_is_read_as_python_lower_cased_and_stripped_it() {
     assert_eq!(
         said("  Lin@Studio.Example.Test\u{9}", "hi", "", false, &NONE),

@@ -75,12 +75,15 @@ ESP_MARKERS = (
     "cmail19", "cmail20", "createsend", "exct.net", "responsys", "marketo",
     "pardot", "salesforce", "constantcontact", "ccsend", "icontact", "mailjet",
     "postmarkapp", "sparkpostmail", "everestengagement", "convertkit",
-    "ck.page", "drip.com", "activecampaign", "getresponse", "aweber", "emarsys",
+    "drip.com", "activecampaign", "getresponse", "aweber", "emarsys",
     "bluecore", "cordial", "movableink", "narvar", "shopifyemail",
 )
 # ESP markers too short to match inside a word: each must be a whole dot-label, and not the last
 # one (.sg is Singapore's top-level domain)
 ESP_LABELS = {"sg"}
+# Fixed since: ck.page was a marker, so a person's nick.page was bulk. Its first label is as short as sg, so it must
+# be whole labels.
+ESP_DOMAINS = ("ck.page",)
 # first dot-label of the domain that signals a bulk stream
 BULK_SUBDOMAINS = {
     "e", "em", "email", "emails", "mail", "mailing", "mailings", "news",
@@ -229,7 +232,8 @@ def python_classify(from_addr: str, subject: str | None = "", from_name: str | N
     # 4) newsletters / marketing: the big leak we now close
     if has_list_unsub:
         return MKT, "high", "List-Unsubscribe header"
-    if any(m in domain for m in ESP_MARKERS) or ESP_LABELS & set(domain.split(".")[:-1]):
+    if (any(m in domain for m in ESP_MARKERS) or any(f".{d}." in f".{domain}." for d in ESP_DOMAINS)
+            or ESP_LABELS & set(domain.split(".")[:-1])):
         return MKT, "high", "bulk email-service-provider domain"
     if nlabels >= 3 and label0 in BULK_SUBDOMAINS:
         return MKT, "med", f"bulk sub-domain ({label0}.)"
@@ -280,7 +284,7 @@ EDGES = "_\u0301\u0345\u203f\u200d\u00b2\u2460\u0663\u2160\u00a0\ua7ce\U00016ea0
 LOCALS = sorted(ROLE_MKT | ROLE_MKT_WEAK | ROLE_NOTIF | ROLE_TXN) + [
     "lin", "ada.lovelace", "failed-payments", "invoice+statements", "no-reply-bot", "jo.newsom", "lin2", "li22", "l\u00b2\u00b2",
     "ab\u2460\u2460\u2460", "élève", "\u0391\u03a3", "\u0130nfo", "not\u0131fy", "x", "0123456789abcdef", "abcdefghijklmnopqrstu"]
-DOMAINS = sorted(FREE_MAIL) + [f"x.{m}.example.test" for m in ESP_MARKERS] + [
+DOMAINS = sorted(FREE_MAIL) + [f"x.{m}.example.test" for m in ESP_MARKERS + ESP_DOMAINS] + [
     f"{s}.shop.example.test" for s in BULK_SUBDOMAINS] + [f"example.{t}" for t in SUSPICIOUS_TLDS] + [
     "studio.sg", "sg.example.test", "em.sg.example.test", "msg.example.test", "tax.gov", "tax.gov.uk", "impots.gouv.fr",
     "x.go.jp", "x.gob.mx", "x.admin.ch", "canada.gc.ca", "x.govt.nz", "gov.example.test", "stanford.edu", "x.edu.au",
@@ -291,7 +295,9 @@ DOMAINS = sorted(FREE_MAIL) + [f"x.{m}.example.test" for m in ESP_MARKERS] + [
     "medium.example", "mediaplayer.example", "x.medi", "x.mediu", "mediumx.example", "likewise.com", "wise.company",
     "x.wise.com", "wise.com.au", "wise.comx", "pinstripe.com", "x.stripe.com", "stripe.com.example", "hospitality.example",
     "x.hospitals", "x.hospitali", "x.hospitalit", "hospitalitx.example", "revolution.example", "revolut.example",
-    "x.revolut", "revolut_x.example"]
+    "x.revolut", "revolut_x.example",
+    # And an ESP's.
+    "nick.page", "ck.page", "ck.page.example", "x.ck.pages", "ck.pagex.example", "xck.page.example"]
 # A piece of every pattern's alternatives, and of the words around them.
 PHRASES = [
     "receipt", "invoice", "payment received", "your payment", "you paid", "amount paid", "your bill", "e-statement",

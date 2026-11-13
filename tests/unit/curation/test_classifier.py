@@ -28,6 +28,8 @@ CASES = [
     ("namaste@studio.example", "Class schedule", True, m.MKT, "List-Unsubscribe header"),
     ("promo@store.example", "50% off", False, m.MKT, "marketing role"),
     ("x@sendgrid.net", "anything", False, m.MKT, "ESP infrastructure domain"),
+    ("x@mail.ck.page", "anything", False, m.MKT, "ESP domain as whole labels"),
+    ("nick@nick.page", "anything", False, m.PERSONAL, "a vanity domain that only ends like an ESP's"),
 
     # --- ambiguous roles KEPT without a corroborating bulk signal (work-mail safety) ---
     ("info@smallco.example", "New private message", False, m.PERSONAL, "weak role, no bulk signal -> keep"),
