@@ -12,5 +12,6 @@ pub mod outbox;
 pub mod ports;
 pub mod quote;
 pub mod replies;
+pub mod resume;
 pub mod snippets;
 pub mod spec;
