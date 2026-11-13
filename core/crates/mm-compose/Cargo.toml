@@ -1,6 +1,6 @@
 [package]
 name = "mm-compose"
-description = "Drafts, building a message, the outbox and delivery: so far, what the outbox tray lists"
+description = "Drafts, building a message, the outbox and delivery: so far, what the outbox tray lists and the snippets"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

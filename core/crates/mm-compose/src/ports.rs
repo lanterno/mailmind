@@ -1,8 +1,10 @@
-//! What Compose's use cases need of the world: the outbox and the drafts' journal, as stored.
+//! What Compose's use cases need of the world: the outbox, the drafts' journal and the snippets, as stored. The store
+//! (`mm-store`) implements them.
 
 use std::fmt;
 
 use mm_kernel::errors::Fault;
+use serde_json::Value;
 
 /// A stored row, by column name, each value as SQLite holds it.
 pub type Row = serde_json::Map<String, serde_json::Value>;
@@ -44,4 +46,14 @@ pub trait StoredDrafts: Send + Sync + fmt::Debug {
 pub trait DraftFolders: Send + Sync + fmt::Debug {
     /// Whether `folder` is the account's Drafts: what its last LIST said, else what its name says on its own.
     fn plays_drafts(&self, account: &str, folder: &str) -> Result<bool, Fault>;
+}
+
+/// The snippets as kept: the `snippets` document in the database.
+pub trait SnippetsStore: Send + Sync + fmt::Debug {
+    /// What is kept, as JSON parses it, or None when nothing is kept yet or it won't parse.
+    fn read(&self) -> Result<Option<Value>, Fault>;
+
+    /// Read what is kept and keep what `change` makes of it, in one write block, so two changes at once, from two
+    /// tabs, lose neither. When `change` makes nothing, nothing is written.
+    fn change(&self, change: &mut dyn FnMut(Option<Value>) -> Option<Value>) -> Result<(), Fault>;
 }
