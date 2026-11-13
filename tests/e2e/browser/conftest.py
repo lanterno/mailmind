@@ -1,5 +1,9 @@
 """Browser fixtures: one Chromium and one build of the app for the session, and per test a page on the
-app fixture's server (the fake IMAP world, a temporary database, the frozen clock).
+app fixture's server (the fake IMAP world, a temporary database, the frozen clock). That server is a program the suite
+starts and stops, as tests/api does (support/served.py): the Python one, or the one MAILMIND_TEST_SERVER names, so the
+page is held to the same answers from any server. A test reaches it as tests/api's do: through the page, HTTP, the
+fakes and the protocol (app.clock, app.work, app.settle, app.restart), reading the database but never calling or
+patching a MailMind module to make the server act.
 
 The page may reach only the app's own origin: any other request is answered with an empty response
 here and listed in `page.blocked`, which `clean` holds empty, so no test sends anything off the machine. The page's clock is set to the server's NOW, so "today"
@@ -15,6 +19,9 @@ from datetime import datetime, timezone
 from urllib.parse import quote, urlencode, urlsplit
 
 import pytest
+
+import conftest
+import served
 
 SANDBOX_REFUSAL = re.compile(r"Blocked script execution in '(about:srcdoc|about:blank|[^']*/api/message/(?:body|attachment/preview)\.html\?[^']*)' because the "
                              r"document's frame is sandboxed and the 'allow-scripts' permission is not set\.")
@@ -36,10 +43,16 @@ def built(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def serve_the_build(built, monkeypatch):
-    """The app exists only as built, so every test here serves that build."""
-    from mailmind.platform import webroot
-    monkeypatch.setattr(webroot, "DIST", built)
+def _keychain_shared_with_the_server(tmp_path_factory, monkeypatch):
+    served.share_keychain(tmp_path_factory, monkeypatch)
+
+
+@pytest.fixture
+def app(request, world, built, tmp_path_factory):
+    """The server, started over this test's world with its clock at NOW, serving the session's build: the app exists
+    only as built."""
+    with served.serving(request, world, built, tmp_path_factory, conftest.NOW, conftest._home) as server:
+        yield server
 
 
 @pytest.fixture(scope="session")
@@ -133,11 +146,9 @@ class Page:
 
 
 @pytest.fixture
-def page(chromium, app, monkeypatch):
-    from mailmind.bootstrap import accounts
-    from mailmind.platform import sse
-    monkeypatch.setattr(sse, "HEARTBEAT", 0.5)            # a closed page's event stream ends quickly
-    accounts.config.set_preferences({"guide_offered": True})   # or it covers every page: test_guide.py says what it does
+def page(chromium, app):
+    # Or the guide covers every page: test_guide.py says what it does.
+    assert app.post("/api/preferences", {"guide_offered": True}).status == 200
     origin = f"http://127.0.0.1:{app.port}"
     ctx = chromium.new_context(viewport={"width": 1440, "height": 900}, locale="en-US", timezone_id="UTC",
                                base_url=origin)
