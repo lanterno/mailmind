@@ -27,3 +27,16 @@ tests/api/test_http_local.py::test_snooze_presets_from_monday_noon[next_week]
 tests/api/test_http_local.py::test_later_today_after_nine_at_night_means_tomorrow_morning
 tests/api/test_http_local.py::test_snooze_refusals_and_targets
 tests/api/test_http_local.py::test_reply_later_records_when_the_thread_last_moved
+tests/api/test_http_mail.py::test_seen_and_flagged
+tests/api/test_http_mail.py::test_a_refused_flag_change_leaves_the_local_row_alone
+tests/api/test_http_mail.py::test_archive_on_each_provider_and_undo
+tests/api/test_http_mail.py::test_junk_on_each_provider_and_undo
+tests/api/test_http_mail.py::test_trash_on_each_provider_and_undo
+tests/api/test_http_mail.py::test_undoing_a_proton_trash_brings_unread_mail_back_unread
+tests/api/test_http_mail.py::test_undoing_a_proton_trash_of_read_mail_leaves_it_read
+tests/api/test_http_mail.py::test_trash_and_undo_elsewhere_neither_read_nor_change_seen
+tests/api/test_http_mail.py::test_actions_in_one_undo_group_undo_together
+tests/api/test_http_mail.py::test_a_refused_move_keeps_the_message
+tests/api/test_http_mail.py::test_a_server_without_move_gets_copy_store_expunge
+tests/api/test_http_mail.py::test_an_unreachable_server_queues_the_move
+tests/api/test_http_mail.py::test_archive_and_trash_a_whole_conversation
