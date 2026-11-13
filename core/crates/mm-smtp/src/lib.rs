@@ -5,8 +5,8 @@
 //! check its pin; `login` then gives a `Session`, which sends a message as `smtplib.SMTP.sendmail` does and tells a
 //! message that went out unanswered from one that never went. What goes wrong is an `Error`: `smtplib`'s exception
 //! as its codes, never its words, with the Python app's `permanent` and `sanitize_error` on it. The conversation is
-//! `Client`, over any stream, so it can be tested over a script. Only a loopback server is reached for now: its
-//! certificate is pinned rather than verified, as Proton Bridge's must be.
+//! `Client`, over any stream, so it can be tested over a script. A server off this machine is verified on the roots
+//! the system trusts; a loopback one's certificate, as Proton Bridge's must be, is pinned, and checked by the caller.
 
 mod client;
 mod error;

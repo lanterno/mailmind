@@ -16,7 +16,8 @@ pub struct Endpoint<'a> {
     pub port: u16,
     /// STARTTLS on a plain connection (`smtp_starttls`, the default); else TLS from the first byte, as on 465.
     pub starttls: bool,
-    /// The server is on this machine, so its certificate is pinned by the caller rather than verified.
+    /// The server is on this machine, so its certificate is pinned by the caller rather than verified on the roots the
+    /// system trusts.
     pub loopback: bool,
 }
 
@@ -31,8 +32,8 @@ impl Server {
     /// Connect to `endpoint`, asking `outside` before the host is reached, and start TLS: STARTTLS after the greeting
     /// and EHLO, or from the first byte; then EHLO over it. Nothing that names the account is sent.
     pub fn connect(outside: &dyn Outside, endpoint: Endpoint<'_>, timeout: Duration) -> Result<Server, Error> {
-        let config = mm_net::tls::config(endpoint.loopback).map_err(Error::Tls)?;
         outside.reach(endpoint.host).map_err(|_| Error::Tripped)?;
+        let config = mm_net::tls::config(endpoint.loopback).map_err(Error::Tls)?;
         let tcp = mm_net::connect(endpoint.host, endpoint.port, timeout).map_err(Error::Connect)?;
         let local = tcp.local_addr().map_err(|e| Error::Connect(mm_net::lost(&e)))?.ip();
         let name = mm_net::server_name(endpoint.host).map_err(Error::Tls)?;
