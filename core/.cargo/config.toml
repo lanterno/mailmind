@@ -1,3 +1,8 @@
 [env]
 # Where ts-rs writes the TypeScript the web shell's client reads (`just web gen`). Relative to core/.
 TS_RS_EXPORT_DIR = { value = "../shells/web/src/core/generated", relative = true }
+# mm-py is a Python extension module, and nothing here embeds Python: pyo3 links no libpython, and builds the
+# stable ABI without asking an interpreter, so clippy and the tests build it where no Python 3.14 is installed.
+# maturin sets the interpreter it builds for, which these don't override.
+PYO3_BUILD_EXTENSION_MODULE = "1"
+PYO3_NO_PYTHON = "1"

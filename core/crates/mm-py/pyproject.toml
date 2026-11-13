@@ -1,0 +1,27 @@
+# The Python app's bindings to the core's leaves, built by maturin when uv installs the app's environment.
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[project]
+name = "mailmind-leaves"
+version = "0.1.0"
+description = "The leaves the MailMind core shares with the Python app"
+requires-python = ">=3.14"
+
+[tool.maturin]
+# Cargo.lock as committed, never re-resolved during a build.
+locked = true
+
+[tool.uv]
+# A change to the Rust it is built from builds it again: this crate, the core crates it uses, and the lock.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "build.rs" },
+    { file = "src/**/*.rs" },
+    { file = "../mm-kernel/Cargo.toml" },
+    { file = "../mm-kernel/src/**/*.rs" },
+    { file = "../../Cargo.toml" },
+    { file = "../../Cargo.lock" },
+]

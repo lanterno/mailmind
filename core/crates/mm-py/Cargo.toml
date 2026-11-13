@@ -1,0 +1,25 @@
+[package]
+name = "mm-py"
+description = "The leaves the core shares with the Python app, as a Python module, until the Rust server replaces it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+# The module Python imports. Its tests are the Python app's: they hold each leaf to the Python one's answers.
+name = "mailmind_leaves"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[dependencies]
+mm-kernel.workspace = true
+pyo3.workspace = true
+
+[build-dependencies]
+pyo3-build-config.workspace = true
+
+[lints]
+workspace = true
