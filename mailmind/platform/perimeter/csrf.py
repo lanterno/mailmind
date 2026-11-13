@@ -8,8 +8,10 @@ from mailmind.platform.perimeter.origin import own_origins
 
 
 def token_matches(headers, token):
-    """The request carries the page's CSRF token, compared in constant time."""
-    return secrets.compare_digest(headers.get("X-CSRF-Token") or "", token)
+    """The request carries the page's CSRF token, compared in constant time. They are compared as bytes: as strings,
+    `compare_digest` raises on one that isn't ASCII, and a token that isn't is a wrong one like any other."""
+    sent = (headers.get("X-CSRF-Token") or "").encode("utf-8", "surrogatepass")
+    return secrets.compare_digest(sent, token.encode("utf-8"))
 
 
 def refuse_mutation(path, headers, *, port, token):
