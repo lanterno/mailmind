@@ -1,7 +1,8 @@
 //! The app's page, with this run's token in it, and its files (`mailmind.http.routers.static`). These open from a
 //! typed URL or another site's link, so they are no part of the API.
 //!
-//! A place's own URL (`/p/<id>`) and the old `/next` links are not on the Rust server yet.
+//! A place's own URL (`/p/<id>`) opens the app holding the route the place keeps (`mm_store::places`), and a link
+//! from when the app lived at `/next` goes to where it went.
 
 use std::sync::Arc;
 
@@ -37,15 +38,61 @@ pub(super) fn routes() -> Router<Arc<App>> {
     for place in PLACES {
         routes = routes.route(place, get(page));
     }
-    routes.route("/assets/{*file}", get(asset))
+    routes
+        .route("/p/{place}", get(place))
+        .route("/next", get(moved))
+        .route("/next/", get(moved))
+        .route("/next/{*rest}", get(moved))
+        .route("/assets/{*file}", get(asset))
 }
 
 /// The app, or how to make one: only a build holds it.
 async fn page(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
-    let built = {
-        let app = app.clone();
-        tokio::task::spawn_blocking(move || app.page.page(&app.csrf)).await.unwrap_or(Err(Fault::new("Panicked")))
-    };
+    let built = tokio::task::spawn_blocking(move || app.page.page(&app.csrf, None));
+    the_app(built.await.unwrap_or(Err(Fault::new("Panicked"))), &method, &uri)
+}
+
+/// The app at a place, holding the route its id names, which opening it marks used. An id that names none, or no
+/// longer does, is the app with no place, which opens at home. The id is the path's last part as sent.
+async fn place(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    let place = uri.path().strip_prefix("/p/").unwrap_or_default().to_owned();
+    let built = tokio::task::spawn_blocking(move || {
+        if !app.page.is_built() {
+            return Ok(None);
+        }
+        let route = app.places.opened(&place)?;
+        app.page.page(&app.csrf, route.as_deref())
+    });
+    the_app(built.await.unwrap_or(Err(Fault::new("Panicked"))), &method, &uri)
+}
+
+/// A place in the app, as `app/route.ts` writes one (`/p/<id>` for one that holds anything personal) or reads one
+/// typed.
+fn is_place(path: &str) -> bool {
+    matches!(path, "/all" | "/search" | "/documents")
+        || ["/m/", "/brief/", "/all/", "/p/"].iter().any(|start| path.starts_with(start))
+}
+
+/// A link from when the app lived at /next. Only one of its own places goes on the redirect, so no path can send a
+/// browser anywhere else (`/next//elsewhere.example` would, as a path starting `//` names a host). The path and the
+/// query go on as they were sent.
+async fn moved(uri: Uri) -> Response<Body> {
+    let rest = uri.path().strip_prefix("/next").unwrap_or_default();
+    let mut whither = if is_place(rest) { rest.to_owned() } else { "/".to_owned() };
+    if let Some(query) = uri.query().filter(|q| !q.is_empty()) {
+        whither.push('?');
+        whither.push_str(query);
+    }
+    let mut answer = answer::bytes(302, "text/plain", Vec::new());
+    // A request's target is visible ASCII, so it is a header's value as it stands.
+    if let Ok(location) = HeaderValue::from_str(&whither) {
+        answer.headers_mut().insert(header::LOCATION, location);
+    }
+    answer
+}
+
+/// The page built, or how to make one, or the failure.
+fn the_app(built: Result<Option<String>, Fault>, method: &Method, uri: &Uri) -> Response<Body> {
     match built {
         Ok(Some(html)) => {
             let mut answer = answer::bytes(200, "text/html; charset=utf-8", html.into_bytes());

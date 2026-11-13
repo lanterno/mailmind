@@ -19,6 +19,7 @@ mod export;
 mod message;
 mod reading;
 // The page's own state: preferences, places, snippets, the event stream and what the app says of itself.
+mod places;
 mod preferences;
 
 use std::sync::Arc;
@@ -43,6 +44,7 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(documents::routes())
         .merge(message::routes())
         .merge(preferences::routes())
+        .merge(places::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

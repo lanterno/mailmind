@@ -13,6 +13,7 @@ use mm_kernel::seams::{Clock, Keychain, Outside};
 use mm_mailbox::folders::Folders;
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::session::MailServers;
+use mm_store::places::Places;
 use mm_store::{ConfigFile, Database, DbKey, PageFiles};
 
 use crate::environment::{Environment, Settings};
@@ -44,6 +45,11 @@ pub struct App {
     pub work: Arc<Work>,
     /// The reads a person waits on: lists, conversations, the tray of changes.
     pub reading: crate::reading::Reading,
+    // The page's own state, and what the app says of itself.
+    /// Where the app reads the time.
+    pub clock: Arc<dyn Clock>,
+    /// The places the page's URLs name.
+    pub places: Places,
 }
 
 impl App {
@@ -101,6 +107,8 @@ impl App {
             Arc::new(Unheard),
             seams.clock.clone(),
         ));
+        // The page's own state, and what the app says of itself.
+        let places = Places::new(database.clone(), seams.clock.clone());
         Ok(App {
             port,
             csrf,
@@ -110,6 +118,8 @@ impl App {
             ingest,
             work: Arc::new(Work::default()),
             reading,
+            clock: seams.clock.clone(),
+            places,
         })
     }
 }

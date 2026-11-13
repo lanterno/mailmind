@@ -89,15 +89,24 @@ impl Page {
         Ok(format!("{}-{}", self.build()?, &hex(&Sha256::digest(csrf.as_bytes()))[..8]))
     }
 
-    /// The app's page holding this run's token, or None when nothing has built it. The page reads where it is
-    /// from in `<meta name="mailmind-place">`, empty here.
-    pub fn page(&self, csrf: &str) -> Result<Option<String>, Fault> {
+    /// The app's page holding this run's token, or None when nothing has built it. `place` is the route a place
+    /// holds, as its JSON text, which the page reads where it is from (`<meta name="mailmind-place">`, empty for none):
+    /// escaped for an attribute.
+    pub fn page(&self, csrf: &str, place: Option<&str>) -> Result<Option<String>, Fault> {
         let Some(index) = self.files.index()? else {
             return Ok(None);
         };
         Ok(Some(
-            index.replace("__CSRF_TOKEN__", csrf).replace("__BUILD__", &self.edition(csrf)?).replace("__PLACE__", ""),
+            index
+                .replace("__CSRF_TOKEN__", csrf)
+                .replace("__BUILD__", &self.edition(csrf)?)
+                .replace("__PLACE__", &escape(place.unwrap_or_default())),
         ))
+    }
+
+    /// Whether anything has built the page.
+    pub fn is_built(&self) -> bool {
+        self.files.is_built()
     }
 
     /// The asset at a URL path under PREFIX, or None for anything that isn't one of the page's files.
@@ -125,6 +134,22 @@ impl Page {
         self.read.lock().map_err(|_| POISONED)?.insert(relative.to_owned(), (stamp, asset.clone()));
         Ok(Some(asset))
     }
+}
+
+/// `html.escape(text, quote=True)`: the five characters an attribute can't hold as they are.
+fn escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#x27;"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// `gzip.compress(body, 6, mtime=0)`: the same header, though not always the same deflate bytes.
