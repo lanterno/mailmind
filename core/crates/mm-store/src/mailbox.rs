@@ -8,6 +8,9 @@ use rusqlite::{Connection, params_from_iter};
 use crate::db::Database;
 use crate::placeholders;
 
+// The lists the page shows, a conversation and the tray of changes.
+pub(crate) mod lists;
+
 impl StoredMail for Database {
     fn stored_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {
         self.read(|c| {
