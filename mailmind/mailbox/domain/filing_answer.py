@@ -21,11 +21,12 @@ def refusal(kind: str, outcome: str) -> str:
 def of_many(accepted: Sequence[tuple[int, command.Accepted | None]], results: Mapping[int, Mapping[str, Any] | Problem],
             names: Mapping[int, tuple[MessageKey, FolderName, int]]) -> dict[str, Any]:
     """What the person hears of many moves: one the server refused went back alone, and the rest stay filed, named by their
-    key, folder and uid as they were. With none filed, what the first raised, or NotFound when there was none to file."""
+    key, folder and uid as they were. With none filed, what the first raised, or NotFound when there was none to file. A move
+    the worker has, queued or waiting on its account's gate, counts as queued, as it does when it is the only one."""
     filed = {p: said for p, _ in accepted if not isinstance(said := results[p], Problem)}
     if not filed:
         raise next((no for p, _ in accepted if isinstance(no := results[p], Problem)), NotFound(GONE))
-    queued = sum(said.get("status") == "queued" for said in filed.values())
+    queued = sum(said.get("status") in (command.QUEUED, command.WAITING) for said in filed.values())
     return {"ok": True, "msg": "queued" if queued else "filed",
             "filed": [{"key": names[p][0], "folder": names[p][1], "uid": names[p][2]} for p in filed if p in names],
             "count": len(filed), "failed": len(accepted) - len(filed),
