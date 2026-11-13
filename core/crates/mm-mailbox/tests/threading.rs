@@ -181,6 +181,17 @@ fn an_arrival_meets_the_conversation_holding_its_gmail_thread() {
 }
 
 #[test]
+fn new_mail_that_mints_an_id_another_conversation_absorbs_goes_where_it_goes() {
+    // The first mints from <m@example.test>, as the thread the second still holds once did. Python gave the first
+    // the absorbed id. Fixed here, so Python never answered this.
+    let minted = "rf:ada@example.test:850a48d02e8a257f";
+    let arrivals =
+        [replying(copy(1, "<r@example.test>"), "<m@example.test>"), holding(copy(2, "<o@example.test>"), minted)];
+    let placed = place(&arrivals, &[("<o@example.test>", &["rf:a"])], &[]);
+    assert_eq!(placed, placement(&[(1, "rf:a"), (2, "rf:a")], &[(minted, "rf:a")]));
+}
+
+#[test]
 fn a_thread_that_gains_a_gmail_id_takes_it() {
     let arrival = replying(in_gmail(copy(1, "<q@example.test>"), "1781"), "<p@example.test>");
     let placed = place(&[arrival], &[("<p@example.test>", &["rf:a"])], &[]);

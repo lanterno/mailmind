@@ -59,6 +59,15 @@ def test_two_conversations_that_share_a_thread_end_in_one():
     assert placed.given == {1: "rf:a", 2: "rf:a"}
 
 
+def test_new_mail_that_mints_an_id_another_conversation_absorbs_goes_where_it_goes():
+    """New mail mints from <m>, as a thread a copy stored again still holds once did, and that copy's conversation
+    absorbs it into rf:a. The new mail goes to rf:a too, never to the id absorbed."""
+    again = minted("<m@example.test>")
+    new = Copy(1, "<r@example.test>", in_reply_to="<m@example.test>")
+    placed = place([new, Copy(2, "<o@example.test>", thread_id=again)], {"<o@example.test>": {"rf:a"}})
+    assert placed.given == {1: "rf:a", 2: "rf:a"} and placed.merged == {again: "rf:a"}
+
+
 def test_a_thread_that_gains_a_gmail_id_takes_it():
     placed = place([Copy(1, "<q@example.test>", "1781", in_reply_to="<p@example.test>")], {"<p@example.test>": {"rf:a"}})
     assert placed.given == {1: f"gm:{A}:1781"} and placed.merged == {"rf:a": f"gm:{A}:1781"}

@@ -162,6 +162,8 @@ def _oracle():
                 survivor = self._survivor(conversation, members)
                 given.update((m.pk, survivor) for m in conversation.arrivals)
                 merged.update((tid, survivor) for tid in conversation.held if tid != survivor)
+            # Since the core fixed it: an id minted again from a root that another conversation absorbs goes on.
+            given = {pk: merged.get(tid, tid) for pk, tid in given.items()}
             return Placement(given, merged)
 
         def regroup(self, copies):
@@ -195,7 +197,9 @@ GARBAGE = ["", "not-an-id", "<no-at-sign>", "<two words@example.test>", "<two\x1
            "<m0@>", "<a@@b>", "<<m0@example.test>>", "<m0@example.test", "m0@example.test>", "<m0@example.test>\n",
            "<a​b@example.test>", "<\0@example.test>"]
 THRIDS = ["", " ", "1781", " 1781\n", "1799", "　1799\x1f", "2001", "x\x1cy"]
-THREADS = ["", "rf:a", "rf:b", "rf:x", "rf:é", f"gm:{A}:1781", f"gm:{A}:1799", f"gm:{A}:2001", "gm:elsewhere", "\0odd", "odd"]
+THREADS = ["", "rf:a", "rf:b", "rf:x", "rf:é", f"gm:{A}:1781", f"gm:{A}:1799", f"gm:{A}:2001", "gm:elsewhere", "\0odd", "odd",
+           # What new mail naming one of these first would mint again.
+           *(f"rf:{A}:" + hashlib.sha1(root.encode()).hexdigest()[:16] for root in ("<m0@example.test>", "<m1@example.test>"))]
 
 padding = st.text(alphabet=SPACES, max_size=2)
 own_id = st.one_of(st.none(), st.sampled_from(IDS + GARBAGE),
