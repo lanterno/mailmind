@@ -120,4 +120,17 @@ impl Environment {
     pub fn db_key(&self) -> Option<Secret> {
         self.raw(DB_KEY).filter(|k| !k.is_empty()).map(|k| Secret::new(k.to_owned()))
     }
+
+    /// Whether this process only reads, writing nothing to a mail server (`profile.current`): MAILMIND_NOSYNC on,
+    /// or a value it doesn't take, wins; else MAILMIND_PROFILE, unset or empty `full`, and a name that is no
+    /// profile read-only, so it fails safe.
+    pub fn read_only(&self) -> bool {
+        let given = |name: &str| self.raw(name).unwrap_or_default().trim().to_lowercase();
+        let nosync = given("MAILMIND_NOSYNC");
+        if !["", "0", "false", "no", "off"].contains(&nosync.as_str()) {
+            return true;
+        }
+        let profile = given("MAILMIND_PROFILE");
+        !(profile.is_empty() || profile == "full")
+    }
 }

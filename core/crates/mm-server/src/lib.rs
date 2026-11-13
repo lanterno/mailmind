@@ -20,6 +20,7 @@ pub mod query;
 pub mod real;
 pub mod routes;
 pub mod serve;
+mod sync_wiring;
 mod wiring;
 
 pub use app::{App, Seams};

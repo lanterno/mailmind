@@ -5,17 +5,20 @@
 //! person or under a test.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use mm_accounts::Directory;
 use mm_accounts::credential::DATABASE_KEY_ITEM;
 use mm_kernel::seams::{Clock, Keychain, Outside};
 use mm_mailbox::folders::Folders;
+use mm_mailbox::ingest::Ingest;
+use mm_mailbox::session::MailServers;
 use mm_store::{ConfigFile, Database, DbKey, PageFiles};
 
 use crate::environment::{Environment, Settings};
 use crate::page::Page;
 use crate::serve::Work;
+use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier, Unheard};
 use crate::wiring::{ImapSessions, KnownAccounts};
 
 /// Where the app reads the time and its secrets, and what it asks before it opens a file or reaches a host.
@@ -35,6 +38,8 @@ pub struct App {
     pub page: Page,
     pub directory: Arc<Directory>,
     pub folders: Folders,
+    /// The sync: a folder's mail into the database (`work sync`, Undo's way back).
+    pub ingest: Arc<Ingest>,
     /// The requests being answered now, which a stop waits for.
     pub work: Arc<Work>,
 }
@@ -64,13 +69,28 @@ impl App {
         let directory = Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()));
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
         let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
-        let folders = Folders::new(Arc::new(KnownAccounts(directory.clone())), sessions, database, seams.clock.clone());
+        let folders =
+            Folders::new(Arc::new(KnownAccounts(directory.clone())), sessions, database.clone(), seams.clock.clone());
+        let servers: Arc<dyn MailServers> = Arc::new(ImapServers {
+            directory: directory.clone(),
+            outside: seams.outside.clone(),
+            read_only: environment.read_only(),
+        });
+        let ingest = Arc::new(Ingest::new(
+            Arc::new(DirectoryAccounts(directory.clone())),
+            servers,
+            database.clone(),
+            Arc::new(RuleBookClassifier { database: database.clone(), last: Mutex::new(None) }),
+            Arc::new(Unheard),
+            seams.clock.clone(),
+        ));
         Ok(App {
             port,
             csrf,
             page: Page::new(PageFiles::new(dist, seams.outside.clone())),
             directory,
             folders,
+            ingest,
             work: Arc::new(Work::default()),
         })
     }
