@@ -14,7 +14,9 @@ pub mod config;
 pub mod db;
 mod key;
 mod mailbox;
+mod mailbox_sync;
 pub mod page;
+mod rule_book;
 pub mod schema;
 
 use std::collections::HashMap;
