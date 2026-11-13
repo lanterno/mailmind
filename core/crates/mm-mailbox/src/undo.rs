@@ -50,6 +50,8 @@ fn children(entry: &Value) -> Vec<Value> {
 /// Put `entry` on top of the stack, or, when the top gathers `group`, add it to that group's children. Then keep
 /// only the newest `UNDO_MAX`, none older than a day.
 pub fn push(tx: &dyn Tx, entry: &Value, group: Option<&str>, now: Moment) -> Result<(), Fault> {
+    // An empty group gathers nothing.
+    let group = group.filter(|g| !g.is_empty());
     tx.undo_expire(&oldest_kept(now))?;
     let at = when::iso(now);
     let top = tx.undo_rows()?.into_iter().next();
