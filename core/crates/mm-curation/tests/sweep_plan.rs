@@ -139,8 +139,8 @@ fn the_buckets_are_listed_with_whether_each_is_junk() {
 struct Inbox(Vec<Stored>);
 
 impl StoredInbox for Inbox {
-    fn stored_inbox(&self, account: &str) -> Result<Vec<Stored>, Fault> {
-        Ok(if account == "ada@example.test" { self.0.clone() } else { Vec::new() })
+    fn stored_inboxes(&self, accounts: &[&str]) -> Result<Vec<Vec<Stored>>, Fault> {
+        Ok(accounts.iter().map(|a| if *a == "ada@example.test" { self.0.clone() } else { Vec::new() }).collect())
     }
 }
 
@@ -157,28 +157,35 @@ fn plans(rules: Option<Value>) -> StoredPlans {
     StoredPlans::new(Arc::new(Inbox(vec![from("lin@example.test"), from("lin@example.test")])), Arc::new(Book(rules)))
 }
 
+const ADA: (&str, &str) = ("ada@example.test", "imap");
+
 #[test]
-fn a_plan_names_the_account_its_kind_and_no_error() {
-    let plan = plans(None).plan_stored("ada@example.test", "imap").unwrap();
-    let keys: Vec<&str> = plan.keys().map(String::as_str).collect();
-    assert_eq!(keys.len(), 8);
+fn each_plan_names_its_account_its_kind_and_no_error_in_the_order_asked() {
+    let found = plans(None).plans_stored(&[("bea@example.test", "proton"), ADA]).unwrap();
+    assert_eq!(found.len(), 2);
+    let (bea, ada) = (&found[0], &found[1]);
+    assert_eq!(ada.len(), 8);
     assert_eq!(
-        (&plan["account"], &plan["kind"], &plan["error"]),
+        (&ada["account"], &ada["kind"], &ada["error"]),
         (&json!("ada@example.test"), &json!("imap"), &Value::Null)
     );
-    assert_eq!(plan["by_bucket"], json!({"other/personal-ish": 2}));
+    assert_eq!(ada["by_bucket"], json!({"other/personal-ish": 2}));
+    assert_eq!(
+        (&bea["account"], &bea["kind"], &bea["in_inbox"]),
+        (&json!("bea@example.test"), &json!("proton"), &json!(0))
+    );
+    assert!(plans(None).plans_stored(&[]).unwrap().is_empty());
 }
 
 #[test]
 fn a_plan_reads_the_rules_as_they_stand() {
-    let plan =
-        plans(Some(json!({"block_senders": ["LIN@example.test"]}))).plan_stored("ada@example.test", "imap").unwrap();
-    assert_eq!(plan["by_bucket"], json!({"blocked": 2}));
-    assert_eq!((&plan["junk"], &plan["keep"]), (&json!(2), &json!(0)));
+    let found = plans(Some(json!({"block_senders": ["LIN@example.test"]}))).plans_stored(&[ADA]).unwrap();
+    assert_eq!(found[0]["by_bucket"], json!({"blocked": 2}));
+    assert_eq!((&found[0]["junk"], &found[0]["keep"]), (&json!(2), &json!(0)));
 }
 
 #[test]
 fn a_rule_book_that_isnt_one_fails_the_plan() {
-    let failed = plans(Some(json!({"keep_senders": 1}))).plan_stored("ada@example.test", "imap").unwrap_err();
+    let failed = plans(Some(json!({"keep_senders": 1}))).plans_stored(&[ADA]).unwrap_err();
     assert_eq!(failed.class, "MalformedRules");
 }

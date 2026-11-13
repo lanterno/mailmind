@@ -38,11 +38,14 @@ impl AccountList for Two {
 struct Plans;
 
 impl InboxPlans for Plans {
-    fn plan_stored(&self, account: &Listed) -> Result<Map<String, Value>, Fault> {
-        let (in_inbox, junk) = if account.email.starts_with("ada") { (12, 3) } else { (2, 0) };
-        let plan = json!({"account": account.email, "kind": account.kind, "in_inbox": in_inbox, "by_bucket": {},
-                          "junk": junk, "keep": in_inbox - junk, "top_senders": {}, "error": null});
-        Ok(plan.as_object().unwrap().clone())
+    fn plans_stored(&self, accounts: &[Listed]) -> Result<Vec<Map<String, Value>>, Fault> {
+        let plan = |account: &Listed| {
+            let (in_inbox, junk) = if account.email.starts_with("ada") { (12, 3) } else { (2, 0) };
+            let plan = json!({"account": account.email, "kind": account.kind, "in_inbox": in_inbox, "by_bucket": {},
+                              "junk": junk, "keep": in_inbox - junk, "top_senders": {}, "error": null});
+            plan.as_object().unwrap().clone()
+        };
+        Ok(accounts.iter().map(plan).collect())
     }
 
     fn buckets(&self) -> Value {

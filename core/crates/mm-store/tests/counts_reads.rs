@@ -74,11 +74,12 @@ fn an_account_s_labels_count_each_message_once_and_leave_out_gmail_s_own() {
 #[test]
 fn a_stored_inbox_leaves_out_what_is_deleted_or_on_its_way_out() {
     let (_dir, database) = database();
-    let inbox = database.stored_inbox("ada@example.test").unwrap();
-    let senders: Vec<&str> = inbox.iter().map(|s| s.from_addr.as_deref().unwrap()).collect();
-    assert_eq!(senders, ["lin@example.test", "news@loom.example.test"]);
+    let inboxes = database.stored_inboxes(&["cy@example.test", "ada@example.test", "bea@example.test"]).unwrap();
+    let senders: Vec<Vec<&str>> =
+        inboxes.iter().map(|inbox| inbox.iter().map(|s| s.from_addr.as_deref().unwrap()).collect()).collect();
+    assert_eq!(senders, [vec![], vec!["lin@example.test", "news@loom.example.test"], vec!["ivo@example.test"]]);
     assert_eq!(
-        inbox[1],
+        inboxes[1][1],
         Stored {
             from_addr: Some("news@loom.example.test".into()),
             list_unsub_raw: Some("<https://loom.example.test/u>".into()),
