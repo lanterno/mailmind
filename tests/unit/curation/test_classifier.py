@@ -73,3 +73,21 @@ def test_is_junk(bucket, junk):
 
 def test_a_non_ascii_subject_does_not_crash():
     assert m.classify("user@example.test", "新年快乐 🎉 здравей", "", False, rules=RULES)[0] == m.PERSONAL
+
+
+# Known bugs, each the right answer the classifier doesn't give yet: its patterns match inside longer words.
+@pytest.mark.xfail(strict=True, reason="\\bmedi takes media and medium for medical")
+@pytest.mark.parametrize("frm", ["noreply@medium.example", "alerts@mediaplayer.example"])
+def test_a_media_sender_is_not_protected_as_medical(frm):
+    assert m.classify(frm, "Your weekly digest", "", False, rules=RULES)[0] != m.PROTECTED
+
+
+@pytest.mark.xfail(strict=True, reason="wise\\.com matches inside likewise.com")
+def test_a_domain_that_only_ends_like_a_protected_one_is_not_protected():
+    assert m.classify("hello@likewise.com", "Our news", "", False, rules=RULES)[0] != m.PROTECTED
+
+
+@pytest.mark.xfail(strict=True, reason="matrix and cycler match inside other words")
+@pytest.mark.parametrize("subject", ["Join our Matrix room", "Selling my bike to a recycler"])
+def test_a_person_writing_an_ordinary_word_is_not_a_scam(subject):
+    assert m.classify("sam@gmail.com", subject, "", False, rules=RULES)[0] == m.PERSONAL
