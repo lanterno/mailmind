@@ -54,16 +54,17 @@ Step 3 of the "MailMind client architecture" document is under way ([docs/client
 (`core/crates/mm-server`) takes over the Python app's routes one by one, and `tests/support/rust_ledger.txt` lists the
 served tests it passes against the same scripts. Until the flip, the Python app gets fixes only.
 
-- **Port the rest of the routes** · high value · effort L · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers 64 of the Python app's 103
-  routes: the page and settings, the Mailbox's lists, a conversation, a message opened, the digest and the Document Hub;
-  search, saved views and contacts; rules, filters, the Screener, the audit trail and Tidy; snooze, mute, follow-ups,
-  Reply Later and tasks; filing, Undo and the tray of changes; sync, refresh and reconcile. `just test-rust` holds 44 of
-  `tests/api`'s 149 served tests. Still Python's: sending (`/api/send`, drafts, the outbox's retry, cancel and send-now,
-  RSVP), cleanup (`/api/cleanup/*`, `/api/sweep`, `/api/tidy/undo`, unsubscribe over SMTP and one-click HTTPS), the
-  assistant (`/api/ai/*`, the briefing, the review, the Claude API client, the cost governor, batches), accounts (add,
-  edit, test, delete, trust-cert), the calendar (`/api/upcoming`, `/api/calendar/event`, which need an ICS reader and
-  recurrence), the export's archive (`/api/export/archive` answers that it isn't served yet), and `/api/debug/health`
-  and `/api/debug/jobs`. `just test-rust-all` says what passes.
+- **Port the rest of the routes** · high value · effort L · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers 69 of the Python app's
+  103 routes: the page and settings, the Mailbox's lists, a conversation, a message opened, the digest and the
+  Document Hub; search, saved views and contacts; rules, filters, the Screener, the audit trail and Tidy; snooze,
+  mute, follow-ups, Reply Later and tasks; filing, Undo and the tray of changes; sync, refresh and reconcile; and
+  accounts (add, edit, test, delete, trust-cert). `just test-rust` holds 54 of `tests/api`'s 149 served tests and 7 of
+  the browser's. Still Python's: sending (`/api/send`, drafts, the outbox's retry, cancel and send-now, RSVP), cleanup
+  (`/api/cleanup/*`, `/api/sweep`, `/api/tidy/undo`, unsubscribe over SMTP and one-click HTTPS), the assistant
+  (`/api/ai/*`, the briefing, the review, the Claude API client, the cost governor, batches), the calendar
+  (`/api/upcoming`, `/api/calendar/event`, which need an ICS reader and recurrence), the export's archive
+  (`/api/export/archive` answers that it isn't served yet), and `/api/debug/health` and `/api/debug/jobs`, which only
+  in-process tests call. `just test-rust-all` says what passes.
 - **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — `mailmind-server` runs the change
   queue's worker and the snooze, sync and reconcile rounds (`mm-server/src/workers.rs`); `mm-served` drives them one pass
   at a time through its `work` line. Still to come: IDLE (an IDLE command and its interrupt in `mm-imap`, the
@@ -83,20 +84,19 @@ served tests it passes against the same scripts. Until the flip, the Python app 
 - **One adapter for each port** · low value · effort S · [#32](https://github.com/lanterno/mailmind/issues/32) — The areas ported side by side left doubles: three
   readers of the rule book (`Database::rules_document`, `RulesDocument`, the Curation store's `RuleBook`), three ways of
   reading a POST's fields (`body::Fields`, `posted`, `schema`), two adapters naming the accounts (`wiring::KnownAccounts`,
-  `bound::Names`), two tallies of a sender (`StoredTally`, `ContactMail::card`), and two writers of the undo stack
-  (`blocks::push_undo`, `mailbox_commands`). Keep one of each.
+  `bound::Names`), two tallies of a sender (`StoredTally`, `ContactMail::card`), two writers of the undo stack
+  (`blocks::push_undo`, `mailbox_commands`), and three integer readers beside `mm_kernel::parsed::as_int` (`query::as_int`,
+  `body::as_int`, `schema::number`). Keep one of each.
 - **Where the Rust server still answers apart** · low value · effort S · [#33](https://github.com/lanterno/mailmind/issues/33) — Discovery reads a folder's part
   from its name only (`bound::NamedRoles`), not from what LIST said; a domain that isn't ASCII is lowered and punycoded with
   no nameprep; a failed sync or reconcile keeps Rust's class name (`Timeout`, `ConnectionRefused`) where Python kept its
-  exception's, and its log line names no account; a snooze commits twice, its undo entry in a block of its own.
-- **The login Keychain in the Rust server** · high value · effort S · [#7](https://github.com/lanterno/mailmind/issues/7) — `mailmind-server` reads secrets through
-  `NoKeychain` (`mm-server/src/real.rs`), so it needs `MAILMIND_DB_KEY` and can't log in to an account whose password the
-  Keychain keeps. Port `platform.keychain`: `/usr/bin/security`, with the secret on standard input.
-- **Verified TLS to mail servers off this machine** · high value · effort M · [#8](https://github.com/lanterno/mailmind/issues/8) — `mm_imap::Server::connect` refuses them
-  (`VerifiedTlsNotOnTheRustServerYet`); only loopback servers with a pinned certificate are reached. It needs the system's
-  roots and tests of its own.
-- **Fakes that stand alone** · medium value · effort S · [#9](https://github.com/lanterno/mailmind/issues/9) — `tests/fakes/imap_server.py` imports `mailmind` (the Keychain
-  item's name and `platform.keychain`). Before the flip, the fakes must run with no Python app beside them.
+  exception's, and its log line names no account; a snooze commits twice, its undo entry in a block of its own;
+  a login reads its password from the Keychain each time where Python keeps it for the process, and a deleted account's
+  sync status stays until a restart (`Syncing` has no `_forget_status`).
+- **The login hold on the Rust server** · high value · effort S · [#36](https://github.com/lanterno/mailmind/issues/36) — After a server refuses a login, the
+  Python app holds it back (five minutes, doubling to an hour: `accounts.domain.login_hold`) so a password gone bad
+  doesn't lock the account out. `mailmind-server` has no hold, and its workers now sync every five minutes. Port it into
+  `mm-accounts`, ask it before each session opens, and publish CredentialsRejected. Before the Rust server is used daily.
 - **The in-process browser tests on the Rust server** · medium value · effort M · [#10](https://github.com/lanterno/mailmind/issues/10) — `tests/e2e/browser/in_process/` patches
   the Python app's internals, so the ledger can't hold them. Each needs a way in through the Rust server's seams
   (`Clock`, `Outside`, `Keychain`), or a served test that states the same thing.
@@ -169,8 +169,7 @@ implementation.
 
 ## Next up
 
-1. **Step 3: the Rust server on every route** (high) — its background work and what the local writes ask of the change
-   queue, then sending, cleanup, the assistant, accounts and the calendar, with the Keychain and verified TLS beside
-   them. See The move to the Rust core.
+1. **Step 3: the Rust server on every route** (high) — sending, cleanup and the calendar, then the assistant; the login
+   hold and the database's version before anyone uses it daily. See The move to the Rust core.
 2. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
