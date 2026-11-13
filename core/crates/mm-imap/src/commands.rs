@@ -6,7 +6,6 @@
 //! `error`, as `imaplib.IMAP4.error` is. An expunge names its UIDs, never the whole folder.
 
 use std::collections::BTreeMap;
-use std::net::Shutdown;
 
 use mm_kernel::when::civil;
 use mm_mailbox::session::{HEADER_BATCH, Headers, MailServer, Search, Selected, ServerError};
@@ -15,7 +14,6 @@ use crate::codec::{Code, Said};
 use crate::list::mailbox_arg;
 use crate::names::{gmail_labels, imap_quote};
 use crate::session::{Answer, Error, Session};
-use crate::wire::Stream;
 
 /// What a server's NO or BAD to a command is, by its class: `imaplib.IMAP4.error`'s name.
 const REFUSED: &str = "error";
@@ -241,9 +239,6 @@ impl MailServer for Session {
     }
 
     fn shutdown(&mut self) {
-        let _ = match &mut self.connection.wire.stream {
-            Stream::Tls(tls) => tls.sock.shutdown(Shutdown::Both),
-            Stream::Plain(tcp) => tcp.shutdown(Shutdown::Both),
-        };
+        let _ = self.connection.wire.stream.shutdown();
     }
 }

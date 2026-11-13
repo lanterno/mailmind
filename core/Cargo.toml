@@ -20,6 +20,7 @@ mm-curation = { path = "crates/mm-curation" }
 mm-discovery = { path = "crates/mm-discovery" }
 mm-attention = { path = "crates/mm-attention" }
 mm-mailbox = { path = "crates/mm-mailbox" }
+mm-net = { path = "crates/mm-net" }
 mm-accounts = { path = "crates/mm-accounts" }
 mm-imap = { path = "crates/mm-imap" }
 mm-server = { path = "crates/mm-server" }

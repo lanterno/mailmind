@@ -9,6 +9,8 @@ use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signat
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
 
+use crate::Lost;
+
 /// Takes any certificate a loopback server presents, for its pin to be checked after the handshake.
 #[derive(Debug)]
 struct PinnedAfter {
@@ -50,8 +52,16 @@ impl ServerCertVerifier for PinnedAfter {
     }
 }
 
-/// The TLS a loopback server gets: its certificate pinned, not verified.
-pub(crate) fn loopback() -> Result<Arc<ClientConfig>, rustls::Error> {
+/// The TLS a server gets: on this machine, its certificate pinned rather than verified, the pin checked by the caller
+/// before a credential is sent; off it, none yet, since verified TLS isn't on the Rust server.
+pub fn config(loopback: bool) -> Result<Arc<ClientConfig>, Lost> {
+    if !loopback {
+        return Err(Lost("VerifiedTlsNotOnTheRustServerYet"));
+    }
+    pinned_after().map_err(|_| Lost("TlsError"))
+}
+
+fn pinned_after() -> Result<Arc<ClientConfig>, rustls::Error> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let config = ClientConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()?

@@ -1,41 +1,8 @@
 //! IMAP on the wire: a command a line, and a response a line, with any literal (`{n}` and then n bytes) read into it.
 
 use std::io::{self, Read, Write};
-use std::net::TcpStream;
 
-use rustls::{ClientConnection, StreamOwned};
-
-/// The connection, before TLS starts and after.
-#[derive(Debug)]
-pub(crate) enum Stream {
-    Plain(TcpStream),
-    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
-}
-
-impl Read for Stream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Stream::Plain(s) => s.read(buf),
-            Stream::Tls(s) => s.read(buf),
-        }
-    }
-}
-
-impl Write for Stream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Stream::Plain(s) => s.write(buf),
-            Stream::Tls(s) => s.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self {
-            Stream::Plain(s) => s.flush(),
-            Stream::Tls(s) => s.flush(),
-        }
-    }
-}
+pub(crate) use mm_net::Stream;
 
 /// A piece of a response: its text, or a literal's bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]

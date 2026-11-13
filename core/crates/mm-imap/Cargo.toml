@@ -11,6 +11,7 @@ publish.workspace = true
 imap-proto.workspace = true
 mm-kernel.workspace = true
 mm-mailbox.workspace = true
+mm-net.workspace = true
 regex.workspace = true
 rustls.workspace = true
 

@@ -1,7 +1,6 @@
 //! A connection to an account's IMAP server: TLS, then a login, then the commands the Mailbox sends.
 
 use std::io;
-use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 use mm_kernel::errors::Fault;
@@ -9,12 +8,9 @@ use mm_kernel::seams::{Outside, Secret};
 use mm_mailbox::ports::{MailSession, SessionError};
 use mm_mailbox::roles::Folder;
 use mm_mailbox::session::ServerError;
-use rustls::pki_types::ServerName;
-use rustls::{ClientConnection, StreamOwned};
 
 use crate::codec::{self, Said};
 use crate::list::{self, head_and_literal, strip_prefix_ignoring_case};
-use crate::tls;
 use crate::wire::{Piece, Stream, Wire};
 
 /// Where a server listens and how TLS starts there.
@@ -56,13 +52,14 @@ impl From<Error> for SessionError {
     }
 }
 
-fn lost(e: &io::Error) -> Error {
-    match e.kind() {
-        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => Error::Unreachable("Timeout"),
-        io::ErrorKind::ConnectionRefused => Error::Unreachable("ConnectionRefused"),
-        io::ErrorKind::InvalidData => Error::Unreachable("TlsOrProtocolError"),
-        _ => Error::Unreachable("ConnectionLost"),
+impl From<mm_net::Lost> for Error {
+    fn from(lost: mm_net::Lost) -> Error {
+        Error::Unreachable(lost.0)
     }
+}
+
+fn lost(e: &io::Error) -> Error {
+    mm_net::lost(e).into()
 }
 
 /// A command's untagged responses, and the status of its tagged one (`OK`, `NO` or `BAD`) with the rest of its line.
@@ -176,19 +173,12 @@ pub struct Server {
 impl Server {
     /// Connect to `endpoint` through `outside` and start TLS. Nothing that names the account is sent.
     pub fn connect(outside: &dyn Outside, endpoint: Endpoint<'_>, timeout: Duration) -> Result<Server, Error> {
-        if !endpoint.loopback {
-            return Err(Error::Unreachable("VerifiedTlsNotOnTheRustServerYet"));
-        }
+        let config = mm_net::tls::config(endpoint.loopback)?;
         outside.reach(endpoint.host).map_err(|_| Error::Unreachable("Tripped"))?;
-        let tcp = connect_tcp(endpoint.host, endpoint.port, timeout)?;
-        let config = tls::loopback().map_err(|_| Error::Unreachable("TlsError"))?;
-        let name = ServerName::try_from(endpoint.host.to_owned()).map_err(|_| Error::Unreachable("BadServerName"))?;
+        let tcp = mm_net::connect(endpoint.host, endpoint.port, timeout)?;
+        let name = mm_net::server_name(endpoint.host)?;
         let starttls = endpoint.starttls;
-        let stream = if starttls {
-            Stream::Plain(tcp)
-        } else {
-            Stream::Tls(Box::new(handshake(config.clone(), name.clone(), tcp)?))
-        };
+        let stream = if starttls { Stream::Plain(tcp) } else { mm_net::handshake(config.clone(), name.clone(), tcp)? };
         let mut connection = Connection { wire: Wire::new(stream), sent: 0, capabilities: Vec::new() };
         let greeting = connection.wire.response().map_err(|e| lost(&e))?;
         let Some(Piece::Text(greeting)) = greeting.first() else {
@@ -213,15 +203,11 @@ impl Server {
             let Stream::Plain(tcp) = wire.stream else {
                 return Err(Error::Unreachable("TlsError"));
             };
-            let tls = handshake(config, name, tcp)?;
-            connection = Connection { wire: Wire::new(Stream::Tls(Box::new(tls))), sent, capabilities };
+            let tls = mm_net::handshake(config, name, tcp)?;
+            connection = Connection { wire: Wire::new(tls), sent, capabilities };
             connection.learn_capabilities("")?;
         }
-        let certificate = match &connection.wire.stream {
-            Stream::Tls(tls) => tls.conn.peer_certificates().and_then(|c| c.first()).map(|c| c.as_ref().to_vec()),
-            Stream::Plain(_) => None,
-        }
-        .ok_or(Error::Unreachable("NoCertificate"))?;
+        let certificate = connection.wire.stream.peer_certificate().ok_or(Error::Unreachable("NoCertificate"))?;
         Ok(Server { connection, certificate })
     }
 
@@ -258,34 +244,6 @@ impl Server {
 /// An IMAP quoted string.
 fn quote(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
-}
-
-fn connect_tcp(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, Error> {
-    let addresses = (host, port).to_socket_addrs().map_err(|_| Error::Unreachable("NameNotResolved"))?;
-    let mut last = Error::Unreachable("NameNotResolved");
-    for address in addresses {
-        match TcpStream::connect_timeout(&address, timeout) {
-            Ok(tcp) => {
-                tcp.set_read_timeout(Some(timeout)).map_err(|e| lost(&e))?;
-                tcp.set_write_timeout(Some(timeout)).map_err(|e| lost(&e))?;
-                return Ok(tcp);
-            }
-            Err(e) => last = lost(&e),
-        }
-    }
-    Err(last)
-}
-
-fn handshake(
-    config: std::sync::Arc<rustls::ClientConfig>,
-    name: ServerName<'static>,
-    mut tcp: TcpStream,
-) -> Result<StreamOwned<ClientConnection, TcpStream>, Error> {
-    let mut connection = ClientConnection::new(config, name).map_err(|_| Error::Unreachable("TlsError"))?;
-    while connection.is_handshaking() {
-        connection.complete_io(&mut tcp).map_err(|_| Error::Unreachable("TlsError"))?;
-    }
-    Ok(StreamOwned::new(connection, tcp))
 }
 
 /// A logged-in connection.
@@ -353,9 +311,6 @@ impl MailSession for Session {
 
     fn logout(&mut self) {
         let _ = self.connection.command(b"LOGOUT");
-        if let Stream::Tls(tls) = &mut self.connection.wire.stream {
-            tls.conn.send_close_notify();
-            let _ = tls.conn.complete_io(&mut tls.sock);
-        }
+        self.connection.wire.stream.close_notify();
     }
 }
