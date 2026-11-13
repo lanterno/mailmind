@@ -305,7 +305,7 @@ fn the_folders_need_an_account_the_app_knows() {
         bad.json(),
         json!({"type": "/problems/refused", "title": "Refused", "status": 400, "detail": "bad request"})
     );
-    let not_yet = server.get("/api/messages?account=ada@example.test");
+    let not_yet = server.get("/api/export/archive?format=eml");
     assert_eq!((not_yet.status, not_yet.json()), (501, problem(501, "not on the Rust server yet")));
 }
 
