@@ -1,4 +1,4 @@
-"""The ghost pruner's turn at one account (mailmind.mailbox.application.reconcile.Reconciler._auto_reconcile_one), over the
+"""The ghost pruner's turn at one account (mailmind.mailbox.application.reconcile.Reconciler.auto_reconcile_one), over the
 store in a temp database and a stand-in server behind the pool: a message gone from the server goes from the store, the
 reconcile trail in the database says so, and an open list hears it. Each turn's record is committed before the next asks the
 server anything. A user op taking the gate between two folders leaves the rest for the next turn. A reconcile someone asked
@@ -96,7 +96,7 @@ def audit():
 def test_a_message_gone_from_the_server_goes_from_the_store_and_is_said(data_dir, monkeypatch):
     store_folder("INBOX", 1, 2, 3)
     events = heard(monkeypatch)
-    reconciler(_Server(INBOX=(1, 3)))._auto_reconcile_one({"email": ADA})       # deleted in another client
+    reconciler(_Server(INBOX=(1, 3))).auto_reconcile_one({"email": ADA})       # deleted in another client
     assert stored() == [1, 3]
     assert events == [("reconcile", {"account": ADA, "pruned": 1})]
     [record] = audit()
@@ -109,16 +109,16 @@ def test_each_turns_record_is_committed_before_the_next_asks_the_server(data_dir
     heard(monkeypatch)
     server = _Server(INBOX=(1, 2))
     r = reconciler(server)
-    r._auto_reconcile_one({"email": ADA})
+    r.auto_reconcile_one({"email": ADA})
     server.folders["INBOX"].discard(2)
-    r._auto_reconcile_one({"email": ADA})                                       # its SEARCH would refuse an open write
+    r.auto_reconcile_one({"email": ADA})                                       # its SEARCH would refuse an open write
     assert stored() == [1] and [a["pruned"] for a in audit()] == [1, 1]
 
 
 def test_with_nothing_gone_nothing_is_said(data_dir, monkeypatch):
     store_folder("INBOX", 1, 2, 3)
     events = heard(monkeypatch)
-    reconciler(_Server(INBOX=(1, 2, 3)))._auto_reconcile_one({"email": ADA})
+    reconciler(_Server(INBOX=(1, 2, 3))).auto_reconcile_one({"email": ADA})
     assert events == [] and audit() == []
 
 
@@ -127,7 +127,7 @@ def test_a_list_that_cant_hear_it_stops_nothing(data_dir, monkeypatch):
         raise RuntimeError("no one is listening")
     monkeypatch.setattr(sse, "publish", deaf)
     store_folder("INBOX", 1, 2, 3)
-    reconciler(_Server(INBOX=(1, 3)))._auto_reconcile_one({"email": ADA})
+    reconciler(_Server(INBOX=(1, 3))).auto_reconcile_one({"email": ADA})
     assert stored() == [1, 3] and len(audit()) == 1
 
 

@@ -18,7 +18,7 @@ def reconciler(monkeypatch, emails, *, failing=(), interval=900):
         pruned.append(acct["email"])
         if acct["email"] in failing:
             raise RuntimeError(f"{acct['email']}: the database is locked")
-    monkeypatch.setattr(r, "_auto_reconcile_one", one)
+    monkeypatch.setattr(r, "auto_reconcile_one", one)
     return r, pruned
 
 
