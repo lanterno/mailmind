@@ -88,7 +88,8 @@ pub fn run_forever(queue: &dyn Queue, stop: &Stop) {
     if let Err(fault) = queue.recover() {
         log::error(queue.tag(), "rows left running weren't put back", &[], Some(fault.class));
     }
-    let mut looked = queue.now();
+    // No pass has looked yet: a row already due when the worker starts is taken at once, not at the first poll.
+    let mut looked = 0;
     while !stop.is_set() {
         kicked.wait(Duration::from_secs(u64::try_from(queue.until_due(looked)).unwrap_or_default()));
         if stop.is_set() {
