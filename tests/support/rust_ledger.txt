@@ -16,3 +16,14 @@ tests/api/test_http_post_guards.py::test_a_post_is_refused_before_its_body_is_re
 tests/api/test_http_get.py::test_account_health_and_stats
 tests/api/test_http_events.py::test_a_stream_answers_as_an_event_stream
 tests/api/test_http_events.py::test_a_cross_site_listener_is_refused
+tests/api/test_http_get.py::test_search[all]
+tests/api/test_http_get.py::test_search[account]
+tests/api/test_http_settings.py::test_saved_views
+tests/api/test_http_settings.py::test_known_contacts
+tests/api/test_http_local.py::test_snooze_presets_from_monday_noon[later_today]
+tests/api/test_http_local.py::test_snooze_presets_from_monday_noon[tomorrow]
+tests/api/test_http_local.py::test_snooze_presets_from_monday_noon[weekend]
+tests/api/test_http_local.py::test_snooze_presets_from_monday_noon[next_week]
+tests/api/test_http_local.py::test_later_today_after_nine_at_night_means_tomorrow_morning
+tests/api/test_http_local.py::test_snooze_refusals_and_targets
+tests/api/test_http_local.py::test_reply_later_records_when_the_thread_last_moved
