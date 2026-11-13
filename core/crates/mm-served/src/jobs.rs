@@ -1,6 +1,6 @@
 //! `work <job> <JSON>`: one pass of a background job, as a worker would run it, given the arguments in the JSON list
-//! (`serve_python.py` says what each does). Those this server has yet: a folder's sync, waking what is snoozed, and
-//! the minute's round of follow-ups. A job the Rust server doesn't run yet says so.
+//! (`serve_python.py` says what each does). Those this server has yet: a folder's sync, waking what is snoozed, the
+//! minute's round of follow-ups, a pass of the change queue and an account's reconcile. A job the Rust server doesn't run yet says so.
 
 use mm_server::App;
 use serde_json::Value;
@@ -24,6 +24,7 @@ pub fn work(app: &App, argument: &str) -> String {
         },
         "follow-ups" => app.attention.follow_ups.tick().map(|_| ()).map_err(|failure| failure.to_string()),
         "commands" => app.commands.drain().map_err(|fault| fault.class.to_owned()),
+        "reconcile" => app.reconciler.auto_reconcile_one(text(0)).map_err(|fault| fault.class.to_owned()),
         _ => return format!("failed {job}: not on the Rust server yet"),
     };
     match done {
