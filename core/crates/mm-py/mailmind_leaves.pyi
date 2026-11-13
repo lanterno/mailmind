@@ -24,6 +24,37 @@ def parse_query(text: str | None) -> list[tuple[str, str | int | None, str | Non
 
 # -- the classifier (mm-curation, src/classifier.rs) ---------------------------------------------------------------
 
+from collections.abc import Iterable as _Iterable
+from typing import final as _final
+
+@_final
+class RuleSets:
+    """The person's keep and block lists, held by the core, built once when the rules change."""
+
+    def __new__(
+        cls,
+        keep_senders: _Iterable[str],
+        block_senders: _Iterable[str],
+        keep_domains: _Iterable[str],
+        block_domains: _Iterable[str],
+    ) -> RuleSets: ...
+
+def classify(from_addr: str, subject: str, from_name: str, has_list_unsub: bool, rules: RuleSets) -> tuple[str, str, str]:
+    """`(bucket, confidence, reason)` for a message: its From address, subject and display name, and whether it carried
+    a List-Unsubscribe or List-ID header. The rules come first."""
+    ...
+
+def looks_human(local: str | None) -> bool:
+    """Whether a local part looks like a person's, not a role's or a mailer's."""
+    ...
+
+def by_rule(reason: str | None) -> bool:
+    """Whether a reason `classify` gave says one of the person's rules decided."""
+    ...
+
+def is_junk(bucket: str | None) -> bool:
+    """Whether a bucket, by its name, is junk."""
+    ...
 
 
 # -- threading (mm-mailbox, src/threading.rs) ----------------------------------------------------------------------
