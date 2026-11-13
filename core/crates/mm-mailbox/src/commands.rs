@@ -7,7 +7,8 @@
 //! (`ServerOps::apply`), so a change applies at most once.
 //!
 //! The queue is the Python app's DurableQueue over the mail_commands table: an atomic claim, the `applied` flag as
-//! the exactly-once gate, backoff doubling from 20 seconds to 15 minutes, and rows a crash left running put back.
+//! the exactly-once gate, backoff doubling from 20 seconds to 15 minutes, and rows a crash left running put back. Its
+//! worker (`workers::run_forever`) drains it whenever kicked, when the next row comes due, and at least every `POLL`.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,6 +27,7 @@ use crate::server_ops::ServerOps;
 use crate::session::ServerError;
 use crate::sync_ports::{Events, MailboxEvent};
 use crate::undo;
+use crate::workers::{Kick, Queue};
 
 const TAG: &str = "commands";
 
@@ -71,6 +73,8 @@ pub struct MailCommands {
     tokens: Arc<dyn Tokens>,
     /// This process only reads: a change waits here for a full run's worker.
     read_only: bool,
+    /// Wakes the worker.
+    kicked: Arc<Kick>,
 }
 
 /// What wires MailCommands.
@@ -97,10 +101,13 @@ impl MailCommands {
     pub const AFTER_SILENCE: i64 = 60;
     const BACKOFF_BASE: i64 = 20;
     const BACKOFF_CAP: i64 = 900;
+    /// The longest the worker waits between drains, in seconds, kicked or not.
+    pub const POLL: i64 = 30;
 
     pub fn new(parts: CommandParts) -> MailCommands {
         let CommandParts { store, accounts, server, gates, clock, events, tokens, read_only } = parts;
-        MailCommands { store, accounts, server, gates, clock, events, tokens, read_only }
+        let kicked = Arc::new(Kick::default());
+        MailCommands { store, accounts, server, gates, clock, events, tokens, read_only, kicked }
     }
 
     pub fn store(&self) -> &dyn CommandStore {
@@ -586,5 +593,53 @@ impl MailCommands {
     /// At boot: rows a crash left running go back to the queue.
     pub fn recover(&self) -> Result<(), Fault> {
         command_ports::write(&*self.store, |tx| tx.reset_running())
+    }
+
+    /// Wake the worker now rather than at its next poll: something was queued for it.
+    pub fn kick(&self) {
+        self.kicked.kick();
+    }
+
+    /// Seconds from now until the next queued row comes due, at most POLL, and none if one has come due since the
+    /// last drain began to look (`looked`): that drain may have missed it, and no kick is coming. A row due before
+    /// it looked isn't waited for: a kick brings the drain that takes it, and a read-only process's poll.
+    pub fn until_due(&self, looked: i64) -> i64 {
+        let now = self.now();
+        match command_ports::read(&*self.store, |tx| tx.next_due(looked)) {
+            Ok(Some(due)) => (due - now).clamp(0, Self::POLL),
+            Ok(None) => Self::POLL,
+            Err(fault) => {
+                // The poll still comes.
+                log::warning(TAG, "next due", &[], Some(fault.class));
+                Self::POLL
+            }
+        }
+    }
+}
+
+/// The change queue as its worker drains it (`workers::run_forever`).
+impl Queue for MailCommands {
+    fn tag(&self) -> &'static str {
+        TAG
+    }
+
+    fn kicked(&self) -> Arc<Kick> {
+        self.kicked.clone()
+    }
+
+    fn recover(&self) -> Result<(), Fault> {
+        MailCommands::recover(self)
+    }
+
+    fn now(&self) -> i64 {
+        MailCommands::now(self)
+    }
+
+    fn until_due(&self, looked: i64) -> i64 {
+        MailCommands::until_due(self, looked)
+    }
+
+    fn drain(&self) -> Result<(), Fault> {
+        MailCommands::drain(self)
     }
 }

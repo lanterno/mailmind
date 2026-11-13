@@ -39,3 +39,5 @@ pub mod opening;
 // Tidy's runs, as the brief reads the newest.
 pub mod tidy;
 pub mod undo;
+// What the background workers wait on (a kick, and the stop that ends them), and the worker a queue is drained by.
+pub mod workers;
