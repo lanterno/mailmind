@@ -9,6 +9,7 @@ _default:
 
 # Install everything the checks and the app use: the Python packages, node_modules, Chromium, osv-scanner
 setup: _web-deps
+    @command -v cargo >/dev/null || { echo 'Rust builds the leaves the app shares with the core: install it from https://rustup.rs' >&2; exit 1; }
     uv sync
     uv run playwright install chromium
     command -v osv-scanner >/dev/null || brew install osv-scanner
