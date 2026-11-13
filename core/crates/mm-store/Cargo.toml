@@ -14,6 +14,7 @@ mm-compose.workspace = true
 # A message's parts, as opening it keeps them.
 mm-content.workspace = true
 mm-discovery.workspace = true
+mm-curation.workspace = true
 mm-kernel.workspace = true
 mm-mailbox.workspace = true
 # A snapshot of the database, copied page for page (the online backup API).

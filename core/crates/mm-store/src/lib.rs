@@ -30,6 +30,7 @@ pub mod schema;
 mod senders;
 // The page's own state, and what the app says of itself.
 pub mod compose;
+mod curation_inbox;
 pub mod places;
 mod sync_state;
 
