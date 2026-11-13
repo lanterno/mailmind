@@ -48,6 +48,18 @@ def test_touching_two_threads_merges_them_into_the_smaller_id():
     assert placed.given == {1: "rf:a"} and placed.merged == {"rf:b": "rf:a"}
 
 
+@pytest.mark.xfail(strict=True, reason="place merges each conversation on its own, so two that share a thread chain")
+def test_two_conversations_that_share_a_thread_end_in_one():
+    """New mail that threads b and c hold, and a copy stored again in b whose message thread a holds: the three are one
+    thread now. Merging each conversation on its own puts c into b and b into a, a chain whose outcome hangs on the
+    order the merges are applied in, and gives the new mail b, which is gone."""
+    new = Copy(1, "<n@example.test>")
+    again = Copy(2, "<o@example.test>", thread_id="rf:b")
+    placed = place([new, again], {"<n@example.test>": {"rf:b", "rf:c"}, "<o@example.test>": {"rf:a"}})
+    assert placed.merged == {"rf:b": "rf:a", "rf:c": "rf:a"}
+    assert placed.given == {1: "rf:a", 2: "rf:a"}
+
+
 def test_a_thread_that_gains_a_gmail_id_takes_it():
     placed = place([Copy(1, "<q@example.test>", "1781", in_reply_to="<p@example.test>")], {"<p@example.test>": {"rf:a"}})
     assert placed.given == {1: f"gm:{A}:1781"} and placed.merged == {"rf:a": f"gm:{A}:1781"}
