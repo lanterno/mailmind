@@ -4,7 +4,8 @@
 //! An entry is JSON as it parsed, so what a key holds is the file's word for it: a value is echoed as it came, and
 //! read as Python reads it (`truthy`), so both apps answer one file alike.
 
-use mm_kernel::text;
+use mm_kernel::errors::Problem;
+use mm_kernel::{parsed, text};
 use serde_json::{Map, Value, json};
 
 use crate::credential::CredentialRef;
@@ -245,17 +246,158 @@ pub fn clean_signature(value: &Value) -> String {
     text::strip(&kept).chars().take(2000).collect()
 }
 
-/// The entry under `email`, matched as Python's `account.find` matches it: stripped, in any case.
-pub fn find<'a>(raw: &'a mut Map<String, Value>, email: &str) -> Option<&'a mut Map<String, Value>> {
+/// An alias as the page shows it: printable characters and spaces, stripped, at most 64 characters (`clean_alias`).
+pub fn clean_alias(alias: &str) -> String {
+    let kept: String = alias.chars().filter(|c| *c == ' ' || text::is_printable(*c)).collect();
+    text::strip(&kept).chars().take(64).collect()
+}
+
+/// What a port that isn't one says, by the key it was given under.
+fn port_said(key: &str) -> &'static str {
+    if key == "smtp_port" { "SMTP port must be 1–65535" } else { "port must be 1–65535" }
+}
+
+/// A port as a request or the file gives it, as `int()` reads it; else the refusal that names it (`_port`).
+fn port(key: &str, given: &Value) -> Result<i64, Problem> {
+    parsed::as_int(given).ok_or_else(|| Problem::refused(port_said(key)))
+}
+
+/// The refusal a port outside 1–65535 gets.
+fn port_in_range(key: &str, given: &Value) -> Result<(), Problem> {
+    if (1..=65535).contains(&port(key, given)?) { Ok(()) } else { Err(Problem::refused(port_said(key))) }
+}
+
+/// What a request's `p[k] not in (None, "")` lets through.
+fn said(value: &Value) -> bool {
+    !matches!(value, Value::Null) && value.as_str() != Some("")
+}
+
+/// The fields a request may change, other than its credential, applied to `entry` (`apply_fields`): a blank alias
+/// or signature unsets it, a port is read as a number, a flag is taken only as true or false, and any other value
+/// but null and "" is kept as it came.
+pub fn apply_fields(entry: &mut Map<String, Value>, asked: &Map<String, Value>) -> Result<(), Problem> {
+    if let Some(alias) = asked.get("alias") {
+        let alias = alias.as_str().map(clean_alias).unwrap_or_default();
+        if alias.is_empty() {
+            entry.shift_remove("alias");
+        } else {
+            entry.insert("alias".into(), Value::String(alias));
+        }
+    }
+    if let Some(signature) = asked.get("signature") {
+        let signature = clean_signature(signature);
+        if signature.is_empty() {
+            entry.shift_remove("signature");
+        } else {
+            entry.insert("signature".into(), Value::String(signature));
+        }
+    }
+    for key in ["type", "host", "trash", "smtp_host"] {
+        if let Some(value) = asked.get(key).filter(|v| said(v)) {
+            entry.insert(key.into(), value.clone());
+        }
+    }
+    for key in ["port", "smtp_port"] {
+        if let Some(value) = asked.get(key).filter(|v| said(v)) {
+            entry.insert(key.into(), Value::from(port(key, value)?));
+        }
+    }
+    for key in ["starttls", "strip_spaces", "disabled", "smtp_starttls"] {
+        if let Some(flag @ Value::Bool(_)) = asked.get(key) {
+            entry.insert(key.into(), flag.clone());
+        }
+    }
+    Ok(())
+}
+
+/// What an account must be to be saved (`validate_new`): an address, a type MailMind knows, a host for generic
+/// IMAP, and a port a connection can reach.
+pub fn validate_new(entry: &Map<String, Value>) -> Result<(), Problem> {
+    let email = entry.get("email").and_then(Value::as_str).map(text::strip).unwrap_or_default();
+    if !email.contains('@') {
+        return Err(Problem::refused("a valid email is required"));
+    }
+    let kind = match entry.get("type") {
+        None => Some("imap"),
+        Some(Value::String(t)) => ["gmail", "imap", "proton"].contains(&t.as_str()).then_some(t.as_str()),
+        Some(_) => None,
+    };
+    let Some(kind) = kind else {
+        return Err(Problem::refused("type must be gmail, imap, or proton"));
+    };
+    let host = match entry.get("host") {
+        Some(v) if truthy(v) => match v {
+            Value::String(s) => s.clone(),
+            other => other.to_string(),
+        },
+        _ => String::new(),
+    };
+    if kind == "imap" && text::strip(&host).is_empty() {
+        return Err(Problem::refused("a host is required for a generic IMAP account"));
+    }
+    match entry.get("port") {
+        Some(given) => port_in_range("port", given),
+        None => Ok(()),
+    }
+}
+
+/// Text that names a host: not empty, and every character printable and no space (`_names_a_host`).
+fn names_a_host(held: &Value) -> bool {
+    held.as_str().is_some_and(|h| !h.is_empty() && h.chars().all(|c| text::is_printable(c) && !text::is_space(c)))
+}
+
+/// Python's `==` of two values a file or a request gave: a number equals the same number written otherwise, and
+/// true is 1.
+fn same(a: &Value, b: &Value) -> bool {
+    let number = |v: &Value| match v {
+        Value::Bool(b) => Some(f64::from(u8::from(*b))),
+        Value::Number(n) => n.as_f64(),
+        _ => None,
+    };
+    match (number(a), number(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => a == b,
+    }
+}
+
+/// A write may not leave an endpoint no connection could reach (`refuse_bad_endpoints`). Only what it changes from
+/// `before` counts: what the file held is the owner's, and asking for a new alias is no time to refuse it.
+pub fn refuse_bad_endpoints(entry: &Map<String, Value>, before: &Map<String, Value>) -> Result<(), Problem> {
+    let changed = |key: &str| entry.get(key).filter(|now| !same(now, before.get(key).unwrap_or(&Value::Null)));
+    if changed("host").is_some_and(|h| !names_a_host(h)) {
+        return Err(Problem::refused("host must be a host name"));
+    }
+    if changed("smtp_host").is_some_and(|h| !names_a_host(h)) {
+        return Err(Problem::refused("SMTP host must be a host name"));
+    }
+    match changed("smtp_port") {
+        Some(given) => port_in_range("smtp_port", given),
+        None => Ok(()),
+    }
+}
+
+/// Where in the file's `accounts` the entry under `email` is, matched as Python's `account.find` matches it:
+/// stripped, in any case, and an entry with no address answering to "".
+pub fn position(raw: &Map<String, Value>, email: &str) -> Option<usize> {
     let wanted = text::strip(email).to_lowercase();
-    let Some(Value::Array(entries)) = raw.get_mut("accounts") else {
+    let Some(Value::Array(entries)) = raw.get("accounts") else {
         return None;
     };
-    entries.iter_mut().find_map(|e| match e {
-        Value::Object(entry) => {
-            let named = entry.get("email").and_then(Value::as_str).map(|e| text::strip(e).to_lowercase());
-            (named.as_deref() == Some(wanted.as_str())).then_some(entry)
-        }
-        _ => None,
+    entries.iter().position(|e| {
+        let named = match e.get("email") {
+            Some(Value::String(named)) => Some(text::strip(named).to_lowercase()),
+            Some(named) if truthy(named) => None,
+            _ => Some(String::new()),
+        };
+        e.is_object() && named.as_deref() == Some(wanted.as_str())
     })
+}
+
+/// The entry under `email`, as `position` finds it.
+pub fn find<'a>(raw: &'a mut Map<String, Value>, email: &str) -> Option<&'a mut Map<String, Value>> {
+    let at = position(raw, email)?;
+    match raw.get_mut("accounts") {
+        Some(Value::Array(entries)) => entries.get_mut(at).and_then(Value::as_object_mut),
+        _ => None,
+    }
 }

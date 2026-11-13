@@ -32,3 +32,32 @@ pub struct Synced {
 pub trait SyncRecord: Send + Sync + std::fmt::Debug {
     fn sync_record(&self) -> Result<Vec<Synced>, Fault>;
 }
+
+/// Why a login didn't work, by the class of its trouble alone (`mm_imap`'s and `mm_net`'s, or a fault's): never
+/// what a server said.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LoginTrouble(pub &'static str);
+
+/// An account's server, asked whether a login works there: a login, and then a logout.
+pub trait LoginProbe: Send + Sync + std::fmt::Debug {
+    /// Log a saved account in at its saved server, with its saved secret.
+    fn saved(&self, account: &crate::Account, timeout: std::time::Duration) -> Result<(), LoginTrouble>;
+
+    /// Log a draft in where it was typed, with the password typed with it.
+    fn draft(&self, draft: &crate::draft::Draft, timeout: std::time::Duration) -> Result<(), LoginTrouble>;
+}
+
+/// What happened to an account, once the file holds it (`mailmind.accounts.domain.events`): each names the account
+/// by its address, and says nothing of its credential.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AccountChange {
+    Added(String),
+    /// Its settings changed: endpoint, credential, alias, signature, or the certificates trusted for it.
+    Changed(String),
+    Removed(String),
+}
+
+/// Who hears of an account's change: its logins, and its IDLE (`bus.publish` in the Python app).
+pub trait AccountEvents: Send + Sync + std::fmt::Debug {
+    fn publish(&self, change: AccountChange);
+}

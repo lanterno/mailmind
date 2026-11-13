@@ -10,6 +10,9 @@
 //! An entry naming two gets the first of keychain, env, proton_bridge, op; one naming plain, or a bare string, reads
 //! as the style "plain" only so it can be refused. No credential may name the item the database's key is kept in.
 
+use mm_kernel::errors::Problem;
+use mm_kernel::seams::Secret;
+use mm_kernel::{parsed, text};
 use serde_json::{Value, json};
 
 use crate::account::truthy;
@@ -52,6 +55,8 @@ impl Style {
 pub struct CredentialRef {
     pub style: Option<Style>,
     named: Value,
+    /// A Keychain credential's: how many secrets MailMind has kept under its item, so a new one reads as new.
+    version: Value,
 }
 
 impl std::fmt::Debug for CredentialRef {
@@ -62,11 +67,12 @@ impl std::fmt::Debug for CredentialRef {
 
 impl CredentialRef {
     pub fn parse(credential: Option<&Value>) -> CredentialRef {
-        let of = |style, named: &Value| CredentialRef { style: Some(style), named: named.clone() };
+        let of =
+            |style, named: &Value| CredentialRef { style: Some(style), named: named.clone(), version: Value::Null };
         let cred = match credential {
             Some(Value::String(s)) => return of(Style::Plain, &Value::String(s.clone())),
             Some(Value::Object(cred)) if !cred.is_empty() => cred,
-            _ => return CredentialRef { style: None, named: Value::Null },
+            _ => return CredentialRef { style: None, named: Value::Null, version: Value::Null },
         };
         if let Some(plain) = cred.get("plain") {
             return of(Style::Plain, plain);
@@ -75,7 +81,8 @@ impl CredentialRef {
             if item == DATABASE_KEY_ITEM {
                 return of(Style::Unknown, &Value::Null);
             }
-            return of(Style::Keychain, item);
+            let version = cred.get("version").cloned().unwrap_or(Value::Null);
+            return CredentialRef { version, ..of(Style::Keychain, item) };
         }
         if let Some(var) = cred.get("env") {
             return of(Style::Env, var);
@@ -97,6 +104,11 @@ impl CredentialRef {
         }
     }
 
+    /// A Keychain credential's version, as the file wrote it.
+    pub fn version(&self) -> &Value {
+        &self.version
+    }
+
     /// The credential as the API may show it: its style and whether it is set, and only ever a pointer. Never a value,
     /// a length, a prefix or a hash.
     pub fn masked(&self) -> Value {
@@ -113,4 +125,65 @@ impl CredentialRef {
             None => json!({"style": null, "set": false}),
         }
     }
+}
+
+/// What a request asks the file to hold of an account's credential (`credential_from`).
+#[derive(Debug)]
+pub enum Asked {
+    /// A password typed into Settings, for the Keychain: the file never holds it.
+    Typed(Secret),
+    /// Where a secret is, as the file holds it: a 1Password reference, a variable or the Bridge password.
+    Stored(Value),
+}
+
+/// Text that isn't blank.
+fn text_given(held: &Value) -> bool {
+    held.as_str().is_some_and(|t| !text::strip(t).is_empty())
+}
+
+/// What a request's `{style, value|ref|var}` asks for (`credential_from`): None keeps the credential there is,
+/// for one with no style it reads. One it can't take is refused in a sentence that holds nothing typed.
+pub fn credential_from(asked: Option<&Value>) -> Result<Option<Asked>, Problem> {
+    let Some(asked) = asked.filter(|a| truthy(a)) else { return Ok(None) };
+    let Value::Object(asked) = asked else {
+        return Err(Problem::refused("a credential names its style"));
+    };
+    match asked.get("style").and_then(Value::as_str) {
+        Some("keychain") => match asked.get("value") {
+            Some(Value::String(typed)) if !typed.is_empty() => Ok(Some(Asked::Typed(Secret::new(typed.clone())))),
+            _ => Err(Problem::refused("password required")),
+        },
+        Some("op") => {
+            let given = asked.get("ref").cloned().unwrap_or(Value::Null);
+            let listed = given.as_array().is_some_and(|refs| !refs.is_empty() && refs.iter().all(text_given));
+            if !(text_given(&given) || listed) {
+                return Err(Problem::refused("1Password reference required"));
+            }
+            Ok(Some(Asked::Stored(json!({"op": given}))))
+        }
+        Some("env") => match asked.get("var") {
+            Some(var @ Value::String(name)) if text_given(var) => {
+                Ok(Some(Asked::Stored(json!({"env": text::strip(name)}))))
+            }
+            _ => Err(Problem::refused("environment variable name required")),
+        },
+        Some("proton_bridge") => Ok(Some(Asked::Stored(json!({"proton_bridge": true})))),
+        _ => Ok(None),
+    }
+}
+
+/// The credential naming `item` once a secret is kept there (`keychain_credential`). Its version is one past
+/// `before`'s when that named the same item, so the file says the secret changed.
+pub fn keychain_credential(item: &str, before: Option<&Value>) -> Value {
+    let was = CredentialRef::parse(before);
+    let kept = match was.item() {
+        Some(named) if named == item => parsed::as_int(was.version()),
+        _ => None,
+    };
+    json!({"keychain": item, "version": kept.unwrap_or(0).max(0) + 1})
+}
+
+/// Whether `credential` names the Keychain item `item` (`_names`).
+pub fn names(credential: Option<&Value>, item: &str) -> bool {
+    CredentialRef::parse(credential).item() == Some(item)
 }

@@ -1,15 +1,16 @@
 //! The accounts as `mailmind.config.json` holds them, and what is kept for each (`mailmind.accounts.application
-//! .directory`): the use cases that read the file, and the one write a connection makes, a certificate's pin.
+//! .directory`): the use cases that read the file, the one write a connection makes, a certificate's pin, and the
+//! changes Settings makes.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
-use mm_kernel::errors::{Failure, Fault};
-use mm_kernel::seams::{Clock, Keychain, Secret};
+use mm_kernel::errors::{Failure, Fault, Kind, Problem};
+use mm_kernel::seams::{Clock, Keychain, Secret, keepable_name, keepable_secret};
 use mm_kernel::when;
 use serde_json::{Map, Value, json};
 
 use crate::account::{self, Account, truthy};
-use crate::credential::{CredentialRef, Style};
+use crate::credential::{self, Asked, CredentialRef, Style, credential_from};
 use crate::ports::ConfigFile;
 use crate::preferences;
 
@@ -236,5 +237,154 @@ impl Directory {
     fn preferences_answer(mut read: Map<String, Value>, raw: &Map<String, Value>) -> Value {
         read.insert(preferences::AI_DAILY_LIMIT.to_owned(), preferences::dollars(preferences::daily_limit_usd(raw)));
         json!({"ok": true, "preferences": read})
+    }
+}
+
+/// What a name the Keychain can't take is told.
+const UNNAMEABLE: &str = "A Keychain item MailMind keeps is named in letters, digits and . _ % + @ : = - alone.";
+/// What a secret the Keychain can't hold as itself is told.
+const UNPRINTABLE: &str = "A secret MailMind keeps in the Keychain is printable ASCII, and not empty: letters, digits, punctuation and spaces.";
+
+fn writing(lock: &Mutex<()>) -> Result<MutexGuard<'_, ()>, Fault> {
+    lock.lock().map_err(|_| Fault::new("PoisonedLock"))
+}
+
+/// The address an entry the file holds is saved under.
+fn email_of(entry: &Map<String, Value>) -> Result<String, Fault> {
+    entry.get("email").and_then(Value::as_str).map(str::to_owned).ok_or(MALFORMED)
+}
+
+/// The changes Settings makes to the file: an account added, edited or removed, and its pins forgotten. A typed
+/// password goes to the login Keychain, in the account's own item, before the file is written, and the file names the
+/// item; a Keychain that won't is `Unreachable`, and the file is left as it was.
+impl Directory {
+    /// What the file holds of `asked`: a typed secret is kept in the Keychain as `item` first, and the file names the
+    /// item, one version past `before`'s (`_kept`).
+    fn kept(&self, item: &str, asked: Asked, before: Option<&Value>) -> Result<Value, Failure> {
+        let typed = match asked {
+            Asked::Stored(credential) => return Ok(credential),
+            Asked::Typed(typed) => typed,
+        };
+        if !keepable_name(item) {
+            return Err(Problem::refused(UNNAMEABLE).into());
+        }
+        if !keepable_secret(typed.expose()) {
+            return Err(Problem::refused(UNPRINTABLE).into());
+        }
+        self.keychain.put(item, &typed).map_err(|_| {
+            Problem::new(Kind::Unreachable, "The Keychain didn't keep the password. Is the login keychain locked?")
+        })?;
+        Ok(credential::keychain_credential(item, before))
+    }
+
+    /// Take the account's own Keychain item out, if it has one (`_let_go`). An address no item could be named for
+    /// has none.
+    fn let_go(&self, email: &str) -> Result<(), Failure> {
+        let item = credential::account_item(email);
+        if !keepable_name(&item) {
+            return Ok(());
+        }
+        match self.keychain.delete(&item) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(Problem::new(
+                Kind::Unreachable,
+                "The Keychain didn't let go of the password. Is the login keychain locked?",
+            )
+            .into()),
+        }
+    }
+
+    /// Add the account `asked` describes (`add_account`): its row as the API may show it. One saved under its
+    /// address already, one with no credential, and one `validate_new` refuses are refused, and write nothing.
+    pub fn add_account(&self, asked: &Map<String, Value>) -> Result<Value, Failure> {
+        let _writing = writing(&self.write)?;
+        let mut raw = self.file.read()?;
+        Directory::entries(&raw)?;
+        let email = asked.get("email").and_then(Value::as_str).map(mm_kernel::text::strip).unwrap_or_default();
+        if account::position(&raw, email).is_some() {
+            return Err(Problem::refused(format!("{email} already exists")).into());
+        }
+        let mut entry = Map::new();
+        entry.insert("email".into(), json!(email));
+        entry.insert("type".into(), asked.get("type").cloned().unwrap_or_else(|| json!("imap")));
+        account::apply_fields(&mut entry, asked)?;
+        let credential =
+            credential_from(asked.get("credential"))?.ok_or_else(|| Problem::refused("a credential is required"))?;
+        account::refuse_bad_endpoints(&entry, &Map::new())?;
+        account::validate_new(&entry)?;
+        entry.insert("credential".into(), self.kept(&credential::account_item(email), credential, None)?);
+        let row = account::masked_row(&Value::Object(entry.clone())).map_err(|_| MALFORMED)?;
+        match raw.entry("accounts").or_insert_with(|| json!([])) {
+            Value::Array(entries) => entries.push(Value::Object(entry)),
+            _ => return Err(MALFORMED.into()),
+        }
+        self.file.write(&raw)?;
+        Ok(row)
+    }
+
+    /// Change what `asked` names of the account saved under `email` (`update_account`): its row, or None when the
+    /// file holds no such account. A credential is replaced only when `asked` gives one with a value, and the
+    /// account's own Keychain item goes once its credential no longer names it.
+    pub fn update_account(&self, email: &str, asked: &Map<String, Value>) -> Result<Option<Value>, Failure> {
+        let _writing = writing(&self.write)?;
+        let mut raw = self.file.read()?;
+        Directory::entries(&raw)?;
+        let Some(entry) = account::find(&mut raw, email) else {
+            return Ok(None);
+        };
+        let before = entry.clone();
+        let old = before.get("credential");
+        account::apply_fields(entry, asked)?;
+        let new = match asked.contains_key("credential") {
+            true => credential_from(asked.get("credential"))?,
+            false => None,
+        };
+        account::refuse_bad_endpoints(entry, &before)?;
+        account::validate_new(entry)?;
+        if let Some(new) = new {
+            let saved_as = email_of(entry)?;
+            let own = credential::account_item(&saved_as);
+            entry.insert("credential".into(), self.kept(&own, new, old)?);
+            if credential::names(old, &own) && !credential::names(entry.get("credential"), &own) {
+                self.let_go(&saved_as)?;
+            }
+        }
+        let row = account::masked_row(&Value::Object(entry.clone())).map_err(|_| MALFORMED)?;
+        self.file.write(&raw)?;
+        Ok(Some(row))
+    }
+
+    /// Remove the account saved under `email`, and its own Keychain item (`remove_account`): the address it was
+    /// saved under, or None when the file holds no such account.
+    pub fn remove_account(&self, email: &str) -> Result<Option<String>, Failure> {
+        let _writing = writing(&self.write)?;
+        let mut raw = self.file.read()?;
+        Directory::entries(&raw)?;
+        let Some(at) = account::position(&raw, email) else {
+            return Ok(None);
+        };
+        let Some(Value::Array(entries)) = raw.get_mut("accounts") else {
+            return Err(MALFORMED.into());
+        };
+        let saved_as = entries.get(at).and_then(Value::as_object).ok_or(MALFORMED).and_then(email_of)?;
+        self.let_go(&saved_as)?;
+        entries.remove(at);
+        self.file.write(&raw)?;
+        Ok(Some(saved_as))
+    }
+
+    /// Trust the account's servers again: forget each certificate pinned for it, so the next connection pins the one
+    /// it meets (`forget_tls_pins`). The address it is saved under, or None when the file holds no such account.
+    pub fn forget_tls_pins(&self, email: &str) -> Result<Option<String>, Fault> {
+        let _writing = writing(&self.write)?;
+        let mut raw = self.file.read()?;
+        let Some(entry) = account::find(&mut raw, email) else {
+            return Ok(None);
+        };
+        let saved_as = email_of(entry)?;
+        if entry.shift_remove("tls_pins").is_some_and(|pins| !pins.is_null()) {
+            self.file.write(&raw)?;
+        }
+        Ok(Some(saved_as))
     }
 }
