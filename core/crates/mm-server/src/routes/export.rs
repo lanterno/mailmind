@@ -14,7 +14,7 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::{HeaderValue, Method, Response, StatusCode, Uri, header};
 use axum::routing::get;
-use mm_kernel::errors::{Failure, Fault};
+use mm_kernel::errors::{Failure, Fault, Problem};
 use mm_store::export::Download;
 use tokio::sync::mpsc;
 
@@ -26,7 +26,19 @@ use crate::app::App;
 pub const CHUNK: usize = 262_144;
 
 pub(super) fn routes() -> Router<Arc<App>> {
-    Router::new().route("/api/export/plan", get(plan)).route("/api/export", get(snapshot))
+    Router::new()
+        .route("/api/export/plan", get(plan))
+        .route("/api/export", get(snapshot))
+        .route("/api/export/archive", get(archive))
+}
+
+/// The mail as a zip of .eml files or of an mbox a folder (`ExportArgs`), which isn't on the Rust server yet: a
+/// format it doesn't know is the `bad request` refusal.
+async fn archive(method: Method, uri: Uri) -> Response<Body> {
+    match super::reading::query(&uri).text("format") {
+        Some("eml" | "mbox") => answer::not_yet(uri.path()),
+        _ => answer::failure(&Failure::Problem(Problem::bad_request()), method.as_str(), uri.path()),
+    }
 }
 
 /// What an export would hold, by account and folder.
