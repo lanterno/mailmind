@@ -357,11 +357,13 @@ static TRANSACTIONAL: LazyLock<Regex> = LazyLock::new(|| {
         r"order (?:confirm|no|placed|shipped|dispatched)|has shipped|out for delivery|refund|tax invoice|vat|charged|",
         r"transaction (?:receipt|confirm))",
         word_ends!(),
-        // `order #` and `order no.` end on a character that isn't a word's, so Python's `\b` after them wants one.
+        // `order no.` ends on a character that isn't a word's, so Python's `\b` after it wants one. `order #` is an
+        // order's number whatever follows the sign, as in `Order # 123`.
         r"|",
         word_starts!(),
-        r"order (?:#|no\.)",
+        r"order (?:#|no\.",
         word!(),
+        r")",
     ))
 });
 
