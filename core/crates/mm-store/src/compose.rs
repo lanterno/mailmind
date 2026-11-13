@@ -1,7 +1,9 @@
 //! What Compose keeps in the database (`compose.adapters.sqlite`): the outbox and the drafts' journal, the drafts it
 //! tracks, one of which a message opening tracks, and the snippets, as the `snippets` document
 //! (`mailmind.compose.adapters.snippets_store`), a row of `documents` (migration 48) as
-//! `mailmind.platform.db.documents` reads and writes one.
+//! `mailmind.platform.db.documents` reads and writes one. What a send and a save write is in `book`.
+
+mod book;
 
 use std::sync::Arc;
 
