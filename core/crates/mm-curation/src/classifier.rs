@@ -383,30 +383,36 @@ static STRONG_SCAM: LazyLock<Regex> = LazyLock::new(|| {
 /// brands use the words too.
 static WEAK_SCAM: LazyLock<Regex> = LazyLock::new(|| {
     pattern(concat!(
-        r"(?i)get paid|getpaid|make money|earn money|earn \$?\d|make \$?\d|",
+        r"(?i)",
+        // Each phrase from where a word starts, so a budget paid, a word to learn 5 of, or a nonprofit system is no
+        // fraud. A cycler too, so a recycler isn't.
+        word_starts!(),
+        r"(?:get paid|getpaid|make money|earn money|earn \$?\d|make \$?\d|",
+        r"work from home|passive income|be your own boss|financial freedom|",
+        r"revenue share|traffic exchange|paid to click|downline|cycler|",
+        r"cash ?club|instant ?cash|join asap|going viral|pre-?launch|profit system|",
+        r"risk[- ]free.{0,20}(?:invest|profit|return)|",
+        // A transfer or a fund where its word starts, so no refund. The character before it is one `.` takes, so no
+        // line feed.
+        r"urgent.{0,14}(?-i:[^\p{L}\p{N}_\n])(?:transfer|fund)|",
+        r"(?:ptc|m2m)",
+        word_ends!(),
+        r")|",
+        // A day, a week or a month where its word ends, so no weekend.
         r"\$\d[\d,]*",
         space!(),
         r"*(?:a|per|/)",
         space!(),
-        r"*(?:day|week|month)|[0-9]{2,}",
+        r"*(?:day|week|month)",
+        word_ends!(),
+        r"|[0-9]{2,}",
         space!(),
         r"*% (?:per|a) (?:day|month|return)|",
-        r"work from home|passive income|be your own boss|financial freedom|",
-        r"revenue share|traffic exchange|paid to click|downline|",
-        // A matrix is an everyday word, so it counts only glued into a scheme's name, as in Matrixforall. A cycler
-        // counts where a word starts, so a recycler doesn't.
+        // A matrix is an everyday word, so it counts only glued into a scheme's name, as in Matrixforall.
         word!(),
         r"matrix|matrix",
         word!(),
-        r"|",
-        word_starts!(),
-        r"cycler|",
-        r"cash ?club|instant ?cash|join asap|going viral|pre-?launch|profit system|",
-        r"risk[- ]free.{0,20}(?:invest|profit|return)|100% (?:guarantee|profit)|",
-        r"urgent.{0,15}(?:transfer|fund)|",
-        word_starts!(),
-        r"(?:ptc|m2m)",
-        word_ends!(),
+        r"|100% (?:guarantee|profit)",
     ))
 });
 
