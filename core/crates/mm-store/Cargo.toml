@@ -11,6 +11,7 @@ publish.workspace = true
 mm-accounts.workspace = true
 mm-assistant.workspace = true
 mm-compose.workspace = true
+mm-discovery.workspace = true
 mm-kernel.workspace = true
 mm-mailbox.workspace = true
 rusqlite.workspace = true
