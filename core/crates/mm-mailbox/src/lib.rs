@@ -15,6 +15,7 @@ pub mod gates;
 pub mod ingest;
 pub mod labels;
 pub mod ports;
+pub mod reversal;
 pub mod roles;
 pub mod server_ops;
 pub mod session;
