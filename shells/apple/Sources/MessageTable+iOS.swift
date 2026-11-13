@@ -167,7 +167,7 @@ final class MessageCell: UICollectionViewCell {
     private let flag = MessageCell.symbol("flag.fill", .systemOrange)
     private let bars = [140, 240, 320].map { _ in MessageCell.fill(.quaternarySystemFill, radius: 3) }
     private let separator = MessageCell.fill(.separator, radius: 0)
-    private var row: MessageRow?
+    private(set) var row: MessageRow?
     private var shown = false
 
     override init(frame: CGRect) {

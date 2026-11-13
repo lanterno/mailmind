@@ -8,7 +8,8 @@ import UIKit
 /// Measure mode, for `just apple measure`. With MAILMIND_MEASURE=start the app prints how long it took from process
 /// start to the first rows and quits. With MAILMIND_MEASURE=all it then waits idle, scrolls fast for ten seconds,
 /// scrolls through the whole list, jumps around it, prints its memory and the main thread's time per run-loop pass,
-/// and quits. MAILMIND_MEASURE=scroll stops after the fast scroll. Without it, nothing here runs.
+/// and quits. MAILMIND_MEASURE=scroll is `just apple smoke`'s check: it jumps nine tenths of the way down and quits
+/// once the rows on screen there show mail, or after a minute without. Without it, nothing here runs.
 /// It moves the table's scroll view as a trackpad or a finger does, so the table hears of it as it would of a person.
 @MainActor
 final class Measure {
@@ -25,6 +26,7 @@ final class Measure {
         awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "measuring")
         emit("first_rows_ms", shown.timeIntervalSince(Self.processStart()) * 1000)
         if mode == "start" { exit(0) }
+        if mode == "scroll" { await scrollFar(model) }
 
         try? await Task.sleep(for: .seconds(3))
         emit("idle_footprint_mb", Self.footprintMB())
@@ -46,7 +48,6 @@ final class Measure {
         emit("scroll_ticks", Double(ticks))
         fling.report("scroll")
         emit("after_fast_scroll_footprint_mb", Self.footprintMB())
-        if mode == "scroll" { exit(0) }
 
         // Then the whole list, fifty rows a step, so every page has been on screen once.
         let sweep = MainThreadBusy()
@@ -78,6 +79,28 @@ final class Measure {
         exit(0)
     }
 
+    /// The smoke check: one jump far down, as dragging the scroll bar makes, then wait for the rows on screen to show
+    /// what the core sent for them. Its exit code is the result: 0 once they do, 3 after a minute without.
+    private func scrollFar(_ model: ListModel) async -> Never {
+        let target = model.total * 9 / 10
+        let started = ContinuousClock.now
+        scroll(toRow: target, rows: model.total)
+        while ContinuousClock.now - started < .seconds(60) {
+            try? await Task.sleep(for: .milliseconds(50))
+            let shown = shownRows()
+            if let first = shown.map(\.position).min(), first >= model.total * 85 / 100, shown.allSatisfy(\.real) {
+                emit("scrolled_ms", Double((ContinuousClock.now - started) / .milliseconds(1)))
+                emit("shown_rows", Double(shown.count))
+                exit(0)
+            }
+        }
+        let shown = shownRows()
+        print("stuck: \(shown.filter(\.real).count) of \(shown.count) rows on screen show mail,"
+              + " the first at \(shown.map(\.position).min() ?? -1) of \(model.total)")
+        fflush(stdout)
+        exit(3)
+    }
+
     #if os(macOS)
     /// The list's scroll view. Moving its clip view is what a trackpad does, so scrolling is measured the way a
     /// person scrolls.
@@ -103,6 +126,15 @@ final class Measure {
         let y = (document as? NSTableView)?.rect(ofRow: min(row, rows - 1)).minY
             ?? document.frame.height * CGFloat(row) / CGFloat(max(rows, 1))
         move(y)
+    }
+
+    /// Each row on screen, and whether its cell shows mail rather than a placeholder.
+    private func shownRows() -> [(position: Int, real: Bool)] {
+        guard let table = scrollView?.documentView as? NSTableView else { return [] }
+        let shown = table.rows(in: table.visibleRect)
+        return (shown.location..<(shown.location + shown.length)).map { row in
+            (row, (table.view(atColumn: 0, row: row, makeIfNecessary: false) as? MessageCell)?.row != nil)
+        }
     }
 
     private func move(_ y: CGFloat) {
@@ -137,6 +169,14 @@ final class Measure {
         let y = (scrollView as? UICollectionView)?.layoutAttributesForItem(at: item)?.frame.minY
             ?? scrollView.contentSize.height * CGFloat(row) / CGFloat(max(rows, 1))
         move(y)
+    }
+
+    /// Each row on screen, and whether its cell shows mail rather than a placeholder.
+    private func shownRows() -> [(position: Int, real: Bool)] {
+        guard let list = scrollView as? UICollectionView else { return [] }
+        return list.indexPathsForVisibleItems.map { path in
+            (path.item, (list.cellForItem(at: path) as? MessageCell)?.row != nil)
+        }
     }
 
     private func move(_ y: CGFloat) {

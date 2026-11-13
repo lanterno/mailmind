@@ -134,7 +134,7 @@ final class MessageCell: NSView {
     private static let flag = symbol("flag.fill", .systemOrange)
     private static let ellipsis = Line("\u{2026}", caption)
 
-    private var row: MessageRow?
+    private(set) var row: MessageRow?
     private var shown = false
     private var sender: Line?
     private var date: Line?
