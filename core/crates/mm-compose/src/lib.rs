@@ -5,6 +5,7 @@
 //! What it needs of the world is in `ports`, which the store implements; nothing here reads the disk, the network or
 //! the clock.
 
+pub mod builder;
 pub mod drafts;
 pub mod markdown;
 pub mod outbox;
@@ -12,3 +13,4 @@ pub mod ports;
 pub mod quote;
 pub mod replies;
 pub mod snippets;
+pub mod spec;
