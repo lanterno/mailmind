@@ -64,19 +64,18 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   edit, test, delete, trust-cert), the calendar (`/api/upcoming`, `/api/calendar/event`, which need an ICS reader and
   recurrence), the export's archive (`/api/export/archive` answers that it isn't served yet), and `/api/debug/health`
   and `/api/debug/jobs`. `just test-rust-all` says what passes.
-- **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — Nothing on the Rust server runs on its
-  own: the change queue drains, a sync round runs, a snooze wakes and a follow-up comes due only through the served
-  suites' `work` line (`mm_served::jobs`) or a request. Port the workers (`platform.workers`): the queue's worker and its
-  kick, the sync round and what it starts (`attention.wake_due`, the `assess` job, `warm_tick`), and IDLE.
-- **What Attention and Curation ask of the change queue** · high value · effort S · [#29](https://github.com/lanterno/mailmind/issues/29) — The queue is on the
-  Rust server, but `bound::NoFlags` (Attention's `Flags::mark_seen`: a mute marking unread mail read, a snooze waking
-  read mail unread) and `bound::NoFiling` (Curation's `Filing::trash_now`: a rule that blocks a copy) still answer that
-  it can't. `/api/undo` has no reverser for `snooze`, `mute` or `unblock` (`Undo::new`'s list; the Python app's
-  `Snoozing.reverse` and `Muting.reverse`).
-- **Every change tells the page** · medium value · effort S · [#30](https://github.com/lanterno/mailmind/issues/30) — The Mailbox's events (`MailboxEvent`) go to
-  `Unheard`, the writes of Discovery, Curation and Attention publish nothing, and `/api/stats` is counted afresh at every
-  read. Forward each to the event stream (`events::Hub`) under the Python app's names (`outbox`, `commands-changed`,
-  `undo-done`, `sync-done`, `new-mail`, `reconcile`), and keep the counts until an event says they moved.
+- **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — `mailmind-server` runs the change
+  queue's worker and the snooze, sync and reconcile rounds (`mm-server/src/workers.rs`); `mm-served` drives them one pass
+  at a time through its `work` line. Still to come: IDLE (an IDLE command and its interrupt in `mm-imap`, the
+  supervisor, and re-checking when an account changes), `warm_tick` (a per-account `warm_folders`), backfilling bodies,
+  `forget`, loading 1Password credentials before the first sync, and the jobs of areas not yet ported (assess, draft
+  ahead, the brief, the review, Tidy, draft push, expiry). Each joins `Workers::start` as a `mm_mailbox::workers::Queue`
+  or a timed lane.
+- **Every change tells the page, the rest of it** · medium value · effort S · [#30](https://github.com/lanterno/mailmind/issues/30) — The Mailbox's,
+  Attention's and Curation's changes reach the event stream under the Python app's names (`mm-server/src/heard.rs`),
+  and `/api/stats` keeps its counts until one says they moved. Still silent: the outbox's Sent, Failed and
+  DraftCopyRemoved, CredentialsRejected and the account events, and `folder-synced` at the end of a folder's first scan
+  (which itself waits on the scan when a folder opens).
 - **The sync's remaining parts** · medium value · effort M · [#31](https://github.com/lanterno/mailmind/issues/31) — `mm_mailbox::ingest` leaves out a person's
   arrival filters (Curation's `arrival_flags`), the invite a message carries kept with its body, and holding back a login
   a server refused (`accounts.logins`, with its `forget` on a retry). A move's folder catch-up (`Folders.touched`) and the
