@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use mm_accounts::ports::ConfigFile as _;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Outside, Tripped};
-use mm_mailbox::ports::{StoredMail, ViewCounts};
+use mm_mailbox::ports::{StoredLists, StoredMail, ViewCounts};
 use mm_store::{ConfigFile, Database, DbKey, PageFiles, Store};
 use serde_json::{Value, json};
 
@@ -80,6 +80,35 @@ fn the_rail_counts_what_is_stored_and_not_on_its_way_out() {
     let both = ["ada@example.test".to_owned(), "bea@example.test".to_owned()];
     assert_eq!(database.view_counts(&both).unwrap().snoozed, 2);
     assert!(outside.asked.lock().unwrap().iter().all(|n| n == "mailmind.db"));
+}
+
+const GOING: &str = "
+CREATE TABLE sync_state (account TEXT, folder TEXT);
+CREATE TABLE snoozes (message_key INTEGER, folder TEXT);
+CREATE TABLE muted (account TEXT, thread_id TEXT);
+CREATE TABLE followups (account TEXT, thread_id TEXT, state TEXT, kind TEXT);
+INSERT INTO messages (account, kind, folder, uid, thread_id, ts, message_key, pending_removal) VALUES
+  ('ada@example.test', 'imap', 'INBOX', 1, 't1', 100, 1, NULL),
+  ('ada@example.test', 'imap', 'INBOX', 2, 't1', 200, 2, 1),
+  ('ada@example.test', 'imap', 'INBOX', 3, 't2', 300, 3, 1);
+INSERT INTO muted VALUES ('ada@example.test', 't1'), ('ada@example.test', 't2');
+";
+
+/// Muted shows a thread by its latest message not on its way out, and its badge counts one only while it has such a
+/// message: the latest copy of `t1` is going, and all of `t2` is.
+#[test]
+fn a_muted_thread_shows_its_latest_message_not_on_its_way_out() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mailmind.db");
+    Store::open(&path, &key()).unwrap().create_list_tables().unwrap();
+    let database = Database::new(path, key(), Arc::new(Watching::default()));
+    database.read(|c| c.execute_batch(GOING)).unwrap();
+
+    let ada = ["ada@example.test".to_owned()];
+    let listed: Vec<(Value, Value)> =
+        database.muted(&ada).unwrap().iter().map(|r| (r["uid"].clone(), r["thread_count"].clone())).collect();
+    assert_eq!(listed, [(json!(1), json!(1))]);
+    assert_eq!(database.view_counts(&ada).unwrap().muted, 1);
 }
 
 #[test]
