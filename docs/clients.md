@@ -1,7 +1,7 @@
 # Clients
 
 MailMind's clients are one Rust library and a shell per platform. The design is the "MailMind client
-architecture" document; this page says what is built, how the pieces talk, and what step 0 found.
+architecture" document; this page says what is built, how the pieces talk, and what each step found.
 
 | Where | What it is | Read |
 | --- | --- | --- |
@@ -83,6 +83,32 @@ What the numbers say:
   the same conditions. Both were measured held awake: behind a locked screen macOS naps an app to about half speed,
   which is where the first recorded 296 ms came from. The iOS table has not run here: there is no simulator runtime.
 - **The crossing is not a cost.** A 50-row batch through UniFFI takes about 85 µs, about 1% of a frame.
+
+## Steps 1 and 2: the contract frozen, the leaves ported
+
+**Step 1.** The golden suites and the browser tests run against the server as a program
+(`tests/support/served.py`, `serve_python.py`): they reach it only through HTTP and a line protocol that sets its
+clock and runs its jobs (`work outbox`, `work sync`, `settle`), so a Rust server can be held to the same tests. The
+browser tests that patch the app's internals stand apart in `tests/e2e/browser/in_process/`.
+
+**Step 2.** The pure functions the Python app calls now run in the core, through `mailmind_leaves`
+(`core/crates/mm-py`, PyO3, built by maturin as a uv path dependency, so `uv run` builds it):
+
+| Leaf | Crate | Python module that calls it |
+| --- | --- | --- |
+| A message's identity | `mm-kernel` | `mailbox.domain.identity` |
+| The search grammar | `mm-discovery` | `discovery.domain.query` |
+| The classifier and its rule sets | `mm-curation` | `curation.domain.classifier`, `rulebook` |
+| Threading | `mm-mailbox` | `mailbox.domain.threading` |
+| MIME | `mm-content` (mail-parser) | `content.mime.message` |
+| The sanitizer | `mm-content` (html5ever's tokenizer) | `content.sanitize.html` |
+
+Each Python module keeps its API, and its tests pass unchanged but where the port fixed a bug. Each leaf has a
+`test_<leaf>_in_rust.py` that keeps the Python it replaced as the oracle and holds the core to it with Hypothesis
+(see [testing.md](testing.md)). The port found and fixed: two conversations that shared a thread staying apart;
+classifier patterns matching inside longer words; a forwarded email's attachment cut short; CSS a browser read
+otherwise than the sanitizer had checked it, so that a message could make its frame's elements `position: fixed`;
+and an `<embed>` or an unclosed `<head>` taking the rest of a message with it.
 
 ## The six questions
 
