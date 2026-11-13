@@ -96,12 +96,12 @@ class RunningAsgiApp:
     """The app, as `python -m mailmind serve` builds it, on a random loopback port, serving from a
     background thread, with what its routes answer held to their schemas."""
 
-    def __init__(self):
+    def __init__(self, port=0):
         import schema_contract
         from asgi_server import Uvicorn
         from mailmind.bootstrap import front
         self.asgi = front.build()
-        self.uvicorn = Uvicorn(schema_contract.HoldingAnswers(self.asgi))
+        self.uvicorn = Uvicorn(schema_contract.HoldingAnswers(self.asgi), port=port)
         self.port = self.uvicorn.port
 
     def start(self):

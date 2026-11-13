@@ -61,8 +61,9 @@ class _Server(serving.Server):
 
 
 class Uvicorn:
-    def __init__(self, app, name="app-http", grace=5):
-        self.sock = socket.create_server(("127.0.0.1", 0))
+    def __init__(self, app, name="app-http", grace=5, port=0):
+        # A port of its own unless told one: a server the API suite restarts comes back where its client calls.
+        self.sock = socket.create_server(("127.0.0.1", port))
         self.port = self.sock.getsockname()[1]
         self.server = _Server(serving.config(app, port=self.port, grace=grace))
         self.thread = threading.Thread(target=self.server.run, kwargs={"sockets": [self.sock]},
