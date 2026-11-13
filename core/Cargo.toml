@@ -35,6 +35,7 @@ axum = { version = "=0.8.9", default-features = false }
 # The page's scripts and stylesheets, compressed for a browser that takes them, as the Python app does.
 flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
 # A download as a stream of chunks (axum's Body::from_stream), for the Rust server's exports.
+# The event stream's body, a stream of frames as they come (mm-server), as axum takes one.
 futures-core = { version = "=0.3.34", default-features = false }
 # The CSRF token, from the operating system's random source.
 getrandom = "=0.4.3"
