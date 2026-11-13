@@ -12,6 +12,7 @@ use mm_attention::muting::Muting;
 use mm_attention::ports::{Accounts, Copy, Flags};
 use mm_attention::snoozing::Snoozing;
 use mm_attention::tasks::Tasks;
+use mm_curation::cleanup::Cleanup;
 use mm_curation::filters::Filters;
 use mm_curation::ports::{Conditions, Filing, FilterIds, Mailboxes, RuleBook as _};
 use mm_curation::screener::{Audit, Screener};
@@ -183,6 +184,7 @@ pub struct Curation {
     pub screener: Screener,
     pub filters: Filters,
     pub audit: Audit,
+    pub cleanup: Cleanup,
     /// The database, for the copy a request names.
     pub(crate) database: Arc<Database>,
 }
@@ -204,7 +206,8 @@ impl Curation {
                 clock.clone(),
             ),
             filters: Filters::new(store.clone(), Arc::new(ArrivalConditions(zone.clone())), Arc::new(Drawn)),
-            audit: Audit::new(store),
+            audit: Audit::new(store.clone()),
+            cleanup: Cleanup::new(store.clone(), store, clock.clone()),
             database: database.clone(),
         }
     }

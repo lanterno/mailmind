@@ -22,6 +22,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/filters", post(filters))
         .route("/api/audit", get(audit))
         .route("/api/screener", get(screener))
+        .route("/api/cleanup/senders", get(cleanup_senders))
 }
 
 fn query(uri: &Uri) -> Query {
@@ -116,4 +117,9 @@ async fn audit(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respons
 async fn screener(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
     let account = query(&uri).text("account").map(str::to_owned);
     super::run(&app, &method, &uri, move |app| app.curation.screener.queue(account.as_deref())).await
+}
+
+/// The senders to clean up after first: the noisiest no rule decides yet. The database alone.
+async fn cleanup_senders(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    super::run(&app, &method, &uri, |app| app.curation.cleanup.senders()).await
 }
