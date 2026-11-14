@@ -145,6 +145,20 @@ def test_why_a_cleanup_and_what_the_screener_would_do(app, golden, world, ai):
     golden.record("when the API fails", app.post("/api/screener/suggest", {"account": w.ADA}))
 
 
+def test_what_a_sender_has_been_writing_about(app, golden, world, ai):
+    ai.queue(fa.answer({"summary": " Lin plans lunch and sends quilts. ", "topics": [" lunch ", 5, "quilts"],
+                        "open": "Whether Thursday suits"}))
+    golden.record("Lin", app.post("/api/contact/summary", {"addr": " Lin@Example.test"}))
+    sent(golden, ai, "sent for Lin")
+    ai.queue(fa.answer({"summary": "", "topics": [], "open": ""}))
+    golden.record("Noor, of whom the model says nothing", app.post("/api/contact/summary",
+                                                                    {"addr": "noor@studio.example.test"}))
+    ai.requests.clear()
+    golden.record("no address", app.post("/api/contact/summary", {"addr": "nobody"}))
+    golden.record("no mail from them", app.post("/api/contact/summary", {"addr": "nobody@example.test"}))
+    golden.note("calls for those", len(ai.requests))
+
+
 @pytest.mark.parametrize("route", ["/api/briefing", "/api/review"])
 def test_briefing_and_review_are_written_once_and_a_get_only_reads(app, golden, world, ai, route):
     golden.note("messages triaged", triaged(app, ai))
