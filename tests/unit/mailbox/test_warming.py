@@ -16,11 +16,13 @@ FOLDERS = [Folder("INBOX"), Folder("Drafts", frozenset({"\\drafts"})), Folder("A
 
 
 class _Session:
-    def __init__(self, folders=FOLDERS, lists=True, logs_out=True):
-        self._folders, self._lists, self._logs_out = folders, lists, logs_out
+    def __init__(self, folders=FOLDERS, lists=True, logs_out=True, lost=False):
+        self._folders, self._lists, self._logs_out, self._lost = folders, lists, logs_out, lost
         self.logged_out = 0
 
     def folders(self):
+        if self._lost:
+            raise imaplib.IMAP4.abort("the connection went")
         if not self._lists:
             raise imaplib.IMAP4.error("LIST refused")
         return self._folders
@@ -119,6 +121,14 @@ def test_a_role_the_inbox_plays_is_passed_over():
 def test_a_list_the_server_refuses_warms_nothing():
     w = warming({ADA: _Session(lists=False)})
     assert ticks(w, 6) == [[]] * 6
+
+
+@pytest.mark.xfail(strict=True, reason="a connection lost while listing keeps no folder for any part, until a restart")
+def test_a_connection_lost_while_the_folders_are_listed_is_tried_again_next_tick():
+    w = warming({ADA: _Session(lost=True)})
+    assert ticks(w, 1) == [[]]
+    w.server.sessions[ADA] = _Session()
+    assert ticks(w, 1) == [[(ADA, "Drafts"), (ADA, "All Mail")]]
 
 
 def test_an_account_that_cant_be_reached_is_tried_again_next_tick_and_the_others_go_on(capsys):
