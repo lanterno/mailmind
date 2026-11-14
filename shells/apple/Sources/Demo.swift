@@ -1,7 +1,8 @@
 import Foundation
 import Observation
 
-/// Step 0's only mode: a fictional mailbox of 100,000 messages, made on first launch in Application Support.
+/// Step 0's only mode: a fictional mailbox of 100,000 messages, made on first launch in a folder of its own in
+/// Application Support.
 /// Every address in it is at example.test, and its key guards only fictional mail.
 @MainActor
 @Observable
@@ -43,12 +44,14 @@ final class Demo {
         }
     }
 
+    /// Step 0's folder in Application Support: one of its own beside the app's, never inside the app's data folder
+    /// (named for the bundle identifier), where a person's mail is kept.
+    nonisolated static let folderName = "MailMind Step 0 Demo"
+
     nonisolated private static func mailboxPath() throws -> URL {
         let support = try FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let folder = support
-            .appending(path: Bundle.main.bundleIdentifier ?? "app.mailmind.MailMind")
-            .appending(path: "Demo")
+        let folder = support.appending(path: folderName, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder.appending(path: "inbox-\(messages).db")
     }
