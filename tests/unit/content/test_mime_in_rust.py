@@ -683,6 +683,17 @@ def holds_a_delimiter_python_read_as_text(raw: bytes) -> bool:
                for line in lines for separator in separators)
 
 
+def names_by_its_type_what_python_left_unnamed(raw: bytes) -> bool:
+    """Whether a part has a filename Python read as empty (`filename`, `filename=""`, `filename="`) and kept to, and a
+    Content-Type `name`. The core names the part by that name (test_a_file_name_reads_as_written), so it lists the
+    part as a file where Python showed it as the message's text."""
+    try:
+        msg = email.message_from_bytes(raw, policy=policy.default)
+        return any(part.get_filename() == "" and str(part.get_param("name") or "").strip() for part in msg.walk())
+    except Exception:
+        return False
+
+
 # Broken messages Hypothesis found, held every run. A multipart cut off after the CR of a delimiter's line break, which
 # Python read as the line's end and an empty part after it, as the core does now.
 CUT_AFTER_A_CR = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: Ada Lin <ada@example.test>, "
@@ -706,6 +717,11 @@ UNCLOSED_BOUNDARY = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\n
                      b"Content-Transfer-Encoding: base64\r\n\r\n\r\n--=_part_0\r\nContent-Type: multipart/mixed; "
                      b'boundary="\r\n--\r\n=_part_1"\r\n\r\n--=_part_1\r\nContent-Type: text/plain\r\n\r\n\r\n--=_part_1--\r\n\r\n'
                      b"--=_part_0--\r\n")
+# And a message cut off at a bare `filename`, which Python read as an empty file name and kept to, so the part was the
+# message's text. The core names the part by its type's `name` instead, on purpose, and lists it as a file.
+CUT_AT_A_BARE_FILENAME = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: Ada Lin <ada@example.test>, "
+                          b"Ada Lin <bo.lin@mail.example.test>\r\nDate: Sat, 01 Jan 2000 00:00:00 +0000\r\nContent-Type: text/plain; "
+                          b'format=flowed; delsp=yes; name="=?utf-8?Q?invite=2Eics?="\r\nContent-Disposition: inline; filename')
 
 
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -713,11 +729,13 @@ UNCLOSED_BOUNDARY = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\n
 @example(CUT_AFTER_A_CR)
 @example(CLOSE_CUT_TO_ONE_DASH)
 @example(UNCLOSED_BOUNDARY)
+@example(CUT_AT_A_BARE_FILENAME)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
     body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
-    core. So this holds what matters: the core answers whatever comes, what it lists it hands over whole, and it finds
-    every part Python found, with the same bytes where nothing had to be guessed."""
+    core, an empty filename lets the type's name stand in. So this holds what matters: the core answers whatever comes,
+    what it lists it hands over whole, and it finds every part Python found, with the same bytes where nothing had to
+    be guessed."""
     new = core_reading(raw)
     parts = new["parts"]
     for a in new["attachments"]:
@@ -732,7 +750,8 @@ def test_a_broken_message_loses_no_part_python_found(raw):
         return                                  # Python failed on it: see test_where_python_failed_the_core_answers
     assert len(parts) >= len(old_parts)
     if [t for _, t in parts] == [t for _, t in old_parts]:
-        assert (new["text"] is None, new["html"] is None) == (old["text"] is None, old["html"] is None)
+        if not names_by_its_type_what_python_left_unnamed(raw):          # a file for the core, text for Python
+            assert (new["text"] is None, new["html"] is None) == (old["text"] is None, old["html"] is None)
         # A line that holds a delimiter with junk on it delimits for the core, where Python kept it as text in a part:
         # that part's bytes differ on purpose (test_a_line_that_holds_a_delimiter_delimits).
         if b"base64" not in raw.lower() and not holds_a_delimiter_python_read_as_text(raw):
