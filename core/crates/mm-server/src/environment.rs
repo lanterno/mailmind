@@ -57,9 +57,18 @@ fn absolute(path: &str) -> std::io::Result<PathBuf> {
 }
 
 /// The environment as the process was given it, or as a caller says it is.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct Environment {
     vars: HashMap<String, String>,
+}
+
+/// Names only: a value may be a secret (the database's key, the Claude API key, a variable a credential names).
+impl std::fmt::Debug for Environment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut names: Vec<&str> = self.vars.keys().map(String::as_str).collect();
+        names.sort_unstable();
+        f.debug_struct("Environment").field("names", &names).finish()
+    }
 }
 
 /// Where the app keeps its data, and where it is served.
