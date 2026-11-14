@@ -40,7 +40,8 @@ libs:
     for abi in {{abis}}; do targets+=(-t "$abi"); done
     cd "{{core}}"
     rustup target add {{rust_targets}}
-    CARGO_NDK_PLATFORM="$min_sdk" cargo ndk "${targets[@]}" -o "{{jni}}" build --release -p mm-ffi --lib
+    # Without the host, the app in the shell's process, which only the Apple app runs so far.
+    CARGO_NDK_PLATFORM="$min_sdk" cargo ndk "${targets[@]}" -o "{{jni}}" build --release -p mm-ffi --lib --no-default-features
 
 # The core's size per ABI, stripped as the APK carries it, as a Markdown table (CI puts it in the run's summary)
 sizes:

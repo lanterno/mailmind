@@ -319,4 +319,6 @@ gen-bindings:
     lib=target/debug/libmailmind_core.dylib
     test -f "$lib" || lib=target/debug/libmailmind_core.so
     cargo run -q -p mm-ffi --bin uniffi-bindgen -- generate --library "$lib" --language swift --out-dir ../shells/apple/Generated
-    cargo run -q -p mm-ffi --bin uniffi-bindgen -- generate --library "$lib" --language kotlin --no-format --out-dir ../shells/android/core/src/main/kotlin
+    # Android's library leaves the host (the app in the shell's process) out, and so do its bindings.
+    cargo build -q -p mm-ffi --no-default-features
+    cargo run -q -p mm-ffi --no-default-features --bin uniffi-bindgen -- generate --library "$lib" --language kotlin --no-format --out-dir ../shells/android/core/src/main/kotlin
