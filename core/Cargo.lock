@@ -976,6 +976,7 @@ version = "0.1.0"
 dependencies = [
  "mm-app",
  "mm-fixtures",
+ "mm-host",
  "uniffi",
  "zeroize",
 ]
