@@ -1,0 +1,27 @@
+[
+ {
+  "note": "the batch",
+  "value": {
+   "out": [
+    {
+     "created_at": 1793620800,
+     "cutoff_ts": 1791187200,
+     "ended_at": null,
+     "estimate_micros": 48750,
+     "feature": "triage-batch",
+     "model": "claude-opus-5-5",
+     "polled_at": 1793620800,
+     "prompt_version": 2,
+     "remote_id": "msgbatch_0001",
+     "requests": 10,
+     "state": "running"
+    }
+   ],
+   "requests": 10
+  }
+ },
+ {
+  "note": "triaged one at a time",
+  "value": 20
+ }
+]

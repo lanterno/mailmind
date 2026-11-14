@@ -1,0 +1,51 @@
+[
+ {
+  "note": "the batch calls",
+  "value": [
+   "POST /v1/messages/batches"
+  ]
+ },
+ {
+  "note": "triaged one at a time",
+  "value": {
+   "count": 125,
+   "the cut-off batch's": [
+    "Backlog note 0",
+    "Backlog note 1"
+   ]
+  }
+ },
+ {
+  "note": "batches left",
+  "value": []
+ },
+ {
+  "note": "the ledger",
+  "value": [
+   {
+    "calls": 125,
+    "cost_micros": 0,
+    "day": "2026-11-02",
+    "feature": "triage",
+    "input_tokens": 0,
+    "last_ts": 1793620800,
+    "model": "claude-opus-5-5",
+    "outcome": "ok",
+    "output_tokens": 0,
+    "served": "claude-opus-5-5"
+   },
+   {
+    "calls": 1,
+    "cost_micros": 0,
+    "day": "2026-11-02",
+    "feature": "triage-batch",
+    "input_tokens": 0,
+    "last_ts": 1793620800,
+    "model": "claude-opus-5-5",
+    "outcome": "failed",
+    "output_tokens": 0,
+    "served": ""
+   }
+  ]
+ }
+]

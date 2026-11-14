@@ -1,0 +1,108 @@
+[
+ {
+  "note": "the batch calls",
+  "value": [
+   "GET /v1/messages/batches/msgbatch_left",
+   "GET /v1/messages/batches/msgbatch_left",
+   "GET /v1/messages/batches/msgbatch_left/results",
+   "DELETE /v1/messages/batches/msgbatch_left"
+  ]
+ },
+ {
+  "note": "triaged one at a time",
+  "value": {
+   "count": 123,
+   "of the batch's": [
+    "Backlog note 5"
+   ]
+  }
+ },
+ {
+  "note": "what was kept",
+  "value": [
+   {
+    "action": "",
+    "category": "info",
+    "created_at": "2026-11-02T12:00:00+00:00",
+    "importance": 3,
+    "model": "claude-opus-5-5",
+    "outcome": "assessed",
+    "prompt_version": null,
+    "served_by": "claude-opus-5-5",
+    "subject": "Backlog note 3",
+    "summary": "Left behind."
+   },
+   {
+    "action": "",
+    "category": "personal",
+    "created_at": "2026-11-02T12:00:00+00:00",
+    "importance": 4,
+    "model": "claude-opus-5-5",
+    "outcome": "assessed",
+    "prompt_version": null,
+    "served_by": "claude-opus-5-5",
+    "subject": "Backlog note 4",
+    "summary": "Also left."
+   },
+   {
+    "action": "stub action",
+    "category": "action-needed",
+    "created_at": "2026-11-02T12:00:00+00:00",
+    "importance": 1,
+    "model": "claude-opus-5-5",
+    "outcome": "assessed",
+    "prompt_version": 2,
+    "served_by": "claude-opus-5-5",
+    "subject": "Backlog note 5",
+    "summary": "stub summary"
+   }
+  ]
+ },
+ {
+  "note": "the batches",
+  "value": [
+   {
+    "created_at": 1793534400,
+    "cutoff_ts": 0,
+    "ended_at": 1793620800,
+    "estimate_micros": 12000,
+    "feature": "triage-batch",
+    "model": "claude-sonnet-5-5",
+    "polled_at": 1793617200,
+    "prompt_version": null,
+    "remote_id": "msgbatch_left",
+    "requests": 3,
+    "state": "done"
+   }
+  ]
+ },
+ {
+  "note": "the ledger",
+  "value": [
+   {
+    "calls": 1,
+    "cost_micros": 0,
+    "day": "2026-11-02",
+    "feature": "triage-batch",
+    "input_tokens": 0,
+    "last_ts": 1793620800,
+    "model": "claude-sonnet-5-5",
+    "outcome": "failed",
+    "output_tokens": 0,
+    "served": ""
+   },
+   {
+    "calls": 2,
+    "cost_micros": 1500,
+    "day": "2026-11-02",
+    "feature": "triage-batch",
+    "input_tokens": 500,
+    "last_ts": 1793620800,
+    "model": "claude-sonnet-5-5",
+    "outcome": "ok",
+    "output_tokens": 50,
+    "served": "claude-opus-5-5"
+   }
+  ]
+ }
+]

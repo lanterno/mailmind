@@ -1,0 +1,54 @@
+[
+ {
+  "note": "what the round asked",
+  "value": {
+   "batch": [
+    "GET /v1/messages/batches/msgbatch_0001",
+    "POST /v1/messages/batches"
+   ],
+   "triaged one at a time": [
+    "Backlog note 100",
+    "Backlog note 101",
+    "Backlog note 102",
+    "Backlog note 103",
+    "Backlog note 104",
+    "Backlog note 85",
+    "Backlog note 86",
+    "Backlog note 87",
+    "Backlog note 88",
+    "Backlog note 89",
+    "Backlog note 90",
+    "Backlog note 91",
+    "Backlog note 92",
+    "Backlog note 93",
+    "Backlog note 94",
+    "Backlog note 95",
+    "Backlog note 96",
+    "Backlog note 97",
+    "Backlog note 98",
+    "Backlog note 99"
+   ]
+  }
+ },
+ {
+  "note": "the batches",
+  "value": {
+   "first": "msgbatch_0001",
+   "now": [
+    {
+     "created_at": 1793621100,
+     "cutoff_ts": 1791115200,
+     "ended_at": null,
+     "estimate_micros": 414270,
+     "feature": "triage-batch",
+     "model": "claude-opus-5-5",
+     "polled_at": 1793621100,
+     "prompt_version": 2,
+     "remote_id": "msgbatch_0001",
+     "requests": 85,
+     "state": "running"
+    }
+   ]
+  }
+ }
+]
