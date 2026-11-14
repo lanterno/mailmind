@@ -241,9 +241,12 @@ impl Workers {
         if !read_only {
             queues.push(app.commands.clone());
             let syncing = app.syncing.clone();
+            // Its first round reads each 1Password credential first, so a long-running server needn't ask again.
+            let (warming, warmed) = (app.directory.clone(), std::sync::Once::new());
             lanes.push((
                 app.jobs.add("sync", SYNC_INTERVAL, 0),
                 Box::new(move || {
+                    warmed.call_once(|| crate::one_password::warm(&warming));
                     syncing.sync_once();
                     Ok(None)
                 }),

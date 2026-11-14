@@ -1,6 +1,6 @@
 //! 1Password's CLI, which `mailmind-server` reads a secret reference through (`secrets._op_read`): `op read
 //! <reference>`, tried again after a pause when op timed out or its authorization prompt went unanswered, three times
-//! at most.
+//! at most; and the sync's first round, which reads every account's 1Password credential before it syncs.
 //!
 //! `op` is the first program of that name in a folder the environment's PATH names, absolute folders alone: a
 //! relative one is whatever the current directory is. Each start of it is asked of `Outside` first, so a test's
@@ -16,9 +16,11 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use mm_accounts::Directory;
 use mm_accounts::one_password::{UNREAD, readable};
 use mm_accounts::ports::OnePassword;
 use mm_kernel::errors::Fault;
+use mm_kernel::log::{self, Field};
 use mm_kernel::seams::{Outside, Secret};
 
 use crate::environment::Environment;
@@ -37,6 +39,7 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(5);
 /// The variables that hold a secret of the server's own, which op isn't given.
 const WITHHELD: [&str; 2] = [crate::environment::DB_KEY, "ANTHROPIC_API_KEY"];
+const TAG: &str = "sync";
 
 /// `op read`, through the op a PATH finds.
 pub struct OpCli {
@@ -176,5 +179,17 @@ impl OnePassword for OpCli {
             }
         }
         Err(UNREAD)
+    }
+}
+
+/// Before the sync's first round, every account's 1Password credential read (`sync_rounds`), so a long-running server
+/// needn't ask again: how many read is logged when any did.
+pub(crate) fn warm(directory: &Directory) {
+    match directory.preload() {
+        Ok(0) => {}
+        Ok(read) => {
+            log::info(TAG, "warmed %(count)s 1Password-backed credential(s)", &[(Field::Count, &read.to_string())])
+        }
+        Err(fault) => log::warning(TAG, "the 1Password credentials weren't read ahead", &[], Some(fault.class)),
     }
 }
