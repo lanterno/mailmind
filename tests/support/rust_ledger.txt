@@ -173,3 +173,5 @@ tests/api/test_http_get.py::test_ai_routes_without_a_key
 tests/api/test_http_ai.py::test_why_a_cleanup_and_what_the_screener_would_do
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/cleanup/rationale-body10]
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/screener/suggest-body11]
+tests/api/test_http_ai.py::test_what_a_sender_has_been_writing_about
+tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/contact/summary-body12]
