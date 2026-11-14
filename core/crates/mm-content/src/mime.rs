@@ -426,10 +426,12 @@ fn unread_tails(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
 const EMPTY_BOUNDARY: &[u8] = b"=_mailmind_empty_boundary_=";
 /// The same, as a value for a bare `boundary` that has none.
 const EMPTY_BOUNDARY_VALUE: &[u8] = b"=\"=_mailmind_empty_boundary_=\"";
+/// The same, with the closing quote a `boundary="` never had.
+const EMPTY_BOUNDARY_CLOSED: &[u8] = b"=_mailmind_empty_boundary_=\"";
 
-/// A multipart whose boundary is empty (`boundary=""`, or a bare `boundary` with no `=`), against RFC 2046. Python
-/// split it at every line that is `--` alone, then blanks, where mail-parser reads no parts in it and its parts would
-/// be lost: a boundary goes into the header and into each of those lines.
+/// A multipart whose boundary is empty (`boundary=""`, a `boundary="` never closed, or a bare `boundary` with no `=`),
+/// against RFC 2046. Python split it at every line that is `--` alone, then blanks, where mail-parser reads no parts
+/// in it and its parts would be lost: a boundary goes into the header and into each of those lines.
 fn empty_boundaries(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
     let mut insertions = Vec::new();
     for part in message.root().parts() {
@@ -446,6 +448,7 @@ fn empty_boundaries(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
         };
         insertions.push(match empty {
             header::EmptyParam::Quoted(quote) => (value + quote, EMPTY_BOUNDARY),
+            header::EmptyParam::Unclosed(quote) => (value + quote, EMPTY_BOUNDARY_CLOSED),
             header::EmptyParam::Bare(end) => (value + end, EMPTY_BOUNDARY_VALUE),
         });
         let mut at = start;

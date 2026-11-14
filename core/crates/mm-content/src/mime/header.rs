@@ -87,8 +87,10 @@ fn param(line: &str, name: &str) -> Option<String> {
 }
 
 /// Where a parameter Python read as an empty value lies in a raw header value: `name=""`, at its closing quote
-/// ([`EmptyParam::Quoted`]), or a bare `name` with no `=` at all, just after the name ([`EmptyParam::Bare`]). Python
-/// read a bare `name=` as no value, so that is neither.
+/// ([`EmptyParam::Quoted`]), `name="` with only blanks after its quote to the end of the parameter, just after the
+/// quote ([`EmptyParam::Unclosed`]), or a bare `name` with no `=` at all, just after the name ([`EmptyParam::Bare`]).
+/// Python read a bare `name=` as no value, so that is none of them, and an unclosed quote with more after it as that
+/// value.
 pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
     let (mut start, mut quoted) = (0, false);
     let mut segments = Vec::new();
@@ -112,11 +114,16 @@ pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
             return Some(EmptyParam::Bare(segment.start + text.trim_ascii_end().len()));
         };
         let (key, value) = (text.get(..equals)?, text.get(equals + 1..)?);
-        if !key.trim_ascii().eq_ignore_ascii_case(name.as_bytes()) || value.trim_ascii() != b"\"\"" {
+        if !key.trim_ascii().eq_ignore_ascii_case(name.as_bytes()) {
             return None;
         }
         let blanks = value.len() - value.trim_ascii_start().len();
-        Some(EmptyParam::Quoted(segment.start + equals + 1 + blanks + 1))
+        let after_quote = segment.start + equals + 1 + blanks + 1;
+        match value.trim_ascii() {
+            b"\"\"" => Some(EmptyParam::Quoted(after_quote)),
+            b"\"" => Some(EmptyParam::Unclosed(after_quote)),
+            _ => None,
+        }
     })
 }
 
@@ -124,6 +131,8 @@ pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
 pub(super) enum EmptyParam {
     /// `name=""`: where its closing quote lies.
     Quoted(usize),
+    /// `name="` with nothing after the quote: where the quote ends.
+    Unclosed(usize),
     /// A bare `name`: where the name ends.
     Bare(usize),
 }
