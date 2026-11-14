@@ -26,6 +26,7 @@ just gen-bindings       # Swift and Kotlin bindings, into shells/apple/Generated
 | `mm-imap` | An account's IMAP server, as the Mailbox's `MailSession`, on `mm-net`. |
 | `mm-smtp` | An account's SMTP server, as the outbox delivers through it, on `mm-net`: the certificate handed back for the caller's pin check before the login. |
 | `mm-server` | The Rust server: an HTTP adapter on axum that decodes a request, calls a context's use case and encodes the answer, behind the Python app's perimeter. `environment` is the only module that reads the environment; `app` binds the contexts. The binary is `mailmind-server`, which makes or upgrades the database as it starts; `mailmind-server db check-upgrade` tries the upgrade on a copy first. |
+| `mm-host` | The app in a shell's own process (the Mac app's): it opens a data folder, assembles `mm-server`'s `App` and starts its background work, answers a route through the same perimeter as the served app with no port open, hands the event stream to a subscriber, and on `close` waits for the work requests set going. A home with a keychain stand-in (a demo's, a test's) gets the file-backed keychain and an outside that reaches only loopback. |
 | `mm-served` | The Rust server as the served suites start it (`tests/support/served.py`'s line protocol): a frozen clock, the tripwire `guard.py` is, and `fake_keychain`'s file, through the server's seams. Never shipped. |
 | `mm-discovery` | Finding mail by what a person types: the search grammar, the Document Hub, what is said of a sender. |
 | `mm-compose` | Drafts, building a message, the outbox and delivery: a message built byte for byte as the Python app builds it, a send queued and delivered, a draft saved locally first and reopened from its own bytes, the outbox tray and the snippets. |
@@ -33,7 +34,7 @@ just gen-bindings       # Swift and Kotlin bindings, into shells/apple/Generated
 | `mm-curation` | What stays in the inbox: the classifier, the rule sets it reads, and a sweep's plan from the stored inbox. |
 | `mm-content` | What a message holds: its MIME parts (on mail-parser), its HTML made safe to show (html5ever's tokenizer), and the document its frame loads. |
 | `mm-app` | The contract: `Session`, `ListView`, `ViewObserver`. `mm_app::wire` is the same contract as JSON lines. |
-| `mm-ffi` | The contract for Swift and Kotlin, through UniFFI. The only crate that knows UniFFI exists. |
+| `mm-ffi` | The contract for Swift and Kotlin, through UniFFI, and `mm-host` for Swift as `CoreHost` (the `host` feature, on by default; Android's build and its Kotlin bindings leave it out). The only crate that knows UniFFI exists. |
 | `mm-py` | The leaves for the Python app, as the module `mailmind_leaves` (PyO3), until the Rust server replaces it. The only crate that knows Python exists. |
 | `mm-fixtures` | The fictional mailbox the tests, the budgets and the shells' demo modes use. |
 | `mm-daemon` | The core as a program: JSON lines over standard input and output, or a Unix socket. |

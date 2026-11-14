@@ -1,8 +1,13 @@
 # shells/apple/: the MailMind app for iPhone, iPad and Mac
 
 One SwiftUI app over the Rust core (`../../core`), with an iOS target (iPhone and iPad) and a macOS target that share
-every source file. The core decides everything about mail; this shell only shows what it sends. Step 0 is a walking
-skeleton: one message list over a fictional mailbox of 100,000 messages, made in Application Support on first launch.
+every source file. The core decides everything about mail; this shell only shows what it sends.
+
+On the Mac the app runs the whole of MailMind in its own process: the core's host (`mm-host`, through `mm-ffi`'s
+`CoreHost`) opens a data folder, starts the background work, and answers the page's routes with no port open. The
+window calls those routes through `Core` and their generated Swift types. iPhone and iPad, and the Mac's step 0
+measure modes, still show step 0: one message list over a fictional mailbox of 100,000 messages, made on first
+launch in a folder of its own.
 
 ## Commands
 
@@ -10,8 +15,11 @@ From the repo root (`just apple` lists them; recipes run from here whatever the 
 
 ```bash
 just apple build        # the core as build/MailMindCore.xcframework, the Xcode project, then the iOS simulator and macOS apps
-just apple test         # the list model's tests, on macOS
-just apple run          # the Mac app
+just apple test         # the list models' and the client's tests, on macOS
+just apple demo         # the Mac app on fictional mail: fake servers on loopback, a temp home, a keychain stand-in
+just apple demo smoke   # the same until the inbox shows rows (exit 0), or not; `demo measure`: first rows and memory
+just apple run          # the Mac app as a person runs it: MailMind's own data folder and the login Keychain
+just apple gen-api      # after a route or schema changes: rewrites Sources/Client/API.gen.swift (commit it on its own)
 just apple smoke        # the Mac app, then the iPhone app in a simulator: each jumps nine tenths down and waits for mail
 just apple measure      # cold start, memory, main-thread time, crossing cost, sizes, a web view's memory: build/measure/results.txt
 just gen-bindings       # after a change to the core's contract: rewrites Generated/ (commit that diff on its own)
@@ -45,7 +53,12 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | `Sources/MessageTable+iOS.swift` | The iPhone and iPad list: a `UICollectionView` over a fixed-row layout, its rows and placeholders. |
 | `Sources/Measure.swift` | Measure mode, run only when `MAILMIND_MEASURE` is set. |
 | `Sources/Updates.swift` | Sparkle's updater and **Check for Updates…** in the app menu (`UpdateCommands`), on the Mac only. |
-| `Measure/` | `measure.sh` and the probes it compiles (the crossing cost, a web view's memory), and `smoke.sh`, which CI runs. |
+| `Sources/Client/Core.swift` | `Core`: the host opened over a home, a route's GET or POST as its generated types, a refusal thrown as its `Problem`, the event stream as an `AsyncStream`. `CoreHome.ofThisProcess` picks the home. |
+| `Sources/Client/APISupport.swift` | What the generated types lean on: `JSONValue`, the `GetRoute` and `PostRoute` protocols, `NotJSON`, a union's decoding. |
+| `Sources/Client/API.gen.swift` | The routes' answers and bodies as Swift types, all inside `API`, each route as `API.Get.X` or `API.Post.X`. Written by `just apple gen-api`; never edit it. |
+| `Sources/Window/` | The Mac app's window: `Root` (the window or step 0), `MailApp` (the core, the sidebar's accounts and folders, where the window is), `MailList` (`Place`, `Selection`, the list a page at a time), `Reader` (the message chosen, its frame's URL), `MailWindow+macOS` (the views, the frame's web view), `HomeMeasure` (`MAILMIND_MEASURE=home`). |
+| `Generator/swift_api.py` | Writes `API.gen.swift` from the OpenAPI document `tests/support/openapi_doc.py` makes. `just apple check-api`, in `just verify`, fails when the two differ. |
+| `Measure/` | `measure.sh` and the probes it compiles (the crossing cost, a web view's memory), `smoke.sh`, which CI runs, and `demo_home.py`, which `just apple demo` runs. |
 | `build/` | The XCFramework, derived data, measurements and releases. Ignored by git. |
 
 ## Rules
@@ -54,6 +67,7 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   sends them. The shell formats a date and draws. Anything two platforms would have to agree on goes in the core.
 - **The core's thread is never the main thread.** Observer calls arrive on the core's thread and hop to the main
   actor in order (`DispatchQueue.main.async`). Opening the database and ordering the list run in a detached task.
+  `Core` makes every call to the host on a queue of its own, and a request blocks that queue, never the main thread.
 - **The list is a native table with one row height.** Row n is at n times the height, so the table asks only for
   the rows on screen, and a batch redraws only the rows it changed. SwiftUI's `List` spent up to 20 ms a frame deep in
   the list and kept memory for every row it had shown.
@@ -61,6 +75,17 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   the rest when a batch arrives.
 - **Generated files are never edited by hand.** Change the core, run `just gen-bindings`, commit the diff on its own.
   The XCFramework is rebuilt by every `just apple build`, so bindings and library always come from the same core.
+  A route or schema change runs `just apple gen-api` the same way.
+- **Never run the Mac app on a person's data by accident.** With no `MAILMIND_HOME` it opens MailMind's own folder in
+  Application Support and the login Keychain: that is `just apple run`. A demo, a measure run or a test names a
+  temporary home with `MAILMIND_HOME`, a key with `MAILMIND_DB_KEY` and the keychain's stand-in with
+  `MAILMIND_TEST_KEYCHAIN` (as `just apple demo` does), and one that names no home opens nothing. Step 0's mailbox
+  lives in a folder of its own, never inside the app's.
+- **The window speaks the page's routes,** in-process, through the same perimeter as the served app, and keeps no
+  closed set or limit the server owns: those come with the generated types.
+- **A mail body's frame has walls of its own.** The web view runs no JavaScript, keeps nothing on disk, follows no
+  link or redirect, and its scheme (`mailmind-frame:`) answers only `/api/message/body.html` through the core. The
+  document's own sandbox policy stays the boundary, as in the page.
 - **Fixtures are fictional.** Every address is at example.test, and the fixture key guards only fictional mail.
 - **Only a release checks for updates.** `MAILMIND_CHECKS_FOR_UPDATES` stays `NO` in `Release/mac.yml`; only
   `just apple release` turns it on. A debug build, `just apple build`'s, a test or a demo never asks the network.

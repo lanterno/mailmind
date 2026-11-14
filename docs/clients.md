@@ -26,6 +26,11 @@ The contract is `mm_app`'s, and it reaches a shell one of three ways:
   (`mm-daemon`). Their TypeScript comes from the core through ts-rs (`just web gen`).
 - A contract change starts in `mm-app`, then reaches every carrier in the same change.
 
+The Mac app also carries the whole app: `mm-host` runs `mm-server`'s `App` in the app's own process, and `mm-ffi`'s
+`CoreHost` hands Swift a route's answer (status, type, bytes) and the event stream. The window calls the page's routes
+through the same perimeter as the served app, with Swift types written from the routes' schemas
+(`just apple gen-api`; `just verify` fails when they are stale).
+
 ## How a list works
 
 A shell opens a list with a query and says which rows are visible; the core answers with batches.
