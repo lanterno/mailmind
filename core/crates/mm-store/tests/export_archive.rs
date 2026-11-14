@@ -258,3 +258,38 @@ fn a_form_is_named_as_the_route_names_it() {
         assert_eq!(Form::named(other), None);
     }
 }
+
+#[test]
+fn what_a_stopped_download_left_behind_goes_and_nothing_else_does() {
+    let home = tempfile::tempdir().unwrap();
+    let (exports, data) = exports(home.path(), ROWS, Files::default());
+    let left = data.join("mm-export-4242-7");
+    std::fs::create_dir(&left).unwrap();
+    std::fs::write(left.join("mailmind-eml-20261102T120000Z.zip"), b"PK").unwrap();
+    // Named otherwise, a file of that name, and a link of that name to a folder elsewhere: all three stay.
+    let other = data.join("mm-export-notes");
+    std::fs::create_dir(&other).unwrap();
+    let file = data.join("mm-export-4242-8");
+    std::fs::write(&file, b"kept").unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    std::fs::write(elsewhere.path().join("kept.txt"), b"kept").unwrap();
+    let link = data.join("mm-export-4242-9");
+    std::os::unix::fs::symlink(elsewhere.path(), &link).unwrap();
+
+    exports.sweep_left_behind();
+
+    assert!(!left.exists());
+    assert!(other.is_dir() && file.is_file() && link.symlink_metadata().is_ok());
+    assert!(elsewhere.path().join("kept.txt").is_file());
+    // A sweep the outside refuses takes nothing away.
+    std::fs::create_dir(&left).unwrap();
+    let (refusing, _) = exports_over(&data, Files { refused: Some(data.clone()) });
+    refusing.sweep_left_behind();
+    assert!(left.is_dir());
+}
+
+/// Exports over an existing data directory's database.
+fn exports_over(data: &Path, outside: Files) -> (Exports, PathBuf) {
+    let database = Arc::new(Database::new(data.join("mailmind.db"), key(), Arc::new(Files::default())));
+    (Exports::new(database, Arc::new(outside), Arc::new(Frozen), data.join("tmp")), data.to_path_buf())
+}
