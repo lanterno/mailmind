@@ -57,7 +57,8 @@ test: xcframework project
     cd "{{here}}" && xcodebuild -quiet -project MailMind.xcodeproj -scheme MailMind-macOS -destination 'platform=macOS,arch=arm64' \
         -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO test
 
-# The Mac app, on a fictional mailbox of 100,000 messages it makes on first launch
+# The Mac app as a person runs it: on MailMind's data folder in Application Support and the login Keychain, so your
+# own mail (`just apple demo` runs it on fictional mail)
 run: build
     "{{here}}/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/MailMind"
 
@@ -117,3 +118,17 @@ _swift-api out:
     cd "{{here}}/../.."
     uv run python tests/support/openapi_doc.py "$doc/openapi.json"
     uv run python "{{here}}/Generator/swift_api.py" "$doc/openapi.json" "{{out}}"
+
+# The Mac app on fictional mail (`just demo`'s world): fake mail servers and the fake Claude API on loopback, a temp
+# home with a key of its own and a file in the login Keychain's place. `demo smoke` waits for the inbox's rows and
+# quits; `demo measure` times launch to first rows and idle memory. Nothing of yours is read or changed.
+demo mode="": build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{here}}/../.."
+    app="{{here}}/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/MailMind"
+    case "{{mode}}" in
+        "") uv run python "{{here}}/Measure/demo_home.py" "$app" ;;
+        smoke|measure) uv run python "{{here}}/Measure/demo_home.py" "$app" "--{{mode}}" ;;
+        *) echo "just apple demo [smoke|measure]" >&2; exit 2 ;;
+    esac
