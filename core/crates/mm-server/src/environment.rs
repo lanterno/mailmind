@@ -228,6 +228,13 @@ impl Environment {
             .contains(&self.raw("MAILMIND_NO_SCHEMA").unwrap_or_default().trim().to_lowercase().as_str())
     }
 
+    /// MAILMIND_NO_BATCHES on: a backlog is triaged one message at a time, at full price, rather than sent as a batch.
+    /// A value it doesn't take is off.
+    pub fn no_batches(&self) -> bool {
+        ["1", "true", "yes", "on"]
+            .contains(&self.raw("MAILMIND_NO_BATCHES").unwrap_or_default().trim().to_lowercase().as_str())
+    }
+
     /// MAILMIND_NO_DRAFT_TICK on: draft no replies ahead. A value it doesn't take is on, which drafts nothing.
     pub fn no_draft_tick(&self) -> bool {
         !["", "0", "false", "no", "off"]

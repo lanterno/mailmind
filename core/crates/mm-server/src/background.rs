@@ -1,8 +1,8 @@
 //! The assistant's background work and Tidy's run (`bootstrap.background`'s assess, draft-ahead, brief-ahead,
-//! review-ahead and tidy), each a round as Python's `schedule` runs it: triage of new mail; a reply drafted ahead for
-//! the best mail that wants one, with its own breaker, while someone is at the screen; and, for someone who turned
-//! each on, the morning's brief and the week's review written ahead and Tidy's run. Every AI call goes through the
-//! Assistant's gateway and its cost governor.
+//! review-ahead and tidy), each a round as Python's `schedule` runs it: triage of new mail, and of a backlog as a
+//! batch; a reply drafted ahead for the best mail that wants one, with its own breaker, while someone is at the
+//! screen; and, for someone who turned each on, the morning's brief and the week's review written ahead and Tidy's
+//! run. Every AI call goes through the Assistant's gateway and its cost governor.
 //!
 //! `Workers::start` puts them on lanes, unless the process only reads; `mm-served`'s `work assess` and `work tidy` run
 //! one pass of the two the served suites wait on.
@@ -13,6 +13,7 @@ use mm_accounts::Directory;
 use mm_assistant::ahead::Ahead;
 use mm_assistant::assessments::Assessments;
 use mm_assistant::background_ports::{DraftCandidates, FinishedBatches};
+use mm_assistant::batches::Batching;
 use mm_assistant::calls::Calls;
 use mm_assistant::prepared_replies::PreparedReplies;
 use mm_assistant::prepared_reply::Breaker;
@@ -54,6 +55,8 @@ pub(crate) struct Parts<'a> {
     pub(crate) zone: Arc<dyn Zone>,
     /// MAILMIND_NO_DRAFT_TICK off: replies are drafted ahead.
     pub(crate) drafts_ahead: bool,
+    /// MAILMIND_NO_BATCHES off: the assess round sends a backlog as a batch.
+    pub(crate) batches: bool,
 }
 
 #[derive(Debug)]
@@ -78,8 +81,13 @@ pub struct Background {
 
 impl Background {
     pub(crate) fn assemble(parts: Parts<'_>) -> Background {
-        let Parts { database, assistant, directory, filing, events, clock, zone, drafts_ahead } = parts;
-        let assessments = Arc::new(Assessments::new(assistant.calls.clone(), database.clone(), clock.clone()));
+        let Parts { database, assistant, directory, filing, events, clock, zone, drafts_ahead, batches } = parts;
+        // A batch out is brought in whatever MAILMIND_NO_BATCHES says, as one the Python app sent is.
+        let batching =
+            Arc::new(Batching::new(assistant.calls.clone(), database.clone(), database.clone(), clock.clone()));
+        let assessments = Arc::new(
+            Assessments::new(assistant.calls.clone(), database.clone(), clock.clone()).with_batches(batching, batches),
+        );
         let ahead = Ahead::new(
             assistant.asking.clone(),
             Arc::new(crate::wiring::KnownAccounts(directory.clone())),
@@ -161,7 +169,7 @@ impl Background {
         Ok(None)
     }
 
-    /// The Assistant's part of the forget round: the batches the Python app sent, a month after they ended.
+    /// The Assistant's part of the forget round: the batches sent, a month after they ended.
     pub fn forget_batches_round(&self) -> RoundOutcome {
         mm_assistant::batches::forget_finished(&*self.batches, &*self.clock).map(|_| None).map_err(|f| f.class)
     }

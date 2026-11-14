@@ -399,6 +399,8 @@ impl App {
             clock: seams.clock.clone(),
             zone: zone.clone(),
             drafts_ahead: !environment.no_draft_tick(),
+            // A backlog goes as a batch unless MAILMIND_NO_BATCHES says otherwise.
+            batches: !environment.no_batches(),
         });
         Ok(App {
             port,
