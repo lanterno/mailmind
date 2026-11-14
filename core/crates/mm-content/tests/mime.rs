@@ -409,6 +409,23 @@ fn a_parameter_after_a_vertical_tab_reads_as_python_read_it() {
 }
 
 #[test]
+fn a_boundary_ends_at_its_last_byte_that_isnt_a_blank_inside_its_quotes_too() {
+    // Python's get_boundary stripped the boundary on the right once its quotes were off.
+    let body = "\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b--\r\n";
+    for param in ["boundary=\"b\t\"", "boundary=\"b \x0b\"", "boundary= \"b \t \" ; charset=x"] {
+        let raw = message(&format!("Content-Type: multipart/mixed; {param}{body}"));
+        assert_eq!(part(&raw, 1), Some((b"hi".to_vec(), "text/plain".to_owned())), "{param:?}");
+    }
+    // One of blanks alone is an empty boundary; one with blanks at its start keeps them.
+    let blank = message(
+        "Content-Type: multipart/mixed; boundary=\" \"\r\n\r\npre\r\n--\r\nContent-Type: text/plain\r\n\r\nhi\r\n--\r\n\r\nsecond\r\n",
+    );
+    assert_eq!(part(&blank, 2), Some((b"second".to_vec(), "text/plain".to_owned())));
+    let leading = message(&format!("Content-Type: multipart/mixed; boundary=\"\tb\"{body}"));
+    assert_eq!(part(&leading, 1), None);
+}
+
+#[test]
 fn a_boundary_whose_quote_never_closed_is_an_empty_one() {
     // Python read `boundary="` with only blanks after the quote as `boundary=""`, and split at `--` lines.
     for header in ["boundary=\"", "boundary = \" ", "charset=x; boundary=\""] {
