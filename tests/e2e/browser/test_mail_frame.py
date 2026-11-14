@@ -450,6 +450,27 @@ def test_no_css_in_a_message_makes_anything_fixed(page, world):
     clean(page)
 
 
+HEADED = """<!doctype html><html><head><meta charset="utf-8"><title>The news</title>
+<style>p[title=headed]{color:rgb(4, 5, 6);position:fixed} body{background:url(https://tracker.example.test/bg.png)}</style>
+<noscript><style>p[title=noscript]{color:rgb(7, 8, 9)}</style></noscript>
+<template><style>p[title=headed]{color:rgb(1, 1, 1)}</style></template>
+</head><body><p title="headed">Styled from the head</p><p title="noscript">And from its noscript</p></body></html>"""
+
+
+def test_a_heads_style_sheet_applies_in_the_frame(page, world):
+    """A newsletter styled from its head shows as it was sent: the head's sheets come through the sanitizer, held to the
+    same CSS checks as any other, and apply in the frame. One in a <template> applies to nothing."""
+    pk, key = arrives(world, HEADED)
+    frame = reading(page, key)
+    loaded(page, frame)
+    style = "f.contentWindow.getComputedStyle(f.contentDocument.querySelector('[title={}]'))"
+    assert frame.evaluate(f"f => {style.format('headed')}.color") == "rgb(4, 5, 6)"
+    assert frame.evaluate(f"f => {style.format('noscript')}.color") == "rgb(7, 8, 9)"
+    assert frame.evaluate(f"f => {style.format('headed')}.position") == "static"
+    assert frame.evaluate("f => f.contentDocument.title") == ""
+    clean(page)                                     # the sheet's remote background was never asked for
+
+
 # The walls on mail the sanitizer let everything through: the sandbox and the policy hold alone.
 
 def test_a_hostile_body_runs_nothing_and_reaches_nothing(page, world, unsanitized):
