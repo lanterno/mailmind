@@ -3,7 +3,8 @@
 tests/support/openapi_doc.py writes the document, as it does for the page's TypeScript (`just gen-api`); this writes it as
 Swift: a Codable struct for each object schema, an enum for each closed set, an enum with a case for each member of a union,
 and under `API.Get` and `API.Post` each route under /api/ with what it answers and, for a POST, what it takes. The support
-these lean on (`JSONValue`, `Route`, `Union`) is hand-written beside them, in APISupport.swift.
+these lean on (`JSONValue`, `Route`, `Union`) is hand-written beside them, in APISupport.swift. `API.Limits` holds the limits
+the page holds a person to (mailmind/http/page_limits.py, as the page's limits.gen.ts does), so the app keeps no copy of one.
 
 A union is decoded as the page reads one: the first member whose keys the answer's keys fit (every key it requires there, and
 no key it doesn't name), else the first that decodes. The schemas name every field an answer has (the schema contract holds
@@ -13,8 +14,11 @@ them to it), so the keys alone tell the members apart.
 """
 import json
 import keyword
+import os
 import re
 import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 SWIFT_RESERVED = {
     "associatedtype", "class", "deinit", "enum", "extension", "fileprivate", "func", "import", "init", "inout", "internal",
@@ -71,8 +75,9 @@ def literal(value):
 
 
 class Writer:
-    def __init__(self, doc):
+    def __init__(self, doc, limits=None):
         self.doc = doc
+        self.limits = limits or {}
         self.schemas = doc["components"]["schemas"]
         self.lines = []
         self.unions = set()            # the structs some union decodes, which say which keys they name
@@ -311,6 +316,16 @@ class Writer:
                     out.append(f"        public enum {name} {{}}")
             out.append("    }")
         out.append("}")
+        if self.limits:
+            out.append("")
+            out.append("extension API {")
+            out.append("    /// The limits the page holds a person to, each the server's own (mailmind/http/page_limits.py): a request that")
+            out.append("    /// would name more is sent as more requests, and a setting past one is refused before it is asked.")
+            out.append("    public enum Limits {")
+            for name, value in self.limits.items():
+                out.append(f"        public static let {member_name(name)} = {literal(value)}")
+            out.append("    }")
+            out.append("}")
         for method, protocol in (("get", "GetRoute"), ("post", "PostRoute")):
             for kind, name, what, _ in routes[method]:
                 if kind != "route":
@@ -326,10 +341,17 @@ class Writer:
         return "\n".join(out) + "\n"
 
 
+def page_limits():
+    """The server's limits the page holds a person to, as tests/support/openapi_doc.py writes them for the page."""
+    sys.path.insert(0, ROOT)
+    from mailmind.http.page_limits import PAGE_LIMITS
+    return PAGE_LIMITS
+
+
 def main(doc_path, out_path):
     with open(doc_path, encoding="utf-8") as f:
         doc = json.load(f)
-    text = Writer(doc).write()
+    text = Writer(doc, page_limits()).write()
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(text)
 
