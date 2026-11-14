@@ -10,6 +10,12 @@ use zeroize::Zeroize;
 
 uniffi::setup_scaffolding!();
 
+// The app in the shell's own process, which the Apple app runs: its routes answered, its events heard.
+#[cfg(feature = "host")]
+mod host;
+#[cfg(feature = "host")]
+pub use host::{CoreAnswer, CoreEvent, CoreHeader, CoreHome, CoreHost, EventListener, EventSubscription, HostProblem};
+
 /// Why the core did not do what it was asked.
 #[derive(Debug, PartialEq, Eq, uniffi::Error)]
 pub enum CoreRefusal {
