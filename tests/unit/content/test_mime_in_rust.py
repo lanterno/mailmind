@@ -729,6 +729,18 @@ DELIMITER_ENDED_BY_A_LONE_CR = (b"From: Ada Lin <ada@example.test>\r\nSubject: S
                                 b"<desk@studio.example.test>\r\nReply-To: =?utf-8?B?5pel5pys?= <x+tag@studio.example.test>\r\n"
                                 b'Content-Type: multipart/related; boundary="=_part_0"\r\n\r\n--=_part_0\r\x00\nContent-Type: '
                                 b"text/plain\r\n\r\n\r\n--=_part_0--\r\n")
+# And a boundary after a vertical tab, at the top and in a nested multipart, which Python took for white space and
+# found the boundary past, as the core does now.
+VERTICAL_TAB_BEFORE_A_BOUNDARY = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: Ada Lin "
+                                  b'<ada@example.test>, =?utf-8?B?5pel5pys?= <ada@studio.example.test>, "Quoted Name" '
+                                  b"<desk@studio.example.test>\r\nReply-To: =?utf-8?B?5pel5pys?= <x+tag@studio.example.test>\r\n"
+                                  b'Date: 01 Jan 2000 00:00:00 +0000\r\nContent-Type: multipart/related; \x0bboundary="=_part_0"'
+                                  b"\r\n\r\n--=_part_0\r\nContent-Type: text/plain\r\n\r\n\r\n--=_part_0--\r\n")
+VERTICAL_TAB_BEFORE_A_NESTED_BOUNDARY = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: "
+                                         b"<x+tag@example.test>\r\nDate: 01 Jan 2000 00:00:00 +0000\r\nContent-Type: "
+                                         b'multipart/alternative; boundary="=_part_0"\r\n\r\n--=_part_0\r\nContent-Type: '
+                                         b'multipart/alternative; \x0bboundary="b1"\r\n\r\n--b1\r\nContent-Type: text/plain\r\n'
+                                         b"\r\n\r\n--b1--\r\n\r\n--=_part_0--\r\n")
 
 
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -738,6 +750,8 @@ DELIMITER_ENDED_BY_A_LONE_CR = (b"From: Ada Lin <ada@example.test>\r\nSubject: S
 @example(UNCLOSED_BOUNDARY)
 @example(CUT_AT_A_BARE_FILENAME)
 @example(DELIMITER_ENDED_BY_A_LONE_CR)
+@example(VERTICAL_TAB_BEFORE_A_BOUNDARY)
+@example(VERTICAL_TAB_BEFORE_A_NESTED_BOUNDARY)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
     body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
