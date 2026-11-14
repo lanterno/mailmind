@@ -12,6 +12,8 @@ use crate::placeholders;
 mod bodies;
 mod digest;
 pub(crate) mod lists;
+// A body kept as opening its message keeps one, which a sync keeps of an invite too.
+pub(crate) use bodies::keep_body;
 
 impl StoredMail for Database {
     fn stored_folder_counts(&self, account: &str) -> Result<Vec<(String, Option<i64>, i64)>, Fault> {

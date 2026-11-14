@@ -9,6 +9,8 @@ use mm_content::mime::Fields;
 use mm_kernel::errors::Fault;
 use mm_kernel::events::Topic;
 
+use crate::fetch_ports::KeptBody;
+
 /// What a sync needs to know of an account.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SyncAccount {
@@ -124,6 +126,9 @@ pub trait SyncStore: Send + Sync + fmt::Debug {
     /// What a person's filters asked of the stored message `pk`, queued for its server where the row doesn't hold it
     /// already, and shown on the row at once. Whether anything was queued.
     fn queue_filtered(&self, pk: i64, wanted: &[(&'static str, bool)], when: &str) -> Result<bool, Fault>;
+    /// The body of the stored message `pk`, which carries an invite, kept as opening it keeps one: its bytes, its
+    /// parts, who it went to and its text.
+    fn keep_invite(&self, pk: i64, body: &KeptBody) -> Result<(), Fault>;
 }
 
 /// What the Mailbox says happened, for whoever listens (`mailbox.domain.events`).

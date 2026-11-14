@@ -5,8 +5,10 @@
 //! Mail new to the Inbox that MailMind has never seen before is judged by the person's filters as it is stored, and
 //! what they ask is queued for the server (`arrival_flags`).
 //!
-//! No transaction stays open while the server is asked: each store call is its own. What isn't here yet: the invite a
-//! message carries kept with its body (Calendar's), and a login a server refused held back (`accounts.logins`).
+//! An Inbox message that carries a calendar invite keeps its body as it is stored, as opening it would, so Today &
+//! next finds the invite.
+//!
+//! No transaction stays open while the server is asked: each store call is its own.
 
 use std::sync::{Arc, OnceLock};
 
@@ -17,6 +19,7 @@ use mm_kernel::seams::Clock;
 use mm_kernel::when;
 
 use crate::arrival_ports::ArrivalFilters;
+use crate::fetch_ports::KeptBody;
 use crate::session::{HEADER_FIELDS, MailServer, MailServers, ServerError, found_by_message_id};
 use crate::sync_plan::{self, FLAG_REFRESH, WHOLE};
 use crate::sync_ports::{
@@ -216,9 +219,15 @@ impl Ingest {
             }
         }
         for mut row in rows {
+            let mut invite = None;
             if with_body && !row.verdict.is_junk {
                 row.snippet = match s.body(row.uid) {
-                    Ok(raw) => mime::text_body(&raw.unwrap_or_default()),
+                    Ok(raw) => {
+                        let raw = raw.unwrap_or_default();
+                        let text = mime::text_body(&raw);
+                        invite = mime::has_invite(&raw).then_some(raw);
+                        text
+                    }
                     Err(e) => {
                         if !e.is_unreachable() {
                             log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
@@ -240,6 +249,12 @@ impl Ingest {
                 if !wanted.is_empty() && self.store.queue_filtered(pk, &wanted, &self.now())? {
                     queued = true;
                 }
+            }
+            // Today & next reads invites from stored bodies only.
+            if let Some(raw) = invite
+                && let Err(fault) = self.store.keep_invite(pk, &KeptBody::of(raw, self.now()))
+            {
+                log::warning(TAG, "an invite's body wasn't kept", &[], Some(fault.class));
             }
         }
         if let Some(filters) = filters.filter(|_| queued) {

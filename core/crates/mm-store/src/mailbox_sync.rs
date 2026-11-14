@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use mm_content::mime::Fields;
 use mm_kernel::errors::Fault;
 use mm_kernel::identity;
+use mm_mailbox::fetch_ports::KeptBody;
 use mm_mailbox::sync_plan::{COLUMNS, still_to_say};
 use mm_mailbox::sync_ports::{FlagRow, FolderState, Incoming, SyncAccount, SyncStore};
 use mm_mailbox::threading::{StoredCopy, Threader};
@@ -645,5 +646,9 @@ impl SyncStore for Database {
             let changes = still_to_say(wanted, &held);
             Ok(!changes.is_empty() && queue_flags(c, pk, &changes, "filter", when)?)
         })
+    }
+
+    fn keep_invite(&self, pk: i64, body: &KeptBody) -> Result<(), Fault> {
+        self.write(|c| crate::mailbox::keep_body(c, pk, body))
     }
 }
