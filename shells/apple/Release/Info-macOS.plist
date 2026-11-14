@@ -19,6 +19,8 @@
 	<true/>
 	<key>SURequireSignedFeed</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 MailMind contributors. MIT License.</string>
 	<key>MailMindChecksForUpdates</key>
 	<string>$(MAILMIND_CHECKS_FOR_UPDATES)</string>
 </dict>

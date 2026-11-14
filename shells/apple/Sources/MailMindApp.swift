@@ -8,9 +8,16 @@ struct MailMindApp: App {
         WindowGroup {
             Root(demo: demo)
         }
-        .commands { UpdateCommands() }
+        .commands {
+            UpdateCommands()
+            AcknowledgementsCommands()
+        }
         #if os(macOS)
         .defaultSize(width: 560, height: 820)
+        #endif
+
+        #if os(macOS)
+        AcknowledgementsWindow()
         #endif
     }
 }
