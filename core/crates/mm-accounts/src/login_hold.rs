@@ -102,3 +102,6 @@ pub fn after_refusal(before: Option<&Hold>, login: LoginId, now: Moment) -> Hold
     };
     Hold { login, until: Moment::from_micros(now.micros() + rest * 1_000_000), rest }
 }
+
+#[cfg(test)]
+mod tests;

@@ -209,6 +209,7 @@ fn a_failure_says_what_went_wrong_in_words_of_its_own() {
         ("ConnectionRefused", "connection refused"),
         ("Timeout", "timeout"),
         ("LoginRefused", "AUTHENTICATIONFAILED"),
+        ("LoginUnavailable", "AUTHENTICATIONFAILED"),
         ("TLSPinMismatch", "certificate changed"),
         ("NameNotResolved", "host not found"),
         ("CertificateNotVerified", "SSLCertVerificationError"),
