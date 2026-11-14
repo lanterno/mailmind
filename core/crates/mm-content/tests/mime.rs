@@ -357,6 +357,28 @@ fn a_multipart_with_an_empty_boundary_splits_at_lines_of_two_dashes() {
 }
 
 #[test]
+fn a_bare_boundary_with_no_equals_is_an_empty_one() {
+    // Python read `boundary` alone as `boundary=""`, after any other parameter too, and split at `--` lines.
+    for header in ["boundary", "boundary ", "charset=x; boundary"] {
+        let raw = message(&format!(
+            "Content-Type: multipart/mixed; {header}\r\n\r\npre\r\n--\r\nContent-Type: text/plain\r\n\r\nfirst\r\n--\r\n\r\nsecond\r\n"
+        ));
+        assert_eq!(part(&raw, 1), Some((b"first".to_vec(), "text/plain".to_owned())), "{header}");
+        assert_eq!(part(&raw, 2), Some((b"second".to_vec(), "text/plain".to_owned())), "{header}");
+    }
+}
+
+#[test]
+fn an_empty_boundary_still_splits_when_a_line_of_dashes_ends_the_header_block() {
+    // The `--` line ends the header block, so the body it starts is the one split: ending the block and splitting it
+    // in one pass split the body mail-parser had read past that line, and lost the part.
+    for boundary in ["boundary", "boundary=\"\""] {
+        let raw = message(&format!("Content-Type: multipart/alternative; {boundary}\r\n--\r\n=\"x\"\r\n\r\nbody\r\n"));
+        assert_eq!(part(&raw, 1), Some((b"=\"x\"\r\n\r\nbody".to_vec(), "text/plain".to_owned())), "{boundary}");
+    }
+}
+
+#[test]
 fn a_header_block_ends_at_its_first_line_that_isnt_a_header() {
     // mail-parser read on to the blank line, and what came before it was lost.
     let raw = b"From: a@example.test\r\nSubject: s\r\nHello there\r\n\r\nsecond paragraph\r\n";
