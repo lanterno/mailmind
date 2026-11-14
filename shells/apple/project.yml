@@ -84,6 +84,10 @@ targets:
       # Settings, the first run and the status, their models and views
       - Sources/Mac/Settings
       - Sources/Mac/Status
+      # The mailbox (its places, lists, verbs and views) with the window's state it hangs on
+      - Sources/Mac/Mailbox
+      - Sources/Window/MailApp.swift
+      - Sources/Window/Reader.swift
     dependencies:
       - framework: build/MailMindCore.xcframework
         embed: false

@@ -32,6 +32,10 @@ final class MailApp {
     let reader = ReaderModel()
     @ObservationIgnored private(set) var core: Core?
     @ObservationIgnored private var listening: Task<Void, Never>?
+    #if os(macOS)
+    /// The sidebar's places and counts, every place's list, the rows chosen and the verbs on them (Mac/Mailbox).
+    @ObservationIgnored private(set) lazy var mailbox = Mailbox(app: self)
+    #endif
 
     /// Open the core over this process's home, then the sidebar and the first list, then listen.
     func start() async {
@@ -43,6 +47,9 @@ final class MailApp {
             stage = .open
             openList()
             await readSidebar()
+            #if os(macOS)
+            await mailbox.refresh()
+            #endif
             listen(to: core)
         } catch {
             stage = .failed((error as? Problem)?.description ?? String(describing: error))
@@ -74,28 +81,17 @@ final class MailApp {
         reader.open(copy)
     }
 
-    private func openList() {
-        guard let core, let place else {
+    /// Open the place's list, read as the mailbox reads each of its places (Mac/Mailbox/Mailbox.swift), or none for a
+    /// place that isn't a list of mail. The mailbox opens it again when its tab or grouping changes.
+    func openList() {
+        #if os(macOS)
+        let load = place.flatMap { mailbox.loader(for: $0) }
+        #else
+        let load: MailListModel.Loader? = nil
+        #endif
+        guard let load else {
             list = nil
             return
-        }
-        let load: MailListModel.Loader
-        switch place {
-        case .allInboxes:
-            load = { offset, limit in
-                let read = try await core.get(API.Get.Inboxes.self, ["offset": String(offset), "limit": String(limit)])
-                return .init(total: read.total, rows: read.items)
-            }
-        case .folder(let account, let folder):
-            load = { offset, limit in
-                let read = try await core.get(API.Get.Messages.self, [
-                    "account": account, "folder": folder, "offset": String(offset), "limit": String(limit),
-                ])
-                switch read {
-                case .folderListing(let listing): return .init(total: listing.total, rows: listing.items)
-                default: return .init(total: 0, rows: [])
-                }
-            }
         }
         let list = MailListModel(selection: selection, load: load)
         self.list = list
@@ -113,6 +109,9 @@ final class MailApp {
             guard let events = try? await core.events() else { return }
             for await event in events {
                 guard let self else { return }
+                #if os(macOS)
+                self.mailbox.heard(event)
+                #endif
                 if Self.mailChanged.contains(event.name) || Self.readAFolder(event) {
                     self.list?.refresh()
                     await self.readSidebar()

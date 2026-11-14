@@ -93,10 +93,7 @@ private struct ListColumn: View {
     }
 
     private var title: String {
-        switch app.place {
-        case .allInboxes, nil: String(localized: "All Inboxes")
-        case .folder(_, let folder): folder
-        }
+        app.mailbox.title
     }
 }
 

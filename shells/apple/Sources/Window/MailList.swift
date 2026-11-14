@@ -8,6 +8,13 @@ enum Place: Hashable, Sendable {
     case allInboxes
     /// One account's folder (`/api/messages`).
     case folder(account: String, folder: String)
+    // The mailbox's places (Mac/Mailbox/Places.swift).
+    /// Reply later, Waiting, Snoozed or Muted, of one account or of every account (`account` nil).
+    case virtual(VirtualFolder, account: String?)
+    /// A search's results, or a view's, a label's or a lane's, which are searches.
+    case search(Search)
+    /// Every attachment across the accounts: the Document Hub.
+    case documents
 }
 
 /// A copy of a message, as the page names one: its key, the folder it is in and its uid there. A row's number is no
