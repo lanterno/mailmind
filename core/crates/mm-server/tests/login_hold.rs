@@ -190,7 +190,12 @@ fn world(otherwise: &'static str) -> World {
     let clock = Arc::new(Moving::default());
     let environment = Environment::from_pairs([("MAILMIND_DB_KEY", "5e".repeat(32).as_str())]);
     let settings = Settings { home: home.path().to_path_buf() };
-    let seams = Seams { clock: clock.clone(), outside: Arc::new(Open), keychain: Arc::new(Kept) };
+    let seams = Seams {
+        clock: clock.clone(),
+        outside: Arc::new(Open),
+        keychain: Arc::new(Kept),
+        sanitizer: Arc::new(mm_server::real::Sanitizing),
+    };
     let app = App::assemble(&environment, &settings, home.path().join("dist"), 1, &seams).unwrap();
     World { app, imap, clock, _home: home }
 }
