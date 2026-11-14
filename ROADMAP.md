@@ -91,12 +91,8 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   message opens (#31), and the reader calls `/api/upcoming` and `/api/ai/draft-ahead`, which answer 404 there (#6). With
   bodies stored ahead and those two 404s set aside, 39 of `test_mail_frame.py` and `test_mail_frame_scripts.py`'s 40 pass
   on it, every unsanitized case among them; the 40th opens a conversation whose bodies weren't stored. Waits on #6 and #31.
-- **The core runs the migrations** · high value · effort M · [#35](https://github.com/lanterno/mailmind/issues/35) — `mailmind-server`
-  starts only over a database at the version it reads (`mm_store::schema::VERSION`, 51) and leaves making and upgrading
-  one to the Python app. Before the flip, the core takes the migrations over from 52, with the backup before an upgrade
-  and the copy-first check `db check-upgrade` does.
 - **The flip** · high value · effort M · [#11](https://github.com/lanterno/mailmind/issues/11) — Step 4: when the served suites pass against both servers and the owner has used
-  the Rust server daily for two weeks, the Python server goes. Waits on #6, #10, #28, #30, #31 and #35. The two weeks
+  the Rust server daily for two weeks, the Python server goes. Waits on #6, #10, #28, #30 and #31. The two weeks
   begin once the page's routes (#6) are on the Rust server and a message whose body isn't stored opens there (#31). Then step 5 moves the page from routes to the core's
   views and commands, screen by screen, starting with the message list.
 
@@ -162,7 +158,7 @@ implementation.
 
 ## Next up
 
-1. **Step 3: the Rust server on every route** (high) — the assistant (#6), the sync's remaining parts with the body fetch
-   first (#31), and the migrations (#35) are under way. See The move to the Rust core.
+1. **Step 3: the Rust server on every route** (high) — the assistant (#6) and the sync's remaining parts with the body
+   fetch first (#31) are under way; the core makes and upgrades the database now. See The move to the Rust core.
 2. **The owner's two weeks on the Rust server** (high) — IDLE runs there now; they begin once the page's routes (#6) are
    served and a message whose body isn't stored opens (#31), and they end in the flip (#11). `MAILMIND_WORKERS=account` (#3) can soak in them, or now: both servers read it.
