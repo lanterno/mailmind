@@ -70,7 +70,12 @@ fn running(profile: &str) -> Running {
     let key = "5e".repeat(32);
     let environment = Environment::from_pairs([("MAILMIND_DB_KEY", key.as_str()), ("MAILMIND_PROFILE", profile)]);
     let settings = Settings { home: home.path().to_path_buf() };
-    let seams = Seams { clock: Arc::new(Frozen), outside: Arc::new(Open), keychain: Arc::new(Empty) };
+    let seams = Seams {
+        clock: Arc::new(Frozen),
+        outside: Arc::new(Open),
+        keychain: Arc::new(Empty),
+        sanitizer: Arc::new(mm_server::real::Sanitizing),
+    };
     let dist = home.path().join("dist");
     let app = Arc::new(App::assemble(&environment, &settings, dist, port, &seams).unwrap());
     let csrf = app.csrf.clone();
