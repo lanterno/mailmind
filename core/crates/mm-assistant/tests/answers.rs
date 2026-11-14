@@ -18,12 +18,15 @@ use mm_assistant::governor::CostGovernor;
 use mm_assistant::ports::{
     AccountList, AiSettings, Answers, Around, AskIndex, AskRow, Cards, ConversationBy, CopyNow, Engine, Glance,
     InForce, LanguageModel, Mail, Message, ModelError, Needing, NewDraft, Overview, PlanSearch, Prompt, Reached, Reply,
-    Said, Spend, Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary, Usage, UsageLedger, WeekRows,
+    Said, SenderRecent, SenderStats, Senders, Spend, Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary,
+    Usage, UsageLedger, WeekRows,
 };
 use mm_assistant::prepared_replies::{PreparedReplies, ReplyAsked};
+use mm_assistant::rationale::Rationales;
 use mm_assistant::refusals::{AiFailure, NotSent};
 use mm_assistant::reply_draft::ReplyDrafts;
 use mm_assistant::reviews::Reviews;
+use mm_assistant::screening::Screening;
 use mm_assistant::status::Status;
 use mm_assistant::thread_digest::{Asked, ThreadDigest};
 use mm_kernel::errors::{Failure, Fault, Kind};
@@ -856,4 +859,95 @@ fn a_reply_drafted_ahead_is_set_going_only_with_the_token_and_served_once_ready(
     let ready = w.drafting.get(3, true, false).expect("an answer");
     assert_eq!(ready, (json!({"ok": true, "status": "ready", "body": "stub body", "tone": "balanced"}), None));
     assert!(sent(&w).is_empty());
+}
+
+/// What the Mailbox stores of Lin, and what was asked of it.
+#[derive(Debug, Default)]
+struct Stored {
+    asked: Mutex<Vec<(Vec<String>, i64)>>,
+}
+
+impl Senders for Stored {
+    fn sender_stats(&self, addrs: &[String]) -> Result<Vec<SenderStats>, Fault> {
+        let lin = SenderStats {
+            addr: "lin@example.test".into(),
+            name: Some("Lin Mori".into()),
+            n: 4,
+            unseen: Some(2),
+            replied: Some(1),
+            first_ts: Some(NOW - 12 * 86400),
+            last_ts: Some(NOW - 3600),
+        };
+        Ok(addrs.iter().filter(|a| *a == "lin@example.test").map(|_| lin.clone()).collect())
+    }
+
+    fn senders_recent(&self, addrs: &[&str], n: i64) -> Result<Vec<Vec<SenderRecent>>, Fault> {
+        self.asked.lock().expect("asked").push((addrs.iter().map(|a| (*a).to_owned()).collect(), n));
+        let lunch = SenderRecent { subject: Some("Lunch on Thursday?".into()), summary: None };
+        Ok(addrs.iter().map(|_| vec![lunch.clone()]).collect())
+    }
+}
+
+fn refused_as(r: &Result<Value, AiFailure>, kind: Kind, said: &str) -> bool {
+    matches!(r, Err(AiFailure::Failure(Failure::Problem(p))) if p.kind == kind && p.said == said)
+}
+
+#[test]
+fn a_rationale_is_written_for_each_sender_with_mail_and_none_is_asked_for_without() {
+    let w = world(true);
+    let rationales = Rationales::new(w.calls.clone(), Arc::new(Stored::default()), clock_at(NOW));
+    w.model
+        .replies
+        .lock()
+        .expect("replies")
+        .push(Ok("{\"rationales\": [{\"id\": 1, \"text\": \"Mostly unread.\"}]}".into()));
+    let asked = ["Lin@example.test ".to_owned(), "nobody@example.test".to_owned()];
+    let said = rationales.explain(Some(&asked)).expect("an answer");
+    assert_eq!(said, json!({"ok": true, "rationales": {"lin@example.test": "Mostly unread."}}));
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.ends_with(
+        "Senders:\n[1] Lin Mori <lin@example.test>: 4 messages over 12 days, 2 of them never opened, 1 replied to, \
+         the latest under a day ago.\n"
+    ));
+    let nobody = ["nobody@example.test".to_owned()];
+    assert_eq!(rationales.explain(Some(&nobody)).expect("an answer"), json!({"ok": true, "rationales": {}}));
+    assert!(refused_as(&rationales.explain(None), Kind::Refused, "bad senders"));
+    assert!(refused_as(&rationales.explain(Some(&["nobody".to_owned()])), Kind::Refused, "bad senders"));
+    assert!(sent(&w).is_empty());
+    w.model.replies.lock().expect("replies").push(Err(ModelError::new("Claude API 400: bad", Some(400))));
+    assert!(refused_as(&rationales.explain(Some(&asked)), Kind::Unreachable, "rationale unavailable"));
+    let off = world(false);
+    let rationales = Rationales::new(off.calls.clone(), Arc::new(Stored::default()), clock_at(NOW));
+    assert_eq!(rationales.explain(Some(&asked)), Err(AiFailure::NotSent(NotSent::AiOff)));
+}
+
+#[test]
+fn a_screener_pass_reads_no_more_than_its_senders_and_says_only_what_it_is_sure_of() {
+    let w = world(true);
+    let stored = Arc::new(Stored::default());
+    let screening = Screening::new(w.calls.clone(), stored.clone());
+    let waiting: Vec<Value> = (0..50)
+        .map(|i| json!({"from_addr": format!("s{i}@example.test"), "from_name": format!("S{i}"), "count": 1}))
+        .collect();
+    w.model.replies.lock().expect("replies").push(Ok("{\"verdicts\": [{\"id\": 2, \"verdict\": \"block\", \
+        \"confidence\": 0.9, \"why\": \"bulk mail\"}, {\"id\": 41, \"verdict\": \"keep\", \"confidence\": 1, \
+        \"why\": \"not shown\"}]}"
+        .into()));
+    let said = screening.suggest(Some(ADA), &waiting).expect("an answer");
+    assert_eq!(
+        said,
+        json!({"ok": true, "account": ADA, "asked": 40, "suggestions": [
+            {"from_addr": "s1@example.test", "verdict": "block", "confidence": 0.9, "why": "bulk mail"}]})
+    );
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.contains("\n[1] S0 <s0@example.test>, 1 in the inbox. Subjects: Lunch on Thursday?.\n"));
+    assert!(prompt.text.contains("\n[40] ") && !prompt.text.contains("[41]"));
+    let asked = stored.asked.lock().expect("asked").clone();
+    assert_eq!((asked.len(), asked[0].0.len(), asked[0].1), (1, 40, 3));
+    let none = screening.suggest(None, &[]).expect("an answer");
+    assert_eq!(none, json!({"ok": true, "account": null, "asked": 0, "suggestions": []}));
+    assert!(sent(&w).is_empty());
+    let off = world(false);
+    let screening = Screening::new(off.calls.clone(), stored);
+    assert_eq!(screening.suggest(Some(ADA), &waiting), Err(AiFailure::NotSent(NotSent::AiOff)));
 }
