@@ -63,6 +63,9 @@ pub mod backup;
 pub mod migrate;
 pub mod upgrade_check;
 
+// The background work's: what triage and drafting ahead read and keep.
+mod assistant_background;
+
 use std::collections::HashMap;
 use std::fmt;
 use std::path::Path;

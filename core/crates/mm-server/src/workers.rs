@@ -174,6 +174,33 @@ impl Jobs {
 /// What a lane runs each round.
 type Round = Box<dyn Fn() -> RoundOutcome + Send>;
 
+/// The assistant's background jobs, each on a lane of its own (`background.schedule`'s assess, draft-ahead,
+/// brief-ahead and review-ahead).
+fn background_lanes(app: &Arc<App>) -> Vec<(Arc<Job>, Round)> {
+    use crate::background::{ASSESS_FIRST, ASSESS_INTERVAL, BRIEF_AHEAD, REVIEW_AHEAD};
+    use mm_assistant::prepared_replies::{DRAFT_TICK_INTERVAL, DRAFT_TICK_STARTUP_DELAY};
+    type Of = fn(&crate::background::Background) -> RoundOutcome;
+    let mut jobs: Vec<(&'static str, (i64, i64), Of)> =
+        vec![("assess", (ASSESS_INTERVAL, ASSESS_FIRST), crate::background::Background::assess_round)];
+    if app.background.drafts_ahead {
+        jobs.push((
+            "draft-ahead",
+            (DRAFT_TICK_INTERVAL, DRAFT_TICK_STARTUP_DELAY),
+            crate::background::Background::draft_ahead_round,
+        ));
+    }
+    jobs.push(("brief-ahead", BRIEF_AHEAD, crate::background::Background::brief_ahead_round));
+    jobs.push(("review-ahead", REVIEW_AHEAD, crate::background::Background::review_ahead_round));
+    jobs.into_iter()
+        .map(|(name, (every, first), round)| {
+            let job = app.jobs.add(name, every, first);
+            let app = app.clone();
+            let round: Round = Box::new(move || round(&app.background));
+            (job, round)
+        })
+        .collect()
+}
+
 /// The workers this process started, which a stop ends once each round in progress returns.
 #[derive(Debug)]
 pub struct Workers {
@@ -251,6 +278,9 @@ impl Workers {
                 app.jobs.add("forget", mm_mailbox::forgetting::EVERY, mm_mailbox::forgetting::FIRST),
                 Box::new(move || forgetting.forgetting.round().map(|_| None).map_err(|fault| fault.class)),
             ));
+            // The assistant's background work: triage, which a sync with new mail kicks; replies drafted ahead,
+            // unless MAILMIND_NO_DRAFT_TICK; and the opt-in rounds, the brief and the review written ahead.
+            lanes.extend(background_lanes(app));
         }
         let mut threads = Vec::new();
         for queue in queues {

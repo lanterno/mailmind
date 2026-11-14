@@ -119,6 +119,8 @@ pub struct App {
     pub calendar: crate::calendar_wiring::Calendar,
     /// The Assistant's: every AI call, the cost governor, and how AI stands.
     pub assistant: crate::assistant_wiring::Assistant,
+    /// The assistant's background work (`work assess`), which `Workers::start` schedules.
+    pub background: crate::background::Background,
 }
 
 impl App {
@@ -365,6 +367,16 @@ impl App {
             zone: zone.clone(),
             delivery: compose.delivery.clone(),
         });
+        // The assistant's background work.
+        let background = crate::background::Background::assemble(crate::background::Parts {
+            database: database.clone(),
+            assistant: &assistant,
+            directory: directory.clone(),
+            events: events.clone(),
+            clock: seams.clock.clone(),
+            zone: zone.clone(),
+            drafts_ahead: !environment.no_draft_tick(),
+        });
         Ok(App {
             port,
             csrf,
@@ -400,6 +412,7 @@ impl App {
             cleanups,
             calendar,
             assistant,
+            background,
         })
     }
 }

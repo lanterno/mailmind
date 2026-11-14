@@ -61,5 +61,8 @@ mod arrival_wiring;
 // The Assistant's use cases bound: the language model for the key in force, the cost governor and every AI call.
 pub mod assistant_wiring;
 
+// The assistant's background work, each a round the workers schedule.
+pub mod background;
+
 pub use app::{App, Seams};
 pub use serve::{Server, Work};

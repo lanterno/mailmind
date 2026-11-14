@@ -6,6 +6,7 @@
 //! checks the fingerprint, the age, whether the mail still wants a reply and the thread's anchor again, so a stale
 //! draft is never shown. One generation at a time for each key; the cost governor says when one may run.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,6 +15,7 @@ use mm_kernel::events::{Events, Topic};
 use mm_kernel::seams::Clock;
 use serde_json::{Value, json};
 
+use crate::background_ports::DraftCandidates;
 use crate::context::Context;
 use crate::digest;
 use crate::flights::SingleFlight;
@@ -26,6 +28,15 @@ use crate::text::cut;
 
 /// How long a second generation for a key waits on the first.
 const WAIT: Duration = Duration::from_secs(45);
+/// Seconds between the background rounds, and before the first, which lets the first sync and triage settle.
+pub const DRAFT_TICK_INTERVAL: i64 = 180;
+pub const DRAFT_TICK_STARTUP_DELAY: i64 = 120;
+/// Warm drafts kept for at most this many of the best candidates, one drafted a round...
+pub const DRAFT_TOPK: usize = 6;
+/// ...and at most this many for one account.
+pub const DRAFT_TOPK_PER_ACCOUNT: usize = 2;
+/// Only mail from the last three days: older mail drafts on demand.
+pub const DRAFT_RECENCY_WINDOW: i64 = 3 * 86_400;
 
 /// What a reply request asks: what to reply to, by whom, and how.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -263,20 +274,60 @@ impl PreparedReplies {
         self.flights.run(key.clone(), make, warm, WAIT, true).flatten()
     }
 
-    /// A pre-drafter's round, with its own breaker: at most one reply drafted ahead, only when the cost governor would
-    /// let it go, then the expired drafts collected. `candidate` is the round's pick.
+    /// One round's worth of work from `rows`, the candidates as the store lists them, best first: the best that wants
+    /// a reply and isn't warm, being made or backing off, by its account and pk. None when the warm set is full or
+    /// nothing is left. Reading it spends nothing.
+    pub fn pick(&self, rows: &[Message]) -> Result<Option<(String, i64)>, Fault> {
+        let now = self.now();
+        let mut seen = HashSet::new();
+        let mut warm_total = 0;
+        let mut warm_of: HashMap<&str, usize> = HashMap::new();
+        for r in rows {
+            if warm_total >= DRAFT_TOPK {
+                break;
+            }
+            if !self.eligible(r) {
+                continue;
+            }
+            let Some(key) = rules::key_of(r) else { continue };
+            if !seen.insert(key.clone()) {
+                continue;
+            }
+            let stored = self.answers.draft_ahead(&key.0, &key.1)?;
+            let tid = r.thread_id.as_deref().filter(|t| !t.is_empty());
+            let fp = self.fingerprint(&r.account, tid, r.pk)?;
+            if rules::servable(stored.as_ref(), &fp, now) {
+                // Already warm: what keeps a restart from drafting them all again.
+                warm_total += 1;
+                *warm_of.entry(&r.account).or_default() += 1;
+                continue;
+            }
+            if warm_of.get(r.account.as_str()).copied().unwrap_or_default() >= DRAFT_TOPK_PER_ACCOUNT
+                || rules::backing_off(stored.as_ref(), now)
+                || self.flights.busy(&key)
+            {
+                continue;
+            }
+            return Ok(Some((r.account.clone(), r.pk)));
+        }
+        Ok(None)
+    }
+
+    /// A pre-drafter's round, with its own breaker: at most one reply drafted ahead, picked from `candidates`, only when
+    /// the cost governor would let it go (`held_back` false), then the expired drafts collected.
     pub fn round(
         &self,
         breaker: &mut Breaker,
         held_back: bool,
-        candidate: Option<(String, i64)>,
+        candidates: &dyn DraftCandidates,
         events: &dyn Events,
     ) -> Result<(), Fault> {
         let now = self.clock.now().seconds();
         if breaker.is_open(now) || held_back {
             return Ok(());
         }
-        if let Some((account, pk)) = candidate {
+        let rows = candidates.draft_candidates(self.now() - DRAFT_RECENCY_WINDOW)?;
+        if let Some((account, pk)) = self.pick(&rows)? {
             let led = self.generate(Some(&account), pk, "topk", events);
             if breaker.heard(led, self.clock.now().seconds()) {
                 mm_kernel::log::warning("draft", "tick suspended 30m after repeated failures", &[], None);
