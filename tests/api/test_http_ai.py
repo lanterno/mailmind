@@ -126,6 +126,25 @@ def test_do_plans_a_preview_and_degrades_to_search(app, golden, world, ai):
     golden.record("do: when the API fails", app.post("/api/ai/do-plan", {"cmd": "archive Lin"}))
 
 
+def test_why_a_cleanup_and_what_the_screener_would_do(app, golden, world, ai):
+    ai.queue(fa.answer({"rationales": [{"id": 1, "text": "You open few of these."}, {"id": 9, "text": "made up"}]}))
+    golden.record("why clean up Lin, Noor and nobody", app.post("/api/cleanup/rationale", {"senders": [
+        " Lin@Example.test", "noor@studio.example.test", "nobody@example.test"]}))
+    sent(golden, ai, "sent for the rationale")
+    golden.record("why clean up no one", app.post("/api/cleanup/rationale", {"senders": []}))
+    golden.record("why clean up a number", app.post("/api/cleanup/rationale", {"senders": [5]}))
+    ai.queue(fa.answer({"verdicts": [{"id": 1, "verdict": "keep", "confidence": 0.95, "why": "Writes to you often"},
+                                     {"id": 2, "verdict": "block", "confidence": 0.5, "why": "Unsure"},
+                                     {"id": 4, "verdict": "block", "confidence": 0.875, "why": "A mailer"},
+                                     {"id": 9, "verdict": "block", "confidence": 1, "why": "Not shown"}]}))
+    golden.record("what the Screener would do for Ada", app.post("/api/screener/suggest", {"account": w.ADA}))
+    sent(golden, ai, "sent for the Screener")
+    golden.record("for no account", app.post("/api/screener/suggest", {}))
+    golden.note("calls for those with nothing to ask", len(ai.requests))
+    ai.queue(fa.error(400, "invalid_request_error", "bad request"))
+    golden.record("when the API fails", app.post("/api/screener/suggest", {"account": w.ADA}))
+
+
 @pytest.mark.parametrize("route", ["/api/briefing", "/api/review"])
 def test_briefing_and_review_are_written_once_and_a_get_only_reads(app, golden, world, ai, route):
     golden.note("messages triaged", triaged(app, ai))
