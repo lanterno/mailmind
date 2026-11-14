@@ -19,7 +19,10 @@ each with one line:
                         due), follow-ups (note replies and expiries), assess (triage mail AI hasn't summarized), sync
                         (one folder: ["<account>", "<folder>"]), reconcile (the ghost pruner's round over one account,
                         which yields to a user's change as it would: ["<account>"]), tidy (file the day's
-                        low-priority mail, for someone who turned Tidy by itself on)
+                        low-priority mail, for someone who turned Tidy by itself on), forget (what went a month ago
+                        let go), backfill (fetch the bodies of up to a dozen stored messages that have none, each
+                        account in turn), warm (sync the Drafts, Archive and Sent of each account asking to be warmed,
+                        those due this round)
     settle              ok once work the requests started has ended; `busy <what>` after 30 seconds
     check               ok, or `problems <JSON list>`: what its own checks refused since the last check
     unsanitized on|off  ok: from now on the bodies the reader and its frame show (`/api/message/body`, `body.html`)
@@ -86,12 +89,13 @@ def jobs():
     """A pass of each background job a worker runs, by the name the protocol gives it."""
     from mailmind.bootstrap import accounts, assistant, attention, background
     from mailmind.bootstrap.compose import drafts, outbox
-    from mailmind.bootstrap.mailbox import commands, ingest, reconciler
+    from mailmind.bootstrap.mailbox import commands, ingest, reconciler, syncing, warm
     return {"outbox": outbox.drain, "commands": commands.drain, "drafts": drafts.push_round,
             "snoozes": attention.snoozing.wake_due, "follow-ups": attention.followups.tick, "assess": assistant.assessments.round,
             "sync": lambda account, folder: ingest.sync_folder(accounts.get(account), folder),
             "reconcile": lambda account: reconciler.auto_reconcile_one(accounts.get(account)),
-            "tidy": background.tidy_round, "forget": background.forget_round}
+            "tidy": background.tidy_round, "forget": background.forget_round,
+            "backfill": syncing.backfill_round, "warm": warm.warm_tick}
 
 
 def main():
