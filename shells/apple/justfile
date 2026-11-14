@@ -69,3 +69,13 @@ measure: build
 # and waits for mail in the rows there
 smoke which="all": build
     "{{here}}/Measure/smoke.sh" {{which}}
+
+# ── packaging and updates: see docs/releasing.md ──────────────────────────────
+
+# The Mac app's icon: Icon/icon.swift draws every size into Icon/Assets.xcassets (commit the images on their own)
+icon:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p "{{out}}"
+    xcrun swiftc -O "{{here}}/Icon/icon.swift" -o "{{out}}/icon"
+    "{{out}}/icon" "{{here}}/Icon/Assets.xcassets"
