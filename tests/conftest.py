@@ -79,9 +79,9 @@ _TESTS = os.path.dirname(os.path.abspath(__file__))
 
 
 def _is_served(item):
-    """A test of a server the suite starts as a program: tests/api's, and tests/e2e/browser's but in_process/."""
+    """A test of a server the suite starts as a program: tests/api's and tests/e2e/browser's."""
     parts = os.path.relpath(str(item.path), _TESTS).split(os.sep)
-    return parts[0] == "api" or (parts[:2] == ["e2e", "browser"] and "in_process" not in parts)
+    return parts[0] == "api" or parts[:2] == ["e2e", "browser"]
 
 
 def _hold_to_the_ledger(items):
@@ -270,17 +270,10 @@ def world(world_template, data_dir):
 
 
 @pytest.fixture
-def app(in_process_app):
-    """The app in this process (`in_process_app`). The API and browser suites start a server as a program instead."""
-    return in_process_app
-
-
-@pytest.fixture
-def in_process_app(world, monkeypatch):
-    """The app as `python -m mailmind serve` builds it, over this test's world and the new set of objects `_fresh_app`
-    assembled, with the clock frozen at NOW. Yields an AppClient; its .clock moves the frozen time (clock.shift(timedelta(...)),
-    clock.move_to(datetime)). Named as well as `app`, so a folder whose suite serves the app as a program can keep a test
-    that must patch the app's insides on this one."""
+def app(world, monkeypatch):
+    """The app as `python -m mailmind serve` builds it, in this process, over this test's world and the new set of objects
+    `_fresh_app` assembled, with the clock frozen at NOW. Yields an AppClient; its .clock moves the frozen time
+    (clock.shift(timedelta(...)), clock.move_to(datetime)). The API and browser suites start a server as a program instead."""
     import dataclasses
     import time_machine
     import app_client

@@ -71,14 +71,14 @@ test-rust *args:
     while IFS= read -r test; do listed+=("$test"); done < <(grep -v '^#' tests/support/rust_ledger.txt | grep .)
     uv run pytest -n 4 --browser "${listed[@]}" {{args}}
 
-# Every served test (tests/api, and tests/e2e/browser but in_process/) against the Rust server, with those off the ledger
+# Every served test (tests/api and tests/e2e/browser) against the Rust server, with those off the ledger
 # expected to fail: one that passes errors with XPASS(strict), and goes on the ledger
 test-rust-all *args: setup
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build -q --manifest-path core/Cargo.toml -p mm-served
     export MAILMIND_TEST_SERVER="$PWD/core/target/debug/mm-served" MAILMIND_TEST_LEDGER="$PWD/tests/support/rust_ledger.txt"
-    uv run pytest -n 4 --browser -rfE tests/api tests/e2e/browser --ignore=tests/e2e/browser/in_process {{args}}
+    uv run pytest -n 4 --browser -rfE tests/api tests/e2e/browser {{args}}
 
 # Undefined names, unused imports and pyflakes' other checks, run by ruff; then the import rules
 # between the mailmind package's layers (import-linter; the contracts are in pyproject.toml), then types (pyright)
