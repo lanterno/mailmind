@@ -2484,6 +2484,26 @@ extension API {
         }
     }
 
+    /// Whether one is set: never what it is, how long, or any part of it.
+    public struct Kept: Codable, Hashable, Sendable {
+        public var ok: Bool
+        public var set: Bool
+
+        public init(ok: Bool, set: Bool) {
+            self.ok = ok
+            self.set = set
+        }
+    }
+
+    /// The Claude API key, as typed or pasted.
+    public struct KeyBody: Codable, Hashable, Sendable {
+        public var key: String
+
+        public init(key: String) {
+            self.key = key
+        }
+    }
+
     public struct Known: Codable, Hashable, Sendable {
         public var bad: [String]
         public var items: [String: KnownVerdict]
@@ -3252,6 +3272,15 @@ extension API {
         public init(email: String? = nil, name: String? = nil) {
             self.email = email
             self.name = name
+        }
+    }
+
+    /// The Proton Bridge's password, as the Bridge shows it.
+    public struct PasswordBody: Codable, Hashable, Sendable {
+        public var password: String
+
+        public init(password: String) {
+            self.password = password
         }
     }
 
@@ -6530,8 +6559,12 @@ extension API {
         public enum AccountHealth {}
         /// GET /api/accounts
         public enum Accounts {}
+        /// GET /api/accounts/bridge-password
+        public enum AccountsBridgePassword {}
         /// GET /api/ai/draft-ahead
         public enum AiDraftAhead {}
+        /// GET /api/ai/key
+        public enum AiKey {}
         /// GET /api/audit
         public enum Audit {}
         /// GET /api/briefing
@@ -6621,6 +6654,10 @@ extension API {
     public enum Post {
         /// POST /api/accounts/add
         public enum AccountsAdd {}
+        /// POST /api/accounts/bridge-password
+        public enum AccountsBridgePassword {}
+        /// POST /api/accounts/bridge-password/clear
+        public enum AccountsBridgePasswordClear {}
         /// POST /api/accounts/delete
         public enum AccountsDelete {}
         /// POST /api/accounts/edit
@@ -6639,6 +6676,10 @@ extension API {
         public enum AiDraftReply {}
         /// POST /api/ai/extract
         public enum AiExtract {}
+        /// POST /api/ai/key
+        public enum AiKey {}
+        /// POST /api/ai/key/clear
+        public enum AiKeyClear {}
         /// POST /api/ai/rewrite
         public enum AiRewrite {}
         /// POST /api/ai/summarize
@@ -6768,9 +6809,19 @@ extension API.Get.Accounts: GetRoute {
     public typealias Answer = API.Listed
 }
 
+extension API.Get.AccountsBridgePassword: GetRoute {
+    public static let path = "/api/accounts/bridge-password"
+    public typealias Answer = API.Kept
+}
+
 extension API.Get.AiDraftAhead: GetRoute {
     public static let path = "/api/ai/draft-ahead"
     public typealias Answer = API.AiDraftAheadAnswer
+}
+
+extension API.Get.AiKey: GetRoute {
+    public static let path = "/api/ai/key"
+    public typealias Answer = API.Kept
 }
 
 extension API.Get.Audit: GetRoute {
@@ -6989,6 +7040,18 @@ extension API.Post.AccountsAdd: PostRoute {
     public typealias Body = API.AccountBody
 }
 
+extension API.Post.AccountsBridgePassword: PostRoute {
+    public static let path = "/api/accounts/bridge-password"
+    public typealias Answer = API.Kept
+    public typealias Body = API.PasswordBody
+}
+
+extension API.Post.AccountsBridgePasswordClear: PostRoute {
+    public static let path = "/api/accounts/bridge-password/clear"
+    public typealias Answer = API.Kept
+    public typealias Body = API.NoBody
+}
+
 extension API.Post.AccountsDelete: PostRoute {
     public static let path = "/api/accounts/delete"
     public typealias Answer = API.Removed
@@ -7041,6 +7104,18 @@ extension API.Post.AiExtract: PostRoute {
     public static let path = "/api/ai/extract"
     public typealias Answer = API.Extracted
     public typealias Body = API.NamesAMessage
+}
+
+extension API.Post.AiKey: PostRoute {
+    public static let path = "/api/ai/key"
+    public typealias Answer = API.Kept
+    public typealias Body = API.KeyBody
+}
+
+extension API.Post.AiKeyClear: PostRoute {
+    public static let path = "/api/ai/key/clear"
+    public typealias Answer = API.Kept
+    public typealias Body = API.NoBody
 }
 
 extension API.Post.AiRewrite: PostRoute {
