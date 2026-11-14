@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  The Mac app's own Info.plist keys, merged into the one Xcode generates. Sparkle reads the first three; the build
+  The Mac app's own Info.plist keys, merged into the one Xcode generates. Sparkle reads the first four; the build
   settings they name are in Release/mac.yml. See docs/releasing.md.
+
+  SURequireSignedFeed: the appcast itself must carry a signature by the update key, not only each update in it, so
+  whoever could change the feed on its way (or on GitHub) can't change what it says either: the version, the minimum
+  macOS, the links. generate_appcast signs it when it finds this key in the app it reads. Sparkle needs
+  SUVerifyUpdateBeforeExtraction with it.
 -->
 <plist version="1.0">
 <dict>
@@ -11,6 +16,8 @@
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_PUBLIC_KEY)</string>
 	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SURequireSignedFeed</key>
 	<true/>
 	<key>MailMindChecksForUpdates</key>
 	<string>$(MAILMIND_CHECKS_FOR_UPDATES)</string>

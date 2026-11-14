@@ -134,6 +134,9 @@ fi
 eddsa="$out/core/eddsa"
 xcrun swiftc -O "$here/Release/eddsa.swift" -o "$eddsa"
 "$eddsa" verify-appcast "$out/appcast.xml" "$dmg" "$key"
+# The app requires a signed feed (Release/Info-macOS.plist), so a feed generate_appcast left unsigned is one no copy
+# would read.
+"$eddsa" verify-feed "$out/appcast.xml" "$key"
 
 sed "s/{{version}}/$version/g" "$here/Release/notes.md" >"$out/notes.md"
 /bin/rm -rf "$out/core"
