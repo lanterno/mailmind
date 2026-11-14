@@ -448,6 +448,21 @@ fn a_header_block_ends_at_its_first_line_that_isnt_a_header() {
 }
 
 #[test]
+fn a_first_header_line_of_blanks_alone_is_left_out_and_the_block_goes_on() {
+    // Python read it as a fold with nothing to fold into, and left it out; mail-parser ended the block there.
+    let message_first = b" \r\nFrom: a@example.test\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n";
+    assert_eq!(parse(message_first).html.as_deref(), Some("<b>x</b>\r\n"));
+    for blanks in [" \r\n", "\t\t\n", " \r\n \r\n"] {
+        let part_first = message(&format!(
+            "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n{blanks}Content-Type: text/html\r\n\r\n<b>x</b>\r\n--b--\r\n"
+        ));
+        assert_eq!(part(&part_first, 1), Some((b"<b>x</b>".to_vec(), "text/html".to_owned())), "{blanks:?}");
+    }
+    let then_blank = message("Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n \r\n\r\nbody\r\n--b--\r\n");
+    assert_eq!(part(&then_blank, 1), Some((b"body".to_vec(), "text/plain".to_owned())));
+}
+
+#[test]
 fn the_first_content_type_of_a_part_is_its_type() {
     let raw = message("Content-Type: text/html\r\nContent-Type: text/plain\r\n\r\n<b>which</b>\r\n");
     assert_eq!(parse(&raw).html.as_deref(), Some("<b>which</b>\r\n"));
