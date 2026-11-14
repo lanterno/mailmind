@@ -6,8 +6,8 @@
 //! The base is the Python app's schema at 51 (`schema_v51.sql`), made in one write transaction that sets the version
 //! too. Each migration after it runs in a transaction of its own (BEGIN IMMEDIATE) that sets its version as well, so
 //! one that fails leaves the database exactly as it was before it, at the version before it, and the next start runs
-//! it again. A database older than the base is the Python app's to upgrade, and one newer than the core's newest
-//! migration is one the core is behind.
+//! it again. Before it migrates a database it didn't just make, it backs it up (`backup`). A database older than the
+//! base is the Python app's to upgrade, and one newer than the core's newest migration is one the core is behind.
 //!
 //! Migrations are append-only, as the Python app's are: the version is the on-disk contract, so one is never
 //! renumbered or removed, and a retired feature leaves a migration that does nothing behind. Each is idempotent at its
@@ -17,10 +17,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mm_kernel::Refusal;
+use mm_kernel::seams::Clock;
 use rusqlite::Connection;
 
-use crate::Store;
 use crate::db::Database;
+use crate::{Store, backup};
 
 /// The version a database the core makes starts at: the Python app's last migration before the core took them over.
 pub const BASE: i64 = 51;
@@ -98,6 +99,8 @@ pub enum NotReady {
     Storage,
     /// The migration to this version failed: the database is as it was before it, and the next start tries it again.
     Failed(i64),
+    /// The copy taken before an upgrade couldn't be made: nothing was migrated.
+    NoBackup,
 }
 
 /// Whether SQLite `version` (as `sqlite_version()` says it, `3.54.1`) is `SQLITE_NEEDED` or newer.
@@ -110,14 +113,15 @@ pub fn sqlite_fits(version: &str) -> bool {
 }
 
 impl Database {
-    /// Make the database if there is none, and run every migration it hasn't run yet. Safe on every start: a
-    /// database at the newest version is left alone.
-    pub fn ready(&self) -> Result<Ready, NotReady> {
-        self.ready_with(MIGRATIONS)
+    /// Make the database if there is none, and run every migration it hasn't run yet, backing it up first
+    /// (`backup`, its copy named for `clock`'s time). Safe on every start: a database at the newest version is left
+    /// alone.
+    pub fn ready(&self, clock: &dyn Clock) -> Result<Ready, NotReady> {
+        self.ready_with(clock, MIGRATIONS)
     }
 
     /// `ready`, with `migrations` in place of the core's own (a test's).
-    pub fn ready_with(&self, migrations: &[Migration]) -> Result<Ready, NotReady> {
+    pub fn ready_with(&self, clock: &dyn Clock, migrations: &[Migration]) -> Result<Ready, NotReady> {
         let found = rusqlite::version();
         if !sqlite_fits(found) {
             return Err(NotReady::SqliteTooOld(found.to_owned()));
@@ -159,6 +163,10 @@ impl Database {
         let pending: Vec<&Migration> = migrations.iter().filter(|m| m.version > from).collect();
         if pending.is_empty() {
             return Ok(if made { Ready::Made } else { Ready::AsItWas });
+        }
+        // One just made holds nothing to keep.
+        if !made {
+            backup::take(c, path, from, self.key(), self.outside(), clock.now()).map_err(|_| NotReady::NoBackup)?;
         }
         for migration in pending {
             run(c, migration).map_err(|_| NotReady::Failed(migration.version))?;

@@ -7,11 +7,20 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use mm_kernel::seams::{Outside, Tripped};
+use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
 use mm_store::migrate::{BASE, MIGRATIONS, Migration, NotReady, Ready};
 use mm_store::schema::VERSION;
 use mm_store::{Database, DbKey, Store};
 use rusqlite::Connection;
+
+#[derive(Debug)]
+struct Frozen;
+
+impl Clock for Frozen {
+    fn now(&self) -> Moment {
+        Moment::from_micros(1_793_620_800_000_000)
+    }
+}
 
 #[derive(Debug)]
 struct Open;
@@ -108,7 +117,7 @@ const TWO: &[Migration] = &[Migration::new(52, m52), Migration::new(53, m53)];
 /// A database the core made at the base, as it stands before any migration after it.
 fn at_base(dir: &Path) -> std::path::PathBuf {
     let path = dir.join("mailmind.db");
-    assert_eq!(database(&path).ready_with(&[]), Ok(Ready::Made));
+    assert_eq!(database(&path).ready_with(&Frozen, &[]), Ok(Ready::Made));
     path
 }
 
@@ -116,7 +125,7 @@ fn at_base(dir: &Path) -> std::path::PathBuf {
 fn each_pending_migration_runs_in_order_and_sets_its_version() {
     let dir = tempfile::tempdir().unwrap();
     let path = at_base(dir.path());
-    assert_eq!(database(&path).ready_with(TWO), Ok(Ready::Upgraded { from: BASE, to: 53 }));
+    assert_eq!(database(&path).ready_with(&Frozen, TWO), Ok(Ready::Upgraded { from: BASE, to: 53 }));
     assert_eq!(version(&path), 53);
     assert_eq!(ran(&path), vec![52, 53]);
 }
@@ -125,9 +134,9 @@ fn each_pending_migration_runs_in_order_and_sets_its_version() {
 fn only_those_it_hasnt_run_run() {
     let dir = tempfile::tempdir().unwrap();
     let path = at_base(dir.path());
-    assert_eq!(database(&path).ready_with(&TWO[..1]), Ok(Ready::Upgraded { from: BASE, to: 52 }));
-    assert_eq!(database(&path).ready_with(TWO), Ok(Ready::Upgraded { from: 52, to: 53 }));
-    assert_eq!(database(&path).ready_with(TWO), Ok(Ready::AsItWas));
+    assert_eq!(database(&path).ready_with(&Frozen, &TWO[..1]), Ok(Ready::Upgraded { from: BASE, to: 52 }));
+    assert_eq!(database(&path).ready_with(&Frozen, TWO), Ok(Ready::Upgraded { from: 52, to: 53 }));
+    assert_eq!(database(&path).ready_with(&Frozen, TWO), Ok(Ready::AsItWas));
     assert_eq!(ran(&path), vec![52, 53]);
 }
 
@@ -135,7 +144,7 @@ fn only_those_it_hasnt_run_run() {
 fn a_new_database_is_made_at_the_base_and_migrated_from_it() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
-    assert_eq!(database(&path).ready_with(TWO), Ok(Ready::Made));
+    assert_eq!(database(&path).ready_with(&Frozen, TWO), Ok(Ready::Made));
     assert_eq!(version(&path), 53);
     assert_eq!(ran(&path), vec![52, 53]);
 }
@@ -145,16 +154,16 @@ fn a_migration_that_fails_leaves_the_database_as_it_was_before_it_and_the_next_s
     let dir = tempfile::tempdir().unwrap();
     let path = at_base(dir.path());
     let failing = [Migration::new(52, m52), Migration::new(53, m53_fails_halfway)];
-    assert_eq!(database(&path).ready_with(&failing), Err(NotReady::Failed(53)));
+    assert_eq!(database(&path).ready_with(&Frozen, &failing), Err(NotReady::Failed(53)));
     // 52 went whole, and nothing of 53 is left.
     assert_eq!(version(&path), 52);
     assert_eq!(ran(&path), vec![52]);
     let stopped = tempfile::tempdir().unwrap();
     let only_52 = at_base(stopped.path());
-    database(&only_52).ready_with(&TWO[..1]).unwrap();
+    database(&only_52).ready_with(&Frozen, &TWO[..1]).unwrap();
     assert_eq!(schema(&path), schema(&only_52));
     // Fixed, the next start runs it.
-    assert_eq!(database(&path).ready_with(TWO), Ok(Ready::Upgraded { from: 52, to: 53 }));
+    assert_eq!(database(&path).ready_with(&Frozen, TWO), Ok(Ready::Upgraded { from: 52, to: 53 }));
     assert_eq!(ran(&path), vec![52, 53]);
 }
 
@@ -163,7 +172,7 @@ fn a_migration_that_ends_its_own_transaction_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let path = at_base(dir.path());
     let committing = [Migration::new(52, m52), Migration::new(53, m53_commits)];
-    assert_eq!(database(&path).ready_with(&committing), Err(NotReady::Failed(53)));
+    assert_eq!(database(&path).ready_with(&Frozen, &committing), Err(NotReady::Failed(53)));
     assert_eq!(version(&path), 52);
 }
 
@@ -171,8 +180,8 @@ fn a_migration_that_ends_its_own_transaction_is_refused() {
 fn a_database_newer_than_the_migrations_is_one_the_core_is_behind() {
     let dir = tempfile::tempdir().unwrap();
     let path = at_base(dir.path());
-    database(&path).ready_with(TWO).unwrap();
-    assert_eq!(database(&path).ready_with(&TWO[..1]), Err(NotReady::Newer(53)));
+    database(&path).ready_with(&Frozen, TWO).unwrap();
+    assert_eq!(database(&path).ready_with(&Frozen, &TWO[..1]), Err(NotReady::Newer(53)));
     assert_eq!(version(&path), 53);
 }
 
@@ -181,7 +190,7 @@ fn a_database_older_than_the_base_is_still_the_python_apps_to_upgrade() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
     Store::open(&path, &DbKey::from_bytes(KEY)).unwrap().set_version(BASE - 1).unwrap();
-    assert_eq!(database(&path).ready_with(TWO), Err(NotReady::Older(BASE - 1)));
+    assert_eq!(database(&path).ready_with(&Frozen, TWO), Err(NotReady::Older(BASE - 1)));
     assert_eq!(version(&path), BASE - 1);
 }
 
@@ -190,7 +199,7 @@ fn a_migration_is_idempotent_at_its_place_in_the_history() {
     // As the core's own must be: run again over what it left, it leaves the same.
     let dir = tempfile::tempdir().unwrap();
     let path = at_base(dir.path());
-    database(&path).ready_with(TWO).unwrap();
+    database(&path).ready_with(&Frozen, TWO).unwrap();
     let once = schema(&path);
     let c = keyed(&path);
     c.execute_batch("BEGIN IMMEDIATE").unwrap();
@@ -212,7 +221,7 @@ fn each_of_the_cores_migrations_runs_twice_at_its_place_in_the_history_and_leave
     for (n, migration) in MIGRATIONS.iter().enumerate() {
         let dir = tempfile::tempdir().unwrap();
         let path = at_base(dir.path());
-        database(&path).ready_with(&MIGRATIONS[..=n]).unwrap();
+        database(&path).ready_with(&Frozen, &MIGRATIONS[..=n]).unwrap();
         let once = schema(&path);
         let c = keyed(&path);
         c.execute_batch("BEGIN IMMEDIATE").unwrap();

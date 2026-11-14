@@ -42,7 +42,8 @@ mod labels;
 mod mailbox;
 mod mailbox_commands;
 mod mailbox_sync;
-// Making the database, and bringing it to the newest schema.
+// Making the database, and bringing it to the newest schema with a copy taken first.
+pub mod backup;
 pub mod migrate;
 pub mod page;
 // The page's own state, and what the app says of itself.

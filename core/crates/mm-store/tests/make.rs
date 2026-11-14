@@ -7,11 +7,20 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use mm_kernel::seams::{Outside, Tripped};
+use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
 use mm_store::migrate::{self, BASE, NotReady, Ready};
 use mm_store::schema::VERSION;
 use mm_store::{Database, DbKey, Store};
 use rusqlite::Connection;
+
+#[derive(Debug)]
+struct Frozen;
+
+impl Clock for Frozen {
+    fn now(&self) -> Moment {
+        Moment::from_micros(1_793_620_800_000_000)
+    }
+}
 
 #[derive(Debug)]
 struct Open;
@@ -91,7 +100,7 @@ fn golden() -> String {
 fn a_new_database_has_the_python_apps_schema_byte_for_byte() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
-    assert_eq!(database(&path).ready(), Ok(Ready::Made));
+    assert_eq!(database(&path).ready(&Frozen), Ok(Ready::Made));
     assert_eq!(dump(&path), golden());
 }
 
@@ -99,7 +108,7 @@ fn a_new_database_has_the_python_apps_schema_byte_for_byte() {
 fn it_holds_what_the_python_apps_init_seeds_and_nothing_else() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
-    database(&path).ready().unwrap();
+    database(&path).ready(&Frozen).unwrap();
     let c = keyed(&path);
     let names: Vec<String> = c
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
@@ -129,7 +138,7 @@ fn it_is_its_owners_alone_with_its_log_and_writes_ahead() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
-    database(&path).ready().unwrap();
+    database(&path).ready(&Frozen).unwrap();
     let mode: String = keyed(&path).query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
     assert_eq!(mode, "wal");
     for each in ["mailmind.db", "mailmind.db-wal", "mailmind.db-shm"] {
@@ -147,7 +156,7 @@ fn one_made_before_mailmind_saw_to_it_is_taken_back() {
     let path = dir.path().join("mailmind.db");
     Store::open(&path, &DbKey::from_bytes(KEY)).unwrap().set_version(VERSION).unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-    assert_eq!(database(&path).ready(), Ok(Ready::AsItWas));
+    assert_eq!(database(&path).ready(&Frozen), Ok(Ready::AsItWas));
     assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
 }
 
@@ -155,12 +164,12 @@ fn one_made_before_mailmind_saw_to_it_is_taken_back() {
 fn a_database_at_the_newest_version_is_left_alone() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
-    database(&path).ready().unwrap();
+    database(&path).ready(&Frozen).unwrap();
     keyed(&path)
         .execute("INSERT INTO muted(account, thread_id, muted_at) VALUES ('ada@example.test', 't1', 'now')", [])
         .unwrap();
     let before = dump(&path);
-    assert_eq!(database(&path).ready(), Ok(Ready::AsItWas));
+    assert_eq!(database(&path).ready(&Frozen), Ok(Ready::AsItWas));
     assert_eq!(dump(&path), before);
     let kept: String = keyed(&path).query_row("SELECT thread_id FROM muted", [], |r| r.get(0)).unwrap();
     assert_eq!(kept, "t1");
@@ -171,7 +180,7 @@ fn an_empty_file_is_a_new_database() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
     std::fs::write(&path, b"").unwrap();
-    assert_eq!(database(&path).ready(), Ok(Ready::Made));
+    assert_eq!(database(&path).ready(&Frozen), Ok(Ready::Made));
     assert_eq!(dump(&path), golden());
 }
 
@@ -180,7 +189,7 @@ fn one_older_than_the_base_is_the_python_apps_to_upgrade() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
     Store::open(&path, &DbKey::from_bytes(KEY)).unwrap().set_version(BASE - 1).unwrap();
-    assert_eq!(database(&path).ready(), Err(NotReady::Older(BASE - 1)));
+    assert_eq!(database(&path).ready(&Frozen), Err(NotReady::Older(BASE - 1)));
     let version: i64 = keyed(&path).query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
     assert_eq!(version, BASE - 1);
 }
@@ -191,7 +200,7 @@ fn tables_with_no_version_were_made_outside_the_migrations_and_are_left_as_they_
     let path = dir.path().join("mailmind.db");
     Store::open(&path, &DbKey::from_bytes(KEY)).unwrap().create_list_tables().unwrap();
     let before = dump(&path);
-    assert_eq!(database(&path).ready(), Err(NotReady::Older(0)));
+    assert_eq!(database(&path).ready(&Frozen), Err(NotReady::Older(0)));
     assert_eq!(dump(&path), before);
 }
 
@@ -200,16 +209,16 @@ fn one_newer_than_the_core_is_one_it_is_behind() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
     Store::open(&path, &DbKey::from_bytes(KEY)).unwrap().set_version(VERSION + 1).unwrap();
-    assert_eq!(database(&path).ready(), Err(NotReady::Newer(VERSION + 1)));
+    assert_eq!(database(&path).ready(&Frozen), Err(NotReady::Newer(VERSION + 1)));
 }
 
 #[test]
 fn another_key_opens_nothing_and_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
-    database(&path).ready().unwrap();
+    database(&path).ready(&Frozen).unwrap();
     let other = Database::new(path.clone(), DbKey::from_bytes([0x11; 32]), Arc::new(Open));
-    assert_eq!(other.ready(), Err(NotReady::KeyDoesNotFit));
+    assert_eq!(other.ready(&Frozen), Err(NotReady::KeyDoesNotFit));
     assert_eq!(dump(&path), golden());
 }
 
@@ -218,7 +227,7 @@ fn a_tripwire_refuses_before_a_file_is_made() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("mailmind.db");
     let closed = Database::new(path.clone(), DbKey::from_bytes(KEY), Arc::new(Closed));
-    assert_eq!(closed.ready(), Err(NotReady::Tripped));
+    assert_eq!(closed.ready(&Frozen), Err(NotReady::Tripped));
     assert!(!path.exists());
 }
 

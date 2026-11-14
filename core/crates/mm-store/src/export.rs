@@ -52,7 +52,7 @@ impl Drop for Download {
 }
 
 /// `%Y%m%dT%H%M%SZ` of a moment.
-fn stamp(at: Moment) -> String {
+pub(crate) fn stamp(at: Moment) -> String {
     let seconds = at.whole_seconds();
     let (year, month, day) = civil(seconds.div_euclid(86_400));
     let of_day = seconds.rem_euclid(86_400);

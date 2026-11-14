@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use mm_accounts::credential::DATABASE_KEY_ITEM;
-use mm_kernel::seams::{Keychain, Outside, Secret};
+use mm_kernel::seams::{Clock, Keychain, Outside, Secret};
 use mm_store::migrate::{BASE, NotReady, SQLITE_NEEDED};
 use mm_store::schema::VERSION;
 use mm_store::{Database, DbKey};
@@ -46,9 +46,10 @@ fn made(keychain: &dyn Keychain) -> Result<Secret, String> {
     keychain.find(DATABASE_KEY_ITEM).ok().flatten().ok_or_else(|| NO_KEY.into())
 }
 
-/// Nothing when the database is ready: made if there was none, and upgraded to `VERSION`. Otherwise what to do.
-pub(crate) fn ready(database: &Database) -> Result<(), String> {
-    database.ready().map(|_| ()).map_err(|not| said(&not))
+/// Nothing when the database is ready: made if there was none, and upgraded to `VERSION`, a copy taken first and
+/// named for `clock`'s time. Otherwise what to do.
+pub(crate) fn ready(database: &Database, clock: &dyn Clock) -> Result<(), String> {
+    database.ready(clock).map(|_| ()).map_err(|not| said(&not))
 }
 
 /// What a person is told of a database that isn't ready.
@@ -68,6 +69,7 @@ pub(crate) fn said(not: &NotReady) -> String {
         ),
         NotReady::KeyDoesNotFit => "the database key doesn't open the database".into(),
         NotReady::Tripped | NotReady::Storage => "the database can't be made or read".into(),
+        NotReady::NoBackup => "the database couldn't be backed up before its upgrade, so it wasn't upgraded".into(),
         NotReady::Failed(version) => format!(
             "the database's upgrade to version {version} failed: it is as it was before it, and the next start tries \
              it again"

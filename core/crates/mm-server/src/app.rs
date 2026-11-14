@@ -149,7 +149,7 @@ impl App {
             events: account_events.clone(),
         });
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
-        crate::database_version::ready(&database)?;
+        crate::database_version::ready(&database, &*seams.clock)?;
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
