@@ -220,6 +220,13 @@ impl Workers {
                     Box::new(move || Ok(Some(reconciling.reconciler.round(reconcile_secs)))),
                 ));
             }
+            // The outbox's worker, which a send kicks, and the drafts saved here pushed to their servers.
+            queues.push(app.compose.queue());
+            let pushing = app.clone();
+            lanes.push((
+                app.jobs.add("draft-push", mm_compose::draft_journal::PUSH_TICK, 5),
+                Box::new(move || pushing.compose.drafting.push_round().map(|_| None).map_err(|fault| fault.class)),
+            ));
         }
         let mut threads = Vec::new();
         for queue in queues {

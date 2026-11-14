@@ -11,7 +11,8 @@
 //! for a person, who is told it may go twice.
 //!
 //! Each account's sends go in a lane of their own, so one waiting on its IMAP server for a Sent copy holds up no other
-//! account's. `deliver` runs each lane on a thread of its own and waits for them all.
+//! account's. `deliver` runs each lane on a thread of its own and waits for them all. The worker that calls it is the
+//! program's: it waits `until_due`, and a send queued, retried or brought forward wakes it (`Worker`).
 
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
@@ -30,7 +31,7 @@ use crate::outbox_item::{self, OriginalRow, SendMeta};
 use crate::ports::Row;
 use crate::sending_ports::{
     self, Accounts, Book, ComposeStore, Copies, DraftRow, Effects, Gate, GateWait, Mark, OutboxRow, Priority, Screen,
-    Transport, on_gate,
+    Transport, Worker, on_gate,
 };
 use crate::spec::Built;
 
@@ -38,8 +39,8 @@ const TAG: &str = "outbox";
 
 /// How long a Retry waits for the account's gate, to look in Sent first.
 pub const LOOK_IN_SENT_WAIT: Duration = Duration::from_secs(5);
-/// The worker wakes at least this often to catch due retries.
-pub const POLL: Duration = Duration::from_secs(30);
+/// The worker wakes at least this often, in seconds, to catch due retries.
+pub const POLL: i64 = 30;
 
 /// What wires the outbox.
 #[derive(Debug)]
@@ -50,6 +51,8 @@ pub struct DeliveryParts {
     pub accounts: Arc<dyn Accounts>,
     pub effects: Arc<dyn Effects>,
     pub screen: Arc<dyn Screen>,
+    /// The worker a send wakes. In the served suites none waits on it: they run each pass themselves.
+    pub worker: Arc<dyn Worker>,
     pub gate: Arc<dyn Gate>,
     pub clock: Arc<dyn Clock>,
     /// Whether this process writes to mail servers (`profile.writes_allowed`): a read-only one keeps its sends.
@@ -61,9 +64,6 @@ pub struct Delivery {
     /// The lanes a pass is running now, each an account.
     busy: Mutex<HashSet<String>>,
     freed: Condvar,
-    /// Set by a kick; the worker's wait ends on it.
-    kicked: Mutex<bool>,
-    kick: Condvar,
 }
 
 impl fmt::Debug for Delivery {
@@ -78,16 +78,11 @@ fn text(row: &Row, name: &str) -> Option<String> {
 
 impl Delivery {
     pub fn new(parts: DeliveryParts) -> Delivery {
-        Delivery {
-            parts,
-            busy: Mutex::new(HashSet::new()),
-            freed: Condvar::new(),
-            kicked: Mutex::new(false),
-            kick: Condvar::new(),
-        }
+        Delivery { parts, busy: Mutex::new(HashSet::new()), freed: Condvar::new() }
     }
 
-    fn now(&self) -> i64 {
+    /// The clock's seconds now.
+    pub fn now(&self) -> i64 {
         self.parts.clock.now().whole_seconds()
     }
 
@@ -467,29 +462,24 @@ impl Delivery {
         self.write(|book| book.outbox_reset_stuck(outbox_item::UNSURE))
     }
 
-    /// How long the worker may wait before its next pass: until the next queued send comes due, at most POLL.
-    pub fn until_due(&self) -> Result<Duration, Fault> {
+    /// Seconds from now until the next queued send comes due, at most POLL, and none if one has come due since the
+    /// last pass began to look (`looked`): that pass may have missed it, and no wake is coming (`until_due`). A send
+    /// due before it looked isn't waited for: a wake brings the pass that takes it.
+    pub fn until_due(&self, looked: i64) -> i64 {
         let now = self.now();
-        let next = self.read(|book| book.outbox_next_due(now))?;
-        Ok(match next {
-            Some(at) => Duration::from_secs(u64::try_from((at - now).max(0)).unwrap_or(0)).min(POLL),
-            None => POLL,
-        })
+        match self.read(|book| book.outbox_next_due(looked)) {
+            Ok(Some(due)) => (due - now).clamp(0, POLL),
+            Ok(None) => POLL,
+            Err(fault) => {
+                // The poll still comes.
+                log::warning(TAG, "next due", &[], Some(fault.class));
+                POLL
+            }
+        }
     }
 
-    /// Wake a worker waiting in `wait`: a send was queued, retried or brought forward.
-    pub fn wake(&self) {
-        if let Ok(mut kicked) = self.kicked.lock() {
-            *kicked = true;
-        }
-        self.kick.notify_all();
-    }
-
-    /// Wait for a wake, at most `at_most`.
-    pub fn wait(&self, at_most: Duration) {
-        let Ok(kicked) = self.kicked.lock() else { return };
-        if let Ok((mut kicked, _)) = self.kick.wait_timeout_while(kicked, at_most, |k| !*k) {
-            *kicked = false;
-        }
+    /// Wake the worker: a send was queued, retried or brought forward.
+    fn wake(&self) {
+        self.parts.worker.wake();
     }
 }

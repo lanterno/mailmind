@@ -1,7 +1,8 @@
 //! Compose bound to its adapters (`mailmind.bootstrap.compose`): the sends and the drafts, the outbox that delivers
 //! them, and what they ask of the world. SMTP is mm-smtp's, over what the configuration says of each account; the
 //! copies in Sent and Drafts are the Mailbox's sessions; \Answered on an original is a flag on its server, mirrored
-//! in its row; a follow-up is Attention's; and what the page hears goes out on the app's events.
+//! in its row; a follow-up is Attention's; and what the page hears goes out on the app's events. The outbox's worker
+//! is `outbox_worker`'s.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,9 +29,12 @@ use mm_mailbox::folders::Folders;
 use mm_mailbox::gates::{Gates, Wait};
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::session::{MailServer, MailServers, Search, ServerError, find_role, found_by_message_id};
+use mm_mailbox::workers::{Kick, Queue};
 use mm_store::Database;
 use mm_store::attention::AttentionStore;
 use serde_json::{Value, json};
+
+use crate::outbox_worker::{KickWorker, OutboxQueue};
 
 /// What a session waits for each answer (`pool.KEPT_TIMEOUT`), and an SMTP connection for each reply.
 const TIMEOUT_SECONDS: u64 = 60;
@@ -493,6 +497,8 @@ pub struct Compose {
     /// What another context sends through the outbox: an invite's answer, an unsubscribe by mail.
     pub outgoing: Outgoing,
     database: Arc<Database>,
+    /// What the outbox's worker waits on, which a send kicks.
+    kick: Arc<Kick>,
 }
 
 impl Compose {
@@ -506,6 +512,7 @@ impl Compose {
             clock: parts.clock.clone(),
         });
         let screen: Arc<dyn Screen> = Arc::new(ComposeScreen { folders: parts.folders.clone(), events: parts.events });
+        let kick = Arc::new(Kick::default());
         let gate: Arc<dyn Gate> = Arc::new(ComposeGate(parts.gates));
         let writes = !parts.read_only;
         let delivery = Arc::new(Delivery::new(DeliveryParts {
@@ -525,6 +532,7 @@ impl Compose {
                 read_only: parts.read_only,
             }),
             screen: screen.clone(),
+            worker: Arc::new(KickWorker(kick.clone())),
             gate: gate.clone(),
             clock: parts.clock.clone(),
             writes,
@@ -546,7 +554,12 @@ impl Compose {
             mint,
             writes,
         });
-        Compose { composing, sending, drafting, delivery, outgoing, database: parts.database }
+        Compose { composing, sending, drafting, delivery, outgoing, database: parts.database, kick }
+    }
+
+    /// The outbox as its worker drains it, kicked by each send.
+    pub fn queue(&self) -> Arc<dyn Queue> {
+        Arc::new(OutboxQueue { delivery: self.delivery.clone(), kick: self.kick.clone() })
     }
 
     /// A copy of a message the request names, by its key alone (`pk_of_message`).
