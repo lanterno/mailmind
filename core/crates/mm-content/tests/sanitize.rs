@@ -190,6 +190,16 @@ const ATTACKS: &[&str] = &[
     "<head><style></style><script>alert(1)</script><style>p{x:expression(alert(1))}</style></head>",
     "<head><noscript><style></noscript><img src=x onerror=alert(1)></style></noscript></head>",
     "<head><style>p{font-family:\"</style><img src=x onerror=alert(1)>\"}</style>",
+    // A form, button or select a browser ends early, and what follows it.
+    "<form><form></form><script>alert(1)</script><img src=x onerror=alert(1)></form>",
+    "<button><button></button><img src=x onerror=alert(1)><a href='javascript:alert(1)'>x</a></button>",
+    "<select><select><img src=x onerror=alert(1)><svg onload=alert(1)>",
+    "<select><input><form action='https://e.example.test/'><input name=p></form>",
+    "<form><table></form><img src=x onerror=alert(1)></table>",
+    "<button><svg><button></svg><script>alert(1)</script></button>",
+    "<form><template><form></template></form><iframe src='https://e.example.test/'></iframe>",
+    "<button><svg><foreignObject><style></button><img src=x onerror=alert(1)></style>",
+    "<form><style></form><img src=x onerror=alert(1)></style></form><object data=x></object>",
 ];
 
 #[test]
@@ -342,6 +352,141 @@ fn a_heads_style_sheet_is_kept() {
             "<style>p{color:red}</style><blockquote>q</blockquote>",
             [0, 0, 0],
         ),
+    ]);
+}
+
+/// Holds each case to what it writes, with images blocked, folded, and nothing blocked to count.
+fn shows(cases: &[(&str, &str)]) {
+    for (html, out) in cases {
+        holds(&[(html, false, true, out, [0, 0, 0])]);
+    }
+}
+
+/// A browser ends a form at the first `</form>` in it, ignoring a form nested in it, and a button or select at one of
+/// its own nested in it. Python skipped each to the end tag that balanced its count, losing the text between. Chromium
+/// shows what each writes here once its forms, buttons, selects, svgs and templates are taken out.
+#[test]
+fn a_form_button_or_select_ends_where_a_browser_ends_it() {
+    shows(&[
+        ("<form>a<form>b</form>c</form>d", "cd"),
+        ("<form>a<form>b</form>c<form>d</form>e", "ce"),
+        ("<button>a<button>b</button>c</button>d", "cd"),
+        ("<select>a<select>b</select>c</select>d", "bcd"),
+        ("<select><select>x", "x"),
+        ("<select><option>a<select>b</select>c</select>d", "bcd"),
+        // An <input> ends a select too, and is dropped after it.
+        ("<select><input>after", "after"),
+        ("<select><option>a</option><input>b</select>c", "bc"),
+        // A stray end tag is ignored.
+        ("<form>a</form>b</form>c", "bc"),
+        ("<button>a</button>b</button>c", "bc"),
+        ("<select>a</select>b</select>c", "bc"),
+    ]);
+}
+
+/// A form's end tag takes the form alone off what a browser has open, so it ends the form where nothing else is left
+/// open: where what a browser closes by itself is, and where what is open closed in order.
+#[test]
+fn a_form_ends_where_nothing_is_left_open_in_it() {
+    shows(&[
+        ("<form><p>a<form>b</form>c</form>d", "cd"),
+        ("<form><option>x<option>y<form>a</form>b</form>c", "bc"),
+        ("<form><div>a<form>b</form>c</div></form>d", "d"),
+        ("<form><input>a<form>b</form>c", "c"),
+        ("<form><a>x<a>y</a></form>z", "z"),
+        ("<form><h1>x<h2>y</h2>z<form>a</form>b</form>c", "bc"),
+        ("<form><h1>x</h2>y<form>a</form>b</form>c", "bc"),
+        ("<form><p>x<div>y</p>z</div>w<form>a</form>b</form>c", "bc"),
+        ("<form><p>x<li>y</p>z<form>a</form>b</form>c", "bc"),
+        ("<form><div><span>x</div>y<form>a</form>b</form>c", "bc"),
+        ("<form><div><p>x</div>y<form>a</form>b</form>c", "bc"),
+        ("<form><dl><dt>x<dd>y</dl>z<form>a</form>b</form>c", "bc"),
+        ("<form><button>x<button>y</button>z<form>a</form>b</form>c", "bc"),
+        ("<form><nobr>x<nobr>y</nobr>z<form>a</form>b</form>c", "bc"),
+        ("<form><p><button>x</p>y</button>z<form>a</form>b</form>c", "bc"),
+        ("<form><li><ul>x</li>y</ul>z<form>a</form>b</form>c", "bc"),
+        ("<form><button><div>x<button>y</button>z<form>a</form>b</form>c", "bc"),
+        // Raw text holds the end tag.
+        ("<form><textarea></form>x</textarea>y</form>z", "z"),
+        ("<form><style></form>x</style>y</form>z", "z"),
+        ("<form><script></form>x</script>y</form>z", "z"),
+        ("<form><title></form>x</title>y</form>z", "z"),
+    ]);
+}
+
+/// Where a browser leaves something open in the form at its end tag, or forgets the form because the end tag doesn't
+/// reach it, where the rest ends turns on elements the sanitizer doesn't follow, the form's ancestors among them. It
+/// keeps to the end tag then, as Python did, though Chromium shows less: what it shows is in the comment.
+#[test]
+fn a_form_keeps_to_its_end_tag_where_a_browser_leaves_something_open() {
+    shows(&[
+        // ef: the <div> holds d, and ends before e.
+        ("<form>a<div>b<form>c</form>d</div>e</form>f", "f"),
+        // wv: the <b> holds z, and ends before w.
+        ("<form><b>x<form>y</form>z</b>w</form>v", "v"),
+        // Nothing: the <table> stands between the end tag and the form, and Chromium leaves the rest in the form.
+        ("<form><table></form></table>after", "</table>after"),
+        ("<form><object><form>x</form>y</object>z</form>w", "w"),
+        ("<form><select></form>y</select>z", "yz"),
+        // Nothing: the <b> a browser opens again holds the rest.
+        ("<form><p><b>x</p>y<form>z</form>w</form>v", "v"),
+        // Nothing: the <svg> holds the rest.
+        ("<form><svg></form>after", "after"),
+    ]);
+    // So does a form, button or select holding more open than the sanitizer keeps track of.
+    shows(&[(&format!("<button>{}</button>after", "<table>".repeat(300)), "after")]);
+    shows(&[(&format!("<form>{}<form></form>a</form>b", "<div>".repeat(300)), "b")]);
+}
+
+/// Behind a `<template>`, `<table>`, `<object>`, `<marquee>`, a select in a button, or an `<svg>`'s or `<math>`'s
+/// element HTML is read in, the same tag nests, and the end tag doesn't reach the outer one. In an `<svg>` or `<math>`
+/// the tag is theirs, and their end tags close it.
+#[test]
+fn a_form_button_or_select_nests_behind_a_wall() {
+    shows(&[
+        ("<form><template><form>x</form>y</template>z</form>w", "w"),
+        ("<form><template></form>x</template>y</form>w", "w"),
+        ("<form><template><form>x<div></form>y</template>z</form>w", "w"),
+        ("<form><template><form><table></form>x</table>y</form>z</template>w</form>v", "v"),
+        ("<button><template><button>x</button>y</template>z</button>w", "w"),
+        ("<button><template></button>x</template>y</button>w", "w"),
+        ("<select><template><select>x</select>y</template>z</select>w", "w"),
+        ("<button><table><button>x</button>y</table>z</button>w", "w"),
+        ("<button><table><tr><td><button>x</button>y</button>z</td></tr></table>w</button>v", "v"),
+        ("<button><table></button></table>after</button>x", "x"),
+        ("<button><table><template></table>x</template>y</table>z</button>w", "w"),
+        ("<button><object><button>x</button>y</object>z</button>w", "w"),
+        ("<button><object></button></object>after</button>x", "x"),
+        ("<button><object><table></object>x</table>y</object>z</button>w", "w"),
+        ("<button><marquee><button>x</button>y</marquee>z</button>w", "w"),
+        ("<select><table><select>x</select>y</table>z</select>w", "w"),
+        ("<select><table></select>x</table>y</select>z", "z"),
+        ("<select><object><select>x</select>y</object>z</select>w", "w"),
+        ("<select><object><input>x</object>y</select>z", "z"),
+        // A select shows none of what it holds but its options, and a button's end tag doesn't reach past one.
+        ("<button><select></button>after", ""),
+        ("<button><select><button>x</button>y", ""),
+        ("<button><select></select>after</button>x", "x"),
+        ("<button><select><option>o</select>x</button>y", "y"),
+        ("<select><button><select>x", "x"),
+        // In an <svg> or <math>.
+        ("<button><svg><button></button>x</svg>y</button>z", "z"),
+        ("<button><svg><button>x</svg>y</button>z", "z"),
+        ("<form><svg><form></form>x</svg>y</form>z", "z"),
+        ("<select><svg><select></select>x</svg>y</select>z", "z"),
+        ("<select><svg><input>after", ""),
+        ("<button><svg></button>after", "after"),
+        ("<select><svg></select>after", "after"),
+        ("<button><svg><foreignObject></button>after</foreignObject></svg>x</button>y", "y"),
+        ("<button><svg><foreignObject><button>x</button>y</foreignObject></svg>z</button>w", "w"),
+        ("<button><svg><desc></button>x</desc>y</svg>z</button>w", "w"),
+        ("<button><math><mtext></button>x</mtext>y</math>z</button>w", "w"),
+        ("<button><math><mi><button>x</button>y</mi>z</math>w</button>v", "v"),
+        ("<select><svg><foreignObject><select>x</select>y</foreignObject></svg>z</select>w", "w"),
+        ("<select><svg><foreignObject><input>x</foreignObject></svg>y</select>z", "z"),
+        // Only an <svg>'s <title> is one, and only a <math>'s <mi>.
+        ("<button><svg><mi></button>after", "after"),
+        ("<button><math><title></button>after", "after"),
     ]);
 }
 
