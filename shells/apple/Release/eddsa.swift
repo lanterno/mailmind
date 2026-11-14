@@ -4,6 +4,11 @@
 //       Checks the appcast's item for ARCHIVE (named by its file name) the way Sparkle will on a person's Mac: its
 //       length is the archive's, and its sparkle:edSignature verifies against PUBLIC_KEY, the one the app ships with.
 //       A release whose appcast fails this would be refused by every copy of the app, so the recipe stops on it.
+//   eddsa throwaway-key FOLDER
+//       A key pair for the release check only: FOLDER/private-key holds the private seed, base64, as Sparkle's
+//       --ed-key-file reads it, readable by this user alone. Prints the public key. It never touches a Keychain.
+//
+// Nothing here prints a private key.
 import CryptoKit
 import Foundation
 
@@ -38,12 +43,24 @@ func verifyAppcast(appcast: URL, archive: URL, publicKey: String) {
     print("verified: \(name), \(bytes.count) bytes, signed with the app's update key")
 }
 
+func throwawayKey(folder: URL) {
+    let key = Curve25519.Signing.PrivateKey()
+    let file = folder.appending(path: "private-key")
+    let made = FileManager.default.createFile(
+        atPath: file.path, contents: Data(key.rawRepresentation.base64EncodedString().utf8),
+        attributes: [.posixPermissions: 0o600])
+    guard made else { fail("throwaway-key: can't write \(file.path)") }
+    print(key.publicKey.rawRepresentation.base64EncodedString())
+}
+
 let arguments = CommandLine.arguments.dropFirst()
 switch (arguments.first, arguments.count) {
 case ("verify-appcast", 4):
     let rest = Array(arguments.dropFirst())
     verifyAppcast(
         appcast: URL(fileURLWithPath: rest[0]), archive: URL(fileURLWithPath: rest[1]), publicKey: rest[2])
+case ("throwaway-key", 2):
+    throwawayKey(folder: URL(fileURLWithPath: Array(arguments)[1], isDirectory: true))
 default:
-    fail("usage: eddsa verify-appcast APPCAST ARCHIVE PUBLIC_KEY")
+    fail("usage: eddsa verify-appcast APPCAST ARCHIVE PUBLIC_KEY | eddsa throwaway-key FOLDER")
 }

@@ -84,3 +84,8 @@ icon:
 # with the appcast signed with the owner's update key. Prints the `gh release create` command; never publishes
 release:
     "{{here}}/Release/release.sh"
+
+# The release recipe end to end with a throwaway update key, never the login Keychain: the .dmg mounts, the app in it is
+# universal and its signature verifies, and its Info.plist and the appcast say what they should
+release-check:
+    "{{here}}/Release/check.sh"
