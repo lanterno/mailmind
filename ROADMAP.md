@@ -69,8 +69,6 @@ Python app gets fixes only.
 - **Measure the desktop app on Windows and Linux** · high value · effort S · [#12](https://github.com/lanterno/mailmind/issues/12) — CI shows only that their lists open and
   scroll (`just desktop smoke`). Measure launch, idle memory and frame times on the runners, add budgets for each to
   `budgets.toml`, and decide each platform's shell from them (see The desktop app).
-- **Measure the Mac's Tauri build with the screen awake** · low value · effort S · [#13](https://github.com/lanterno/mailmind/issues/13) — `desktop.mac_first_rows_ms` and
-  `desktop.mac_idle_memory_mb` were taken behind a locked screen, where macOS runs the app at about half speed.
 - **Run the iPhone smoke check once** · medium value · effort S · [#14](https://github.com/lanterno/mailmind/issues/14) — `just apple smoke` scrolls the list in an iPhone
   simulator on CI's Mac, and has yet to complete there.
 - **Real app identifiers** · medium value · effort S · [#15](https://github.com/lanterno/mailmind/issues/15) — `app.mailmind` is a placeholder (`shells/apple/project.yml`,
@@ -104,10 +102,31 @@ Python app gets fixes only.
 - **Proton Mail goes with the desktop app** — decided on 2026-11-08. Proton offers IMAP only through its Bridge, which has
   to run on the same computer as the app, so only a desktop app can count on it. The `proton` account type, the
   `proton_bridge` credential and the loopback handling stay as they are until that app exists; add no new Bridge special cases.
-- **A native Mac app; the web shell on Windows and Linux** — decided on 2026-11-14 ([#26](https://github.com/lanterno/mailmind/issues/26)).
-  On the Mac the native list opens in 218 ms and idles at 28 MB, against 724 ms and 83.9 MB for the same page in Tauri,
-  so the native Mac app ships after the Tauri build, once the iPad shell it reuses has the screens. Windows and Linux
-  keep the web shell unless their measurements (#12) miss a budget, with a GTK4 shell in Rust as Linux's fallback.
+- **A native Mac app now; the web shell on Windows and Linux** — decided on 2026-11-14 ([#26](https://github.com/lanterno/mailmind/issues/26)),
+  and that day the owner chose to build the native Mac app now, in place of shipping the Tauri build first. On the Mac
+  the native list opens in 218 ms and idles at 28 MB, against 724 ms and 83.9 MB for the same page in Tauri. It runs
+  the core in its own process and reaches it through the routes the page calls, answered in-process, so every use case
+  is the one the served suites hold; step 5's views and commands can replace them screen by screen later. Its
+  identifier is `io.github.lanterno.mailmind`; it is signed ad hoc until there is a Developer ID (#42), and updates
+  through Sparkle from the repo's GitHub Releases. Windows and Linux keep the web shell unless their measurements (#12)
+  miss a budget, with a GTK4 shell in Rust as Linux's fallback.
+- **The Mac app: the core in its own process** · high value · effort M · [#38](https://github.com/lanterno/mailmind/issues/38) — A host crate
+  assembles the `App` with its workers, its data in `~/Library/Application Support/io.github.lanterno.mailmind`, answers
+  a route in-process through the perimeter with no port open, and passes the event stream to a callback; `mm-ffi`
+  carries it to Swift, with Codable types generated from the OpenAPI document. With it, the window: a sidebar, the list
+  and the reader pane on real mail.
+- **The Mac app: Proton Bridge and the Claude key on the Rust core** · high value · effort S · [#39](https://github.com/lanterno/mailmind/issues/39) — The
+  Bridge's password, as `secrets.bridge_password` reads it (`Style::ProtonBridge` is refused today), and the Claude API
+  key set and cleared from the app into the login Keychain.
+- **The Mac app: every screen in SwiftUI** · high value · effort L · [#40](https://github.com/lanterno/mailmind/issues/40) — The mailbox and
+  search; reading and writing; settings and the first run; the assistant, curation, attention and the calendar. Waits on
+  #38 and #39.
+- **The Mac app: packaging, updates and a first release** · high value · effort M · [#41](https://github.com/lanterno/mailmind/issues/41) — Its icon,
+  a universal build, an ad-hoc signature and a .dmg, Sparkle updates from GitHub Releases signed with a key the owner
+  keeps; notifications for new mail, the Dock badge, mailto:; then a first release, once the owner says so. The
+  packaging can start now; the release waits on #40.
+- **Developer ID signing and notarization** · medium value · effort S · [#42](https://github.com/lanterno/mailmind/issues/42) — Waits on the
+  owner's paid Apple Developer account.
 
 ## Open decisions
 
@@ -125,7 +144,10 @@ implementation.
 
 ## Next up
 
-1. **The owner's two weeks on the Rust server** (high) — step 3 is done: every route the Python app answers is served
+1. **The native Mac app** (high) — the core in its own process (#38) and the Rust core's gaps (#39), with the packaging
+   (#41) beside them; then every screen (#40); then a first release to share (#41). It runs only the Rust core, so it
+   is also the owner's way into their two weeks on it.
+2. **The owner's two weeks on the Rust server** (high) — step 3 is done: every route the Python app answers is served
    there, the debug routes too, and a message whose body isn't stored opens. `just run-rust` starts them, in place of
    `just run`, and they end in the flip (#11), which waits on nothing else. `MAILMIND_WORKERS=account` (#3) can soak in
    them: both servers read it.
