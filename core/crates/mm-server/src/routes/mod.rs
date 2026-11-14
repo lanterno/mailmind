@@ -37,6 +37,8 @@ mod cleanup;
 mod calendar;
 // The Assistant's: everything asked of Claude.
 mod assistant;
+// What a person keeps in the login Keychain from Settings: the Claude API key and the Bridge's password.
+mod keychain;
 
 use std::sync::Arc;
 
@@ -76,6 +78,8 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(calendar::routes())
         // The Assistant's.
         .merge(assistant::routes())
+        // What a person keeps in the login Keychain.
+        .merge(keychain::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

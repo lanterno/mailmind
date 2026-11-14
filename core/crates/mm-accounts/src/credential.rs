@@ -19,6 +19,10 @@ use crate::account::truthy;
 
 /// The Keychain item the database's key is kept in, which no credential may name.
 pub const DATABASE_KEY_ITEM: &str = "database-key";
+/// The Keychain item MailMind keeps the Claude API key in.
+pub const API_KEY_ITEM: &str = "anthropic-api-key";
+/// The file's key for where the Claude API key is.
+pub const API_KEY_WHO: &str = "anthropic_api_key";
 
 /// The Keychain item MailMind keeps `email`'s password in.
 pub fn account_item(email: &str) -> String {

@@ -11,7 +11,7 @@ use mm_kernel::when;
 use serde_json::{Map, Value, json};
 
 use crate::account::{self, Account, truthy};
-use crate::bridge::{Bridge, BridgeGiven};
+use crate::bridge::{self, Bridge, BridgeGiven};
 use crate::credential::{self, Asked, CredentialRef, Style, credential_from};
 use crate::one_password::OpReads;
 use crate::ports::{ConfigFile, Variables};
@@ -452,5 +452,91 @@ impl Directory {
             self.file.write(&raw)?;
         }
         Ok(Some(saved_as))
+    }
+}
+
+/// What a Keychain that didn't answer whether it holds an item is told.
+const UNANSWERED: &str = "The Keychain didn't answer. Is the login keychain locked?";
+
+/// The other secrets a person keeps in the login Keychain from Settings, beside each account's own password: the
+/// Claude API key, which the file names as `anthropic_api_key`, and the Proton Bridge's password, which every
+/// `{"proton_bridge": true}` credential logs in with. Each is kept with the Keychain's `put` and taken out with its
+/// `delete`, never in the file, and nothing here says what one is: only whether one is set.
+impl Directory {
+    /// Whether the file names a Claude API key, wherever it keeps it.
+    pub fn api_key_set(&self) -> Result<bool, Fault> {
+        Ok(self.file.read()?.get(credential::API_KEY_WHO).is_some_and(truthy))
+    }
+
+    /// Keep `typed` as the Claude API key, in its own Keychain item, and name the item in the file, one version past
+    /// what it named before, whatever that was (`set_api_key`). A secret the Keychain can't hold is refused, and a
+    /// Keychain that won't keep it is `Unreachable`, the file left as it was.
+    pub fn set_api_key(&self, typed: Secret) -> Result<(), Failure> {
+        let _writing = writing(&self.write)?;
+        let mut raw = self.file.read()?;
+        let old = raw.get(credential::API_KEY_WHO).cloned();
+        let named = self.kept(credential::API_KEY_ITEM, Asked::Typed(typed), old.as_ref())?;
+        raw.entry("accounts").or_insert_with(|| json!([]));
+        raw.insert(credential::API_KEY_WHO.to_owned(), named);
+        self.evict(old.as_ref());
+        self.file.write(&raw)?;
+        Ok(())
+    }
+
+    /// Take the Claude API key's Keychain item out, and the file's `anthropic_api_key` with it, whatever it named
+    /// (`clear_api_key`): AI is off unless the environment gives a key. A Keychain that won't let go of the item is
+    /// `Unreachable`, the file left as it was.
+    pub fn clear_api_key(&self) -> Result<(), Failure> {
+        let _writing = writing(&self.write)?;
+        let mut raw = self.file.read()?;
+        self.keychain.delete(credential::API_KEY_ITEM).map_err(|_| {
+            Problem::new(Kind::Unreachable, "The Keychain didn't let go of the key. Is the login keychain locked?")
+        })?;
+        if let Some(old) = raw.shift_remove(credential::API_KEY_WHO) {
+            self.evict(Some(&old));
+            self.file.write(&raw)?;
+        }
+        Ok(())
+    }
+
+    /// Whether the Keychain keeps the Bridge's password: the environment or 1Password may give one all the same.
+    pub fn bridge_password_set(&self) -> Result<bool, Failure> {
+        match self.keychain.find(bridge::ITEM) {
+            Ok(kept) => Ok(kept.is_some_and(|secret| !secret.expose().is_empty())),
+            Err(_) => Err(Problem::new(Kind::Unreachable, UNANSWERED).into()),
+        }
+    }
+
+    /// Keep `typed` as the Bridge's password, in its Keychain item, and let go of the one this process found, so the
+    /// next login looks again. A secret the Keychain can't hold is refused, and a Keychain that won't keep it is
+    /// `Unreachable`.
+    pub fn set_bridge_password(&self, typed: Secret) -> Result<(), Failure> {
+        if !keepable_secret(typed.expose()) {
+            return Err(Problem::refused(UNPRINTABLE).into());
+        }
+        self.keychain.put(bridge::ITEM, &typed).map_err(|_| {
+            Problem::new(Kind::Unreachable, "The Keychain didn't keep the password. Is the login keychain locked?")
+        })?;
+        self.bridge.forget();
+        Ok(())
+    }
+
+    /// Take the Bridge's password out of the Keychain, and let go of the one this process found. A Keychain that
+    /// won't is `Unreachable`.
+    pub fn clear_bridge_password(&self) -> Result<(), Failure> {
+        self.keychain.delete(bridge::ITEM).map_err(|_| {
+            Problem::new(Kind::Unreachable, "The Keychain didn't let go of the password. Is the login keychain locked?")
+        })?;
+        self.bridge.forget();
+        Ok(())
+    }
+
+    /// The addresses of the accounts that log in with the Bridge's password, disabled ones left out.
+    pub fn bridged(&self) -> Result<Vec<String>, Fault> {
+        let bridged = self
+            .accounts()?
+            .into_iter()
+            .filter(|account| CredentialRef::parse(Some(&account.credential)).style == Some(Style::ProtonBridge));
+        Ok(bridged.map(|account| account.email).collect())
     }
 }

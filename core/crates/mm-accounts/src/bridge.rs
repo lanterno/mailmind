@@ -100,4 +100,10 @@ impl Bridge {
             Err(_) => Err(KEYCHAIN),
         }
     }
+
+    /// Let go of what was found, so the next login looks again: once Settings has kept another or taken it out. A
+    /// lookup running now ends first, so what it found is let go too.
+    pub(crate) fn forget(&self) {
+        *self.kept() = None;
+    }
 }

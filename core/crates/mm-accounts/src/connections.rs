@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mm_kernel::errors::{Failure, Problem};
-use mm_kernel::seams::Clock;
+use mm_kernel::seams::{Clock, Secret};
 use serde_json::{Map, Value, json};
 
 use crate::Directory;
@@ -139,5 +139,26 @@ impl Connections {
             .ok_or_else(|| Problem::not_found("not found"))?;
         self.events.publish(AccountChange::Removed(saved_as));
         Ok(json!({"ok": true, "removed": asked}))
+    }
+
+    /// Keep `typed` as the Proton Bridge's password, in the login Keychain (`set_bridge_password`). Each account that
+    /// logs in with it has changed: a login its server refused is let go, and IDLE logs in afresh.
+    pub fn set_bridge_password(&self, typed: Secret) -> Result<(), Failure> {
+        self.directory.set_bridge_password(typed)?;
+        self.bridged_changed()
+    }
+
+    /// Take the Bridge's password out of the login Keychain (`clear_bridge_password`), and say so of each account
+    /// that logs in with it.
+    pub fn clear_bridge_password(&self) -> Result<(), Failure> {
+        self.directory.clear_bridge_password()?;
+        self.bridged_changed()
+    }
+
+    fn bridged_changed(&self) -> Result<(), Failure> {
+        for email in self.directory.bridged()? {
+            self.events.publish(AccountChange::Changed(email));
+        }
+        Ok(())
     }
 }
