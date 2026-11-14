@@ -41,20 +41,21 @@ served tests it passes against the same scripts. Until the flip, the Python app 
 
 - **Port the rest of the routes** · high value · effort M · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers every
   route the page calls, the assistant's among them on `mm-claude`'s Claude API client and the cost governor, and
-  `just test-rust` holds 606 of the 620 served tests. Still short of the Python app: Ask's do-confirm, which says the
-  plan isn't served yet (`routes/assistant.rs`, `do_confirm`; 2 browser tests); the export's archive (`/api/export/archive`); a one-click
+  `just test-rust` holds 612 of the 625 served tests. Still short of the Python app: Ask's do-confirm, which says the
+  plan isn't served yet (`routes/assistant.rs`, `do_confirm`; 2 browser tests); a one-click
   unsubscribe, which needs an HTTPS client (`cleanup_wiring::NoHttps`); the review's meetings, which say none until
   `mm_calendar::agenda::Agenda::soonest` is wired in (`assistant_wiring.rs`; 1 browser test); batches (`assess --batch`); and
   `/api/debug/ai`, `/api/debug/health` and `/api/debug/jobs`, which neither the page nor a served test calls. A summary's
   body (`AssistantMail::fetch_text`) is fetched on a connection of its own rather than through the body fetch
   (`mm_mailbox::fetching`), and isn't stored. `just test-rust-all` says what passes.
 - **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — `mailmind-server` runs the change
-  queue's and the outbox's workers, the snooze, sync, reconcile, draft-push and expiry rounds, and IDLE's workers, one
+  queue's and the outbox's workers, the snooze, sync, reconcile, draft-push, expiry and forget rounds, and IDLE's workers, one
   for each account, which follow the accounts as they change (`mm-server/src/workers.rs`, `mm_mailbox::realtime`);
   `mm-served` drives the rounds one pass at a time through its `work` line. Still to come: the assistant's background
   work (assess, drafting ahead, the brief and the review written ahead, and Tidy's run), with `mm-served`'s `work
   assess` and `work tidy`, which answer that they aren't there yet, for the 7 and 3 served tests that wait on them;
-  `warm_tick` (a per-account `warm_folders`); backfilling bodies; and `forget`.
+  `warm_tick` (a per-account `warm_folders`); and backfilling bodies. The forget round lets go of the Mailbox's
+  rows only: the Assistant's finished batches (Python's `answers.batch_forget_finished`) join it with the batches.
   Each joins `Workers::start` as a `mm_mailbox::workers::Queue` or a timed lane.
 - **1Password credentials on the Rust server** · low value · effort S · [#31](https://github.com/lanterno/mailmind/issues/31) — An account whose
   password is a 1Password reference can't log in there: `mm_accounts::Directory::password` refuses it
@@ -148,5 +149,5 @@ implementation.
 1. **The owner's two weeks on the Rust server** (high) — every route the page calls is served there and a message whose
    body isn't stored opens: `just run-rust` starts them, in place of `just run`, and they end in the flip (#11).
    `MAILMIND_WORKERS=account` (#3) can soak in them: both servers read it.
-2. **Step 3's last parts** (high) — the assistant's background work (#28) and what #6 lists: do-confirm, the export's
-   archive, the review's meetings and a one-click unsubscribe. See The move to the Rust core.
+2. **Step 3's last parts** (high) — the assistant's background work (#28) and what #6 lists: do-confirm, the review's
+   meetings and a one-click unsubscribe. See The move to the Rust core.
