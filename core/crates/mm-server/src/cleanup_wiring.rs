@@ -384,4 +384,46 @@ mod tests {
         let hex: String = mac.iter().map(|b| format!("{b:02x}")).collect();
         assert_eq!(hex, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
     }
+
+    /// The hosts a POST asked to reach, each refused, so nothing is looked up.
+    #[derive(Debug, Default)]
+    struct Shut {
+        reached: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl Outside for Shut {
+        fn open(&self, _path: &std::path::Path) -> Result<(), mm_kernel::seams::Tripped> {
+            Ok(())
+        }
+
+        fn reach(&self, host: &str) -> Result<(), mm_kernel::seams::Tripped> {
+            self.reached.lock().unwrap().push(host.to_owned());
+            Err(mm_kernel::seams::Tripped(host.to_owned()))
+        }
+
+        fn run(&self, _program: &str) -> Result<(), mm_kernel::seams::Tripped> {
+            Ok(())
+        }
+    }
+
+    fn http(read_only: bool) -> (Arc<Shut>, OneClickHttp) {
+        let shut = Arc::new(Shut::default());
+        (shut.clone(), OneClickHttp { post: OneClick::system(shut), read_only })
+    }
+
+    #[test]
+    fn the_one_click_post_is_ready_and_asks_before_it_looks_a_host_up() {
+        let (shut, http) = http(false);
+        assert!(http.ready());
+        // Refused before its lookup: no answer came, so its status is 0.
+        assert_eq!(http.one_click_post("https://loom.example.test/u/ada-218"), (false, Some(0)));
+        assert_eq!(*shut.reached.lock().unwrap(), ["loom.example.test"]);
+    }
+
+    #[test]
+    fn a_read_only_process_posts_nothing() {
+        let (shut, http) = http(true);
+        assert_eq!(http.one_click_post("https://loom.example.test/u/ada-218"), (false, Some(0)));
+        assert_eq!(*shut.reached.lock().unwrap(), Vec::<String>::new());
+    }
 }
