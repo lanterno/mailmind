@@ -93,6 +93,16 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
+    pub(crate) fn new(stream: Stream) -> Connection {
+        Connection { wire: Wire::new(stream), sent: 0, capabilities: Vec::new() }
+    }
+
+    /// The tag of the next command sent.
+    pub(crate) fn next_tag(&mut self) -> String {
+        self.sent += 1;
+        format!("MM{}", self.sent)
+    }
+
     pub(crate) fn command(&mut self, command: &[u8]) -> Result<Answer, Error> {
         self.exchange(command, None)
     }
@@ -100,8 +110,7 @@ impl Connection {
     /// Send `command`, with `literal` after it as a literal once the server asks for it (`+`); then read to the tagged
     /// answer. A server that refuses the literal answers before asking, and it is never sent.
     pub(crate) fn exchange(&mut self, command: &[u8], literal: Option<&[u8]>) -> Result<Answer, Error> {
-        self.sent += 1;
-        let tag = format!("MM{}", self.sent);
+        let tag = self.next_tag();
         let mut line = Vec::with_capacity(tag.len() + 1 + command.len() + 16);
         line.extend_from_slice(tag.as_bytes());
         line.push(b' ');
@@ -179,7 +188,7 @@ impl Server {
         let name = mm_net::server_name(endpoint.host)?;
         let starttls = endpoint.starttls;
         let stream = if starttls { Stream::Plain(tcp) } else { mm_net::handshake(config.clone(), name.clone(), tcp)? };
-        let mut connection = Connection { wire: Wire::new(stream), sent: 0, capabilities: Vec::new() };
+        let mut connection = Connection::new(stream);
         let greeting = connection.wire.response().map_err(|e| lost(&e))?;
         let Some(Piece::Text(greeting)) = greeting.first() else {
             return Err(Error::Unreachable("ProtocolError"));

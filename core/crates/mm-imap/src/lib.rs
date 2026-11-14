@@ -11,6 +11,8 @@
 
 mod codec;
 mod commands;
+// IDLE on the selected folder, and its interrupt from another thread.
+mod idle;
 mod list;
 mod names;
 mod session;

@@ -6,6 +6,10 @@
 //! `Outside` by the caller, before `connect`.
 
 pub mod tls;
+// A wait as long as a protocol says, and its end from another thread (IMAP's IDLE).
+mod waiting;
+
+pub use waiting::{Interrupter, timed_out};
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
