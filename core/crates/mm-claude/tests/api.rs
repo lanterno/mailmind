@@ -266,3 +266,41 @@ fn an_endpoint_is_read_from_its_url() {
     assert!(!Endpoint::parse("http://localhost.example.test").expect("a name").loopback());
     assert_eq!(Endpoint::parse("ftp://api.example.test"), None);
 }
+
+#[test]
+fn a_url_with_a_line_break_or_a_blank_inside_it_is_no_endpoint() {
+    for url in [
+        "https://api.example.test\r\nX-Api-Key: other",
+        "https://api.example.test/v\n1",
+        "http://127.0.0.1:8123/a b",
+        "https://api.example.test\t/",
+        "https://api.example.test\u{0}",
+    ] {
+        assert_eq!(Endpoint::parse(url), None, "{url:?}");
+    }
+    assert!(Endpoint::parse("  https://api.example.test/  ").is_some(), "blanks around it are trimmed");
+}
+
+#[test]
+fn a_chunked_reply_is_read_whole() {
+    let sent = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4;ext=1\r\n{\"a\"\r\n3\r\n:1}\r\n0\r\n\r\n";
+    let read = mm_claude::http::read_response(&mut &sent[..]).expect("a whole reply");
+    assert_eq!((read.status, read.body.as_slice()), (200, &b"{\"a\":1}"[..]));
+}
+
+#[test]
+fn a_chunked_reply_cut_short_is_a_lost_connection() {
+    let sent = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n8\r\n{\"a\"";
+    assert_eq!(mm_claude::http::read_response(&mut &sent[..]), Err(mm_net::Lost("ConnectionLost")));
+}
+
+#[test]
+fn a_chunk_larger_than_any_reply_is_refused_before_it_is_waited_for() {
+    for size in ["ffffffffffffffff", "2000001"] {
+        let sent = format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{size}\r\nx");
+        let read = mm_claude::http::read_response(&mut sent.as_bytes());
+        assert_eq!(read, Err(mm_net::Lost("ResponseTooLarge")), "{size}");
+    }
+    let sent = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\nx\r\n0\r\n\r\n";
+    assert_eq!(mm_claude::http::read_response(&mut &sent[..]), Err(mm_net::Lost("ProtocolError")));
+}
