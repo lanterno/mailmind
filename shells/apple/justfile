@@ -89,3 +89,31 @@ release:
 # universal and its signature verifies, and its Info.plist and the appcast say what they should
 release-check:
     "{{here}}/Release/check.sh"
+
+# ── the app over the core in its own process ──────────────────────────────────
+
+# The API's Swift types, Sources/Client/API.gen.swift, from the routes' schemas, as `just gen-api` writes the page's
+gen-api:
+    {{just_executable()}} --justfile "{{source_file()}}" _swift-api "{{here}}/Sources/Client/API.gen.swift"
+
+# Fail when Sources/Client/API.gen.swift no longer matches the routes' schemas (`just verify` runs it)
+check-api:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fresh="$(mktemp -d)"
+    trap '/bin/rm -rf "$fresh"' EXIT
+    {{just_executable()}} --justfile "{{source_file()}}" _swift-api "$fresh/API.gen.swift"
+    if ! cmp -s "$fresh/API.gen.swift" "{{here}}/Sources/Client/API.gen.swift"; then
+        echo "shells/apple/Sources/Client/API.gen.swift doesn't match the server's schemas: run just apple gen-api, and review the diff" >&2
+        exit 1
+    fi
+
+# The Swift types written to `out`: tests/support/openapi_doc.py writes the OpenAPI document, Generator/swift_api.py reads it
+_swift-api out:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    doc="$(mktemp -d)"
+    trap '/bin/rm -rf "$doc"' EXIT
+    cd "{{here}}/../.."
+    uv run python tests/support/openapi_doc.py "$doc/openapi.json"
+    uv run python "{{here}}/Generator/swift_api.py" "$doc/openapi.json" "{{out}}"

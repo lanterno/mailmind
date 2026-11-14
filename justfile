@@ -45,7 +45,7 @@ run-rust port="": build-web
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Everything a change should pass before committing
-verify: lint compile test check-frontend check-web core-verify test-rust audit
+verify: lint compile test check-frontend check-web core-verify test-rust audit check-apple-api
 
 # Every test but the browser's and Dovecot's, a process for each core (pytest-xdist). Pick some with `just test -k hardening`;
 # `just test -n0` runs them in this one process
@@ -309,6 +309,10 @@ core-serve count="100000":
     test -f "$db" || cargo run --release -q -p mm-fixtures -- "$db" {{count}}
     # The fixture key (mm_fixtures::FIXTURE_KEY_HEX): it guards only fictional mail
     MAILMIND_DB_KEY=f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7f1c7 cargo run --release -q -p mm-daemon -- "$db"
+
+# The Mac app's API types still match the routes' schemas, as check-web holds the page's (`just apple gen-api` rewrites them)
+check-apple-api:
+    {{just_executable()}} apple check-api
 
 # The Swift and Kotlin bindings from the core, into each shell's generated folder
 gen-bindings:
