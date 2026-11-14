@@ -638,6 +638,290 @@ def _safe_url(val: str | None) -> str | None:
     return val if SAFE_URL.match(v) else None
 
 
+# the core now: where an element dropped with all it holds ends (core/crates/mm-content/src/sanitize/dropped.rs).
+# Python skipped each to the end tag that balanced its count of the tag. A browser ends a form at the first </form> in
+# it, ignoring a form nested in it, and a button or select at one of its own nested in it, so the core follows its tree
+# builder as far as that takes, and keeps to Python's end tag where what a browser does turns on what it doesn't follow.
+SCOPE = ("template", "table", "object", "applet", "marquee")     # and a select, but in a select
+INTEGRATION_POINTS = {"svg": ("foreignobject", "desc", "title"), "math": ("mi", "mo", "mn", "ms", "mtext",
+                                                                          "annotation-xml")}
+IMPLIED = {"dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc"}
+OPENS_NOTHING = {"area", "base", "basefont", "bgsound", "br", "col", "embed", "frame", "hr", "image", "img", "input",
+                 "keygen", "link", "meta", "param", "source", "track", "wbr", "html", "head", "body", "frameset",
+                 "caption", "colgroup", "tbody", "tfoot", "thead", "tr", "td", "th"}
+HEADINGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+CLOSES_P = {"address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset",
+            "figcaption", "figure", "footer", "header", "hgroup", "main", "menu", "nav", "ol", "p", "search", "section",
+            "summary", "ul", "pre", "listing", "plaintext", "xmp", "li", "dd", "dt"} | HEADINGS
+FORMATTING = {"a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"}
+SPECIAL = {"address", "article", "aside", "blockquote", "button", "center", "dd", "details", "dialog", "dir", "div",
+           "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "header", "hgroup", "iframe", "li",
+           "listing", "main", "menu", "nav", "noembed", "noframes", "noscript", "ol", "p", "plaintext", "pre",
+           "script", "search", "section", "style", "summary", "textarea", "title", "ul", "xmp"} | HEADINGS
+OPEN_LIMIT = 256
+WITHIN, ENDS, ENDS_BEFORE = "within", "ends", "ends before"
+# What is open in a dropped form, button or select: ("wall", tag), the element's own tag nested in it, the same in an
+# <svg> or <math>, or ("open", tag), any other element open in a form while nothing above is.
+AGAIN, FOREIGN = ("again", ""), ("foreign", "")
+
+
+def _is_point(wall: str) -> bool:
+    return any(wall in points for points in INTEGRATION_POINTS.values())
+
+
+def _in_foreign(inside: list[tuple[str, str]]) -> bool:
+    return bool(inside) and inside[-1] in (("wall", "svg"), ("wall", "math"), ("wall", "annotation-xml"), FOREIGN)
+
+
+def _blocks(open_: tuple[str, str]) -> bool:
+    kind, wall = open_
+    return kind == "wall" and (wall in SCOPE or wall == "select" or _is_point(wall))
+
+
+def _last(inside: list[tuple[str, str]], pick) -> int | None:
+    return next((at for at in range(len(inside) - 1, -1, -1) if pick(inside[at])), None)
+
+
+def _open_foreign(tag: str, inside: list[tuple[str, str]], name: str, self_closing: bool) -> bool:
+    if name in ("svg", "math"):
+        if not self_closing:
+            inside.append(("wall", name))
+        return True
+    if not _in_foreign(inside):
+        return False
+    within = next((wall for kind, wall in reversed(inside) if kind == "wall" and wall in ("svg", "math")), None)
+    if self_closing:
+        return True
+    if name in INTEGRATION_POINTS.get(within, ()):
+        inside.append(("wall", name))
+    elif name == tag:
+        inside.append(FOREIGN)
+    return True
+
+
+def _close_foreign(tag: str, inside: list[tuple[str, str]], name: str) -> bool:
+    for at in range(len(inside) - 1, -1, -1):
+        kind, wall = inside[at]
+        if kind == "wall" and (wall in ("svg", "math") or _is_point(wall)):
+            open_ = wall
+        elif kind == "foreign":
+            open_ = tag
+        else:
+            return False
+        if open_ == name:
+            del inside[at:]
+            return True
+    return False
+
+
+def _close_wall(inside: list[tuple[str, str]], name: str) -> bool:
+    at = _last(inside, lambda open_: open_ == ("wall", name))
+    if at is None:
+        return False
+    after = inside[at + 1:]
+    if name == "template" or (name == "table" and ("wall", "template") not in after) \
+            or (name != "table" and not any(map(_blocks, after))):
+        del inside[at:]
+    return True
+
+
+def _select_or_input(inside: list[tuple[str, str]], name: str) -> None:
+    at = _last(inside, lambda open_: open_ == ("wall", "select"))
+    if at is not None and not any(map(_blocks, inside[at + 1:])):
+        del inside[at:]
+    elif name == "select":
+        inside.append(("wall", "select"))
+
+
+def _pop_implied(inside: list[tuple[str, str]], keep: str) -> None:
+    while inside and inside[-1][0] == "open" and inside[-1][1] != keep and inside[-1][1] in IMPLIED:
+        inside.pop()
+
+
+def _reach(inside: list[tuple[str, str]]) -> int | str:
+    """Where a browser finds the dropped element's own tag nested in it, or "root", or "blocked"."""
+    for at in range(len(inside) - 1, -1, -1):
+        if inside[at] == AGAIN:
+            return at
+        if _blocks(inside[at]):
+            return "blocked"
+    return "root"
+
+
+def _control_start(tag: str, inside: list[tuple[str, str]], name: str, self_closing: bool) -> str:
+    if _open_foreign(tag, inside, name, self_closing):
+        return WITHIN
+    if tag == "button" and name in ("select", "input"):
+        _select_or_input(inside, name)
+        return WITHIN
+    if name in SCOPE:
+        inside.append(("wall", name))
+        return WITHIN
+    if name == tag:
+        reach = _reach(inside)
+        if tag == "button" and reach != "blocked":
+            return WITHIN
+        if reach == "root":
+            return ENDS
+        if reach == "blocked":
+            inside.append(AGAIN)
+        else:
+            del inside[reach:]
+        return WITHIN
+    if tag == "select" and name == "input":
+        reach = _reach(inside)
+        if reach == "root":
+            return ENDS_BEFORE
+        if reach != "blocked":
+            del inside[reach:]
+    return WITHIN
+
+
+def _control_end(tag: str, inside: list[tuple[str, str]], name: str) -> str:
+    if _close_foreign(tag, inside, name):
+        return WITHIN
+    if name == tag:
+        reach = _reach(inside)
+        if reach == "root":
+            return ENDS
+        if reach != "blocked":
+            del inside[reach:]
+        return WITHIN
+    _close_wall(inside, name)
+    return WITHIN
+
+
+class _Dropped:
+    """the core now: an element dropped with all it holds, to where the core ends it."""
+
+    def __init__(self, tag: str):
+        self.tag = tag
+        self.kind = {"head": "head", "button": "control", "select": "control", "form": "form"}.get(tag, "counted")
+        self.depth = 1          # Python's count of the tag
+        self.templates = 0      # how deep in <template>s in a head
+        self.inside: list[tuple[str, str]] = []
+        self.lost = False       # whether what is open in a form is past telling
+
+    def foreign(self) -> bool:
+        if self.kind == "counted":
+            return self.tag in ("svg", "math")
+        return self.kind != "head" and _in_foreign(self.inside)
+
+    def bare_head(self) -> bool:
+        return self.kind == "head" and not self.templates
+
+    def start(self, name: str, self_closing: bool) -> str:
+        counts = not (self.foreign() and self_closing)
+        if self.kind == "head":
+            if name == "template":
+                self.templates += 1
+            elif not self.templates and name not in HEAD_HOLDS:
+                return ENDS_BEFORE
+            return WITHIN
+        if name == self.tag and counts:
+            self.depth += 1
+        if self.kind == "counted":
+            return WITHIN
+        if self.kind == "control":
+            step = _control_start(self.tag, self.inside, name, self_closing)
+            if step != WITHIN:
+                return step
+        else:
+            self._form_start(name, self_closing)
+        if len(self.inside) <= OPEN_LIMIT:
+            return WITHIN
+        if not self.depth:
+            return ENDS
+        self.kind, self.inside = "counted", []
+        return WITHIN
+
+    def end(self, name: str) -> str:
+        if self.kind == "head":
+            if name == "template" and self.templates:
+                self.templates -= 1
+            elif name in ("head", "body", "html", "br") and not self.templates:
+                return ENDS
+            return WITHIN
+        if name == self.tag:
+            self.depth = max(self.depth - 1, 0)
+        if self.kind == "counted":
+            return ENDS if name == self.tag and not self.depth else WITHIN
+        if self.kind == "control":
+            return _control_end(self.tag, self.inside, name)
+        return self._form_end(name)
+
+    def _last_open(self, pick) -> int | None:
+        return _last(self.inside, lambda open_: open_[0] == "open" and pick(open_[1]))
+
+    def _form_start(self, name: str, self_closing: bool) -> None:
+        inside = self.inside
+        if _open_foreign("form", inside, name, self_closing):
+            return
+        if name in ("select", "input"):
+            _select_or_input(inside, name)
+            return
+        if name in SCOPE:
+            inside.append(("wall", name))
+            return
+        if name == "form":
+            if ("wall", "template") in inside:
+                inside.append(AGAIN)
+            return
+        if not all(kind == "open" for kind, _ in inside):
+            return
+        if name in ("a", "nobr", "button"):
+            at = self._last_open(lambda open_: open_ == name)
+            if at is not None:
+                self._close_through(at, name != "button")
+        elif name in CLOSES_P:
+            p = self._last_open(lambda open_: open_ == "p")
+            button = self._last_open(lambda open_: open_ == "button")
+            if p is not None and (button is None or button < p):
+                _pop_implied(inside, "p")
+                self._close_through(p, False)
+        if name in HEADINGS and inside and inside[-1][0] == "open" and inside[-1][1] in HEADINGS:
+            inside.pop()
+        if name not in OPENS_NOTHING:
+            inside.append(("open", name))
+
+    def _close_through(self, at: int, formatting: bool) -> None:
+        after = self.inside[at + 1:]
+        if (formatting and after) or any(kind == "open" and open_ in FORMATTING for kind, open_ in after):
+            self.lost = True
+        else:
+            del self.inside[at:]
+
+    def _form_end(self, name: str) -> str:
+        inside = self.inside
+        if _close_foreign("form", inside, name):
+            return WITHIN
+        if name == "form":
+            if ("wall", "template") in inside:
+                reach = _reach(inside)
+                if isinstance(reach, int):
+                    del inside[reach:]
+                return WITHIN
+            _pop_implied(inside, "")
+            if (not inside and not self.lost) or not self.depth:
+                return ENDS
+            self.kind, self.inside = "counted", []     # something is left open: Python's end tag
+            return WITHIN
+        if not _close_wall(inside, name) and all(kind == "open" for kind, _ in inside):
+            _pop_implied(inside, name)
+            heading = name in HEADINGS
+            at = self._last_open(lambda open_: open_ == name or (heading and open_ in HEADINGS))
+            if at is None:
+                return WITHIN
+            if name in FORMATTING:
+                self._close_through(at, True)
+                return WITHIN
+            stops = {"button"} if name == "p" else {"ol", "ul"} if name == "li" else set() if name in SPECIAL \
+                else SPECIAL
+            if not any(kind == "open" and open_ in stops for kind, open_ in inside[at + 1:]):
+                self._close_through(at, False)
+        return WITHIN
+
+
 _FOLD_OPEN = '<details class="mm-quote"><summary>··· quoted text</summary>'
 _FOLD_CLOSE = "</details>"
 
@@ -650,36 +934,29 @@ class _San(HTMLParser):
         self.fold = fold
         self.blocked_images = 0
         self.blocked_links = 0
-        self._skip = 0          # nesting depth inside a dropped-with-content subtree
-        self._skip_tag: str | None = None
+        self._dropped: _Dropped | None = None    # the core now: in place of a depth and tag to skip to
         self._bq_depth = 0      # blockquote nesting depth
         self._folded = False    # have we wrapped the trailing quote chain in a <details> yet
         self._has_content = False  # any visible text seen before the first top-level quote
         self.blocked_css_urls = 0  # remote url() blocked in CSS while load_images=False
         self._in_style = 0      # inside a <style> being captured
         self._style_buf: list[str] = []    # buffered raw CSS text
-        self._head_templates = 0    # the core now: how deep inside <template>s in a dropped <head>
         self._raw = False           # the core now: inside raw text, which only its end tag ends
-
-    def _leave_head(self) -> None:
-        self._skip, self._skip_tag, self._head_templates = 0, None, 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
         self._raw = tag in self.CDATA_CONTENT_ELEMENTS + self.RCDATA_CONTENT_ELEMENTS    # the core now
-        if self._skip_tag == "head":                                                    # the core now
-            if tag == "template":
-                self._head_templates += 1
-            elif not self._head_templates and tag not in HEAD_HOLDS:
-                self._leave_head()
-        if tag == "style" and self._skip_tag == "head" and not self._head_templates:   # the core now: a head's sheet
+        if tag == "style" and self._dropped and self._dropped.bare_head():     # the core now: a head's sheet
             self._in_style = 1
             self._style_buf = []
             return
-        if self._skip:
-            if tag == self._skip_tag and tag != "head":     # the core now: a <head> in a head is ignored
-                self._skip += 1
-            return
+        if self._dropped:                                                       # the core now
+            step = self._dropped.start(tag, False)
+            if step == WITHIN:
+                return
+            self._dropped = None
+            if step == ENDS:
+                return
         if tag in DROP_VOID:
             return  # drop the tag; it has no content/close so don't enter skip mode
         if tag == "style":
@@ -687,8 +964,7 @@ class _San(HTMLParser):
             self._style_buf = []
             return                       # emit on close, after sanitizing the CSS
         if tag in DROP_WITH_CONTENT:
-            self._skip = 1
-            self._skip_tag = tag
+            self._dropped = _Dropped(tag)
             return
         if tag not in ALLOWED:
             return  # unwrap: drop the tag, keep its text content
@@ -711,26 +987,20 @@ class _San(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
         self._raw = False       # the core now
-        if tag == "style":
-            if self._in_style:
-                css = python_sanitize_css_stylesheet("".join(self._style_buf), self)
-                if css:
-                    self.out.append("<style>" + css + "</style>")
-                self._in_style = 0
-                self._style_buf = []
+        if tag == "style" and self._in_style:   # the core now: one in a dropped element reaches it
+            css = python_sanitize_css_stylesheet("".join(self._style_buf), self)
+            if css:
+                self.out.append("<style>" + css + "</style>")
+            self._in_style = 0
+            self._style_buf = []
             return
-        if self._skip_tag == "head":    # the core now
-            if tag == "template" and self._head_templates:
-                self._head_templates -= 1
-            elif tag in ("head", "body", "html", "br") and not self._head_templates:
-                self._leave_head()
-            return
-        if self._skip:
-            if tag == self._skip_tag:
-                self._skip -= 1
-                if self._skip == 0:
-                    self._skip_tag = None
-            return
+        if self._dropped:       # the core now
+            step = self._dropped.end(tag)
+            if step == WITHIN:
+                return
+            self._dropped = None
+            if step == ENDS:
+                return
         if tag in ALLOWED and tag not in VOID:
             self.out.append("</" + tag + ">")
             if tag == "blockquote" and self._bq_depth > 0:
@@ -740,12 +1010,12 @@ class _San(HTMLParser):
         if self._in_style:
             self._style_buf.append(data)
             return                       # never escape/measure buffered CSS
-        if self._skip_tag == "head" and not self._head_templates and not self._raw:  # the core now
+        if self._dropped and self._dropped.bare_head() and not self._raw:  # the core now
             body = data.lstrip("\t\n\f\r ")
             if body:
-                self._leave_head()
+                self._dropped = None
                 data = body
-        if self._skip:
+        if self._dropped:
             return
         if data.strip() and self._bq_depth == 0 and not self._folded:
             self._has_content = True   # real text before the first quote -> there's something to fold under
@@ -1192,8 +1462,8 @@ HOSTILE = [
     "<textarea>", "</textarea>", "<xmp>", "</xmp>", "<iframe>", "</iframe>", "<noembed>", "</noembed>", "<noframes>",
     "<noscript>", "</noscript>", "<plaintext>", "<template>", "</template>", "<svg>", "</svg>", "<svg/>", "<math>",
     "</math>", "<foreignObject>", "<desc>", "<annotation-xml encoding=text/html>", "<mglyph>", "<object>",
-    "</object>", "<embed>", "<head>", "</head>", "<select>", "<option>", "<form action=https://e.example.test/>",
-    "<button>", "<input>", "<base href=https://e.example.test/>", "<link rel=stylesheet href=//e.example.test/s>",
+    "</object>", "<embed>", "<head>", "</head>", "<select>", "</select>", "<option>",
+    "<form action=https://e.example.test/>", "</form>", "<button>", "</button>", "<input>", "<base href=https://e.example.test/>", "<link rel=stylesheet href=//e.example.test/s>",
     "<meta http-equiv=refresh content='0;url=https://e.example.test/'>", "<body onload=alert(1)>",
     "<p>", "</p>", "<b>", "</b>", "<div>", "</div>", "<blockquote>", "</blockquote>", "<details>", "<summary>",
     "<table>", "<td>", "<br>", "<br/>", "</br>", "<img>", "<hr/>", "<font>", "<a>", "</a>", "<blink>", "<o:p>",
@@ -1411,6 +1681,44 @@ def test_a_heads_style_sheet_is_held_to_the_css_checks():
         ('<style>body{background:url("https://t.example.test/b.png")}</style>v', NOTHING_BLOCKED)
     assert_html_as_python_wrote_it(html, load_images=False)
     assert_html_as_python_wrote_it(html, load_images=True)
+
+
+@pytest.mark.parametrize(("html", "written"), [
+    ("<form>a<form>b</form>c</form>d", "cd"),
+    ("<button>a<button>b</button>c</button>d", "cd"),
+    ("<select>a<select>b</select>c</select>d", "bcd"),
+    ("<select><input>after", "after"),
+    ("<form><p>a<form>b</form>c</form>d", "cd"),
+    ("<form><div>a<form>b</form>c</div></form>d", "d"),
+    ("<form><h1>x<h2>y</h2>z<form>a</form>b</form>c", "bc"),
+    ("<form><style></form>x</style>y</form>z", "z"),
+    ("<form><template><form>x</form>y</template>z</form>w", "w"),
+    ("<button><table><button>x</button>y</table>z</button>w", "w"),
+    ("<button><table></button></table>after</button>x", "x"),
+    ("<button><select></button>after", ""),
+    ("<button><svg><button></button>x</svg>y</button>z", "z"),
+    ("<button><svg><foreignObject></button>after</foreignObject></svg>x</button>y", "y"),
+])
+def test_a_form_button_or_select_ends_where_a_browser_ends_it(html, written):
+    """Python skipped a form, button or select to the end tag that balanced its count, losing the text after one nested
+    in it. A browser ends a form at the first </form> in it and a button or select at one of its own nested in it,
+    nesting them only behind a <template>, a <table>, an <object> or the like, and Chromium shows the text of each as
+    written here once its forms, buttons, selects, svgs and templates are taken out."""
+    assert sanitizer.sanitize(html) == (written, NOTHING_BLOCKED)
+    assert_html_as_python_wrote_it(html, load_images=False)
+
+
+@pytest.mark.parametrize(("html", "written"), [
+    ("<form>a<div>b<form>c</form>d</div>e</form>f", "f"),
+    ("<form><table></form></table>after", "</table>after"),
+    ("<form><select></form>y</select>z", "yz"),
+])
+def test_a_form_keeps_to_its_end_tag_where_a_browser_leaves_something_open(html, written):
+    """Where a browser leaves something open in a form at its end tag, or forgets the form because the end tag doesn't
+    reach it, where the rest ends turns on elements the sanitizer doesn't follow, the form's ancestors among them, so
+    it keeps to the end tag as Python did. Chromium shows "ef", nothing, and nothing."""
+    assert sanitizer.sanitize(html) == (written, NOTHING_BLOCKED)
+    assert_html_as_python_wrote_it(html, load_images=False)
 
 
 def test_a_blocked_url_adds_to_what_the_caller_counted_as_python_did():
