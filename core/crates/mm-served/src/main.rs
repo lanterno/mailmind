@@ -6,8 +6,8 @@
 //! the tripwire guards besides the repo root) and MAILMIND_TEST_KEYCHAIN (the fake Keychain's file).
 //!
 //! It writes `ready <port>` on standard output once it answers, then answers each command on standard input with one
-//! line: `clock <ISO 8601>`, `work <job> <JSON>`, `settle`, `check`; at the end of its input it stops. Standard output
-//! is the protocol's alone: the server's log goes to standard error, which the suite keeps.
+//! line: `clock <ISO 8601>`, `work <job> <JSON>`, `settle`, `check`, `unsanitized on|off`; at the end of its input it
+//! stops. Standard output is the protocol's alone: the server's log goes to standard error, which the suite keeps.
 
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -23,6 +23,7 @@ use serde_json::Value;
 use mm_served::clock::{FrozenClock, parse_iso};
 use mm_served::keychain::FakeKeychain;
 use mm_served::tripwire::Tripwire;
+use mm_served::unsanitized::Switch;
 
 /// What `settle` waits for the requests being answered, at most.
 const SETTLE: Duration = Duration::from_secs(30);
@@ -63,11 +64,12 @@ fn run() -> Result<(), String> {
     let tripwire = Arc::new(Tripwire::new(&repo_root(), &guarded, &[settings.home.clone(), dist.clone()]));
     let clock = Arc::new(FrozenClock::at(now));
     let keychain = FakeKeychain::new(environment.raw("MAILMIND_TEST_KEYCHAIN").map(PathBuf::from), tripwire.clone());
+    let sanitizer = Arc::new(Switch::default());
     let seams = Seams {
         clock: clock.clone(),
         outside: tripwire.clone(),
         keychain: Arc::new(keychain),
-        sanitizer: Arc::new(mm_server::real::Sanitizing),
+        sanitizer: sanitizer.clone(),
     };
 
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|_| "no runtime")?;
@@ -103,6 +105,7 @@ fn run() -> Result<(), String> {
                     format!("problems {}", mm_server::json::dumps(&listed))
                 }
             }
+            "unsanitized" => sanitizer.answer(argument),
             other => format!("unknown command {other:?}"),
         };
         say(&answer);
