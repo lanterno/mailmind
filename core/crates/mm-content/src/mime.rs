@@ -279,7 +279,11 @@ fn reading(raw: &[u8]) -> Reading<'_> {
 fn mend(raw: &[u8], message: &Message<'_>) -> Option<Vec<u8>> {
     let mut insertions = header_insertions(raw, message);
     insertions.extend(unread_tails(raw, message));
-    insertions.extend(empty_boundaries(raw, message));
+    // An empty boundary goes into each `--` line of its part's body, and ending a header block moves where that body
+    // starts: those wait for the next pass, which reads the mended blocks.
+    if insertions.is_empty() {
+        insertions.extend(empty_boundaries(raw, message));
+    }
     insertions.sort_by_key(|&(at, _)| at);
     insertions.dedup();
     if !insertions.is_empty() {
@@ -412,10 +416,12 @@ fn unread_tails(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
 
 /// A boundary no sender writes, which stands in for an empty one.
 const EMPTY_BOUNDARY: &[u8] = b"=_mailmind_empty_boundary_=";
+/// The same, as a value for a bare `boundary` that has none.
+const EMPTY_BOUNDARY_VALUE: &[u8] = b"=\"=_mailmind_empty_boundary_=\"";
 
-/// A multipart whose boundary is empty (`boundary=""`), against RFC 2046. Python split it at every line that is `--`
-/// alone, then blanks, where mail-parser reads no parts in it and its parts would be lost: a boundary goes into the
-/// header and into each of those lines.
+/// A multipart whose boundary is empty (`boundary=""`, or a bare `boundary` with no `=`), against RFC 2046. Python
+/// split it at every line that is `--` alone, then blanks, where mail-parser reads no parts in it and its parts would
+/// be lost: a boundary goes into the header and into each of those lines.
 fn empty_boundaries(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
     let mut insertions = Vec::new();
     for part in message.root().parts() {
@@ -423,14 +429,17 @@ fn empty_boundaries(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
             continue;
         }
         let Some(written) = part.headers().all(HeaderName::ContentType).next() else { continue };
-        let (Some(quote), Some(value), Some(start)) = (
-            header::empty_quoted_param(written.raw_value(), "boundary"),
+        let (Some(empty), Some(value), Some(start)) = (
+            header::empty_param(written.raw_value(), "boundary"),
             offset_in(raw, written.raw_value()),
             offset_in(raw, part.raw_body()),
         ) else {
             continue;
         };
-        insertions.push((value + quote, EMPTY_BOUNDARY));
+        insertions.push(match empty {
+            header::EmptyParam::Quoted(quote) => (value + quote, EMPTY_BOUNDARY),
+            header::EmptyParam::Bare(end) => (value + end, EMPTY_BOUNDARY_VALUE),
+        });
         let mut at = start;
         for line in part.raw_body().split_inclusive(|&byte| byte == b'\n') {
             let bare = line.strip_suffix(b"\n").unwrap_or(line);

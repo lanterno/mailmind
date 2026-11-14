@@ -86,9 +86,10 @@ fn param(line: &str, name: &str) -> Option<String> {
     })
 }
 
-/// Where the closing quote of `name=""` lies in a raw header value, when it writes the parameter so. Python read
-/// that as an empty value, and a bare `name=` as none.
-pub(super) fn empty_quoted_param(raw: &[u8], name: &str) -> Option<usize> {
+/// Where a parameter Python read as an empty value lies in a raw header value: `name=""`, at its closing quote
+/// ([`EmptyParam::Quoted`]), or a bare `name` with no `=` at all, just after the name ([`EmptyParam::Bare`]). Python
+/// read a bare `name=` as no value, so that is neither.
+pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
     let (mut start, mut quoted) = (0, false);
     let mut segments = Vec::new();
     for (at, &byte) in raw.iter().enumerate() {
@@ -104,14 +105,27 @@ pub(super) fn empty_quoted_param(raw: &[u8], name: &str) -> Option<usize> {
     segments.push(start..raw.len());
     segments.into_iter().skip(1).find_map(|segment| {
         let text = raw.get(segment.clone())?;
-        let equals = text.iter().position(|&byte| byte == b'=')?;
+        let Some(equals) = text.iter().position(|&byte| byte == b'=') else {
+            if !text.trim_ascii().eq_ignore_ascii_case(name.as_bytes()) {
+                return None;
+            }
+            return Some(EmptyParam::Bare(segment.start + text.trim_ascii_end().len()));
+        };
         let (key, value) = (text.get(..equals)?, text.get(equals + 1..)?);
         if !key.trim_ascii().eq_ignore_ascii_case(name.as_bytes()) || value.trim_ascii() != b"\"\"" {
             return None;
         }
         let blanks = value.len() - value.trim_ascii_start().len();
-        Some(segment.start + equals + 1 + blanks + 1)
+        Some(EmptyParam::Quoted(segment.start + equals + 1 + blanks + 1))
     })
+}
+
+/// How a parameter Python read as empty is written, and where: see [`empty_param`].
+pub(super) enum EmptyParam {
+    /// `name=""`: where its closing quote lies.
+    Quoted(usize),
+    /// A bare `name`: where the name ends.
+    Bare(usize),
 }
 
 /// The first header with this name.
