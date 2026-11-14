@@ -21,6 +21,17 @@ pub fn copy_pk(c: &Connection, key: i64, folder: &str, uid: Option<i64>) -> rusq
     Ok(if pks.len() == 1 { pks.first().copied() } else { None })
 }
 
+/// The pk of message `key`'s copy in `folder` now, the newest where there are two, or None if none is there or it is on
+/// its way out (`pk_in`).
+pub fn pk_in(c: &Connection, key: i64, folder: &str) -> rusqlite::Result<Option<i64>> {
+    c.prepare_cached(
+        "SELECT pk FROM messages WHERE message_key=? AND folder=? AND pending_removal IS NULL \
+         ORDER BY pk DESC LIMIT 1",
+    )?
+    .query_row(rusqlite::params![key, folder], |r| r.get(0))
+    .optional()
+}
+
 /// The pk of a copy of message `key` now, or None if it has none: the copy at `uid` in `folder` where that is one of
 /// its copies, else its copy in `folder` if there is one, else another, one listed first, then the newer.
 pub fn message_pk(c: &Connection, key: i64, folder: Option<&str>, uid: Option<i64>) -> rusqlite::Result<Option<i64>> {

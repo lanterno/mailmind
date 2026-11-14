@@ -282,16 +282,16 @@ async fn do_plan(State(app): State<Arc<App>>, request: Request) -> Response<Body
     .await
 }
 
-/// The plan a preview froze, carried out once. Filing what it holds is the Mailbox's, which the Rust server hasn't
-/// yet: a plan that has expired, or that no one made, says so.
+/// The plan a preview froze, carried out once through the Mailbox's filing, under the request's undo group: a plan
+/// that has expired, or that no one made, says so.
 async fn do_confirm(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
-    let (_, uri, _, body) = match body_of(request).await {
+    let (method, uri, _, body) = match body_of(request).await {
         Ok(read) => read,
         Err(answer) => return *answer,
     };
     let read = (|| -> Result<_, Problem> { Ok((body.text("plan")?, body.text("undo_group")?)) })();
-    let plan = match read {
-        Ok((plan, _undo_group)) => plan.unwrap_or_default(),
+    let (plan, undo_group) = match read {
+        Ok((plan, undo_group)) => (plan.unwrap_or_default(), undo_group),
         Err(problem) => return refused(problem),
     };
     match app.assistant.bulk.take(&plan) {
@@ -302,7 +302,12 @@ async fn do_confirm(State(app): State<Arc<App>>, request: Request) -> Response<B
             }
             answer::problem_document(410, &expired)
         }
-        Some(_) => answer::not_yet(uri.path()),
+        Some(plan) => {
+            crate::routes::run(&app, &method, &uri, move |app| {
+                app.plans.carry_out(&plan.verb, plan.preset.as_deref(), &plan.messages, undo_group.as_deref())
+            })
+            .await
+        }
     }
 }
 

@@ -72,6 +72,8 @@ pub struct App {
     pub commands: Arc<MailCommands>,
     pub undo: Undo,
     pub filing: Arc<Filing>,
+    /// A plan a bulk command's preview froze, carried out (`/api/ai/do-confirm`).
+    pub plans: mm_mailbox::plans::Plans,
     /// Each account's INBOX synced, one round at a time (`/api/refresh`).
     pub syncing: Arc<Syncing>,
     /// IDLE's workers, one for each account, which `Workers::start` starts: none in the served suites.
@@ -282,6 +284,7 @@ impl App {
             crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone, curation_filing.clone());
         let flags = Arc::new(FilingFlags(filing.clone()));
         let attention = crate::bound::Attention::assemble(&database, &directory, &seams.clock, &zone, flags, heard);
+        let plans = crate::plan_wiring::plans(&filing, &database, &attention.snoozing);
         let undo = Undo::new(
             database.clone(),
             gates.clone(),
@@ -389,6 +392,7 @@ impl App {
             commands,
             undo,
             filing,
+            plans,
             syncing,
             realtime,
             reconciler,

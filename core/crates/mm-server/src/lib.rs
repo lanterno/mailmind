@@ -63,6 +63,8 @@ pub mod assistant_wiring;
 
 // The assistant's background work and Tidy's run, each a round the workers schedule.
 pub mod background;
+// A plan a bulk command's preview froze, carried out through the Mailbox's filing and Attention's snoozing.
+mod plan_wiring;
 
 pub use app::{App, Seams};
 pub use serve::{Server, Work};
