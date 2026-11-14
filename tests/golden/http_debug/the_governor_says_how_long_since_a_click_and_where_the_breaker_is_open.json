@@ -1,0 +1,187 @@
+[
+ {
+  "body": {
+   "batch": {
+    "estimate_micros": 0,
+    "state": null,
+    "waiting": 0
+   },
+   "days": [
+    {
+     "calls": 0,
+     "cost_micros": 0,
+     "day": "2026-11-02",
+     "features": {}
+    }
+   ],
+   "generated": "2026-11-02T12:00:00+00:00",
+   "governor": {
+    "breaker": [],
+    "interactive_running": 0,
+    "limit_micros": 15000000,
+    "reserved_micros": 0,
+    "since_interactive": null,
+    "since_seen": 0.0,
+    "spent_today_micros": 0
+   },
+   "ok": true
+  },
+  "headers": {
+   "cache-control": "no-store",
+   "content-type": "application/json",
+   "cross-origin-opener-policy": "same-origin",
+   "cross-origin-resource-policy": "same-origin",
+   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "before any call",
+  "status": 200
+ },
+ {
+  "body": {
+   "batch": {
+    "estimate_micros": 0,
+    "state": null,
+    "waiting": 0
+   },
+   "days": [
+    {
+     "calls": 1,
+     "cost_micros": 0,
+     "day": "2026-11-02",
+     "features": {
+      "rewrite": {
+       "calls": 1,
+       "cost_micros": 0
+      }
+     }
+    }
+   ],
+   "generated": "2026-11-02T12:00:30+00:00",
+   "governor": {
+    "breaker": [
+     "every feature"
+    ],
+    "interactive_running": 0,
+    "limit_micros": 15000000,
+    "reserved_micros": 0,
+    "since_interactive": 30.0,
+    "since_seen": 0.0,
+    "spent_today_micros": 0
+   },
+   "ok": true
+  },
+  "headers": {
+   "cache-control": "no-store",
+   "content-type": "application/json",
+   "cross-origin-opener-policy": "same-origin",
+   "cross-origin-resource-policy": "same-origin",
+   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "a refused key, thirty seconds on",
+  "status": 200
+ },
+ {
+  "body": {
+   "ai": {
+    "batch": {
+     "estimate_micros": 0,
+     "state": null,
+     "waiting": 0
+    },
+    "limit_micros": 15000000,
+    "today": {
+     "calls": 1,
+     "cost_micros": 0,
+     "day": "2026-11-02",
+     "features": {
+      "rewrite": {
+       "calls": 1,
+       "cost_micros": 0
+      }
+     }
+    }
+   },
+   "breakers": [
+    "every feature"
+   ],
+   "generated": "2026-11-02T12:00:30+00:00",
+   "idle": {
+    "accounts": 0,
+    "running": 0
+   },
+   "jobs": [],
+   "ok": true,
+   "profile": "full",
+   "queues": {
+    "commands": {},
+    "drafts_waiting": 0,
+    "outbox": {}
+   }
+  },
+  "headers": {
+   "cache-control": "no-store",
+   "content-type": "application/json",
+   "cross-origin-opener-policy": "same-origin",
+   "cross-origin-resource-policy": "same-origin",
+   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "at a glance",
+  "status": 200
+ },
+ {
+  "body": {
+   "batch": {
+    "estimate_micros": 0,
+    "state": null,
+    "waiting": 0
+   },
+   "days": [
+    {
+     "calls": 2,
+     "cost_micros": 0,
+     "day": "2026-11-02",
+     "features": {
+      "rewrite": {
+       "calls": 2,
+       "cost_micros": 0
+      }
+     }
+    }
+   ],
+   "generated": "2026-11-02T12:02:33.450000+00:00",
+   "governor": {
+    "breaker": [
+     "every feature"
+    ],
+    "interactive_running": 0,
+    "limit_micros": 15000000,
+    "reserved_micros": 0,
+    "since_interactive": 123.5,
+    "since_seen": 0.0,
+    "spent_today_micros": 0
+   },
+   "ok": true
+  },
+  "headers": {
+   "cache-control": "no-store",
+   "content-type": "application/json",
+   "cross-origin-opener-policy": "same-origin",
+   "cross-origin-resource-policy": "same-origin",
+   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "a good call, two minutes on",
+  "status": 200
+ }
+]
