@@ -1,0 +1,392 @@
+[
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "Bob Example <bob@example.test>"
+   ],
+   [
+    "Named",
+    "Subject",
+    "Lunch?"
+   ],
+   [
+    "Named",
+    "Date",
+    "Mon, 02 Nov 2026 12:00:00 +0000"
+   ],
+   [
+    "Named",
+    "Message-ID",
+    "<a1@example.test>"
+   ],
+   [
+    "Named",
+    "X-MailMind-Account",
+    "ada@example.test"
+   ],
+   [
+    "Named",
+    "X-MailMind-Folder",
+    "INBOX"
+   ],
+   [
+    "Named",
+    "X-MailMind-ThreadID",
+    "t1"
+   ],
+   [
+    "Named",
+    "X-MailMind-Bucket",
+    "primary"
+   ]
+  ],
+  "text": "Shall we?",
+  "raw": "From: Bob Example <bob@example.test>\r\nSubject: Lunch?\r\nDate: Mon, 02 Nov 2026 12:00:00 +0000\r\nMessage-ID: <a1@example.test>\r\nX-MailMind-Account: ada@example.test\r\nX-MailMind-Folder: INBOX\r\nX-MailMind-ThreadID: t1\r\nX-MailMind-Bucket: primary\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nShall we?\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "Zoë Ünïcode <zoe@example.test>"
+   ],
+   [
+    "Named",
+    "Subject",
+    "Café ☕ meeting about a very long subject line that goes on and on past seventy-eight columns for sure"
+   ],
+   [
+    "Named",
+    "Message-ID",
+    "<a2@example.test>"
+   ],
+   [
+    "Named",
+    "In-Reply-To",
+    "<a1@example.test>"
+   ],
+   [
+    "Named",
+    "References",
+    "<a0@example.test> <a1@example.test>"
+   ],
+   [
+    "Named",
+    "X-MailMind-Account",
+    "ada@example.test"
+   ]
+  ],
+  "text": "Ünïcode body\nline two",
+  "raw": "From: =?utf-8?b?Wm/DqyDDnG7Dr2NvZGU=?= <zoe@example.test>\r\nSubject: =?utf-8?b?Q2Fmw6kg4piV?= meeting about a very long subject line that\r\n goes on and on past seventy-eight columns for sure\r\nMessage-ID: <a2@example.test>\r\nIn-Reply-To: <a1@example.test>\r\nReferences: <a0@example.test> <a1@example.test>\r\nX-MailMind-Account: ada@example.test\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 8bit\r\nMIME-Version: 1.0\r\n\r\nÃnÃ¯code body\r\nline two\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "X-MailMind-Account",
+    "ada@example.test"
+   ],
+   [
+    "Named",
+    "X-MailMind-Folder",
+    "INBOX"
+   ]
+  ],
+  "text": "",
+  "raw": "X-MailMind-Account: ada@example.test\r\nX-MailMind-Folder: INBOX\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\n\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "Doe, Jane <a@b.example>"
+   ],
+   [
+    "Named",
+    "Subject",
+    "x"
+   ],
+   [
+    "Named",
+    "Message-ID",
+    "<x@y>"
+   ]
+  ],
+  "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "raw": "From: Doe, Jane <a@b.example>\r\nSubject: x\r\nMessage-ID: <x@y>\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\r\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=\r\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Person",
+    "From",
+    "Team: Alerts",
+    "alerts@example.test"
+   ],
+   [
+    "Named",
+    "Subject",
+    "Group-like, quoted"
+   ]
+  ],
+  "text": "short",
+  "raw": "From: \"Team: Alerts\" <alerts@example.test>\r\nSubject: Group-like, quoted\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nshort\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Person",
+    "From",
+    "Doe, Jane",
+    "jane@example.test"
+   ],
+   [
+    "Named",
+    "Subject",
+    "Comma"
+   ]
+  ],
+  "text": "short",
+  "raw": "From: \"Doe, Jane\" <jane@example.test>\r\nSubject: Comma\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nshort\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Person",
+    "From",
+    "Zoë Ünïcode",
+    "zoe@example.test"
+   ],
+   [
+    "Named",
+    "Subject",
+    "Person, not ASCII"
+   ]
+  ],
+  "text": "short",
+  "raw": "From: =?utf-8?b?Wm/DqyDDnG7Dr2NvZGU=?= <zoe@example.test>\r\nSubject: Person, not ASCII\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nshort\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Person",
+    "From",
+    "",
+    "bare@example.test"
+   ]
+  ],
+  "text": "short",
+  "raw": "From: bare@example.test\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nshort\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Person",
+    "From",
+    "Name",
+    ""
+   ]
+  ],
+  "text": "short",
+  "raw": "From: Name <>\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nshort\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Person",
+    "From",
+    "Name \"Nick\" Last",
+    "nick@example.test"
+   ]
+  ],
+  "text": "short",
+  "raw": "From: \"Name \\\"Nick\\\" Last\" <nick@example.test>\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nshort\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Person",
+    "From",
+    "A very long display name that goes on and on and on, past the line",
+    "long@example.test"
+   ]
+  ],
+  "text": "s",
+  "raw": "From: \"A very long display name that goes on and on and on, past the line\"\r\n <long@example.test>\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\ns\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "bare@example.test"
+   ],
+   [
+    "Named",
+    "Message-ID",
+    "not-an-id"
+   ],
+   [
+    "Named",
+    "In-Reply-To",
+    "<a@b> junk"
+   ],
+   [
+    "Named",
+    "References",
+    "<a@b>, <c@d> <e@f>"
+   ]
+  ],
+  "text": "a\rb\r\nc\n\nd",
+  "raw": "From: bare@example.test\r\nMessage-ID: not-an-id\r\nIn-Reply-To: <a@b> junk\r\nReferences: <a@b>  <c@d> <e@f>\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\na\r\nb\r\nc\r\n\r\nd\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "\"Quoted, Name\" <q@example.test>"
+   ],
+   [
+    "Named",
+    "Subject",
+    "=?utf-8?q?already_encoded?="
+   ]
+  ],
+  "text": "жжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжжж",
+  "raw": "From: \"Quoted, Name\" <q@example.test>\r\nSubject: already encoded\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: base64\r\nMIME-Version: 1.0\r\n\r\n0LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQ\r\nttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC2\r\n0LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQ\r\nttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC2\r\n0LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQ\r\nttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC2\r\n0LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQttC20LbQ\r\ntgo=\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "Ünïcode Only"
+   ],
+   [
+    "Named",
+    "Subject",
+    "Tab\there"
+   ]
+  ],
+  "text": "éééééééééééééééééééééééééééééé\nplain line",
+  "raw": "From: =?utf-8?b?w5xuw69jb2Rl?= Only\r\nSubject: Tab\there\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 8bit\r\nMIME-Version: 1.0\r\n\r\nÃ©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©Ã©\r\nplain line\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "Subject",
+    "Equals = and trailing spaces   "
+   ]
+  ],
+  "text": "a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b a=b   \nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+  "raw": "Subject: Equals = and trailing spaces   \r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\na=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db=\r\n a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3Db a=3D=\r\nb a=3Db a=3Db a=3Db a=3Db  =20\r\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\nyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy=\r\nyy\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "Subject",
+    "Eleven lines"
+   ]
+  ],
+  "text": "line 0 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 1 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 2 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 3 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 4 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 5 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 6 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 7 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 8 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 9 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nline 10 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+  "raw": "Subject: Eleven lines\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nline 0 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 1 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 2 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 3 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 4 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 5 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 6 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 7 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 8 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 9 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzz\r\nline 10 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=\r\nzzzzzzzzzzz\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "Subject",
+    "Eleven short then long"
+   ]
+  ],
+  "text": "l0\nl1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+  "raw": "Subject: Eleven short then long\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\nl0\r\nl1\r\nl2\r\nl3\r\nl4\r\nl5\r\nl6\r\nl7\r\nl8\r\nl9\r\nl10\r\nqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq=\r\nqqqqqqqqqqqqq\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "Subject",
+    "Tab in body"
+   ]
+  ],
+  "text": "a\tb\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t",
+  "raw": "Subject: Tab in body\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\na\tb\r\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t=\r\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t=09\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "<only@example.test>"
+   ],
+   [
+    "Named",
+    "Subject",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ]
+  ],
+  "text": "end with newline\n",
+  "raw": "From: <only@example.test>\r\nSubject: =?utf-8?q?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?=\r\n =?utf-8?q?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?=\r\n =?utf-8?q?xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?=\r\n =?utf-8?q?xxxxxxxxxxxxx?=\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nend with newline\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "Name With Émoji 😀 <emoji@example.test>"
+   ],
+   [
+    "Named",
+    "Subject",
+    "😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 😀 "
+   ]
+  ],
+  "text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+  "raw": "From: Name With =?utf-8?b?w4ltb2ppIPCfmIA=?= <emoji@example.test>\r\nSubject: =?utf-8?b?8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iAIA==?=\r\n =?utf-8?b?8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iAIPCfmIAg?=\r\n =?utf-8?b?8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iAIPCfmIAg?=\r\n =?utf-8?b?8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iAIPCfmIAg?=\r\n =?utf-8?b?8J+YgCDwn5iAIPCfmIAg8J+YgCDwn5iA?= \r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: base64\r\nMIME-Version: 1.0\r\n\r\n8J+YgPCfmIDwn5iA8J+YgPCfmIDwn5iA8J+YgPCfmIDwn5iA8J+YgPCfmIDwn5iA8J+YgPCfmIDw\r\nn5iA8J+YgPCfmIDwn5iA8J+YgPCfmIAK\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "Subject",
+    "Latin-1 mostly é"
+   ]
+  ],
+  "text": "éaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaéaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaéaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaéaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaéaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "raw": "Subject: Latin-1 mostly =?utf-8?q?=C3=A9?=\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\nMIME-Version: 1.0\r\n\r\n=C3=A9aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=C3=A9aaaaaaaaaaaaaaaaaaaaaaaaa=\r\naaaaaaaaaaaaaaa=C3=A9aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=C3=A9aaaaaaaaaa=\r\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=C3=A9aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "From",
+    "a@b, c@d"
+   ],
+   [
+    "Named",
+    "Subject",
+    "two"
+   ]
+  ],
+  "text": "x",
+  "raw": "From: a@b, c@d\r\nSubject: two\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: 7bit\r\nMIME-Version: 1.0\r\n\r\nx\r\n"
+ },
+ {
+  "headers": [
+   [
+    "Named",
+    "Subject",
+    "line separator"
+   ]
+  ],
+  "text": "x",
+  "error": "ValueError: Header values may not contain linefeed or carriage return characters"
+ }
+]
