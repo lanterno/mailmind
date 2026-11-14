@@ -44,8 +44,47 @@ fn a_fetch_says_the_uid_flags_and_the_section_as_its_literal_held_it() {
             section: Some(header.to_vec()),
             gmail_thread: None,
             gmail_labels: None,
+            arrived: None,
         })
     );
+}
+
+#[test]
+fn an_internaldate_is_when_the_message_arrived_in_unix_seconds() {
+    let Said::Fetch(fetched) = said(&["* 3 FETCH (UID 9 INTERNALDATE \"01-Jan-2026 12:00:00 +0000\")"]) else {
+        panic!("not a fetch")
+    };
+    assert_eq!((fetched.uid, fetched.arrived), (Some(9), Some(1_767_268_800)));
+    let Said::Fetch(fetched) = said(&["* 3 FETCH (UID 9 INTERNALDATE \" 1-Jan-2026 07:00:00 -0500\")"]) else {
+        panic!("not a fetch")
+    };
+    assert_eq!(fetched.arrived, Some(1_767_268_800));
+}
+
+#[test]
+fn an_internaldate_reads_as_imaplib_reads_one_and_anything_else_is_none() {
+    // RFC 3501's example, which imaplib's own tests read as 837_596_665.
+    assert_eq!(internal_date("17-Jul-1996 02:44:25 -0700"), Some(837_596_665));
+    assert_eq!(internal_date("1-jan-2026 13:30:00 +0130"), Some(1_767_268_800));
+    // A day past its month's end runs on, and day 0 back, as calendar.timegm runs them.
+    assert_eq!(internal_date("32-Dec-2025 12:00:00 +0000"), Some(1_767_268_800));
+    assert_eq!(internal_date("00-Jan-2026 12:00:00 +0000"), Some(1_767_182_400));
+    for text in [
+        "",
+        "17-Jul-1996",
+        "17-Jul-1996 02:44:25",
+        "17-Jly-1996 02:44:25 -0700",
+        "17-Jul-96 02:44:25 -0700",
+        "17-Jul-1996 2:44:25 -0700",
+        "17-Jul-1996 02:44:25 0700",
+        "17-Jul-1996 02:44:25 -07",
+        "17-Jul-1996 02:44:25:01 -0700",
+        "17-Jul-1996-1 02:44:25 -0700",
+        "40-Jul-1996 02:44:25 -0700",
+        "+7-Jul-1996 02:44:25 -0700",
+    ] {
+        assert_eq!(internal_date(text), None, "{text:?}");
+    }
 }
 
 #[test]

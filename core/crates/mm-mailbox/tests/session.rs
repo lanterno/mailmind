@@ -94,6 +94,11 @@ impl MailServer for Recording {
         Ok(None)
     }
 
+    fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {
+        self.answer("FETCH", format!("INTERNALDATE {uids:?}"))?;
+        Ok(uids.iter().map(|&uid| (uid, 1_767_268_800 + i64::from(uid))).collect())
+    }
+
     fn store_flags(&mut self, uids: &[u32], add: bool, flags: &[&str]) -> Result<(), ServerError> {
         self.answer("STORE", format!("STORE {uids:?} {}{flags:?}", if add { '+' } else { '-' }))
     }
@@ -220,4 +225,14 @@ fn a_read_only_session_examines_and_sends_no_write() {
     assert_eq!(session.append("Drafts", b"", &[], None), Err(ServerError::Unreachable("ReadOnlyError")));
     assert!(ServerError::Unreachable("ReadOnlyError").is_unreachable());
     assert_eq!(*heard.lock().unwrap(), ["EXAMINE INBOX"]);
+}
+
+#[test]
+fn a_read_only_session_still_searches_by_sender_and_says_when_mail_arrived() {
+    let server = Recording { found: vec![3, 4], ..Recording::with(&[]) };
+    let heard = Arc::clone(&server.asked);
+    let mut session = ReadOnly(Box::new(server));
+    assert_eq!(session.search(Search::From("notify-example.test")).unwrap(), [3, 4]);
+    assert_eq!(session.arrivals(&[3, 4]).unwrap(), BTreeMap::from([(3, 1_767_268_803), (4, 1_767_268_804)]));
+    assert_eq!(*heard.lock().unwrap(), ["SEARCH From(\"notify-example.test\")", "INTERNALDATE [3, 4]"]);
 }
