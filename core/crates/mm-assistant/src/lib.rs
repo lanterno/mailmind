@@ -4,6 +4,9 @@
 //! What it needs of the world is in `ports`, which the store, the Claude API's crate (`mm-claude`) and the program
 //! implement; nothing here reads the disk, the network or the clock.
 
+pub mod action_plan;
+pub mod ask;
+pub mod bulk;
 pub mod calls;
 pub mod context;
 pub mod digest;

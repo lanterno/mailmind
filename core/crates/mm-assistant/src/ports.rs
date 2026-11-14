@@ -267,6 +267,52 @@ pub struct NewDraft<'a> {
     pub source: &'a str,
 }
 
+/// A message a question to Ask reads (`for_asking`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AskRow {
+    pub pk: i64,
+    pub message_key: Option<i64>,
+    pub uid: Option<i64>,
+    pub account: String,
+    pub folder: Option<String>,
+    pub from_name: Option<String>,
+    pub from_addr: Option<String>,
+    pub subject: Option<String>,
+    pub snippet: Option<String>,
+    pub body_text: Option<String>,
+    pub date_iso: Option<String>,
+    /// What the AI's triage said of it.
+    pub ai_summary: Option<String>,
+}
+
+/// What a question reads (Discovery's index).
+pub trait AskIndex: Send + Sync + fmt::Debug {
+    /// What `fts_match` finds in `accounts`, best first, or with nothing to match the newest mail; None for a query
+    /// the index rejects. No account matches nothing.
+    fn for_asking(&self, fts_match: &str, accounts: &[String], limit: i64) -> Result<Option<Vec<AskRow>>, Fault>;
+}
+
+/// What a bulk command's filter reaches: how many messages, each by its key and the folder it was seen in, the few a
+/// preview shows, and how many rows the filter says whatever it may reach.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Reached {
+    pub count: i64,
+    pub messages: Vec<(i64, String)>,
+    pub sample: Vec<Value>,
+    pub matched: i64,
+}
+
+/// What a bulk command asks of Discovery: its filter read by the search grammar, never trusted raw.
+pub trait PlanSearch: Send + Sync + fmt::Debug {
+    /// Whether `filter` picks out part of the mailbox, and whether it names a folder.
+    fn narrows(&self, filter: &str) -> (bool, bool);
+    /// What `filter` reaches, up to `cap`, leaving out the folders playing the roles in `apart`; None for a query the
+    /// index rejects.
+    fn reach(&self, filter: &str, cap: i64, apart: &[&str], sample: usize) -> Result<Option<Reached>, Fault>;
+    /// Whether `matched` rows are most of the mailbox.
+    fn sweeps_whole_mailbox(&self, matched: i64) -> Result<bool, Fault>;
+}
+
 /// What the Assistant keeps of its answers (`Answers`).
 pub trait Answers: Send + Sync + fmt::Debug {
     fn thread_summary(&self, account: &str, thread_id: &str, scope: &str) -> Result<Option<StoredSummary>, Fault>;

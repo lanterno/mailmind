@@ -9,22 +9,29 @@ use std::sync::{Arc, Mutex};
 
 use mm_accounts::credential::{CredentialRef, Style};
 use mm_accounts::ports::ConfigFile;
+use mm_assistant::ask::Asker;
+use mm_assistant::bulk::BulkCommands;
 use mm_assistant::calls::Calls;
 use mm_assistant::context::Context;
 use mm_assistant::extract::Extractor;
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
-use mm_assistant::ports::{AccountList, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, Said, Stamp};
+use mm_assistant::ports::{
+    AccountList, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, PlanSearch, Reached, Said, Stamp,
+};
 use mm_assistant::prepared_replies::PreparedReplies;
 use mm_assistant::reply_draft::ReplyDrafts;
 use mm_assistant::status::Status;
 use mm_assistant::thread_digest::ThreadDigest;
+use mm_discovery::query::QuerySpec;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Keychain, Outside, Secret};
 use mm_kernel::zone::Zone;
 use mm_mailbox::gates::{Gates, Priority, Wait, on_gate};
 use mm_mailbox::session::MailServers;
 use mm_store::Database;
+use mm_store::discovery::DiscoveryStore;
+use serde_json::json;
 
 use crate::environment::Environment;
 use crate::wiring::AiConfig;
@@ -133,6 +140,10 @@ pub struct Assistant {
     pub extractor: Arc<Extractor>,
     /// Replies drafted on demand, and ahead.
     pub drafting: Arc<PreparedReplies>,
+    /// A question about the person's own mail.
+    pub asking: Arc<Asker>,
+    /// A command in words, planned and previewed; the plans a preview froze.
+    pub bulk: Arc<BulkCommands>,
 }
 
 /// The API routes a hidden tab fetches on its own, which say nothing of someone being here (`shared.UI_QUIET`).
@@ -167,12 +178,18 @@ impl Assistant {
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
         let mail = Arc::new(AssistantMail { database: database.clone(), servers, gates });
         let context = Context::new(mail, accounts);
+        let index = Arc::new(DiscoveryStore::new(database.clone(), clock.clone()));
+        let asking = Arc::new(Asker::new(calls.clone(), index.clone(), context.clone(), clock.clone()));
+        let planning = Arc::new(Planning { store: index, clock: clock.clone(), zone: zone.clone() });
+        let draw: mm_assistant::bulk::Draw =
+            Arc::new(|| crate::perimeter::new_token().map_err(|_| Fault::new("Random")));
+        let bulk = Arc::new(BulkCommands::new(calls.clone(), planning, clock.clone(), zone.clone(), draw));
         let digest = Arc::new(ThreadDigest::new(calls.clone(), database.clone(), context.clone(), clock.clone()));
         let extractor = Arc::new(Extractor::new(calls.clone(), context.clone(), clock.clone(), zone));
         let replies = Arc::new(ReplyDrafts::new(calls.clone(), context.clone()));
         let looks_human = Box::new(|local: &str| mm_curation::classifier::looks_human(Some(local)));
         let drafting = Arc::new(PreparedReplies::new(database, context, replies, looks_human, clock));
-        Assistant { calls, status, governor, digest, extractor, drafting }
+        Assistant { calls, status, governor, digest, extractor, drafting, asking, bulk }
     }
 
     /// Someone is here, for the cost governor's presence gate on drafting ahead: any request to the API that got past
@@ -235,6 +252,56 @@ impl Mail for AssistantMail {
 
     fn thread_anchor(&self, account: &str, thread_id: &str) -> Result<Option<i64>, Fault> {
         self.database.thread_anchor(account, thread_id)
+    }
+}
+
+/// What a bulk command asks of Discovery: its filter read by the search's own grammar, a date in it in the person's
+/// zone, and run as the search runs it.
+#[derive(Debug)]
+pub(crate) struct Planning {
+    store: Arc<DiscoveryStore>,
+    clock: Arc<dyn Clock>,
+    zone: Arc<dyn Zone>,
+}
+
+impl Planning {
+    fn spec(&self, filter: &str) -> QuerySpec {
+        QuerySpec::parse(filter, |wall| mm_discovery::search::placed(&*self.zone, wall))
+    }
+}
+
+/// Text that says something: Python's `or` passes over an empty one.
+fn said(text: &Option<String>) -> Option<&str> {
+    text.as_deref().filter(|t| !t.is_empty())
+}
+
+impl PlanSearch for Planning {
+    fn narrows(&self, filter: &str) -> (bool, bool) {
+        let spec = self.spec(filter);
+        (spec.narrows(), spec.names_folder())
+    }
+
+    fn reach(&self, filter: &str, cap: i64, apart: &[&str], sample: usize) -> Result<Option<Reached>, Fault> {
+        let roles = crate::bound::NamedRoles;
+        let Some(reach) = self.store.reach(&self.spec(filter), cap, apart, &roles)? else { return Ok(None) };
+        let now = self.clock.now();
+        let messages =
+            reach.rows.iter().map(|r| (r.message_key.unwrap_or_default(), r.folder.clone().unwrap_or_default()));
+        let shown = reach.rows.iter().take(sample).map(|r| {
+            json!({"from": said(&r.from_name).or(said(&r.from_addr)).unwrap_or_default(),
+                   "subject": said(&r.subject).unwrap_or(mm_discovery::search::NO_SUBJECT),
+                   "when": mm_kernel::relative::rel_time(r.date_iso.as_deref(), now)})
+        });
+        Ok(Some(Reached {
+            count: reach.count,
+            messages: messages.collect(),
+            sample: shown.collect(),
+            matched: reach.matched,
+        }))
+    }
+
+    fn sweeps_whole_mailbox(&self, matched: i64) -> Result<bool, Fault> {
+        Ok(mm_discovery::guard::sweeps_whole_mailbox(matched, self.store.total()?))
     }
 }
 

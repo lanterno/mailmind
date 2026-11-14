@@ -34,6 +34,9 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/ai/draft-reply", post(draft_reply))
         .route("/api/ai/rewrite", post(rewrite))
         .route("/api/ai/extract", post(extract))
+        .route("/api/ai/ask", post(ask))
+        .route("/api/ai/do-plan", post(do_plan))
+        .route("/api/ai/do-confirm", post(do_confirm))
 }
 
 /// A problem document of one of the AI's own kinds.
@@ -234,4 +237,61 @@ async fn extract(State(app): State<Arc<App>>, request: Request) -> Response<Body
         Ok(answer::json(200, &app.assistant.extractor.read(pk)?))
     })
     .await
+}
+
+/// A question about the person's own mail, answered from what the search finds; nothing changed.
+async fn ask(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let (method, uri, headers, body) = match body_of(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    let (account, question) = match (|| -> Result<_, Problem> { Ok((body.text("account")?, body.text("question")?)) })()
+    {
+        Ok(read) => read,
+        Err(problem) => return refused(problem),
+    };
+    ai(&app, (&method, &uri, &headers), ("ask error", "ask failed"), move |app| {
+        Ok(answer::json(200, &app.assistant.asking.ask(account.as_deref(), question.as_deref())?))
+    })
+    .await
+}
+
+/// A command in words as a capped preview of what it would do, or a search: it changes nothing.
+async fn do_plan(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let (method, uri, headers, body) = match body_of(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    let cmd = match body.text("cmd") {
+        Ok(cmd) => cmd.map(Value::String),
+        Err(problem) => return refused(problem),
+    };
+    ai(&app, (&method, &uri, &headers), ("do-plan error", "plan failed"), move |app| {
+        Ok(answer::json(200, &app.assistant.bulk.plan(cmd.as_ref())?))
+    })
+    .await
+}
+
+/// The plan a preview froze, carried out once. Filing what it holds is the Mailbox's, which the Rust server hasn't
+/// yet: a plan that has expired, or that no one made, says so.
+async fn do_confirm(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let (_, uri, _, body) = match body_of(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    let read = (|| -> Result<_, Problem> { Ok((body.text("plan")?, body.text("undo_group")?)) })();
+    let plan = match read {
+        Ok((plan, _undo_group)) => plan.unwrap_or_default(),
+        Err(problem) => return refused(problem),
+    };
+    match app.assistant.bulk.take(&plan) {
+        None => {
+            let mut expired = problem::blank(410, "this plan has expired");
+            if let Some(doc) = expired.as_object_mut() {
+                doc.insert("expired".into(), json!(true));
+            }
+            answer::problem_document(410, &expired)
+        }
+        Some(_) => answer::not_yet(uri.path()),
+    }
 }

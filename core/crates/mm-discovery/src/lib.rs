@@ -10,6 +10,7 @@ pub mod arrival;
 pub mod contacts;
 // The Document Hub, and what is said of a sender as a message opens.
 pub mod documents;
+pub mod guard;
 pub mod known;
 pub mod ports;
 pub mod query;

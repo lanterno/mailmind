@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 
+use mm_assistant::ports::{AskIndex, AskRow};
 use mm_discovery::ports::{
     ContactMail, Facts, FolderRoles, Found, Recent, Recipient, SearchIndex, Sender, Tally, ViewsStore,
 };
@@ -491,5 +492,153 @@ impl ViewsStore for DiscoveryStore {
             }
             Ok(())
         })
+    }
+}
+
+// The Assistant's asks of the index: what a question to Ask reads, and what a bulk command's filter reaches.
+
+const ASKED: &str = "m.pk, m.message_key, m.uid, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.snippet, \
+                     m.body_text, m.date_iso, s.summary AS ai_summary";
+
+fn asked(r: &Row) -> rusqlite::Result<AskRow> {
+    Ok(AskRow {
+        pk: r.get(0)?,
+        message_key: r.get(1)?,
+        uid: r.get(2)?,
+        account: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+        folder: r.get(4)?,
+        from_name: r.get(5)?,
+        from_addr: r.get(6)?,
+        subject: r.get(7)?,
+        snippet: r.get(8)?,
+        body_text: r.get(9)?,
+        date_iso: r.get(10)?,
+        ai_summary: r.get(11)?,
+    })
+}
+
+impl AskIndex for DiscoveryStore {
+    fn for_asking(&self, fts_match: &str, accounts: &[String], limit: i64) -> Result<Option<Vec<AskRow>>, Fault> {
+        let scope = if accounts.is_empty() {
+            "1=0".to_owned()
+        } else {
+            format!("m.account IN ({})", placeholders(accounts.len()))
+        };
+        let in_scope = accounts.iter().map(|a| Sql::Text(a.clone()));
+        let (sql, all): (String, Vec<Sql>) = if fts_match.is_empty() {
+            // No content words: the newest mail.
+            let sql = format!(
+                "SELECT {ASKED} FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key \
+                 WHERE {scope} AND m.pending_removal IS NULL ORDER BY m.ts DESC LIMIT ?"
+            );
+            (sql, in_scope.chain([Sql::Integer(limit)]).collect())
+        } else {
+            let sql = format!(
+                "SELECT {ASKED}, {BM25} AS score FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid \
+                 LEFT JOIN assessments s ON s.message_key=m.message_key \
+                 WHERE msg_fts MATCH ? AND {scope} AND m.pending_removal IS NULL ORDER BY score ASC, m.ts DESC LIMIT ?"
+            );
+            (sql, [Sql::Text(fts_match.to_owned())].into_iter().chain(in_scope).chain([Sql::Integer(limit)]).collect())
+        };
+        self.db.read(|c| {
+            let rows: rusqlite::Result<Vec<AskRow>> =
+                (|| c.prepare(&sql)?.query_map(params_from_iter(all), asked)?.collect())();
+            Ok(rows.ok())
+        })
+    }
+}
+
+/// A copy a bulk command's filter reaches: each message's copy in the Inbox, else any but the one in All Mail.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Reaching {
+    pub message_key: Option<i64>,
+    pub folder: Option<String>,
+    pub from_name: Option<String>,
+    pub from_addr: Option<String>,
+    pub subject: Option<String>,
+    pub date_iso: Option<String>,
+}
+
+/// What a bulk command's filter reaches: how many messages, the copies up to the cap, newest first, and how many rows
+/// the filter says whatever it may reach.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Reach {
+    pub count: i64,
+    pub rows: Vec<Reaching>,
+    pub matched: i64,
+}
+
+fn reach_in(
+    c: &Connection,
+    spec: &QuerySpec,
+    cap: i64,
+    apart: &[&str],
+    roles: &dyn FolderRoles,
+) -> rusqlite::Result<Reach> {
+    let (matched, wheres, params) = to_sql(spec);
+    let where_sql: String = visible(wheres).iter().map(|w| format!(" AND {w}")).collect();
+    let (base, base_params): (String, Vec<Sql>) = match matched {
+        Some(matched) => (
+            format!(
+                "FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid \
+                 LEFT JOIN assessments s ON s.message_key=m.message_key \
+                 WHERE msg_fts MATCH ? AND m.pending_removal IS NULL{where_sql}"
+            ),
+            [Sql::Text(matched)].into_iter().chain(params).collect(),
+        ),
+        None => (
+            format!(
+                "FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key \
+                 WHERE m.pending_removal IS NULL{where_sql}"
+            ),
+            params,
+        ),
+    };
+    let (not_apart, apart_params) = in_folders_playing(c, roles, apart)?;
+    let (in_all, in_all_params) = in_folders_playing(c, roles, &["all"])?;
+    let matched: i64 =
+        c.prepare(&format!("SELECT COUNT(*) {base}"))?.query_row(params_from_iter(&base_params), |r| r.get(0))?;
+    let reaching: Vec<Sql> = base_params.iter().cloned().chain(apart_params).collect();
+    let count: i64 = c
+        .prepare(&format!("SELECT COUNT(DISTINCT m.message_key) {base} AND NOT {not_apart}"))?
+        .query_row(params_from_iter(&reaching), |r| r.get(0))?;
+    let sql = format!(
+        "SELECT * FROM (SELECT m.message_key, m.uid, m.folder, m.from_name, m.from_addr, m.subject, m.date_iso, m.ts, \
+         ROW_NUMBER() OVER (PARTITION BY m.message_key ORDER BY m.folder='INBOX' DESC, {in_all}, m.pk DESC) AS nth \
+         {base} AND NOT {not_apart}) WHERE nth=1 ORDER BY ts DESC LIMIT ?"
+    );
+    let all: Vec<Sql> = in_all_params.into_iter().chain(reaching).chain([Sql::Integer(cap)]).collect();
+    let rows = c
+        .prepare(&sql)?
+        .query_map(params_from_iter(all), |r| {
+            Ok(Reaching {
+                message_key: r.get("message_key")?,
+                folder: r.get("folder")?,
+                from_name: r.get("from_name")?,
+                from_addr: r.get("from_addr")?,
+                subject: r.get("subject")?,
+                date_iso: r.get("date_iso")?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(Reach { count, rows, matched })
+}
+
+impl DiscoveryStore {
+    /// What `spec` reaches, up to `cap`, leaving out the folders playing the roles in `apart`; None for a query the
+    /// index rejects. Its FROM and JOINs are the search's.
+    pub fn reach(
+        &self,
+        spec: &QuerySpec,
+        cap: i64,
+        apart: &[&str],
+        roles: &dyn FolderRoles,
+    ) -> Result<Option<Reach>, Fault> {
+        self.db.read(|c| Ok(reach_in(c, spec, cap, apart, roles).ok()))
+    }
+
+    /// How many rows the mailbox holds.
+    pub fn total(&self) -> Result<i64, Fault> {
+        self.db.read(|c| Ok(c.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0)).unwrap_or(0)))
     }
 }
