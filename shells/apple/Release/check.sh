@@ -61,6 +61,19 @@ mounted="$work/mnt"
 app="$mounted/MailMind.app"
 check "it mounts and holds MailMind.app" test -x "$app/Contents/MacOS/MailMind"
 check "beside a link to /Applications" equal "$(readlink "$mounted/Applications")" /Applications
+laid_out() {
+    test -f "$mounted/.background.tiff" &&
+        uv run --project "$here/../.." --group release --quiet python -I - "$mounted/.DS_Store" <<'PYTHON'
+import sys
+from ds_store import DSStore
+with DSStore.open(sys.argv[1], "r") as store:
+    assert store["MailMind.app"]["Iloc"] == (160, 205), store["MailMind.app"]["Iloc"]
+    assert store["Applications"]["Iloc"] == (480, 205), store["Applications"]["Iloc"]
+    assert store["."]["icvp"]["backgroundType"] == 2, "no background picture"
+    assert store["."]["bwsp"]["ShowToolbar"] is False, "the toolbar shows"
+PYTHON
+}
+check "its window: MailMind and Applications where the picture behind them draws around them" laid_out
 
 echo "## the app in it"
 universal() {
