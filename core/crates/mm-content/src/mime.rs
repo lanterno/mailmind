@@ -379,9 +379,10 @@ fn header_block(headers: &[u8], start: usize, insertions: &mut Vec<Insertion>) {
 /// What follows the last delimiter of a multipart that never closed, where mail-parser reads no part and Python read
 /// one: when it doesn't start with a header line, or is cut off before a line break. A blank line after the
 /// delimiter makes it a part with no headers, as Python read it, and a line break at the end ends its last line;
-/// either goes again with the multipart that never closed.
+/// either goes again with the multipart that never closed. A delimiter cut off after the CR of its line break ended
+/// its line there for Python, as a lone CR does: an LF goes in after it.
 fn unread_tails(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
-    let mut insertions = Vec::new();
+    let mut insertions: Vec<Insertion> = Vec::new();
     for part in message.root().parts().filter(|part| part.flags().contains(PartFlags::UNTERMINATED)) {
         let (Some(boundary), Some(start)) = (part.boundary(), offset_in(raw, part.raw_body())) else { continue };
         let mut tail = None;
@@ -392,16 +393,21 @@ fn unread_tails(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
             let bare = bare.strip_suffix(b"\r").unwrap_or(bare);
             let rest = bare.strip_prefix(b"--").and_then(|rest| rest.strip_prefix(boundary.as_bytes()));
             if rest.is_some_and(|rest| rest.iter().all(|&byte| byte == b' ' || byte == b'\t')) {
-                tail = Some((at, line.ends_with(b"\n")));
+                tail = Some((at, line.last().copied()));
             }
         }
-        let Some((tail, ended)) = tail else { continue };
+        let Some((tail, last)) = tail else { continue };
         if part.children().any(|child| child.offset_header() as usize >= tail) {
             continue;
         }
         let crlf: &'static [u8] = if part.raw_headers().ends_with(b"\r\n") { b"\r\n" } else { b"\n" };
         // A delimiter on the last line opens an empty part: once it ends in a line break, a blank line makes it one.
-        if !ended || tail == raw.len() {
+        // One cut off after the CR of its line break gets the LF first, and the blank line on the next pass.
+        if last == Some(b'\r') {
+            insertions.push((tail, b"\n"));
+            continue;
+        }
+        if last != Some(b'\n') || tail == raw.len() {
             insertions.push((raw.len(), crlf));
             continue;
         }
