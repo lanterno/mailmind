@@ -115,6 +115,41 @@ pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
     })
 }
 
+/// Where a raw Content-Type value holds a byte that Python took for white space and dropped, and mail-parser keeps: a
+/// vertical tab, a form feed or one of the separators `\x1c` to `\x1f`, at either edge of a parameter's name, or at
+/// the end of a boundary, which Python's `get_boundary` stripped on the right. Python kept one at the start of a
+/// value, at the end of any other or inside either, and so does the core.
+pub(super) fn stripped_controls(raw: &[u8]) -> Vec<usize> {
+    let mut found = Vec::new();
+    for param in params(raw) {
+        let Some(text) = raw.get(param.clone()) else { continue };
+        let equals = text.iter().position(|&byte| byte == b'=').map_or(param.end, |equals| param.start + equals);
+        let name = raw.get(param.start..equals).unwrap_or_default();
+        let lead = name.iter().take_while(|&&byte| python_blank(byte)).count();
+        let trail = name.iter().rev().take_while(|&&byte| python_blank(byte)).count().min(name.len() - lead);
+        found.extend((param.start..param.start + lead).chain(equals - trail..equals));
+        let bare_name = name.get(lead..name.len() - trail).unwrap_or_default();
+        let value = raw.get(equals + 1..param.end).unwrap_or_default();
+        let blanks = value.iter().rev().take_while(|&&byte| python_blank(byte)).count();
+        if bare_name.eq_ignore_ascii_case(b"boundary") && blanks < value.len() {
+            found.extend(param.end - blanks..param.end);
+        }
+    }
+    found.retain(|&at| raw.get(at).copied().is_some_and(kept_by_mail_parser));
+    found
+}
+
+/// Whether Python's `str.strip` took a byte of a header for white space: an ASCII blank, a line end, a vertical tab, a
+/// form feed or a separator from `\x1c` to `\x1f`.
+fn python_blank(byte: u8) -> bool {
+    byte.is_ascii_whitespace() || matches!(byte, 0x0b | 0x1c..=0x1f)
+}
+
+/// Whether mail-parser keeps a byte Python's `str.strip` took for white space at a parameter's edge.
+fn kept_by_mail_parser(byte: u8) -> bool {
+    matches!(byte, 0x0b | 0x0c | 0x1c..=0x1f)
+}
+
 /// Where each parameter of a raw header value lies, as Python's parser split them: at each `;` outside quotes, the
 /// value before the first left out.
 fn params(raw: &[u8]) -> impl Iterator<Item = Range<usize>> {
