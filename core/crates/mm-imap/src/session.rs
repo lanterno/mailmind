@@ -326,3 +326,6 @@ impl MailSession for Session {
         self.connection.wire.stream.close_notify();
     }
 }
+
+#[cfg(test)]
+mod tests;
