@@ -185,6 +185,11 @@ const ATTACKS: &[&str] = &[
     "<blockquote cite=\"javascript:alert(1)\" onclick=alert(1)>q</blockquote>",
     "<details open ontoggle=alert(1)><summary onclick=alert(1)>s</summary></details>",
     "<a href=\"https://example.test/\" target=\"_self\" rel=\"opener\">x</a>",
+    // A head's sheets, which are kept.
+    "<head><style>@import url(https://e.example.test/i.css); p{background:url(javascript:alert(1))}</style></head>x",
+    "<head><style></style><script>alert(1)</script><style>p{x:expression(alert(1))}</style></head>",
+    "<head><noscript><style></noscript><img src=x onerror=alert(1)></style></noscript></head>",
+    "<head><style>p{font-family:\"</style><img src=x onerror=alert(1)>\"}</style>",
 ];
 
 #[test]
@@ -221,7 +226,13 @@ fn nothing_of_a_dropped_element_is_shown() {
         ("<textarea>a &amp; <b>c</b></textarea>after", false, true, "after", [0, 0, 0]),
         ("<script>if (a < b) { x = '</scr' + 'ipt>' }</script>after", false, true, "after", [0, 0, 0]),
         ("<!doctype html><html><head><title>T</title></head><body>B</body></html>", false, true, "B", [0, 0, 0]),
-        ("<head><style>p{color:red}</style></head><body><p>x</p></body>", false, true, "<p>x</p>", [0, 0, 0]),
+        (
+            "<head><title>T</title><meta name=x><script>s</script></head><body><p>x</p></body>",
+            false,
+            true,
+            "<p>x</p>",
+            [0, 0, 0],
+        ),
         // <embed> holds nothing and has no end tag: the tag goes and what follows it stays.
         ("<embed src=x>after", false, true, "after", [0, 0, 0]),
         (
@@ -264,6 +275,73 @@ fn a_head_ends_where_a_browser_ends_it() {
         ("<head><head></head>Hello", false, true, "Hello", [0, 0, 0]),
         ("<p>a<head><title>t</title>b", false, true, "<p>ab", [0, 0, 0]),
         ("<head><title>T</title></head><body>B</body>", false, true, "B", [0, 0, 0]),
+    ]);
+}
+
+/// A head's style sheet applies as one in the body does, and Chromium applies one in a head's `<noscript>` too, with
+/// scripting off. Python dropped them with the head, so a newsletter styled from its head showed plainer than sent.
+#[test]
+fn a_heads_style_sheet_is_kept() {
+    holds(&[
+        (
+            "<html><head><style>p{color:red}</style></head><body><p>x</p></body></html>",
+            false,
+            true,
+            "<style>p{color:red}</style><p>x</p>",
+            [0, 0, 0],
+        ),
+        ("<head><style>p{color:red}</style><p>x", false, true, "<style>p{color:red}</style><p>x", [0, 0, 0]),
+        (
+            "<head><title>T</title><style>p{color:red}</style><meta name=x><style>b{color:blue}</style></head>B",
+            false,
+            true,
+            "<style>p{color:red}</style><style>b{color:blue}</style>B",
+            [0, 0, 0],
+        ),
+        (
+            "<head><noscript><style>p{color:red}</style></noscript></head><p>x</p>",
+            false,
+            true,
+            "<style>p{color:red}</style><p>x</p>",
+            [0, 0, 0],
+        ),
+        // One never closed is written at the end, as one in the body is.
+        ("<head><style>p{color:red}", false, true, "<style>p{color:red}</style>", [0, 0, 0]),
+        // One in a <template> applies to nothing.
+        ("<head><template><style>p{color:red}</style></template></head><p>x</p>", false, true, "<p>x</p>", [0, 0, 0]),
+        // It is sanitized as any other sheet is, and what it blocks counts.
+        (
+            "<head><style>@import url(https://e.example.test/i.css); body{background:url(https://t.example.test/b.png)} \
+             p{color:red;position:fixed}</style></head>v",
+            false,
+            true,
+            "<style>p{color:red}</style>v",
+            [0, 0, 1],
+        ),
+        (
+            "<head><style>body{background:url(https://t.example.test/b.png)}</style></head>v",
+            true,
+            true,
+            "<style>body{background:url(\"https://t.example.test/b.png\")}</style>v",
+            [0, 0, 0],
+        ),
+        // Its raw text ends at its own end tag, and nothing in it is markup.
+        (
+            "<head><style>p{font-family:'</style><script>alert(1)</script>'}</style></head>x",
+            false,
+            true,
+            "'}x",
+            [0, 0, 0],
+        ),
+        ("<head><style><img src=x onerror=alert(1)></style></head>x", false, true, "x", [0, 0, 0]),
+        // A sheet is no text to fold a quote under.
+        (
+            "<head><style>p{color:red}</style></head><blockquote>q</blockquote>",
+            false,
+            true,
+            "<style>p{color:red}</style><blockquote>q</blockquote>",
+            [0, 0, 0],
+        ),
     ]);
 }
 
