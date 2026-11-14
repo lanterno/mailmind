@@ -49,7 +49,8 @@ Python app gets fixes only.
 - **Where the Rust server still answers apart** · low value · effort S · [#33](https://github.com/lanterno/mailmind/issues/33) — Discovery reads a folder's part
   from its name only (`bound::NamedRoles`), not from what LIST said; a domain that isn't ASCII is lowered and punycoded with
   no nameprep; a failed sync or reconcile keeps Rust's class name (`Timeout`, `ConnectionRefused`) where Python kept its
-  exception's, and its log line names no account; a snooze commits twice, its undo entry in a block of its own;
+  exception's, and its log line names no account, as a job's `last_error` does in `/api/debug/jobs`, which lists the
+  jobs in another order; a snooze commits twice, its undo entry in a block of its own;
   a login reads its password from the Keychain each time where Python keeps it for the process, and a deleted account's
   sync status stays until a restart (`Syncing` has no `_forget_status`). Compose: an attached message/rfc822 is
   rewritten best-effort (about a third of 1,500 random cases differ from Python's bytes), encoded words a person typed
