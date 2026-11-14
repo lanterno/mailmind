@@ -110,8 +110,9 @@ and the Claude API.
   two bodies into the local cache.
 - **Skimming no longer burns unread.** A message is marked read only after it stays
   open ~1.2 seconds, so fast `j`/`k` scanning leaves the list intact.
-- **Newsletters render in their real design.** Inline styles and `<style>` blocks
-  survive a whitelist sanitizer while scripts, remote fetches, trackers and
+- **Newsletters render in their real design.** Inline styles and `<style>` blocks, the head's
+  among them, survive a whitelist sanitizer, which shows what a browser shows of what it drops (a
+  `<noscript>`'s text, an `<object>`'s fallback, the text after a nested form), while scripts, remote fetches, trackers and
   viewport-curtain phishing are blocked — with an un-spoofable
   `External · domain · Sandboxed · N trackers blocked` strip rendered *outside* the
   frame, and per-link risk checks against the sender's domain.
