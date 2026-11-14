@@ -607,3 +607,6 @@ tests/e2e/browser/test_suggestions.py::test_nothing_is_made_until_a_task_is_conf
 tests/e2e/browser/test_suggestions.py::test_the_card_has_nothing_axe_finds[day]
 tests/e2e/browser/test_suggestions.py::test_the_card_has_nothing_axe_finds[dusk]
 tests/e2e/browser/test_suggestions.py::test_the_card_has_nothing_axe_finds[night]
+tests/api/test_http_export.py::test_the_mail_as_an_archive[eml]
+tests/api/test_http_export.py::test_the_mail_as_an_archive[mbox]
+tests/api/test_http_export.py::test_a_format_the_export_does_not_offer_is_the_bad_request
