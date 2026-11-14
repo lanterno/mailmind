@@ -98,8 +98,8 @@ with the CSRF token its page carries, and over a line protocol on its standard i
 
 - `clock` moves its frozen time, beside the test's own (`app.clock.shift`).
 - `work` runs one pass of a background job, since no worker runs on its own there: `app.work("outbox")`, `"commands"`,
-  `"drafts"`, `"snoozes"`, `"follow-ups"`, `"assess"` (triage what AI hasn't summarized), `"tidy"`,
-  `app.work("reconcile", account)` (the ghost pruner's round), or `app.work("sync", account, folder)`, which
+  `"drafts"`, `"snoozes"`, `"follow-ups"`, `"assess"` (triage what AI hasn't summarized), `"tidy"`, `"forget"` (what
+  went a month ago let go), `app.work("reconcile", account)` (the ghost pruner's round), or `app.work("sync", account, folder)`, which
   `world.deliver` runs after delivering. `tests/support/serve_python.py` says what each does.
 - `settle` waits for the work requests started (`app.settle()`), and `check` fails the test on what the server's own checks refused:
   a schema an answer broke, the tripwire.
