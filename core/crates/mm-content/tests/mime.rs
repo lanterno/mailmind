@@ -327,6 +327,17 @@ fn a_message_cut_off_keeps_the_part_it_was_cut_in() {
     let at_a_delimiter =
         message("Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b");
     assert_eq!(part(&at_a_delimiter, 2), Some((Vec::new(), "text/plain".to_owned())));
+    // Cut off after the CR of the delimiter's line break, which ended the line for Python as a lone CR does.
+    for cut in ["--b\r", "--b \r"] {
+        let after_a_cr = message(&format!(
+            "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n{cut}"
+        ));
+        assert_eq!(part(&after_a_cr, 1), Some((b"hi".to_vec(), "text/plain".to_owned())), "{cut:?}");
+        assert_eq!(part(&after_a_cr, 2), Some((Vec::new(), "text/plain".to_owned())), "{cut:?}");
+    }
+    let first_after_a_cr = message("Content-Type: multipart/report; boundary=b\r\n\r\npreamble\r\n--b\r");
+    assert_eq!(part(&first_after_a_cr, 1), Some((Vec::new(), "text/plain".to_owned())));
+    assert_eq!(parse(&first_after_a_cr).text.as_deref(), Some(""));
 }
 
 #[test]
