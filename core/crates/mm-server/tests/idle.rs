@@ -352,7 +352,12 @@ fn world(emails: &[&str], profile: &str) -> World {
     let hex = "5e".repeat(32);
     let environment = Environment::from_pairs([("MAILMIND_DB_KEY", hex.as_str()), ("MAILMIND_PROFILE", profile)]);
     let settings = Settings { home: home.path().to_path_buf() };
-    let seams = Seams { clock: Arc::new(Frozen), outside: Arc::new(Loopback), keychain };
+    let seams = Seams {
+        clock: Arc::new(Frozen),
+        outside: Arc::new(Loopback),
+        keychain,
+        sanitizer: Arc::new(mm_server::real::Sanitizing),
+    };
     let app = Arc::new(App::assemble(&environment, &settings, home.path().join("dist"), 1, &seams).unwrap());
     World { app, imap, home }
 }
@@ -590,7 +595,7 @@ fn a_read_only_process_opens_its_inbox_read_only_to_idle() {
 #[test]
 fn the_workers_start_idle_and_their_stop_ends_it() {
     let w = world(&[ADA], "full");
-    let workers = Workers::start(&w.app, false, 0);
+    let workers = Workers::start(&w.app, false, 0, 0);
     until(|| w.imap.idling(ADA, 1));
     let stopping = Instant::now();
     workers.stop();
@@ -602,7 +607,7 @@ fn the_workers_start_idle_and_their_stop_ends_it() {
 #[test]
 fn a_read_only_process_starts_no_idle() {
     let w = world(&[ADA], "read-only");
-    let workers = Workers::start(&w.app, true, 0);
+    let workers = Workers::start(&w.app, true, 0, 0);
     std::thread::sleep(Duration::from_millis(300));
     workers.stop();
     assert_eq!(w.imap.count(ADA, "IDLE"), 0);
