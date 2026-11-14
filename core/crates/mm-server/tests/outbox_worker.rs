@@ -76,7 +76,8 @@ CREATE TABLE draft_journal(draft_id INTEGER PRIMARY KEY REFERENCES drafts(id) ON
 fn app(home: &Path, profile: &str) -> Arc<App> {
     std::fs::write(home.join("mailmind.config.json"), "{}").unwrap();
     let (path, key) = (home.join("mailmind.db"), DbKey::from_bytes([0x5e; 32]));
-    Store::open(&path, &key).unwrap();
+    // At the version the server reads, as the Python app's migrations leave it.
+    Store::open(&path, &key).unwrap().set_version(mm_store::schema::VERSION).unwrap();
     Database::new(path, key, Arc::new(Closed)).read(|c| c.execute_batch(TABLES)).unwrap();
     let key = "5e".repeat(32);
     let environment = Environment::from_pairs([("MAILMIND_DB_KEY", key.as_str()), ("MAILMIND_PROFILE", profile)]);
