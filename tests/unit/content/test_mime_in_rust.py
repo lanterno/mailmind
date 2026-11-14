@@ -741,6 +741,18 @@ VERTICAL_TAB_BEFORE_A_NESTED_BOUNDARY = (b"From: Ada Lin <ada@example.test>\r\nS
                                          b'multipart/alternative; boundary="=_part_0"\r\n\r\n--=_part_0\r\nContent-Type: '
                                          b'multipart/alternative; \x0bboundary="b1"\r\n\r\n--b1\r\nContent-Type: text/plain\r\n'
                                          b"\r\n\r\n--b1--\r\n\r\n--=_part_0--\r\n")
+# And a nested delimiter a lone CR ends, then a blank line: an empty header block for Python, and a part that starts
+# after it, as for the core now.
+BLANK_LINE_AFTER_A_LONE_CR = (b'From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: "Lin, Bo" '
+                              b'<bo.lin@studio.example.test>\r\nContent-Type: multipart/mixed; boundary="----=_NextPart_0000"\r\n\r\n'
+                              b"This is a multi-part message in MIME format.\r\n------=_NextPart_0000\r\nContent-Type: multipart/mixed; "
+                              b'boundary="b1"\r\n\r\n--b1\r\nContent-Type: multipart/alternative; boundary="a\'()+_,-./:=?b2"\r\n\r\n'
+                              b'--a\'()+_,-./:=?b2\r\nContent-Type: text/calendar; name="=?utf-8?Q?swatch=202=2Epng?="\r\n'
+                              b"Content-Disposition: inline\r\n\r\n\r\n--a'()+_,-./:=?b2\r\nContent-Type: image/png; "
+                              b'name="=?utf-8?Q?swatch=202=2Epng?="\r\nContent-Disposition: attachment; '
+                              b'filename="=?utf-8?Q?r=C3=A9sum=C3=A9=2Epdf?="\r\nContent-ID: <p1@example.test>\r\n\r\n\x00\x00\r\n'
+                              b"--a'()+_,-./:=?b2\r\r\n--\r\n\nContent-Type: text/plain\r\n\r\n\r\n--a'()+_,-./:=?b2--\r\n\r\n"
+                              b"--b1--\r\n\r\n------=_NextPart_0000--\r\n")
 
 
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -752,6 +764,7 @@ VERTICAL_TAB_BEFORE_A_NESTED_BOUNDARY = (b"From: Ada Lin <ada@example.test>\r\nS
 @example(DELIMITER_ENDED_BY_A_LONE_CR)
 @example(VERTICAL_TAB_BEFORE_A_BOUNDARY)
 @example(VERTICAL_TAB_BEFORE_A_NESTED_BOUNDARY)
+@example(BLANK_LINE_AFTER_A_LONE_CR)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
     body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
