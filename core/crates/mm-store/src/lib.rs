@@ -41,6 +41,8 @@ mod key;
 mod labels;
 mod mailbox;
 mod mailbox_commands;
+// What the forget round lets go of: keys with no copy left, and finished changes.
+mod mailbox_forget;
 mod mailbox_sync;
 pub mod page;
 // The page's own state, and what the app says of itself.
