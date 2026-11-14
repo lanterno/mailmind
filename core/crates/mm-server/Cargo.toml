@@ -42,6 +42,9 @@ tower-service.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# A loopback IMAP server for the login hold's tests: its certificate, and the TLS it serves.
+rcgen.workspace = true
+rustls.workspace = true
 
 [lints]
 workspace = true
