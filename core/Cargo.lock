@@ -1103,6 +1103,7 @@ dependencies = [
 name = "mm-store"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "mm-accounts",
  "mm-assistant",
  "mm-attention",
