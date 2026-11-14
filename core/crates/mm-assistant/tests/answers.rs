@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use mm_assistant::action_plan::{out_of_reach, preset_told, verb_told};
 use mm_assistant::ask::{Asker, cited, fts_match};
+use mm_assistant::briefs::Briefs;
 use mm_assistant::bulk::BulkCommands;
 use mm_assistant::calls::Calls;
 use mm_assistant::context::{Context, trim};
@@ -15,13 +16,14 @@ use mm_assistant::digest::{fingerprint, parse};
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
 use mm_assistant::ports::{
-    AccountList, AiSettings, Answers, AskIndex, AskRow, ConversationBy, Engine, InForce, LanguageModel, Mail, Message,
-    ModelError, NewDraft, PlanSearch, Prompt, Reached, Reply, Said, Spend, Stamp, StoredDraft, StoredSummary, Usage,
-    UsageLedger,
+    AccountList, AiSettings, Answers, Around, AskIndex, AskRow, Cards, ConversationBy, CopyNow, Engine, Glance,
+    InForce, LanguageModel, Mail, Message, ModelError, Needing, NewDraft, Overview, PlanSearch, Prompt, Reached, Reply,
+    Said, Spend, Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary, Usage, UsageLedger, WeekRows,
 };
 use mm_assistant::prepared_replies::{PreparedReplies, ReplyAsked};
 use mm_assistant::refusals::{AiFailure, NotSent};
 use mm_assistant::reply_draft::ReplyDrafts;
+use mm_assistant::reviews::Reviews;
 use mm_assistant::status::Status;
 use mm_assistant::thread_digest::{Asked, ThreadDigest};
 use mm_kernel::errors::{Failure, Fault, Kind};
@@ -608,4 +610,213 @@ fn only_the_newest_plans_are_kept() {
     }
     assert_eq!(bulk.take("plan-1"), None);
     assert!(bulk.take("plan-2").is_some() && bulk.take("plan-17").is_some());
+}
+
+/// The stored mail a card reads: the rows given, each message's copy now in INBOX at uid key + 100, but key 20's, gone.
+#[derive(Debug, Default)]
+struct Glances {
+    rows: Mutex<Vec<Glance>>,
+}
+
+impl Overview for Glances {
+    fn brief_rows(&self, _accounts: &[String], _n: i64) -> Result<Vec<Glance>, Fault> {
+        Ok(self.rows.lock().expect("rows").clone())
+    }
+    fn delta_rows(&self, _accounts: &[String], since_ts: i64, _n: i64) -> Result<Vec<Glance>, Fault> {
+        Ok(if since_ts > NOW { vec![] } else { self.rows.lock().expect("rows").clone() })
+    }
+    fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault> {
+        Ok(copies.iter().map(|(key, _)| (*key != 20).then(|| (Some("INBOX".to_owned()), Some(key + 100)))).collect())
+    }
+    fn week(&self, _accounts: &[String], since_ts: f64, since_iso: &str, _top: i64) -> Result<WeekRows, Fault> {
+        assert_eq!((since_ts, since_iso), ((NOW - 7 * 86_400) as f64, "2026-10-26T12:00:00+00:00"));
+        let ivo = Needing {
+            message_key: Some(10),
+            account: ADA.into(),
+            thread_id: Some("t-contract".into()),
+            from_name: Some("Ivo".into()),
+            subject: Some("Contract".into()),
+            importance: Some(5),
+            action: Some("Reply today".into()),
+            ..Needing::default()
+        };
+        Ok(WeekRows {
+            sent: 2,
+            received: 5,
+            by_bucket: vec![(None, 3), (Some("newsletters".into()), 2)],
+            needs: vec![ivo],
+            ..WeekRows::default()
+        })
+    }
+}
+
+/// No calendar, and a review read only today.
+#[derive(Debug)]
+struct NoCalendar;
+
+impl Around for NoCalendar {
+    fn events_from(&self, _at: i64, _limit: usize) -> Result<Vec<Value>, Fault> {
+        Err(Fault::new("Unreadable"))
+    }
+    fn weekly_review(&self) -> Result<bool, Fault> {
+        Ok(false)
+    }
+}
+
+#[derive(Debug, Default)]
+struct Kept2 {
+    briefs: Mutex<HashMap<(String, String), StoredCard>>,
+    deltas: Mutex<HashMap<(String, i64, String), StoredCard>>,
+    reviews: Mutex<HashMap<(String, String), StoredReview>>,
+}
+
+impl Cards for Kept2 {
+    fn brief(&self, accounts: &str, day: &str) -> Result<Option<StoredCard>, Fault> {
+        Ok(self.briefs.lock().expect("briefs").get(&(accounts.into(), day.into())).cloned())
+    }
+    fn save_brief(&self, accounts: &str, day: &str, brief: &StoredCard, _forget: &str) -> Result<(), Fault> {
+        self.briefs.lock().expect("briefs").insert((accounts.into(), day.into()), brief.clone());
+        Ok(())
+    }
+    fn delta(&self, accounts: &str, since_ts: i64, fingerprint: &str) -> Result<Option<StoredCard>, Fault> {
+        Ok(self.deltas.lock().expect("deltas").get(&(accounts.into(), since_ts, fingerprint.into())).cloned())
+    }
+    fn save_delta(&self, accounts: &str, since_ts: i64, delta: &StoredCard, _forget: &str) -> Result<(), Fault> {
+        let key = (accounts.into(), since_ts, delta.fingerprint.clone());
+        self.deltas.lock().expect("deltas").insert(key, delta.clone());
+        Ok(())
+    }
+    fn review(&self, accounts: &str, day: &str) -> Result<Option<StoredReview>, Fault> {
+        Ok(self.reviews.lock().expect("reviews").get(&(accounts.into(), day.into())).cloned())
+    }
+    fn save_review(&self, accounts: &str, day: &str, review: &StoredReview, forget: &str) -> Result<(), Fault> {
+        assert_eq!(forget, "2026-10-26T12:00:00+00:00");
+        self.reviews.lock().expect("reviews").insert((accounts.into(), day.into()), review.clone());
+        Ok(())
+    }
+}
+
+fn glanced(pk: i64, key: i64, importance: i64, category: &str) -> Glance {
+    Glance {
+        pk,
+        message_key: Some(key),
+        folder: Some("INBOX".into()),
+        from_name: Some(format!("Sender {pk}")),
+        subject: Some(format!("Subject {pk}")),
+        message_id: Some(format!("<m{pk}@example.test>")),
+        summary: Some("What it says.".into()),
+        importance: Some(importance),
+        category: Some(category.into()),
+        ..Glance::default()
+    }
+}
+
+#[test]
+fn a_brief_is_written_once_kept_for_the_day_and_read_with_each_message_where_it_is_now() {
+    let w = world(true);
+    let (glances, kept) = (Arc::new(Glances::default()), Arc::new(Kept2::default()));
+    let briefs = Briefs::new(w.calls.clone(), kept.clone(), glances.clone(), clock_at(NOW), Arc::new(Utc));
+    let accounts = [ADA.to_owned()];
+    let quiet = briefs.build(&accounts, false, false, "brief").expect("a card");
+    assert_eq!(
+        (quiet["model"].clone(), quiet["narrative"].clone()),
+        (json!("empty"), json!("Nothing needs you right now \u{2014} your inbox is quiet."))
+    );
+    *glances.rows.lock().expect("rows") = vec![glanced(1, 10, 5, "action-needed"), glanced(2, 20, 2, "")];
+    let missing = briefs.build(&accounts, false, false, "brief").expect("a card");
+    assert_eq!(
+        missing,
+        json!({"ok": true, "missing": true, "narrative": "", "groups": [], "cached": false, "stale": false})
+    );
+    w.model.replies.lock().expect("replies").push(Ok(
+        "{\"narrative\": \"Ivo wants you.\", \"groups\": [{\"label\": \"Contracts\", \"count\": 9, \"pks\": [1, 2, 7]}]}".into(),
+    ));
+    let written = briefs.build(&accounts, false, true, "brief").expect("a card");
+    assert_eq!(
+        written,
+        json!({"ok": true, "narrative": "Ivo wants you.", "model": "claude-opus-5-5",
+               "groups": [{"label": "Contracts", "count": 1, "messages": [{"key": 10, "folder": "INBOX", "uid": 110}]}],
+               "generated": "2026-11-02T12:00:00+00:00", "cached": false, "stale": false})
+    );
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.contains(
+        "[1] (imp 5, action-needed) Sender 1 \u{2014} Subject 1 \u{2014} What it says.\n[2] (imp 2, other) Sender 2 \u{2014} Subject 2 \u{2014} What it says."
+    ));
+    let stored = kept.briefs.lock().expect("briefs")[&(ADA.to_owned(), "2026-11-02".to_owned())].body.clone();
+    assert_eq!(stored, "[{\"label\":\"Contracts\",\"messages\":[[10,\"INBOX\"],[20,\"INBOX\"]]}]");
+    let read = briefs.build(&accounts, false, false, "brief").expect("a card");
+    assert_eq!((read["cached"].clone(), read["stale"].clone()), (json!(true), json!(false)));
+    glances.rows.lock().expect("rows").pop();
+    assert_eq!(briefs.build(&accounts, false, true, "brief").expect("a card")["stale"], true);
+    assert!(sent(&w).is_empty());
+}
+
+#[test]
+fn a_delta_is_kept_by_what_it_was_made_from_and_one_that_wont_do_by_the_rows() {
+    let w = world(true);
+    let (glances, kept) = (Arc::new(Glances::default()), Arc::new(Kept2::default()));
+    let briefs = Briefs::new(w.calls.clone(), kept.clone(), glances.clone(), clock_at(NOW), Arc::new(Utc));
+    let accounts = [ADA.to_owned()];
+    assert_eq!(
+        briefs.build_delta(&accounts, NOW + 1, true).expect("a delta"),
+        json!({"ok": true, "empty": true, "count": 0})
+    );
+    *glances.rows.lock().expect("rows") = vec![glanced(1, 10, 5, "action-needed")];
+    let missing = briefs.build_delta(&accounts, NOW - 3600, false).expect("a delta");
+    assert_eq!(missing, json!({"ok": true, "empty": false, "missing": true, "count": 1}));
+    w.model.replies.lock().expect("replies").push(Ok("{\"headline\": \"\", \"items\": []}".into()));
+    let made = briefs.build_delta(&accounts, NOW - 3600, true).expect("a delta");
+    assert_eq!(
+        made,
+        json!({"ok": true, "empty": false, "headline": "1 new since you last looked.",
+               "items": [{"who": "Sender 1", "gist": "Subject 1", "importance": 5}], "count": 1, "cached": false})
+    );
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.contains("[1] (imp 5, action-needed) Sender 1 \u{2014} Subject 1 \u{2014} What it says."));
+    assert_eq!(briefs.build_delta(&accounts, NOW - 3600, false).expect("a delta")["cached"], true);
+    assert!(sent(&w).is_empty());
+}
+
+#[test]
+fn a_review_counts_the_week_and_keeps_what_the_model_said_of_it() {
+    let w = world(true);
+    let kept = Arc::new(Kept2::default());
+    let reviews = Reviews::new(
+        w.calls.clone(),
+        kept.clone(),
+        Arc::new(Glances::default()),
+        Arc::new(NoCalendar),
+        clock_at(NOW),
+        Arc::new(Utc),
+    );
+    let accounts = [ADA.to_owned()];
+    assert_eq!(
+        reviews.build(&accounts, false, false, "review", false).expect("a review"),
+        json!({"ok": true, "missing": true})
+    );
+    w.model.replies.lock().expect("replies").push(Ok("{\"narrative\": \"test\", \"next\": []}".into()));
+    let written = reviews.build(&accounts, false, true, "review", false).expect("a review");
+    assert_eq!(
+        (written["narrative"].clone(), written["next"].clone(), written["model"].clone(), written["meetings"].clone()),
+        (
+            json!("In the last 7 days you sent 2 messages and 5 came in. 1 still need a reply from you."),
+            json!(["Reply to Ivo \u{2014} Contract"]),
+            json!("fallback"),
+            json!([])
+        )
+    );
+    assert_eq!(
+        written["stats"],
+        json!({"sent": 2, "received": 5, "by_bucket": {"other": 3, "newsletters": 2}, "needs_you": 1, "waiting_on": 0,
+               "reply_later": 0, "cleaned": 0, "handled": 0})
+    );
+    assert_eq!(written["week_start"], "2026-10-26T12:00:00+00:00");
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.contains("Received in inbox: 5 (other: 3, newsletters: 2)"));
+    assert!(prompt.text.contains("- [5] Ivo \u{2014} Contract \u{2014} Reply today"));
+    let read = reviews.build(&accounts, false, false, "review", false).expect("a review");
+    assert_eq!(
+        (read["cached"].clone(), read["stale"].clone(), read["needs"][0]["uid"].clone()),
+        (json!(true), json!(false), json!(110))
+    );
 }
