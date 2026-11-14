@@ -76,3 +76,10 @@ pub trait DraftCandidates: Send + Sync + fmt::Debug {
     /// its latest message, the most important first.
     fn draft_candidates(&self, since_ts: i64) -> Result<Vec<Message>, Fault>;
 }
+
+/// The Claude API batches the Python app sent (`ai_batches`), as the forget round lets them go.
+pub trait FinishedBatches: Send + Sync + fmt::Debug {
+    /// Let go of the batches done that ended before `ended_before` (seconds since the epoch), their items with them:
+    /// how many went.
+    fn forget_finished(&self, ended_before: i64) -> Result<usize, Fault>;
+}

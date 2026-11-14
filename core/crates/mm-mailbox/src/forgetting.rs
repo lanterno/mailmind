@@ -3,7 +3,7 @@
 //! message, and a change-queue row that finished. Until then a copy that comes back (a move, an Undo, a resync)
 //! finds its key and its assessment, and a finished change can still be undone or found resubmitted.
 //!
-//! The Assistant's part of the round, the batches that finished, is the Assistant's to add.
+//! The Assistant's part of the round, the batches that finished, is `mm_assistant::batches`.
 
 use std::fmt;
 use std::sync::Arc;

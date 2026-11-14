@@ -2,7 +2,7 @@
 //! and `save_summary`, and `mailbox.adapters.sqlite.assistant_reads.draft_candidates`): the mail triage hasn't
 //! summarized, what it says kept under each message's key, and the mail a reply may be drafted ahead for.
 
-use mm_assistant::background_ports::{Assessment, DraftCandidates, Pending, Triage};
+use mm_assistant::background_ports::{Assessment, DraftCandidates, FinishedBatches, Pending, Triage};
 use mm_assistant::ports::Message;
 use mm_kernel::errors::Fault;
 use rusqlite::{OptionalExtension, params};
@@ -133,5 +133,12 @@ impl DraftCandidates for Database {
                 })?
                 .collect()
         })
+    }
+}
+
+/// `answers.batch_forget_finished`: a batch done before then goes, and its items by the foreign key's cascade.
+impl FinishedBatches for Database {
+    fn forget_finished(&self, ended_before: i64) -> Result<usize, Fault> {
+        self.write(|c| c.execute("DELETE FROM ai_batches WHERE state='done' AND ended_at < ?", [ended_before]))
     }
 }

@@ -1,7 +1,7 @@
 //! `work <job> <JSON>`: one pass of a background job, as a worker would run it, given the arguments in the JSON list
 //! (`serve_python.py` says what each does). Those this server has yet: a folder's sync, waking what is snoozed, the
 //! minute's round of follow-ups, a pass of the change queue, an account's reconcile, a pass of the outbox and a round
-//! of the drafts' pushes; and the assistant's triage and a run of Tidy. A job the Rust server doesn't run yet says so.
+//! of the drafts' pushes; the forget round; and the assistant's triage and a run of Tidy. A job the Rust server doesn't run yet says so.
 
 use mm_server::App;
 use serde_json::Value;
@@ -22,9 +22,14 @@ pub fn work(app: &App, argument: &str) -> String {
         // Compose's: a pass of the outbox, and a round of the drafts' pushes.
         "outbox" => app.compose.delivery.deliver().map_err(|fault| fault.class.to_owned()),
         "drafts" => app.compose.drafting.push_round().map(drop).map_err(|fault| fault.class.to_owned()),
-        // The forget round's Mailbox part: keys with no copy left and finished changes, a month on.
-        "forget" => app.forgetting.round().map(drop).map_err(|fault| fault.class.to_owned()),
-        // The assistant's triage of what it hasn't summarized.
+        // The forget round: keys with no copy left, finished changes and finished batches, a month on.
+        "forget" => app
+            .forgetting
+            .round()
+            .map_err(|fault| fault.class)
+            .and_then(|_| app.background.forget_batches_round())
+            .map(drop)
+            .map_err(str::to_owned),
         // The assistant's triage of what it hasn't summarized, and a run of Tidy for someone who turned it on.
         "assess" => app.background.assess_round().map(drop).map_err(str::to_owned),
         "tidy" => app.background.tidy_round().map(drop).map_err(str::to_owned),

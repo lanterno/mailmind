@@ -43,3 +43,4 @@ pub mod thread_digest;
 pub mod ahead;
 pub mod assessments;
 pub mod background_ports;
+pub mod batches;

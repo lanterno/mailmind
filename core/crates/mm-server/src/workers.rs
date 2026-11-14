@@ -272,12 +272,15 @@ impl Workers {
                     }),
                 ));
             }
-            // What has gone, let go a month on: keys with no copy left and finished changes, daily. It writes, so
-            // a process that only reads leaves it, as the Python app's does.
+            // What has gone, let go a month on: keys with no copy left, finished changes and the Python app's
+            // finished batches, daily. It writes, so a process that only reads leaves it, as the Python app's does.
             let forgetting = app.clone();
             lanes.push((
                 app.jobs.add("forget", mm_mailbox::forgetting::EVERY, mm_mailbox::forgetting::FIRST),
-                Box::new(move || forgetting.forgetting.round().map(|_| None).map_err(|fault| fault.class)),
+                Box::new(move || {
+                    forgetting.forgetting.round().map_err(|fault| fault.class)?;
+                    forgetting.background.forget_batches_round()
+                }),
             ));
             // The assistant's background work: triage, which a sync with new mail kicks; replies drafted ahead,
             // unless MAILMIND_NO_DRAFT_TICK; and the opt-in rounds, the brief and the review written ahead and Tidy.

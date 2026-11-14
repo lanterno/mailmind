@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use mm_accounts::Directory;
 use mm_assistant::ahead::Ahead;
 use mm_assistant::assessments::Assessments;
-use mm_assistant::background_ports::DraftCandidates;
+use mm_assistant::background_ports::{DraftCandidates, FinishedBatches};
 use mm_assistant::calls::Calls;
 use mm_assistant::prepared_replies::PreparedReplies;
 use mm_assistant::prepared_reply::Breaker;
@@ -69,6 +69,9 @@ pub struct Background {
     ahead: Ahead,
     tidying: Tidying,
     directory: Arc<Directory>,
+    /// The batches the forget round lets go of.
+    batches: Arc<dyn FinishedBatches>,
+    clock: Arc<dyn Clock>,
     /// Whether this process drafts replies ahead (MAILMIND_NO_DRAFT_TICK off).
     pub drafts_ahead: bool,
 }
@@ -84,18 +87,25 @@ impl Background {
             clock.clone(),
             zone.clone(),
         );
-        let tidying =
-            Tidying::new(TidyingParts { log: database.clone(), digest: database.clone(), filing, clock, zone });
+        let tidying = Tidying::new(TidyingParts {
+            log: database.clone(),
+            digest: database.clone(),
+            filing,
+            clock: clock.clone(),
+            zone,
+        });
         Background {
             assessments,
             calls: assistant.calls.clone(),
             drafting: assistant.drafting.clone(),
             breaker: Mutex::new(Breaker::default()),
-            candidates: database,
+            candidates: database.clone(),
             events,
             ahead,
             tidying,
             directory,
+            batches: database,
+            clock,
             drafts_ahead,
         }
     }
@@ -149,5 +159,10 @@ impl Background {
             self.tidying.round().map_err(|failure| class(&failure))?;
         }
         Ok(None)
+    }
+
+    /// The Assistant's part of the forget round: the batches the Python app sent, a month after they ended.
+    pub fn forget_batches_round(&self) -> RoundOutcome {
+        mm_assistant::batches::forget_finished(&*self.batches, &*self.clock).map(|_| None).map_err(|f| f.class)
     }
 }
