@@ -12,7 +12,11 @@
 mod fold;
 mod mime;
 mod parse;
+// A message of a few headers over a plain text: the export's, for a copy whose whole message was never fetched.
+mod plain;
 mod rfc822;
+
+pub use plain::{Header, plain_message};
 
 use std::collections::{BTreeSet, HashSet};
 

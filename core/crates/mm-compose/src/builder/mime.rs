@@ -13,6 +13,8 @@ pub(super) enum Value {
     Text(String),
     /// `AddressHeader`, from (display name, addr-spec) pairs.
     Addresses(Vec<(String, String)>),
+    /// `AddressHeader`, from the list as it was written.
+    AddressText(String),
     /// `MessageIDHeader`.
     MessageId(String),
     /// `ReferencesHeader`: In-Reply-To and References.
@@ -97,6 +99,8 @@ fn tree(value: &Value) -> Tok {
             parse::get_address_list(&decoded)
                 .unwrap_or_else(|()| Tok::list(Kind::AddressList, vec![Tok::value(decoded, "utext")]))
         }
+        Value::AddressText(text) => parse::get_address_list(text)
+            .unwrap_or_else(|()| Tok::list(Kind::AddressList, vec![Tok::value(text.clone(), "utext")])),
         Value::MessageId(id) => parse::parse_message_id(id),
         Value::MessageIds(ids) => parse::parse_message_ids(ids),
         Value::MimeVersion => Tok::list(
@@ -255,7 +259,7 @@ pub(super) fn quoted_printable(text: &str) -> String {
 }
 
 /// `quoprimime.body_encode(body, maxlinelen)`, over text whose lines end `\n`.
-fn body_encode(body: &[u8], maxlinelen: usize) -> String {
+pub(super) fn body_encode(body: &[u8], maxlinelen: usize) -> String {
     let mut translated = String::with_capacity(body.len());
     for &b in body {
         if b == b'\n' || b == b'\r' || b == b'\t' || ((b' '..=b'~').contains(&b) && b != b'=') {
