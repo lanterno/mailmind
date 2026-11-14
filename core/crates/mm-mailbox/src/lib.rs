@@ -58,7 +58,10 @@ pub mod arrival_ports;
 pub mod forgetting;
 // A plan a bulk command's preview froze, carried out.
 pub mod plans;
-// The body backfill: old mail's bodies fetched a little at a time, so it is full-text searchable.
+// The body backfill: old mail's bodies fetched a little at a time, so it is full-text searchable; and folders beyond
+// the Inbox warmed as a sync round ends, for the accounts asking.
 pub mod backfill;
 pub mod backfill_ports;
 pub mod body_backfill;
+pub mod warm;
+pub mod warm_ports;

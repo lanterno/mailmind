@@ -176,6 +176,9 @@ pub struct Account {
     pub alias: Option<String>,
     /// Its Trash folder: the entry's, or its type's (`accounts.trash_folder`).
     pub trash: String,
+    /// The entry says `"warm_folders": true`, asking for its Drafts, Archive and Sent to be synced with its INBOX,
+    /// which counts while MAILMIND_WARM_FOLDERS is unset.
+    pub warm_folders: bool,
 }
 
 impl Account {
@@ -217,6 +220,7 @@ impl Account {
                 Some(Value::String(t)) if !t.is_empty() => t.clone(),
                 _ => defaults(entry).trash.to_owned(),
             },
+            warm_folders: entry.get("warm_folders") == Some(&Value::Bool(true)),
         })
     }
 
