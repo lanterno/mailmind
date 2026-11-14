@@ -76,6 +76,8 @@ targets:
       - Tests
       - Sources/ListModel.swift
       - Generated/MailMindCore.swift
+      # The client over the core in this process
+      - Sources/Client
     dependencies:
       - framework: build/MailMindCore.xcframework
         embed: false
