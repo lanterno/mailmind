@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use mm_accounts::directory::Pin;
-use mm_accounts::ports::ConfigFile;
+use mm_accounts::ports::{ConfigFile, Variables};
 use mm_accounts::{Directory, tls_pin};
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Secret};
@@ -42,6 +42,15 @@ struct At(Moment);
 impl Clock for At {
     fn now(&self) -> Moment {
         self.0
+    }
+}
+
+#[derive(Debug)]
+struct Set(HashMap<String, String>);
+
+impl Variables for Set {
+    fn variable(&self, name: &str) -> Option<Secret> {
+        self.0.get(name).map(|value| Secret::new(value.clone()))
     }
 }
 
@@ -173,4 +182,28 @@ fn an_account_s_alias_is_what_its_entry_names_stripped_and_none_when_blank() {
     let mut unnamed = ada();
     unnamed.as_object_mut().unwrap().remove("alias");
     assert_eq!(mm_accounts::Account::from_entry(&unnamed).unwrap().alias, None);
+}
+
+#[test]
+fn a_credential_naming_a_variable_reads_it_from_the_environment_given() {
+    let mut env = ada();
+    env["credential"] = json!({"env": "ADA_PASSWORD"});
+    let (directory, _) = directory(json!([env]));
+    let variables = Set(HashMap::from([
+        ("ADA_PASSWORD".to_owned(), "app-password-1".to_owned()),
+        ("EMPTY".to_owned(), String::new()),
+    ]));
+    let directory = directory.reading_variables(Arc::new(variables));
+    let account = directory.get("ada@example.test").unwrap().unwrap();
+    assert_eq!(directory.password(&account).unwrap().expose(), "app-password-1");
+
+    for named in [json!("UNSET"), json!("EMPTY"), json!(null)] {
+        let mut env = ada();
+        env["credential"] = json!({"env": named});
+        let (directory, _) = self::directory(json!([env]));
+        let directory =
+            directory.reading_variables(Arc::new(Set(HashMap::from([("EMPTY".to_owned(), String::new())]))));
+        let account = directory.get("ada@example.test").unwrap().unwrap();
+        assert_eq!(directory.password(&account).unwrap_err(), Fault::new("NoCredential"), "{named}");
+    }
 }
