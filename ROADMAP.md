@@ -53,9 +53,9 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   `/api/debug/health` and `/api/debug/jobs`, which neither the page nor a served test calls. Twelve cleanup and RSVP tests wait on the body fetch
   when a message opens (#31). `just test-rust-all` says what passes.
 - **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — `mailmind-server` runs the change
-  queue's and the outbox's workers, and the snooze, sync, reconcile and draft-push rounds (`mm-server/src/workers.rs`); `mm-served` drives them one pass
-  at a time through its `work` line. Still to come: IDLE (an IDLE command and its interrupt in `mm-imap`, the
-  supervisor, and re-checking when an account changes), `warm_tick` (a per-account `warm_folders`), backfilling bodies,
+  queue's and the outbox's workers, the snooze, sync, reconcile and draft-push rounds, and IDLE's workers, one for
+  each account, which follow the accounts as they change (`mm-server/src/workers.rs`, `mm_mailbox::realtime`);
+  `mm-served` drives the rounds one pass at a time through its `work` line. Still to come: `warm_tick` (a per-account `warm_folders`), backfilling bodies,
   `forget`, loading 1Password credentials before the first sync, and the jobs of areas not yet ported (assess, draft
   ahead, the brief, the review, Tidy), which wait on those areas (#6). Expiry runs on a lane of its own. Each joins `Workers::start` as a `mm_mailbox::workers::Queue`
   or a timed lane.
