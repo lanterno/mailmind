@@ -239,6 +239,8 @@ impl App {
             filing: filing.clone(),
             stats: stats.clone(),
             store: Arc::new(mm_store::curation::CurationStore::new(database.clone(), seams.clock.clone())),
+            folders: folders.clone(),
+            events: mailbox_events.clone(),
         });
         let curation =
             crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone, curation_filing.clone());

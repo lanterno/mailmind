@@ -10,13 +10,15 @@ use mm_attention::snoozing::Snoozing;
 use mm_curation::cleanup_ports::NamedCopy;
 use mm_curation::screener::Screener;
 use mm_kernel::errors::{Failure, Fault};
+use mm_kernel::events::Topic;
 use mm_kernel::log;
 use mm_mailbox::filing::Filing;
+use mm_mailbox::folders::Folders;
 use mm_mailbox::stats::LiveStats;
-use mm_mailbox::sync_ports::AroundSync;
+use mm_mailbox::sync_ports::{AroundSync, Events, MailboxEvent};
 use mm_mailbox::undo::{Reversed, Reverser};
 use mm_store::curation::CurationStore;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::workers::Jobs;
 
@@ -32,14 +34,16 @@ impl mm_attention::ports::Flags for FilingFlags {
 }
 
 /// What Curation asks of the Mailbox (`bootstrap.curation`'s `_Filing`): a blocked sender's copy trashed with nothing
-/// for Undo; a cleanup's trashing, under its undo group, and the block's reversal on the undo stack beside it; and the
-/// counts let go once a rule moved them.
+/// for Undo; a cleanup's trashing, under its undo group, and the block's reversal on the undo stack beside it; the
+/// counts let go once a rule moved them; and what expiry moved on a server told as a reconcile's prune.
 #[derive(Debug)]
 pub(crate) struct CurationFiling {
     pub(crate) filing: Arc<Filing>,
     pub(crate) stats: Arc<LiveStats>,
     /// Where the undo stack is kept.
     pub(crate) store: Arc<CurationStore>,
+    pub(crate) folders: Arc<Folders>,
+    pub(crate) events: Arc<dyn Events>,
 }
 
 impl mm_curation::ports::Filing for CurationFiling {
@@ -62,6 +66,17 @@ impl mm_curation::ports::Filing for CurationFiling {
 
     fn stats_changed(&self) {
         self.stats.invalidate();
+    }
+
+    fn folders_changed(&self, account: &str, moved: usize) -> Result<(), Fault> {
+        self.stats.invalidate();
+        self.folders.invalidate(Some(account))?;
+        // The same refresh as a ghost prune: open lists drop the rows.
+        self.events.publish(MailboxEvent::Page {
+            topic: Topic::Reconcile,
+            data: json!({"account": account, "pruned": moved}),
+        });
+        Ok(())
     }
 }
 

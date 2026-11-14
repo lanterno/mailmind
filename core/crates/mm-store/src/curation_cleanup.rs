@@ -242,4 +242,26 @@ impl SweptRows for CurationStore {
             Ok(())
         })
     }
+
+    fn forget_expired(&self, account: &str, moved: &[(String, String)], stragglers: &[String]) -> Result<(), Fault> {
+        let now = self.clock.now().whole_seconds();
+        self.db.write(|c| {
+            for (uid, mid) in moved {
+                if mid.is_empty() || stragglers.contains(uid) {
+                    continue;
+                }
+                let pk: Option<i64> = c
+                    .query_row(
+                        "SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND message_id=?",
+                        params![account, mid],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                if let Some(pk) = pk {
+                    delete_message(c, pk, now)?;
+                }
+            }
+            Ok(())
+        })
+    }
 }

@@ -1,4 +1,4 @@
-//! A sender's cleanup, its unsubscribe and a sweep bound to their adapters (`bootstrap.curation`'s `_Filing`,
+//! A sender's cleanup, its unsubscribe, a sweep and expiry bound to their adapters (`bootstrap.curation`'s `_Filing`,
 //! `_ListHeaders`, `_Mailboxes`, `_SafeHttp` and `_SystemSend`): the filing the Screener files through, the Mailbox's
 //! servers, each account's gate, the confirm tokens under this run's secret, and Curation's store.
 //!
@@ -6,6 +6,7 @@
 //! mailto: wants the outbox. Each says it isn't ready, so a cleanup that would use one answers as not yet served
 //! before it changes anything.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,6 +16,7 @@ use mm_curation::cleaning::{Cleaning, CleaningParts};
 use mm_curation::cleanup_ports::{
     ConfirmTokens, Ids, ListHeaders, LiveError, LiveInboxes, LiveSession, SafeHttp, SweptAccount, SystemSend, UnsubRow,
 };
+use mm_curation::expiry::{Expiry, ExpiryParts};
 use mm_curation::sweeping::{Sweeps, SweepsParts};
 use mm_curation::unsubscribe::{Unsubscribing, UnsubscribingParts};
 use mm_kernel::errors::Fault;
@@ -186,8 +188,16 @@ impl LiveSession for ServerSession {
         self.0.search(Search::All).map_err(live)
     }
 
+    fn uids_from(&mut self, text: &str) -> Result<Vec<u32>, LiveError> {
+        self.0.search(Search::From(text)).map_err(live)
+    }
+
     fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
         Ok(self.0.headers(uids, fields, false).map_err(live)?.into_iter().map(|h| (h.uid, h.raw)).collect())
+    }
+
+    fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
+        self.0.arrivals(uids).map_err(live)
     }
 
     fn move_to(&mut self, uids: &[u32], dest: &str) -> Result<(), LiveError> {
@@ -225,17 +235,30 @@ impl LiveInboxes for AccountInboxes {
         }
     }
 
+    fn on_gate_unless_held(
+        &self,
+        account: &str,
+        job: &mut dyn FnMut() -> Result<Value, Fault>,
+    ) -> Result<Option<Value>, Fault> {
+        match on_gate(&*self.gates, account, Priority::Maintenance, Wait::Not, job) {
+            Ok(done) => done.map(Some),
+            Err(Refused::Busy) => Ok(None),
+            Err(Refused::Nested) => Err(Fault::new("Nested")),
+        }
+    }
+
     fn open(&self, account: &str) -> Result<Box<dyn LiveSession>, &'static str> {
         let server = self.servers.open(account, SESSION_TIMEOUT).map_err(ServerError::class)?;
         Ok(Box::new(ServerSession(server)))
     }
 }
 
-/// A sender's cleanup and a sweep, bound.
+/// A sender's cleanup, a sweep and expiry, bound.
 #[derive(Debug)]
 pub struct Cleanups {
     pub cleaning: Cleaning,
     pub sweeps: Sweeps,
+    pub expiry: Expiry,
 }
 
 /// What `Cleanups` is made of.
@@ -270,7 +293,16 @@ impl Cleanups {
             clock: clock.clone(),
             writes_allowed: !read_only,
         });
+        let boxes = Arc::new(AccountInboxes { directory, servers, gates });
         Cleanups {
+            expiry: Expiry::new(ExpiryParts {
+                rules: store.clone(),
+                boxes: boxes.clone(),
+                audit: store.clone(),
+                rows: store.clone(),
+                filing: filing.clone(),
+                clock: clock.clone(),
+            }),
             cleaning: Cleaning::new(CleaningParts {
                 rules: store.clone(),
                 classified: store.clone(),
@@ -284,7 +316,7 @@ impl Cleanups {
             }),
             sweeps: Sweeps::new(SweepsParts {
                 rules: store.clone(),
-                boxes: Arc::new(AccountInboxes { directory, servers, gates }),
+                boxes,
                 audit: store.clone(),
                 rows: store,
                 filing,

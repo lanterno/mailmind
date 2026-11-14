@@ -96,6 +96,9 @@ pub trait Filing: Send + Sync + fmt::Debug {
     fn undo_push(&self, entry: &Value, group: &str) -> Result<(), Fault>;
     /// What is stored was classified again: the counts the page shows have moved.
     fn stats_changed(&self);
+    /// `moved` messages left the account's INBOX on its server behind the store's back: the counts and the rail move,
+    /// and open lists hear it as a reconcile's prune.
+    fn folders_changed(&self, account: &str, moved: usize) -> Result<(), Fault>;
 }
 
 /// Whether a search can be judged of mail as it arrives: Discovery's to say.

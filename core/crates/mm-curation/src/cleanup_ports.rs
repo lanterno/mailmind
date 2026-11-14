@@ -1,8 +1,9 @@
-//! What a sender's cleanup, its unsubscribe and a sweep need of the world (`mailmind.curation.application.ports`): the
+//! What a sender's cleanup, its unsubscribe, a sweep and expiry need of the world (`mailmind.curation.application.ports`): the
 //! stored mail they read and Curation's own tables, the mail servers, the two ways an unsubscribe goes out, the sweep
 //! trail and the confirm tokens. The store and the program implement them; what they ask of the Mailbox's filing is
 //! Curation's `ports::Filing`.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use mm_kernel::errors::Fault;
@@ -152,8 +153,12 @@ pub trait LiveSession {
     fn select(&mut self, folder: &str, readonly: bool) -> Result<(), LiveError>;
     /// Every UID in the selected folder, in order.
     fn uids(&mut self) -> Result<Vec<u32>, LiveError>;
+    /// The UIDs in the selected folder whose From holds `text`, as the server matches it: a coarse filter.
+    fn uids_from(&mut self, text: &str) -> Result<Vec<u32>, LiveError>;
     /// These header fields of each message, in UID order: (uid, the fields as the server sent them).
     fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError>;
+    /// When each message arrived, as the server says (INTERNALDATE), in Unix seconds; one it doesn't say is left out.
+    fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError>;
     /// Move the UIDs to `dest`: one MOVE where the server offers it, else a checked copy, never a bulk EXPUNGE.
     fn move_to(&mut self, uids: &[u32], dest: &str) -> Result<(), LiveError>;
     /// Log out, or hang up where the connection failed.
@@ -167,12 +172,21 @@ pub trait LiveInboxes: Send + Sync + fmt::Debug {
     /// Run `job` on the account's gate, as interactive work, waiting its turn: what it answers, or a fault where the gate
     /// couldn't be had.
     fn on_gate(&self, account: &str, job: &mut dyn FnMut() -> Result<Value, Fault>) -> Result<Value, Fault>;
+    /// Run `job` on the account's gate as maintenance, unless someone holds it: None then, and `job` never ran.
+    fn on_gate_unless_held(
+        &self,
+        account: &str,
+        job: &mut dyn FnMut() -> Result<Value, Fault>,
+    ) -> Result<Option<Value>, Fault>;
     /// A logged-in session on the account's server, or the class of why there is none.
     fn open(&self, account: &str) -> Result<Box<dyn LiveSession>, &'static str>;
 }
 
-/// What a sweep leaves of the stored mail it moved.
+/// What a sweep and expiry leave of the stored mail they moved, each named by (UID, Message-ID).
 pub trait SweptRows: Send + Sync + fmt::Debug {
     /// Forget the stored INBOX rows of what moved, by Message-ID where it has one, else by UID; a straggler stays.
     fn forget_moved(&self, account: &str, moved: &[(String, String)], stragglers: &[String]) -> Result<(), Fault>;
+    /// Forget the stored INBOX rows of what expiry moved, by Message-ID alone (a UID may be another row's now): one
+    /// with none stays for the next reconcile, as a straggler does.
+    fn forget_expired(&self, account: &str, moved: &[(String, String)], stragglers: &[String]) -> Result<(), Fault>;
 }

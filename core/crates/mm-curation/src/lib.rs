@@ -10,6 +10,7 @@ pub mod classifier;
 pub mod cleaning;
 pub mod cleanup;
 pub mod cleanup_ports;
+pub mod expiry;
 pub mod filters;
 pub mod ports;
 pub mod rulebook;
