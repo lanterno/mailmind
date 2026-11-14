@@ -180,16 +180,19 @@ def readings(raw: bytes) -> tuple[dict, dict]:
 
 def sent_as_is(old: dict, new: dict) -> None:
     """An attached email (message/rfc822, message/global, a delivery report) comes as it was sent, where Python wrote out
-    again what it had parsed of it, with LF line ends and, for a delivery report, its first block alone. Its bytes and
-    its size are the core's own, then, and must hold Python's. `old` takes them, so everything else must be equal."""
+    again what it had parsed of it, with LF line ends, a lone CR's too, and, for a delivery report, its first block
+    alone. Its bytes and its size are the core's own, then, and must hold Python's. `old` takes them, so everything else
+    must be equal."""
     if len(old["parts"]) != len(new["parts"]):
         return
     for at, (was, now) in enumerate(zip(old["parts"], new["parts"], strict=True)):
+        # Every line end made LF, as Python wrote them: CRLF alone made LF would read `\r\r\n` as a CRLF.
+        as_python_wrote_it = re.sub(rb"\r\n?", b"\n", now[0])
         if was[1] in ("message/rfc822", "message/global") and was[1] == now[1]:
-            assert python_parse(now[0].replace(b"\r\n", b"\n")) == python_parse(was[0]), at      # the same email
+            assert python_parse(as_python_wrote_it) == python_parse(was[0]), at      # the same email
             old["parts"][at] = now
         elif was[1].startswith("message/") and was[1] == now[1]:
-            assert now[0].replace(b"\r\n", b"\n").startswith(was[0].strip(b"\n")), at
+            assert as_python_wrote_it.startswith(was[0].strip(b"\n")), at
             old["parts"][at] = now
     for was, now in zip(old["attachments"], new["attachments"], strict=False):
         if was["content_type"].startswith("message/") and was == {**now, "size": was["size"]}:
@@ -644,8 +647,16 @@ def test_a_hand_made_message_named_as_changed_reads_otherwise(name):
     assert new != old
 
 
+# A message Hypothesis found, held every run: an attached email whose file is a lone CR, which Python wrote out as LF.
+LONE_CR_IN_AN_ATTACHED_EMAIL = (
+    b'From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="b0"\r\n\r\n'
+    b"--b0\r\nContent-Type: message/rfc822\r\n\r\nFrom: Bo <bo@example.test>\r\nSubject: Inner\r\nContent-Type: multipart/mixed; "
+    b'boundary="b2"\r\n\r\n--b2\r\nContent-Type: application/pdf; name="a.pdf"\r\n\r\n\r\r\n--b2--\r\n\r\n--b0--\r\n')
+
+
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(messages())
+@example(LONE_CR_IN_AN_ATTACHED_EMAIL)
 def test_generated_messages_read_as_python_read_them(raw):
     assert_same(raw)
 
