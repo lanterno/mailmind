@@ -26,3 +26,7 @@ targets:
         # Only `just apple release` turns this on, so a debug build, `just apple build`'s, a test or a demo never asks
         # the network for an update.
         MAILMIND_CHECKS_FOR_UPDATES: "NO"
+        # The hardened runtime, and the entitlements it needs while the app is signed ad hoc, for a build Xcode signs.
+        # `just apple release` signs with the same (Release/release.sh).
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: Release/MailMind.entitlements

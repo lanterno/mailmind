@@ -79,3 +79,8 @@ icon:
     mkdir -p "{{out}}"
     xcrun swiftc -O "{{here}}/Icon/icon.swift" -o "{{out}}/icon"
     "{{out}}/icon" "{{here}}/Icon/Assets.xcassets"
+
+# The Mac app to hand to someone, into build/release: universal, signed ad hoc under the hardened runtime, in a .dmg,
+# with the appcast signed with the owner's update key. Prints the `gh release create` command; never publishes
+release:
+    "{{here}}/Release/release.sh"

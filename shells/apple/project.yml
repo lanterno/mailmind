@@ -17,7 +17,8 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "$(MARKETING_VERSION)"
     GENERATE_INFOPLIST_FILE: YES
-    # The core is built for arm64 only: Apple silicon Macs, the iOS simulator on them, and devices.
+    # The core is built for arm64 here: Apple silicon Macs, the iOS simulator on them, and devices. `just apple release`
+    # builds the Mac app for Intel Macs too.
     ARCHS: arm64
     INFOPLIST_KEY_CFBundleDisplayName: MailMind
     DEAD_CODE_STRIPPING: YES
