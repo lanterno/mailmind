@@ -76,12 +76,11 @@ served tests it passes against the same scripts. Until the flip, the Python app 
 - **Every change tells the page, the rest of it** · medium value · effort S · [#30](https://github.com/lanterno/mailmind/issues/30) — The Mailbox's,
   Attention's and Curation's changes reach the event stream under the Python app's names (`mm-server/src/heard.rs`),
   and `/api/stats` keeps its counts until one says they moved. The outbox's Sent, Failed and DraftCopyRemoved
-  are heard too. Still silent: CredentialsRejected and the account events, and `folder-synced` at the end of a folder's first scan
-  (which itself waits on the scan when a folder opens).
+  are heard too, and the logins hear CredentialsRejected and an account's edit or removal (`AccountsHeard`). Still silent:
+  `folder-synced` at the end of a folder's first scan (which itself waits on the scan when a folder opens).
 - **The sync's remaining parts** · medium value · effort M · [#31](https://github.com/lanterno/mailmind/issues/31) — `mm_mailbox::ingest` leaves out a person's
-  arrival filters (Curation's `arrival_flags`), the invite a message carries kept with its body, and holding back a login
-  a server refused (`accounts.logins`, with its `forget` on a retry). A move's folder catch-up (`Folders.touched`) and the
-  1Password preload aren't ported either.
+  arrival filters (Curation's `arrival_flags`) and the invite a message carries kept with its body. A move's folder
+  catch-up (`Folders.touched`) and the 1Password preload aren't ported either.
 - **One adapter for each port** · low value · effort S · [#32](https://github.com/lanterno/mailmind/issues/32) — The areas ported side by side left doubles: three
   readers of the rule book (`Database::rules_document`, `RulesDocument`, the Curation store's `RuleBook`), three ways of
   reading a POST's fields (`body::Fields`, `posted`, `schema`), two adapters naming the accounts (`wiring::KnownAccounts`,
@@ -97,10 +96,6 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   rewritten best-effort (about a third of 1,500 random cases differ from Python's bytes), encoded words a person typed
   are decoded only in UTF-8, ASCII or Latin-1, a few broken-MIME drafts reopen differently, and an original fetched to
   reply to isn't stored.
-- **The login hold on the Rust server** · high value · effort S · [#36](https://github.com/lanterno/mailmind/issues/36) — After a server refuses a login, the
-  Python app holds it back (five minutes, doubling to an hour: `accounts.domain.login_hold`) so a password gone bad
-  doesn't lock the account out. `mailmind-server` has no hold, and its workers now sync every five minutes. Port it into
-  `mm-accounts`, ask it before each session opens, and publish CredentialsRejected. Before the Rust server is used daily.
 - **The in-process browser tests on the Rust server** · medium value · effort M · [#10](https://github.com/lanterno/mailmind/issues/10) — `tests/e2e/browser/in_process/` patches
   the Python app's internals, so the ledger can't hold them. Each needs a way in through the Rust server's seams
   (`Clock`, `Outside`, `Keychain`), or a served test that states the same thing.
