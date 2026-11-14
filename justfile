@@ -36,6 +36,12 @@ dev port="": build-web
 run-fast port="": build-web
     MAILMIND_POOL=1 MAILMIND_WARM_FOLDERS=1 {{py}} -m mailmind serve {{port}}
 
+# Build the app and the Rust server, then run the Rust server on your data in place of the Python one (same port and
+# database; run one of them at a time). MAILMIND_PROFILE=read-only works as it does for `just dev`
+run-rust port="": build-web
+    cargo build -q --release --manifest-path core/Cargo.toml -p mm-server
+    core/target/release/mailmind-server {{port}}
+
 # ── checks ────────────────────────────────────────────────────────────────────
 
 # Everything a change should pass before committing
