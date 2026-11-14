@@ -989,6 +989,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mm-host"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "futures-core",
+ "mm-kernel",
+ "mm-server",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "mm-imap"
 version = "0.1.0"
 dependencies = [
