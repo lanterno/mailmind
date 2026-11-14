@@ -111,17 +111,9 @@ Python app gets fixes only.
   identifier is `io.github.lanterno.mailmind`; it is signed ad hoc until there is a Developer ID (#42), and updates
   through Sparkle from the repo's GitHub Releases. Windows and Linux keep the web shell unless their measurements (#12)
   miss a budget, with a GTK4 shell in Rust as Linux's fallback.
-- **The Mac app: the core in its own process** · high value · effort M · [#38](https://github.com/lanterno/mailmind/issues/38) — A host crate
-  assembles the `App` with its workers, its data in `~/Library/Application Support/io.github.lanterno.mailmind`, answers
-  a route in-process through the perimeter with no port open, and passes the event stream to a callback; `mm-ffi`
-  carries it to Swift, with Codable types generated from the OpenAPI document. With it, the window: a sidebar, the list
-  and the reader pane on real mail.
-- **The Mac app: Proton Bridge and the Claude key on the Rust core** · high value · effort S · [#39](https://github.com/lanterno/mailmind/issues/39) — The
-  Bridge's password, as `secrets.bridge_password` reads it (`Style::ProtonBridge` is refused today), and the Claude API
-  key set and cleared from the app into the login Keychain.
 - **The Mac app: every screen in SwiftUI** · high value · effort L · [#40](https://github.com/lanterno/mailmind/issues/40) — The mailbox and
-  search; reading and writing; settings and the first run; the assistant, curation, attention and the calendar. Waits on
-  #38 and #39.
+  search; reading and writing; settings and the first run; the assistant, curation, attention and the calendar, on the
+  window that runs the core in its own process (a sidebar, the list and the reader on real mail, today).
 - **The Mac app: packaging, updates and a first release** · high value · effort M · [#41](https://github.com/lanterno/mailmind/issues/41) — The owner's
   update-signing key, made once ([docs/releasing.md](docs/releasing.md): `just apple release` stops until its public
   half is in `shells/apple/Release/mac.yml`); notifications for new mail, the Dock badge, mailto:; then a first release
@@ -145,9 +137,8 @@ implementation.
 
 ## Next up
 
-1. **The native Mac app** (high) — the core in its own process (#38) and the Rust core's gaps (#39), with the packaging
-   (#41) beside them; then every screen (#40); then a first release to share (#41). It runs only the Rust core, so it
-   is also the owner's way into their two weeks on it.
+1. **The native Mac app** (high) — every screen (#40) on the window that now runs the core in its own process; then a
+   first release to share (#41). It runs only the Rust core, so it is also the owner's way into their two weeks on it.
 2. **The owner's two weeks on the Rust server** (high) — step 3 is done: every route the Python app answers is served
    there, the debug routes too, and a message whose body isn't stored opens. `just run-rust` starts them, in place of
    `just run`, and they end in the flip (#11), which waits on nothing else. `MAILMIND_WORKERS=account` (#3) can soak in

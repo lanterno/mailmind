@@ -560,7 +560,9 @@ automatically.
 
 ## The Mac app
 
-A native Mac app is being built over the Rust core (`shells/apple`). It has no release yet; when it has, it is a .dmg on
+A native Mac app is being built over the Rust core (`shells/apple`). It runs the whole of MailMind in its own process,
+with no port open, and so far shows your accounts and their folders, the list and the reader; the other screens are
+being built ([#40](https://github.com/lanterno/mailmind/issues/40)). It has no release yet; when it has, it is a .dmg on
 this repo's [Releases](https://github.com/lanterno/mailmind/releases) page, for macOS 26 or later on Apple silicon or
 Intel:
 
