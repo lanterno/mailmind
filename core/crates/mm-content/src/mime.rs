@@ -281,6 +281,7 @@ fn reading(raw: &[u8]) -> Reading<'_> {
 fn mend(raw: &[u8], message: &Message<'_>) -> Option<Vec<u8>> {
     let mut insertions = header_insertions(raw, message);
     insertions.extend(unread_tails(raw, message));
+    insertions.extend(lone_cr_delimiters(raw, message));
     // An empty boundary goes into each `--` line of its part's body, and ending a header block moves where that body
     // starts: those wait for the next pass, which reads the mended blocks.
     if insertions.is_empty() {
@@ -420,6 +421,48 @@ fn unread_tails(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
         }
     }
     insertions
+}
+
+/// The delimiter lines of the message's own multiparts that a lone CR ends, or comes just before. Python split a
+/// body's lines at CR, LF or CRLF, as it did a header block's, where mail-parser splits them at LF: a delimiter a lone
+/// CR ended took the line after it, and a part's headers with it, and one after a lone CR wasn't read at all, nor the
+/// part it opened. An LF goes in after each such CR. One cut off after its CR is [`unread_tails`]'s.
+fn lone_cr_delimiters(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
+    let mut insertions: Vec<Insertion> = Vec::new();
+    for part in message.root().parts() {
+        let (Some(boundary), Some(start)) = (part.boundary(), offset_in(raw, part.raw_body())) else { continue };
+        let body = part.raw_body();
+        let mut at = 0;
+        while let Some(rest) = body.get(at..).filter(|rest| !rest.is_empty()) {
+            let len = match rest.iter().position(|&byte| byte == b'\r' || byte == b'\n') {
+                Some(end) if rest.get(end..end + 2) == Some(b"\r\n") => end + 2,
+                Some(end) => end + 1,
+                None => rest.len(),
+            };
+            let line = rest.get(..len).unwrap_or_default();
+            if python_delimiter(line, boundary.as_bytes()) {
+                if at > 0 && body.get(at - 1) == Some(&b'\r') {
+                    insertions.push((start + at, b"\n"));
+                }
+                let end = start + at + len;
+                if line.ends_with(b"\r") && raw.get(end).is_some_and(|&byte| byte != b'\n') {
+                    insertions.push((end, b"\n"));
+                }
+            }
+            at += len;
+        }
+    }
+    insertions
+}
+
+/// Whether Python's parser read a line, with its line end, as a delimiter of this boundary, by its `boundaryendRE`:
+/// `--`, the boundary, `--` if it closes, then only blanks.
+fn python_delimiter(line: &[u8], boundary: &[u8]) -> bool {
+    let Some(rest) = line.strip_prefix(b"--").and_then(|rest| rest.strip_prefix(boundary)) else { return false };
+    let rest = rest.strip_suffix(b"\n").unwrap_or(rest);
+    let rest = rest.strip_suffix(b"\r").unwrap_or(rest);
+    let rest = rest.strip_prefix(b"--").unwrap_or(rest);
+    rest.iter().all(|&byte| byte == b' ' || byte == b'\t')
 }
 
 /// A boundary no sender writes, which stands in for an empty one.
