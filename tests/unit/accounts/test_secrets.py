@@ -101,6 +101,17 @@ def test_when_no_ref_reads_the_last_refusal_is_raised(op):
         secrets.resolve({"op": [OTHER, REF]}, who="ada")
 
 
+@pytest.mark.xfail(strict=True, reason="_op_read hands op whatever the credential names, and op takes one that starts "
+                                       "with a dash for an option: `--help` prints its help and ends well, and that "
+                                       "is kept as the password. The Rust server sends only a reference (op://...).")
+@pytest.mark.parametrize("named", ["--help", "-h"])
+def test_what_isnt_a_reference_is_never_sent_to_op(op, named):
+    fake = op({named: [(0, "op's help\n", "")]})
+    with pytest.raises(RuntimeError):
+        secrets.resolve({"op": named}, who="ada")
+    assert fake.asked == []
+
+
 # -- the Keychain ------------------------------------------------------------------------------------------------
 
 ADA = "account:ada@example.test"
