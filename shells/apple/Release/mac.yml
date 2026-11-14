@@ -1,8 +1,17 @@
 # The Mac app's packaging and updates, which project.yml includes: XcodeGen merges this into it, appending to its
 # lists. See docs/releasing.md.
 
+# Sparkle checks for and installs updates. Its binary comes with a checksum in its own manifest, so this exact
+# version always resolves to the same bytes.
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
+
 targets:
   MailMind-macOS:
     sources:
       # The icon Icon/icon.swift draws. A path here is from this file's folder.
       - path: ../Icon/Assets.xcassets
+    dependencies:
+      - package: Sparkle
