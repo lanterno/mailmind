@@ -130,3 +130,17 @@ tests/api/test_http_get.py::test_attachments
 tests/api/test_http_get.py::test_documents_and_cleanup
 tests/api/test_http_send.py::test_rsvp_to_an_invite
 tests/api/test_http_events.py::test_the_end_of_a_folders_first_scan_tells_the_open_tabs
+tests/api/test_http_filters.py::test_new_mail_that_fits_is_starred_and_the_server_hears
+tests/api/test_http_filters.py::test_mark_read_reaches_the_server
+tests/api/test_http_filters.py::test_two_filters_are_one_change
+tests/api/test_http_filters.py::test_words_are_found_in_the_message_just_stored
+tests/api/test_http_filters.py::test_a_negated_clause_counts
+tests/api/test_http_filters.py::test_a_kind_of_mail_can_be_named
+tests/api/test_http_filters.py::test_a_filter_can_mark_junk_read
+tests/api/test_http_filters.py::test_mail_that_doesnt_fit_asks_nothing
+tests/api/test_http_filters.py::test_flags_it_came_with_ask_nothing
+tests/api/test_http_filters.py::test_only_what_it_lacks_is_asked
+tests/api/test_http_filters.py::test_another_folder_isnt_arrival
+tests/api/test_http_filters.py::test_mail_seen_before_isnt_new
+tests/api/test_http_filters.py::test_a_message_brought_back_by_undo_isnt_new
+tests/api/test_http_filters.py::test_a_later_sync_doesnt_take_the_mark_back
