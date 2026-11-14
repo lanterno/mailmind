@@ -200,6 +200,26 @@ const ATTACKS: &[&str] = &[
     "<form><template><form></template></form><iframe src='https://e.example.test/'></iframe>",
     "<button><svg><foreignObject><style></button><img src=x onerror=alert(1)></style>",
     "<form><style></form><img src=x onerror=alert(1)></style></form><object data=x></object>",
+    // What a browser shows of a dropped element: a <noscript>'s, an <object>'s fallback, an unclosed <xml>'s, and
+    // the HTML it breaks out of an <svg> or <math> to show.
+    "<noscript><script>alert(1)</script><img src=x onerror=alert(1)><a href='javascript:alert(1)'>x</a></noscript>",
+    "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></p></noscript>",
+    "<noscript><style>@import url(https://e.example.test/i.css);</style><iframe src='https://e.example.test/'>",
+    "<object data='javascript:alert(1)'><embed src='javascript:alert(1)'><param name=movie value=x.swf>fb</object>",
+    "<object data=x><iframe srcdoc='<script>alert(1)</script>'></iframe><form action='https://e.example.test/'>",
+    "<object data=x><svg onload=alert(1)><script>alert(1)</script></svg><img src=x onerror=alert(1)></object>",
+    "<xml><script>alert(1)</script><img src=x onerror=alert(1)><a href='javascript:alert(1)'>x</a>",
+    "<xml><img src=x onerror=alert(1)></xml><img src=x onerror=alert(1)>",
+    "<xml><style></xml><img src=x onerror=alert(1)></style>",
+    "<xml><svg><style></xml><img src=x onerror=alert(1)></style>",
+    "<svg><p><img src=x onerror=alert(1)><a href='javascript:alert(1)'>x</a></p></svg>",
+    "<svg></p><style><a id=\"</style><img src=1 onerror=alert(1)>\">",
+    "<math><b><style><img src=x onerror=alert(1)></style><script>alert(1)</script></b></math>",
+    "<svg><font color='expression(alert(1))' onmouseover=alert(1)>x</font>",
+    "<svg><table><tr><td background='http://evil/o.gif' onclick=alert(1)>x</td></tr></table>",
+    "<math><annotation-xml encoding=text/html><p><img src=x onerror=alert(1)></p></annotation-xml></math>",
+    "<form><svg><p>x</p><input name=p></form><img src=x onerror=alert(1)>",
+    "<button><svg></p><button onclick=alert(1)>x</button></svg></button>",
 ];
 
 #[test]
@@ -226,8 +246,9 @@ fn nothing_of_a_dropped_element_is_shown() {
         ("<base href='http://evil/'>b", false, true, "b", [0, 0, 0]),
         ("<meta http-equiv=refresh content='0;url=evil'>b", false, true, "b", [0, 0, 0]),
         ("<template><p>t</p></template>after", false, true, "after", [0, 0, 0]),
-        ("<noscript><p>n</p></noscript>after", false, true, "after", [0, 0, 0]),
-        ("<object data='x'><p>o</p></object>after", false, true, "after", [0, 0, 0]),
+        // A browser shows a <noscript>'s content and an <object>'s fallback, but these hide it (see below).
+        ("<noscript hidden><p>n</p></noscript>after", false, true, "after", [0, 0, 0]),
+        ("<object type='image/png'><p>o</p></object>after", false, true, "after", [0, 0, 0]),
         ("<select><option>o</option></select>after", false, true, "after", [0, 0, 0]),
         ("<button>b</button>after", false, true, "after", [0, 0, 0]),
         ("<form><input value=x>f</form>after", false, true, "after", [0, 0, 0]),
@@ -487,6 +508,179 @@ fn a_form_button_or_select_nests_behind_a_wall() {
         // Only an <svg>'s <title> is one, and only a <math>'s <mi>.
         ("<button><svg><mi></button>after", "after"),
         ("<button><math><title></button>after", "after"),
+    ]);
+}
+
+/// The frame runs no script, so a browser shows what a `<noscript>` holds, and the sanitizer unwraps it. Python
+/// dropped it with all it held.
+#[test]
+fn a_noscript_shows_what_it_holds() {
+    shows(&[
+        ("<noscript><p>n</p></noscript>after", "<p>n</p>after"),
+        ("<p>a<noscript>n</noscript>b</p>", "<p>anb</p>"),
+        ("<noscript><noscript>a</noscript>b</noscript>c", "abc"),
+        ("<noscript title=t><b>n</b></noscript>", "<b>n</b>"),
+        // Through the same allowlist.
+        ("<noscript><form action='https://e.example.test/'><input name=p>f</form>n</noscript>", "n"),
+        (
+            "<noscript><style>p{color:red}</style><iframe src='https://e.example.test/'></iframe>n</noscript>",
+            "<style>p{color:red}</style>n",
+        ),
+        // It holds markup, so its end tag in a value ends nothing.
+        (
+            "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\"></p></noscript>",
+            "<p title=\"&lt;/noscript&gt;&lt;img src=x onerror=alert(1)&gt;\"></p>",
+        ),
+        // Unwrapped, one would lose what may hide it, so it stays dropped.
+        ("<noscript hidden><p>n</p></noscript>after", "after"),
+        ("<noscript style='color:red'><p>n</p></noscript>after", "after"),
+    ]);
+    holds(&[(
+        "<noscript><script>alert(1)</script><img src=x onerror=alert(1)><a href='javascript:alert(1)'>x</a></noscript>",
+        false,
+        true,
+        "<img/><a>x</a>",
+        [0, 1, 0],
+    )]);
+}
+
+/// The frame's policy loads no object, so a browser shows an `<object>`'s fallback in its place, and the sanitizer
+/// unwraps it. Python dropped it with all it held. Chromium shows the fallback of each unwrapped here.
+#[test]
+fn an_objects_fallback_shows_where_a_browser_shows_it() {
+    shows(&[
+        ("<object data='x'><p>o</p></object>after", "<p>o</p>after"),
+        ("<object><p>no data</p></object>after", "<p>no data</p>after"),
+        (
+            "<object data='https://e.example.test/x.swf' type='application/x-shockwave-flash'>\
+             <param name=movie value=x.swf><embed src=x.swf><p>fb</p></object>after",
+            "<p>fb</p>after",
+        ),
+        ("<object data='cid:part1'>fb</object>z", "fbz"),
+        ("<object data='javascript:alert(1)'>fb</object>z", "fbz"),
+        ("<object data=' DATA:text/html,x'>fb</object>z", "fbz"),
+        ("<object data='blob:x'>fb</object>z", "fbz"),
+        ("<object data='?x'>fb</object>z", "fbz"),
+        ("<object data=''>fb</object>z", "fbz"),
+        ("<object classid='clsid:D27CDB6E-AE6D-11cf-96B8-444553540000'>fb</object>z", "fbz"),
+        ("<object data=x><object data=y>inner</object>outer</object>z", "innerouterz"),
+        ("<object data=x><object type=image/png>inner</object>outer</object>z", "outerz"),
+        ("<object data=x><p>fb", "<p>fb"),
+        // Through the same allowlist.
+        ("<object data=x><iframe src='https://e.example.test/'></iframe><script>alert(1)</script>fb</object>z", "fbz"),
+        ("<object data=x><form action='https://e.example.test/'><button>go</button></form>fb</object>z", "fbz"),
+    ]);
+    // An image shows in an object's place, and an about: page or the document's own address with a fragment in a
+    // frame of its own. The sanitizer keeps any image type dropped, and any scheme but those it names, though
+    // Chromium shows the fallback of a remote image, an image/svg+xml, a file: and an ftp: one. Unwrapped, an object
+    // would lose what may hide it.
+    shows(&[
+        ("<object type='image/png'>fb</object>z", "z"),
+        ("<object type='IMAGE/GIF' data='https://e.example.test/x.gif'>fb</object>z", "z"),
+        ("<object type='image/svg+xml'>fb</object>z", "z"),
+        ("<object type=image/png><object data=y>inner</object>outer</object>z", "z"),
+        ("<object data='about:blank'>fb</object>z", "z"),
+        ("<object data=' ABOUT:blank'>fb</object>z", "z"),
+        ("<object data='#x'>fb</object>z", "z"),
+        ("<object data='file:///x'>fb</object>z", "z"),
+        ("<object data='ftp://e.example.test/x'>fb</object>z", "z"),
+        ("<object data='x' hidden>fb</object>z", "z"),
+        ("<object data='x' style='display:none'>fb</object>z", "z"),
+    ]);
+}
+
+/// A browser shows what an `<xml>` holds, as any element's. Python dropped it with all it held, and the sanitizer
+/// still drops a closed one, an Office document's settings that show as stray words, but one left unclosed held the
+/// rest of the message, which now shows: what it holds is written as it comes, and taken back at its end tag.
+#[test]
+fn an_xml_left_unclosed_shows_the_rest_of_the_message() {
+    shows(&[
+        ("<xml>abc", "abc"),
+        ("<xml>a<xml>b</xml>c", "abc"),
+        ("<xml>a<xml hidden>b</xml>c", "ac"),
+        ("<xml><blockquote>q</blockquote>", "<blockquote>q</blockquote>"),
+        // Raw text holds the end tag.
+        ("<xml>a<script>x</xml></script>b", "ab"),
+        // Closed, by Python's count of its tag, it is dropped with all it holds.
+        ("<xml>abc</xml>def", "def"),
+        ("<xml><o:p>96</o:p></xml>def", "def"),
+        ("<xml>a<xml>b</xml>c</xml>d", "d"),
+        ("<xml>a<div></xml>b", "b"),
+        ("<xml>a<svg></xml>b", "b"),
+        ("<xml><style>p{color:red}</style>a</xml>b", "b"),
+        ("<xml><form>f</xml>b", "b"),
+        // Unwrapped, one would lose what may hide it, so it stays dropped.
+        ("<xml hidden>abc", ""),
+        ("<xml style='display:none'>abc", ""),
+    ]);
+    // What it held is taken back with what it counted, and the fold it opened.
+    let folded = |before: &str, quoted: &str| format!("{before}{FOLD_OPEN}{quoted}{FOLD_CLOSE}");
+    let held = "<xml><img src='https://e.example.test/x.png'><a href=javascript:x>l</a>\
+                <p style='background:url(https://e.example.test/b.png)'>p</p>";
+    holds(&[
+        (&format!("{held}</xml>after"), false, true, "after", [0, 0, 0]),
+        (&format!("{held}after"), false, true, "<img/><a>l</a><p>p</p>after", [1, 1, 1]),
+        ("<p>a</p><xml><blockquote>q</blockquote></xml>b", false, true, "<p>a</p>b", [0, 0, 0]),
+        (
+            "<p>a</p><xml><blockquote>q</blockquote>b",
+            false,
+            true,
+            &folded("<p>a</p>", "<blockquote>q</blockquote>b"),
+            [0, 0, 0],
+        ),
+    ]);
+}
+
+/// A browser breaks out of an `<svg>` or `<math>` at a paragraph, a table, a line break, text in bold and the like,
+/// and shows that HTML and what follows it. Python dropped all to the `</svg>` or `</math>` that balanced its count.
+/// Chromium shows what each writes here once its svgs and maths are taken out.
+#[test]
+fn html_breaks_out_of_an_svg_or_math() {
+    shows(&[
+        ("<svg><p>x</p></svg>after", "<p>x</p>after"),
+        ("<math><div>x</div></math>after", "<div>x</div>after"),
+        ("<svg>hidden<b>x</b>after", "<b>x</b>after"),
+        ("<svg><g><p>x", "<p>x"),
+        ("<svg><svg><p>x</p></svg>y</svg>z", "<p>x</p>yz"),
+        ("<svg><math><p>x</p>", "<p>x</p>"),
+        ("<svg><desc></desc><p>x</p>", "<p>x</p>"),
+        ("<svg><head>x", "x"),
+        ("<svg><table><tr><td>x</td></tr></table>y", "<table><tr><td>x</td></tr></table>y"),
+        ("<math><mtext>t</mtext><b>x</b>", "<b>x</b>"),
+        // A <font> breaks out with a color, face or size.
+        ("<svg><font color=red>x</font>after", "<font color=\"red\">x</font>after"),
+        ("<svg><FONT SIZE=3>x</font>after", "<font>x</font>after"),
+        ("<svg><font>x</font>after", ""),
+        // So does a </p> or </br>: a browser reads the one as <p></p>, the other as <br>.
+        ("<svg></p>x", "</p>x"),
+        ("<svg></br>x", "x"),
+        // An <annotation-xml> that isn't an integration point is closed with the <math>.
+        ("<math><annotation-xml><svg><p>x</p></svg></annotation-xml></math>z", "<p>x</p>z"),
+        // Raw text again, as HTML's.
+        ("<svg><p><style>p{color:red}</style>x", "<p><style>p{color:red}</style>x"),
+        ("<svg><style><img src=x onerror=alert(1)></style></svg>", "<img/>"),
+        ("<svg></p><style><a id=\"</style><img src=1 onerror=alert(1)>\">", "</p><img/>\"&gt;"),
+        // In a dropped form, button or select, the HTML is theirs, and their end tag ends them.
+        ("<form><svg><p>hi</p></form>after", "after"),
+        ("<form><svg><b>x</b></svg></form>after", "after"),
+        ("<button><svg><p>hi</p></button>after", "after"),
+        ("<button><svg></p></button>after", "after"),
+        ("<select><svg><p>p</p></select>after", "after"),
+    ]);
+    // In an integration point the HTML is the svg's or math's, which the sanitizer doesn't follow: it keeps to the end
+    // tag, as Python did. Chromium shows nothing of either here but what follows the end tag.
+    shows(&[
+        ("<svg><foreignObject><p>x</p></foreignObject></svg>after", "after"),
+        ("<svg><title><p>x</p></title></svg>z", "z"),
+        ("<math><mi><p>x</p></mi></math>after", "after"),
+        ("<math><annotation-xml encoding=text/html><p>x</p></annotation-xml></math>z", "z"),
+        ("<button><svg><foreignObject><svg><p>x</button>after", ""),
+        // yz: the <p> breaks out of the inner <svg> into the <foreignObject>, and the outer </svg> ends the outer.
+        ("<svg><foreignObject><svg><p>x</p></svg>y</foreignObject></svg>z", "z"),
+    ]);
+    holds(&[
+        ("<math><b><a href='javascript:alert(1)'>x</a></b>", false, true, "<b><a>x</a></b>", [0, 1, 0]),
+        ("<svg><img src='https://e.example.test/x.png' onerror=alert(1)>", false, true, "<img/>", [1, 0, 0]),
     ]);
 }
 
