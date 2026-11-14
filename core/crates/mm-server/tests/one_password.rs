@@ -3,8 +3,8 @@
 //! or an unanswered prompt tried again after a pause, three times at most, and nothing op says in a fault; op found
 //! only in an absolute folder PATH names, and never started when the tripwire refuses it or the reference isn't one.
 //! Then the app over it: an account whose password is a 1Password reference logging in with it, read once a process
-//! until its credential changes; and the Claude API key as one. No test starts the real op: the PATH it is looked for
-//! in is the test's own.
+//! until its credential changes; the Claude API key as one; and the sync's first round reading them ahead. No test
+//! starts the real op: the PATH it is looked for in is the test's own.
 
 #![cfg(unix)]
 #![allow(clippy::unwrap_used)]
@@ -21,6 +21,7 @@ use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret, Tripped};
 use mm_server::environment::{Environment, Settings};
 use mm_server::one_password::OpCli;
+use mm_server::workers::Workers;
 use mm_server::{App, Seams};
 use rcgen::{CertificateParams, KeyPair};
 use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -359,6 +360,14 @@ fn object(value: Value) -> Map<String, Value> {
     }
 }
 
+fn until(what: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while !what() {
+        assert!(Instant::now() < deadline, "it never came");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
 #[test]
 fn an_account_whose_password_is_in_1password_logs_in_with_it_read_once_until_its_credential_changes() {
     let imap = Imap::start();
@@ -400,4 +409,25 @@ fn the_claude_api_key_can_be_a_1password_reference_and_wins_over_the_environment
     let unread = json!({"accounts": [], "anthropic_api_key": {"op": "op://Tests/Unread/credential"}});
     let w = world(unread, &[("ANTHROPIC_API_KEY", "sk-ant-from-the-environment")]);
     assert_eq!(w.app.assistant.status.report().unwrap()["engine"], json!("none"));
+}
+
+#[test]
+fn the_syncs_first_round_reads_each_1password_credential_ahead() {
+    // Nothing listens at Ada's server, so no login reads her password: only the round ahead does.
+    let closed = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let w = world(json!({"accounts": [ada_at(closed, json!({"op": "op://Tests/Warm/password"}))]}), &[]);
+    let workers = Workers::start(&w.app, false, 0, 0);
+    until(|| started("op://Tests/Warm/password") == 1);
+    workers.stop();
+    assert_eq!(started("op://Tests/Warm/password"), 1);
+}
+
+#[test]
+fn a_process_that_only_reads_reads_nothing_ahead() {
+    let closed = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let w = world(json!({"accounts": [ada_at(closed, json!({"op": "op://Tests/Idle/password"}))]}), &[]);
+    let workers = Workers::start(&w.app, true, 0, 0);
+    std::thread::sleep(Duration::from_millis(300));
+    workers.stop();
+    assert_eq!(started("op://Tests/Idle/password"), 0);
 }
