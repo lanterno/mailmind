@@ -722,6 +722,13 @@ UNCLOSED_BOUNDARY = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\n
 CUT_AT_A_BARE_FILENAME = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: Ada Lin <ada@example.test>, "
                           b"Ada Lin <bo.lin@mail.example.test>\r\nDate: Sat, 01 Jan 2000 00:00:00 +0000\r\nContent-Type: text/plain; "
                           b'format=flowed; delsp=yes; name="=?utf-8?Q?invite=2Eics?="\r\nContent-Disposition: inline; filename')
+# And a delimiter a lone CR ends, with a NUL after it, which Python read as a delimiter, then a part whose first line
+# is the NUL, as the core does now.
+DELIMITER_ENDED_BY_A_LONE_CR = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: Ada Lin "
+                                b'<ada@example.test>, =?utf-8?B?5pel5pys?= <ada@studio.example.test>, "Quoted Name" '
+                                b"<desk@studio.example.test>\r\nReply-To: =?utf-8?B?5pel5pys?= <x+tag@studio.example.test>\r\n"
+                                b'Content-Type: multipart/related; boundary="=_part_0"\r\n\r\n--=_part_0\r\x00\nContent-Type: '
+                                b"text/plain\r\n\r\n\r\n--=_part_0--\r\n")
 
 
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -730,6 +737,7 @@ CUT_AT_A_BARE_FILENAME = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatche
 @example(CLOSE_CUT_TO_ONE_DASH)
 @example(UNCLOSED_BOUNDARY)
 @example(CUT_AT_A_BARE_FILENAME)
+@example(DELIMITER_ENDED_BY_A_LONE_CR)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
     body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
