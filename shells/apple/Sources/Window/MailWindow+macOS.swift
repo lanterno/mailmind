@@ -26,89 +26,15 @@ struct MailWindow: View {
                                    description: Text(why))
         case .open:
             NavigationSplitView {
-                Sidebar(app: app)
+                // The mailbox's sidebar and list (Mac/Mailbox).
+                MailboxSidebar(app: app, mailbox: app.mailbox)
                     .navigationSplitViewColumnWidth(min: 180, ideal: 220)
             } content: {
-                ListColumn(app: app)
+                MailboxColumn(app: app, mailbox: app.mailbox)
                     .navigationSplitViewColumnWidth(min: 300, ideal: 380)
             } detail: {
                 ReaderPane(reader: app.reader)
             }
-        }
-    }
-}
-
-/// Every account's Inbox, then each account with its folders, as `/api/accounts` and `/api/folders` say.
-private struct Sidebar: View {
-    @Bindable var app: MailApp
-
-    var body: some View {
-        List(selection: $app.place) {
-            Label("All Inboxes", systemImage: "tray.2")
-                .tag(Place.allInboxes)
-            ForEach(app.accounts, id: \.email) { account in
-                if let email = account.email {
-                    Section(account.alias.flatMap { $0.isEmpty ? nil : $0 } ?? email) {
-                        ForEach(app.folders[email] ?? [], id: \.name) { folder in
-                            Label(folder.name, systemImage: Self.symbol(folder.role))
-                                .badge(folder.unseen)
-                                .tag(Place.folder(account: email, folder: folder.name))
-                        }
-                    }
-                }
-            }
-        }
-        .listStyle(.sidebar)
-    }
-
-    /// A folder's symbol by the part it plays, which the server names.
-    private static func symbol(_ role: String) -> String {
-        switch role {
-        case "inbox": "tray"
-        case "sent": "paperplane"
-        case "drafts": "doc"
-        case "archive": "archivebox"
-        case "trash": "trash"
-        case "junk", "spam": "xmark.bin"
-        default: "folder"
-        }
-    }
-}
-
-/// The list the sidebar chose: a native table with one row height, over the route the page lists mail with.
-private struct ListColumn: View {
-    let app: MailApp
-
-    var body: some View {
-        Group {
-            if let list = app.list {
-                MessageTable(model: list, choose: { app.choose($0) })
-                    .id(app.place)
-                    .overlay { ListState(list: list) }
-            } else {
-                ContentUnavailableView("Choose a mailbox", systemImage: "tray")
-            }
-        }
-        .navigationTitle(title)
-    }
-
-    private var title: String {
-        app.mailbox.title
-    }
-}
-
-/// What the list says when it has no rows to show.
-private struct ListState: View {
-    let list: MailListModel
-
-    var body: some View {
-        if let problem = list.problem, list.total == 0 {
-            ContentUnavailableView("This list couldn't be read", systemImage: "exclamationmark.triangle",
-                                   description: Text(problem))
-        } else if list.firstRowsAt == nil {
-            ProgressView()
-        } else if list.total == 0 {
-            ContentUnavailableView("No mail", systemImage: "tray")
         }
     }
 }

@@ -11,6 +11,10 @@ final class HomeMeasure {
 
     func watch(_ app: MailApp) async {
         guard measuring else { return }
+        #if os(macOS)
+        // A demo home's mail has no AI verdicts yet, so nothing needs you: the Inbox shows Everything.
+        app.mailbox.tab = .all
+        #endif
         let started = ContinuousClock.now
         while ContinuousClock.now - started < .seconds(60) {
             if let list = app.list, list.total > 0, list.row(at: 0) != nil {
