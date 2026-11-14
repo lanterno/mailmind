@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 from mailmind.mailbox.domain import threading
@@ -220,6 +220,10 @@ copy = st.tuples(pk, own_id, st.one_of(st.none(), st.sampled_from(THRIDS)), head
                  st.one_of(st.none(), st.sampled_from(THREADS), st.text(max_size=6)), folder, ts)
 long_copy = st.tuples(pk, own_id, st.none(), headers, forged, st.one_of(st.none(), st.sampled_from(THREADS)), folder, ts)
 copies = st.lists(st.one_of(copy, copy, copy, copy, copy, copy, copy, copy, copy, long_copy), max_size=12)
+# A sync's arrivals as the store hands them over: each a row of its own. Two arrivals with one pk and different
+# fields can't be placed at all (`given` keeps one place a pk), so a property of where they go leaves them out.
+arrivals = st.lists(st.one_of(copy, copy, copy, copy, copy, copy, copy, copy, copy, long_copy), max_size=12,
+                    unique_by=lambda row: row[0])
 
 name = st.one_of(st.sampled_from(IDS + NOBODY + [f"gm:{t.strip()}" for t in THRIDS if t.strip()]), st.text(max_size=6))
 tid = st.one_of(st.sampled_from(THREADS), st.text(max_size=6))
@@ -287,7 +291,10 @@ def absorbs_nothing_it_keeps(placed):
 
 
 @CASES
-@given(account, copies, touching, copies)
+@given(account, arrivals, touching, copies)
+@example(who=A, touched={}, members=[(3, None, "1781", None, None, "gm:elsewhere", "INBOX", 0)],
+         arrivals=[(1, None, None, None, None, f"gm:{A}:1781", "INBOX", None), (4, None, "2001", None, None, None, "INBOX", None),
+                   (2, None, "1799", None, None, "gm:elsewhere", "INBOX", None)])
 def test_a_sync_absorbs_no_id_it_keeps(who, arrivals, touched, members):
     threader = threading.Threader(who)
     new, new_members = both(arrivals)[1], both(members)[1]
