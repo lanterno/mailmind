@@ -112,6 +112,12 @@ class Served(AppClient):
         """What the server's own checks refused since the last check (a schema it broke, the tripwire) fails the test."""
         self.ask("check")
 
+    def unsanitized(self, on=True):
+        """From now on the bodies the reader and its frame show come back as they were given, as if the sanitizer had
+        missed everything, and say an image was held back; `on=False` sanitizes them again. The frame's sandbox and its
+        document's policy are the boundary, and this shows they hold alone. A restart sanitizes them again."""
+        self.ask("unsanitized " + ("on" if on else "off"))
+
     def stop(self):
         if self.proc is None:
             return

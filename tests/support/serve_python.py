@@ -22,9 +22,15 @@ each with one line:
                         low-priority mail, for someone who turned Tidy by itself on)
     settle              ok once work the requests started has ended; `busy <what>` after 30 seconds
     check               ok, or `problems <JSON list>`: what its own checks refused since the last check
+    unsanitized on|off  ok: from now on the bodies the reader and its frame show (`/api/message/body`, `body.html`)
+                        come back as they were given, as if the sanitizer had missed everything, and say an image was
+                        held back, so the reader offers to load them; `off` sanitizes them again. The frame's sandbox
+                        and its document's policy are the boundary, so a test takes the sanitizer away to show they
+                        hold alone
     (end of input)      it stops and exits
 
-Test hooks live here and never in the app: the frozen clock, the tripwire and the schema checks are this program's.
+Test hooks live here and never in the app: the frozen clock, the tripwire, the schema checks and the sanitizer taken
+away are this program's.
 The app runs as `serve` runs it, without the workers that would sync and sweep on their own, so an answer depends only on
 what the suite sends: requests, and a worker's pass when it says (`work`).
 """
@@ -61,6 +67,19 @@ def settle(before, timeout=30):
             t._started.wait(max(0.0, deadline - time.monotonic()))
             t.join(max(0.0, deadline - time.monotonic()))
     return []
+
+
+def unsanitized(patches, on):
+    """The reader's bodies with the sanitizer taken away (`on`), or given back. Only where `Bodies` sanitizes, as the
+    Rust server's seam is: a reply or a forward going out still goes through it."""
+    from types import SimpleNamespace
+
+    from mailmind.content import sanitize
+    from mailmind.mailbox.application import bodies
+
+    def missed_everything(html, load_images=False, fold=True):
+        return html, {"blocked_images": 1, "blocked_css_urls": 0}
+    patches.setattr(bodies, "sanitize", SimpleNamespace(sanitize=missed_everything) if on else sanitize)
 
 
 def jobs():
@@ -126,6 +145,12 @@ def main():
                     schema_contract.violations.clear()
                     guard.violations.clear()
                     answer = "problems " + json.dumps(found) if found else "ok"
+                elif command == "unsanitized":
+                    if argument in ("on", "off"):
+                        unsanitized(patches, argument == "on")
+                        answer = "ok"
+                    else:
+                        answer = "failed unsanitized: on or off"
                 else:
                     answer = f"unknown command {command!r}"
                 print(answer, file=protocol, flush=True)
