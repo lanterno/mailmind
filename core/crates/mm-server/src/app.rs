@@ -154,10 +154,14 @@ impl App {
         crate::database_version::ready(&database, &*seams.clock)?;
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
+        let gates: Arc<dyn Gates> = Arc::new(AccountGates::new(environment.gate_per_account()));
         // The Assistant's: every AI call, and how AI stands, which the digest says.
         let assistant = crate::assistant_wiring::Assistant::assemble(
             crate::assistant_wiring::Parts {
                 database: database.clone(),
+                accounts: Arc::new(KnownAccounts(directory.clone())),
+                servers: Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() }),
+                gates: gates.clone(),
                 config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
                 keychain: seams.keychain.clone(),
                 outside: seams.outside.clone(),
@@ -189,7 +193,6 @@ impl App {
         let stats =
             Arc::new(LiveStats::new(Arc::new(ListedAccounts(directory.clone())), Arc::new(plans), seams.clock.clone()));
         let labels = Labels::new(database.clone());
-        let gates: Arc<dyn Gates> = Arc::new(AccountGates::new(environment.gate_per_account()));
         // What the Mailbox and Attention say happened, told to the open tabs.
         let heard = Arc::new(Heard { hub: events.clone(), stats: stats.clone(), folders: folders.clone() });
         let mailbox_events: Arc<dyn Events> = heard.clone();

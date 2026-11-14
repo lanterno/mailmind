@@ -11,7 +11,7 @@
 //! `mailmind.config.json` and `page` the page's build. Every file goes through `Outside` before it is opened.
 
 // What the Assistant reads: what calls cost.
-mod assistant;
+pub mod assistant;
 // Attention's: snoozes, mutes, follow-ups, Reply Later and tasks.
 pub mod attention;
 // What the contexts' adapters share: the documents a context keeps whole and the undo stack.

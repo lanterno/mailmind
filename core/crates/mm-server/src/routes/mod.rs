@@ -35,6 +35,8 @@ mod tidy;
 mod cleanup;
 // The calendar's: Today & next, an answer to an invite and an event file.
 mod calendar;
+// The Assistant's: everything asked of Claude.
+mod assistant;
 
 use std::sync::Arc;
 
@@ -72,6 +74,8 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(cleanup::routes())
         // The calendar's: Today & next, an answer to an invite and an event file.
         .merge(calendar::routes())
+        // The Assistant's.
+        .merge(assistant::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)

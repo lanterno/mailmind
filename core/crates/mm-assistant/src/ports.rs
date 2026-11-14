@@ -160,3 +160,124 @@ pub trait UsageLedger: Send + Sync + fmt::Debug {
     /// How many messages are out in a batch.
     fn in_batches(&self) -> Result<i64, Fault>;
 }
+
+/// A message of a conversation, as the model is shown it (`conversation_rows`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Said {
+    pub pk: i64,
+    pub account: String,
+    pub from_name: Option<String>,
+    pub from_addr: Option<String>,
+    pub date_iso: Option<String>,
+    pub subject: Option<String>,
+    pub snippet: Option<String>,
+    pub body_text: Option<String>,
+    pub message_id: Option<String>,
+    pub body_fetched: bool,
+    pub ts: Option<i64>,
+}
+
+/// A message's row as the Assistant reads it to answer about it (`get_message`): whose it is, its thread, and what
+/// says whether a reply is wanted.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Message {
+    pub pk: i64,
+    pub account: String,
+    pub thread_id: Option<String>,
+    pub message_id: Option<String>,
+    pub message_key: Option<i64>,
+    pub from_addr: Option<String>,
+    pub folder: Option<String>,
+    pub is_junk: bool,
+    pub answered: bool,
+    /// Whether `snoozes` says it wakes later.
+    pub snoozed: bool,
+}
+
+/// What a conversation's messages share: their thread, or for a message with no thread its Message-ID or its pk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConversationBy {
+    Thread,
+    MessageId,
+    Pk,
+}
+
+/// A copy's Message-ID and a number beside it: its time, or whether its body is here.
+pub type Stamp = (Option<String>, Option<i64>);
+
+/// What the Assistant reads of the mail (`Mail`): never anything a request wrote into SQL.
+pub trait Mail: Send + Sync + fmt::Debug {
+    fn message(&self, pk: i64) -> Result<Option<Message>, Fault>;
+    /// A conversation's copies, oldest first.
+    fn conversation(&self, account: &str, by: ConversationBy, value: &str) -> Result<Vec<Said>, Fault>;
+    /// A message with no thread as a reply is drafted from it, in a list as a conversation's are.
+    fn to_reply_to(&self, pk: i64) -> Result<Vec<Said>, Fault>;
+    /// A message's text from its server, at interactive priority, when none is stored: None where there is none.
+    fn fetch_text(&self, pk: i64) -> Result<Option<String>, Fault>;
+    /// Each copy's Message-ID and time: the thread's state.
+    fn thread_stamps(&self, account: &str, thread_id: &str) -> Result<Vec<Stamp>, Fault>;
+    /// A message's Message-ID and `body_fetched`: a lone message's state.
+    fn message_stamp(&self, pk: i64) -> Result<Option<Stamp>, Fault>;
+    /// The thread's latest message, the only one its prepared reply answers.
+    fn thread_anchor(&self, account: &str, thread_id: &str) -> Result<Option<i64>, Fault>;
+}
+
+/// The accounts the app may use, by address: a request naming another is refused.
+pub trait AccountList: Send + Sync + fmt::Debug {
+    fn emails(&self) -> Result<Vec<String>, Fault>;
+}
+
+/// A thread's summary as `thread_summaries` keeps it, its lists as JSON text.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StoredSummary {
+    pub account: String,
+    pub thread_id: String,
+    pub scope: String,
+    pub fingerprint: Option<String>,
+    pub tldr: Option<String>,
+    pub points: Option<String>,
+    pub action: Option<String>,
+    pub participants: Option<String>,
+    pub message_count: Option<i64>,
+    pub model: Option<String>,
+    pub created_at: Option<String>,
+}
+
+/// A reply drafted ahead as `draft_ahead` keeps it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StoredDraft {
+    pub fp: Option<String>,
+    pub body: Option<String>,
+    pub tone: Option<String>,
+    pub model: Option<String>,
+    pub created_ts: i64,
+    pub fail_ts: i64,
+    pub fail_count: i64,
+}
+
+/// A reply drafted, to keep under its key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NewDraft<'a> {
+    pub fp: &'a str,
+    pub body: &'a str,
+    pub tone: Option<&'a str>,
+    pub model: Option<&'a str>,
+    pub src_message_id: Option<&'a str>,
+    /// What made it: dwell, topk or demand.
+    pub source: &'a str,
+}
+
+/// What the Assistant keeps of its answers (`Answers`).
+pub trait Answers: Send + Sync + fmt::Debug {
+    fn thread_summary(&self, account: &str, thread_id: &str, scope: &str) -> Result<Option<StoredSummary>, Fault>;
+    fn save_thread_summary(&self, summary: &StoredSummary) -> Result<(), Fault>;
+    fn draft_ahead(&self, account: &str, ref_key: &str) -> Result<Option<StoredDraft>, Fault>;
+    fn put_draft_ahead(&self, account: &str, ref_key: &str, draft: &NewDraft<'_>, now: i64) -> Result<(), Fault>;
+    /// A generation failed: the failure is counted, and a body already there stays.
+    fn draft_ahead_failed(&self, account: &str, ref_key: &str, now: i64) -> Result<(), Fault>;
+    fn draft_ahead_touched(&self, account: &str, ref_key: &str, now: i64) -> Result<(), Fault>;
+    /// Hygiene only: the old, the moot, the orphaned (`orphans`) and past the cap go.
+    fn draft_ahead_gc(&self, now: i64, orphans: bool) -> Result<(), Fault>;
+    /// Whether the AI's verdict on the message calls it worth a reply drafted ahead.
+    fn reply_worthy(&self, pk: i64) -> Result<bool, Fault>;
+}

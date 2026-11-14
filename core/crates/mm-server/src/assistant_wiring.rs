@@ -10,13 +10,20 @@ use std::sync::{Arc, Mutex};
 use mm_accounts::credential::{CredentialRef, Style};
 use mm_accounts::ports::ConfigFile;
 use mm_assistant::calls::Calls;
+use mm_assistant::context::Context;
+use mm_assistant::extract::Extractor;
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
-use mm_assistant::ports::{Engine, InForce, LanguageModel};
+use mm_assistant::ports::{AccountList, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, Said, Stamp};
+use mm_assistant::prepared_replies::PreparedReplies;
+use mm_assistant::reply_draft::ReplyDrafts;
 use mm_assistant::status::Status;
+use mm_assistant::thread_digest::ThreadDigest;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Keychain, Outside, Secret};
 use mm_kernel::zone::Zone;
+use mm_mailbox::gates::{Gates, Priority, Wait, on_gate};
+use mm_mailbox::session::MailServers;
 use mm_store::Database;
 
 use crate::environment::Environment;
@@ -103,6 +110,10 @@ impl Engine for ApiEngine {
 /// What the Assistant is made from.
 pub(crate) struct Parts {
     pub(crate) database: Arc<Database>,
+    pub(crate) accounts: Arc<dyn AccountList>,
+    /// What reads a body that hasn't come down from its server, on its account's gate.
+    pub(crate) servers: Arc<dyn MailServers>,
+    pub(crate) gates: Arc<dyn Gates>,
     pub(crate) config: Arc<dyn ConfigFile>,
     pub(crate) keychain: Arc<dyn Keychain>,
     pub(crate) outside: Arc<dyn Outside>,
@@ -116,6 +127,12 @@ pub struct Assistant {
     pub calls: Arc<Calls>,
     pub status: Arc<Status>,
     pub governor: Arc<CostGovernor>,
+    /// A thread's summary, on a person's click.
+    pub digest: Arc<ThreadDigest>,
+    /// What a message proposes for the calendar and the to-do list.
+    pub extractor: Arc<Extractor>,
+    /// Replies drafted on demand, and ahead.
+    pub drafting: Arc<PreparedReplies>,
 }
 
 /// The API routes a hidden tab fetches on its own, which say nothing of someone being here (`shared.UI_QUIET`).
@@ -133,7 +150,7 @@ const UI_QUIET: [&str; 9] = [
 
 impl Assistant {
     pub(crate) fn assemble(parts: Parts, environment: &Environment) -> Assistant {
-        let Parts { database, config, keychain, outside, clock, zone } = parts;
+        let Parts { database, accounts, servers, gates, config, keychain, outside, clock, zone } = parts;
         let engine = Arc::new(ApiEngine {
             file: config.clone(),
             keychain,
@@ -142,13 +159,20 @@ impl Assistant {
             made: Mutex::new(None),
         });
         let settings = Arc::new(AiConfig { file: config, environment_key: environment.anthropic_key().is_some() });
-        let budget = Arc::new(Budget { ledger: database, settings, clock: clock.clone(), zone });
+        let budget = Arc::new(Budget { ledger: database.clone(), settings, clock: clock.clone(), zone: zone.clone() });
         let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
         let gateway = Arc::new(Gateway::new(engine, budget, governor.clone()));
         let label = environment.model().unwrap_or_else(|| mm_assistant::models::DEFAULT.to_owned());
-        let status = Arc::new(Status::new(gateway.clone(), clock, label));
+        let status = Arc::new(Status::new(gateway.clone(), clock.clone(), label));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
-        Assistant { calls, status, governor }
+        let mail = Arc::new(AssistantMail { database: database.clone(), servers, gates });
+        let context = Context::new(mail, accounts);
+        let digest = Arc::new(ThreadDigest::new(calls.clone(), database.clone(), context.clone(), clock.clone()));
+        let extractor = Arc::new(Extractor::new(calls.clone(), context.clone(), clock.clone(), zone));
+        let replies = Arc::new(ReplyDrafts::new(calls.clone(), context.clone()));
+        let looks_human = Box::new(|local: &str| mm_curation::classifier::looks_human(Some(local)));
+        let drafting = Arc::new(PreparedReplies::new(database, context, replies, looks_human, clock));
+        Assistant { calls, status, governor, digest, extractor, drafting }
     }
 
     /// Someone is here, for the cost governor's presence gate on drafting ahead: any request to the API that got past
@@ -157,6 +181,67 @@ impl Assistant {
         if path.starts_with("/api/") && !UI_QUIET.contains(&path) {
             self.governor.saw_someone();
         }
+    }
+}
+
+/// What the Assistant reads of the mail: the store's rows, and a body that hasn't come down, read from its server.
+///
+/// Python's `Mail.fetch_body` is the Mailbox's `Ingest.fetch_body`, which keeps what it read. Until the Rust server's
+/// Mailbox fetches and keeps a body (area G), the Assistant reads one here, read-only on the account's gate at
+/// interactive priority, as that fetch does, and keeps nothing: the next request reads it again.
+#[derive(Debug)]
+pub(crate) struct AssistantMail {
+    database: Arc<Database>,
+    servers: Arc<dyn MailServers>,
+    gates: Arc<dyn Gates>,
+}
+
+/// How long a body's read waits on each answer.
+const FETCH_SECONDS: u64 = 30;
+
+impl Mail for AssistantMail {
+    fn message(&self, pk: i64) -> Result<Option<Message>, Fault> {
+        self.database.message(pk)
+    }
+
+    fn conversation(&self, account: &str, by: ConversationBy, value: &str) -> Result<Vec<Said>, Fault> {
+        self.database.conversation(account, by, value)
+    }
+
+    fn to_reply_to(&self, pk: i64) -> Result<Vec<Said>, Fault> {
+        self.database.to_reply_to(pk)
+    }
+
+    fn fetch_text(&self, pk: i64) -> Result<Option<String>, Fault> {
+        let Some((account, folder, uid)) = mm_store::assistant::copy_at(&self.database, pk)? else { return Ok(None) };
+        let (Some(folder), Some(uid)) = (folder, uid.and_then(|u| u32::try_from(u).ok())) else { return Ok(None) };
+        let read = on_gate(&*self.gates, &account, Priority::Interactive, Wait::Ever, || {
+            let mut session = self.servers.open(&account, FETCH_SECONDS).ok()?;
+            let raw = session.select(&folder, true).ok().and_then(|_| session.body(uid).ok().flatten());
+            session.logout();
+            raw
+        });
+        let raw = read.map_err(|_| Fault::new("Busy"))?.unwrap_or_default();
+        Ok(mm_content::mime::parse(&raw).text.map(std::borrow::Cow::into_owned))
+    }
+
+    fn thread_stamps(&self, account: &str, thread_id: &str) -> Result<Vec<Stamp>, Fault> {
+        self.database.thread_stamps(account, thread_id)
+    }
+
+    fn message_stamp(&self, pk: i64) -> Result<Option<Stamp>, Fault> {
+        self.database.message_stamp(pk)
+    }
+
+    fn thread_anchor(&self, account: &str, thread_id: &str) -> Result<Option<i64>, Fault> {
+        self.database.thread_anchor(account, thread_id)
+    }
+}
+
+/// The accounts a request may name.
+impl AccountList for crate::wiring::KnownAccounts {
+    fn emails(&self) -> Result<Vec<String>, Fault> {
+        Ok(self.0.accounts()?.into_iter().map(|a| a.email).collect())
     }
 }
 
