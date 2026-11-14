@@ -359,6 +359,7 @@ impl App {
             secret: csrf.clone(),
             read_only: environment.read_only(),
             delivery: compose.delivery.clone(),
+            outside: seams.outside.clone(),
         });
         // An answer to an invite goes through Compose's outbox.
         let calendar = crate::calendar_wiring::Calendar::assemble(crate::calendar_wiring::CalendarParts {

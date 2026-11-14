@@ -38,6 +38,8 @@ mm-attention.workspace = true
 mm-smtp.workspace = true
 # What is asked of Claude, over the Claude API.
 mm-claude.workspace = true
+# RFC 8058's one-click unsubscribe POST.
+mm-oneclick.workspace = true
 # An answer's JSON in the order its fields were written, as Python's dicts keep theirs.
 serde_json = { workspace = true, features = ["preserve_order"] }
 sha2.workspace = true

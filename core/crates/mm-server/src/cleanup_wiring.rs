@@ -3,8 +3,8 @@
 //! servers, each account's gate, the confirm tokens under this run's secret, Curation's store, and Compose's outbox,
 //! which a mailto: unsubscribe is queued in.
 //!
-//! The one-click POST isn't here yet: it wants an HTTPS client. It says it isn't ready, so a cleanup that would use it
-//! answers as not yet served before it changes anything.
+//! The one-click POST is mm-oneclick's, behind every guard the Python app's `safe_http.one_click_post` has, and never
+//! made from a read-only process.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -24,10 +24,11 @@ use mm_curation::sweeping::{Sweeps, SweepsParts};
 use mm_curation::unsubscribe::{Unsubscribing, UnsubscribingParts};
 use mm_kernel::errors::Fault;
 use mm_kernel::log::{self, Field};
-use mm_kernel::seams::Clock;
+use mm_kernel::seams::{Clock, Outside};
 use mm_mailbox::command_ports::Tokens;
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait, on_gate};
 use mm_mailbox::session::{self, MailServer, MailServers, Search, ServerError};
+use mm_oneclick::OneClick;
 use mm_store::Database;
 use mm_store::curation::CurationStore;
 use serde_json::Value;
@@ -86,17 +87,25 @@ impl ListHeaders for ServerListHeaders {
     }
 }
 
-/// RFC 8058's one-click POST, which wants an HTTPS client this server doesn't have yet.
+/// RFC 8058's one-click POST (`_SafeHttp`): the status the host answered, 0 where none came back. A read-only process
+/// posts nothing, as Python's refuses before it looks anything up.
 #[derive(Debug)]
-pub(crate) struct NoHttps;
+pub(crate) struct OneClickHttp {
+    pub(crate) post: OneClick,
+    pub(crate) read_only: bool,
+}
 
-impl SafeHttp for NoHttps {
+impl SafeHttp for OneClickHttp {
     fn ready(&self) -> bool {
-        false
+        true
     }
 
-    fn one_click_post(&self, _url: &str) -> (bool, Option<i64>) {
-        (false, None)
+    fn one_click_post(&self, url: &str) -> (bool, Option<i64>) {
+        if self.read_only {
+            return (false, Some(0));
+        }
+        let posted = self.post.post(url);
+        (posted.ok, Some(i64::from(posted.status)))
     }
 }
 
@@ -302,11 +311,14 @@ pub(crate) struct CleanupsParts {
     pub(crate) read_only: bool,
     /// Compose's outbox, which a mailto: unsubscribe is queued in.
     pub(crate) delivery: Arc<Delivery>,
+    /// What the one-click POST asks before it looks a host up.
+    pub(crate) outside: Arc<dyn Outside>,
 }
 
 impl Cleanups {
     pub(crate) fn assemble(parts: CleanupsParts) -> Cleanups {
-        let CleanupsParts { database, directory, servers, gates, filing, clock, secret, read_only, delivery } = parts;
+        let CleanupsParts { database, directory, servers, gates, filing, clock, secret, read_only, delivery, outside } =
+            parts;
         // Minted as Compose mints a send.
         let mint = Mint { clock: clock.clone(), draws: Arc::new(RandomDraws), pid: std::process::id() };
         let store = Arc::new(CurationStore::new(database.clone(), clock.clone()));
@@ -318,7 +330,7 @@ impl Cleanups {
                 gates: gates.clone(),
                 directory: directory.clone(),
             }),
-            http: Arc::new(NoHttps),
+            http: Arc::new(OneClickHttp { post: OneClick::system(outside), read_only }),
             send: Arc::new(OutboxSend {
                 outgoing: Outgoing::new(database.clone(), delivery, mint),
                 directory: directory.clone(),
