@@ -39,6 +39,11 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 - Migrations are **append-only**. Never renumber or delete one — the version number is
   the on-disk contract, and retired features leave a historical no-op behind (`_m14_notes` →
   `_m18_drop_notes`).
+- The Rust server doesn't migrate yet. It starts only over a database at `mm_store::schema::VERSION` (51), and over
+  any other says to start the Python app to make or upgrade it, or that it is behind
+  (`mm-server/src/database_version.rs`). A new migration renames the golden schema, which fails `mm-store`'s
+  `tests/version.rs` until the core reads that version too: bring the Rust server's reads and `VERSION` along in the
+  same change.
 - `migrate.init` runs the base schema, then each pending migration, each in a transaction of its
   own (`BEGIN IMMEDIATE`) that sets its version too, so one that fails leaves the database as it
   was before it. A migration gets the connection through `_Within`: `execute`, and
