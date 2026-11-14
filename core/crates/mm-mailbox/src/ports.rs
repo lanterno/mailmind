@@ -256,3 +256,12 @@ pub trait StoredLabels: Send + Sync + fmt::Debug {
     /// however many copies it has, by name with case ignored.
     fn labels_of_account(&self, account: &str) -> Result<Vec<(String, i64)>, Fault>;
 }
+
+/// What makes a body's HTML safe for the reader and the document its frame loads: the sanitizer itself
+/// (`mm_content::sanitize::sanitize`) wherever MailMind runs. The frame's sandbox and policy are the boundary and this
+/// is the defence behind them (docs/security.md), so it is a seam only for the test launcher, which takes it away to
+/// show the walls hold alone.
+pub trait Sanitizer: Send + Sync + fmt::Debug {
+    /// `html` made safe to show, as `mm_content::sanitize::sanitize` makes it.
+    fn sanitize(&self, html: &str, load_images: bool, fold: bool) -> mm_content::sanitize::Sanitized;
+}

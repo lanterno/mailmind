@@ -63,7 +63,12 @@ fn run() -> Result<(), String> {
     let tripwire = Arc::new(Tripwire::new(&repo_root(), &guarded, &[settings.home.clone(), dist.clone()]));
     let clock = Arc::new(FrozenClock::at(now));
     let keychain = FakeKeychain::new(environment.raw("MAILMIND_TEST_KEYCHAIN").map(PathBuf::from), tripwire.clone());
-    let seams = Seams { clock: clock.clone(), outside: tripwire.clone(), keychain: Arc::new(keychain) };
+    let seams = Seams {
+        clock: clock.clone(),
+        outside: tripwire.clone(),
+        keychain: Arc::new(keychain),
+        sanitizer: Arc::new(mm_server::real::Sanitizing),
+    };
 
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|_| "no runtime")?;
     let server = runtime.block_on(Server::bind(port)).map_err(|_| format!("can't listen on 127.0.0.1:{port}"))?;

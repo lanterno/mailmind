@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret, Tripped};
 use mm_server::environment::{Environment, Settings};
+use mm_server::real::Sanitizing;
 use mm_server::{App, Seams, Server};
 use serde_json::{Value, json};
 
@@ -80,7 +81,12 @@ fn running(config: &str, built: bool) -> Running {
     let port = server.port().unwrap();
     let environment = Environment::from_pairs([("MAILMIND_DB_KEY", "5e".repeat(32).as_str())]);
     let settings = Settings { home: home.path().to_path_buf() };
-    let seams = Seams { clock: Arc::new(Frozen), outside: Arc::new(Open), keychain: Arc::new(Empty) };
+    let seams = Seams {
+        clock: Arc::new(Frozen),
+        outside: Arc::new(Open),
+        keychain: Arc::new(Empty),
+        sanitizer: Arc::new(Sanitizing),
+    };
     let app = Arc::new(App::assemble(&environment, &settings, dist, port, &seams).unwrap());
     let csrf = app.csrf.clone();
     let (stop, stopped) = tokio::sync::watch::channel(false);

@@ -59,7 +59,12 @@ impl Reading {
         Reading {
             exports: Exports::new(database.clone(), seams.outside.clone(), clock.clone(), environment.temporary()),
             lists: Lists::new(accounts.clone(), database.clone(), database.clone(), syncs, clock.clone()),
-            bodies: Bodies::new(database.clone(), Arc::new(StoredBody::new(database.clone())), Arc::new(opening)),
+            bodies: Bodies::new(
+                database.clone(),
+                Arc::new(StoredBody::new(database.clone())),
+                Arc::new(opening),
+                seams.sanitizer.clone(),
+            ),
             documents: DocumentHub::new(database.clone(), accounts.clone(), clock.clone()),
             outbox: Outbox::new(database.clone(), clock.clone(), environment.profile() == "full"),
             digest: Digest::new(

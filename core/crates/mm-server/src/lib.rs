@@ -5,9 +5,10 @@
 //! SQL and no rules of its own. `app` binds the use cases to their adapters, `serve` is the accept loop, and
 //! `environment` is the one place the environment is read.
 //!
-//! The app holds no test hooks. What a test must control comes in through `Seams`: the clock, the Keychain and
-//! `Outside`, asked before a file is opened or a host reached. `mailmind-server` passes the real ones; the test
-//! launcher (`mm-served`) passes a frozen clock, a Keychain of its own and a tripwire.
+//! The app holds no test hooks. What a test must control comes in through `Seams`: the clock, the Keychain,
+//! `Outside`, asked before a file is opened or a host reached, and the sanitizer a body's HTML goes through.
+//! `mailmind-server` passes the real ones (`real::seams`); the test launcher (`mm-served`) passes a frozen clock, a
+//! Keychain of its own, a tripwire and a sanitizer it can take away.
 
 pub mod answer;
 pub mod app;

@@ -51,6 +51,9 @@ pub struct Seams {
     pub clock: Arc<dyn Clock>,
     pub outside: Arc<dyn Outside>,
     pub keychain: Arc<dyn Keychain>,
+    /// What makes a body's HTML safe for the reader and its frame: the sanitizer itself (`real::Sanitizing`), which
+    /// only the test launcher takes away, to show the frame's walls hold alone.
+    pub sanitizer: Arc<dyn mm_mailbox::ports::Sanitizer>,
 }
 
 #[derive(Debug)]

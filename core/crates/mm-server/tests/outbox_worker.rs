@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use mm_compose::spec::MessageSpec;
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret, Tripped};
 use mm_server::environment::{Environment, Settings};
+use mm_server::real::Sanitizing;
 use mm_server::workers::Workers;
 use mm_server::{App, Seams};
 use mm_store::{Database, DbKey, Store};
@@ -82,7 +83,12 @@ fn app(home: &Path, profile: &str) -> Arc<App> {
     let key = "5e".repeat(32);
     let environment = Environment::from_pairs([("MAILMIND_DB_KEY", key.as_str()), ("MAILMIND_PROFILE", profile)]);
     let settings = Settings { home: home.to_path_buf() };
-    let seams = Seams { clock: Arc::new(Frozen), outside: Arc::new(Closed), keychain: Arc::new(Empty) };
+    let seams = Seams {
+        clock: Arc::new(Frozen),
+        outside: Arc::new(Closed),
+        keychain: Arc::new(Empty),
+        sanitizer: Arc::new(Sanitizing),
+    };
     Arc::new(App::assemble(&environment, &settings, home.join("dist"), 0, &seams).unwrap())
 }
 

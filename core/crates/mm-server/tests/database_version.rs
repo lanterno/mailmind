@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret, Tripped};
 use mm_server::environment::{Environment, Settings};
+use mm_server::real::Sanitizing;
 use mm_server::{App, Seams};
 use mm_store::schema::VERSION;
 use mm_store::{DbKey, Store};
@@ -51,7 +52,12 @@ fn start(home: &Path) -> Result<(), String> {
     std::fs::write(home.join("mailmind.config.json"), r#"{"accounts": []}"#).unwrap();
     let environment = Environment::from_pairs([("MAILMIND_DB_KEY", "5e".repeat(32).as_str())]);
     let settings = Settings { home: home.to_path_buf() };
-    let seams = Seams { clock: Arc::new(Frozen), outside: Arc::new(Open), keychain: Arc::new(Empty) };
+    let seams = Seams {
+        clock: Arc::new(Frozen),
+        outside: Arc::new(Open),
+        keychain: Arc::new(Empty),
+        sanitizer: Arc::new(Sanitizing),
+    };
     App::assemble(&environment, &settings, home.join("dist"), 8721, &seams).map(|_| ())
 }
 

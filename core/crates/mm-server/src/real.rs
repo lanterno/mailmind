@@ -1,12 +1,29 @@
-//! The seams as `mailmind-server` runs: the system's clock and nothing between the app and its files, hosts and
-//! programs. Its Keychain is the login Keychain (`login_keychain`). Lines of the log go to standard error.
+//! The seams as `mailmind-server` runs: the system's clock, nothing between the app and its files, hosts and
+//! programs, and the sanitizer itself. Its Keychain is the login Keychain (`login_keychain`). Lines of the log go to
+//! standard error.
 
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use mm_content::sanitize::Sanitized;
 use mm_kernel::log::{Line, Sink};
 use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
+use mm_mailbox::ports::Sanitizer;
+
+use crate::app::Seams;
+use crate::login_keychain::LoginKeychain;
+
+/// The seams `mailmind-server` runs on. Nothing in it reads the environment to choose them.
+pub fn seams() -> Seams {
+    Seams {
+        clock: Arc::new(SystemClock),
+        outside: Arc::new(Unguarded),
+        keychain: Arc::new(LoginKeychain::new(Arc::new(Unguarded))),
+        sanitizer: Arc::new(Sanitizing),
+    }
+}
 
 /// The system's clock.
 #[derive(Debug, Default)]
@@ -34,6 +51,16 @@ impl Outside for Unguarded {
 
     fn run(&self, _program: &str) -> Result<(), Tripped> {
         Ok(())
+    }
+}
+
+/// The sanitizer itself (`mm_content::sanitize`): the only one this server has.
+#[derive(Debug, Default)]
+pub struct Sanitizing;
+
+impl Sanitizer for Sanitizing {
+    fn sanitize(&self, html: &str, load_images: bool, fold: bool) -> Sanitized {
+        mm_content::sanitize::sanitize(html, load_images, fold)
     }
 }
 

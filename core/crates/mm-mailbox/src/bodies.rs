@@ -8,12 +8,11 @@ use std::sync::Arc;
 
 use mm_content::frame;
 use mm_content::mime::{self, Attachment, Parsed};
-use mm_content::sanitize::sanitize;
 use mm_kernel::errors::{Failure, Fault, Problem};
 use serde_json::{Value, json};
 
 use crate::inline_images;
-use crate::ports::{BodyFetch, NOT_YET, Opening, Row, StoredBodies};
+use crate::ports::{BodyFetch, NOT_YET, Opening, Row, Sanitizer, StoredBodies};
 
 /// What a frame says of a copy that isn't there.
 pub const GONE: &str = "This message isn\u{2019}t here any more.";
@@ -87,6 +86,7 @@ pub struct Bodies {
     stored: Arc<dyn StoredBodies>,
     fetch: Arc<dyn BodyFetch>,
     opening: Arc<dyn Opening>,
+    sanitizer: Arc<dyn Sanitizer>,
 }
 
 impl fmt::Debug for Bodies {
@@ -96,8 +96,15 @@ impl fmt::Debug for Bodies {
 }
 
 impl Bodies {
-    pub fn new(stored: Arc<dyn StoredBodies>, fetch: Arc<dyn BodyFetch>, opening: Arc<dyn Opening>) -> Bodies {
-        Bodies { stored, fetch, opening }
+    /// `sanitizer` makes a body's HTML safe for the reader and its frame: the sanitizer itself, which only the test
+    /// launcher swaps for one it can take away.
+    pub fn new(
+        stored: Arc<dyn StoredBodies>,
+        fetch: Arc<dyn BodyFetch>,
+        opening: Arc<dyn Opening>,
+        sanitizer: Arc<dyn Sanitizer>,
+    ) -> Bodies {
+        Bodies { stored, fetch, opening, sanitizer }
     }
 
     /// The row the copy names now, or `not found`.
@@ -120,7 +127,7 @@ impl Bodies {
             Some((cut, _)) => &html[..cut],
             None => html,
         };
-        let clean = sanitize(html, load_images, true);
+        let clean = self.sanitizer.sanitize(html, load_images, true);
         let mut safe = clean.html;
         if safe.contains("cid:") {
             let raw = self.stored.raw(pk)?.unwrap_or_default();
