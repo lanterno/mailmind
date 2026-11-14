@@ -11,6 +11,7 @@ mod date;
 mod fields;
 mod flowed;
 mod header;
+mod indexed;
 mod walk;
 
 use std::borrow::Cow;
@@ -20,6 +21,7 @@ use mail_parser::{HeaderName, Message, MessageParser, MessagePart, PartFlags};
 use walk::{Node, Walk};
 
 pub use fields::{Fields, fields, has_invite, text_body};
+pub use indexed::{body_text_of, snippet_of};
 
 /// A part a reader is offered: a file, an attached email, a picture the text shows, or an invite.
 #[derive(Debug, Clone, PartialEq, Eq)]

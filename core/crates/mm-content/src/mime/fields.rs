@@ -188,9 +188,9 @@ static NONCONTENT: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         })
         .collect()
 });
-static COMMENT: LazyLock<Regex> =
+pub(super) static COMMENT: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?is)<!--.*?-->").expect("a pattern written in this crate compiles"));
-static TAG: LazyLock<Regex> =
+pub(super) static TAG: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"<[^>]+>").expect("a pattern written in this crate compiles"));
 static ENTITY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"&(#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z]+);").expect("a pattern written in this crate compiles")
@@ -201,7 +201,7 @@ static PARAGRAPHS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\n\s*\n+").expect("a pattern written in this crate compiles"));
 
 /// The common named entities and every numbered one; any other stays as written.
-fn unescape(text: &str) -> String {
+pub(super) fn unescape(text: &str) -> String {
     ENTITY
         .replace_all(text, |c: &regex::Captures<'_>| {
             let name = &c[1];
@@ -239,7 +239,7 @@ fn unescape(text: &str) -> String {
 
 /// Invisible preheader padding: zero-width spaces and joiners, the word joiner, the BOM, the combining grapheme
 /// joiner, the soft hyphen and the bidi marks (`INVISIBLE`).
-fn visible(c: char) -> bool {
+pub(super) fn visible(c: char) -> bool {
     !matches!(
         c,
         '\u{200b}' | '\u{200c}' | '\u{200d}' | '\u{2060}' | '\u{feff}' | '\u{34f}' | '\u{ad}' | '\u{200e}' | '\u{200f}'
