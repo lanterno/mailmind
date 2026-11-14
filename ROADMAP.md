@@ -39,24 +39,25 @@ Step 3 of the "MailMind client architecture" document is under way ([docs/client
 (`core/crates/mm-server`) takes over the Python app's routes one by one, and `tests/support/rust_ledger.txt` lists the
 served tests it passes against the same scripts. Until the flip, the Python app gets fixes only.
 
-- **Port the rest of the routes** · high value · effort L · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers 76 of the Python app's
+- **Port the rest of the routes** · high value · effort L · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers 85 of the Python app's
   103 routes: the page and settings, the Mailbox's lists, a conversation, a message opened, the digest and the
   Document Hub; search, saved views and contacts; rules, filters, the Screener, the audit trail and Tidy; snooze,
   mute, follow-ups, Reply Later and tasks; filing, Undo and the tray of changes; sync, refresh and reconcile;
-  accounts (add, edit, test, delete, trust-cert); and sending (`/api/send`, drafts, the preview, the outbox's Undo,
-  retry and send-now, over `mm-smtp`). `just test-rust` holds 87 of `tests/api`'s 146 served tests and 7 of the
-  browser's. Still Python's: RSVP (`/api/invite/rsvp`, with the calendar), cleanup
-  (`/api/cleanup/*`, `/api/sweep`, `/api/tidy/undo`, unsubscribe over SMTP and one-click HTTPS), the assistant
-  (`/api/ai/*`, the briefing, the review, the Claude API client, the cost governor, batches), the calendar
-  (`/api/upcoming`, `/api/calendar/event`, which need an ICS reader and recurrence), the export's archive
-  (`/api/export/archive` answers that it isn't served yet), and `/api/debug/health` and `/api/debug/jobs`, which only
-  in-process tests call. `just test-rust-all` says what passes.
+  accounts (add, edit, test, delete, trust-cert); sending (`/api/send`, drafts, the preview, the outbox's Undo,
+  retry and send-now, over `mm-smtp`); a sender's cleanup, its unsubscribe by mail, the sweep and Tidy's Undo; and the
+  calendar (`/api/upcoming`, `/api/calendar/event`, `/api/invite/rsvp`, on `mm-calendar`'s own bounded ICS and
+  recurrence reader). `just test-rust` holds 99 of `tests/api`'s 146 served tests and 7 of the browser's. Still
+  Python's: the assistant (`/api/ai/*`, the briefing, the review, `/api/cleanup/rationale` and `/api/screener/suggest`,
+  the Claude API client, the cost governor, batches), a one-click unsubscribe (it needs an HTTPS client:
+  `cleanup_wiring::NoHttps`), the export's archive (`/api/export/archive` answers that it isn't served yet), and
+  `/api/debug/health` and `/api/debug/jobs`, which neither the page nor a served test calls. Twelve cleanup and RSVP tests wait on the body fetch
+  when a message opens (#31). `just test-rust-all` says what passes.
 - **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — `mailmind-server` runs the change
   queue's and the outbox's workers, and the snooze, sync, reconcile and draft-push rounds (`mm-server/src/workers.rs`); `mm-served` drives them one pass
   at a time through its `work` line. Still to come: IDLE (an IDLE command and its interrupt in `mm-imap`, the
   supervisor, and re-checking when an account changes), `warm_tick` (a per-account `warm_folders`), backfilling bodies,
   `forget`, loading 1Password credentials before the first sync, and the jobs of areas not yet ported (assess, draft
-  ahead, the brief, the review, Tidy, expiry), which wait on those areas (#6). Each joins `Workers::start` as a `mm_mailbox::workers::Queue`
+  ahead, the brief, the review, Tidy), which wait on those areas (#6). Expiry runs on a lane of its own. Each joins `Workers::start` as a `mm_mailbox::workers::Queue`
   or a timed lane.
 - **Every change tells the page, the rest of it** · medium value · effort S · [#30](https://github.com/lanterno/mailmind/issues/30) — The Mailbox's,
   Attention's and Curation's changes reach the event stream under the Python app's names (`mm-server/src/heard.rs`),
@@ -67,7 +68,7 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   from what is stored, and no first scan or catch-up starts (`mm_mailbox::opening::StoredOnly`, where Python runs
   `folders.on_open`); a message that opens with no stored body says it isn't served yet (`opening::StoredBody`, where
   Python fetches it, `Ingest.fetch_body`, and prefetches the next). `mm_mailbox::ingest` leaves out a person's arrival filters (Curation's `arrival_flags`) and the
-  invite a message carries kept with its body, which waits on the calendar's ICS reader (#6). A move's folder catch-up
+  invite a message carries kept with its body (`mm-calendar` reads it now). A move's folder catch-up
   (`Folders.touched`) and the 1Password preload aren't ported either.
 - **One adapter for each port** · low value · effort S · [#32](https://github.com/lanterno/mailmind/issues/32) — The areas ported side by side left doubles: three
   readers of the rule book (`Database::rules_document`, `RulesDocument`, the Curation store's `RuleBook`), three ways of
@@ -83,7 +84,7 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   sync status stays until a restart (`Syncing` has no `_forget_status`). Compose: an attached message/rfc822 is
   rewritten best-effort (about a third of 1,500 random cases differ from Python's bytes), encoded words a person typed
   are decoded only in UTF-8, ASCII or Latin-1, a few broken-MIME drafts reopen differently, and an original fetched to
-  reply to isn't stored.
+  reply to isn't stored. Expiry: with no INTERNALDATE, a Date of `-0000` is read as UTC, where Python read it as local time.
 - **The mail frame's browser tests on the Rust server** · medium value · effort M · [#10](https://github.com/lanterno/mailmind/issues/10) — They are served
   tests now, run against both servers, and take the sanitizer away through the protocol (`unsanitized on`). None passes
   on the Rust server yet, for three reasons, none of them the frame's: a body that isn't stored isn't fetched as its
@@ -161,7 +162,7 @@ implementation.
 
 ## Next up
 
-1. **Step 3: the Rust server on every route** (high) — cleanup and the calendar, the assistant, and IDLE are under way;
-   then the sync's remaining parts (#31), and the migrations (#35) before the flip. See The move to the Rust core.
+1. **Step 3: the Rust server on every route** (high) — the assistant and IDLE are under way; then the sync's remaining
+   parts (#31), the body fetch first, and the migrations (#35) before the flip. See The move to the Rust core.
 2. **The owner's two weeks on the Rust server** (high) — they begin once the page's routes (#6) and IDLE (#28) are served,
    and they end in the flip (#11). `MAILMIND_WORKERS=account` (#3) can soak in them, or now: both servers read it.
