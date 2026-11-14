@@ -10,6 +10,7 @@
 //! when the browser's reading wins.
 
 pub mod css;
+mod dropped;
 pub mod html;
 mod text;
 
