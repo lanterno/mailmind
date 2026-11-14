@@ -10,6 +10,8 @@ mailmind_rules.json
 .views-*.tmp
 .rules.lock
 .snippets-*.tmp
+# An export's archive, made beside the database while it downloads, and left there if the server is killed: the mail
+mm-export-*/
 
 # === Local data & caches (regenerated) ===
 mailmind.db
