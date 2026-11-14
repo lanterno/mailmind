@@ -218,6 +218,17 @@ impl Environment {
             .contains(&self.raw("MAILMIND_NO_DRAFT_TICK").unwrap_or_default().trim().to_lowercase().as_str())
     }
 
+    /// PATH: the folders a program named alone is looked for in, as 1Password's `op` is.
+    pub fn program_path(&self) -> Option<&str> {
+        self.raw("PATH")
+    }
+
+    /// Every variable but those `withheld`, for the environment of a program the server starts (`op`).
+    pub fn passed_on(&self, withheld: &[&str]) -> Vec<(String, String)> {
+        let kept = self.vars.iter().filter(|(name, _)| !withheld.contains(&name.as_str()));
+        kept.map(|(name, value)| (name.clone(), value.clone())).collect()
+    }
+
     /// The variable an account's or a setting's credential names (`{"env": NAME}` in mailmind.config.json), as set.
     pub fn credential(&self, name: &str) -> Option<Secret> {
         self.raw(name).map(|value| Secret::new(value.to_owned()))

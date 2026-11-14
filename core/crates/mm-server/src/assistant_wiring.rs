@@ -1,13 +1,15 @@
 //! The Assistant's wiring (`mailmind.bootstrap.assistant`): the language model the process talks to, and with which
 //! key, the cost governor and the gateway every call goes through, and every AI use case.
 //!
-//! The key is the config file's `anthropic_api_key` (a Keychain item, or a variable it names), and only then
+//! The key is the config file's `anthropic_api_key` (a Keychain item, a 1Password reference, or a variable it names,
+//! a 1Password read kept for the process as an account's password is), and only then
 //! ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet switch to the environment's. Both are
 //! read at each call, so a new key takes effect at once, and the model is made again only when the key changes.
 
 use std::sync::{Arc, Mutex};
 
 use mm_accounts::credential::{CredentialRef, Style};
+use mm_accounts::one_password::OpReads;
 use mm_accounts::ports::ConfigFile;
 use mm_assistant::ask::Asker;
 use mm_assistant::asking::Asking;
@@ -53,6 +55,7 @@ const ENVIRONMENT: &str = "ANTHROPIC_API_KEY";
 pub(crate) struct ApiEngine {
     file: Arc<dyn ConfigFile>,
     keychain: Arc<dyn Keychain>,
+    op: Arc<OpReads>,
     outside: Arc<dyn Outside>,
     environment: Environment,
     made: Mutex<Option<(Secret, Arc<dyn LanguageModel>)>>,
@@ -83,7 +86,8 @@ impl ApiEngine {
                 .and_then(serde_json::Value::as_str)
                 .and_then(|name| self.environment.credential(name))
                 .filter(|v| !v.expose().is_empty()),
-            // A key the file holds itself is refused, and a 1Password read isn't on the Rust server yet.
+            Some(Style::Op) => credential.op_refs().and_then(|refs| self.op.read(refs, false).ok()),
+            // A key the file holds itself is refused.
             _ => None,
         };
         let key = found.map(|k| mm_kernel::text::strip(k.expose()).to_owned()).unwrap_or_default();
@@ -133,6 +137,8 @@ pub(crate) struct Parts {
     pub(crate) gates: Arc<dyn Gates>,
     pub(crate) config: Arc<dyn ConfigFile>,
     pub(crate) keychain: Arc<dyn Keychain>,
+    /// What 1Password gave this process, which the Directory shares.
+    pub(crate) op: Arc<OpReads>,
     pub(crate) outside: Arc<dyn Outside>,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) zone: Arc<dyn Zone>,
@@ -179,11 +185,12 @@ const UI_QUIET: [&str; 9] = [
 
 impl Assistant {
     pub(crate) fn assemble(parts: Parts, environment: &Environment) -> Assistant {
-        let Parts { database, accounts, servers, gates, config, keychain, outside, clock, zone } = parts;
+        let Parts { database, accounts, servers, gates, config, keychain, op, outside, clock, zone } = parts;
         let around = Arc::new(Surroundings::over(&database, config.clone(), &outside, &clock, &zone));
         let engine = Arc::new(ApiEngine {
             file: config.clone(),
             keychain,
+            op,
             outside,
             environment: environment.clone(),
             made: Mutex::new(None),

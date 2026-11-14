@@ -138,7 +138,13 @@ impl App {
         let key: DbKey = crate::database_version::key(environment, &settings.db(), seams)?;
         let csrf = crate::perimeter::new_token().map_err(|_| "the system's random source failed")?;
         let config = Arc::new(ConfigFile::new(settings.config(), seams.outside.clone()));
-        let directory = Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()));
+        // What 1Password gives this process, through the op PATH finds: an account's password, and the API key.
+        let op = Arc::new(mm_accounts::one_password::OpReads::new(Arc::new(crate::one_password::OpCli::new(
+            environment,
+            seams.outside.clone(),
+        ))));
+        let directory =
+            Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()).reading_op(op.clone()));
         // Every session logs in through `login`, which holds back a login its server refused; a refusal, and an
         // account's change, are heard by its logins. This process's own key names each login.
         let mut login_key = [0u8; 32];
@@ -170,6 +176,7 @@ impl App {
                 gates: gates.clone(),
                 config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
                 keychain: seams.keychain.clone(),
+                op,
                 outside: seams.outside.clone(),
                 clock: seams.clock.clone(),
                 zone: zone.clone(),

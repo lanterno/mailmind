@@ -43,6 +43,8 @@ pub mod workers;
 // The login Keychain, through /usr/bin/security; and the accounts' changes and their test login.
 mod account_wiring;
 pub mod login_keychain;
+// 1Password, through its CLI: an account's password or the Claude API key, read once a process.
+pub mod one_password;
 // Compose's use cases bound: the sends, the drafts and the outbox that delivers them, and the outbox's worker.
 pub mod compose_wiring;
 mod outbox_worker;
