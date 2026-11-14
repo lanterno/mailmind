@@ -1,0 +1,507 @@
+[
+ {
+  "headers": {
+   "cache-control": "no-store",
+   "content-disposition": "attachment; filename=mailmind-mbox-20261102T120000Z.zip",
+   "content-type": "application/zip",
+   "cross-origin-opener-policy": "same-origin",
+   "cross-origin-resource-policy": "same-origin",
+   "permissions-policy": "accelerometer=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=()",
+   "referrer-policy": "no-referrer",
+   "x-content-type-options": "nosniff",
+   "x-frame-options": "DENY"
+  },
+  "request": "GET /api/export/archive?format=mbox",
+  "status": 200
+ },
+ {
+  "note": "files",
+  "value": [
+   "ada@example.test/Archive.mbox",
+   "ada@example.test/Drafts.mbox",
+   "ada@example.test/INBOX.mbox",
+   "ada@example.test/Sent.mbox",
+   "ada@example.test/Trash.mbox",
+   "bea@example.test/Drafts.mbox",
+   "bea@example.test/Folders_Clients.mbox",
+   "bea@example.test/INBOX.mbox",
+   "cy@example.test/INBOX.mbox",
+   "cy@example.test/[Gmail]_Sent Mail.mbox"
+  ]
+ },
+ {
+  "note": "ada@example.test/Archive.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Lin Mori",
+      "lin@example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<pattern-ideas@lin.example.test>",
+    "references": null,
+    "subject": "Quilt pattern ideas",
+    "text": "\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "Archive",
+    "x-mailmind-threadid": "rf:ada@example.test:c5862e0831764395"
+   }
+  ]
+ },
+ {
+  "note": "ada@example.test/Drafts.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Ada Park",
+      "ada@example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<draft-notes@ada.example.test>",
+    "references": null,
+    "subject": "Notes for the review",
+    "text": "\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "Drafts",
+    "x-mailmind-threadid": "rf:ada@example.test:a9a397439969c343"
+   },
+   {
+    "from": [
+     [
+      "Ada Park",
+      "ada@example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<draft-notes@ada.example.test>",
+    "references": null,
+    "subject": "Notes for the review",
+    "text": "\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "Drafts",
+    "x-mailmind-threadid": "rf:ada@example.test:a9a397439969c343"
+   }
+  ]
+ },
+ {
+  "note": "ada@example.test/INBOX.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Lin Mori",
+      "lin@example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<lunch-1@lin.example.test>",
+    "references": null,
+    "subject": "Lunch on Thursday?",
+    "text": "Hi Ada,\r\n\r\nAre you free for lunch on Thursday? The noodle place by the station reopened.\r\n\r\nLin\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:f55e4e75612a3def"
+   },
+   {
+    "from": [
+     [
+      "Lin Mori",
+      "lin@example.test"
+     ]
+    ],
+    "in-reply-to": "<lunch-2@ada.example.test>",
+    "message-id": "<lunch-3@lin.example.test>",
+    "references": "<lunch-1@lin.example.test> <lunch-2@ada.example.test>",
+    "subject": "Re: Lunch on Thursday?",
+    "text": "12:30 is perfect. See you there.\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:f55e4e75612a3def"
+   },
+   {
+    "from": [
+     [
+      "The Weekly Loom",
+      "news@loom.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<issue-218@loom.example.test>",
+    "references": null,
+    "subject": "This week: five new patterns",
+    "text": "\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "newsletters/marketing",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:744c453dcb89c684"
+   },
+   {
+    "from": [
+     [
+      "Build Bot",
+      "noreply@ci.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<build-412@ci.example.test>",
+    "references": null,
+    "subject": "[quilt] Build #412 passed",
+    "text": "\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "automated-notifications",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:20e13d75692f3245"
+   },
+   {
+    "from": [
+     [
+      "Thimble & Co",
+      "orders@thimble.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<order-1042@thimble.example.test>",
+    "references": null,
+    "subject": "Your receipt for order 1042",
+    "text": "Thanks for your order.\r\n\r\nOrder 1042\r\n1 x Linen thread, natural 4.50\r\nTotal 4.50\r\n\r\nPaid with card ending 0000.\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "receipts/transactional",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:d6830290e0dcf6f0"
+   },
+   {
+    "from": [
+     [
+      "Noor Haddad",
+      "noor@studio.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<DB9P250MB0001.review@studio.example.test>",
+    "references": null,
+    "subject": "Design review",
+    "text": "Let's walk through the new layouts.\r\n",
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
+   },
+   {
+    "from": [
+     [
+      "Noor Haddad",
+      "noor@studio.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<fwd-samples@studio.example.test>",
+    "references": null,
+    "subject": "Fwd: Fabric samples",
+    "text": "Forwarding Lin's note, see attached.\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:46cc6a37490f7358"
+   },
+   {
+    "from": [
+     [
+      "Old Mailer",
+      "legacy@mailer.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<statement-10@mailer.example.test>",
+    "references": null,
+    "subject": "Monthly statement",
+    "text": "This message claims to be multipart but names no boundary.\r\nYour statement for October is ready.\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:9652750ff02d44da"
+   },
+   {
+    "from": [
+     [
+      "Renée Lefèvre",
+      "renee@atelier.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<atelier-nov@atelier.example.test>",
+    "references": "<atelier-oct@atelier.example.test>   <atelier-sep@atelier.example.test>",
+    "subject": "Projet d’atelier — planning de novembre",
+    "text": "Bonjour Ada, voici le planning de novembre pour l’atelier.\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:b56ed2a0fc20ba1c"
+   },
+   {
+    "from": [
+     [
+      "Café Lumière",
+      "hello@cafe.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<menu-aout@cafe.example.test>",
+    "references": null,
+    "subject": "Menu d’août — nouveautés ☕",
+    "text": "Notre menu d’août arrive : crêpes, galettes et café filtre.\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:14318281301a68a3"
+   },
+   {
+    "from": [
+     [
+      "Lin Mori",
+      "lin@example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<quilt-photo@lin.example.test>",
+    "references": null,
+    "subject": "The finished quilt",
+    "text": "It's done!\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:d6e7bd3a63a67d5a"
+   },
+   {
+    "from": [
+     [
+      "Prize Desk",
+      "winner@prizes.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<claim-now@prizes.example.test>",
+    "references": null,
+    "subject": "CONGRATULATIONS you have WON $1,000,000 - claim your prize now",
+    "text": "\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "spam/scam",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:ada@example.test:49f75d579113fc94"
+   }
+  ]
+ },
+ {
+  "note": "ada@example.test/Sent.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Ada Park",
+      "ada@example.test"
+     ]
+    ],
+    "in-reply-to": "<lunch-1@lin.example.test>",
+    "message-id": "<lunch-2@ada.example.test>",
+    "references": "<lunch-1@lin.example.test>",
+    "subject": "Re: Lunch on Thursday?",
+    "text": "\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "Sent",
+    "x-mailmind-threadid": "rf:ada@example.test:f55e4e75612a3def"
+   }
+  ]
+ },
+ {
+  "note": "ada@example.test/Trash.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Spindle Deals",
+      "deals@spindle.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<promo-oct@spindle.example.test>",
+    "references": null,
+    "subject": "20% off all yarn this weekend",
+    "text": "\r\n",
+    "x-mailmind-account": "ada@example.test",
+    "x-mailmind-bucket": "newsletters/marketing",
+    "x-mailmind-folder": "Trash",
+    "x-mailmind-threadid": "rf:ada@example.test:df70180a771a3af4"
+   }
+  ]
+ },
+ {
+  "note": "bea@example.test/Drafts.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Bea Novak",
+      "bea@example.test"
+     ]
+    ],
+    "in-reply-to": "<contract-v2@harbor.example.test>",
+    "message-id": "<A1B2C3D4-0000-4000-8000-000000000001@example.test>",
+    "references": "<contract-v2@harbor.example.test>",
+    "subject": "Re: Contract draft v2",
+    "text": "\r\n",
+    "x-mailmind-account": "bea@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "Drafts",
+    "x-mailmind-threadid": "rf:bea@example.test:1f7815dd634a2ba6"
+   }
+  ]
+ },
+ {
+  "note": "bea@example.test/Folders_Clients.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Ivo Brandt",
+      "ivo@harbor.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<kickoff@harbor.example.test>",
+    "references": null,
+    "subject": "Kickoff notes",
+    "text": "\r\n",
+    "x-mailmind-account": "bea@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "Folders/Clients",
+    "x-mailmind-threadid": "rf:bea@example.test:b8304c2862f5ab91"
+   }
+  ]
+ },
+ {
+  "note": "bea@example.test/INBOX.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Ivo Brandt",
+      "ivo@harbor.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<contract-v2@harbor.example.test>",
+    "references": null,
+    "subject": "Contract draft v2",
+    "text": "Bea, the second draft is ready for your comments.\r\n",
+    "x-mailmind-account": "bea@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:bea@example.test:1f7815dd634a2ba6"
+   },
+   {
+    "from": [
+     [
+      "Example Bank",
+      "alerts@bank.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<signin-31@bank.example.test>",
+    "references": null,
+    "subject": "New sign-in to your account",
+    "text": "We noticed a new sign-in from a Mac. If this was you, no action is needed.\r\n",
+    "x-mailmind-account": "bea@example.test",
+    "x-mailmind-bucket": "personal/protected",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "rf:bea@example.test:b3330a7a33c000ec"
+   }
+  ]
+ },
+ {
+  "note": "cy@example.test/INBOX.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Mae Lindqvist",
+      "mae@guild.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<venue-1@guild.example.test>",
+    "references": null,
+    "subject": "Guild meetup venue",
+    "text": "Shall we book the library hall again?\r\n",
+    "x-mailmind-account": "cy@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "gm:cy@example.test:1800000000000000001"
+   },
+   {
+    "from": [
+     [
+      "Mae Lindqvist",
+      "mae@guild.example.test"
+     ]
+    ],
+    "in-reply-to": "<venue-2@cy.example.test>",
+    "message-id": "<venue-3@guild.example.test>",
+    "references": "<venue-1@guild.example.test> <venue-2@cy.example.test>",
+    "subject": "Re: Guild meetup venue",
+    "text": "Booked for the 14th.\r\n",
+    "x-mailmind-account": "cy@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "gm:cy@example.test:1800000000000000001"
+   },
+   {
+    "from": [
+     [
+      "Parcel Service",
+      "tracking@parcels.example.test"
+     ]
+    ],
+    "in-reply-to": null,
+    "message-id": "<parcel-77@parcels.example.test>",
+    "references": null,
+    "subject": "Your parcel is out for delivery",
+    "text": "Parcel 77 will arrive today between 10:00 and 14:00.\r\n",
+    "x-mailmind-account": "cy@example.test",
+    "x-mailmind-bucket": "receipts/transactional",
+    "x-mailmind-folder": "INBOX",
+    "x-mailmind-threadid": "gm:cy@example.test:1800000000000000004"
+   }
+  ]
+ },
+ {
+  "note": "cy@example.test/[Gmail]_Sent Mail.mbox",
+  "value": [
+   {
+    "from": [
+     [
+      "Cy Okafor",
+      "cy@example.test"
+     ]
+    ],
+    "in-reply-to": "<venue-1@guild.example.test>",
+    "message-id": "<venue-2@cy.example.test>",
+    "references": "<venue-1@guild.example.test>",
+    "subject": "Re: Guild meetup venue",
+    "text": "\r\n",
+    "x-mailmind-account": "cy@example.test",
+    "x-mailmind-bucket": "other/personal-ish",
+    "x-mailmind-folder": "[Gmail]/Sent Mail",
+    "x-mailmind-threadid": "gm:cy@example.test:1800000000000000001"
+   }
+  ]
+ }
+]
