@@ -491,7 +491,8 @@ automatically.
 - **Upgrades can't cost you mail.** Before a new version changes the database's layout, MailMind
   backs it up beside it (the newest three kept, encrypted and readable only by you), and each step of the change
   lands whole or not at all. `uv run python -m mailmind db check-upgrade` tries the next upgrade on a copy
-  first and reports only row counts and integrity checks, never a message.
+  first and reports only row counts and integrity checks, never a message. The Rust server makes and upgrades the
+  database the same way, and `mailmind-server db check-upgrade` is its check.
 - **The page asks no other host for anything** until you load a message's images. Its fonts are served from the
   app, so opening your mail tells no font service you did.
 - **Only your own MailMind page can talk to the local server.** It answers just its

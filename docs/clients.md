@@ -12,8 +12,8 @@ architecture" document; this page says what is built, how the pieces talk, and w
 | `shells/desktop/` | Tauri around the web shell's page, over the core running natively | [shells/desktop/CLAUDE.md](../shells/desktop/CLAUDE.md) |
 | `budgets.toml` | The limits every client is held to, and what was measured | |
 
-The Python app in `mailmind/` stays what runs until the clients replace it. Until then it owns the database's
-schema and migrations; the core reads the same encrypted files (a raw 32-byte key, SQLCipher 4's defaults).
+The Python app in `mailmind/` stays what runs until the clients replace it. Until then both make and upgrade the same
+encrypted files (a raw 32-byte key, SQLCipher 4's defaults), migration for migration ([migrations.md](migrations.md)).
 
 ## One contract, three carriers
 

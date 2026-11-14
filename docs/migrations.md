@@ -39,11 +39,20 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
 - Migrations are **append-only**. Never renumber or delete one — the version number is
   the on-disk contract, and retired features leave a historical no-op behind (`_m14_notes` →
   `_m18_drop_notes`).
-- The Rust server doesn't migrate yet. It starts only over a database at `mm_store::schema::VERSION` (51), and over
-  any other says to start the Python app to make or upgrade it, or that it is behind
-  (`mm-server/src/database_version.rs`). A new migration renames the golden schema, which fails `mm-store`'s
-  `tests/version.rs` until the core reads that version too: bring the Rust server's reads and `VERSION` along in the
-  same change.
+- The Rust server makes and upgrades the database too (`mm_store::migrate`, from `App::assemble` through
+  `mm-server/src/database_version.rs`). Over a data directory with none it makes one at version 51 from
+  `mm-store/src/schema_v51.sql`, the Python app's schema at 51 as its database stores it, frozen as the migrations are,
+  with what `init` seeds, the pragmas `connect` sets and its owner's files, after the SQLite check `init` makes; with no
+  key in `MAILMIND_DB_KEY` or the Keychain either, it makes the key first, as `key.ensure` does. `mm-store`'s
+  `tests/make.rs` dumps what it made as `test_schema.py` does and compares it with the golden schema byte for byte.
+  From 52 on it runs its own migrations, `mm_store::migrate::MIGRATIONS`, each in a `BEGIN IMMEDIATE` of its own that
+  sets its version, after the same backup (`mm_store::backup`). Each `Migration` declares the tables it retires,
+  rebuilds and fills and the rows it trims, which `mailmind-server db check-upgrade` (`mm_store::upgrade_check`) reads
+  as `check.py` reads `RETIRED`, `REBUILT`, `FILLED` and `TRIMMED`, in the same report. A database older than 51 still
+  takes a start of the Python app, and over one newer than its last migration the core says it is behind.
+- Until the Python app goes, a schema change is a migration in both: the Python app's N, which renames the golden
+  schema, and a `Migration` of the same number at the end of `MIGRATIONS` that leaves the same schema, with the Rust
+  server's reads brought along. `mm-store`'s `tests/version.rs` and `tests/make.rs` fail until the core has it.
 - `migrate.init` runs the base schema, then each pending migration, each in a transaction of its
   own (`BEGIN IMMEDIATE`) that sets its version too, so one that fails leaves the database as it
   was before it. A migration gets the connection through `_Within`: `execute`, and

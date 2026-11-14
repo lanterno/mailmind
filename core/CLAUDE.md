@@ -19,13 +19,13 @@ just gen-bindings       # Swift and Kotlin bindings, into shells/apple/Generated
 | Crate | What it is |
 | --- | --- |
 | `mm-kernel` | Names, refusals, problems and a message's identity, and the seams a program meets the world through (`Clock`, `Outside`, `Keychain`, the log). Nothing in it reads the disk, the network or the clock; nor do the context crates (`mm-accounts`, `mm-mailbox`, `mm-discovery`, `mm-curation`, `mm-compose`, `mm-assistant`) or `mm-content`. |
-| `mm-store` | The encrypted database, and the only place the app opens a file: the database, `mailmind.config.json` and the page's build, each through `Outside`. It implements the context crates' ports, with each context's SQL in a module of its name. |
+| `mm-store` | The encrypted database, and the only place the app opens a file: the database, `mailmind.config.json` and the page's build, each through `Outside`. It makes the database and upgrades it (`migrate`: the Python app's schema at 51, then the core's migrations from 52, each after a `backup`), and tries an upgrade on a copy (`upgrade_check`). It implements the context crates' ports, with each context's SQL in a module of its name. |
 | `mm-accounts` | The mail accounts and how MailMind reaches each: the config's entries, where a secret is, a loopback server's pinned certificate. |
 | `mm-mailbox` | The mail on each server: how its copies thread into conversations, which folder plays which part, the folder rail, and what is stored counted: each inbox by bucket, a Gmail account's labels, each account's syncs. |
 | `mm-net` | What every mail protocol shares: the TCP connection with its time limits, TLS on it (a certificate verified on the roots the system trusts off this machine, and pinned on it), and the stream. |
 | `mm-imap` | An account's IMAP server, as the Mailbox's `MailSession`, on `mm-net`. |
 | `mm-smtp` | An account's SMTP server, as the outbox delivers through it, on `mm-net`: the certificate handed back for the caller's pin check before the login. |
-| `mm-server` | The Rust server: an HTTP adapter on axum that decodes a request, calls a context's use case and encodes the answer, behind the Python app's perimeter. `environment` is the only module that reads the environment; `app` binds the contexts. The binary is `mailmind-server`. |
+| `mm-server` | The Rust server: an HTTP adapter on axum that decodes a request, calls a context's use case and encodes the answer, behind the Python app's perimeter. `environment` is the only module that reads the environment; `app` binds the contexts. The binary is `mailmind-server`, which makes or upgrades the database as it starts; `mailmind-server db check-upgrade` tries the upgrade on a copy first. |
 | `mm-served` | The Rust server as the served suites start it (`tests/support/served.py`'s line protocol): a frozen clock, the tripwire `guard.py` is, and `fake_keychain`'s file, through the server's seams. Never shipped. |
 | `mm-discovery` | Finding mail by what a person types: the search grammar, the Document Hub, what is said of a sender. |
 | `mm-compose` | Drafts, building a message, the outbox and delivery: a message built byte for byte as the Python app builds it, a send queued and delivered, a draft saved locally first and reopened from its own bytes, the outbox tray and the snippets. |
@@ -45,6 +45,9 @@ just gen-bindings       # Swift and Kotlin bindings, into shells/apple/Generated
 - **Refusals are values,** and their words never hold a person's data. Never echo a request back in one.
 - **The database.** Open it only through `mm_store::Store`, which keys it before anything reads it: a raw 32-byte
   key and SQLCipher 4's defaults, so the Python app and the core open the same files.
+- **Migrations are append-only.** A schema change is a new `Migration` at the end of `mm_store::migrate::MIGRATIONS`,
+  of the same number as the Python app's migration that makes it, and idempotent at its place in the history. Never
+  edit `schema_v51.sql` or a migration that shipped, never renumber or remove one ([docs/migrations.md](../docs/migrations.md)).
 - **Keys.** A key never prints (`DbKey`'s `Debug` says `DbKey(..)`) and never goes on a command line: programs read
   `MAILMIND_DB_KEY`. Key bytes that cross from a shell are wiped once the core holds them.
 - **The contract changes in `mm-app` first,** then in every carrier in the same change: `mm-ffi`, and `wire` with
