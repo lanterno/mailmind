@@ -86,6 +86,7 @@ check "its version is project.yml's, $version" equal "$(plist "$app" CFBundleSho
 check "and so is its build number" equal "$(plist "$app" CFBundleVersion)" "$version"
 check "it carries the update key it was signed for" equal "$(plist "$app" SUPublicEDKey)" "$public"
 check "it checks for updates" equal "$(plist "$app" MailMindChecksForUpdates)" YES
+check "and reads only a feed signed with that key" equal "$(plist "$app" SURequireSignedFeed)" true
 check "from the latest release's appcast" equal "$(plist "$app" SUFeedURL)" \
     "https://github.com/lanterno/mailmind/releases/latest/download/appcast.xml"
 
@@ -117,6 +118,13 @@ check "and Sparkle's own sign_update agrees" \
     --verify --ed-key-file "$work/key/private-key" "$dmg" "$signature"
 check "while another key refuses it" bash -c '! "$0" verify-appcast "$1" "$2" "$3"' \
     "$work/eddsa" "$appcast" "$dmg" "$other"
+check "the appcast itself is signed with the key the app carries" "$work/eddsa" verify-feed "$appcast" "$public"
+check "while another key refuses the feed" bash -c '! "$0" verify-feed "$1" "$2"' "$work/eddsa" "$appcast" "$other"
+tampered() {
+    sed 's|<sparkle:version>|<sparkle:version>9|' "$appcast" >"$work/tampered.xml"
+    ! cmp -s "$appcast" "$work/tampered.xml" && ! "$work/eddsa" verify-feed "$work/tampered.xml" "$public"
+}
+check "and so does a feed changed after it was signed" tampered
 check "the release's notes name the version" grep -q "MailMind-$version.dmg" "$work/out/notes.md"
 
 hdiutil detach -quiet "$mounted"
