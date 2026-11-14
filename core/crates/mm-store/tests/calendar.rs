@@ -36,7 +36,8 @@ impl Outside for Open {
 
 const TABLES: &str = "
 CREATE TABLE messages(pk INTEGER PRIMARY KEY, message_key INTEGER, account TEXT, folder TEXT, uid INTEGER,
-  thread_id TEXT, ts INTEGER, body_fetched INTEGER DEFAULT 0, pending_removal INTEGER);
+  thread_id TEXT, ts INTEGER, body_fetched INTEGER DEFAULT 0, pending_removal INTEGER, message_id TEXT, refs TEXT,
+  in_reply_to TEXT);
 CREATE TABLE bodies(message_pk INTEGER PRIMARY KEY, raw BLOB, fetched_at TEXT);
 CREATE TABLE attachments(id INTEGER PRIMARY KEY AUTOINCREMENT, message_pk INTEGER, part_id TEXT, filename TEXT,
   content_type TEXT, size INTEGER, sha256 TEXT, is_inline INTEGER DEFAULT 0, content_id TEXT);
@@ -194,6 +195,33 @@ fn a_message_is_its_pk_key_and_account() {
     let message = EventMessages::message(&*database, 7).unwrap().unwrap();
     assert_eq!((message.pk, message.key, message.account.as_str()), (7, Some(107), "ada@example.test"));
     assert!(EventMessages::message(&*database, 8).unwrap().is_none());
+}
+
+#[test]
+fn an_answer_is_threaded_by_the_messages_id_references_and_in_reply_to() {
+    let (_dir, database) = database();
+    add(&database, &row(7, 100));
+    add(&database, &row(8, 100));
+    database
+        .write(|c| {
+            c.execute(
+                "UPDATE messages SET message_id='<i@example.test>', refs='<a@example.test> <b@example.test>',
+                   in_reply_to='<b@example.test>' WHERE pk=7",
+                [],
+            )
+        })
+        .unwrap();
+    let threading = |pk| database.read(|c| mm_store::calendar::threading(c, pk)).unwrap();
+    assert_eq!(
+        threading(7),
+        Some([
+            Some("<i@example.test>".to_owned()),
+            Some("<a@example.test> <b@example.test>".to_owned()),
+            Some("<b@example.test>".to_owned())
+        ])
+    );
+    assert_eq!(threading(8), Some([None, None, None]));
+    assert_eq!(threading(9), None);
 }
 
 #[test]
