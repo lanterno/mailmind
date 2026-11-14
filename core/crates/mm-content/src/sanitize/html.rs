@@ -15,7 +15,8 @@
 //! builder would do more (close a `<p>`, move a table's text), the sanitizer doesn't: it leaves unclosed what the
 //! message left unclosed, for the browser to close. It follows the builder only to tell where a dropped element ends
 //! (`dropped`): at its end tag, or where a browser ends it when the text after it would otherwise be lost. A dropped
-//! `<head>`'s style sheets are kept, as a browser applies them.
+//! `<head>`'s style sheets are kept, as a browser applies them, and what a browser shows of a `<noscript>`, an
+//! `<object>`'s fallback and an `<xml>` left unclosed is unwrapped, through the same allowlist.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -32,7 +33,8 @@ use super::css::{self, CssContext, DATA_IMAGE, SAFE_URL};
 use super::dropped::{Dropped, Step};
 use super::text::{self, pattern, space};
 
-/// Tags dropped with all they hold, to where `Dropped` ends each, but a `<head>`'s `<style>` sheets, which are kept.
+/// Tags dropped with all they hold, to where `Dropped` ends each, but a `<head>`'s `<style>` sheets, which are kept,
+/// and what a browser shows of a `<noscript>`, an `<object>` and an `<xml>` (see `Sanitizer::open`).
 const DROP_WITH_CONTENT: &[&str] = &[
     "script", "head", "title", "iframe", "object", "applet", "form", "button", "select", "textarea", "noscript",
     "template", "svg", "math", "frameset", "xml",
@@ -312,6 +314,31 @@ struct Sanitizer {
     has_content: bool,
     /// The text of the `<style>` being read, which is written once its end tag comes.
     style: Option<String>,
+    /// The `<xml>` being read. Python dropped one with all it held, and its end tag still drops what it holds: an
+    /// Office document's settings, which show as stray words. One left unclosed holds the rest of the message, which
+    /// a browser shows, so what it holds is read as any other and taken back if its end tag comes.
+    xml: Option<Xml>,
+}
+
+/// An `<xml>` being read, what it holds written as it comes.
+#[derive(Debug)]
+struct Xml {
+    /// How deep Python's count of `<xml>` and `</xml>` stands.
+    depth: usize,
+    /// Where the sanitizer stood at its start tag, to go back to at its end tag.
+    before: Before,
+}
+
+/// What the sanitizer has written and counted, at an `<xml>`'s start tag.
+#[derive(Debug, Clone, Copy)]
+struct Before {
+    written: usize,
+    css: CssContext,
+    blocked_images: usize,
+    blocked_links: usize,
+    quote_depth: usize,
+    folded: bool,
+    has_content: bool,
 }
 
 impl Sanitizer {
@@ -328,7 +355,35 @@ impl Sanitizer {
             folded: false,
             has_content: false,
             style: None,
+            xml: None,
         }
+    }
+
+    /// Where the sanitizer stands, to go back to.
+    fn before(&self) -> Before {
+        Before {
+            written: self.out.0.len(),
+            css: self.css,
+            blocked_images: self.blocked_images,
+            blocked_links: self.blocked_links,
+            quote_depth: self.quote_depth,
+            folded: self.folded,
+            has_content: self.has_content,
+        }
+    }
+
+    /// Goes back to where the sanitizer stood `before`: what it wrote since is taken back, and what it counted.
+    fn go_back(&mut self, before: Before) {
+        self.out.0.truncate(before.written);
+        self.css = before.css;
+        self.blocked_images = before.blocked_images;
+        self.blocked_links = before.blocked_links;
+        self.quote_depth = before.quote_depth;
+        self.folded = before.folded;
+        self.has_content = before.has_content;
+        self.dropped = None;
+        self.raw = false;
+        self.style = None;
     }
 
     /// Whether the tokenizer is in foreign content, which a browser reads otherwise: no tag there switches it to raw
@@ -345,6 +400,13 @@ impl Sanitizer {
     fn start(&mut self, tag: &Tag) -> TokenSinkResult<()> {
         // A browser reads a tag by what is open before it: an <svg> element's <title> is foreign, what it holds isn't.
         let foreign = self.in_foreign_content();
+        // Python counted an <xml> in an <xml> as it counted any other dropped element's own tag.
+        if &*tag.name == "xml"
+            && !(foreign && tag.self_closing)
+            && let Some(xml) = &mut self.xml
+        {
+            xml.depth += 1;
+        }
         self.open(tag);
         let state = if foreign { TokenSinkResult::Continue } else { raw_state(&tag.name) };
         self.raw = !matches!(state, TokenSinkResult::Continue);
@@ -360,7 +422,7 @@ impl Sanitizer {
             return;
         }
         if let Some(dropped) = &mut self.dropped {
-            match dropped.start(name, tag.self_closing) {
+            match dropped.start(name, tag.self_closing, &tag.attrs) {
                 Step::Within => return,
                 Step::Ends => {
                     self.dropped = None;
@@ -376,10 +438,24 @@ impl Sanitizer {
             self.style = Some(String::new());
             return;
         }
+        // A browser shows what these hold where no attribute may hide it: a <noscript>'s, as the frame runs no
+        // script, an <object>'s fallback, as the frame loads no object (see `shows_fallback`), and an <xml>'s, as
+        // any element's (see `xml`).
+        match name {
+            "noscript" if !hides(&tag.attrs) => return,
+            "object" if shows_fallback(&tag.attrs) => return,
+            "xml" if !hides(&tag.attrs) => {
+                if self.xml.is_none() {
+                    self.xml = Some(Xml { depth: 1, before: self.before() });
+                }
+                return;
+            }
+            _ => {}
+        }
         if let Some(dropped) = DROP_WITH_CONTENT.iter().find(|dropped| **dropped == name) {
             // A browser closes an <svg/> or <math/> at once. On any other HTML element it ignores the slash.
             if !(tag.self_closing && matches!(name, "svg" | "math")) {
-                self.dropped = Some(Dropped::new(dropped));
+                self.dropped = Some(Dropped::new(dropped, &tag.attrs));
             }
             return;
         }
@@ -400,6 +476,17 @@ impl Sanitizer {
     fn end(&mut self, name: &str) {
         // In raw text the tokenizer reads no end tag but the one that ends it.
         self.raw = false;
+        if name == "xml"
+            && let Some(xml) = &mut self.xml
+        {
+            xml.depth -= 1;
+            if xml.depth == 0 {
+                let before = xml.before;
+                self.xml = None;
+                self.go_back(before);
+                return;
+            }
+        }
         if name == "style"
             && let Some(sheet) = self.style.take()
         {
@@ -543,6 +630,40 @@ impl Sanitizer {
                 css_urls: self.css.blocked_urls,
             },
         }
+    }
+}
+
+/// Whether an element's attributes may hide what it holds: a `hidden`, or a `style`, which the element unwrapped
+/// loses. Such an element stays dropped with all it holds.
+fn hides(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| matches!(&*attr.name.local, "hidden" | "style"))
+}
+
+/// The schemes of an `<object>`'s `data` at which a browser shows its fallback in the mail frame, whose policy loads
+/// no object: none is loaded, and nothing stands in its place.
+const FALLBACK_SCHEMES: &[&str] = &["http", "https", "data", "cid", "javascript", "blob"];
+
+/// Whether a browser shows an `<object>`'s fallback in the mail frame, whose policy loads no object. It doesn't where
+/// the object is an image, which shows in its place, nor where it is a frame of its own: an `about:` page, or the
+/// document's own address with a fragment. The sanitizer keeps the object dropped for any image type, though a
+/// browser shows the fallback of some, and for a `data` of a scheme `FALLBACK_SCHEMES` doesn't name.
+fn shows_fallback(attrs: &[Attribute]) -> bool {
+    let value = |name: &str| attrs.iter().find(|attr| &*attr.name.local == name).map(|attr| &*attr.value);
+    if hides(attrs) || value("type").is_some_and(|kind| kind.to_ascii_lowercase().starts_with("image/")) {
+        return false;
+    }
+    let Some(data) = value("data") else { return true };
+    // A browser reads a URL past the controls and spaces around it, and without its tabs and line breaks.
+    let data: String =
+        data.trim_matches(|c: char| c <= ' ').chars().filter(|c| !matches!(c, '\t' | '\n' | '\r')).collect();
+    let scheme = data.split_once(':').map(|(scheme, _)| scheme).filter(|scheme| {
+        let mut chars = scheme.chars();
+        chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+            && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    });
+    match scheme {
+        Some(scheme) => FALLBACK_SCHEMES.iter().any(|kept| scheme.eq_ignore_ascii_case(kept)),
+        None => !data.starts_with('#'),
     }
 }
 

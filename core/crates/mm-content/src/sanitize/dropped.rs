@@ -3,10 +3,13 @@
 //! Python's sanitizer skipped each to its own end tag, counting the same tag nested in it, and most end there in a
 //! browser too: a raw text element can hold no other tag, and a `<template>` nests in itself. Where a browser's tree
 //! builder ends one elsewhere, the text after it would be lost, so the sanitizer follows the builder as far as that
-//! takes: a `<head>` ends at what a head can't hold, and a `<form>`, `<button>` or `<select>` ends, or goes on, as a
-//! browser reads one of its own nested in it and its own end tag. It follows nothing outside the element, so an
-//! ancestor's end tag never ends one, and where what a browser does turns on what it doesn't follow, it keeps to the
-//! end tag, as Python did. Each reading here is Chromium's, with scripting off.
+//! takes: a `<head>` ends at what a head can't hold, a `<form>`, `<button>` or `<select>` ends, or goes on, as a
+//! browser reads one of its own nested in it and its own end tag, and an `<svg>` or `<math>` ends where a browser
+//! breaks out of it to show HTML. It follows nothing outside the element, so an ancestor's end tag never ends one,
+//! and where what a browser does turns on what it doesn't follow, it keeps to the end tag, as Python did. Each
+//! reading here is Chromium's, with scripting off.
+
+use html5ever::Attribute;
 
 /// The tags a browser keeps in a `<head>`. It ends the head at any other start tag, at text that isn't space outside
 /// a raw text element, and at `</body>`, `</html>` and `</br>` as at `</head>`, and reads what ended it as the body's.
@@ -65,8 +68,17 @@ const SPECIAL: &[&str] = &[
     "plaintext", "pre", "script", "search", "section", "style", "summary", "textarea", "title", "ul", "xmp",
 ];
 
-/// How many elements open in a form, button or select the sanitizer keeps track of. Past that it keeps to the end
-/// tag, as Python did.
+/// The start tags a browser breaks out of an `<svg>` or `<math>` at, but in one of their integration points: it
+/// closes what is open of theirs and reads the tag as HTML's. A `<font>` breaks out with a color, face or size.
+#[rustfmt::skip]
+const BREAKOUT: &[&str] = &[
+    "b", "big", "blockquote", "body", "br", "center", "code", "dd", "div", "dl", "dt", "em", "embed", "h1", "h2",
+    "h3", "h4", "h5", "h6", "head", "hr", "i", "img", "li", "listing", "menu", "meta", "nobr", "ol", "p", "pre",
+    "ruby", "s", "small", "span", "strong", "strike", "sub", "sup", "table", "tt", "u", "ul", "var",
+];
+
+/// How many elements open in a form, button, select, svg or math the sanitizer keeps track of. Past that it keeps to
+/// the end tag, as Python did.
 const OPEN_LIMIT: usize = 256;
 
 /// An element dropped with all it holds, and what of its content decides where it ends.
@@ -81,6 +93,8 @@ pub(super) enum Dropped {
     Control { tag: &'static str, inside: Vec<Inside>, depth: usize },
     /// A `<form>`: see `Form`.
     Form(Form),
+    /// An `<svg>` or `<math>`: see `Foreign`.
+    Foreign(Foreign),
 }
 
 /// A dropped `<form>`. A browser ignores a form nested in a form but in a `<template>`, and at the form's end tag
@@ -134,12 +148,15 @@ enum Reach {
 }
 
 impl Dropped {
-    /// The element `tag` starts, dropped with all it holds.
-    pub(super) fn new(tag: &'static str) -> Self {
+    /// The element `tag` starts, dropped with all it holds. `attrs` are its attributes.
+    pub(super) fn new(tag: &'static str, attrs: &[Attribute]) -> Self {
         match tag {
             "head" => Self::Head { templates: 0 },
             "button" | "select" => Self::Control { tag, inside: Vec::new(), depth: 1 },
             "form" => Self::Form(Form { inside: Vec::new(), depth: 1, lost: false }),
+            "svg" | "math" => {
+                Self::Foreign(Foreign { root: tag, open: vec![Element::new(tag, tag == "math", attrs)], depth: 1 })
+            }
             _ => Self::Counted { tag, depth: 1 },
         }
     }
@@ -151,6 +168,7 @@ impl Dropped {
             Self::Counted { tag, .. } => is_foreign(tag),
             Self::Head { .. } => false,
             Self::Control { inside, .. } | Self::Form(Form { inside, .. }) => in_foreign(inside),
+            Self::Foreign(_) => true,
         }
     }
 
@@ -160,8 +178,8 @@ impl Dropped {
         matches!(self, Self::Head { templates: 0 })
     }
 
-    /// A start tag read in the element.
-    pub(super) fn start(&mut self, name: &str, self_closing: bool) -> Step {
+    /// A start tag read in the element, with its attributes.
+    pub(super) fn start(&mut self, name: &str, self_closing: bool, attrs: &[Attribute]) -> Step {
         // In foreign content a tag written to close itself is closed at once.
         let counts = !(self.foreign() && self_closing);
         let (tag, inside, depth) = match self {
@@ -183,7 +201,7 @@ impl Dropped {
                 if name == *tag && counts {
                     *depth += 1;
                 }
-                let step = control_start(tag, inside, name, self_closing);
+                let step = control_start(tag, inside, name, self_closing, attrs);
                 if step != Step::Within {
                     return step;
                 }
@@ -193,18 +211,22 @@ impl Dropped {
                 if name == "form" && counts {
                     form.depth += 1;
                 }
-                form.start(name, self_closing);
+                form.start(name, self_closing, attrs);
                 ("form", &mut form.inside, form.depth)
+            }
+            Self::Foreign(foreign) => {
+                if name == foreign.root && counts {
+                    foreign.depth += 1;
+                }
+                let next = foreign.start(name, self_closing, attrs);
+                let (root, depth) = (foreign.root, foreign.depth);
+                return self.next(next, root, depth);
             }
         };
         if inside.len() <= OPEN_LIMIT {
             return Step::Within;
         }
-        if depth == 0 {
-            return Step::Ends;
-        }
-        *self = Self::Counted { tag, depth };
-        Step::Within
+        self.next(Next::Counted, tag, depth)
     }
 
     /// An end tag read in the element.
@@ -237,30 +259,153 @@ impl Dropped {
                 if name == "form" {
                     form.depth = form.depth.saturating_sub(1);
                 }
-                match form.end(name) {
-                    Next::Step(step) => step,
-                    Next::Counted(depth) => {
-                        *self = Self::Counted { tag: "form", depth };
-                        Step::Within
-                    }
+                let next = form.end(name);
+                let depth = form.depth;
+                self.next(next, "form", depth)
+            }
+            Self::Foreign(foreign) => {
+                if name == foreign.root {
+                    foreign.depth = foreign.depth.saturating_sub(1);
                 }
+                let next = foreign.end(name);
+                let (root, depth) = (foreign.root, foreign.depth);
+                self.next(next, root, depth)
+            }
+        }
+    }
+
+    /// Where `next` leaves the element: past telling, it goes on to the end tag of `tag` that ends it in Python's
+    /// count, `depth` deep.
+    fn next(&mut self, next: Next, tag: &'static str, depth: usize) -> Step {
+        match next {
+            Next::Step(step) => step,
+            Next::Counted if depth == 0 => Step::Ends,
+            Next::Counted => {
+                *self = Self::Counted { tag, depth };
+                Step::Within
             }
         }
     }
 }
 
-/// What an end tag in a form leads to.
+/// What a tag leads to in an element whose end the sanitizer may stop telling.
 enum Next {
-    /// The form goes on, or ends.
+    /// The element goes on, or ends.
     Step(Step),
-    /// Where the form ends is past telling: it goes on to the end tag that ends it in Python's count, this deep.
-    Counted(usize),
+    /// Where it ends is past telling: it ends at the end tag that ends it in Python's count.
+    Counted,
+}
+
+/// A dropped `<svg>` or `<math>`. A browser ends one at its end tag, and at the start of the HTML it breaks out of
+/// one to show: a paragraph, a table, a line break, text in bold, and the like (see `BREAKOUT`). In one of its
+/// integration points it reads HTML, which the sanitizer doesn't follow, so there it keeps to the end tag, as Python
+/// did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Foreign {
+    /// `svg` or `math`.
+    root: &'static str,
+    /// The elements open in it, the root first, all of them an `<svg>`'s or `<math>`'s.
+    open: Vec<Element>,
+    /// How deep Python's count of the root's tag stands.
+    depth: usize,
+}
+
+/// An element of an `<svg>` or `<math>` open in one being dropped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Element {
+    name: String,
+    /// Whether it is a `<math>`'s element, not an `<svg>`'s.
+    math: bool,
+    kind: Kind,
+}
+
+/// How a browser reads a start tag in an element of an `<svg>` or `<math>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    /// As foreign.
+    Plain,
+    /// As HTML: an HTML integration point.
+    Html,
+    /// As HTML, but `<mglyph>` and `<malignmark>`: a MathML text integration point.
+    Text,
+    /// As foreign, but an `<svg>`: an `<annotation-xml>` that isn't an HTML integration point.
+    Annotation,
+}
+
+impl Element {
+    fn new(name: &str, math: bool, attrs: &[Attribute]) -> Self {
+        let html_encoding = || {
+            attrs.iter().any(|attr| {
+                &*attr.name.local == "encoding"
+                    && (attr.value.eq_ignore_ascii_case("text/html")
+                        || attr.value.eq_ignore_ascii_case("application/xhtml+xml"))
+            })
+        };
+        let kind = match (math, name) {
+            (false, "foreignobject" | "desc" | "title") => Kind::Html,
+            (true, "mi" | "mo" | "mn" | "ms" | "mtext") => Kind::Text,
+            (true, "annotation-xml") if html_encoding() => Kind::Html,
+            (true, "annotation-xml") => Kind::Annotation,
+            _ => Kind::Plain,
+        };
+        Self { name: name.to_owned(), math, kind }
+    }
+}
+
+impl Foreign {
+    /// A start tag read in the `<svg>` or `<math>`.
+    fn start(&mut self, name: &str, self_closing: bool, attrs: &[Attribute]) -> Next {
+        let Some(current) = self.open.last() else { return Next::Step(Step::EndsBefore) };
+        let html = match current.kind {
+            Kind::Html => true,
+            Kind::Text => !matches!(name, "mglyph" | "malignmark"),
+            Kind::Annotation => name == "svg",
+            Kind::Plain => false,
+        };
+        let math = if html { name == "math" } else { current.math };
+        if html && !is_foreign(name) {
+            // HTML in an integration point.
+            return Next::Counted;
+        }
+        if !html && breaks_out(name, attrs) {
+            return self.break_out();
+        }
+        if !self_closing {
+            self.open.push(Element::new(name, math, attrs));
+        }
+        if self.open.len() > OPEN_LIMIT { Next::Counted } else { Next::Step(Step::Within) }
+    }
+
+    /// An end tag read in the `<svg>` or `<math>`: a browser closes the last element of that name open in it, and
+    /// breaks out of it at a `</p>` or `</br>`. Any other it reads as HTML's, which the sanitizer doesn't follow.
+    fn end(&mut self, name: &str) -> Next {
+        if matches!(name, "p" | "br") {
+            return self.break_out();
+        }
+        match self.open.iter().rposition(|open| open.name == name) {
+            Some(0) => Next::Step(Step::Ends),
+            Some(at) => {
+                self.open.truncate(at);
+                Next::Step(Step::Within)
+            }
+            None => Next::Step(Step::Within),
+        }
+    }
+
+    /// HTML a browser breaks out to: it closes what is open to the last integration point, and reads the tag as
+    /// HTML there, or past the root.
+    fn break_out(&mut self) -> Next {
+        while self.open.last().is_some_and(|open| matches!(open.kind, Kind::Plain | Kind::Annotation)) {
+            self.open.pop();
+        }
+        if self.open.is_empty() { Next::Step(Step::EndsBefore) } else { Next::Counted }
+    }
 }
 
 impl Form {
     /// A start tag read in the form.
-    fn start(&mut self, name: &str, self_closing: bool) {
-        if open_foreign("form", &mut self.inside, name, self_closing) {
+    fn start(&mut self, name: &str, self_closing: bool, attrs: &[Attribute]) {
+        if open_foreign("form", &mut self.inside, name, self_closing, attrs) {
             return;
         }
         if matches!(name, "select" | "input") {
@@ -385,7 +530,7 @@ impl Form {
             return Next::Step(Step::Ends);
         }
         // Something is left open, or the end tag doesn't reach the form: see `Form`.
-        Next::Counted(self.depth)
+        Next::Counted
     }
 
     /// Where the last element open in the form whose name `pick` takes is.
@@ -413,8 +558,8 @@ fn blocks(open: &Inside) -> bool {
 }
 
 /// A start tag of an `<svg>` or a `<math>`, or one in foreign content: whether it was one. `tag` is the dropped
-/// element's own.
-fn open_foreign(tag: &str, inside: &mut Vec<Inside>, name: &str, self_closing: bool) -> bool {
+/// element's own. One a browser breaks out of foreign content at is HTML's once it has.
+fn open_foreign(tag: &str, inside: &mut Vec<Inside>, name: &str, self_closing: bool, attrs: &[Attribute]) -> bool {
     if let Some(foreign) = ["svg", "math"].into_iter().find(|foreign| *foreign == name) {
         // A browser closes an <svg/> or <math/> at once.
         if !self_closing {
@@ -424,6 +569,9 @@ fn open_foreign(tag: &str, inside: &mut Vec<Inside>, name: &str, self_closing: b
     }
     if !in_foreign(inside) {
         return false;
+    }
+    if breaks_out(name, attrs) {
+        return !leave_foreign(inside);
     }
     let within = inside.iter().rev().find_map(|open| match open {
         Inside::Wall(wall) if is_foreign(wall) => Some(*wall),
@@ -445,8 +593,11 @@ fn open_foreign(tag: &str, inside: &mut Vec<Inside>, name: &str, self_closing: b
 }
 
 /// An end tag in foreign content: a browser closes the element of that name open last, as long as it meets only
-/// foreign elements on the way. Whether it did.
+/// foreign elements on the way, and breaks out at a `</p>` or `</br>`. Whether it read the tag as foreign.
 fn close_foreign(tag: &str, inside: &mut Vec<Inside>, name: &str) -> bool {
+    if matches!(name, "p" | "br") && in_foreign(inside) {
+        return !leave_foreign(inside);
+    }
     for at in (0..inside.len()).rev() {
         let open = match &inside[at] {
             Inside::Wall(wall) if is_foreign(wall) || is_integration_point(wall) => *wall,
@@ -459,6 +610,22 @@ fn close_foreign(tag: &str, inside: &mut Vec<Inside>, name: &str) -> bool {
         }
     }
     false
+}
+
+/// Whether a browser breaks out of foreign content at the start tag `name` with `attrs`.
+fn breaks_out(name: &str, attrs: &[Attribute]) -> bool {
+    BREAKOUT.contains(&name)
+        || (name == "font" && attrs.iter().any(|attr| matches!(&*attr.name.local, "color" | "face" | "size")))
+}
+
+/// Breaks out of foreign content, as a browser does at HTML in it: closes the `<svg>`s and `<math>`s open last, and
+/// what is open in them, to an integration point or an HTML element. Whether the tag is HTML's now: in an
+/// `<annotation-xml>`, which may be an integration point or not, the sanitizer stops, and reads the tag as foreign.
+fn leave_foreign(inside: &mut Vec<Inside>) -> bool {
+    while matches!(inside.last(), Some(Inside::Wall("svg" | "math") | Inside::Foreign)) {
+        inside.pop();
+    }
+    !in_foreign(inside)
 }
 
 /// Whether `wall` is one of the `INTEGRATION_POINTS`, which only foreign content holds.
@@ -518,8 +685,8 @@ fn reach(inside: &[Inside]) -> Reach {
 }
 
 /// A start tag read in a dropped button or select.
-fn control_start(tag: &str, inside: &mut Vec<Inside>, name: &str, self_closing: bool) -> Step {
-    if open_foreign(tag, inside, name, self_closing) {
+fn control_start(tag: &str, inside: &mut Vec<Inside>, name: &str, self_closing: bool, attrs: &[Attribute]) -> Step {
+    if open_foreign(tag, inside, name, self_closing, attrs) {
         return Step::Within;
     }
     if tag == "button" && matches!(name, "select" | "input") {
