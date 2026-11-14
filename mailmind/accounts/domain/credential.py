@@ -10,8 +10,8 @@
 An entry naming two gets the first of keychain, env, proton_bridge, op, and one naming plain is refused whatever else it
 names. Having the secret is
 mailmind.accounts.adapters.secrets's; this only says where it is, and what MailMind names the Keychain items it keeps:
-`account:<address>` for an account's password, `anthropic-api-key` for the Claude API key. No credential may name the
-item the database's key is kept in, which would send that key to a mail server.
+`account:<address>` for an account's password, `anthropic-api-key` for the Claude API key, `proton-bridge-password` for
+the Bridge's. No credential may name the item the database's key is kept in, which would send that key to a mail server.
 
 The file never holds a secret itself. One that does, `{ "plain": "the-password" }` or a bare string as MailMind once
 wrote them, reads as the style "plain" only so it can be refused: `PlaintextSecret` says how to move it to the Keychain.
@@ -38,6 +38,7 @@ type Style = Literal["plain", "keychain", "typed", "op", "env", "proton_bridge",
 
 API_KEY_ITEM = "anthropic-api-key"
 API_KEY_WHO = "anthropic_api_key"       # the file's key for it, and the name a refusal gives it
+BRIDGE_ITEM = "proton-bridge-password"  # the Proton Bridge's password, which every proton_bridge credential logs in with
 DATABASE_KEY_ITEM = "database-key"      # mailmind.platform.db.key's, which no credential names
 
 

@@ -8,13 +8,15 @@ in the Keychain, and takes one out.
 
 The Bridge password comes from the first of: the environment variable MAILMIND_PROTON_BRIDGE_PASS;
 1Password's op://Private/<MAILMIND_PROTON_OP_ITEM>/password, when that variable names an item;
-the file ~/.config/mailmind/proton_bridge_pass. It is cached once found.
+the login Keychain's item proton-bridge-password, which Settings keeps; the file ~/.config/mailmind/proton_bridge_pass,
+read when the Keychain holds none or can't be asked. The Rust server reads the same, but the file. It is cached once
+found, until the item is kept again or taken out.
 """
 import pathlib
 import subprocess
 import time
 
-from mailmind.accounts.domain.credential import CredentialRef, PlaintextSecret
+from mailmind.accounts.domain.credential import BRIDGE_ITEM, CredentialRef, PlaintextSecret
 from mailmind.platform import environment, keychain
 
 BRIDGE_FILE = pathlib.Path.home() / ".config" / "mailmind" / "proton_bridge_pass"
@@ -131,12 +133,17 @@ def bridge_password():
                                capture_output=True, text=True)
             if r.returncode == 0:
                 pw = r.stdout.strip()
+    if not pw:
+        try:
+            pw = keychain.find(BRIDGE_ITEM)
+        except keychain.KeychainProblem:
+            pw = None                               # a computer with no Keychain, or one locked: the file's turn
     if not pw and BRIDGE_FILE.exists():
         pw = BRIDGE_FILE.read_text().strip()
     if not pw:
         raise RuntimeError(
             f"Proton Bridge password not configured. Set {environment.PROTON_BRIDGE_PASS.name}, "
-            f"or {environment.PROTON_OP_ITEM.name} (a 1Password item id), or write it to "
-            f"{BRIDGE_FILE} (chmod 600).")
+            f"or {environment.PROTON_OP_ITEM.name} (a 1Password item id), or keep it in the login Keychain "
+            f"as MailMind's {BRIDGE_ITEM}, or write it to {BRIDGE_FILE} (chmod 600).")
     _bridge["pw"] = pw
     return pw
