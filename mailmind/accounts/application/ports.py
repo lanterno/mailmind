@@ -26,6 +26,10 @@ class SecretStore(Protocol):
         """Take `item` out. False when there was none."""
         ...
 
+    def holds(self, item: str) -> bool:
+        """Whether the Keychain holds `item`."""
+        ...
+
 
 class ConnectionProbe(Protocol):
     """A throwaway login to the account's server, and straight out again, which is the test: it shares no IMAP state,

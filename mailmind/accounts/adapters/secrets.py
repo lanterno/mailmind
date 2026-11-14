@@ -4,7 +4,7 @@ A Keychain item is read through mailmind.platform.keychain, and an op read throu
 for the process's life, and only when it succeeds: an item for each version the file names, so a secret kept again, by
 this process or another, is read again. `evict` drops a credential's cached reads when it is replaced or removed, and
 `forget` drops them all, as a new process starts with none. `keep` and `discard` are how Accounts keeps a typed password
-in the Keychain, and takes one out.
+in the Keychain, and takes one out, and `holds` says whether it holds an item.
 
 The Bridge password comes from the first of: the environment variable MAILMIND_PROTON_BRIDGE_PASS;
 1Password's op://Private/<MAILMIND_PROTON_OP_ITEM>/password, when that variable names an item;
@@ -60,6 +60,8 @@ def _keychain_read(item, version, who):
 def _drop(item):
     for kept in [k for k in _keychain_cache if k[0] == item]:
         del _keychain_cache[kept]
+    if item == BRIDGE_ITEM:
+        _bridge.clear()
 
 
 def resolve(cred, *, who, strip=False):
@@ -104,15 +106,27 @@ def evict(cred):
 
 
 def keep(item, secret):
-    """Keep `secret` in the Keychain as `item`, in place of what it held there."""
+    """Keep `secret` in the Keychain as `item`, in place of what it held there, and forget what was read of it: after the
+    keep too, so a read that ran meanwhile isn't kept."""
     _drop(item)
-    keychain.put(item, secret)
+    try:
+        keychain.put(item, secret)
+    finally:
+        _drop(item)
 
 
 def discard(item):
     """Take the Keychain's `item` out, and forget what was read of it. False when it held none."""
     _drop(item)
-    return keychain.delete(item)
+    try:
+        return keychain.delete(item)
+    finally:
+        _drop(item)
+
+
+def holds(item):
+    """Whether the Keychain holds `item`, read now. Raises KeychainProblem when it can't be asked."""
+    return bool(keychain.find(item))
 
 
 def forget():

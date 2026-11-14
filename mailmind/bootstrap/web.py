@@ -8,6 +8,7 @@ from mailmind.http.routers import compose as compose_routes
 from mailmind.http.routers import curation as curation_routes
 from mailmind.http.routers import debug, events, export, places, static
 from mailmind.http.routers import discovery as discovery_routes
+from mailmind.http.routers import keychain as keychain_routes
 from mailmind.http.routers import mailbox as mailbox_routes
 from mailmind.http.routers import preferences as preferences_routes
 from mailmind.http.shared import AI_OVER_HEADER, post_body_cap, tell_of_someone
@@ -19,6 +20,7 @@ ROUTERS = [attention_routes.router(attention, mailbox),
            mailbox_routes.router(mailbox),
            accounts_routes.router(accounts, mailbox),
            preferences_routes.router(accounts, assistant),
+           keychain_routes.router(accounts),
            debug.router(mailbox, compose, background, assistant),
            curation_routes.router(curation, mailbox),
            assistant_routes.router(assistant, mailbox),

@@ -18,7 +18,9 @@ resolves. The file never holds a secret itself: one that does is refused (`refus
 `set_password` or `set_api_key` keeps it in the Keychain instead. A password typed into Settings goes to the login Keychain, in the account's own item
 (`account:<address>`), before the file is written, and the file names the item: a new one replaces
 what the item held, and removing the account takes its item out. A Keychain that won't is
-`Unreachable`, and the file is left as it was.
+`Unreachable`, and the file is left as it was. The Claude API key, which the file names, and the
+Proton Bridge's password, which it doesn't, are kept and taken out alike (`set_api_key`,
+`clear_api_key`, `set_bridge_password`, `clear_bridge_password`).
 
 Type defaults (override per account as needed):
   gmail  -> imap.gmail.com:993 TLS, trash "[Gmail]/Trash", app-password spaces stripped
@@ -32,8 +34,8 @@ from typing import Any
 from mailmind.accounts.application.ports import AccountRepository, SecretStore
 from mailmind.accounts.domain import account, events, preferences
 from mailmind.accounts.domain.account import Entry, MaskedRow
-from mailmind.accounts.domain.credential import (API_KEY_ITEM, CredentialRef, PlaintextSecret, Typed,
-                                                 account_item, credential_from, keychain_credential, plaintext)
+from mailmind.accounts.domain.credential import (API_KEY_ITEM, API_KEY_WHO, BRIDGE_ITEM, CredentialRef, PlaintextSecret,
+                                                 Typed, account_item, credential_from, keychain_credential, plaintext)
 from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.parsed import is_object
 from mailmind.platform import bus
@@ -266,11 +268,61 @@ class Directory:
         with self._write_lock:
             raw = self._raw()
             raw.setdefault("accounts", [])
-            old = raw.get("anthropic_api_key")
-            raw["anthropic_api_key"] = self._kept(API_KEY_ITEM, Typed(secret), old)
+            old = raw.get(API_KEY_WHO)
+            raw[API_KEY_WHO] = self._kept(API_KEY_ITEM, Typed(secret), old)
             self._secrets.evict(old)
             self.save(raw)
         return API_KEY_ITEM
+
+    def api_key_set(self) -> bool:
+        """Whether the file names a Claude API key, wherever it keeps it."""
+        return bool(self._raw().get(API_KEY_WHO))
+
+    def clear_api_key(self) -> None:
+        """Take the Claude API key's Keychain item out, and the file's anthropic_api_key with it, whatever it named: AI is
+        off unless the environment gives a key. Raises Unreachable when the Keychain won't let go of the item, and the
+        file is left as it was."""
+        with self._write_lock:
+            raw = self._raw()
+            self._take_out(API_KEY_ITEM, "key")
+            if API_KEY_WHO in raw:
+                self._secrets.evict(raw.pop(API_KEY_WHO))
+                self.save(raw)
+
+    def bridge_password_set(self) -> bool:
+        """Whether the Keychain keeps the Proton Bridge's password: the environment or 1Password may give one all the
+        same. Raises Unreachable when the Keychain can't be asked."""
+        try:
+            return self._secrets.holds(BRIDGE_ITEM)
+        except KeychainProblem:
+            raise Unreachable("The Keychain didn't answer. Is the login keychain locked?") from None
+
+    def set_bridge_password(self, secret: str) -> None:
+        """Keep `secret` as the Proton Bridge's password, in its Keychain item, which every proton_bridge credential logs in
+        with: each such account has changed, so a login its server refused is let go and IDLE logs in afresh. Raises
+        ValueError for a secret the Keychain can't hold, and Unreachable when it won't keep it."""
+        try:
+            self._secrets.keep(BRIDGE_ITEM, secret)
+        except KeychainProblem:
+            raise Unreachable("The Keychain didn't keep the password. Is the login keychain locked?") from None
+        self._bridged_changed()
+
+    def clear_bridge_password(self) -> None:
+        """Take the Proton Bridge's password out of the Keychain, and say so of each account that logs in with it. Raises
+        Unreachable when the Keychain won't."""
+        self._take_out(BRIDGE_ITEM, "password")
+        self._bridged_changed()
+
+    def _take_out(self, item: str, what: str) -> None:
+        try:
+            self._secrets.discard(item)
+        except KeychainProblem:
+            raise Unreachable(f"The Keychain didn't let go of the {what}. Is the login keychain locked?") from None
+
+    def _bridged_changed(self) -> None:
+        for a in self.accounts():
+            if CredentialRef.parse(a.get("credential")).style == "proton_bridge":
+                bus.publish(events.AccountChanged(a["email"]))
 
     def refuse_plaintext(self) -> None:
         """Raise PlaintextSecret, naming each, when the file holds a secret itself."""
