@@ -40,10 +40,9 @@ Step 3 of the "MailMind client architecture" document is under way ([docs/client
 served tests it passes against the same scripts. Until the flip, the Python app gets fixes only.
 
 - **Port the rest of the routes** · medium value · effort M · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers every
-  route the page calls, and every served test passes on it, as `just test-rust` holds. Still short of the Python
-  app: batches, the Claude API's Message Batches that `assess --batch` sends at half the price (the Rust server triages
-  each message as it comes, as Python's does with `MAILMIND_NO_BATCHES`, and leaves alone what a Python batch holds);
-  and `/api/debug/ai`, `/api/debug/health` and `/api/debug/jobs`, which neither the page nor a served test calls.
+  route the page calls, and every served test passes on it, as `just test-rust` holds, and its assess job sends a
+  backlog as a batch as Python's does. Still short of the Python app: `/api/debug/ai`, `/api/debug/health` and
+  `/api/debug/jobs`, which neither the page nor a served test calls.
 - **One adapter for each port** · low value · effort S · [#32](https://github.com/lanterno/mailmind/issues/32) — The areas ported side by side left doubles: three
   readers of the rule book (`Database::rules_document`, `RulesDocument`, the Curation store's `RuleBook`), three ways of
   reading a POST's fields (`body::Fields`, `posted`, `schema`), two adapters naming the accounts (`wiring::KnownAccounts`,
@@ -130,4 +129,4 @@ implementation.
 1. **The owner's two weeks on the Rust server** (high) — every route the page calls is served there and a message whose
    body isn't stored opens: `just run-rust` starts them, in place of `just run`, and they end in the flip (#11).
    `MAILMIND_WORKERS=account` (#3) can soak in them: both servers read it.
-2. **Step 3's last part** (medium) — batches (#6). See The move to the Rust core.
+2. **Step 3's last part** (small) — the debug routes (#6). See The move to the Rust core.

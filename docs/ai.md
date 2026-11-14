@@ -104,7 +104,10 @@ messages waiting is one, whether a first import or after an outage, and new mail
 `assistant.assessments.batch_submit` sends it and `batch_collect` brings the answers in, both from its `round`, which
 collects first since that sends no mail and the answers are paid for. `uv run python -m mailmind assess --batch` does
 the same for any size. `MAILMIND_NO_BATCHES=1` keeps the job from sending one, so a backlog goes synchronously as it
-did; a batch already out is still brought in.
+did; a batch already out is still brought in. The Rust server's assess job does the same (`mm_assistant::batches`,
+the calls in `mm-claude`'s `batches`) on the same rows, so either server brings in a batch the other sent. It reads a
+batch's answers from the API it sent the batch to, never from the `results_url` the API names, so the key goes nowhere
+else.
 - One at a time (migration 36: `ai_batches`, and `ai_batch_items` by message key). `needs_summary` leaves out what a
   batch holds, and while one is out everything older than the newest it took (`cutoff_ts`), which waits for the next
   batch rather than going at full price.
