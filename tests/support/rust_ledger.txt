@@ -670,3 +670,10 @@ tests/api/test_http_debug.py::test_the_jobs_none_runs_here_and_the_profile
 tests/api/test_http_debug.py::test_each_answers_only_a_get_from_the_page_itself[/api/debug/health]
 tests/api/test_http_debug.py::test_each_answers_only_a_get_from_the_page_itself[/api/debug/jobs]
 tests/api/test_http_debug.py::test_each_answers_only_a_get_from_the_page_itself[/api/debug/ai]
+tests/api/test_http_keychain.py::test_nothing_is_set_to_begin_with
+tests/api/test_http_keychain.py::test_the_claude_api_key_is_kept_in_the_keychain_and_the_config_names_it
+tests/api/test_http_keychain.py::test_clearing_the_key_takes_out_whatever_the_config_named
+tests/api/test_http_keychain.py::test_a_secret_the_keychain_cant_hold_is_refused_in_its_words_and_nothing_is_kept[/api/ai/key-key]
+tests/api/test_http_keychain.py::test_a_secret_the_keychain_cant_hold_is_refused_in_its_words_and_nothing_is_kept[/api/accounts/bridge-password-password]
+tests/api/test_http_keychain.py::test_the_bridges_password_is_kept_and_a_proton_account_logs_in_with_it
+tests/api/test_http_keychain.py::test_a_new_bridge_password_takes_the_place_of_the_one_a_login_found
