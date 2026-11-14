@@ -1,9 +1,17 @@
-//! What an export would hold, and a snapshot of the database as a download (`mailmind.platform.db.export`): read
-//! only, and no network. A download is a file in a folder of its own, made for it and readable by its owner only,
-//! which goes when the `Download` does, however its answer ends.
+//! What an export would hold, and as a download a snapshot of the database or the mail in a standard format
+//! (`mailmind.platform.db.export`): read only, and no network. A download is a file in a folder of its own, made for
+//! it and readable by its owner only, which goes when the `Download` does, however its answer ends. The snapshot,
+//! encrypted as the database is, is made in the system's folder for temporary files; the archive, which holds the
+//! mail as it is, in the data directory, beside the database.
+
+// The mail as .eml files or an mbox a folder.
+mod archive;
+// The zip they are packed in.
+mod zip;
 
 use std::fs;
-use std::path::PathBuf;
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -16,9 +24,15 @@ use rusqlite::backup::Backup;
 use serde_json::{Value, json};
 
 use crate::db::Database;
+pub use archive::Form;
 
 const TRIPPED: Fault = Fault::new("Tripped");
 const UNWRITABLE: Fault = Fault::new("ExportUnwritable");
+const STORAGE: Fault = Fault::new("StorageError");
+/// A message whose headers Python would have refused to write.
+const REFUSED: Fault = Fault::new("ExportRefused");
+/// How much of an archive is held before it goes to its file.
+const CHUNK: usize = 262_144;
 
 static FOLDERS: AtomicU64 = AtomicU64::new(0);
 
@@ -93,11 +107,11 @@ impl Exports {
         Ok(json!({"ok": true, "total": total, "bodies": bodies, "groups": groups}))
     }
 
-    /// A folder of its own for a download, listable by its owner only.
-    fn folder(&self, content_type: &'static str, name: String) -> Result<Download, Fault> {
+    /// A folder of its own for a download, in `within`, listable by its owner only.
+    fn folder(&self, within: &Path, content_type: &'static str, name: String) -> Result<Download, Fault> {
         for _ in 0..64 {
             let n = FOLDERS.fetch_add(1, Ordering::Relaxed);
-            let folder = self.temporary.join(format!("mm-export-{}-{n}", std::process::id()));
+            let folder = within.join(format!("mm-export-{}-{n}", std::process::id()));
             self.outside.open(&folder).map_err(|_| TRIPPED)?;
             let mut builder = fs::DirBuilder::new();
             // A folder of its own: never one already there, nor the folders above it.
@@ -130,8 +144,8 @@ impl Exports {
     /// it opens on this computer, or wherever that key is given (MAILMIND_DB_KEY). SQLite's online backup copies it
     /// page for page into a file keyed as the database is, and writes nothing to the database itself.
     pub fn snapshot(&self) -> Result<Download, Fault> {
-        let mut download =
-            self.folder("application/octet-stream", format!("mailmind-{}.db", stamp(self.clock.now())))?;
+        let name = format!("mailmind-{}.db", stamp(self.clock.now()));
+        let mut download = self.folder(&self.temporary, "application/octet-stream", name)?;
         // Made readable by its owner only, and closed again: SQLite opens it next.
         let _ = self.create(&download.file)?;
         let mut copy = Connection::open(&download.file).map_err(|_| UNWRITABLE)?;
@@ -142,6 +156,25 @@ impl Exports {
             Backup::new(c, &mut copy)?.run_to_completion(i32::MAX, Duration::from_millis(250), None)
         })?;
         drop(copy);
+        download.size = fs::metadata(&download.file).map_err(|_| UNWRITABLE)?.len();
+        Ok(download)
+    }
+
+    /// Every stored message as a zip any other mail program reads (`export.archive`): a .eml file each, under its
+    /// account and folder, or an mbox file a folder. It is made in the data directory, beside the database, since
+    /// it holds the mail as it is, and read from the database in one block, so it is the mail as it stood then.
+    pub fn archive(&self, form: Form) -> Result<Download, Fault> {
+        let now = self.clock.now();
+        let name = format!("mailmind-{}-{}.zip", form.name(), stamp(now));
+        let mut download = self.folder(self.database.folder(), "application/zip", name)?;
+        let file = self.create(&download.file)?;
+        let mut zip = zip::Zip::new(BufWriter::with_capacity(CHUNK, file), now, zip::PYTHONS);
+        self.database.read(|c| Ok(archive::write_all(c, &mut zip, form)))?.map_err(|stop| match stop {
+            archive::Stop::Storage => STORAGE,
+            archive::Stop::Unwritable => UNWRITABLE,
+            archive::Stop::Refused => REFUSED,
+        })?;
+        drop(zip.finish().map_err(|_| UNWRITABLE)?);
         download.size = fs::metadata(&download.file).map_err(|_| UNWRITABLE)?.len();
         Ok(download)
     }

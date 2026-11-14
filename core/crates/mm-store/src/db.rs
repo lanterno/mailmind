@@ -2,7 +2,7 @@
 //! connection for each block of work (the Python app's `UnitOfWork`), so no connection outlives what it was for.
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use mm_kernel::errors::Fault;
@@ -54,6 +54,11 @@ impl Database {
             return Ok(None);
         }
         self.read(|c| c.query_row("PRAGMA user_version", [], |r| r.get(0))).map(Some)
+    }
+
+    /// The folder the database is in, the data directory: where what is made beside it goes (an export's archive).
+    pub(crate) fn folder(&self) -> &Path {
+        self.path.parent().unwrap_or(Path::new("."))
     }
 
     /// The key it opens with, for a copy made with it (an export).
