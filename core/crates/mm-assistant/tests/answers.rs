@@ -820,3 +820,40 @@ fn a_review_counts_the_week_and_keeps_what_the_model_said_of_it() {
         (json!(true), json!(false), json!(110))
     );
 }
+
+/// The open tabs, as what each was told.
+#[derive(Debug, Default)]
+struct Tabs(Mutex<Vec<(&'static str, Value)>>);
+
+impl mm_kernel::events::Events for Tabs {
+    fn publish(&self, topic: mm_kernel::events::Topic, data: Value) {
+        self.0.lock().expect("tabs").push((topic.name(), data));
+    }
+}
+
+#[test]
+fn a_reply_drafted_ahead_is_set_going_only_with_the_token_and_served_once_ready() {
+    let w = world(true);
+    let none = json!({"ok": true, "status": "none"});
+    // Only the thread's newest message is drafted for, and asking never drafts.
+    assert_eq!(w.drafting.get(1, false, true).expect("an answer"), (none.clone(), None));
+    assert_eq!(w.drafting.get(3, true, true).expect("an answer"), (none.clone(), None));
+    assert_eq!(w.drafting.get(3, false, false).expect("an answer"), (none.clone(), None));
+    let (said, start) = w.drafting.get(3, false, true).expect("an answer");
+    assert_eq!((said, start.clone()), (json!({"ok": true, "status": "generating"}), Some((ADA.to_owned(), 3))));
+    assert!(sent(&w).is_empty());
+    let tabs = Tabs::default();
+    assert_eq!(w.drafting.generate(Some(ADA), 3, "dwell", &tabs), Some(true));
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(
+        prompt.text.starts_with(
+            "You are drafting a reply to an email thread, writing AS the account owner (ada@example.test)."
+        )
+    );
+    assert_eq!(*tabs.0.lock().expect("tabs"), [("draft-ready", json!({"account": ADA, "key": 30}))]);
+    // Warm now: another generation joins nothing and calls nothing.
+    assert_eq!(w.drafting.generate(Some(ADA), 3, "dwell", &tabs), None);
+    let ready = w.drafting.get(3, true, false).expect("an answer");
+    assert_eq!(ready, (json!({"ok": true, "status": "ready", "body": "stub body", "tone": "balanced"}), None));
+    assert!(sent(&w).is_empty());
+}
