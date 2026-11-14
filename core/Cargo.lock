@@ -1089,6 +1089,7 @@ dependencies = [
  "mm-imap",
  "mm-kernel",
  "mm-mailbox",
+ "mm-oneclick",
  "mm-smtp",
  "mm-store",
  "rcgen",
