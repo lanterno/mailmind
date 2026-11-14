@@ -112,6 +112,8 @@ pub struct App {
     pub logins: Arc<mm_accounts::logins::Logins>,
     /// A sender's cleanup and a sweep.
     pub cleanups: crate::cleanup_wiring::Cleanups,
+    /// Today & next, an answer to an invite and an event file.
+    pub calendar: crate::calendar_wiring::Calendar,
 }
 
 impl App {
@@ -157,6 +159,16 @@ impl App {
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
         let tidying = crate::bound::Tidying::assemble(&database, &seams.clock);
+        // The calendar's, reading a TZID in the system's zone database.
+        let zones = Arc::new(mm_store::calendar::SystemZones::new(seams.outside.clone()));
+        let calendar = crate::calendar_wiring::Calendar::assemble(crate::calendar_wiring::CalendarParts {
+            database: database.clone(),
+            directory: directory.clone(),
+            fetch: Arc::new(mm_mailbox::opening::StoredBody::new(database.clone())),
+            zones,
+            clock: seams.clock.clone(),
+            zone: zone.clone(),
+        });
         let sessions = Arc::new(ImapSessions { login: login.clone() });
         let folders = Arc::new(Folders::new(
             Arc::new(KnownAccounts(directory.clone())),
@@ -335,6 +347,7 @@ impl App {
             compose,
             logins,
             cleanups,
+            calendar,
         })
     }
 }

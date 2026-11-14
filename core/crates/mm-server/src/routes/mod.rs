@@ -33,6 +33,8 @@ mod syncing;
 mod tidy;
 // A sender's cleanup and a sweep.
 mod cleanup;
+// The calendar's: Today & next, an answer to an invite and an event file.
+mod calendar;
 
 use std::sync::Arc;
 
@@ -68,6 +70,8 @@ pub fn router(app: Arc<App>) -> Router {
         .merge(syncing::routes())
         // A sender's cleanup and a sweep.
         .merge(cleanup::routes())
+        // The calendar's: Today & next, an answer to an invite and an event file.
+        .merge(calendar::routes())
         .fallback(no_route)
         .method_not_allowed_fallback(no_route)
         .with_state(app)
