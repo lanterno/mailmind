@@ -35,6 +35,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/ai/draft-reply", post(draft_reply))
         .route("/api/ai/rewrite", post(rewrite))
         .route("/api/ai/extract", post(extract))
+        .route("/api/ai/draft-ahead", get(draft_ahead))
         .route("/api/ai/ask", post(ask))
         .route("/api/ai/do-plan", post(do_plan))
         .route("/api/ai/do-confirm", post(do_confirm))
@@ -380,6 +381,38 @@ async fn write_delta(State(app): State<Arc<App>>, request: Request) -> Response<
     };
     ai(&app, (&method, &uri, &headers), ("delta error", "delta failed"), move |app| {
         Ok(answer::json(200, &app.assistant.asking.delta(account.as_ref(), since.as_ref(), true)?))
+    })
+    .await
+}
+
+/// A reply drafted ahead for the message the query names: ready, being made, or none. Asking never drafts: where the
+/// mail wants a reply and none is ready, a request that carries the page's CSRF token sets one going, since a kick
+/// spends a call and another site's `<img>` mustn't. `peek=1` only looks.
+async fn draft_ahead(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let (method, uri, headers) = (request.method().clone(), request.uri().clone(), request.headers().clone());
+    let given = Query::parse(uri.query().unwrap_or_default().as_bytes());
+    let read = (|| -> Result<_, Problem> {
+        let key = given.text("key").and_then(crate::query::as_int).ok_or_else(Problem::bad_request)?;
+        let uid = given.text("uid").map(|u| crate::query::as_int(u).ok_or_else(Problem::bad_request)).transpose()?;
+        Ok((key, given.text("folder").map(str::to_owned), uid, given.text("peek") == Some("1")))
+    })();
+    let (key, folder, uid, peek) = match read {
+        Ok(read) => read,
+        Err(problem) => return refused(problem),
+    };
+    let kick = crate::perimeter::token_matches(&headers, &app.csrf);
+    ai(&app, (&method, &uri, &headers), ("error", "draft-ahead failed"), move |app| {
+        let Some(pk) = app.attention.message_pk(key, folder.as_deref(), uid)? else {
+            return Ok(answer::json(200, &json!({"ok": true, "status": "none"})));
+        };
+        let (said, start) = app.assistant.drafting.get(pk, peek, kick)?;
+        if let Some((account, pk)) = start {
+            let (drafting, events) = (app.assistant.drafting.clone(), app.events.clone());
+            app.work.spawn(move || {
+                drafting.generate(Some(&account), pk, "dwell", &*events);
+            });
+        }
+        Ok(answer::json(200, &said))
     })
     .await
 }
