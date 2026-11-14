@@ -120,6 +120,7 @@ impl MailServer for Session {
             Search::MessageId(id) => format!("HEADER Message-ID {}", quoted(id)?),
             Search::UndeletedMessageId(id) => format!("UNDELETED HEADER Message-ID {}", quoted(id)?),
             Search::ChangedSince(modseq) => format!("MODSEQ {}", modseq.saturating_add(1)),
+            Search::From(text) => format!("FROM {}", quoted(text)?),
         };
         let answer = self.send(&format!("UID SEARCH {criteria}"))?;
         let mut found: Vec<u32> = answer
@@ -181,6 +182,18 @@ impl MailServer for Session {
     fn body(&mut self, uid: u32) -> Result<Option<Vec<u8>>, ServerError> {
         let fetched = self.fetched(&format!("UID FETCH {uid} (BODY.PEEK[])"))?;
         Ok(fetched.into_iter().find_map(|f| f.section))
+    }
+
+    fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {
+        let mut out = BTreeMap::new();
+        for batch in uids.chunks(HEADER_BATCH) {
+            for fetched in self.fetched(&format!("UID FETCH {} (UID INTERNALDATE)", uid_set(batch)))? {
+                if let (Some(uid), Some(arrived)) = (fetched.uid, fetched.arrived) {
+                    out.insert(uid, arrived);
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn store_flags(&mut self, uids: &[u32], add: bool, flags: &[&str]) -> Result<(), ServerError> {

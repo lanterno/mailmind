@@ -102,6 +102,9 @@ pub enum Search<'a> {
     UndeletedMessageId(&'a str),
     /// What changed past this mod-sequence (CONDSTORE), once enabled.
     ChangedSince(u64),
+    /// The messages whose From holds this text (`FROM "notify.example.test"`), as the server matches it: a coarse
+    /// filter, which the caller narrows.
+    From(&'a str),
 }
 
 /// The upper-case header names a sync fetches.
@@ -137,6 +140,9 @@ pub trait MailServer: MailSession {
     fn headers(&mut self, uids: &[u32], fields: &[&str], gmail: bool) -> Result<Vec<Headers>, ServerError>;
     /// A whole message, read without marking it read (BODY.PEEK[]).
     fn body(&mut self, uid: u32) -> Result<Option<Vec<u8>>, ServerError>;
+    /// When each message arrived, as the server says (INTERNALDATE), in Unix seconds: one whose date doesn't read
+    /// is left out.
+    fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError>;
     fn store_flags(&mut self, uids: &[u32], add: bool, flags: &[&str]) -> Result<(), ServerError>;
     /// Gmail's X-GM-LABELS.
     fn store_labels(&mut self, uids: &[u32], add: bool, labels: &[&str]) -> Result<(), ServerError>;
@@ -275,6 +281,10 @@ impl MailServer for ReadOnly {
 
     fn body(&mut self, uid: u32) -> Result<Option<Vec<u8>>, ServerError> {
         self.0.body(uid)
+    }
+
+    fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {
+        self.0.arrivals(uids)
     }
 
     fn store_flags(&mut self, _: &[u32], _: bool, _: &[&str]) -> Result<(), ServerError> {

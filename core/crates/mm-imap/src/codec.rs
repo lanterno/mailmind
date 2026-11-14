@@ -18,6 +18,8 @@ pub(crate) struct Fetched {
     pub(crate) section: Option<Vec<u8>>,
     pub(crate) gmail_thread: Option<u64>,
     pub(crate) gmail_labels: Option<Vec<String>>,
+    /// INTERNALDATE, when the message arrived, in Unix seconds: None where it wasn't asked for or doesn't read.
+    pub(crate) arrived: Option<i64>,
 }
 
 /// A response code (`[UIDVALIDITY 7]`), of those the session reads.
@@ -92,10 +94,43 @@ fn fetched(attributes: &[AttributeValue<'_>]) -> Fetched {
             AttributeValue::GmailLabels(labels) => {
                 out.gmail_labels = Some(labels.iter().map(|l| label_name(l)).collect());
             }
+            AttributeValue::InternalDate(date) => out.arrived = internal_date(date),
             _ => {}
         }
     }
     out
+}
+
+/// An INTERNALDATE (`17-Jul-1996 02:44:25 -0700`, its day perhaps led by a space) in Unix seconds, as
+/// `imaplib.Internaldate2tuple` reads one: None where it doesn't read as one.
+pub(crate) fn internal_date(text: &str) -> Option<i64> {
+    const MONTHS: [&str; 12] = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    let number = |part: &str, width: usize| -> Option<i64> {
+        (part.len() == width && part.bytes().all(|b| b.is_ascii_digit())).then(|| part.parse().ok()).flatten()
+    };
+    // A day below ten may be led by a space.
+    let (date, rest) = text.strip_prefix(' ').unwrap_or(text).split_once(' ')?;
+    let mut parts = date.split('-');
+    let (day, month, year) = (parts.next()?, parts.next()?, parts.next()?);
+    let day = number(day, 2).or_else(|| number(day, 1))?;
+    let month = MONTHS.iter().position(|m| m.eq_ignore_ascii_case(month))? as u32 + 1;
+    let year = number(year, 4)?;
+    let (time, zone) = rest.split_once(' ')?;
+    let mut clock = time.split(':');
+    let (hour, minute, second) = (number(clock.next()?, 2)?, number(clock.next()?, 2)?, number(clock.next()?, 2)?);
+    let (sign, digits) = match zone.as_bytes().first()? {
+        b'+' => (1, &zone[1..]),
+        b'-' => (-1, &zone[1..]),
+        _ => return None,
+    };
+    let (zone_hours, zone_minutes) = (number(digits.get(..2)?, 2)?, number(digits.get(2..)?, 2)?);
+    // imaplib's pattern takes a day's first digit from ` 0123`, and a day past its month's end runs on.
+    if parts.next().is_some() || clock.next().is_some() || day > 39 {
+        return None;
+    }
+    let days = mm_kernel::when::days_from_civil(year, month, 1) + day - 1;
+    let local = days * 86_400 + hour * 3_600 + minute * 60 + second;
+    Some(local - sign * (zone_hours * 3_600 + zone_minutes * 60))
 }
 
 /// What a response said. `raw` is the whole of it, its last CRLF included.
