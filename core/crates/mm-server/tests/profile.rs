@@ -25,6 +25,17 @@ fn reconcile_goes_round_every_half_hour_unless_told_otherwise() {
 }
 
 #[test]
+fn the_expiry_rules_go_round_every_hour_unless_told_otherwise() {
+    let secs = |pairs: &[(&str, &str)]| Environment::from_pairs(pairs.iter().copied()).expire_secs();
+    assert_eq!(secs(&[]), 3600);
+    assert_eq!(secs(&[("MAILMIND_EXPIRE_SECS", "")]), 3600);
+    assert_eq!(secs(&[("MAILMIND_EXPIRE_SECS", "hourly")]), 3600);
+    assert_eq!(secs(&[("MAILMIND_EXPIRE_SECS", " 900 ")]), 900);
+    assert_eq!(secs(&[("MAILMIND_EXPIRE_SECS", "0")]), 0);
+    assert_eq!(secs(&[("MAILMIND_EXPIRE_SECS", "-5")]), -5);
+}
+
+#[test]
 fn read_only_wins_and_a_name_that_is_no_profile_fails_safe() {
     assert!(read_only(&[("MAILMIND_PROFILE", "read-only")]));
     assert!(read_only(&[("MAILMIND_PROFILE", "readonly")]));
