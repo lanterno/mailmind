@@ -84,7 +84,9 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   sync status stays until a restart (`Syncing` has no `_forget_status`). Compose: an attached message/rfc822 is
   rewritten best-effort (about a third of 1,500 random cases differ from Python's bytes), encoded words a person typed
   are decoded only in UTF-8, ASCII or Latin-1, a few broken-MIME drafts reopen differently, and an original fetched to
-  reply to isn't stored. Expiry: with no INTERNALDATE, a Date of `-0000` is read as UTC, where Python read it as local time.
+  reply to isn't stored. Expiry: with no INTERNALDATE, a Date of `-0000` is read as UTC, where Python read it as local time. Two Rust servers
+  starting at once on a fresh machine can each make a database key, the second's replacing the first's in the Keychain,
+  where Python's second finds the first's (`database_version::made`).
 - **The mail frame's browser tests on the Rust server** · medium value · effort M · [#10](https://github.com/lanterno/mailmind/issues/10) — They are served
   tests now, run against both servers, and take the sanitizer away through the protocol (`unsanitized on`). None passes
   on the Rust server yet, for three reasons, none of them the frame's: a body that isn't stored isn't fetched as its
