@@ -168,6 +168,8 @@ pub struct Assistant {
     pub screening: Arc<Screening>,
     /// What one sender has been writing about.
     pub sender_digest: Arc<SenderDigest>,
+    /// What AI cost each local day, by feature (`calls.usage`).
+    pub usage: Arc<mm_assistant::usage::UsageReport>,
 }
 
 /// The API routes a hidden tab fetches on its own, which say nothing of someone being here (`shared.UI_QUIET`).
@@ -197,6 +199,7 @@ impl Assistant {
         });
         let settings = Arc::new(AiConfig { file: config, environment_key: environment.anthropic_key().is_some() });
         let budget = Arc::new(Budget { ledger: database.clone(), settings, clock: clock.clone(), zone: zone.clone() });
+        let usage = Arc::new(mm_assistant::usage::UsageReport::new(database.clone(), clock.clone(), zone.clone()));
         let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
         let gateway = Arc::new(Gateway::new(engine, budget, governor.clone()));
         let label = environment.model().unwrap_or_else(|| mm_assistant::models::DEFAULT.to_owned());
@@ -249,6 +252,7 @@ impl Assistant {
             rationales,
             screening,
             sender_digest,
+            usage,
         }
     }
 

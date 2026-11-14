@@ -127,6 +127,8 @@ pub struct App {
     pub warming: Arc<mm_mailbox::warm::Warming>,
     /// Old mail's bodies, fetched a little at a time (`work backfill`), which `Workers::start` schedules.
     pub backfill: mm_mailbox::backfill::Backfill,
+    /// How the process runs (`profile.current`), `full` or `read-only`, as the debug routes say.
+    pub profile: &'static str,
 }
 
 impl App {
@@ -441,6 +443,7 @@ impl App {
             background,
             warming,
             backfill,
+            profile: environment.profile(),
         })
     }
 }
