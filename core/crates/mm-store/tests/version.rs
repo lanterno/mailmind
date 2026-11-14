@@ -80,3 +80,16 @@ fn a_tripwire_refuses_before_the_file_is_looked_at() {
     let database = Database::new(dir.path().join("mailmind.db"), DbKey::from_bytes(KEY), Arc::new(Closed));
     assert_eq!(database.version().unwrap_err().class, "Tripped");
 }
+
+#[test]
+fn the_version_is_the_python_apps_last_migration() {
+    // The golden schema is renamed in the commit that adds a migration (CLAUDE.md), so a new one fails here until
+    // the core is brought to it.
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tests/golden");
+    let named: Vec<String> = std::fs::read_dir(&golden)
+        .unwrap()
+        .filter_map(|entry| entry.unwrap().file_name().into_string().ok())
+        .filter(|name| name.starts_with("schema_v") && name.ends_with(".sql"))
+        .collect();
+    assert_eq!(named, vec![format!("schema_v{VERSION}.sql")]);
+}
