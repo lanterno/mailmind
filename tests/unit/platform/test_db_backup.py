@@ -5,7 +5,7 @@ import stat
 
 import pytest
 
-from mailmind.platform.db import backup, database, migrate, migrations
+from mailmind.platform.db import backup, database, driver, migrate, migrations
 
 NEWEST = migrations.MIGRATIONS[-1][0]
 
@@ -74,3 +74,29 @@ def test_without_a_backup_nothing_is_migrated(tmp_path):
     with pytest.raises(OSError):
         migrate.init(path)
     assert read(path, "PRAGMA user_version") == [(NEWEST - 1,)]
+
+
+class _CopyFails:
+    """The database's connection, whose backup fails once the copy's file is made: the disk filled up."""
+
+    def __init__(self, c):
+        self._c = c
+
+    def execute(self, *args):
+        return self._c.execute(*args)
+
+    def backup(self, target, **kwargs):
+        raise driver.OperationalError("database or disk is full")
+
+
+@pytest.mark.xfail(strict=True, reason="backup.take leaves the copy it couldn't finish in backups/, named as a whole "
+                                       "one: a rollback to it would find nothing, and it counts among the three kept")
+def test_a_copy_that_couldnt_be_finished_isnt_left_looking_whole(tmp_path):
+    path = database_at(tmp_path, NEWEST)
+    c = database.keyed(path)
+    try:
+        with pytest.raises(driver.OperationalError):
+            backup.take(_CopyFails(c), NEWEST)
+    finally:
+        c.close()
+    assert backups(tmp_path) == []
