@@ -163,18 +163,6 @@ impl App {
             database.clone(),
             seams.clock.clone(),
         ));
-        let reading = crate::reading::Reading::assemble(
-            crate::reading::Adapters {
-                accounts: Arc::new(KnownAccounts(directory.clone())),
-                database: database.clone(),
-                sessions,
-                config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
-                folders: folders.clone(),
-                invites: mm_calendar::invites::Invites::new(zones.clone(), zone.clone()),
-            },
-            environment,
-            seams,
-        );
         let servers: Arc<dyn MailServers> =
             Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() });
         // The page's own state, and what the app says of itself.
@@ -199,6 +187,28 @@ impl App {
             mailbox_events.clone(),
             seams.clock.clone(),
         ));
+        // A message's body from its server where it isn't stored, on its account's gate; the reads a person waits on.
+        let fetch: Arc<dyn mm_mailbox::ports::BodyFetch> =
+            Arc::new(mm_mailbox::fetching::Fetching::new(mm_mailbox::fetching::FetchingParts {
+                stored: database.clone(),
+                kept: database.clone(),
+                servers: servers.clone(),
+                gates: gates.clone(),
+                clock: seams.clock.clone(),
+            }));
+        let reading = crate::reading::Reading::assemble(
+            crate::reading::Adapters {
+                accounts: Arc::new(KnownAccounts(directory.clone())),
+                database: database.clone(),
+                sessions,
+                config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
+                folders: folders.clone(),
+                invites: mm_calendar::invites::Invites::new(zones.clone(), zone.clone()),
+                fetch: fetch.clone(),
+            },
+            environment,
+            seams,
+        );
         let tokens: Arc<dyn Tokens> = Arc::new(RandomTokens::default());
         let commands = Arc::new(MailCommands::new(CommandParts {
             store: database.clone(),
@@ -312,7 +322,7 @@ impl App {
         let calendar = crate::calendar_wiring::Calendar::assemble(crate::calendar_wiring::CalendarParts {
             database: database.clone(),
             directory: directory.clone(),
-            fetch: Arc::new(mm_mailbox::opening::StoredBody::new(database.clone())),
+            fetch,
             zones,
             clock: seams.clock.clone(),
             zone: zone.clone(),

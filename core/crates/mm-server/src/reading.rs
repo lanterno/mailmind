@@ -14,8 +14,8 @@ use mm_mailbox::bodies::Bodies;
 use mm_mailbox::digest::{Digest, NotSyncing};
 use mm_mailbox::folders::Folders;
 use mm_mailbox::lists::Lists;
-use mm_mailbox::opening::{StoredBody, StoredOnly};
-use mm_mailbox::ports::MailSessions;
+use mm_mailbox::opening::StoredOnly;
+use mm_mailbox::ports::{BodyFetch, MailSessions};
 use mm_store::Database;
 use mm_store::export::Exports;
 
@@ -42,11 +42,13 @@ pub(crate) struct Adapters {
     pub(crate) folders: Arc<Folders>,
     /// The calendar's reading of the invite a message opens with.
     pub(crate) invites: mm_calendar::invites::Invites,
+    /// A message's body, fetched from its server where it isn't stored.
+    pub(crate) fetch: Arc<dyn BodyFetch>,
 }
 
 impl Reading {
     pub(crate) fn assemble(made: Adapters, environment: &Environment, seams: &Seams) -> Reading {
-        let Adapters { accounts, database, sessions, config, folders, invites } = made;
+        let Adapters { accounts, database, sessions, config, folders, invites, fetch } = made;
         let clock = seams.clock.clone();
         let syncs = Arc::new(StoredOnly::new(database.clone(), sessions));
         let ai = Status::new(
@@ -62,12 +64,7 @@ impl Reading {
         Reading {
             exports: Exports::new(database.clone(), seams.outside.clone(), clock.clone(), environment.temporary()),
             lists: Lists::new(accounts.clone(), database.clone(), database.clone(), syncs, clock.clone()),
-            bodies: Bodies::new(
-                database.clone(),
-                Arc::new(StoredBody::new(database.clone())),
-                Arc::new(opening),
-                seams.sanitizer.clone(),
-            ),
+            bodies: Bodies::new(database.clone(), fetch, Arc::new(opening), seams.sanitizer.clone()),
             documents: DocumentHub::new(database.clone(), accounts.clone(), clock.clone()),
             outbox: Outbox::new(database.clone(), clock.clone(), environment.profile() == "full"),
             digest: Digest::new(
