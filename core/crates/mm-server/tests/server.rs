@@ -64,6 +64,11 @@ const PAGE: &str = "<meta name=\"csrf\" content=\"__CSRF_TOKEN__\"><meta name=\"
 fn running(config: &str, built: bool) -> Running {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(home.path().join("mailmind.config.json"), config).unwrap();
+    // A database the Python app's migrations brought to the version the server reads.
+    let key = mm_store::DbKey::from_bytes([0x5e; 32]);
+    let store = mm_store::Store::open(&home.path().join("mailmind.db"), &key).unwrap();
+    store.set_version(mm_store::schema::VERSION).unwrap();
+    drop(store);
     let dist = home.path().join("dist");
     if built {
         std::fs::create_dir_all(dist.join("assets")).unwrap();
