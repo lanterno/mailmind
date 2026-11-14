@@ -685,12 +685,23 @@ CLOSE_CUT_TO_ONE_DASH = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches
                          b"<x+tag@example.test>, =?utf-8?B?5pel5pys?= <Noreply@studio.example.test>\r\nContent-Type: "
                          b'multipart/report; boundary="=_part_0"\r\n\r\nThis is a multi-part message in MIME format.\r\n'
                          b"--=_part_0\r\nContent-Type: text/plain\r\n\r\n\r\n--=_part_0-")
+# And a nested multipart whose `boundary="` never closed, which Python read as empty, as the core does now: the `--`
+# line after it ends the header block and splits the body.
+UNCLOSED_BOUNDARY = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nReply-To: Ada Lin "
+                     b'<ada@example.test>,\r\n Ada Lin <bo.lin@mail.example.test>,\r\n "Quoted Name" <bo.lin@mail.example.test>\r\n'
+                     b'Date: Sat, 01 Jan 2000 00:00:00 +0000 (UTC)\r\nContent-Type: multipart/mixed; boundary="=_part_0"\r\n\r\n'
+                     b"This is a multi-part message in MIME format.\r\n--=_part_0\r\nContent-Type: text/plain; charset=windows-1252; "
+                     b'format=flowed; delsp=yes; name="=?utf-8?Q?notes=2Etxt?="\r\nContent-ID: <p1@example.test>\r\n'
+                     b"Content-Transfer-Encoding: base64\r\n\r\n\r\n--=_part_0\r\nContent-Type: multipart/mixed; "
+                     b'boundary="\r\n--\r\n=_part_1"\r\n\r\n--=_part_1\r\nContent-Type: text/plain\r\n\r\n\r\n--=_part_1--\r\n\r\n'
+                     b"--=_part_0--\r\n")
 
 
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(broken())
 @example(CUT_AFTER_A_CR)
 @example(CLOSE_CUT_TO_ONE_DASH)
+@example(UNCLOSED_BOUNDARY)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
     body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
