@@ -100,11 +100,10 @@ served tests it passes against the same scripts. Until the flip, the Python app 
 - **The in-process browser tests on the Rust server** · medium value · effort M · [#10](https://github.com/lanterno/mailmind/issues/10) — `tests/e2e/browser/in_process/` patches
   the Python app's internals, so the ledger can't hold them. Each needs a way in through the Rust server's seams
   (`Clock`, `Outside`, `Keychain`), or a served test that states the same thing.
-- **The Rust server and the database's version** · high value · effort M · [#35](https://github.com/lanterno/mailmind/issues/35) — `mailmind-server`
-  opens a database at any schema version and checks none. On a mailbox `mm-fixtures` made (version 0) it answered 500 on
-  a folder's first page and gave rows no thread id, where the Python app upgraded the same file to 51 at its start. Until
-  the core migrates, it opens only version 51 and refuses any other, saying what to do; before the flip it takes the
-  migrations over from 52, upgrading a copy first as `db check-upgrade` does.
+- **The core runs the migrations** · high value · effort M · [#35](https://github.com/lanterno/mailmind/issues/35) — `mailmind-server`
+  starts only over a database at the version it reads (`mm_store::schema::VERSION`, 51) and leaves making and upgrading
+  one to the Python app. Before the flip, the core takes the migrations over from 52, with the backup before an upgrade
+  and the copy-first check `db check-upgrade` does.
 - **The flip** · high value · effort M · [#11](https://github.com/lanterno/mailmind/issues/11) — Step 4: when the served suites pass against both servers and the owner has used
   the Rust server daily for two weeks, the Python server goes. Then step 5 moves the page from routes to the core's
   views and commands, screen by screen, starting with the message list.
@@ -170,6 +169,6 @@ implementation.
 ## Next up
 
 1. **Step 3: the Rust server on every route** (high) — sending, cleanup and the calendar, then the assistant; the login
-   hold and the database's version before anyone uses it daily. See The move to the Rust core.
+   hold before anyone uses it daily, and the migrations before the flip. See The move to the Rust core.
 2. **Soak the three defaults, one at a time** (high) — `MAILMIND_WORKERS=account`, then IMAPClient, then `MAILMIND_POOL`. Each
    is written and tested, and waits on days of real use before it becomes the default.
