@@ -33,6 +33,8 @@ mm-calendar = { path = "crates/mm-calendar" }
 mm-claude = { path = "crates/mm-claude" }
 # RFC 8058's one-click unsubscribe POST (a sender's cleanup), on mm-net.
 mm-oneclick = { path = "crates/mm-oneclick" }
+# The app in a shell's own process (the Mac app's): mm-server's App, its workers and its routes, with no port open.
+mm-host = { path = "crates/mm-host" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that
 # opens the database adds that feature for those targets), and LibTomCrypt in the browser, through sqlite-wasm-rs.
