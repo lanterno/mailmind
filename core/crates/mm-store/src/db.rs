@@ -61,6 +61,15 @@ impl Database {
         &self.key
     }
 
+    /// Where it is, and what is asked before a file is opened: for making it, and upgrading it (`migrate`).
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    pub(crate) fn outside(&self) -> &dyn Outside {
+        &*self.outside
+    }
+
     /// Run `work` holding the database's one write lock (`UnitOfWork.write`): BEGIN IMMEDIATE, committed when `work`
     /// returns, rolled back when it fails. A refusal `work` decides on goes in its value, so what it read stays true
     /// until it has decided.
