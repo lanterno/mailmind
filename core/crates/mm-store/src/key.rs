@@ -1,6 +1,7 @@
 use std::fmt;
 
 use mm_kernel::Refusal;
+use mm_kernel::seams::Secret;
 use zeroize::Zeroizing;
 
 /// The key that opens a database: 32 bytes, which the platform's key store hands over. It never prints, and its
@@ -26,6 +27,24 @@ impl DbKey {
             *byte = (digit(*high)? << 4) | digit(*low)?;
         }
         Ok(key)
+    }
+
+    /// A new key, its bytes written in place by `fill` (the system's random source), so no copy of them is left
+    /// behind.
+    pub fn filled<E>(fill: impl FnOnce(&mut [u8]) -> Result<(), E>) -> Result<DbKey, E> {
+        let mut key = DbKey(Zeroizing::new([0u8; 32]));
+        fill(&mut key.0[..])?;
+        Ok(key)
+    }
+
+    /// The key as 64 hex digits, as `MAILMIND_DB_KEY` and the Keychain hold it.
+    pub fn hex(&self) -> Secret {
+        let mut text = String::with_capacity(DbKey::SIZE * 2);
+        for byte in self.0.iter() {
+            text.push(hex(byte >> 4));
+            text.push(hex(byte & 0x0f));
+        }
+        Secret::new(text)
     }
 
     /// The statement that keys a connection: the raw key, so SQLCipher derives nothing from it.

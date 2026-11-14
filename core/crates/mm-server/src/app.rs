@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use mm_accounts::Directory;
-use mm_accounts::credential::DATABASE_KEY_ITEM;
 use mm_accounts::health::Health;
 use mm_compose::snippets::Snippets;
 use mm_curation::sweep_plan::StoredPlans;
@@ -128,16 +127,7 @@ impl App {
         port: u16,
         seams: &Seams,
     ) -> Result<App, String> {
-        let key = match environment.db_key() {
-            Some(key) => key,
-            None => seams
-                .keychain
-                .find(DATABASE_KEY_ITEM)
-                .ok()
-                .flatten()
-                .ok_or("no database key: MAILMIND_DB_KEY isn't set, and the Keychain can't give one")?,
-        };
-        let key = DbKey::from_hex(key.expose()).map_err(|_| "the database key isn't 64 hex digits")?;
+        let key: DbKey = crate::database_version::key(environment, &settings.db(), seams)?;
         let csrf = crate::perimeter::new_token().map_err(|_| "the system's random source failed")?;
         let config = Arc::new(ConfigFile::new(settings.config(), seams.outside.clone()));
         let directory = Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()));
@@ -159,7 +149,7 @@ impl App {
             events: account_events.clone(),
         });
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
-        crate::database_version::fits(&database)?;
+        crate::database_version::ready(&database)?;
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);

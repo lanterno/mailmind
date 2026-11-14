@@ -47,7 +47,7 @@ pub mod login_keychain;
 pub mod compose_wiring;
 mod outbox_worker;
 
-// Whether the database is at the version this server reads.
+// The database's key, and the database made if there is none, at the version this server reads.
 mod database_version;
 // Every session's login, which a login its server refused waits out.
 mod login_wiring;
