@@ -159,3 +159,7 @@ tests/api/test_http_ai.py::test_status_after_calls
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/summarize-body0]
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/draft-reply-body1]
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/rewrite-body2]
+tests/api/test_http_ai.py::test_ask_across_the_mail
+tests/api/test_http_ai.py::test_do_plans_a_preview_and_degrades_to_search
+tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/ask-body3]
+tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/do-plan-body4]
