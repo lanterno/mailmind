@@ -65,6 +65,14 @@ impl Drop for Download {
     }
 }
 
+/// Whether a name is one [`Exports::folder`] gives: `mm-export-`, a process id, `-` and a count.
+fn left_behind(name: &str) -> bool {
+    let digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+    name.strip_prefix("mm-export-")
+        .and_then(|rest| rest.split_once('-'))
+        .is_some_and(|(pid, n)| digits(pid) && digits(n))
+}
+
 /// `%Y%m%dT%H%M%SZ` of a moment.
 pub(crate) fn stamp(at: Moment) -> String {
     let seconds = at.whole_seconds();
@@ -105,6 +113,29 @@ impl Exports {
             .map(|(account, folder, n, b)| json!({"account": account, "folder": folder, "messages": n, "bodies": b.unwrap_or(0)}))
             .collect();
         Ok(json!({"ok": true, "total": total, "bodies": bodies, "groups": groups}))
+    }
+
+    /// Takes away the archive folders a process stopped mid-download left in the data directory: they hold mail, and
+    /// nothing else would. Only a folder named as [`Exports::folder`] names one (`mm-export-<pid>-<n>`), and only one
+    /// that is a folder itself, never what a link points to. A server runs this once, as it starts, before any
+    /// download of its own; what it can't take away stays. The snapshot's folders are the system's to clear.
+    pub fn sweep_left_behind(&self) {
+        let within = self.database.folder();
+        if self.outside.open(within).is_err() {
+            return;
+        }
+        let Ok(entries) = fs::read_dir(within) else { return };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if !left_behind(name) || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                continue;
+            }
+            let folder = entry.path();
+            if self.outside.open(&folder).is_ok() {
+                let _ = fs::remove_dir_all(&folder);
+            }
+        }
     }
 
     /// A folder of its own for a download, in `within`, listable by its owner only.

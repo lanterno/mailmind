@@ -54,8 +54,10 @@ impl Reading {
             senders: SenderFacts::new(database.clone(), clock.clone()),
             invites,
         };
+        let exports = Exports::new(database.clone(), seams.outside.clone(), clock.clone(), environment.temporary());
+        exports.sweep_left_behind();
         Reading {
-            exports: Exports::new(database.clone(), seams.outside.clone(), clock.clone(), environment.temporary()),
+            exports,
             lists: Lists::new(accounts.clone(), database.clone(), database.clone(), syncs, clock.clone()),
             bodies: Bodies::new(database.clone(), fetch, Arc::new(opening), seams.sanitizer.clone()),
             documents: DocumentHub::new(database.clone(), accounts.clone(), clock.clone()),
