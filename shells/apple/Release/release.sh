@@ -30,7 +30,7 @@ The owner makes the key once with Sparkle's generate_keys, puts its public half 
 docs/releasing.md, \"Once: the update-signing key\". Copies built without it could never be updated."
 fi
 
-for tool in xcodegen xcodebuild hdiutil codesign lipo python3; do
+for tool in xcodegen xcodebuild hdiutil codesign lipo python3 uv; do
     command -v "$tool" >/dev/null || stop "$tool is missing (shells/apple/CLAUDE.md says what the build needs)"
 done
 # rustup's env file, where rustup put one. Sourcing a missing file ends bash at once, `|| true` or not.
@@ -107,13 +107,13 @@ codesign --verify --deep --strict "$app" || stop "the app's signature doesn't ve
 
 echo "## the disk image"
 dmg="$out/MailMind-$version.dmg"
-stage="$out/dmg"
-mkdir -p "$stage"
-ditto "$app" "$stage/MailMind.app"
-ln -s /Applications "$stage/Applications"
-# LZMA, the smallest of hdiutil's formats; every Mac MailMind runs on opens it.
-hdiutil create -quiet -volname MailMind -srcfolder "$stage" -fs HFS+ -format ULMO -ov "$dmg"
-/bin/rm -rf "$stage"
+# Its window: the picture behind it (Release/dmg-background.swift), then dmgbuild lays it out (Release/dmg.py).
+backgrounds="$out/dmg"
+mkdir -p "$backgrounds"
+xcrun swiftc -O "$here/Release/dmg-background.swift" -o "$backgrounds/draw"
+"$backgrounds/draw" "$backgrounds"
+uv run --project "$here/../.." --group release --quiet python -I "$here/Release/dmg.py" "$app" "$backgrounds" "$dmg"
+/bin/rm -rf "$backgrounds"
 
 echo "## the appcast"
 bin="$derived/SourcePackages/artifacts/sparkle/Sparkle/bin"
