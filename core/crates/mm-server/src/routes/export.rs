@@ -1,4 +1,5 @@
-//! What an export would hold, and as a download a snapshot of the database (`mailmind.http.routers.export`).
+//! What an export would hold, and as a download a snapshot of the database or the mail in a standard format
+//! (`mailmind.http.routers.export`).
 //!
 //! A download goes in chunks, each read on a thread of the blocking pool once the one before it is taken, and no
 //! thread held while a client is slow, so a large database never sits in memory; its folder goes once the last is
@@ -15,7 +16,7 @@ use axum::extract::State;
 use axum::http::{HeaderValue, Method, Response, StatusCode, Uri, header};
 use axum::routing::get;
 use mm_kernel::errors::{Failure, Fault, Problem};
-use mm_store::export::Download;
+use mm_store::export::{Download, Form};
 use tokio::sync::mpsc;
 
 use super::reading::run;
@@ -32,12 +33,19 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/export/archive", get(archive))
 }
 
-/// The mail as a zip of .eml files or of an mbox a folder (`ExportArgs`), which isn't on the Rust server yet: a
-/// format it doesn't know is the `bad request` refusal.
-async fn archive(method: Method, uri: Uri) -> Response<Body> {
-    match super::reading::query(&uri).text("format") {
-        Some("eml" | "mbox") => answer::not_yet(uri.path()),
-        _ => answer::failure(&Failure::Problem(Problem::bad_request()), method.as_str(), uri.path()),
+/// The mail as a zip of .eml files or of an mbox a folder (`ExportArgs`), as a file to save: a format the export
+/// doesn't offer is the `bad request` refusal, and nothing is made.
+async fn archive(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    let Some(form) = super::reading::query(&uri).text("format").and_then(Form::named) else {
+        return answer::failure(&Failure::Problem(Problem::bad_request()), method.as_str(), uri.path());
+    };
+    let made = {
+        let app = app.clone();
+        tokio::task::spawn_blocking(move || app.reading.exports.archive(form)).await
+    };
+    match made.unwrap_or(Err(Fault::new("Panicked"))) {
+        Ok(download) => sent(download),
+        Err(fault) => answer::failure(&Failure::Fault(fault), method.as_str(), uri.path()),
     }
 }
 
