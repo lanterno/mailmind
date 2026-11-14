@@ -3,6 +3,9 @@
 //!
 //! A sync asked for while one runs isn't dropped: the running one goes round again as it ends, once for all such
 //! asks, so mail heard of in the meantime is fetched now rather than at the next round.
+//!
+//! Each round ends by warming folders beyond the Inbox, for the accounts asking (`warm`), inside the single flight
+//! and after the Inbox, so it never delays new mail.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
@@ -19,6 +22,7 @@ use crate::folders::Folders;
 use crate::ingest::{Ingest, SyncError};
 use crate::session::ServerError;
 use crate::sync_ports::{AroundSync, Events, MailboxEvent};
+use crate::warm::Warming;
 
 const TAG: &str = "sync";
 const POISONED: Fault = Fault::new("PoisonedLock");
@@ -86,6 +90,7 @@ pub struct Syncing {
     events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
     around: Arc<dyn AroundSync>,
+    warm: Arc<Warming>,
     held: Mutex<Held>,
 }
 
@@ -100,13 +105,15 @@ pub struct SyncingParts {
     pub clock: Arc<dyn Clock>,
     /// What a round asks of the other contexts: snoozes woken before it, new mail triaged after.
     pub around: Arc<dyn AroundSync>,
+    /// Folders beyond the Inbox, warmed as a round ends.
+    pub warm: Arc<Warming>,
 }
 
 impl Syncing {
     pub fn new(parts: SyncingParts) -> Syncing {
-        let SyncingParts { ingest, accounts, store, folders, events, clock, around } = parts;
+        let SyncingParts { ingest, accounts, store, folders, events, clock, around, warm } = parts;
         let held = Held { sync: SyncState { result: "idle".to_owned(), ..SyncState::default() }, ..Held::default() };
-        Syncing { ingest, accounts, store, folders, events, clock, around, held: Mutex::new(held) }
+        Syncing { ingest, accounts, store, folders, events, clock, around, warm, held: Mutex::new(held) }
     }
 
     /// How each account's sync stands now.
@@ -192,7 +199,7 @@ impl Syncing {
     }
 
     /// One sync of `emails`, or of every account. What is snoozed and due wakes first; new mail sets its triage
-    /// going, outside this single flight.
+    /// going, outside this single flight. Folders beyond the Inbox are warmed last.
     fn round(&self, emails: Option<&BTreeSet<String>>) -> Result<(), Fault> {
         self.around.wake_due();
         let new = self.sync_accounts(emails)?;
@@ -206,6 +213,9 @@ impl Syncing {
         held.sync.last = Some(when::iso(self.clock.now()));
         drop(held);
         log::info(TAG, "%(count)s new", &[(Field::Count, &new.to_string())]);
+        if let Err(fault) = self.warm.tick(emails) {
+            log::warning("warm", "tick error", &[], Some(fault.class));
+        }
         Ok(())
     }
 

@@ -123,6 +123,8 @@ pub struct App {
     pub assistant: crate::assistant_wiring::Assistant,
     /// The assistant's background work and Tidy's run (`work assess`, `work tidy`), which `Workers::start` schedules.
     pub background: crate::background::Background,
+    /// Folders beyond the Inbox, warmed as each sync round ends for the accounts asking (`work warm`).
+    pub warming: Arc<mm_mailbox::warm::Warming>,
 }
 
 impl App {
@@ -311,6 +313,8 @@ impl App {
         // The servers a cleanup, a sweep and expiry read and move live mail on.
         let cleanup_servers = servers.clone();
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
+        // Folders beyond the Inbox, warmed as each sync round ends for the accounts asking.
+        let warming = crate::backfill_wiring::warming(&directory, &servers, &ingest, environment);
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),
             accounts: move_accounts.clone(),
@@ -319,6 +323,7 @@ impl App {
             events: mailbox_events.clone(),
             clock: seams.clock.clone(),
             around: Arc::new(AroundRounds { snoozing: attention.snoozing.clone(), jobs: jobs.clone() }),
+            warm: warming.clone(),
         }));
         // IDLE: a worker for each account, which `Workers::start` sets going; what it hears syncs those accounts.
         let realtime = crate::idle_wiring::realtime(&directory, &login, &syncing, environment.read_only(), &idle_heard);
@@ -429,6 +434,7 @@ impl App {
             calendar,
             assistant,
             background,
+            warming,
         })
     }
 }

@@ -68,5 +68,8 @@ pub mod background;
 // A plan a bulk command's preview froze, carried out through the Mailbox's filing and Attention's snoozing.
 mod plan_wiring;
 
+// Folders beyond the Inbox warmed as a sync round ends, and the body backfill, bound.
+mod backfill_wiring;
+
 pub use app::{App, Seams};
 pub use serve::{Server, Work};

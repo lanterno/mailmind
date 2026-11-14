@@ -249,4 +249,10 @@ impl Environment {
     pub fn credential(&self, name: &str) -> Option<Secret> {
         self.raw(name).map(|value| Secret::new(value.to_owned()))
     }
+
+    /// MAILMIND_WARM_FOLDERS, when set and not blank: on (or `all`) for every account, off for none, else the
+    /// addresses it lists. Unset, each account's entry in the file decides.
+    pub fn warm_folders(&self) -> Option<mm_mailbox::warm::Which> {
+        mm_mailbox::warm::Which::read(self.raw("MAILMIND_WARM_FOLDERS"))
+    }
 }
