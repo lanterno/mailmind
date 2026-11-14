@@ -93,12 +93,14 @@ pub fn read_response(stream: &mut impl Read) -> Result<Response, Lost> {
         .collect();
     let named = |name: &str| headers.iter().find(|(n, _)| n == name).map(|(_, v)| v.clone());
     let body = if named("transfer-encoding").is_some_and(|t| t.to_ascii_lowercase().contains("chunked")) {
-        while !chunked_whole(&rest) {
+        loop {
+            if let Some(body) = dechunk(&rest)? {
+                break body;
+            }
             if !more(stream, &mut rest)? {
-                break;
+                return Err(Lost("ConnectionLost"));
             }
         }
-        dechunk(&rest)?
     } else if let Some(length) = named("content-length") {
         let length: usize = length.parse().map_err(|_| Lost("ProtocolError"))?;
         if length > MOST {
@@ -118,25 +120,24 @@ pub fn read_response(stream: &mut impl Read) -> Result<Response, Lost> {
     Ok(Response { status, headers, body })
 }
 
-/// Whether `bytes` hold a chunked body through its last, empty chunk.
-fn chunked_whole(bytes: &[u8]) -> bool {
-    dechunk(bytes).is_ok()
-}
-
-/// A chunked body's bytes, or why it isn't whole.
-fn dechunk(mut bytes: &[u8]) -> Result<Vec<u8>, Lost> {
+/// A chunked body's bytes once `bytes` hold it through its last, empty chunk, None until then, or why it can't be
+/// one: a size that isn't hex, or one past the most a response may run to.
+fn dechunk(mut bytes: &[u8]) -> Result<Option<Vec<u8>>, Lost> {
     let mut out = Vec::new();
     loop {
-        let line_end = find(bytes, b"\r\n").ok_or(Lost("ConnectionLost"))?;
+        let Some(line_end) = find(bytes, b"\r\n") else { return Ok(None) };
         let size_text = String::from_utf8_lossy(&bytes[..line_end]);
         let size_text = size_text.split(';').next().unwrap_or_default().trim();
         let size = usize::from_str_radix(size_text, 16).map_err(|_| Lost("ProtocolError"))?;
+        if size > MOST {
+            return Err(Lost("ResponseTooLarge"));
+        }
         bytes = &bytes[line_end + 2..];
         if size == 0 {
-            return Ok(out);
+            return Ok(Some(out));
         }
         if bytes.len() < size + 2 {
-            return Err(Lost("ConnectionLost"));
+            return Ok(None);
         }
         out.extend_from_slice(&bytes[..size]);
         bytes = &bytes[size + 2..];
