@@ -47,14 +47,16 @@ pub trait LoginProbe: Send + Sync + std::fmt::Debug {
     fn draft(&self, draft: &crate::draft::Draft, timeout: std::time::Duration) -> Result<(), LoginTrouble>;
 }
 
-/// What happened to an account, once the file holds it (`mailmind.accounts.domain.events`): each names the account
-/// by its address, and says nothing of its credential.
+/// What happened to an account, once the file holds it or once its server has answered
+/// (`mailmind.accounts.domain.events`): each names the account by its address, and says nothing of its credential.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AccountChange {
     Added(String),
     /// Its settings changed: endpoint, credential, alias, signature, or the certificates trusted for it.
     Changed(String),
     Removed(String),
+    /// Its server answered a login with no: which login that was (`login_hold::login_id`).
+    CredentialsRejected(String, crate::login_hold::LoginId),
 }
 
 /// Who hears of an account's change: its logins, and its IDLE (`bus.publish` in the Python app).

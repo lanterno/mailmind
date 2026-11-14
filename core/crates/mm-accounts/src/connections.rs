@@ -21,7 +21,7 @@ pub const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 pub fn quiet(trouble: LoginTrouble) -> &'static str {
     match trouble.0 {
         "TLSPinMismatch" => "certificate changed",
-        "LoginRefused" | "Unsendable" | "NoCredential" => "AUTHENTICATIONFAILED",
+        "LoginRefused" | "LoginUnavailable" | "Unsendable" | "NoCredential" => "AUTHENTICATIONFAILED",
         "ConnectionRefused" => "connection refused",
         "Timeout" => "timeout",
         "NameNotResolved" => "host not found",
