@@ -257,6 +257,20 @@ typedef void (*UniffiCallbackInterfaceViewObserverMethod1)(uint64_t, RustBuffer,
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_EVENT_LISTENER_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_EVENT_LISTENER_METHOD0
+typedef void (*UniffiCallbackInterfaceEventListenerMethod0)(uint64_t, RustBuffer, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_EVENT_LISTENER_METHOD1
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_EVENT_LISTENER_METHOD1
+typedef void (*UniffiCallbackInterfaceEventListenerMethod1)(uint64_t, void* _Nonnull, 
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_VIEW_OBSERVER
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_VIEW_OBSERVER
 typedef struct UniffiVTableCallbackInterfaceViewObserver {
@@ -265,6 +279,16 @@ typedef struct UniffiVTableCallbackInterfaceViewObserver {
     UniffiCallbackInterfaceViewObserverMethod0 _Nonnull onBatch;
     UniffiCallbackInterfaceViewObserverMethod1 _Nonnull onRefusal;
 } UniffiVTableCallbackInterfaceViewObserver;
+
+#endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_EVENT_LISTENER
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_EVENT_LISTENER
+typedef struct UniffiVTableCallbackInterfaceEventListener {
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+    UniffiCallbackInterfaceClone _Nonnull uniffiClone;
+    UniffiCallbackInterfaceEventListenerMethod0 _Nonnull onEvent;
+    UniffiCallbackInterfaceEventListenerMethod1 _Nonnull onEnd;
+} UniffiVTableCallbackInterfaceEventListener;
 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_LISTVIEW
@@ -335,6 +359,76 @@ void uniffi_mailmind_core_fn_method_viewobserver_on_batch(uint64_t ptr, RustBuff
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_VIEWOBSERVER_ON_REFUSAL
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_VIEWOBSERVER_ON_REFUSAL
 void uniffi_mailmind_core_fn_method_viewobserver_on_refusal(uint64_t ptr, RustBuffer refusal, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_COREHOST
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_COREHOST
+uint64_t uniffi_mailmind_core_fn_clone_corehost(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FREE_COREHOST
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FREE_COREHOST
+void uniffi_mailmind_core_fn_free_corehost(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CONSTRUCTOR_COREHOST_OPEN
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CONSTRUCTOR_COREHOST_OPEN
+uint64_t uniffi_mailmind_core_fn_constructor_corehost_open(RustBuffer home, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_CLOSE
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_CLOSE
+void uniffi_mailmind_core_fn_method_corehost_close(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_REQUEST
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_REQUEST
+RustBuffer uniffi_mailmind_core_fn_method_corehost_request(uint64_t ptr, RustBuffer method, RustBuffer target, RustBuffer body, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_SUBSCRIBE
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_SUBSCRIBE
+uint64_t uniffi_mailmind_core_fn_method_corehost_subscribe(uint64_t ptr, uint64_t listener, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_EVENTLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_EVENTLISTENER
+uint64_t uniffi_mailmind_core_fn_clone_eventlistener(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FREE_EVENTLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FREE_EVENTLISTENER
+void uniffi_mailmind_core_fn_free_eventlistener(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_INIT_CALLBACK_VTABLE_EVENTLISTENER
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_INIT_CALLBACK_VTABLE_EVENTLISTENER
+void uniffi_mailmind_core_fn_init_callback_vtable_eventlistener(const UniffiVTableCallbackInterfaceEventListener* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_EVENTLISTENER_ON_EVENT
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_EVENTLISTENER_ON_EVENT
+void uniffi_mailmind_core_fn_method_eventlistener_on_event(uint64_t ptr, RustBuffer event, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_EVENTLISTENER_ON_END
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_EVENTLISTENER_ON_END
+void uniffi_mailmind_core_fn_method_eventlistener_on_end(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_EVENTSUBSCRIPTION
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_EVENTSUBSCRIPTION
+uint64_t uniffi_mailmind_core_fn_clone_eventsubscription(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FREE_EVENTSUBSCRIPTION
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FREE_EVENTSUBSCRIPTION
+void uniffi_mailmind_core_fn_free_eventsubscription(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_EVENTSUBSCRIPTION_CANCEL
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_EVENTSUBSCRIPTION_CANCEL
+void uniffi_mailmind_core_fn_method_eventsubscription_cancel(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_FUNC_BUILD_FIXTURE
@@ -691,9 +785,51 @@ uint16_t uniffi_mailmind_core_checksum_method_viewobserver_on_refusal(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_CLOSE
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_CLOSE
+uint16_t uniffi_mailmind_core_checksum_method_corehost_close(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_REQUEST
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_REQUEST
+uint16_t uniffi_mailmind_core_checksum_method_corehost_request(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_SUBSCRIBE
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_SUBSCRIBE
+uint16_t uniffi_mailmind_core_checksum_method_corehost_subscribe(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_EVENTLISTENER_ON_EVENT
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_EVENTLISTENER_ON_EVENT
+uint16_t uniffi_mailmind_core_checksum_method_eventlistener_on_event(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_EVENTLISTENER_ON_END
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_EVENTLISTENER_ON_END
+uint16_t uniffi_mailmind_core_checksum_method_eventlistener_on_end(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_EVENTSUBSCRIPTION_CANCEL
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_EVENTSUBSCRIPTION_CANCEL
+uint16_t uniffi_mailmind_core_checksum_method_eventsubscription_cancel(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_CONSTRUCTOR_SESSION_OPEN
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_CONSTRUCTOR_SESSION_OPEN
 uint16_t uniffi_mailmind_core_checksum_constructor_session_open(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_CONSTRUCTOR_COREHOST_OPEN
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_CONSTRUCTOR_COREHOST_OPEN
+uint16_t uniffi_mailmind_core_checksum_constructor_corehost_open(void
     
 );
 #endif

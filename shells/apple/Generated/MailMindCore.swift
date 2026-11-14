@@ -487,6 +487,22 @@ fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
+    typealias FfiType = UInt16
+    typealias SwiftType = UInt16
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt16 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
@@ -603,6 +619,559 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
         writeBytes(&buf, value)
     }
 }
+
+
+
+
+/**
+ * The app, running in this process. Releasing the last reference closes it.
+ */
+public protocol CoreHostProtocol: AnyObject, Sendable {
+    
+    /**
+     * End every stream, stop the background work once each round returns, and wait for the work requests set
+     * going. A request from then on is answered 503.
+     */
+    func close() 
+    
+    /**
+     * The answer to `method` on `target`, a path and its query (`/api/messages?folder=INBOX`), with `body` for a POST
+     * (JSON). It blocks until the answer is whole: call it off the main thread.
+     */
+    func request(method: String, target: String, body: Data)  -> CoreAnswer
+    
+    /**
+     * Hear the event stream until the subscription is cancelled or released, or the host closes.
+     */
+    func subscribe(listener: EventListener) throws  -> EventSubscription
+    
+}
+/**
+ * The app, running in this process. Releasing the last reference closes it.
+ */
+open class CoreHost: CoreHostProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_mailmind_core_fn_clone_corehost(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_mailmind_core_fn_free_corehost(handle, $0) }
+    }
+
+    
+    /**
+     * Open `home`: its database made or upgraded, the app assembled and its background workers started. It reads
+     * the disk and may wait on the Keychain: never call it on the main thread.
+     */
+public static func `open`(home: CoreHome)throws  -> CoreHost  {
+    return try  FfiConverterTypeCoreHost_lift(try rustCallWithError(FfiConverterTypeHostProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_constructor_corehost_open(
+        FfiConverterTypeCoreHome_lower(home),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+    /**
+     * End every stream, stop the background work once each round returns, and wait for the work requests set
+     * going. A request from then on is answered 503.
+     */
+open func close()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_close(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The answer to `method` on `target`, a path and its query (`/api/messages?folder=INBOX`), with `body` for a POST
+     * (JSON). It blocks until the answer is whole: call it off the main thread.
+     */
+open func request(method: String, target: String, body: Data) -> CoreAnswer  {
+    return try!  FfiConverterTypeCoreAnswer_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_request(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(target),
+        FfiConverterData.lower(body),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Hear the event stream until the subscription is cancelled or released, or the host closes.
+     */
+open func subscribe(listener: EventListener)throws  -> EventSubscription  {
+    return try  FfiConverterTypeEventSubscription_lift(try rustCallWithError(FfiConverterTypeHostProblem_lift) {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_subscribe(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeEventListener_lower(listener),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCoreHost: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = CoreHost
+
+    public static func lift(_ handle: UInt64) throws -> CoreHost {
+        return CoreHost(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: CoreHost) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoreHost {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: CoreHost, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreHost_lift(_ handle: UInt64) throws -> CoreHost {
+    return try FfiConverterTypeCoreHost.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreHost_lower(_ value: CoreHost) -> UInt64 {
+    return FfiConverterTypeCoreHost.lower(value)
+}
+
+
+
+
+
+
+/**
+ * What a shell gives to hear the event stream. Calls come on one of the core's threads, in the order sent.
+ */
+public protocol EventListener: AnyObject, Sendable {
+    
+    func onEvent(event: CoreEvent) 
+    
+    /**
+     * The stream ended on the core's side, as closing ends it: nothing more will come.
+     */
+    func onEnd() 
+    
+}
+/**
+ * What a shell gives to hear the event stream. Calls come on one of the core's threads, in the order sent.
+ */
+open class EventListenerImpl: EventListener, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_mailmind_core_fn_clone_eventlistener(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_mailmind_core_fn_free_eventlistener(handle, $0) }
+    }
+
+    
+
+    
+open func onEvent(event: CoreEvent)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_eventlistener_on_event(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeCoreEvent_lower(event),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The stream ended on the core's side, as closing ends it: nothing more will come.
+     */
+open func onEnd()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_eventlistener_on_end(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceEventListener {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceEventListener = UniffiVTableCallbackInterfaceEventListener(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterTypeEventListener.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface EventListener: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterTypeEventListener.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface EventListener: handle missing in uniffiClone")
+            }
+        },
+        onEvent: { (
+            uniffiHandle: UInt64,
+            event: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeEventListener.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onEvent(
+                     event: try FfiConverterTypeCoreEvent_lift(event)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        onEnd: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeEventListener.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onEnd(
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceEventListener> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceEventListener>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitEventListener() {
+    uniffi_mailmind_core_fn_init_callback_vtable_eventlistener(UniffiCallbackInterfaceEventListener.vtablePtr)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEventListener: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<EventListener>()
+
+    typealias FfiType = UInt64
+    typealias SwiftType = EventListener
+
+    public static func lift(_ handle: UInt64) throws -> EventListener {
+        if ((handle & 1) == 0) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return EventListenerImpl(unsafeFromHandle: handle)
+        } else {
+            // Swift-generated handle, get the object from the handle map
+            return try handleMap.remove(handle: handle)
+        }
+    }
+
+    public static func lower(_ value: EventListener) -> UInt64 {
+         if let rustImpl = value as? EventListenerImpl {
+             // Rust-implemented object.  Clone the handle and return it
+            return rustImpl.uniffiCloneHandle()
+         } else {
+            // Swift object, generate a new vtable handle and return that.
+            return handleMap.insert(obj: value)
+         }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EventListener {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: EventListener, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEventListener_lift(_ handle: UInt64) throws -> EventListener {
+    return try FfiConverterTypeEventListener.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEventListener_lower(_ value: EventListener) -> UInt64 {
+    return FfiConverterTypeEventListener.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A stream being heard.
+ */
+public protocol EventSubscriptionProtocol: AnyObject, Sendable {
+    
+    /**
+     * Hear nothing more.
+     */
+    func cancel() 
+    
+}
+/**
+ * A stream being heard.
+ */
+open class EventSubscription: EventSubscriptionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_mailmind_core_fn_clone_eventsubscription(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_mailmind_core_fn_free_eventsubscription(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Hear nothing more.
+     */
+open func cancel()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_eventsubscription_cancel(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEventSubscription: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = EventSubscription
+
+    public static func lift(_ handle: UInt64) throws -> EventSubscription {
+        return EventSubscription(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: EventSubscription) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EventSubscription {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: EventSubscription, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEventSubscription_lift(_ handle: UInt64) throws -> EventSubscription {
+    return try FfiConverterTypeEventSubscription.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEventSubscription_lower(_ value: EventSubscription) -> UInt64 {
+    return FfiConverterTypeEventSubscription.lower(value)
+}
+
+
 
 
 
@@ -1142,6 +1711,278 @@ public func FfiConverterTypeViewObserver_lower(_ value: ViewObserver) -> UInt64 
 
 
 /**
+ * An answer, as the page would have read it: a route's JSON, a file, or a problem document.
+ */
+public struct CoreAnswer: Equatable, Hashable {
+    public var status: UInt16
+    /**
+     * Its Content-Type, empty when it has none.
+     */
+    public var contentType: String
+    public var headers: [CoreHeader]
+    public var body: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(status: UInt16, 
+        /**
+         * Its Content-Type, empty when it has none.
+         */contentType: String, headers: [CoreHeader], body: Data) {
+        self.status = status
+        self.contentType = contentType
+        self.headers = headers
+        self.body = body
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CoreAnswer: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCoreAnswer: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoreAnswer {
+        return
+            try CoreAnswer(
+                status: FfiConverterUInt16.read(from: &buf), 
+                contentType: FfiConverterString.read(from: &buf), 
+                headers: FfiConverterSequenceTypeCoreHeader.read(from: &buf), 
+                body: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CoreAnswer, into buf: inout [UInt8]) {
+        FfiConverterUInt16.write(value.status, into: &buf)
+        FfiConverterString.write(value.contentType, into: &buf)
+        FfiConverterSequenceTypeCoreHeader.write(value.headers, into: &buf)
+        FfiConverterData.write(value.body, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreAnswer_lift(_ buf: RustBuffer) throws -> CoreAnswer {
+    return try FfiConverterTypeCoreAnswer.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreAnswer_lower(_ value: CoreAnswer) -> RustBuffer {
+    return FfiConverterTypeCoreAnswer.lower(value)
+}
+
+
+/**
+ * One event of the stream: its id, its name (a topic, `hello` or `resync`) and its JSON data.
+ */
+public struct CoreEvent: Equatable, Hashable {
+    public var id: String
+    public var name: String
+    public var data: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, name: String, data: String) {
+        self.id = id
+        self.name = name
+        self.data = data
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CoreEvent: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCoreEvent: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoreEvent {
+        return
+            try CoreEvent(
+                id: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                data: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CoreEvent, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.data, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreEvent_lift(_ buf: RustBuffer) throws -> CoreEvent {
+    return try FfiConverterTypeCoreEvent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreEvent_lower(_ value: CoreEvent) -> RustBuffer {
+    return FfiConverterTypeCoreEvent.lower(value)
+}
+
+
+/**
+ * One header of an answer.
+ */
+public struct CoreHeader: Equatable, Hashable {
+    public var name: String
+    public var value: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, value: String) {
+        self.name = name
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CoreHeader: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCoreHeader: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoreHeader {
+        return
+            try CoreHeader(
+                name: FfiConverterString.read(from: &buf), 
+                value: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CoreHeader, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreHeader_lift(_ buf: RustBuffer) throws -> CoreHeader {
+    return try FfiConverterTypeCoreHeader.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreHeader_lower(_ value: CoreHeader) -> RustBuffer {
+    return FfiConverterTypeCoreHeader.lower(value)
+}
+
+
+/**
+ * Where the app runs and what it is given. The shell chooses the folder; the core never guesses a platform's path.
+ */
+public struct CoreHome: Equatable, Hashable {
+    /**
+     * The data folder, which must exist.
+     */
+    public var folder: String
+    /**
+     * The environment the app reads (`MAILMIND_PROFILE`, a demo's `MAILMIND_DB_KEY`): never the process's own unless
+     * the shell passes it on. Wiped once the core holds it, since a value may be a key.
+     */
+    public var variables: [String: String]
+    /**
+     * A demo or test home's stand-in for the login Keychain: a file of item to secret. With one, the app reaches no
+     * host off this machine and runs no program.
+     */
+    public var standIn: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The data folder, which must exist.
+         */folder: String, 
+        /**
+         * The environment the app reads (`MAILMIND_PROFILE`, a demo's `MAILMIND_DB_KEY`): never the process's own unless
+         * the shell passes it on. Wiped once the core holds it, since a value may be a key.
+         */variables: [String: String], 
+        /**
+         * A demo or test home's stand-in for the login Keychain: a file of item to secret. With one, the app reaches no
+         * host off this machine and runs no program.
+         */standIn: String?) {
+        self.folder = folder
+        self.variables = variables
+        self.standIn = standIn
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension CoreHome: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCoreHome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoreHome {
+        return
+            try CoreHome(
+                folder: FfiConverterString.read(from: &buf), 
+                variables: FfiConverterDictionaryStringString.read(from: &buf), 
+                standIn: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CoreHome, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.folder, into: &buf)
+        FfiConverterDictionaryStringString.write(value.variables, into: &buf)
+        FfiConverterOptionString.write(value.standIn, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreHome_lift(_ buf: RustBuffer) throws -> CoreHome {
+    return try FfiConverterTypeCoreHome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoreHome_lower(_ value: CoreHome) -> RustBuffer {
+    return FfiConverterTypeCoreHome.lower(value)
+}
+
+
+/**
  * Which messages a list shows.
  */
 public struct ListQuery: Equatable, Hashable {
@@ -1510,6 +2351,124 @@ public func FfiConverterTypeCoreRefusal_lower(_ value: CoreRefusal) -> RustBuffe
     return FfiConverterTypeCoreRefusal.lower(value)
 }
 
+
+/**
+ * Why the host did not do what it was asked.
+ */
+public 
+enum HostProblem: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    /**
+     * The home didn't open, in words a person can act on, naming no secret.
+     */
+    case NotOpened(why: String
+    )
+    /**
+     * The route refused: its problem document.
+     */
+    case Refused(answer: CoreAnswer
+    )
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension HostProblem: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHostProblem: FfiConverterRustBuffer {
+    typealias SwiftType = HostProblem
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostProblem {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .NotOpened(
+            why: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .Refused(
+            answer: try FfiConverterTypeCoreAnswer.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HostProblem, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .NotOpened(why):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(why, into: &buf)
+            
+        
+        case let .Refused(answer):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeCoreAnswer.write(answer, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHostProblem_lift(_ buf: RustBuffer) throws -> HostProblem {
+    return try FfiConverterTypeHostProblem.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHostProblem_lower(_ value: HostProblem) -> RustBuffer {
+    return FfiConverterTypeHostProblem.lower(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
+    typealias SwiftType = String?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1530,6 +2489,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCoreHeader: FfiConverterRustBuffer {
+    typealias SwiftType = [CoreHeader]
+
+    public static func write(_ value: [CoreHeader], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCoreHeader.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CoreHeader] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CoreHeader]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCoreHeader.read(from: &buf))
         }
         return seq
     }
@@ -1582,6 +2566,32 @@ fileprivate struct FfiConverterSequenceTypeRowRange: FfiConverterRustBuffer {
             seq.append(try FfiConverterTypeRowRange.read(from: &buf))
         }
         return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
+    public static func write(_ value: [String: String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterString.write(value, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: String] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: String]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterString.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
     }
 }
 /**
@@ -1685,10 +2695,32 @@ private let initializationResult: InitializationResult = {
     if (uniffi_mailmind_core_checksum_method_viewobserver_on_refusal() != 2020) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_mailmind_core_checksum_method_corehost_close() != 33099) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_request() != 34461) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_subscribe() != 56883) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_eventlistener_on_event() != 35529) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_eventlistener_on_end() != 51258) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_eventsubscription_cancel() != 31565) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_mailmind_core_checksum_constructor_session_open() != 15016) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_mailmind_core_checksum_constructor_corehost_open() != 43704) {
+        return InitializationResult.apiChecksumMismatch
+    }
 
+    uniffiCallbackInitEventListener()
     uniffiCallbackInitViewObserver()
     return InitializationResult.ok
 }()
