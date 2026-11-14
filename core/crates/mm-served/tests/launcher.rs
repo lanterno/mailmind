@@ -1,15 +1,18 @@
-//! What the launcher hands the server: the frozen clock, the tripwire guard.py is for the Python app, and the fake
-//! Keychain's file.
+//! What the launcher hands the server: the frozen clock, the tripwire guard.py is for the Python app, the fake
+//! Keychain's file, and the sanitizer a test can take away.
 
 #![allow(clippy::unwrap_used)]
 
 use std::path::Path;
 use std::sync::Arc;
 
+use mm_content::sanitize::sanitize;
 use mm_kernel::seams::{Clock, Keychain, Moment, Outside, Secret, Tripped};
+use mm_mailbox::ports::Sanitizer;
 use mm_served::clock::{FrozenClock, parse_iso};
 use mm_served::keychain::FakeKeychain;
 use mm_served::tripwire::Tripwire;
+use mm_served::unsanitized::Switch;
 
 const NOW: i64 = 1_793_620_800;
 
@@ -136,4 +139,23 @@ fn a_secret_kept_goes_in_the_file_as_the_suite_reads_it() {
     assert!(keychain.put("account:eve@example.test", &Secret::new("caf\u{e9}".to_owned())).is_err());
     let nowhere = FakeKeychain::new(None, Arc::new(Open));
     assert!(nowhere.put("account:dee@example.test", &Secret::new("dee-password".to_owned())).is_err());
+}
+
+#[test]
+fn the_sanitizer_goes_only_while_a_test_says_so() {
+    let hostile = "<p>Hello</p><script>parent.pwned = 1</script><img src=\"https://tracker.example.test/o.png\">";
+    let switch = Switch::default();
+    for (load_images, fold) in [(false, true), (true, true), (false, false)] {
+        assert_eq!(switch.sanitize(hostile, load_images, fold), sanitize(hostile, load_images, fold), "it starts on");
+    }
+    assert_eq!(switch.answer("on"), "ok");
+    for (load_images, fold) in [(false, true), (true, true), (false, false)] {
+        let made = switch.sanitize(hostile, load_images, fold);
+        assert_eq!(made.html, hostile, "as if the sanitizer had missed everything");
+        assert_eq!((made.blocked.images, made.blocked.css_urls), (1, 0), "so the reader offers to load images");
+    }
+    assert_eq!(switch.answer("off"), "ok");
+    assert_eq!(switch.sanitize(hostile, false, true), sanitize(hostile, false, true));
+    assert_eq!(switch.answer("maybe"), "failed unsanitized: on or off");
+    assert_eq!(switch.sanitize(hostile, false, true), sanitize(hostile, false, true), "a wrong word changes nothing");
 }
