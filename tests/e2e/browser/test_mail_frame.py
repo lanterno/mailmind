@@ -471,6 +471,25 @@ def test_a_heads_style_sheet_applies_in_the_frame(page, world):
     clean(page)                                     # the sheet's remote background was never asked for
 
 
+NESTED = """<p>Before</p>
+<form action="https://evil.example.test/form">A field<form>b</form><p title="after">After a form</p></form>
+<button>c<button>d</button><p title="after">After a button</p></button>
+<select><option>o</option><select><option>p</option></select><p title="after">After a select</p></select>"""
+
+
+def test_the_text_after_a_nested_form_button_or_select_shows(page, world):
+    """A browser ends a form at the first </form> in it, and a button or select at one of its own nested in it, so the
+    text after each shows, and nothing of a form, a button or a select does."""
+    pk, key = arrives(world, NESTED)
+    frame = reading(page, key)
+    loaded(page, frame)
+    after = "f => [...f.contentDocument.querySelectorAll('[title=after]')].map(p => p.innerText)"
+    assert frame.evaluate(after) == ["After a form", "After a button", "After a select"]
+    assert frame.evaluate("f => f.contentDocument.querySelectorAll('form, button, select, input, option').length") == 0
+    assert "field" not in frame.evaluate("f => f.contentDocument.body.innerText")
+    clean(page)
+
+
 # The walls on mail the sanitizer let everything through: the sandbox and the policy hold alone.
 
 def test_a_hostile_body_runs_nothing_and_reaches_nothing(page, world, unsanitized):
