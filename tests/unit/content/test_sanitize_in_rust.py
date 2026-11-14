@@ -672,6 +672,10 @@ class _San(HTMLParser):
                 self._head_templates += 1
             elif not self._head_templates and tag not in HEAD_HOLDS:
                 self._leave_head()
+        if tag == "style" and self._skip_tag == "head" and not self._head_templates:   # the core now: a head's sheet
+            self._in_style = 1
+            self._style_buf = []
+            return
         if self._skip:
             if tag == self._skip_tag and tag != "head":     # the core now: a <head> in a head is ignored
                 self._skip += 1
@@ -1380,6 +1384,33 @@ def test_a_head_ends_where_a_browser_ends_it(html, written):
     the first tag that can't be in one, or at text, and Chromium shows the text of each as written here."""
     assert sanitizer.sanitize(html) == (written, NOTHING_BLOCKED)
     assert_html_as_python_wrote_it(html, load_images=False)
+
+
+@pytest.mark.parametrize(("html", "written"), [
+    ("<html><head><style>p{color:red}</style></head><body><p>x</p></body></html>", "<style>p{color:red}</style><p>x</p>"),
+    ("<head><style>p{color:red}</style><p>x", "<style>p{color:red}</style><p>x"),
+    ("<head><title>T</title><style>p{color:red}</style><meta name=x><style>b{color:blue}</style></head>B",
+     "<style>p{color:red}</style><style>b{color:blue}</style>B"),
+    ("<head><noscript><style>p{color:red}</style></noscript></head><p>x</p>", "<style>p{color:red}</style><p>x</p>"),
+    ("<head><style>p{color:red}", "<style>p{color:red}</style>"),
+    ("<head><template><style>p{color:red}</style></template></head><p>x</p>", "<p>x</p>"),
+    ("<head><style>p{color:red;position:fixed}</style></head><blockquote>q</blockquote>",
+     "<style>p{color:red}</style><blockquote>q</blockquote>"),
+])
+def test_a_heads_style_sheet_is_kept(html, written):
+    """Python dropped a head's sheets with the head. A browser applies them as it applies one in the body, and Chromium
+    one in a head's <noscript> too, with scripting off; one in a <template> applies to nothing."""
+    assert sanitizer.sanitize(html) == (written, NOTHING_BLOCKED)
+    assert_html_as_python_wrote_it(html, load_images=False)
+
+
+def test_a_heads_style_sheet_is_held_to_the_css_checks():
+    html = "<head><style>@import url(https://e.example.test/i.css); body{background:url(https://t.example.test/b.png)}</style></head>v"
+    assert sanitizer.sanitize(html) == ("v", {**NOTHING_BLOCKED, "blocked_css_urls": 1})
+    assert sanitizer.sanitize(html, load_images=True) == \
+        ('<style>body{background:url("https://t.example.test/b.png")}</style>v', NOTHING_BLOCKED)
+    assert_html_as_python_wrote_it(html, load_images=False)
+    assert_html_as_python_wrote_it(html, load_images=True)
 
 
 def test_a_blocked_url_adds_to_what_the_caller_counted_as_python_did():
