@@ -256,8 +256,10 @@ impl Filing {
         undo_group: Option<&str>,
         mutation_id: Option<&str>,
     ) -> Result<Value, Failure> {
-        self.picked_folder(pk, to)?;
-        self.file("move", pk, undo_group, mutation_id, Some(to))
+        let account = self.picked_folder(pk, to)?;
+        let said = self.file("move", pk, undo_group, mutation_id, Some(to))?;
+        self.folders.touched(&account, to)?;
+        Ok(said)
     }
 
     /// The messages a conversation's row stands for: its thread in its folder. One without a thread id is a
@@ -281,9 +283,10 @@ impl Filing {
         undo_group: Option<&str>,
         mutation_id: Option<&str>,
     ) -> Result<Value, Failure> {
-        if let Some(to) = to {
-            self.picked_folder(pk, to)?;
-        }
+        let account = match to {
+            Some(to) => Some(self.picked_folder(pk, to)?),
+            None => None,
+        };
         let group = match undo_group {
             Some(g) if !g.is_empty() => g.to_owned(),
             _ => format!("thread:{}", self.tokens.hex(6)),
@@ -299,7 +302,11 @@ impl Filing {
             Ok((accepted, names))
         })?;
         let results = self.try_each(kind, &accepted);
-        Ok(of_many(&accepted, &results, &names)?)
+        let said = of_many(&accepted, &results, &names)?;
+        if let (Some(account), Some(to)) = (account, to) {
+            self.folders.touched(&account, to)?;
+        }
+        Ok(said)
     }
 
     /// The messages a marked row stands for, none if its copy has gone.
@@ -347,10 +354,11 @@ impl Filing {
         if to.is_empty() {
             return Err(Problem::bad_request().into());
         }
-        if let Some(account) = accounts.iter().next() {
-            self.folders.ensure_takes_filing(account, to)?;
-        }
-        self.file_rows("move", rows, undo_group, mutation_id, Some(to))
+        let account = accounts.into_iter().next().unwrap_or_default();
+        self.folders.ensure_takes_filing(&account, to)?;
+        let said = self.file_rows("move", rows, undo_group, mutation_id, Some(to))?;
+        self.folders.touched(&account, to)?;
+        Ok(said)
     }
 
     fn file_rows(

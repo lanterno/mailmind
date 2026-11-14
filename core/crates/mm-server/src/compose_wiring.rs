@@ -423,8 +423,12 @@ impl Screen for ComposeScreen {
         self.folders.plays_drafts(account, folder).unwrap_or_else(|_| mm_mailbox::roles::names_drafts(folder))
     }
 
-    /// A folder's next open catches it up at once: the Rust server keeps no catch-up times yet, so it always does.
-    fn touched(&self, _account: &str, _folder: &str) {}
+    /// A folder's next open catches it up at once.
+    fn touched(&self, account: &str, folder: &str) {
+        if let Err(fault) = self.folders.touched(account, folder) {
+            mm_kernel::log::warning("compose", "a folder's catch-up wasn't asked for", &[], Some(fault.class));
+        }
+    }
 
     fn list_changed(&self, account: &str, folder: &str) {
         self.events.publish(Topic::Reconcile, json!({"account": account, "folder": folder, "pruned": 1}));
