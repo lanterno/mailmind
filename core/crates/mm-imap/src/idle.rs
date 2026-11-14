@@ -135,3 +135,6 @@ enum Waited {
     /// The server answered IDLE on its own.
     Ended(Result<bool, Error>),
 }
+
+#[cfg(test)]
+mod tests;
