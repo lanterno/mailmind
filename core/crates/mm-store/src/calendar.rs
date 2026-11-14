@@ -87,6 +87,14 @@ pub fn message(c: &Connection, pk: i64) -> rusqlite::Result<Option<Message>> {
         .optional()
 }
 
+/// What threads an answer under message `pk`: its Message-ID, References and In-Reply-To, as stored; None where no
+/// message is `pk`.
+pub fn threading(c: &Connection, pk: i64) -> rusqlite::Result<Option<[Option<String>; 3]>> {
+    c.prepare_cached("SELECT message_id, refs, in_reply_to FROM messages WHERE pk=?")?
+        .query_row([pk], |r| Ok([r.get(0)?, r.get(1)?, r.get(2)?]))
+        .optional()
+}
+
 impl EventMessages for Database {
     fn message(&self, pk: i64) -> Result<Option<Message>, Fault> {
         self.read(|c| message(c, pk))
