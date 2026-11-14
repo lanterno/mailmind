@@ -1,7 +1,8 @@
 //! What the outbox tray lists (`compose.outbox.list_recent` and `compose.drafts.waiting`): the recent sends, each as
 //! the page sees it (`outbox_item.listed`), and the saves that should have reached their server by now and haven't
-//! (`draft_journal.listed`).
+//! (`draft_journal.listed`); and, for `/api/debug/health`, the sends in each state and the saves waiting, counted.
 
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
@@ -136,5 +137,16 @@ impl Outbox {
         let before = overdue_since(self.clock.now().whole_seconds(), self.pushing);
         let drafts: Vec<Value> = self.stored.overdue(before)?.iter().map(waiting).collect();
         Ok(json!({"ok": true, "items": items, "drafts": drafts}))
+    }
+
+    /// How many sends stand in each state, sent ones too (`QUEUE.counts`): what `/api/debug/health` shows.
+    pub fn counts(&self) -> Result<BTreeMap<String, i64>, Fault> {
+        self.stored.counts()
+    }
+
+    /// How many saves the tray names (`len(drafts.waiting())`): those that should have reached their server by now.
+    pub fn drafts_waiting(&self) -> Result<usize, Fault> {
+        let before = overdue_since(self.clock.now().whole_seconds(), self.pushing);
+        Ok(self.stored.overdue(before)?.len())
     }
 }

@@ -1,6 +1,7 @@
 //! What Compose's use cases need of the world: the outbox, the drafts' journal and the snippets, as stored. The store
 //! (`mm-store`) implements them.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use mm_kernel::errors::Fault;
@@ -16,6 +17,8 @@ pub trait StoredOutbox: Send + Sync + fmt::Debug {
     /// The saves that should have reached their server by `before` and haven't, newest first, leaving out a draft
     /// whose send is queued or going (`journal_overdue`).
     fn overdue(&self, before: i64) -> Result<Vec<Row>, Fault>;
+    /// How many sends stand in each state, sent ones too (the outbox's `DurableQueue.counts`).
+    fn counts(&self) -> Result<BTreeMap<String, i64>, Fault>;
 }
 
 /// A draft MailMind starts to track (`draft.tracked`): as a message opens, or as a first save makes it, which has no

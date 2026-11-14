@@ -118,6 +118,8 @@ pub trait Tx {
     fn cancel_unapplied(&self, id: i64) -> Result<bool, Fault>;
     /// The soonest a queued row comes due after `after`.
     fn next_due(&self, after: i64) -> Result<Option<i64>, Fault>;
+    /// How many rows stand in each state, done ones too (`DurableQueue.counts`).
+    fn counts(&self) -> Result<BTreeMap<String, i64>, Fault>;
 
     // ── the undo stack ──
     /// Drop the entries made before `oldest_kept`.

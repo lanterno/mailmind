@@ -10,6 +10,7 @@
 //! the exactly-once gate, backoff doubling from 20 seconds to 15 minutes, and rows a crash left running put back. Its
 //! worker (`workers::run_forever`) drains it whenever kicked, when the next row comes due, and at least every `POLL`.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -473,6 +474,11 @@ impl MailCommands {
             let (waiting, stuck) = command::tray_counts(&tx.open_counts()?);
             Ok(json!({"items": items, "waiting": waiting, "stuck": stuck}))
         })
+    }
+
+    /// How many changes stand in each state, done ones too (`QUEUE.counts`): what `/api/debug/health` shows.
+    pub fn counts(&self) -> Result<BTreeMap<String, i64>, Fault> {
+        command_ports::read(&*self.store, |tx| tx.counts())
     }
 
     /// Ask again for a change given up on. False when it isn't one.

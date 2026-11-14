@@ -359,6 +359,13 @@ impl Tx for Block<'_> {
             .map_err(storage)
     }
 
+    fn counts(&self) -> Result<BTreeMap<String, i64>, Fault> {
+        let mut statement =
+            self.0.prepare_cached("SELECT state, COUNT(*) FROM mail_commands GROUP BY state").map_err(storage)?;
+        let rows = statement.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(storage)?;
+        rows.collect::<Result<_, _>>().map_err(storage)
+    }
+
     fn undo_expire(&self, oldest_kept: &str) -> Result<(), Fault> {
         self.run("DELETE FROM undo_entries WHERE created_at < ?", [oldest_kept]).map(|_| ())
     }

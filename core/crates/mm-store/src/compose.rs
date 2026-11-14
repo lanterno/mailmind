@@ -5,6 +5,7 @@
 
 mod book;
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use mm_compose::ports::{Row, SnippetsStore, StoredDrafts, StoredOutbox, Tracked};
@@ -35,6 +36,14 @@ impl StoredOutbox for Database {
 
     fn overdue(&self, before: i64) -> Result<Vec<Row>, Fault> {
         self.read(|c| rows_of(c, OVERDUE, [before]))
+    }
+
+    fn counts(&self) -> Result<BTreeMap<String, i64>, Fault> {
+        self.read(|c| {
+            c.prepare_cached("SELECT state, COUNT(*) FROM outbox GROUP BY state")?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect()
+        })
     }
 }
 
