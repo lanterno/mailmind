@@ -71,6 +71,13 @@ impl std::fmt::Debug for Environment {
     }
 }
 
+/// An account's credential that names a variable reads it here.
+impl mm_accounts::ports::Variables for Environment {
+    fn variable(&self, name: &str) -> Option<Secret> {
+        self.credential(name)
+    }
+}
+
 /// Where the app keeps its data, and where it is served.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {

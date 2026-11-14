@@ -13,14 +13,14 @@ use serde_json::{Map, Value, json};
 use crate::account::{self, Account, truthy};
 use crate::credential::{self, Asked, CredentialRef, Style, credential_from};
 use crate::one_password::OpReads;
-use crate::ports::ConfigFile;
+use crate::ports::{ConfigFile, Variables};
 use crate::preferences;
 
 const MALFORMED: Fault = Fault::new("MalformedConfig");
 const TAG: &str = "accounts";
 const NO_CREDENTIAL: Fault = Fault::new("NoCredential");
 const KEYCHAIN: Fault = Fault::new("KeychainProblem");
-/// A credential kept where the Rust server can't read it yet: a variable or the Bridge password, or 1Password when the
+/// A credential kept where the Rust server can't read it yet: the Bridge password, or a variable or 1Password when the
 /// Directory was given no way to read it.
 const NOT_YET: Fault = Fault::new("CredentialStyleNotOnTheRustServerYet");
 
@@ -75,16 +75,23 @@ pub struct Directory {
     write: Mutex<()>,
     /// What 1Password gave this process, and the way to ask it for more: none until `reading_op` gives it.
     op: Option<Arc<OpReads>>,
+    /// The process's environment, for a credential that names a variable: none until `reading_variables` gives it.
+    variables: Option<Arc<dyn Variables>>,
 }
 
 impl Directory {
     pub fn new(file: Arc<dyn ConfigFile>, keychain: Arc<dyn Keychain>, clock: Arc<dyn Clock>) -> Directory {
-        Directory { file, keychain, clock, write: Mutex::new(()), op: None }
+        Directory { file, keychain, clock, write: Mutex::new(()), op: None, variables: None }
     }
 
     /// The Directory, reading a 1Password credential through `op`, which the Assistant's key shares.
     pub fn reading_op(self, op: Arc<OpReads>) -> Directory {
         Directory { op: Some(op), ..self }
+    }
+
+    /// The Directory, reading a credential that names a variable from `variables`.
+    pub fn reading_variables(self, variables: Arc<dyn Variables>) -> Directory {
+        Directory { variables: Some(variables), ..self }
     }
 
     /// Forget what was read of `credential`'s 1Password references, once it is replaced or its account removed
@@ -180,7 +187,16 @@ impl Directory {
                 (Some(op), Some(refs)) => op.read(refs, account.strip_spaces),
                 _ => Err(NOT_YET),
             },
-            Some(Style::Env | Style::ProtonBridge) => Err(NOT_YET),
+            // Unset or empty, as Python's `if not v`, is no credential.
+            Some(Style::Env) => match &self.variables {
+                Some(variables) => credential
+                    .variable()
+                    .and_then(|name| variables.variable(name))
+                    .filter(|value| !value.expose().is_empty())
+                    .ok_or(NO_CREDENTIAL),
+                None => Err(NOT_YET),
+            },
+            Some(Style::ProtonBridge) => Err(NOT_YET),
             _ => Err(NO_CREDENTIAL),
         }
     }

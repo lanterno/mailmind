@@ -19,6 +19,11 @@ pub trait OnePassword: Send + Sync + std::fmt::Debug {
     fn read(&self, reference: &str) -> Result<mm_kernel::seams::Secret, Fault>;
 }
 
+/// The process's environment, for a credential that names a variable (`{"env": NAME}`): its value as set, or None.
+pub trait Variables: Send + Sync + std::fmt::Debug {
+    fn variable(&self, name: &str) -> Option<mm_kernel::seams::Secret>;
+}
+
 /// What an account's syncs came to, as the Mailbox recorded them, and how its sync stands now. Of an error it holds
 /// the class's name and its kind, never what it said.
 #[derive(Clone, Debug, PartialEq, Eq)]

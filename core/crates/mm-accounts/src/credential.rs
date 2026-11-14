@@ -104,6 +104,14 @@ impl CredentialRef {
         }
     }
 
+    /// The variable an env credential names.
+    pub fn variable(&self) -> Option<&str> {
+        match self.style {
+            Some(Style::Env) => self.named.as_str(),
+            _ => None,
+        }
+    }
+
     /// What an op credential names: a 1Password reference, or a list of them (`one_password::references`).
     pub fn op_refs(&self) -> Option<&Value> {
         match self.style {
