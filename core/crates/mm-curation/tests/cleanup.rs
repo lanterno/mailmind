@@ -11,10 +11,10 @@ use mm_curation::cleaning::{
     sender_named, senders_named, tally, within_batch, within_cap,
 };
 use mm_curation::cleanup_ports::{
-    Audited, CleanupFiling, CleanupMail, ConfirmTokens, Ids, ListHeaders, NamedCopy, SafeHttp, StoredWay, SweepTrail,
-    SystemSend, Target, UnsubRow,
+    Audited, CleanupMail, ConfirmTokens, Ids, ListHeaders, NamedCopy, SafeHttp, StoredWay, SweepTrail, SystemSend,
+    Target, UnsubRow,
 };
-use mm_curation::ports::{Classified, InboxSender, NoisySender, Reclassified, RuleBook, SenderMail};
+use mm_curation::ports::{Classified, Filing, InboxSender, NoisySender, Reclassified, RuleBook, SenderMail};
 use mm_curation::rulebook::Rules;
 use mm_curation::unsubscribe::{
     self, Attempt, Logged, Mailto, UnsubWay, Unsubscribing, UnsubscribingParts, after_mailto, after_one_click,
@@ -464,7 +464,10 @@ impl SenderMail for World {
     }
 }
 
-impl CleanupFiling for World {
+impl Filing for World {
+    fn trash_now(&self, _: i64) -> Result<bool, Fault> {
+        Ok(true)
+    }
     fn trash(&self, pk: i64, group: &str) -> Result<Value, Failure> {
         self.note(format!("trash {pk} {group}"));
         Ok(json!({"ok": true}))

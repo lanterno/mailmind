@@ -6,9 +6,9 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use mm_curation::cleanup_ports::{
-    Audited, CleanupFiling, LiveError, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
+    Audited, LiveError, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
 };
-use mm_curation::ports::RuleBook;
+use mm_curation::ports::{Filing, RuleBook};
 use mm_curation::rulebook::Rules;
 use mm_curation::sweeping::{MOVE_BATCH, READ_ONLY, Sweeps, SweepsParts, move_verified, read_from_headers};
 use mm_kernel::errors::{Failure, Fault, Kind};
@@ -244,7 +244,10 @@ impl SweptRows for Shared {
     }
 }
 
-impl CleanupFiling for Shared {
+impl Filing for Shared {
+    fn trash_now(&self, _: i64) -> Result<bool, Fault> {
+        Ok(true)
+    }
     fn trash(&self, _: i64, _: &str) -> Result<Value, Failure> {
         Ok(Value::Null)
     }
