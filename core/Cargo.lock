@@ -1027,7 +1027,9 @@ dependencies = [
 name = "mm-served"
 version = "0.1.0"
 dependencies = [
+ "mm-content",
  "mm-kernel",
+ "mm-mailbox",
  "mm-server",
  "serde_json",
  "tempfile",
