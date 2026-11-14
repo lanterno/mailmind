@@ -1,8 +1,7 @@
 # The Apple shell's Xcode project, for XcodeGen. `just apple project` writes MailMind.xcodeproj from it.
-# The bundle-id prefix is a placeholder until the company's domain is settled, as in core/crates/mm-ffi/uniffi.toml.
 name: MailMind
 options:
-  bundleIdPrefix: app.mailmind
+  bundleIdPrefix: io.github.lanterno
   deploymentTarget:
     iOS: "26.0"
     macOS: "26.0"
@@ -10,8 +9,10 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
+    # The app's version, in this one place. The build number is the same, so it rises with every release, as Sparkle's
+    # check for a newer version compares it.
     MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    CURRENT_PROJECT_VERSION: "$(MARKETING_VERSION)"
     GENERATE_INFOPLIST_FILE: YES
     # The core is built for arm64 only: Apple silicon Macs, the iOS simulator on them, and devices.
     ARCHS: arm64
@@ -39,7 +40,7 @@ targetTemplates:
     settings:
       base:
         PRODUCT_NAME: MailMind
-        PRODUCT_BUNDLE_IDENTIFIER: app.mailmind.MailMind
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.lanterno.mailmind
 
 targets:
   MailMind-iOS:

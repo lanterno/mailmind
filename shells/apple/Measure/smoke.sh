@@ -43,7 +43,7 @@ for key in sorted((key for key in runtimes if ".iOS-" in key), key=version, reve
     log="$here/build/smoke/ios.log"
     # simctl's own exit status does not carry the app's, so the app's last line says how the check went.
     SIMCTL_CHILD_MAILMIND_MEASURE=scroll limit xcrun simctl launch --console --terminate-running-process \
-        "$udid" app.mailmind.MailMind 2>&1 | tee "$log" || true
+        "$udid" io.github.lanterno.mailmind 2>&1 | tee "$log" || true
     if [[ "$booted" == 0 ]]; then xcrun simctl shutdown "$udid" || true; fi
     grep -q '^scrolled_ms=' "$log" || { echo "The iPhone app's list never showed mail far down." >&2; exit 1; }
 fi
