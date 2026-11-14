@@ -753,6 +753,28 @@ BLANK_LINE_AFTER_A_LONE_CR = (b'From: Ada Lin <ada@example.test>\r\nSubject: Swa
                               b'filename="=?utf-8?Q?r=C3=A9sum=C3=A9=2Epdf?="\r\nContent-ID: <p1@example.test>\r\n\r\n\x00\x00\r\n'
                               b"--a'()+_,-./:=?b2\r\r\n--\r\n\nContent-Type: text/plain\r\n\r\n\r\n--a'()+_,-./:=?b2--\r\n\r\n"
                               b"--b1--\r\n\r\n------=_NextPart_0000--\r\n")
+# And a nested boundary with a tab before its closing quote, which Python's get_boundary stripped, as the core does now.
+BLANK_BEFORE_A_CLOSING_QUOTE = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nCc: Ada Lin "
+                                b"<ada@mail.example.test>\r\nReply-To: Ada Lin <ada@mail.example.test>\r\nContent-Type: multipart/mixed; "
+                                b'boundary="=_part_0"\r\n\r\n--=_part_0\r\nContent-Type: text/plain; charset="windows-1252"; '
+                                b"format=flowed; delsp=yes\r\nContent-Disposition: attachment\r\nContent-Transfer-Encoding: base64\r\n"
+                                b'\r\n\r\n--=_part_0\r\nContent-Type: multipart/alternative; boundary="b1"\r\n\r\n--b1\r\nContent-Type: '
+                                b"multipart/report; boundary=\"a'()+_,-./:=?b2\t\"\r\n\r\n--a'()+_,-./:=?b2\r\nContent-Type: "
+                                b"text/plain\r\n\r\n\r\n--a'()+_,-./:=?b2--\r\n\r\n--b1\r\nContent-Type: text/plain\r\n\r\n\r\n--b1\r\n"
+                                b"Content-Type: text/plain\r\n\r\n\r\n--b1--\r\n\r\n--=_part_0\r\nContent-Type: text/plain\r\n\r\n\r\n"
+                                b"--=_part_0--\r\n")
+# And a part whose header block starts with a line of blanks alone, after a delimiter a lone CR ends: Python left the
+# line out and read the headers after it, as the core does now.
+_BLANK_FOLD_FIRST = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nCc: Ada Lin "
+                     b"<ada@mail.example.test>,\r\n Team: Ada Lin <ada@mail.example.test>;\r\nContent-Type: multipart/mixed; "
+                     b'boundary="b0"\r\n\r\n--b0\r\nContent-Type: image/png\r\nContent-Disposition: attachment; filename="a.pdf"'
+                     b'\r\n\r\n\r\n--b0\r\nContent-Type: multipart/alternative; boundary="b1"\r\n\r\n--b1\r\nContent-Type: '
+                     b"text/plain\r\nContent-ID: <p1@example.test>\r\n\r\n\r\n--b1\r\nContent-Type: text/plain\r\n"
+                     b"Content-Disposition: attachment\r\n\r\n\r\n--b1\r \n")
+BLANK_FOLD_BEFORE_A_NESTED_MULTIPART = _BLANK_FOLD_FIRST + (
+    b'Content-Type: multipart/mixed; boundary="b2"\r\n\r\n--b2\r\nContent-Type: text/plain\r\nContent-ID: '
+    b"<p1@example.test>\r\n\r\n\r\n--b2--\r\n\r\n--b1--\r\n\r\n--b0--\r\n")
+BLANK_FOLD_BEFORE_A_TYPE = _BLANK_FOLD_FIRST + b"Content-Type: text/plain\r\n\r\n\r\n--b1--\r\n\r\n--b0--\r\n"
 
 
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -765,6 +787,9 @@ BLANK_LINE_AFTER_A_LONE_CR = (b'From: Ada Lin <ada@example.test>\r\nSubject: Swa
 @example(VERTICAL_TAB_BEFORE_A_BOUNDARY)
 @example(VERTICAL_TAB_BEFORE_A_NESTED_BOUNDARY)
 @example(BLANK_LINE_AFTER_A_LONE_CR)
+@example(BLANK_BEFORE_A_CLOSING_QUOTE)
+@example(BLANK_FOLD_BEFORE_A_NESTED_MULTIPART)
+@example(BLANK_FOLD_BEFORE_A_TYPE)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
     body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
