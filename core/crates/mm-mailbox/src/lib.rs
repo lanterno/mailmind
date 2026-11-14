@@ -41,5 +41,8 @@ pub mod tidy;
 pub mod undo;
 // What the background workers wait on (a kick, and the stop that ends them), and the worker a queue is drained by.
 pub mod workers;
-// One worker thread for each key, kept in line with what is wanted: IDLE's, which knows nothing of what it watches.
+// IDLE: one worker for each account, kept in line with the configuration by a supervisor that knows nothing of what
+// it watches, and what the workers need of the world.
 pub mod idle_supervisor;
+pub mod realtime;
+pub mod realtime_ports;

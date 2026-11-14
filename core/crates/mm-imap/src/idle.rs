@@ -5,7 +5,13 @@
 //! limit comes back as it leaves. Another thread ends a wait through the session's `Interrupter`, which shuts the
 //! socket down and closes nothing: the wait then fails as a lost connection, and the session is spent.
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use mm_mailbox::idle_supervisor::Interrupt;
+use mm_mailbox::ports::MailSession;
+use mm_mailbox::realtime_ports::IdleSession;
+use mm_mailbox::session::{MailServer, Selected, ServerError};
 
 use crate::list::strip_prefix_ignoring_case;
 use crate::session::{Error, Session};
@@ -134,6 +140,38 @@ enum Waited {
     Over(bool),
     /// The server answered IDLE on its own.
     Ended(Result<bool, Error>),
+}
+
+/// The interrupter, as IDLE's workers hold one.
+#[derive(Debug)]
+struct Interrupting(mm_net::Interrupter);
+
+impl Interrupt for Interrupting {
+    fn interrupt(&self) {
+        self.0.interrupt();
+    }
+}
+
+impl IdleSession for Session {
+    fn capabilities(&self) -> Vec<String> {
+        MailServer::capabilities(self)
+    }
+
+    fn select(&mut self, folder: &str, readonly: bool) -> Result<Selected, ServerError> {
+        MailServer::select(self, folder, readonly)
+    }
+
+    fn idle(&mut self, wait: Duration) -> Result<bool, ServerError> {
+        Ok(Session::idle(self, wait)?)
+    }
+
+    fn interrupter(&self) -> Result<Arc<dyn Interrupt>, ServerError> {
+        Ok(Arc::new(Interrupting(Session::interrupter(self)?)))
+    }
+
+    fn logout(&mut self) {
+        MailSession::logout(self);
+    }
 }
 
 #[cfg(test)]
