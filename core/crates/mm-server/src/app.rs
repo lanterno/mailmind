@@ -242,6 +242,13 @@ impl App {
             tokens,
             stats: stats.clone(),
         }));
+        // A person's filters, judged of new Inbox mail as a sync stores it: what they ask is queued as Filing queues it.
+        ingest.hear_arrivals(Arc::new(crate::arrival_wiring::ArrivalFlags::new(
+            &database,
+            &seams.clock,
+            &zone,
+            filing.clone(),
+        )));
         // Curation's and Attention's, which file and queue through the Mailbox, and whose changes Undo takes back.
         let curation_filing = Arc::new(CurationFiling {
             filing: filing.clone(),

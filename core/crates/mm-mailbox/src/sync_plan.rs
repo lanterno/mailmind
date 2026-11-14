@@ -26,6 +26,13 @@ pub fn columns_of(flags: &[String]) -> [i64; 5] {
     IMAP_NAMES.map(|name| i64::from(said.iter().any(|f| *f == name.to_lowercase())))
 }
 
+/// Of the flags `wanted`, those a row holding `held` doesn't hold already (`still_to_say`): what it came with needs
+/// saying to no one.
+pub fn still_to_say(wanted: &[(&'static str, bool)], held: &[i64; 5]) -> Vec<(&'static str, bool)> {
+    let holds = |name: &str| COLUMNS.iter().position(|c| *c == name).is_some_and(|i| held[i] != 0);
+    wanted.iter().copied().filter(|(name, on)| holds(name) != *on).collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FolderPlan {
     /// The server renumbered the folder: what is stored of it goes first.

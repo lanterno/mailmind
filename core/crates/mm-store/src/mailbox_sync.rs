@@ -7,9 +7,10 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use mm_content::mime::Fields;
 use mm_kernel::errors::Fault;
 use mm_kernel::identity;
-use mm_mailbox::sync_plan::COLUMNS;
+use mm_mailbox::sync_plan::{COLUMNS, still_to_say};
 use mm_mailbox::sync_ports::{FlagRow, FolderState, Incoming, SyncAccount, SyncStore};
 use mm_mailbox::threading::{StoredCopy, Threader};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
@@ -623,6 +624,26 @@ impl SyncStore for Database {
             on_ingest(c, account, when)?;
             resolve_followups(c, account)?;
             Ok(())
+        })
+    }
+
+    fn is_known(&self, account: &str, f: &Fields) -> Result<bool, Fault> {
+        let who = identity::of(Some(&f.message_id), Some(&f.from_addr), f.date_iso.as_deref(), Some(&f.subject));
+        self.read(|c| {
+            c.prepare_cached("SELECT 1 FROM message_identity WHERE account=? AND identity=?")?
+                .exists(params![account, who])
+        })
+    }
+
+    fn queue_filtered(&self, pk: i64, wanted: &[(&'static str, bool)], when: &str) -> Result<bool, Fault> {
+        self.write(|c| {
+            let held: Option<[i64; 5]> = c
+                .prepare_cached("SELECT seen, flagged, answered, draft, deleted FROM messages WHERE pk=?")?
+                .query_row([pk], |r| Ok([r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?]))
+                .optional()?;
+            let Some(held) = held else { return Ok(false) };
+            let changes = still_to_say(wanted, &held);
+            Ok(!changes.is_empty() && queue_flags(c, pk, &changes, "filter", when)?)
         })
     }
 }

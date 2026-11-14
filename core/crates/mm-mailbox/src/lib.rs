@@ -51,3 +51,5 @@ pub mod fetch_ports;
 pub mod fetching;
 // A folder's sync as it opens: what it needs of the world.
 pub mod opening_ports;
+// What a sync asks of a person's filters as new mail arrives.
+pub mod arrival_ports;

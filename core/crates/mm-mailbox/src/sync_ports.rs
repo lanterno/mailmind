@@ -118,6 +118,12 @@ pub trait SyncStore: Send + Sync + fmt::Debug {
     /// of what it stored, mail arriving in a muted thread marked read, and the follow-ups new mail meets.
     fn settle(&self, account: &str, folder: &str, modseq: Option<u64>, stored: &[i64], when: &str)
     -> Result<(), Fault>;
+    /// Whether any copy of the message these fields name has been seen before in the account: what storing it would
+    /// find of its identity (`is_known`).
+    fn is_known(&self, account: &str, fields: &Fields) -> Result<bool, Fault>;
+    /// What a person's filters asked of the stored message `pk`, queued for its server where the row doesn't hold it
+    /// already, and shown on the row at once. Whether anything was queued.
+    fn queue_filtered(&self, pk: i64, wanted: &[(&'static str, bool)], when: &str) -> Result<bool, Fault>;
 }
 
 /// What the Mailbox says happened, for whoever listens (`mailbox.domain.events`).

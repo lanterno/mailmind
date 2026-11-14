@@ -134,6 +134,34 @@ pub fn visible(mut wheres: Vec<String>) -> Vec<String> {
     wheres
 }
 
+/// Whether the row `pk` is one this query finds, as a search finds them (`fits`): a filter asks it of mail just
+/// stored. A query SQLite rejects finds nothing.
+pub fn fits(c: &Connection, pk: i64, spec: &QuerySpec) -> rusqlite::Result<bool> {
+    let (matched, wheres, params) = to_sql(spec);
+    let where_sql: String =
+        std::iter::once("m.pk = ?").chain(wheres.iter().map(String::as_str)).collect::<Vec<_>>().join(" AND ");
+    let (sql, all): (String, Vec<Sql>) = match matched {
+        None => (
+            format!(
+                "SELECT 1 FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key WHERE {where_sql} \
+                 LIMIT 1"
+            ),
+            std::iter::once(Sql::Integer(pk)).chain(params).collect(),
+        ),
+        Some(matched) => (
+            format!(
+                "SELECT 1 FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid \
+                 LEFT JOIN assessments s ON s.message_key=m.message_key WHERE msg_fts MATCH ? AND {where_sql} LIMIT 1"
+            ),
+            [Sql::Text(matched), Sql::Integer(pk)].into_iter().chain(params).collect(),
+        ),
+    };
+    match c.prepare(&sql).and_then(|mut found| found.exists(params_from_iter(all))) {
+        Err(rusqlite::Error::SqliteFailure(..)) => Ok(false),
+        held => held,
+    }
+}
+
 /// SQL and parameters for: a row's folder plays one of `roles`.
 fn in_folders_playing(
     c: &Connection,

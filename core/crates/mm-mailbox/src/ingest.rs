@@ -2,11 +2,13 @@
 //! classify, store with the message's identity and index it, read the body text of the Inbox's mail that isn't junk,
 //! read again the flags of mail already stored, and thread what arrived.
 //!
-//! No transaction stays open while the server is asked: each store call is its own. What isn't here yet: a person's
-//! arrival filters (Curation's `arrival_flags`), the invite a message carries kept with its body (Calendar's), and a
-//! login a server refused held back (`accounts.logins`).
+//! Mail new to the Inbox that MailMind has never seen before is judged by the person's filters as it is stored, and
+//! what they ask is queued for the server (`arrival_flags`).
+//!
+//! No transaction stays open while the server is asked: each store call is its own. What isn't here yet: the invite a
+//! message carries kept with its body (Calendar's), and a login a server refused held back (`accounts.logins`).
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use mm_content::mime;
 use mm_kernel::errors::Fault;
@@ -14,6 +16,7 @@ use mm_kernel::log;
 use mm_kernel::seams::Clock;
 use mm_kernel::when;
 
+use crate::arrival_ports::ArrivalFilters;
 use crate::session::{HEADER_FIELDS, MailServer, MailServers, ServerError, found_by_message_id};
 use crate::sync_plan::{self, FLAG_REFRESH, WHOLE};
 use crate::sync_ports::{
@@ -68,6 +71,8 @@ pub struct Ingest {
     classifier: Arc<dyn Classifier>,
     events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
+    /// The person's filters, heard once what queues their flags is built (it files through this sync).
+    arrivals: OnceLock<Arc<dyn ArrivalFilters>>,
 }
 
 /// A session that logs out however the work on it ends.
@@ -88,7 +93,13 @@ impl Ingest {
         events: Arc<dyn Events>,
         clock: Arc<dyn Clock>,
     ) -> Ingest {
-        Ingest { accounts, servers, store, classifier, events, clock }
+        Ingest { accounts, servers, store, classifier, events, clock, arrivals: OnceLock::new() }
+    }
+
+    /// From now on, new Inbox mail is judged by the person's filters as it is stored. The first call binds them; a
+    /// later one changes nothing.
+    pub fn hear_arrivals(&self, filters: Arc<dyn ArrivalFilters>) {
+        _ = self.arrivals.set(filters);
     }
 
     fn account(&self, account: &str) -> Result<SyncAccount, SyncError> {
@@ -124,7 +135,8 @@ impl Ingest {
         let (uids, scan) = plan.to_fetch(s.0.search(plan.search())?);
         let mut stored = Vec::new();
         let with_body = sync_plan::reads_bodies(folder);
-        let result = self.process(&mut *s.0, &acct, &uids, folder, with_body, true, &mut stored)?;
+        let arriving = plan.arrives_in(folder);
+        let result = self.process(&mut *s.0, &acct, &uids, folder, with_body, arriving, true, &mut stored)?;
         if let Some(scan) = scan {
             self.store.set_scan_state(&acct.email, folder, scan)?;
         }
@@ -147,13 +159,15 @@ impl Ingest {
         s.0.select(folder, true)?;
         let Some(uid) = found_by_message_id(&mut *s.0, message_id)? else { return Ok(0) };
         let mut stored = Vec::new();
-        self.process(&mut *s.0, &acct, &[uid], folder, sync_plan::reads_bodies(folder), false, &mut stored)?;
+        self.process(&mut *s.0, &acct, &[uid], folder, sync_plan::reads_bodies(folder), false, false, &mut stored)?;
         self.store.settle(&acct.email, folder, None, &stored, &self.now())?;
         Ok(1)
     }
 
     /// Store every one of `uids` in the selected `folder`, junk kept as a badge. The Inbox's bodies are read for
-    /// their text; other folders' wait to be opened. `advance` false stores them without touching the watermark.
+    /// their text (`with_body`); other folders' wait to be opened. `arriving` says this mail is new to the folder, so
+    /// the person's filters speak for what MailMind has never seen before. `advance` false stores them without
+    /// touching the watermark.
     #[allow(clippy::too_many_arguments)]
     fn process(
         &self,
@@ -162,9 +176,12 @@ impl Ingest {
         uids: &[u32],
         folder: &str,
         with_body: bool,
+        arriving: bool,
         advance: bool,
         stored: &mut Vec<i64>,
     ) -> Result<Stored, SyncError> {
+        let filters = self.arrivals.get().filter(|_| arriving);
+        let mut queued = false;
         let (mut max_uid, mut kept, mut junk) = (0u32, 0usize, 0usize);
         let mut rows: Vec<Incoming> = Vec::new();
         if !uids.is_empty() {
@@ -210,10 +227,23 @@ impl Ingest {
                     }
                 };
             }
+            let news = match filters {
+                Some(_) => !self.store.is_known(&acct.email, &row.fields)?,
+                None => false,
+            };
             let (pk, threads) = self.store.store_copy(acct, folder, &row)?;
             if threads {
                 stored.push(pk);
             }
+            if let Some(filters) = filters.filter(|_| news) {
+                let wanted = filters.arrival_flags(pk);
+                if !wanted.is_empty() && self.store.queue_filtered(pk, &wanted, &self.now())? {
+                    queued = true;
+                }
+            }
+        }
+        if let Some(filters) = filters.filter(|_| queued) {
+            filters.flags_queued();
         }
         if advance {
             self.store.advance(&acct.email, folder, max_uid, &self.now())?;

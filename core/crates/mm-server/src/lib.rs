@@ -55,6 +55,8 @@ pub mod db_command;
 mod login_wiring;
 // IDLE's workers bound: the accounts, their sessions, and their news syncing those accounts.
 mod idle_wiring;
+// A person's filters, as a sync stores new mail.
+mod arrival_wiring;
 
 pub use app::{App, Seams};
 pub use serve::{Server, Work};
