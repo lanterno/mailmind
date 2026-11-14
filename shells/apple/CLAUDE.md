@@ -15,7 +15,7 @@ From the repo root (`just apple` lists them; recipes run from here whatever the 
 
 ```bash
 just apple build        # the core as build/MailMindCore.xcframework, the Xcode project, then the iOS simulator and macOS apps
-just apple test         # the list models', the client's, Settings' and the status's tests, on macOS; screens drawn into build/screens
+just apple test         # the list models', the client's, the mailbox's, Settings' and the status's tests, on macOS; pictures in build/screens and build/screenshots
 just apple demo         # the Mac app on fictional mail: fake servers on loopback, a temp home, a keychain stand-in
 just apple demo smoke   # the same until the inbox shows rows (exit 0), or not; `demo measure`: first rows and memory
 just apple run          # the Mac app as a person runs it: MailMind's own data folder and the login Keychain
@@ -60,6 +60,7 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | `Sources/Window/` | The Mac app's window: `Root` (the window or step 0), `MailApp` (the core, the sidebar's accounts and folders, where the window is), `MailList` (`Place`, `Selection`, the list a page at a time), `Reader` (the message chosen, its frame's URL), `MailWindow+macOS` (the views, the frame's web view), `HomeMeasure` (`MAILMIND_MEASURE=home`). |
 | `Sources/Mac/Settings/` | Settings (⌘,): Accounts (each connection, its health, Test, Trust It, + with the page's presets, Edit, Remove), General, Notifications and AI; the Claude key and the Bridge's password (`KeptSecretView`, `SecretPost`), and the first run's `Welcome`. |
 | `Sources/Mac/Status/` | `AppStatus` (what the status, Settings and the first run show, heard on an event stream of its own), the status pill and its menu, the account alert, the meeting reminder, new mail's notifications and Dock badge (`NewMailAlerts`), Help and the guide, and `StatusHooks`, the one modifier the window applies. |
+| `Sources/Mac/Mailbox/` | The Mac window's mailbox: `Mailbox` (the sidebar's accounts, folders, labels, views and counts, each place's list, the rows chosen), its verbs (`Verbs`) and ways about (`Going`), the lists' reads (`Lists`), the sidebar, the list's table (`Table`), its column and toolbar (`ListColumn`), the lanes and the Document Hub (`Hub`), Move To and the palette (`Sheets`), a sender's card, and the menu bar's commands (`Commands`). Its hooks (`asks`, `plans`, `composeTo`, `more`, `keys`, `rowMenu`) are where the other areas join in. |
 | `Generator/swift_api.py` | Writes `API.gen.swift` from the OpenAPI document `tests/support/openapi_doc.py` makes. `just apple check-api`, in `just verify`, fails when the two differ. |
 | `Measure/` | `measure.sh` and the probes it compiles (the crossing cost, a web view's memory), `smoke.sh`, which CI runs, and `demo_home.py`, which `just apple demo` runs. |
 | `build/` | The XCFramework, derived data, measurements and releases. Ignored by git. |
