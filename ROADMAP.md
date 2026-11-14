@@ -97,7 +97,7 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   and the copy-first check `db check-upgrade` does.
 - **The flip** · high value · effort M · [#11](https://github.com/lanterno/mailmind/issues/11) — Step 4: when the served suites pass against both servers and the owner has used
   the Rust server daily for two weeks, the Python server goes. Waits on #6, #10, #28, #30, #31 and #35. The two weeks
-  begin once the page's routes (#6) and IDLE (#28) are on the Rust server. Then step 5 moves the page from routes to the core's
+  begin once the page's routes (#6) are on the Rust server and a message whose body isn't stored opens there (#31). Then step 5 moves the page from routes to the core's
   views and commands, screen by screen, starting with the message list.
 
 ## The clients
@@ -162,7 +162,7 @@ implementation.
 
 ## Next up
 
-1. **Step 3: the Rust server on every route** (high) — the assistant and IDLE are under way; then the sync's remaining
-   parts (#31), the body fetch first, and the migrations (#35) before the flip. See The move to the Rust core.
-2. **The owner's two weeks on the Rust server** (high) — they begin once the page's routes (#6) and IDLE (#28) are served,
-   and they end in the flip (#11). `MAILMIND_WORKERS=account` (#3) can soak in them, or now: both servers read it.
+1. **Step 3: the Rust server on every route** (high) — the assistant (#6), the sync's remaining parts with the body fetch
+   first (#31), and the migrations (#35) are under way. See The move to the Rust core.
+2. **The owner's two weeks on the Rust server** (high) — IDLE runs there now; they begin once the page's routes (#6) are
+   served and a message whose body isn't stored opens (#31), and they end in the flip (#11). `MAILMIND_WORKERS=account` (#3) can soak in them, or now: both servers read it.
