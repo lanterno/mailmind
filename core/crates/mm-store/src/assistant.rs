@@ -3,9 +3,9 @@
 //! answers: thread summaries, replies drafted ahead, and the briefs, deltas and reviews; and how a sender stands.
 
 use mm_assistant::ports::{
-    Answers, Awaiting, Cards, ConversationBy, CopyNow, Glance, Mail, Message, Needing, NewDraft, Overview, Said,
-    SenderRecent, SenderStats, Senders, Spend, Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary,
-    UsageLedger, WeekRows,
+    Answers, Awaiting, Cards, ConversationBy, CopyNow, FeatureDay, Glance, Mail, Message, Needing, NewDraft, Overview,
+    Said, SenderRecent, SenderStats, Senders, Spend, Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary,
+    UsageDays, UsageLedger, WeekRows,
 };
 use mm_kernel::errors::Fault;
 use rusqlite::types::Value as Sql;
@@ -68,6 +68,21 @@ impl UsageLedger for Database {
 
     fn in_batches(&self) -> Result<i64, Fault> {
         self.read(|c| c.prepare_cached("SELECT COUNT(*) FROM ai_batch_items")?.query_row([], |r| r.get(0)))
+    }
+}
+
+impl UsageDays for Database {
+    fn days(&self, since: &str) -> Result<Vec<FeatureDay>, Fault> {
+        self.read(|c| {
+            c.prepare_cached(
+                "SELECT day, feature, SUM(calls), SUM(cost_micros) FROM ai_usage WHERE day >= ? \
+                 GROUP BY day, feature ORDER BY day DESC, feature",
+            )?
+            .query_map([since], |r| {
+                Ok(FeatureDay { day: r.get(0)?, feature: r.get(1)?, calls: r.get(2)?, cost_micros: r.get(3)? })
+            })?
+            .collect()
+        })
     }
 }
 

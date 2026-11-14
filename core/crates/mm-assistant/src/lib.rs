@@ -44,3 +44,6 @@ pub mod ahead;
 pub mod assessments;
 pub mod background_ports;
 pub mod batches;
+
+// What AI cost each day, for the debug routes.
+pub mod usage;

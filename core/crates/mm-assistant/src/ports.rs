@@ -195,6 +195,24 @@ pub trait UsageLedger: Send + Sync + fmt::Debug {
     fn in_batches(&self) -> Result<i64, Fault>;
 }
 
+/// What one feature's calls of one day came to, as the usage ledger adds them up.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FeatureDay {
+    /// The local date, YYYY-MM-DD.
+    pub day: String,
+    pub feature: String,
+    pub calls: i64,
+    /// US dollars × 1,000,000.
+    pub cost_micros: i64,
+}
+
+/// What the usage ledger says of the days gone (`UsageLedger.days`).
+pub trait UsageDays: Send + Sync + fmt::Debug {
+    /// Each day from `since` (`YYYY-MM-DD`) on and each feature that made calls on it, the newest day first and its
+    /// features in order of name.
+    fn days(&self, since: &str) -> Result<Vec<FeatureDay>, Fault>;
+}
+
 /// A message of a conversation, as the model is shown it (`conversation_rows`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Said {

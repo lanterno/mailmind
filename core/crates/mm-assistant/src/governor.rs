@@ -24,6 +24,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use mm_kernel::errors::Fault;
 use mm_kernel::log;
 use mm_kernel::seams::Clock;
+use serde_json::{Value, json};
 
 use crate::features::Kind;
 use crate::ports::{LanguageModel, ModelError};
@@ -94,6 +95,22 @@ impl Drop for Slot<'_> {
 enum Scope {
     Every,
     Feature(String, String),
+}
+
+impl Scope {
+    /// What the snapshot calls it (`_scope_name`).
+    fn name(&self) -> String {
+        match self {
+            Scope::Every => "every feature".to_owned(),
+            Scope::Feature(feature, model) => format!("{feature} on {model}"),
+        }
+    }
+}
+
+/// Seconds to a tenth, as Python's `round(seconds, 1)` gives them: the nearest tenth to the float's exact value, a
+/// tie to the even one.
+fn tenths(seconds: f64) -> f64 {
+    format!("{seconds:.1}").parse().unwrap_or(seconds)
 }
 
 #[derive(Debug)]
@@ -283,6 +300,27 @@ impl CostGovernor {
         state.last_seen = now;
         state.rejected.clear();
         state.open.clear();
+    }
+
+    /// What `/api/debug/ai` shows (`snapshot`): today's spending and the limit, what batches still out may cost, the
+    /// interactive calls in flight, the seconds since the last of them ended and since someone was here, and where the
+    /// breaker is open, by name and sorted. A spending the ledger can't say is null.
+    pub fn snapshot(&self) -> Value {
+        let (spent, limit) = self.today();
+        let booked = self.booked();
+        let now = self.now();
+        let state = self.state();
+        let mut breaker: Vec<String> = state.open.keys().map(Scope::name).collect();
+        breaker.sort();
+        json!({
+            "spent_today_micros": spent,
+            "limit_micros": limit,
+            "reserved_micros": booked,
+            "interactive_running": state.running,
+            "since_interactive": state.last_interactive.map(|last| tenths(now - last)),
+            "since_seen": tenths(now - state.last_seen),
+            "breaker": breaker,
+        })
     }
 
     fn booked(&self) -> Option<i64> {

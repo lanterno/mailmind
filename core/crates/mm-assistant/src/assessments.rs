@@ -146,6 +146,14 @@ impl Assessments {
         self
     }
 
+    /// What is out in a batch, with no call made (`batch_status`): nothing, for triage that sends none.
+    pub fn batch_status(&self) -> Result<batches::BatchStatus, Fault> {
+        match &self.batches {
+            Some((batching, _)) => batching.status(),
+            None => Ok(batches::BatchStatus { waiting: 0, state: None, estimate_micros: 0 }),
+        }
+    }
+
     /// Why triage would be held back now, or None when it would go.
     fn held_back(&self) -> Option<&'static str> {
         self.calls.gateway().held_back("triage", Some(&self.calls.model_label()))
