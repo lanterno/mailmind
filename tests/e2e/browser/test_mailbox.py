@@ -461,7 +461,7 @@ def test_the_account_menu_changes_account_and_offers_all_inboxes(page, world):
     expect(page.get_by_role("menu")).to_be_visible()
     page.get_by_role("menuitemradio", name=re.compile("^All inboxes")).click()
     expect(page.locator("#listTitle")).to_have_text("Inbox")
-    assert page.url.endswith("/all")
+    assert page.where() == "/all"
     expect(page.locator("#rows .acctchip").first).to_be_visible()
     clean(page)
 
@@ -475,7 +475,7 @@ def test_all_inboxes_shows_the_views_that_arent_folders_over_every_account(page,
     expect(snoozed.locator(".unread")).to_have_text("2")
     snoozed.click()
     expect(page.locator("#listTitle")).to_have_text("Snoozed")
-    assert page.url.endswith("/all/__snoozed__") or "/all/__snoozed__?" in page.url
+    assert re.fullmatch(r"/all/__snoozed__(\?.*)?", page.where()), page.where()
     rows = page.locator("#rows .row[data-key]")
     expect(rows).to_have_count(2)
     expect(rows.locator(".acctchip")).to_have_count(2)
@@ -485,7 +485,7 @@ def test_all_inboxes_shows_the_views_that_arent_folders_over_every_account(page,
     expect(page.locator(".acct-sw")).to_contain_text("All inboxes")
     page.locator('#folderrail .frow:has-text("Inbox")').first.click()
     expect(page.locator("#listTitle")).to_have_text("Inbox")
-    assert page.url.endswith("/all")
+    assert page.where() == "/all"
     page.keyboard.press("g")
     page.keyboard.press("z")
     expect(page.locator("#listTitle")).to_have_text("Snoozed")

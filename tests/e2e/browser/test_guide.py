@@ -25,6 +25,15 @@ def first_run(page, app):
     assert app.post("/api/preferences", {"guide_offered": False}).status == 200
 
 
+def until(page, check, what):
+    """`check` once it holds: the page saves that it offered the guide as it shows it, not before."""
+    for _ in range(100):
+        if check():
+            return
+        page.wait_for_timeout(50)
+    assert check(), what
+
+
 def inbox(page):
     page.goto(f"/m/{w.ADA}/INBOX")
     return page.get_by_role("dialog", name="Today’s brief")
@@ -39,7 +48,7 @@ def test_it_is_offered_once_and_a_reload_does_not_offer_it_again(page, app, worl
     guide = inbox(page)
     expect(guide).to_be_visible()
     expect(guide.get_by_role("button", name="Next")).to_be_focused()
-    assert kept_as_offered(app) is True      # offered, whether or not it is finished
+    until(page, lambda: kept_as_offered(app) is True, "never kept as offered")   # offered, finished or not
     page.reload()
     expect(page.locator("#rows")).to_be_visible()
     expect(page.locator(".guide-card")).to_have_count(0)
