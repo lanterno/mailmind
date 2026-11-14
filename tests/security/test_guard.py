@@ -72,6 +72,17 @@ def test_renaming_onto_or_deleting_the_owners_data_is_refused(tmp_path, refused)
     assert src.exists() and len(refused) == 2
 
 
+def test_reading_the_owners_bridge_password_file_is_refused(refused):
+    """The Bridge password's last source, read only when the Keychain holds none: a test that reaches it fails, whether or
+    not this computer has one. The Python server the served suites start reads one in its own data directory instead."""
+    from mailmind.accounts.adapters import secrets
+    with pytest.raises(guard.Tripwire):
+        open(os.path.expanduser("~/.config/mailmind/proton_bridge_pass"), "rb")
+    with pytest.raises(guard.Tripwire):
+        secrets.BRIDGE_FILE.read_text()
+    assert len(refused) == 2
+
+
 def test_a_swallowed_refusal_is_still_recorded(refused):
     try:
         open(os.path.join(ROOT, "mailmind_views.json"))
