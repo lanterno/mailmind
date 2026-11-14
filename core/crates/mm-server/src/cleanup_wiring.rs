@@ -1,10 +1,10 @@
 //! A sender's cleanup, its unsubscribe, a sweep and expiry bound to their adapters (`bootstrap.curation`'s `_Filing`,
 //! `_ListHeaders`, `_Mailboxes`, `_SafeHttp` and `_SystemSend`): the filing the Screener files through, the Mailbox's
-//! servers, each account's gate, the confirm tokens under this run's secret, and Curation's store.
+//! servers, each account's gate, the confirm tokens under this run's secret, Curation's store, and Compose's outbox,
+//! which a mailto: unsubscribe is queued in.
 //!
-//! The two ways an unsubscribe leaves this machine aren't here yet: the one-click POST wants an HTTPS client, and a
-//! mailto: wants the outbox. Each says it isn't ready, so a cleanup that would use one answers as not yet served
-//! before it changes anything.
+//! The one-click POST isn't here yet: it wants an HTTPS client. It says it isn't ready, so a cleanup that would use it
+//! answers as not yet served before it changes anything.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -12,6 +12,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mm_accounts::Directory;
+use mm_compose::delivery::Delivery;
+use mm_compose::sending::{Mint, Outgoing};
+use mm_compose::spec::Built;
 use mm_curation::cleaning::{Cleaning, CleaningParts};
 use mm_curation::cleanup_ports::{
     ConfirmTokens, Ids, ListHeaders, LiveError, LiveInboxes, LiveSession, SafeHttp, SweptAccount, SystemSend, UnsubRow,
@@ -31,6 +34,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::command_wiring::RandomTokens;
+use crate::compose_wiring::RandomDraws;
 
 const TAG: &str = "cleanup";
 /// How long a preview waits its turn on the account's gate to read one message's headers (`UNSUB_READ_WAIT`).
@@ -96,17 +100,40 @@ impl SafeHttp for NoHttps {
     }
 }
 
-/// A message MailMind sends for itself goes through the outbox, which isn't on this server yet.
+/// An unsubscribe by mail, queued in Compose's outbox as the Python app's `_SystemSend` queues it: built already, to
+/// its one address, from an account that is still there.
 #[derive(Debug)]
-pub(crate) struct NoOutbox;
+pub(crate) struct OutboxSend {
+    pub(crate) outgoing: Outgoing,
+    pub(crate) directory: Arc<Directory>,
+}
 
-impl SystemSend for NoOutbox {
+impl SystemSend for OutboxSend {
     fn ready(&self) -> bool {
-        false
+        true
     }
 
-    fn send(&self, _: &str, _: &[u8], _: &str, _: &str, _: &str, _: &str) -> Result<(), Fault> {
-        Err(mm_kernel::errors::NOT_YET)
+    fn send(
+        &self,
+        account: &str,
+        raw: &[u8],
+        message_id: &str,
+        to: &str,
+        subject: &str,
+        key: &str,
+    ) -> Result<(), Fault> {
+        if self.directory.get(account)?.is_none() {
+            // A removed or stale account.
+            return Err(Fault::new("KeyError"));
+        }
+        let built = Built {
+            raw: raw.to_vec(),
+            message_id: message_id.to_owned(),
+            envelope: vec![to.to_owned()],
+            to_disp: vec![to.to_owned()],
+            ..Built::default()
+        };
+        self.outgoing.send(&built, key, subject, None, account).map(|_| ())
     }
 }
 
@@ -273,12 +300,16 @@ pub(crate) struct CleanupsParts {
     /// This run's secret, which the confirm tokens are keyed with.
     pub(crate) secret: String,
     pub(crate) read_only: bool,
+    /// Compose's outbox, which a mailto: unsubscribe is queued in.
+    pub(crate) delivery: Arc<Delivery>,
 }
 
 impl Cleanups {
     pub(crate) fn assemble(parts: CleanupsParts) -> Cleanups {
-        let CleanupsParts { database, directory, servers, gates, filing, clock, secret, read_only } = parts;
-        let store = Arc::new(CurationStore::new(database, clock.clone()));
+        let CleanupsParts { database, directory, servers, gates, filing, clock, secret, read_only, delivery } = parts;
+        // Minted as Compose mints a send.
+        let mint = Mint { clock: clock.clone(), draws: Arc::new(RandomDraws), pid: std::process::id() };
+        let store = Arc::new(CurationStore::new(database.clone(), clock.clone()));
         let ids: Arc<dyn Ids> = Arc::new(RandomIds::default());
         let unsubscribing = Unsubscribing::new(UnsubscribingParts {
             mail: store.clone(),
@@ -288,7 +319,10 @@ impl Cleanups {
                 directory: directory.clone(),
             }),
             http: Arc::new(NoHttps),
-            send: Arc::new(NoOutbox),
+            send: Arc::new(OutboxSend {
+                outgoing: Outgoing::new(database.clone(), delivery, mint),
+                directory: directory.clone(),
+            }),
             ids: ids.clone(),
             clock: clock.clone(),
             writes_allowed: !read_only,

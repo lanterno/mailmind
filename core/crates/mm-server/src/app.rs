@@ -251,17 +251,8 @@ impl App {
             ],
         );
         let jobs = Arc::new(Jobs::new(seams.clock.clone()));
-        // A sender's cleanup and a sweep, which file as the Screener does.
-        let cleanups = crate::cleanup_wiring::Cleanups::assemble(crate::cleanup_wiring::CleanupsParts {
-            database: database.clone(),
-            directory: directory.clone(),
-            servers: servers.clone(),
-            gates: gates.clone(),
-            filing: curation_filing,
-            clock: seams.clock.clone(),
-            secret: csrf.clone(),
-            read_only: environment.read_only(),
-        });
+        // The servers a cleanup, a sweep and expiry read and move live mail on.
+        let cleanup_servers = servers.clone();
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),
@@ -306,6 +297,19 @@ impl App {
             read_only: environment.read_only(),
             stats: stats.clone(),
             heard: Arc::new(Heard { hub: events.clone(), stats: stats.clone(), folders: folders.clone() }),
+        });
+        // A sender's cleanup, a sweep and expiry, which file as the Screener does; a mailto: unsubscribe goes through
+        // Compose's outbox.
+        let cleanups = crate::cleanup_wiring::Cleanups::assemble(crate::cleanup_wiring::CleanupsParts {
+            database: database.clone(),
+            directory: directory.clone(),
+            servers: cleanup_servers,
+            gates: gates.clone(),
+            filing: curation_filing,
+            clock: seams.clock.clone(),
+            secret: csrf.clone(),
+            read_only: environment.read_only(),
+            delivery: compose.delivery.clone(),
         });
         // An answer to an invite goes through Compose's outbox.
         let calendar = crate::calendar_wiring::Calendar::assemble(crate::calendar_wiring::CalendarParts {
