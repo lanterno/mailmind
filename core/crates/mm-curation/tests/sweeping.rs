@@ -2,7 +2,7 @@
 //! tests/api/test_http_settings.py's sweep shows): the moves checked and tried once more, then the sweep of an account
 //! on fakes behind Curation's ports.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use mm_curation::cleanup_ports::{
@@ -45,8 +45,16 @@ impl LiveSession for Inbox {
         Ok(self.uids_in.iter().copied().collect())
     }
 
+    fn uids_from(&mut self, _: &str) -> Result<Vec<u32>, LiveError> {
+        unreachable!("a sweep reads the whole INBOX")
+    }
+
     fn headers(&mut self, uids: &[u32], _: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
         Ok(uids.iter().map(|u| (*u, self.heads.get(u).cloned().unwrap_or_default())).collect())
+    }
+
+    fn arrivals(&mut self, _: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
+        unreachable!("a sweep doesn't ask when mail arrived")
     }
 
     fn move_to(&mut self, uids: &[u32], dest: &str) -> Result<(), LiveError> {
@@ -186,8 +194,14 @@ impl LiveSession for Session {
     fn uids(&mut self) -> Result<Vec<u32>, LiveError> {
         self.inbox().uids()
     }
+    fn uids_from(&mut self, text: &str) -> Result<Vec<u32>, LiveError> {
+        self.inbox().uids_from(text)
+    }
     fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
         self.inbox().headers(uids, fields)
+    }
+    fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
+        self.inbox().arrivals(uids)
     }
     fn move_to(&mut self, uids: &[u32], dest: &str) -> Result<(), LiveError> {
         self.inbox().move_to(uids, dest)
@@ -206,6 +220,13 @@ impl LiveInboxes for Shared {
     fn on_gate(&self, account: &str, job: &mut dyn FnMut() -> Result<Value, Fault>) -> Result<Value, Fault> {
         self.0.note(format!("gate {account}"));
         job()
+    }
+    fn on_gate_unless_held(
+        &self,
+        _: &str,
+        _: &mut dyn FnMut() -> Result<Value, Fault>,
+    ) -> Result<Option<Value>, Fault> {
+        unreachable!("a sweep a person asked for waits its turn")
     }
     fn open(&self, _: &str) -> Result<Box<dyn LiveSession>, &'static str> {
         if self.0.refuse_open {
@@ -242,6 +263,9 @@ impl SweptRows for Shared {
         self.0.note(format!("forget {account} {moved:?} {stragglers:?}"));
         Ok(())
     }
+    fn forget_expired(&self, _: &str, _: &[(String, String)], _: &[String]) -> Result<(), Fault> {
+        unreachable!("a sweep forgets what it moved as moved")
+    }
 }
 
 impl Filing for Shared {
@@ -259,6 +283,9 @@ impl Filing for Shared {
     }
     fn stats_changed(&self) {
         self.0.note("stats".into());
+    }
+    fn folders_changed(&self, _: &str, _: usize) -> Result<(), Fault> {
+        unreachable!("a sweep says the counts moved")
     }
 }
 

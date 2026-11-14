@@ -483,6 +483,9 @@ impl Filing for World {
         Ok(())
     }
     fn stats_changed(&self) {}
+    fn folders_changed(&self, _: &str, _: usize) -> Result<(), Fault> {
+        unreachable!("a cleanup's moves go through filing")
+    }
 }
 
 impl SweepTrail for World {

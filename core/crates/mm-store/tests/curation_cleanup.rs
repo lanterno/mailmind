@@ -239,3 +239,25 @@ fn what_a_sweep_moved_is_forgotten_by_message_id_else_by_uid_and_a_straggler_sta
         database.read(|c| c.query_row("SELECT gone_at FROM message_identity WHERE key=1", [], |r| r.get(0))).unwrap();
     assert_eq!(gone, Some(1_793_620_800));
 }
+
+#[test]
+fn what_expiry_moved_is_forgotten_by_message_id_alone_and_a_straggler_stays() {
+    let (_dir, store, database) = store();
+    let moved = [
+        ("11".to_owned(), "<218@loom.example.test>".to_owned()),
+        // No Message-ID: UID 14 may be another row's now, so the row waits for reconcile.
+        ("14".to_owned(), String::new()),
+        ("12".to_owned(), "<217@loom.example.test>".to_owned()),
+        // Another account's message, and one that isn't stored.
+        ("13".to_owned(), String::new()),
+        ("15".to_owned(), "<gone@example.test>".to_owned()),
+    ];
+    store.forget_expired(ADA, &moved, &["12".to_owned()]).unwrap();
+    let left: Vec<i64> = database
+        .read(|c| c.prepare("SELECT pk FROM messages ORDER BY pk")?.query_map([], |r| r.get(0))?.collect())
+        .unwrap();
+    assert_eq!(left, [2, 3, 4]);
+    let gone: Option<i64> =
+        database.read(|c| c.query_row("SELECT gone_at FROM message_identity WHERE key=1", [], |r| r.get(0))).unwrap();
+    assert_eq!(gone, Some(1_793_620_800));
+}
