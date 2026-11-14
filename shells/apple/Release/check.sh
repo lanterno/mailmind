@@ -90,6 +90,19 @@ check "and reads only a feed signed with that key" equal "$(plist "$app" SURequi
 check "from the latest release's appcast" equal "$(plist "$app" SUFeedURL)" \
     "https://github.com/lanterno/mailmind/releases/latest/download/appcast.xml"
 
+acknowledged() {
+    local text="$app/Contents/Resources/Acknowledgements.txt"
+    grep -q "^MailMind, https://github.com/lanterno/mailmind$" "$text" &&
+        grep -q "^bspatch.c and bsdiff.c, from bsdiff" "$text" &&
+        grep -q "^sqlcipher-src .*(sqlcipher/LICENSE-sqlcipher)$" "$text" &&
+        grep -q "^sqlcipher-src .*(sqlcipher/LICENSE-libtomcrypt)$" "$text" &&
+        grep -q "^ring .*(third_party/fiat/LICENSE)$" "$text" &&
+        grep -q "^uniffi .*(MPL-2.0), https://github.com/mozilla/uniffi-rs$" "$text"
+}
+check "it carries the licences: MailMind's, Sparkle's (bsdiff's), SQLCipher's, libtomcrypt's, ring's, UniFFI's" acknowledged
+check "with the copyright About shows" equal "$(plist "$app" NSHumanReadableCopyright)" \
+    "© 2026 MailMind contributors. MIT License."
+
 echo "## Sparkle.framework loads under the app's signature"
 # Library validation is checked when dyld maps a framework, before any of the app's code runs. A program signed as the
 # app is (ad hoc, hardened runtime, the app's entitlements) loads the app's own copy of Sparkle.
