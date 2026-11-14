@@ -9,6 +9,7 @@ struct MailMindApp: App {
             InboxView(demo: demo)
                 .task { await demo.start() }
         }
+        .commands { UpdateCommands() }
         #if os(macOS)
         .defaultSize(width: 560, height: 820)
         #endif

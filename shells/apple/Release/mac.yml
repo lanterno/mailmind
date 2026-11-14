@@ -15,3 +15,14 @@ targets:
       - path: ../Icon/Assets.xcassets
     dependencies:
       - package: Sparkle
+    settings:
+      base:
+        # Sparkle's keys, merged into the Info.plist Xcode generates.
+        INFOPLIST_FILE: Release/Info-macOS.plist
+        # The public half of the owner's EdDSA key, which every update is signed with, and the one place the build
+        # reads it from. A public key is safe to commit; the private half stays in the owner's login Keychain. Until
+        # the owner has made the key (docs/releasing.md) this is a placeholder, and `just apple release` stops.
+        SPARKLE_PUBLIC_KEY: "REPLACE-WITH-THE-OWNERS-PUBLIC-KEY"
+        # Only `just apple release` turns this on, so a debug build, `just apple build`'s, a test or a demo never asks
+        # the network for an update.
+        MAILMIND_CHECKS_FOR_UPDATES: "NO"

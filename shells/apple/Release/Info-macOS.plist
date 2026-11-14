@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Mac app's own Info.plist keys, merged into the one Xcode generates. Sparkle reads the first three; the build
+  settings they name are in Release/mac.yml. See docs/releasing.md.
+-->
+<plist version="1.0">
+<dict>
+	<key>SUFeedURL</key>
+	<string>https://github.com/lanterno/mailmind/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_KEY)</string>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>MailMindChecksForUpdates</key>
+	<string>$(MAILMIND_CHECKS_FOR_UPDATES)</string>
+</dict>
+</plist>
