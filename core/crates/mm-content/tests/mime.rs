@@ -482,6 +482,11 @@ fn a_lone_cr_ends_a_delimiter_line_and_the_line_before_one() {
     // A close delimiter after a lone CR closes.
     let closed = message("Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\nhi\r--b--\r\nepilogue\r\n");
     assert_eq!((part(&closed, 1), part(&closed, 2)), (Some((b"hi".to_vec(), "text/plain".to_owned())), None));
+    // A blank line after the CR ends a header block with nothing in it, and the part starts after it.
+    let blank_after = message(
+        "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b\r\r\nbody\r\n--b--\r\n",
+    );
+    assert_eq!(part(&blank_after, 2), Some((b"body".to_vec(), "text/plain".to_owned())));
 }
 
 // -- headers -------------------------------------------------------------------------------------------------------
