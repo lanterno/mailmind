@@ -16,6 +16,7 @@ just test-dovecot                 # the MailSession contract against Dovecot in 
 just demo [port]                  # the whole app on fictional mail and fake servers: nothing of yours is read or changed
 just dev                          # read-only: writes nothing to a mail server, no background sync
 just run [port]                   # build the app, then the real thing (default http://127.0.0.1:8721)
+just run-rust [port]              # the same on the Rust server (mailmind-server), in place of the Python one
 just setup                        # install the Python packages, node_modules and Chromium
 ```
 

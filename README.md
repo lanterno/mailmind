@@ -604,6 +604,7 @@ uv run python -m mailmind assess 2000 3  # summarize up to 2000, 3 workers
 
 # 4. Run the dashboard
 just run                          # builds the app, then http://127.0.0.1:8721   (custom port: just run 9000)
+just run-rust                     # the same on the Rust server, which is taking over from the Python one
 ```
 
 ## Configuring accounts
