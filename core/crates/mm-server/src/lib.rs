@@ -39,5 +39,8 @@ pub mod workers;
 mod account_wiring;
 pub mod login_keychain;
 
+// Whether the database is at the version this server reads.
+mod database_version;
+
 pub use app::{App, Seams};
 pub use serve::{Server, Work};

@@ -129,6 +129,7 @@ impl App {
         let config = Arc::new(ConfigFile::new(settings.config(), seams.outside.clone()));
         let directory = Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()));
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
+        crate::database_version::fits(&database)?;
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
