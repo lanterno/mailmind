@@ -813,3 +813,22 @@ fn with_ai_off_nothing_is_written_ahead_and_the_round_goes_on() {
     assert!(w.sent().is_empty());
     assert!(shelf.briefs.lock().expect("briefs").is_empty() && shelf.reviews.lock().expect("reviews").is_empty());
 }
+
+/// Says when it was asked to cut.
+#[derive(Debug, Default)]
+struct Batches(std::sync::Mutex<Vec<i64>>);
+
+impl mm_assistant::background_ports::FinishedBatches for Batches {
+    fn forget_finished(&self, ended_before: i64) -> Result<usize, mm_kernel::errors::Fault> {
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(ended_before);
+        Ok(2)
+    }
+}
+
+#[test]
+fn finished_batches_are_let_go_thirty_days_after_they_ended() {
+    let batches = Batches::default();
+    let clock = Frozen(AtomicI64::new(1_793_620_800_000_000));
+    assert_eq!(mm_assistant::batches::forget_finished(&batches, &clock).unwrap(), 2);
+    assert_eq!(*batches.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner), [1_793_620_800 - 30 * 86_400]);
+}

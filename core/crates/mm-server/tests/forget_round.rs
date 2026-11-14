@@ -1,5 +1,6 @@
 //! The forget round as `mailmind-server` starts it: a lane of its own, daily, the first ten minutes in, which lets go
-//! of the keys with no copy left and the changes finished a month ago; and none in a process that only reads.
+//! of the keys with no copy left, the changes finished and the Python app's batches done a month ago; and none in a
+//! process that only reads.
 
 #![allow(clippy::unwrap_used)]
 
@@ -62,10 +63,14 @@ CREATE TABLE mail_commands(id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NO
   params TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', attempts INTEGER NOT NULL DEFAULT 0,
   next_attempt_at INTEGER NOT NULL DEFAULT 0, applied INTEGER NOT NULL DEFAULT 0, begun INTEGER NOT NULL DEFAULT 0,
   outcome TEXT, last_error TEXT, created_at TEXT NOT NULL, done_at TEXT);
+CREATE TABLE ai_batches(id INTEGER PRIMARY KEY AUTOINCREMENT, remote_id TEXT, feature TEXT NOT NULL,
+  model TEXT NOT NULL, state TEXT NOT NULL, requests INTEGER NOT NULL, estimate_micros INTEGER NOT NULL,
+  cutoff_ts INTEGER NOT NULL, created_at INTEGER NOT NULL, polled_at INTEGER NOT NULL DEFAULT 0, ended_at INTEGER,
+  prompt_version INTEGER);
 ";
 
-/// The app over a data directory with no accounts, two keys with no copy left (one gone 31 days ago, one 29) and two
-/// changes done (31 and 29 days ago), its profile `profile`; and the database.
+/// The app over a data directory with no accounts, two keys with no copy left (one gone 31 days ago, one 29), two
+/// changes done and two batches done (each 31 and 29 days ago), its profile `profile`; and the database.
 fn app(home: &Path, profile: &str) -> (Arc<App>, Database) {
     std::fs::write(home.join("mailmind.config.json"), "{}").unwrap();
     let (path, key) = (home.join("mailmind.db"), DbKey::from_bytes([0x5e; 32]));
@@ -88,6 +93,13 @@ fn app(home: &Path, profile: &str) -> (Arc<App>, Database) {
             "INSERT INTO mail_commands (id, account, idempotency_key, kind, message_id, src_folder, params, state, \
              created_at, done_at) VALUES ({id}, 'ada@example.test', 'trash:{id}', 'trash', '<m@example.test>', \
              'INBOX', '{{}}', 'done', '2026-09-01T12:00:00+00:00', '{done_at}');"
+        ));
+    }
+    for (id, days) in [(1, 31), (2, 29)] {
+        rows.push_str(&format!(
+            "INSERT INTO ai_batches (id, feature, model, state, requests, estimate_micros, cutoff_ts, created_at, \
+             ended_at) VALUES ({id}, 'triage', 'claude-opus-5-5', 'done', 1, 0, 0, 0, {});",
+            NOW - days * DAY
         ));
     }
     database.write(|c| c.execute_batch(&rows)).unwrap();
@@ -134,6 +146,7 @@ fn the_round_runs_daily_and_lets_go_of_what_went_a_month_ago() {
     assert_eq!(forget_job(&app)["failures"], json!(0));
     assert_eq!(ids(&database, "SELECT key FROM message_identity ORDER BY key"), [2]);
     assert_eq!(ids(&database, "SELECT id FROM mail_commands ORDER BY id"), [2]);
+    assert_eq!(ids(&database, "SELECT id FROM ai_batches ORDER BY id"), [2]);
 }
 
 #[test]
@@ -144,4 +157,5 @@ fn a_process_that_only_reads_lets_go_of_nothing() {
     assert!(!app.jobs.names().contains(&"forget"), "{:?}", app.jobs.names());
     workers.stop();
     assert_eq!(ids(&database, "SELECT key FROM message_identity ORDER BY key"), [1, 2]);
+    assert_eq!(ids(&database, "SELECT id FROM ai_batches ORDER BY id"), [1, 2]);
 }

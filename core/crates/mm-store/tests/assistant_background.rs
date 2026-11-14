@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use mm_assistant::background_ports::{Assessment, DraftCandidates, Outcome, Triage};
+use mm_assistant::background_ports::{Assessment, DraftCandidates, FinishedBatches, Outcome, Triage};
 use mm_assistant::ports::Message;
 use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
 use mm_store::{Database, DbKey};
@@ -237,4 +237,38 @@ fn drafting_ahead_reads_each_threads_newest_that_wants_a_reply_most_important_fi
     };
     assert_eq!(database.draft_candidates(4000), Ok(vec![lunch.clone(), lone]));
     assert_eq!(database.draft_candidates(4600), Ok(vec![lunch]));
+}
+
+/// Four batches the Python app sent, by their ids: 1 done long ago, 2 done lately, 3 still running from long ago, 4
+/// done with no end written; each with one item.
+const BATCHES: &str = "
+INSERT INTO message_identity (key, account, identity) VALUES
+  (1, 'ada@example.test', 'm1'), (2, 'ada@example.test', 'm2'), (3, 'ada@example.test', 'm3'),
+  (4, 'ada@example.test', 'm4');
+INSERT INTO ai_batches (id, feature, model, state, requests, estimate_micros, cutoff_ts, created_at, ended_at) VALUES
+  (1, 'triage', 'claude-opus-5-5', 'done', 1, 0, 0, 0, 100),
+  (2, 'triage', 'claude-opus-5-5', 'done', 1, 0, 0, 0, 5000),
+  (3, 'triage', 'claude-opus-5-5', 'running', 1, 0, 0, 0, NULL),
+  (4, 'triage', 'claude-opus-5-5', 'done', 1, 0, 0, 0, NULL);
+INSERT INTO ai_batch_items (message_key, batch_id) VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+";
+
+#[test]
+fn a_batch_done_before_the_cut_goes_with_its_items_and_nothing_else_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path(), BATCHES);
+    assert_eq!(database.forget_finished(1000).unwrap(), 1);
+    let left = |table: &str, column: &str| -> Vec<i64> {
+        database
+            .read(|c| {
+                c.prepare(&format!("SELECT {column} FROM {table} ORDER BY {column}"))?
+                    .query_map([], |r| r.get(0))?
+                    .collect()
+            })
+            .unwrap()
+    };
+    assert_eq!(left("ai_batches", "id"), [2, 3, 4]);
+    assert_eq!(left("ai_batch_items", "batch_id"), [2, 3, 4]);
+    // The messages the batch held stay: only what was asked of them goes.
+    assert_eq!(left("message_identity", "key"), [1, 2, 3, 4]);
 }
