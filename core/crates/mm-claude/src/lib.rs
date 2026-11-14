@@ -1,12 +1,14 @@
-//! The network: the Claude API's Messages endpoint (`assistant.adapters.anthropic_sdk`), as the Assistant's
-//! `LanguageModel`, on mm-net.
+//! The network: the Claude API's Messages endpoint and its Message Batches (`assistant.adapters.anthropic_sdk`), as
+//! the Assistant's `LanguageModel`, on mm-net.
 //!
 //! A request goes over HTTPS, its certificate verified on the roots the system trusts. Plain HTTP goes only to a
 //! loopback host, which is what a stand-in for the API is: the key is never sent in the clear to anything off this
-//! machine. The host is asked of `Outside` before a connection is made. A call is sent again, twice, after a status
-//! worth sending again (`RETRIED`) or a lost connection, waiting what `retry-after` says or else a little longer
-//! each time; any other status is a `ModelError` saying it. The key never reaches a log line or an error.
+//! machine, and never to any endpoint but the one it was given for. The host is asked of `Outside` before a connection
+//! is made. A call is sent again, twice, after a status worth sending again (`RETRIED`) or a lost connection, waiting
+//! what `retry-after` says or else a little longer each time, except a batch's sending, which never is; any other
+//! status is a `ModelError` saying it. The key never reaches a log line or an error.
 
+pub mod batches;
 pub mod http;
 pub mod wire;
 
@@ -15,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mm_assistant::models::FALLBACK_BETA;
-use mm_assistant::ports::{LanguageModel, ModelError, Prompt, RETRIED, Reply};
+use mm_assistant::ports::{BatchResult, LanguageModel, ModelError, Prompt, RETRIED, Reply};
 use mm_kernel::seams::{Outside, Secret};
 use mm_net::{Lost, Stream};
 
@@ -167,8 +169,28 @@ fn backoff(response: Option<&http::Response>, retried: u32) -> Duration {
     }
 }
 
-impl LanguageModel for ClaudeApi {
-    fn complete(&self, prompt: &Prompt) -> Result<Reply, ModelError> {
+/// What a request accepts back: JSON, or a batch's results as JSON lines.
+const JSON: &str = "application/json";
+const BINARY: &str = "application/binary";
+
+/// One request to the API, as `ClaudeApi::call` sends it.
+struct Call<'a> {
+    method: &'a str,
+    /// The path after the endpoint's base.
+    path: &'a str,
+    accept: &'static str,
+    beta: Option<&'static str>,
+    /// A JSON body, if it has one.
+    body: Option<&'a [u8]>,
+    /// Attempts after the first.
+    retries: u32,
+}
+
+impl ClaudeApi {
+    /// `call` sent with the key, and sent again up to its `retries` times after a status worth sending again or a lost
+    /// connection: the response when its status says it worked, else a `ModelError` saying why there is none. The key
+    /// goes only over TLS, or in the clear to this machine.
+    fn call(&self, call: &Call<'_>) -> Result<http::Response, ModelError> {
         let Some(endpoint) = &self.endpoint else {
             return Err(ModelError::new("Claude API unreachable: no API address", None));
         };
@@ -176,21 +198,19 @@ impl LanguageModel for ClaudeApi {
         if !endpoint.tls && !endpoint.loopback() {
             return Err(ModelError::new("Claude API unreachable: plain HTTP is only for this machine", None));
         }
-        let body = serde_json::to_vec(&wire::body(prompt)).map_err(|_| ModelError::new("Claude API failed", None))?;
-        let mut headers = vec![
-            ("Accept", "application/json"),
-            ("Content-Type", "application/json"),
-            ("Anthropic-Version", VERSION),
-            ("X-Api-Key", self.key.expose()),
-        ];
-        if prompt.fallback {
-            headers.push(("Anthropic-Beta", FALLBACK_BETA));
+        let mut headers = vec![("Accept", call.accept)];
+        if call.body.is_some() {
+            headers.push(("Content-Type", JSON));
+        }
+        headers.extend([("Anthropic-Version", VERSION), ("X-Api-Key", self.key.expose())]);
+        if let Some(beta) = call.beta {
+            headers.push(("Anthropic-Beta", beta));
         }
         if self.key.expose().contains(['\r', '\n']) {
             return Err(ModelError::new("Claude API failed: the key can't be sent", None));
         }
-        let request =
-            http::request(&format!("{}/v1/messages", endpoint.base), &endpoint.host_header(), &headers, &body);
+        let path = format!("{}{}", endpoint.base, call.path);
+        let request = http::request(call.method, &path, &endpoint.host_header(), &headers, call.body);
         let mut retried = 0;
         loop {
             let attempt = self.attempt(endpoint, &request);
@@ -198,7 +218,7 @@ impl LanguageModel for ClaudeApi {
                 Attempt::Answered(response) => RETRIED.contains(&response.status),
                 Attempt::Lost(lost) => lost.0 != "Refused",
             };
-            if again && retried < self.retries {
+            if again && retried < call.retries {
                 let response = match &attempt {
                     Attempt::Answered(response) => Some(response),
                     Attempt::Lost(_) => None,
@@ -212,17 +232,44 @@ impl LanguageModel for ClaudeApi {
                     Err(ModelError::new("Claude API unreachable: Request timed out.", None))
                 }
                 Attempt::Lost(_) => Err(ModelError::new("Claude API unreachable: Connection error.", None)),
-                Attempt::Answered(response) if (200..300).contains(&response.status) => {
-                    match serde_json::from_slice::<serde_json::Value>(&response.body) {
-                        Ok(parsed) => Ok(wire::reply(&parsed, &prompt.model)),
-                        Err(_) => Err(ModelError::new("Claude API failed: APIResponseValidationError", None)),
-                    }
-                }
+                Attempt::Answered(response) if (200..300).contains(&response.status) => Ok(response),
                 Attempt::Answered(response) => Err(ModelError::new(
                     format!("Claude API {}: {}", response.status, wire::error_text(&response.body)),
                     Some(response.status),
                 )),
             };
         }
+    }
+}
+
+/// A response's JSON body, or the SDK's validation error when it isn't JSON.
+fn parsed(response: &http::Response) -> Result<serde_json::Value, ModelError> {
+    serde_json::from_slice(&response.body)
+        .map_err(|_| ModelError::new("Claude API failed: APIResponseValidationError", None))
+}
+
+impl LanguageModel for ClaudeApi {
+    fn complete(&self, prompt: &Prompt) -> Result<Reply, ModelError> {
+        let body = serde_json::to_vec(&wire::body(prompt)).map_err(|_| ModelError::new("Claude API failed", None))?;
+        let beta = prompt.fallback.then_some(FALLBACK_BETA);
+        let call =
+            Call { method: "POST", path: "/v1/messages", accept: JSON, beta, body: Some(&body), retries: self.retries };
+        Ok(wire::reply(&parsed(&self.call(&call)?)?, &prompt.model))
+    }
+
+    fn submit_batch(&self, requests: &[(String, Prompt)]) -> Result<String, ModelError> {
+        self.send_batch(requests)
+    }
+
+    fn batch_ended(&self, batch_id: &str) -> Result<bool, ModelError> {
+        Ok(self.retrieve(batch_id)?.get("processing_status").and_then(serde_json::Value::as_str) == Some("ended"))
+    }
+
+    fn batch_results(&self, batch_id: &str, asked: &str) -> Result<Vec<BatchResult>, ModelError> {
+        self.results(batch_id, asked)
+    }
+
+    fn discard_batch(&self, batch_id: &str) -> Result<(), ModelError> {
+        self.delete(batch_id)
     }
 }

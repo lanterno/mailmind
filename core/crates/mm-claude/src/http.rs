@@ -1,5 +1,5 @@
-//! One HTTP/1.1 exchange over a connection mm-net opened: a request with a JSON body, written whole, and the response
-//! read back. Each exchange is a connection of its own, closed after it (`Connection: close`).
+//! One HTTP/1.1 exchange over a connection mm-net opened: a request, with a JSON body or none, written whole, and the
+//! response read back. Each exchange is a connection of its own, closed after it (`Connection: close`).
 
 use std::io::{Read, Write};
 
@@ -23,19 +23,22 @@ impl Response {
     }
 }
 
-/// The request's bytes: the request line, `headers` (each a name and a value with no line break in either), and the
-/// body.
-pub fn request(path: &str, host: &str, headers: &[(&str, &str)], body: &[u8]) -> Vec<u8> {
-    let mut out = format!("POST {path} HTTP/1.1\r\nHost: {host}\r\n");
+/// The bytes of a request by `method`: the request line, `headers` (each a name and a value with no line break in
+/// either), and the body, if it has one.
+pub fn request(method: &str, path: &str, host: &str, headers: &[(&str, &str)], body: Option<&[u8]>) -> Vec<u8> {
+    let mut out = format!("{method} {path} HTTP/1.1\r\nHost: {host}\r\n");
     for (name, value) in headers {
         out.push_str(name);
         out.push_str(": ");
         out.push_str(value);
         out.push_str("\r\n");
     }
-    out.push_str(&format!("Content-Length: {}\r\nConnection: close\r\n\r\n", body.len()));
+    if let Some(body) = body {
+        out.push_str(&format!("Content-Length: {}\r\n", body.len()));
+    }
+    out.push_str("Connection: close\r\n\r\n");
     let mut bytes = out.into_bytes();
-    bytes.extend_from_slice(body);
+    bytes.extend_from_slice(body.unwrap_or_default());
     bytes
 }
 

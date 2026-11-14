@@ -100,9 +100,43 @@ impl ModelError {
     }
 }
 
-/// The Messages API, or whatever stands in for it.
+/// What became of one request in a batch: its reply, or None with `permanent` saying that sending it again won't
+/// change that (a bad request, not an outage, a cancel or an expiry).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BatchResult {
+    pub custom_id: String,
+    pub reply: Option<Reply>,
+    pub permanent: bool,
+}
+
+/// What a language model that offers no batches answers when asked for one.
+const NO_BATCHES: &str = "Claude API failed: this model takes no batches";
+
+/// The Messages API, or whatever stands in for it, and its Message Batches. A stand-in that offers no batches fails
+/// every batch call, as nothing answered.
 pub trait LanguageModel: Send + Sync + fmt::Debug {
     fn complete(&self, prompt: &Prompt) -> Result<Reply, ModelError>;
+
+    /// Each (custom id, prompt) as one request of one batch: the batch's id. Never sent again: the API has no key that
+    /// says "the same batch", so another try could pay for it twice.
+    fn submit_batch(&self, _requests: &[(String, Prompt)]) -> Result<String, ModelError> {
+        Err(ModelError::new(NO_BATCHES, None))
+    }
+
+    /// Whether the batch has ended, so its results can be read.
+    fn batch_ended(&self, _batch_id: &str) -> Result<bool, ModelError> {
+        Err(ModelError::new(NO_BATCHES, None))
+    }
+
+    /// What each request of a batch that has ended came to, its replies read as from a request for model `asked`.
+    fn batch_results(&self, _batch_id: &str, _asked: &str) -> Result<Vec<BatchResult>, ModelError> {
+        Err(ModelError::new(NO_BATCHES, None))
+    }
+
+    /// Remove what the API keeps of a batch that has ended.
+    fn discard_batch(&self, _batch_id: &str) -> Result<(), ModelError> {
+        Err(ModelError::new(NO_BATCHES, None))
+    }
 }
 
 /// The language model for the key in force now, or that AI is off; and where the key came from, or where it was

@@ -1,7 +1,7 @@
 //! The Messages API's wire format (`assistant.adapters.wire`): the request body for a `Prompt`, and the `Reply` in a
-//! response.
+//! response; and a batch's, its requests and the lines of its results.
 
-use mm_assistant::ports::{Prompt, Reply, Usage};
+use mm_assistant::ports::{BatchResult, ModelError, Prompt, Reply, Usage};
 use serde_json::{Map, Value, json};
 
 /// The body of a POST /v1/messages for `prompt`. A prompt that takes the refusal fallback asks for it here, beside the
@@ -111,6 +111,47 @@ pub fn reply(response: &Value, asked: &str) -> Reply {
         .map(|b| b.get("text").filter(|t| truthy(t)).map(|t| text_of(Some(t))).unwrap_or_default())
         .collect();
     Reply { text: mm_kernel::text::strip(&text).to_owned(), model, usage: spent, stop_reason: stop }
+}
+
+/// One request of a batch, with no `fallbacks`, which batches reject.
+pub fn batch_request(custom_id: &str, prompt: &Prompt) -> Value {
+    let mut params = body(prompt);
+    if let Value::Object(params) = &mut params {
+        params.remove("fallbacks");
+    }
+    json!({"custom_id": custom_id, "params": params})
+}
+
+/// One line of a batch's results: a message that succeeded, read as from a request for model `asked`, or one errored,
+/// canceled or expired, which is permanent only when the request itself was bad.
+pub fn batch_result(line: &Value, asked: &str) -> BatchResult {
+    let empty = Map::new();
+    let result = line.get("result").and_then(Value::as_object).unwrap_or(&empty);
+    let custom_id = line.get("custom_id").filter(|id| truthy(id)).map(|id| text_of(Some(id))).unwrap_or_default();
+    if result.get("type").and_then(Value::as_str) == Some("succeeded") {
+        let message = result.get("message").filter(|m| truthy(m)).cloned().unwrap_or(Value::Object(Map::new()));
+        return BatchResult { custom_id, reply: Some(reply(&message, asked)), permanent: false };
+    }
+    let error = result.get("error").and_then(Value::as_object).unwrap_or(&empty);
+    let inner = error.get("error").and_then(Value::as_object).unwrap_or(error);
+    let kind = inner.get("type").filter(|t| truthy(t)).map(|t| text_of(Some(t))).unwrap_or_default();
+    BatchResult { custom_id, reply: None, permanent: kind.contains("invalid_request") }
+}
+
+/// A batch's results, one JSON object a line, each read as `batch_result` reads it; a line with nothing on it is
+/// none. Fails when a line isn't JSON, as the SDK's reading of them does.
+pub fn batch_results(body: &[u8], asked: &str) -> Result<Vec<BatchResult>, ModelError> {
+    let mut out = Vec::new();
+    for line in body.split(|b| *b == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.iter().all(u8::is_ascii_whitespace) {
+            continue;
+        }
+        let parsed: Value = serde_json::from_slice(line)
+            .map_err(|_| ModelError::new("Claude API failed: APIResponseValidationError", None))?;
+        out.push(batch_result(&parsed, asked));
+    }
+    Ok(out)
 }
 
 /// What an error response says, as the SDK words it: its `error.message`, else the body's, cut to 200 characters.
