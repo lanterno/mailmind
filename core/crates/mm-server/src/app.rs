@@ -105,6 +105,8 @@ pub struct App {
     pub connections: mm_accounts::connections::Connections,
     /// Compose's: a send, a draft, the outbox (`work outbox`) and the drafts' pushes (`work drafts`).
     pub compose: crate::compose_wiring::Compose,
+    /// Which logins are held back after their server refused them (`/api/sync-retry-account` lets one go).
+    pub logins: Arc<mm_accounts::logins::Logins>,
 }
 
 impl App {
@@ -130,13 +132,27 @@ impl App {
         let csrf = crate::perimeter::new_token().map_err(|_| "the system's random source failed")?;
         let config = Arc::new(ConfigFile::new(settings.config(), seams.outside.clone()));
         let directory = Arc::new(Directory::new(config, seams.keychain.clone(), seams.clock.clone()));
+        // Every session logs in through `login`, which holds back a login its server refused; a refusal, and an
+        // account's change, are heard by its logins. This process's own key names each login.
+        let mut login_key = [0u8; 32];
+        getrandom::fill(&mut login_key).map_err(|_| "the system's random source failed")?;
+        let login_key = mm_accounts::login_hold::LoginKey::new(login_key);
+        let logins = Arc::new(mm_accounts::logins::Logins::new(login_key, seams.clock.clone()));
+        let account_events: Arc<dyn mm_accounts::ports::AccountEvents> =
+            Arc::new(crate::heard::AccountsHeard { logins: logins.clone() });
+        let login = Arc::new(crate::login_wiring::ImapLogin {
+            directory: directory.clone(),
+            outside: seams.outside.clone(),
+            logins: logins.clone(),
+            events: account_events.clone(),
+        });
         let database = Arc::new(Database::new(settings.db(), key, seams.outside.clone()));
         crate::database_version::fits(&database)?;
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
         let tidying = crate::bound::Tidying::assemble(&database, &seams.clock);
-        let sessions = Arc::new(ImapSessions { directory: directory.clone(), outside: seams.outside.clone() });
+        let sessions = Arc::new(ImapSessions { login: login.clone() });
         let folders = Arc::new(Folders::new(
             Arc::new(KnownAccounts(directory.clone())),
             sessions.clone(),
@@ -154,11 +170,8 @@ impl App {
             environment,
             seams,
         );
-        let servers: Arc<dyn MailServers> = Arc::new(ImapServers {
-            directory: directory.clone(),
-            outside: seams.outside.clone(),
-            read_only: environment.read_only(),
-        });
+        let servers: Arc<dyn MailServers> =
+            Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() });
         // The page's own state, and what the app says of itself.
         let places = Places::new(database.clone(), seams.clock.clone());
         let events = Arc::new(Hub::new().map_err(|_| "the system's random source failed")?);
@@ -242,11 +255,11 @@ impl App {
             stats: stats.clone(),
         });
         // Accounts' changes, and their test login.
-        let probe = crate::account_wiring::ImapProbe { directory: directory.clone(), outside: seams.outside.clone() };
+        let probe = crate::account_wiring::ImapProbe { login: login.clone() };
         let connections = mm_accounts::connections::Connections::new(
             directory.clone(),
             Arc::new(probe),
-            Arc::new(crate::account_wiring::NoOneListens),
+            account_events,
             seams.clock.clone(),
         );
         // Compose's, over sessions of its own and the config file as it is when each send goes.
@@ -255,11 +268,8 @@ impl App {
             directory: directory.clone(),
             config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
             outside: seams.outside.clone(),
-            servers: Arc::new(ImapServers {
-                directory: directory.clone(),
-                outside: seams.outside.clone(),
-                read_only: environment.read_only(),
-            }),
+            // Its copies' sessions log in as every other does, so a refused login is held back here too.
+            servers: Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() }),
             gates: gates.clone(),
             folders: folders.clone(),
             events: events.clone(),
@@ -298,6 +308,7 @@ impl App {
             tidying,
             connections,
             compose,
+            logins,
         })
     }
 }

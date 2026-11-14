@@ -44,6 +44,8 @@ mod outbox_worker;
 
 // Whether the database is at the version this server reads.
 mod database_version;
+// Every session's login, which a login its server refused waits out.
+mod login_wiring;
 
 pub use app::{App, Seams};
 pub use serve::{Server, Work};

@@ -67,6 +67,7 @@ async fn trust_cert(
         match held.connections.trust_cert(asked.get("email").and_then(Value::as_str))? {
             Trusted::SyncAgain(email) => {
                 let account = held.syncing.retry(Some(&email))?;
+                held.logins.forget(&account);
                 let (syncing, named) = (held.syncing.clone(), BTreeSet::from([account.clone()]));
                 app.work.spawn(move || syncing.sync_guarded(Some(named)));
                 Ok(json!({"ok": true, "account": account}))

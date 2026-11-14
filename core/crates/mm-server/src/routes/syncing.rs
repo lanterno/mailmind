@@ -34,7 +34,7 @@ async fn refresh(State(app): State<Arc<App>>, request: Request<Body>) -> Respons
     crate::answer::json(200, &json!({"ok": true, "msg": "sync started"}))
 }
 
-/// Clear an account's recorded sync error, and set its sync going.
+/// Clear an account's recorded sync error, let its next login go whatever its hold says, and set its sync going.
 async fn sync_retry(State(app): State<Arc<App>>, request: Request<Body>) -> Response<Body> {
     let (method, uri) = (request.method().clone(), request.uri().clone());
     let fields = match body::read(request).await {
@@ -43,6 +43,7 @@ async fn sync_retry(State(app): State<Arc<App>>, request: Request<Body>) -> Resp
     };
     super::run(&app.clone(), &method, &uri, move |held| {
         let account = held.syncing.retry(fields.text("account")?)?;
+        held.logins.forget(&account);
         let (syncing, named) = (held.syncing.clone(), BTreeSet::from([account.clone()]));
         app.work.spawn(move || syncing.sync_guarded(Some(named)));
         Ok(json!({"ok": true, "account": account}))

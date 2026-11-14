@@ -1,47 +1,35 @@
 //! The sync's ports bound to their adapters (`bootstrap.mailbox`'s ingest): sessions over mm-imap logged in with
-//! what the Directory keeps, read-only ones in a read-only process; the accounts' kinds; and Curation's classifier over
-//! the rule book. What a sync says happened is heard in `heard`.
+//! what the Directory keeps (`login_wiring`), read-only ones in a read-only process; the accounts' kinds; and
+//! Curation's classifier over the rule book. What a sync says happened is heard in `heard`.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use mm_accounts::directory::Pin;
-use mm_accounts::{Directory, tls_pin};
+use mm_accounts::Directory;
 use mm_curation::classifier;
 use mm_curation::rules::RuleSets;
 use mm_kernel::errors::Fault;
-use mm_kernel::seams::Outside;
 use mm_mailbox::session::{MailServer, MailServers, ReadOnly, ServerError};
 use mm_mailbox::sync_ports::{Classifier, Envelope, SyncAccount, SyncAccounts, Verdict};
 use mm_store::Database;
 use serde_json::Value;
 
-/// Sessions on each account's server (`open_session`): a loopback server's certificate is checked against its pin
-/// before the password is read or sent. In a read-only process each opens folders read-only and sends no write.
+use crate::login_wiring::ImapLogin;
+
+/// Sessions on each account's server (`open_session`), logged in as `login` logs in, which a login its server refused
+/// waits out. In a read-only process each opens folders read-only and sends no write.
 #[derive(Debug)]
 pub(crate) struct ImapServers {
-    pub(crate) directory: Arc<Directory>,
-    pub(crate) outside: Arc<dyn Outside>,
+    pub(crate) login: Arc<ImapLogin>,
     pub(crate) read_only: bool,
 }
 
 impl MailServers for ImapServers {
     fn open(&self, account: &str, timeout_seconds: u64) -> Result<Box<dyn MailServer>, ServerError> {
         let failed = ServerError::Failed;
-        let account = self.directory.get(account).map_err(failed)?.ok_or(failed(Fault::new("UnknownAccount")))?;
-        let (host, port) = account.imap_server().ok_or(failed(Fault::new("NoImapServer")))?;
-        let loopback = tls_pin::is_loopback(&host);
-        let endpoint = mm_imap::Endpoint { host: &host, port, starttls: account.starttls, loopback };
-        let server = mm_imap::Server::connect(&*self.outside, endpoint, Duration::from_secs(timeout_seconds))?;
-        if loopback {
-            let seen = tls_pin::fingerprint(server.certificate());
-            let pin = self.directory.tls_pin(&account.email, &tls_pin::endpoint(&host, port), &seen).map_err(failed)?;
-            if pin == Pin::Other {
-                return Err(ServerError::Unreachable("TLSPinMismatch"));
-            }
-        }
-        let password = self.directory.password(&account).map_err(failed)?;
-        let session: Box<dyn MailServer> = Box::new(server.login(&account.email, &password)?);
+        let account = self.login.directory.get(account).map_err(failed)?.ok_or(failed(Fault::new("UnknownAccount")))?;
+        let session = self.login.open(&account, Duration::from_secs(timeout_seconds))?;
+        let session: Box<dyn MailServer> = Box::new(session);
         Ok(if self.read_only { Box::new(ReadOnly(session)) } else { session })
     }
 }
