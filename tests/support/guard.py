@@ -1,5 +1,5 @@
-"""A tripwire for the test process: no test may touch the owner's mail data, reach past this
-machine, or start a credential helper or the claude CLI.
+"""A tripwire for the test process: no test may touch the owner's mail data or the Bridge password
+file, reach past this machine, or start a credential helper or the claude CLI.
 
 conftest.py installs it before any MailMind module is imported. Python audit hooks see every
 open(), sqlite3.connect(), SQLCipher's connect, rename, delete, socket connect, DNS lookup and process start in the
@@ -33,6 +33,8 @@ PRIVATE = ("mailmind.db", "mailmind.db-*", "mailmind.config.json*", "mailmind_ru
            "mailmind_views.json", "mailmind_snippets.json", "*.jsonl", "*.sqlite", "*.db-journal", ".cfg-*.tmp", ".views-*.tmp",
            ".snippets-*.tmp",
            "mailmind.log", "mailmind.log.*")
+# The owner's secrets kept in a file: the Proton Bridge's password, which mailmind.accounts.adapters.secrets reads last.
+SECRET_FILES = {os.path.realpath(os.path.expanduser("~/.config/mailmind/proton_bridge_pass")).lower()}
 # A real AI call, a 1Password read and a Keychain read.
 PROGRAMS = ("claude", "op", "security")
 
@@ -56,7 +58,10 @@ def _private(path):
         p = urllib.parse.unquote(p[5:].split("?", 1)[0])
     if not p or p == ":memory:":
         return False
-    d, name = os.path.split(os.path.realpath(os.path.abspath(p)))
+    full = os.path.realpath(os.path.abspath(p))
+    if full.lower() in SECRET_FILES:
+        return True
+    d, name = os.path.split(full)
     return d.lower() in _data_dirs and any(fnmatch.fnmatchcase(name.lower(), pat) for pat in PRIVATE)
 
 

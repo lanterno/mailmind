@@ -32,13 +32,14 @@ each with one line:
                         hold alone
     (end of input)      it stops and exits
 
-Test hooks live here and never in the app: the frozen clock, the tripwire, the schema checks and the sanitizer taken
-away are this program's.
+Test hooks live here and never in the app: the frozen clock, the tripwire, the schema checks, the sanitizer taken
+away and the Bridge password's file, kept out of the person's home, are this program's.
 The app runs as `serve` runs it, without the workers that would sync and sweep on their own, so an answer depends only on
 what the suite sends: requests, and a worker's pass when it says (`work`).
 """
 import json
 import os
+import pathlib
 import sys
 import threading
 import time
@@ -121,6 +122,10 @@ def main():
     webroot.DIST = os.environ["MAILMIND_TEST_DIST"]
     patches = pytest.MonkeyPatch()
     schema_contract.watch_reads(patches)
+    # The Bridge password's last source, a file in the person's home, which the Rust server doesn't read: one in the
+    # test's data directory that isn't there, so the two find the same, and the tripwire's on the real one never trips.
+    from mailmind.accounts.adapters import secrets
+    patches.setattr(secrets, "BRIDGE_FILE", pathlib.Path(settings.current().home, "proton_bridge_pass"))
     wiring.assemble()
     wiring.wire()                     # as wiring.start does, without starting the workers' threads
     assistant.governor().forget()     # someone here at the frozen time, not at the real time the process began
