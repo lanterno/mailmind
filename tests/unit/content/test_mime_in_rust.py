@@ -514,6 +514,10 @@ def hand_made() -> dict[str, bytes]:
         "boundary-spaces": H + b'Content-Type: multipart/mixed; boundary="a b c"\r\n\r\n--a b c\r\nContent-Type: text/plain\r\n\r\nhi\r\n--a b c--\r\n',
         "boundary-empty": H + b'Content-Type: multipart/mixed; boundary=""\r\n\r\n--\r\nContent-Type: text/plain\r\n\r\nhi\r\n----\r\n',
         "boundary-empty-unquoted": H + b"Content-Type: multipart/mixed; boundary=\r\n\r\n--\r\nContent-Type: text/plain\r\n\r\nhi\r\n----\r\n",
+        "boundary-empty-bare": H + b"Content-Type: multipart/mixed; boundary\r\n\r\n--\r\nContent-Type: text/plain\r\n\r\nhi\r\n----\r\n",
+        "boundary-empty-bare-last": H + b"Content-Type: multipart/mixed; charset=x; boundary \r\n\r\npre\r\n--\r\n\r\nhi\r\n",
+        "boundary-empty-ends-header": H + b'Content-Type: multipart/alternative; boundary\r\n--\r\n="=_part_0"\r\n\r\n'
+                                      b"--=_part_0\r\nContent-Type: text/plain\r\n\r\n\r\n--=_part_0--\r\n",
         "boundary-empty-nested": mixed(text(b"first"), b'Content-Type: multipart/alternative; boundary=""\r\n\r\npre\r\n--\r\n'
                                        b"Content-Type: text/html\r\n\r\n<b>x</b>\r\n-- \r\nBo\r\n---\r\n----"),
         "boundary-lf": (multi + b"--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b\r\nContent-Type: application/pdf; name=a.pdf\r\n\r\n"
