@@ -59,6 +59,20 @@ impl Calls {
         self.status.noting(|| self.gateway.ask(prompt, schema, feature, self.model.as_deref(), effort))
     }
 
+    /// Each (custom id, text) as one request of one batch under `schema` (none with MAILMIND_NO_SCHEMA), at `effort`,
+    /// sent once: the batch's id. Its outcome is noted for the status, as a call's is.
+    pub fn submit_batch(
+        &self,
+        requests: &[(String, String)],
+        schema: &Value,
+        effort: Option<&str>,
+        feature: &str,
+    ) -> Result<String, CallError> {
+        let schema = (!self.no_schema).then_some(schema);
+        let label = self.model_label();
+        self.status.noting(|| self.gateway.submit_batch(requests, schema, feature, Some(&label), effort))
+    }
+
     /// A JSON object matching `schema`: the one structured output gives, else what a loose reading of the text
     /// finds. It fails only when no reply came; a reply that can't be read is an empty object.
     pub fn call_claude_json(

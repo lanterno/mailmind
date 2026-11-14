@@ -77,7 +77,82 @@ pub trait DraftCandidates: Send + Sync + fmt::Debug {
     fn draft_candidates(&self, since_ts: i64) -> Result<Vec<Message>, Fault>;
 }
 
-/// The Claude API batches the Python app sent (`ai_batches`), as the forget round lets them go.
+/// A batch sent to the Claude API, as `ai_batches` keeps it: by this process or the Python app, which keep the same
+/// rows. `state` is `submitting` until the API has it, then `running`, `collected` once its answers are stored and
+/// `done` once the API has let it go.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Batch {
+    pub id: i64,
+    /// The API's id for it, once it has one.
+    pub remote_id: Option<String>,
+    pub feature: String,
+    /// The model it asked.
+    pub model: String,
+    pub state: String,
+    pub requests: i64,
+    /// What it may cost, booked against the daily limit while it is out, in micro-dollars.
+    pub estimate_micros: i64,
+    /// The newest message it took: while it is out, what came before waits for the next batch.
+    pub cutoff_ts: i64,
+    /// Seconds since the epoch.
+    pub created_at: i64,
+    pub polled_at: i64,
+    pub ended_at: Option<i64>,
+    /// The triage prompt's version its requests were made with; None from before migration 43 said.
+    pub prompt_version: Option<i64>,
+}
+
+/// A batch about to be sent: what it holds, and what it may cost.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Begun<'a> {
+    pub feature: &'a str,
+    pub model: &'a str,
+    /// The messages it holds, by key.
+    pub keys: &'a [i64],
+    pub estimate_micros: i64,
+    pub cutoff_ts: i64,
+    pub now: i64,
+    pub prompt_version: u32,
+}
+
+/// What a stored answer is made from: the copy of its message there is now, if one is, and the reply.
+pub type Judge<'a> = &'a dyn Fn(Option<&Pending>, &crate::ports::Reply) -> Assessment;
+
+/// Where the batches sent to the Claude API are kept (`Answers`' `batch_*`): one out at a time, the messages each holds
+/// by key, so nothing triages those meanwhile.
+pub trait BatchBook: Send + Sync + fmt::Debug {
+    /// The batch that is out (`submitting` or `running`), if any.
+    fn open(&self) -> Result<Option<Batch>, Fault>;
+    /// The batches in `state`, oldest first.
+    fn in_state(&self, state: &str) -> Result<Vec<Batch>, Fault>;
+    /// Record a batch about to be sent and hold its messages, committed before it is sent, which is a network call:
+    /// its id, or None when another is out already.
+    fn begin(&self, begun: &Begun<'_>) -> Result<Option<i64>, Fault>;
+    /// The API has it, under `remote_id`.
+    fn sent(&self, id: i64, remote_id: &str, now: i64) -> Result<(), Fault>;
+    /// It never went, or the API no longer has it: its messages are waiting again.
+    fn drop_batch(&self, id: i64) -> Result<(), Fault>;
+    /// The API was asked about it at `now`.
+    fn polled(&self, id: i64, now: i64) -> Result<(), Fault>;
+    /// In one write: each (key, reply) of a key the batch holds kept as `judge` makes it, as of `when`, for the
+    /// message's copies and any that comes later, and the batch collected at `now`, so a message it held with no
+    /// answer is waiting again. A message no copy is left of keeps only an answer that was assessed. How many answers
+    /// were for keys it holds.
+    fn collected(
+        &self,
+        id: i64,
+        now: i64,
+        when: &str,
+        answers: &[(i64, crate::ports::Reply)],
+        judge: Judge<'_>,
+    ) -> Result<usize, Fault>;
+    /// The API has let it go.
+    fn discarded(&self, id: i64) -> Result<(), Fault>;
+    /// How many messages are out in a batch.
+    fn waiting(&self) -> Result<i64, Fault>;
+}
+
+/// The Claude API batches sent (`ai_batches`), as the forget round lets them go.
 pub trait FinishedBatches: Send + Sync + fmt::Debug {
     /// Let go of the batches done that ended before `ended_before` (seconds since the epoch), their items with them:
     /// how many went.

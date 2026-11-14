@@ -77,3 +77,14 @@ pub fn cost_micros(asked: &str, served: &str, input: i64, output: i64, cache_wri
 pub fn batch_micros(micros: i64) -> i64 {
     -(-micros).div_euclid(2)
 }
+
+/// On the low side: mail runs near 4, and an estimate should err high.
+pub const CHARS_PER_TOKEN: i64 = 3;
+/// A triage answer is rarely half this.
+pub const OUTPUT_TOKENS_GUESS: i64 = 400;
+
+/// About the most one triage request of `chars` characters should cost through a batch. A batch's cost is only known
+/// when its answers are in, so this is what it books against the daily limit until then.
+pub fn batch_estimate(model: &str, chars: i64) -> i64 {
+    batch_micros(cost_micros(model, model, chars.div_euclid(CHARS_PER_TOKEN) + 1, OUTPUT_TOKENS_GUESS, 0, 0))
+}

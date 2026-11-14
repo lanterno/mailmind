@@ -1,9 +1,8 @@
 //! Summarizing and scoring mail that isn't junk (`application.assessment`): a few calls in parallel for what's new,
 //! each its message's triage under a schema, and what it said kept under the message's key.
 //!
-//! The Python app sends a backlog as a batch at half price. The Rust server keeps no batches yet: it triages every
-//! message as Python's does with MAILMIND_NO_BATCHES on, one call each, and leaves alone what a batch the Python app
-//! sent still holds.
+//! A backlog goes as a batch at half price (`batches`), from the same round: what a batch holds, and while one is out
+//! everything older than the newest it took, is left to it.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -14,6 +13,7 @@ use mm_kernel::seams::Clock;
 use serde_json::{Map, Value, json};
 
 use crate::background_ports::{Assessment, Outcome, Pending, Triage};
+use crate::batches::{self, Batching};
 use crate::calls::Calls;
 use crate::ports::Reply;
 use crate::prompts;
@@ -96,6 +96,11 @@ fn member(obj: &Map<String, Value>, name: &str, default: &str) -> String {
 /// What to keep for a message from what triage answered. A reply with no usable summary keeps a stand-in, so the
 /// message doesn't go round for ever.
 pub fn assessment_of(row: &Pending, reply: &Reply, model_label: &str, prompt_version: u32) -> Assessment {
+    assessment_with(row, reply, model_label, Some(prompt_version))
+}
+
+/// The same, for a reply to a prompt whose version may not be known: a batch sent before migration 43 kept none.
+pub fn assessment_with(row: &Pending, reply: &Reply, model_label: &str, prompt_version: Option<u32>) -> Assessment {
     let obj = object_in(&reply.text);
     if obj.get("summary").is_some_and(truthy) {
         return Assessment {
@@ -105,7 +110,7 @@ pub fn assessment_of(row: &Pending, reply: &Reply, model_label: &str, prompt_ver
             action: cut(&member(&obj, "action", ""), ACTION_MAX).to_owned(),
             model: model_label.to_owned(),
             served_by: Some(reply.model.clone()),
-            prompt_version: Some(prompt_version),
+            prompt_version,
             outcome: Some(Outcome::Assessed),
         };
     }
@@ -116,7 +121,7 @@ pub fn assessment_of(row: &Pending, reply: &Reply, model_label: &str, prompt_ver
         action: String::new(),
         model: "parse-error".to_owned(),
         served_by: Some(reply.model.clone()),
-        prompt_version: Some(prompt_version),
+        prompt_version,
         outcome: Some(if reply.refused() { Outcome::Refused } else { Outcome::Unusable }),
     }
 }
@@ -126,11 +131,19 @@ pub struct Assessments {
     calls: Arc<Calls>,
     triage: Arc<dyn Triage>,
     clock: Arc<dyn Clock>,
+    /// The backlog's batches, and whether the round sends one (MAILMIND_NO_BATCHES off).
+    batches: Option<(Arc<Batching>, bool)>,
 }
 
 impl Assessments {
     pub fn new(calls: Arc<Calls>, triage: Arc<dyn Triage>, clock: Arc<dyn Clock>) -> Assessments {
-        Assessments { calls, triage, clock }
+        Assessments { calls, triage, clock, batches: None }
+    }
+
+    /// The same, with a round that brings in a batch's answers and, when `send`, sends a backlog as a batch.
+    pub fn with_batches(mut self, batching: Arc<Batching>, send: bool) -> Assessments {
+        self.batches = Some((batching, send));
+        self
     }
 
     /// Why triage would be held back now, or None when it would go.
@@ -188,10 +201,18 @@ impl Assessments {
 
     /// The assess job's round: triage up to ASSESS_BATCH messages that have no summary yet. A full round means more
     /// are waiting, so the next follows at once (Some(0)). While the person is using AI it waits until it has yielded
-    /// long enough; held back otherwise (the limit, the breaker), it waits its interval (None).
+    /// long enough; held back otherwise (the limit, the breaker), it waits its interval (None). A batch's answers are
+    /// brought in first, whatever holds the rest back, and a backlog goes out in the next batch rather than through
+    /// this round's calls.
     pub fn round(&self) -> Result<Option<i64>, Fault> {
+        if let Some((batching, _)) = &self.batches {
+            batching.collect()?;
+        }
         if let Some(why) = self.held_back() {
             return Ok((why == "yielding").then_some(ASSESS_YIELD));
+        }
+        if let Some((batching, true)) = &self.batches {
+            batching.submit(batches::MIN, batches::KEEP_NEWEST)?;
         }
         let done = self.summarize_pending(ASSESS_BATCH, WORKERS)?;
         if done > 0 {

@@ -24,13 +24,27 @@ const NEEDS_SUMMARY: &str = "SELECT m.* FROM messages m \
 const BATCH_CUTOFF: &str =
     "SELECT cutoff_ts FROM ai_batches WHERE state IN ('submitting', 'running') ORDER BY id DESC LIMIT 1";
 
-const SAVE_ASSESSMENT: &str = "INSERT INTO assessments (message_key, summary, importance, category, action, model, \
-     created_at, served_by, prompt_version, outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+pub(crate) const SAVE_ASSESSMENT: &str = "INSERT INTO assessments (message_key, summary, importance, category, action, \
+     model, created_at, served_by, prompt_version, outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
      ON CONFLICT(message_key) DO UPDATE SET \
      summary = excluded.summary, importance = excluded.importance, \
      category = excluded.category, action = excluded.action, \
      model = excluded.model, created_at = excluded.created_at, \
      served_by = excluded.served_by, prompt_version = excluded.prompt_version, outcome = excluded.outcome";
+
+/// A message's row (`SELECT m.*`) as triage's prompt reads it.
+pub(crate) fn pending(r: &rusqlite::Row<'_>) -> rusqlite::Result<Pending> {
+    Ok(Pending {
+        pk: r.get("pk")?,
+        message_key: r.get("message_key")?,
+        from_name: r.get("from_name")?,
+        from_addr: r.get("from_addr")?,
+        subject: r.get("subject")?,
+        date_iso: r.get("date_iso")?,
+        snippet: r.get("snippet")?,
+        ts: r.get("ts")?,
+    })
+}
 
 impl Triage for Database {
     fn batch_cutoff(&self) -> Result<Option<i64>, Fault> {
@@ -44,20 +58,7 @@ impl Triage for Database {
 
     fn needs_summary(&self, limit: i64, newer_than: Option<i64>) -> Result<Vec<Pending>, Fault> {
         self.read(|c| {
-            c.prepare_cached(NEEDS_SUMMARY)?
-                .query_map(params![newer_than.unwrap_or(-1), limit], |r| {
-                    Ok(Pending {
-                        pk: r.get("pk")?,
-                        message_key: r.get("message_key")?,
-                        from_name: r.get("from_name")?,
-                        from_addr: r.get("from_addr")?,
-                        subject: r.get("subject")?,
-                        date_iso: r.get("date_iso")?,
-                        snippet: r.get("snippet")?,
-                        ts: r.get("ts")?,
-                    })
-                })?
-                .collect()
+            c.prepare_cached(NEEDS_SUMMARY)?.query_map(params![newer_than.unwrap_or(-1), limit], pending)?.collect()
         })
     }
 
