@@ -101,6 +101,7 @@ def seconds_left(float_):
 def due(app, page):
     """The Undo window the page's last send was answered with passes on the server's clock, and the server runs an
     outbox pass."""
+    until(page, lambda: page.sends, "no send was answered")      # the row is queued before the page hears the answer
     app.clock.shift(timedelta(seconds=page.sends[-1].json()["undo_seconds"] + 1))
     app.work("outbox")
 
@@ -390,8 +391,9 @@ def test_saves_of_one_composer_go_in_turn(page, world):
     held.let_go()
     until(page, lambda: asked, "the second save went")
     assert asked[0]["draft_id"]                           # and names the copy the first left
-    until(page, lambda: any(b"The dark one?" in c for c in copies(world, "Thread colours")), "the second save landed")
-    assert len(copies(world, "Thread colours")) == 1
+    # The second copy is put up before the first is taken down: wait for the one it ends with.
+    until(page, lambda: [b"The dark one?" in c for c in copies(world, "Thread colours")] == [True],
+          "the second save landed in place of the first")
     clean(page)
 
 
