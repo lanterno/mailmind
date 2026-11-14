@@ -13,6 +13,12 @@ pub trait ConfigFile: Send + Sync + std::fmt::Debug {
     fn write(&self, raw: &Map<String, Value>) -> Result<(), Fault>;
 }
 
+/// 1Password, through its CLI: the secret a reference (`op://Vault/Item/Field`) names, as `op read` prints it.
+pub trait OnePassword: Send + Sync + std::fmt::Debug {
+    /// What op printed for `reference`, untrimmed, or the class of why it gave nothing: never what op said.
+    fn read(&self, reference: &str) -> Result<mm_kernel::seams::Secret, Fault>;
+}
+
 /// What an account's syncs came to, as the Mailbox recorded them, and how its sync stands now. Of an error it holds
 /// the class's name and its kind, never what it said.
 #[derive(Clone, Debug, PartialEq, Eq)]

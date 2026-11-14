@@ -21,7 +21,8 @@ pub const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 pub fn quiet(trouble: LoginTrouble) -> &'static str {
     match trouble.0 {
         "TLSPinMismatch" => "certificate changed",
-        "LoginRefused" | "LoginUnavailable" | "Unsendable" | "NoCredential" => "AUTHENTICATIONFAILED",
+        // A 1Password read that failed: Python's words say so of one whose reference names its `password` field.
+        "LoginRefused" | "LoginUnavailable" | "Unsendable" | "NoCredential" | "OpReadFailed" => "AUTHENTICATIONFAILED",
         "ConnectionRefused" => "connection refused",
         "Timeout" => "timeout",
         "NameNotResolved" => "host not found",

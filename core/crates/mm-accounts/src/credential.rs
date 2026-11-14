@@ -104,6 +104,14 @@ impl CredentialRef {
         }
     }
 
+    /// What an op credential names: a 1Password reference, or a list of them (`one_password::references`).
+    pub fn op_refs(&self) -> Option<&Value> {
+        match self.style {
+            Some(Style::Op) => Some(&self.named),
+            _ => None,
+        }
+    }
+
     /// A Keychain credential's version, as the file wrote it.
     pub fn version(&self) -> &Value {
         &self.version

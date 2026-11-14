@@ -5,19 +5,23 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use mm_kernel::errors::{Failure, Fault, Kind, Problem};
+use mm_kernel::log;
 use mm_kernel::seams::{Clock, Keychain, Secret, keepable_name, keepable_secret};
 use mm_kernel::when;
 use serde_json::{Map, Value, json};
 
 use crate::account::{self, Account, truthy};
 use crate::credential::{self, Asked, CredentialRef, Style, credential_from};
+use crate::one_password::OpReads;
 use crate::ports::ConfigFile;
 use crate::preferences;
 
 const MALFORMED: Fault = Fault::new("MalformedConfig");
+const TAG: &str = "accounts";
 const NO_CREDENTIAL: Fault = Fault::new("NoCredential");
 const KEYCHAIN: Fault = Fault::new("KeychainProblem");
-/// A credential kept where the Rust server can't read it yet: 1Password, a variable or the Bridge password.
+/// A credential kept where the Rust server can't read it yet: a variable or the Bridge password, or 1Password when the
+/// Directory was given no way to read it.
 const NOT_YET: Fault = Fault::new("CredentialStyleNotOnTheRustServerYet");
 
 /// What a pin check found at an endpoint.
@@ -69,11 +73,26 @@ pub struct Directory {
     keychain: Arc<dyn Keychain>,
     clock: Arc<dyn Clock>,
     write: Mutex<()>,
+    /// What 1Password gave this process, and the way to ask it for more: none until `reading_op` gives it.
+    op: Option<Arc<OpReads>>,
 }
 
 impl Directory {
     pub fn new(file: Arc<dyn ConfigFile>, keychain: Arc<dyn Keychain>, clock: Arc<dyn Clock>) -> Directory {
-        Directory { file, keychain, clock, write: Mutex::new(()) }
+        Directory { file, keychain, clock, write: Mutex::new(()), op: None }
+    }
+
+    /// The Directory, reading a 1Password credential through `op`, which the Assistant's key shares.
+    pub fn reading_op(self, op: Arc<OpReads>) -> Directory {
+        Directory { op: Some(op), ..self }
+    }
+
+    /// Forget what was read of `credential`'s 1Password references, once it is replaced or its account removed
+    /// (`secrets.evict`).
+    fn evict(&self, credential: Option<&Value>) {
+        if let (Some(op), Some(refs)) = (&self.op, CredentialRef::parse(credential).op_refs()) {
+            op.evict(refs);
+        }
     }
 
     fn entries(raw: &Map<String, Value>) -> Result<&[Value], Fault> {
@@ -148,7 +167,8 @@ impl Directory {
     }
 
     /// The password an account logs in with. A credential that names nothing to read, or a secret that isn't there,
-    /// is a fault, as it is in the Python app.
+    /// is a fault, as it is in the Python app. A 1Password read is kept for the process, its spaces taken out for an
+    /// account that asks for that (`strip_spaces`, a Gmail app password).
     pub fn password(&self, account: &Account) -> Result<Secret, Fault> {
         let credential = CredentialRef::parse(Some(&account.credential));
         match credential.style {
@@ -156,9 +176,29 @@ impl Directory {
                 let item = credential.item().filter(|i| !mm_kernel::text::strip(i).is_empty()).ok_or(NO_CREDENTIAL)?;
                 self.keychain.find(item).map_err(|_| KEYCHAIN)?.ok_or(NO_CREDENTIAL)
             }
-            Some(Style::Env | Style::Op | Style::ProtonBridge) => Err(NOT_YET),
+            Some(Style::Op) => match (&self.op, credential.op_refs()) {
+                (Some(op), Some(refs)) => op.read(refs, account.strip_spaces),
+                _ => Err(NOT_YET),
+            },
+            Some(Style::Env | Style::ProtonBridge) => Err(NOT_YET),
             _ => Err(NO_CREDENTIAL),
         }
+    }
+
+    /// Read every 1Password credential now (`preload`), so a long-running server needn't ask again: how many read. One
+    /// that doesn't is logged, by its class, and the rest go on.
+    pub fn preload(&self) -> Result<usize, Fault> {
+        let mut read = 0;
+        for account in self.accounts()? {
+            if CredentialRef::parse(Some(&account.credential)).style != Some(Style::Op) {
+                continue;
+            }
+            match self.password(&account) {
+                Ok(_) => read += 1,
+                Err(fault) => log::warning(TAG, "a credential's preload failed", &[], Some(fault.class)),
+            }
+        }
+        Ok(read)
     }
 
     /// The certificate pinned for `email` at `endpoint`, against `seen`: the one pinned before, or `seen`, pinned now
@@ -348,6 +388,7 @@ impl Directory {
             if credential::names(old, &own) && !credential::names(entry.get("credential"), &own) {
                 self.let_go(&saved_as)?;
             }
+            self.evict(old);
         }
         let row = account::masked_row(&Value::Object(entry.clone())).map_err(|_| MALFORMED)?;
         self.file.write(&raw)?;
@@ -368,6 +409,7 @@ impl Directory {
         };
         let saved_as = entries.get(at).and_then(Value::as_object).ok_or(MALFORMED).and_then(email_of)?;
         self.let_go(&saved_as)?;
+        self.evict(entries.get(at).and_then(|entry| entry.get("credential")));
         entries.remove(at);
         self.file.write(&raw)?;
         Ok(Some(saved_as))
