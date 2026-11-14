@@ -1,10 +1,11 @@
 //! What the Assistant keeps in the database (`assistant.adapters.sqlite_ledger` and `assistant.adapters.sqlite`): the
 //! usage ledger, what each day's calls cost; what the Assistant reads of the mail (its `Mail`); and what it keeps of its
-//! answers: thread summaries, replies drafted ahead, and the briefs, deltas and reviews.
+//! answers: thread summaries, replies drafted ahead, and the briefs, deltas and reviews; and how a sender stands.
 
 use mm_assistant::ports::{
-    Answers, Awaiting, Cards, ConversationBy, CopyNow, Glance, Mail, Message, Needing, NewDraft, Overview, Said, Spend,
-    Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary, UsageLedger, WeekRows,
+    Answers, Awaiting, Cards, ConversationBy, CopyNow, Glance, Mail, Message, Needing, NewDraft, Overview, Said,
+    SenderRecent, SenderStats, Senders, Spend, Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary,
+    UsageLedger, WeekRows,
 };
 use mm_kernel::errors::Fault;
 use rusqlite::types::Value as Sql;
@@ -644,6 +645,58 @@ impl Cards for Database {
                 ],
             )?;
             forget(c, "reviews", forget_before)
+        })
+    }
+}
+
+impl Senders for Database {
+    fn sender_stats(&self, addrs: &[String]) -> Result<Vec<SenderStats>, Fault> {
+        let sql = format!(
+            "SELECT addr, MAX(name) name, COUNT(*) n, SUM(seen=0) unseen, SUM(answered) replied, MIN(ts) first_ts, \
+             MAX(ts) last_ts \
+             FROM (SELECT lower(from_addr) addr, from_name name, MAX(seen) seen, MAX(COALESCE(answered, 0)) answered, \
+                   MAX(ts) ts \
+                   FROM messages WHERE lower(from_addr) IN ({}) AND pending_removal IS NULL \
+                   GROUP BY lower(from_addr), COALESCE(message_key, -pk)) \
+             GROUP BY addr ORDER BY n DESC",
+            placeholders(addrs.len())
+        );
+        self.read(|c| {
+            c.prepare(&sql)?
+                .query_map(params_from_iter(addrs), |r| {
+                    Ok(SenderStats {
+                        addr: r.get(0)?,
+                        name: r.get(1)?,
+                        n: r.get(2)?,
+                        unseen: r.get(3)?,
+                        replied: r.get(4)?,
+                        first_ts: r.get(5)?,
+                        last_ts: r.get(6)?,
+                    })
+                })?
+                .collect()
+        })
+    }
+
+    fn senders_recent(&self, addrs: &[&str], n: i64) -> Result<Vec<Vec<SenderRecent>>, Fault> {
+        self.read(|c| {
+            let mut recent = c.prepare_cached(
+                "SELECT m.account, m.thread_id, m.from_name, m.subject, m.date_iso, m.ts, m.seen, m.answered, \
+                 m.snippet, s.summary, s.category \
+                 FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key \
+                 WHERE lower(m.from_addr)=? AND m.pending_removal IS NULL \
+                 GROUP BY m.message_key ORDER BY m.ts DESC LIMIT ?",
+            )?;
+            addrs
+                .iter()
+                .map(|addr| {
+                    recent
+                        .query_map(rusqlite::params![addr, n], |r| {
+                            Ok(SenderRecent { subject: r.get(3)?, summary: r.get(9)? })
+                        })?
+                        .collect()
+                })
+                .collect()
         })
     }
 }

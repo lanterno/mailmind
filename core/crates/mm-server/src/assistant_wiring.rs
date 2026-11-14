@@ -23,8 +23,10 @@ use mm_assistant::ports::{
     Stamp,
 };
 use mm_assistant::prepared_replies::PreparedReplies;
+use mm_assistant::rationale::Rationales;
 use mm_assistant::reply_draft::ReplyDrafts;
 use mm_assistant::reviews::Reviews;
+use mm_assistant::screening::Screening;
 use mm_assistant::status::Status;
 use mm_assistant::thread_digest::ThreadDigest;
 use mm_discovery::query::QuerySpec;
@@ -150,6 +152,10 @@ pub struct Assistant {
     pub asking: Arc<Asking>,
     /// A command in words, planned and previewed; the plans a preview froze.
     pub bulk: Arc<BulkCommands>,
+    /// Why each sender a cleanup names is worth it.
+    pub rationales: Arc<Rationales>,
+    /// What the AI would say of the senders waiting in the Screener.
+    pub screening: Arc<Screening>,
 }
 
 /// The API routes a hidden tab fetches on its own, which say nothing of someone being here (`shared.UI_QUIET`).
@@ -205,9 +211,11 @@ impl Assistant {
             zone.clone(),
         ));
         let asking = Arc::new(Asking::new(briefs, reviews, accounts, around, clock.clone()));
+        let rationales = Arc::new(Rationales::new(calls.clone(), database.clone(), clock.clone()));
+        let screening = Arc::new(Screening::new(calls.clone(), database.clone()));
         let looks_human = Box::new(|local: &str| mm_curation::classifier::looks_human(Some(local)));
         let drafting = Arc::new(PreparedReplies::new(database, context, replies, looks_human, clock));
-        Assistant { calls, status, governor, digest, extractor, drafting, asker, asking, bulk }
+        Assistant { calls, status, governor, digest, extractor, drafting, asker, asking, bulk, rationales, screening }
     }
 
     /// Someone is here, for the cost governor's presence gate on drafting ahead: any request to the API that got past

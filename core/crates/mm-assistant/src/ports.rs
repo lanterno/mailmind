@@ -445,3 +445,31 @@ pub trait Cards: Send + Sync + fmt::Debug {
     fn review(&self, accounts: &str, day: &str) -> Result<Option<StoredReview>, Fault>;
     fn save_review(&self, accounts: &str, day: &str, review: &StoredReview, forget_before: &str) -> Result<(), Fault>;
 }
+
+/// How one sender stands in the stored mail, each message counted once however many folders hold it: `addr` lower
+/// case, the times in seconds since the epoch.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SenderStats {
+    pub addr: String,
+    pub name: Option<String>,
+    pub n: i64,
+    pub unseen: Option<i64>,
+    pub replied: Option<i64>,
+    pub first_ts: Option<i64>,
+    pub last_ts: Option<i64>,
+}
+
+/// One of a sender's newest messages, as the Screener's pass is told of it: its subject and what the AI said of it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SenderRecent {
+    pub subject: Option<String>,
+    pub summary: Option<String>,
+}
+
+/// What the Assistant reads of the stored mail about senders, nothing on its way out counted.
+pub trait Senders: Send + Sync + fmt::Debug {
+    /// How each of `addrs` (lower case) that has mail stored stands, the one with the most first.
+    fn sender_stats(&self, addrs: &[String]) -> Result<Vec<SenderStats>, Fault>;
+    /// The newest `n` messages of each of `addrs`, one list an address, read together.
+    fn senders_recent(&self, addrs: &[&str], n: i64) -> Result<Vec<Vec<SenderRecent>>, Fault>;
+}

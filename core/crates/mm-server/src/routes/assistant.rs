@@ -44,6 +44,8 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/briefing/since", get(delta).post(write_delta))
         .route("/api/review", get(review).post(write_review))
         .route("/api/review/refresh", post(refresh_review))
+        .route("/api/cleanup/rationale", post(cleanup_rationale))
+        .route("/api/screener/suggest", post(screener_suggest))
 }
 
 /// A problem document of one of the AI's own kinds.
@@ -413,6 +415,47 @@ async fn draft_ahead(State(app): State<Arc<App>>, request: Request) -> Response<
             });
         }
         Ok(answer::json(200, &said))
+    })
+    .await
+}
+
+/// Why each sender a cleanup names is worth cleaning up, in a sentence; it does nothing.
+async fn cleanup_rationale(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let (method, uri, headers, body) = match body_of(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    // `list[str] | None`: a list of text, or nothing.
+    let read = body.list("senders").and_then(|listed| {
+        listed
+            .map(|items| items.iter().map(|v| v.as_str().map(str::to_owned).ok_or_else(Problem::bad_request)).collect())
+            .transpose()
+    });
+    let senders: Option<Vec<String>> = match read {
+        Ok(senders) => senders,
+        Err(problem) => return refused(problem),
+    };
+    ai(&app, (&method, &uri, &headers), ("cleanup rationale error", "rationale failed"), move |app| {
+        Ok(answer::json(200, &app.assistant.rationales.explain(senders.as_deref())?))
+    })
+    .await
+}
+
+/// What the AI would allow or screen out of the senders waiting in an account's Screener; only a person's click
+/// writes a rule. Who is waiting is Curation's to say, so the route hands its queue over.
+async fn screener_suggest(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let (method, uri, headers, body) = match body_of(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    let account = match body.text("account") {
+        Ok(account) => account,
+        Err(problem) => return refused(problem),
+    };
+    ai(&app, (&method, &uri, &headers), ("screener suggest error", "suggestions failed"), move |app| {
+        let queue = app.curation.screener.queue(account.as_deref())?;
+        let waiting = queue.get("items").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+        Ok(answer::json(200, &app.assistant.screening.suggest(account.as_deref(), waiting)?))
     })
     .await
 }
