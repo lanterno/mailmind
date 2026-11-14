@@ -153,3 +153,9 @@ tests/api/test_http_sync.py::test_a_draft_saved_lets_drafts_catch_up_on_its_next
 tests/api/test_http_sync.py::test_a_move_lets_its_folder_catch_up_on_its_next_open[one]
 tests/api/test_http_sync.py::test_a_move_lets_its_folder_catch_up_on_its_next_open[conversation]
 tests/api/test_http_sync.py::test_a_move_lets_its_folder_catch_up_on_its_next_open[marked]
+tests/api/test_http_ai.py::test_summarize_a_thread_and_a_message
+tests/api/test_http_ai.py::test_draft_a_reply_and_rewrite
+tests/api/test_http_ai.py::test_status_after_calls
+tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/summarize-body0]
+tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/draft-reply-body1]
+tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/rewrite-body2]
