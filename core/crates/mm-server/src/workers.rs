@@ -244,6 +244,13 @@ impl Workers {
                     }),
                 ));
             }
+            // What has gone, let go a month on: keys with no copy left and finished changes, daily. It writes, so
+            // a process that only reads leaves it, as the Python app's does.
+            let forgetting = app.clone();
+            lanes.push((
+                app.jobs.add("forget", mm_mailbox::forgetting::EVERY, mm_mailbox::forgetting::FIRST),
+                Box::new(move || forgetting.forgetting.round().map(|_| None).map_err(|fault| fault.class)),
+            ));
         }
         let mut threads = Vec::new();
         for queue in queues {

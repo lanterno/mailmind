@@ -78,6 +78,8 @@ pub struct App {
     pub realtime: Arc<mm_mailbox::realtime::Realtime>,
     /// Ghosts pruned: mail gone from the server (`/api/reconcile`, `work reconcile`).
     pub reconciler: Reconciler,
+    /// Keys with no copy left and finished changes, let go a month on (`work forget`).
+    pub forgetting: mm_mailbox::forgetting::Forgetting,
     /// The requests being answered now, which a stop waits for.
     pub work: Arc<Work>,
     /// The reads a person waits on: lists, conversations, the tray of changes.
@@ -377,6 +379,7 @@ impl App {
             syncing,
             realtime,
             reconciler,
+            forgetting: mm_mailbox::forgetting::Forgetting::new(database.clone(), seams.clock.clone()),
             work,
             reading,
             clock: seams.clock.clone(),
