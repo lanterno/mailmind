@@ -47,8 +47,10 @@ pub mod login_keychain;
 pub mod compose_wiring;
 mod outbox_worker;
 
-// The database's key, and the database made if there is none, at the version this server reads.
+// The database's key, and the database made if there is none, at the version this server reads; and `db
+// check-upgrade`, what an upgrade would do to it.
 mod database_version;
+pub mod db_command;
 // Every session's login, which a login its server refused waits out.
 mod login_wiring;
 // IDLE's workers bound: the accounts, their sessions, and their news syncing those accounts.

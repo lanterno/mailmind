@@ -31,6 +31,15 @@ pub(crate) fn key(environment: &Environment, path: &Path, seams: &Seams) -> Resu
     DbKey::from_hex(held.expose()).map_err(|_| "the database key isn't 64 hex digits".into())
 }
 
+/// The database's key as `key` finds it, but never made: for what only reads a database (`db check-upgrade`).
+pub(crate) fn existing_key(environment: &Environment, seams: &Seams) -> Result<DbKey, String> {
+    let held = match environment.db_key() {
+        Some(key) => key,
+        None => seams.keychain.find(DATABASE_KEY_ITEM).ok().flatten().ok_or(NO_KEY)?,
+    };
+    DbKey::from_hex(held.expose()).map_err(|_| "the database key isn't 64 hex digits".into())
+}
+
 /// Whether there is no database at `path` yet: no file, or an empty one.
 fn no_database(path: &Path, outside: &dyn Outside) -> bool {
     outside.open(path).is_ok() && std::fs::metadata(path).map_or(true, |found| found.len() == 0)

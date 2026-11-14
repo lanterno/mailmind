@@ -1,5 +1,6 @@
 //! `mailmind-server [port]`: the Rust server on 127.0.0.1 (default port 8721), over the data MAILMIND_HOME names,
-//! serving the page `just build-web` built. It runs until it is stopped.
+//! serving the page `just build-web` built. It makes the database if there is none and upgrades it if its version is
+//! behind, then runs until it is stopped. `mailmind-server db check-upgrade` tries the upgrade on a copy first.
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -14,11 +15,18 @@ const DEFAULT_PORT: u16 = 8721;
 
 fn main() -> ExitCode {
     mm_kernel::log::install(Box::new(StandardError));
+    // `mailmind-server db check-upgrade [--db PATH]`: what the next start's migrations would do, tried on a copy.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some((db, rest)) = args.split_first()
+        && db == "db"
+    {
+        return mm_server::db_command::main(rest);
+    }
     let port = match std::env::args().nth(1).map(|p| p.parse::<u16>()) {
         None => DEFAULT_PORT,
         Some(Ok(port)) => port,
         Some(Err(_)) => {
-            eprintln!("usage: mailmind-server [port]");
+            eprintln!("usage: mailmind-server [port], or mailmind-server db check-upgrade [--db PATH]");
             return ExitCode::from(2);
         }
     };

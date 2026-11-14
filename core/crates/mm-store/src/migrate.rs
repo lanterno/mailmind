@@ -17,11 +17,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mm_kernel::Refusal;
-use mm_kernel::seams::Clock;
+use mm_kernel::seams::{Clock, Outside};
 use rusqlite::Connection;
 
 use crate::db::Database;
-use crate::{Store, backup};
+use crate::{DbKey, Store, backup};
 
 /// The version a database the core makes starts at: the Python app's last migration before the core took them over.
 pub const BASE: i64 = 51;
@@ -122,57 +122,73 @@ impl Database {
 
     /// `ready`, with `migrations` in place of the core's own (a test's).
     pub fn ready_with(&self, clock: &dyn Clock, migrations: &[Migration]) -> Result<Ready, NotReady> {
-        let found = rusqlite::version();
-        if !sqlite_fits(found) {
-            return Err(NotReady::SqliteTooOld(found.to_owned()));
-        }
-        let path = self.path();
-        self.outside().open(path).map_err(|_| NotReady::Tripped)?;
-        keep_private(self, path);
-        make_private(path)?;
-        let store = Store::open(path, self.key()).map_err(|refusal| match refusal {
-            Refusal::KeyDoesNotFit => NotReady::KeyDoesNotFit,
-            _ => NotReady::Storage,
-        })?;
-        let c = &store.conn;
-        let mut made = false;
-        if version(c)? == 0 {
-            if tables(c)? > 0 {
-                return Err(NotReady::Older(0));
-            }
-            // Read again inside the write: another process may have made it while this one waited for the lock.
-            made = in_transaction(c, |c| {
-                let empty = version_of(c)? == 0 && tables_of(c)? == 0;
-                if empty {
-                    c.execute_batch(BASE_SCHEMA)?;
-                    c.execute_batch(BASE_SEEDS)?;
-                    set_version(c, BASE)?;
-                }
-                Ok(empty)
-            })
-            .map_err(|_| NotReady::Storage)?;
-        }
-        let from = version(c)?;
-        let newest = migrations.last().map_or(BASE, |last| last.version);
-        if from < BASE {
-            return Err(NotReady::Older(from));
-        }
-        if from > newest {
-            return Err(NotReady::Newer(from));
-        }
-        let pending: Vec<&Migration> = migrations.iter().filter(|m| m.version > from).collect();
-        if pending.is_empty() {
-            return Ok(if made { Ready::Made } else { Ready::AsItWas });
-        }
-        // One just made holds nothing to keep.
-        if !made {
-            backup::take(c, path, from, self.key(), self.outside(), clock.now()).map_err(|_| NotReady::NoBackup)?;
-        }
-        for migration in pending {
-            run(c, migration).map_err(|_| NotReady::Failed(migration.version))?;
-        }
-        Ok(if made { Ready::Made } else { Ready::Upgraded { from, to: newest } })
+        ready_at(self.path(), self.key(), self.outside(), clock, migrations)
     }
+}
+
+/// `Database::ready_with` for the database at `path`, keyed with `key`: the database itself, or a copy of it that the
+/// upgrade check migrates.
+pub(crate) fn ready_at(
+    path: &Path,
+    key: &DbKey,
+    outside: &dyn Outside,
+    clock: &dyn Clock,
+    migrations: &[Migration],
+) -> Result<Ready, NotReady> {
+    let found = rusqlite::version();
+    if !sqlite_fits(found) {
+        return Err(NotReady::SqliteTooOld(found.to_owned()));
+    }
+    outside.open(path).map_err(|_| NotReady::Tripped)?;
+    keep_private(path, outside);
+    make_private(path)?;
+    let store = Store::open(path, key).map_err(|refusal| match refusal {
+        Refusal::KeyDoesNotFit => NotReady::KeyDoesNotFit,
+        _ => NotReady::Storage,
+    })?;
+    let c = &store.conn;
+    let mut made = false;
+    if version(c)? == 0 {
+        if tables(c)? > 0 {
+            return Err(NotReady::Older(0));
+        }
+        // Read again inside the write: another process may have made it while this one waited for the lock.
+        made = in_transaction(c, |c| {
+            let empty = version_of(c)? == 0 && tables_of(c)? == 0;
+            if empty {
+                c.execute_batch(BASE_SCHEMA)?;
+                c.execute_batch(BASE_SEEDS)?;
+                set_version(c, BASE)?;
+            }
+            Ok(empty)
+        })
+        .map_err(|_| NotReady::Storage)?;
+    }
+    let from = version(c)?;
+    let newest = migrations.last().map_or(BASE, |last| last.version);
+    if from < BASE {
+        return Err(NotReady::Older(from));
+    }
+    if from > newest {
+        return Err(NotReady::Newer(from));
+    }
+    let pending: Vec<&Migration> = pending(migrations, from).collect();
+    if pending.is_empty() {
+        return Ok(if made { Ready::Made } else { Ready::AsItWas });
+    }
+    // One just made holds nothing to keep.
+    if !made {
+        backup::take(c, path, from, key, outside, clock.now()).map_err(|_| NotReady::NoBackup)?;
+    }
+    for migration in pending {
+        run(c, migration).map_err(|_| NotReady::Failed(migration.version))?;
+    }
+    Ok(if made { Ready::Made } else { Ready::Upgraded { from, to: newest } })
+}
+
+/// The migrations a database at `version` hasn't run.
+pub(crate) fn pending(migrations: &[Migration], version: i64) -> impl Iterator<Item = &Migration> {
+    migrations.iter().filter(move |m| m.version > version)
 }
 
 /// One migration in its own write transaction, which sets its version too. Read inside the write: another process
@@ -235,9 +251,9 @@ pub(crate) fn beside(path: &Path, suffix: &str) -> PathBuf {
 /// The database holds every message, so only its owner may read it, nor its log and index, which SQLite makes with the
 /// database's own mode only when they are new (`database.keep_private`). One made before MailMind saw to it is taken
 /// back; what isn't there, or can't be changed, is left to SQLite to say.
-fn keep_private(database: &Database, path: &Path) {
+fn keep_private(path: &Path, outside: &dyn Outside) {
     for each in [path.to_path_buf(), beside(path, "-wal"), beside(path, "-shm")] {
-        if database.outside().open(&each).is_ok() {
+        if outside.open(&each).is_ok() {
             #[cfg(unix)]
             let _ = fs::set_permissions(&each, std::os::unix::fs::PermissionsExt::from_mode(0o600));
         }
