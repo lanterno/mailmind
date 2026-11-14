@@ -161,14 +161,6 @@ impl App {
         let tidying = crate::bound::Tidying::assemble(&database, &seams.clock);
         // The calendar's, reading a TZID in the system's zone database.
         let zones = Arc::new(mm_store::calendar::SystemZones::new(seams.outside.clone()));
-        let calendar = crate::calendar_wiring::Calendar::assemble(crate::calendar_wiring::CalendarParts {
-            database: database.clone(),
-            directory: directory.clone(),
-            fetch: Arc::new(mm_mailbox::opening::StoredBody::new(database.clone())),
-            zones: zones.clone(),
-            clock: seams.clock.clone(),
-            zone: zone.clone(),
-        });
         let sessions = Arc::new(ImapSessions { login: login.clone() });
         let folders = Arc::new(Folders::new(
             Arc::new(KnownAccounts(directory.clone())),
@@ -183,7 +175,7 @@ impl App {
                 sessions,
                 config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
                 folders: folders.clone(),
-                invites: mm_calendar::invites::Invites::new(zones, zone.clone()),
+                invites: mm_calendar::invites::Invites::new(zones.clone(), zone.clone()),
             },
             environment,
             seams,
@@ -314,6 +306,16 @@ impl App {
             read_only: environment.read_only(),
             stats: stats.clone(),
             heard: Arc::new(Heard { hub: events.clone(), stats: stats.clone(), folders: folders.clone() }),
+        });
+        // An answer to an invite goes through Compose's outbox.
+        let calendar = crate::calendar_wiring::Calendar::assemble(crate::calendar_wiring::CalendarParts {
+            database: database.clone(),
+            directory: directory.clone(),
+            fetch: Arc::new(mm_mailbox::opening::StoredBody::new(database.clone())),
+            zones,
+            clock: seams.clock.clone(),
+            zone: zone.clone(),
+            delivery: compose.delivery.clone(),
         });
         Ok(App {
             port,

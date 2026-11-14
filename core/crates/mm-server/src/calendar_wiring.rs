@@ -2,8 +2,7 @@
 //! answer to an invite, an event file of a person's own, and the invite a message opens with. Each reads its times in
 //! the person's zone, a TZID in the system's zone database.
 //!
-//! An answer goes out through Compose's outbox, which isn't on this server yet: it says so once everything an answer
-//! is checked for has passed, so a request it would refuse is refused as the Python app refuses it.
+//! An answer goes out through Compose's outbox, built by Compose's builder as a reply to the invite.
 
 use std::sync::Arc;
 
@@ -12,6 +11,10 @@ use mm_calendar::agenda::Agenda;
 use mm_calendar::ports::{FolderRoles, Me, Message, Messages, Reply, SystemSend, ZoneNames};
 use mm_calendar::publish::Publishing;
 use mm_calendar::rsvp::Rsvp;
+use mm_compose::builder::reference_chain;
+use mm_compose::delivery::Delivery;
+use mm_compose::sending::{Mint, Outgoing};
+use mm_compose::spec::{Attachment, MessageSpec};
 use mm_kernel::errors::{Failure, Fault, Kind, NOT_YET, Problem};
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
@@ -19,7 +22,9 @@ use mm_kernel::zone::Zone;
 use mm_mailbox::ports::BodyFetch;
 use mm_store::Database;
 use mm_store::calendar::SystemZones;
-use serde_json::Value;
+use serde_json::{Value, json};
+
+use crate::compose_wiring::RandomDraws;
 
 const TAG: &str = "rsvp";
 
@@ -70,13 +75,40 @@ impl Messages for RsvpMessages {
     }
 }
 
-/// A message MailMind sends for itself goes through the outbox, which isn't on this server yet.
+/// An answer to an invite, built and queued in Compose's outbox as the Python app's `_Send` does: a reply to the
+/// message it answers, its calendar a METHOD:REPLY part named `invite.ics`.
 #[derive(Debug)]
-pub(crate) struct OutboxNotYet;
+pub(crate) struct ComposeSend {
+    pub(crate) outgoing: Outgoing,
+    pub(crate) database: Arc<Database>,
+}
 
-impl SystemSend for OutboxNotYet {
-    fn send(&self, _reply: &Reply) -> Result<Value, Failure> {
-        Err(Failure::Fault(NOT_YET))
+impl SystemSend for ComposeSend {
+    fn send(&self, reply: &Reply) -> Result<Value, Failure> {
+        let [message_id, refs, in_reply_to] =
+            self.database.read(|c| mm_store::calendar::threading(c, reply.pk))?.unwrap_or_default();
+        let spec = MessageSpec {
+            account: reply.account.clone(),
+            account_name: reply.account_name.clone(),
+            to: vec![reply.to.clone()],
+            subject: reply.subject.clone(),
+            text: reply.text.clone(),
+            attachments: vec![Attachment {
+                filename: "invite.ics".to_owned(),
+                content_type: "text/calendar".to_owned(),
+                data: reply.calendar.clone().into_bytes(),
+                params: vec![("method".to_owned(), "REPLY".to_owned()), ("charset".to_owned(), "UTF-8".to_owned())],
+                cid: None,
+            }],
+            references: reference_chain(message_id.as_deref(), refs.as_deref(), in_reply_to.as_deref()),
+            in_reply_to: message_id,
+            ..MessageSpec::default()
+        };
+        // The builder's own words, which hold nothing secret.
+        let built = self.outgoing.build(&spec).map_err(Problem::refused)?;
+        let (id, queued) =
+            self.outgoing.send(&built, &reply.idempotency_key, &reply.subject, Some(reply.pk), &reply.account)?;
+        Ok(json!({"outbox_id": id, "queued": queued, "undo_seconds": self.outgoing.send_delay()}))
     }
 }
 
@@ -100,16 +132,24 @@ pub(crate) struct CalendarParts {
     pub(crate) clock: Arc<dyn Clock>,
     /// The person's zone.
     pub(crate) zone: Arc<dyn Zone>,
+    /// Compose's outbox, which an answer is queued in.
+    pub(crate) delivery: Arc<Delivery>,
 }
 
 impl Calendar {
     pub(crate) fn assemble(parts: CalendarParts) -> Calendar {
-        let CalendarParts { database, directory, fetch, zones, clock, zone } = parts;
+        let CalendarParts { database, directory, fetch, zones, clock, zone, delivery } = parts;
         let zones: Arc<dyn ZoneNames> = zones;
         let messages = Arc::new(RsvpMessages { database: database.clone(), directory, fetch });
+        // Minted as Compose mints a send.
+        let mint = Mint { clock: clock.clone(), draws: Arc::new(RandomDraws), pid: std::process::id() };
+        let send = Arc::new(ComposeSend {
+            outgoing: Outgoing::new(database.clone(), delivery, mint),
+            database: database.clone(),
+        });
         Calendar {
             agenda: Agenda::new(database.clone(), Arc::new(NamedRoles), zones.clone(), clock.clone(), zone.clone()),
-            rsvp: Rsvp::new(database.clone(), messages, Arc::new(OutboxNotYet), zones, clock.clone(), zone.clone()),
+            rsvp: Rsvp::new(database.clone(), messages, send, zones, clock.clone(), zone.clone()),
             publishing: Publishing::new(database.clone(), clock, zone),
             database,
         }
