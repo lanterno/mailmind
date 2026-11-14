@@ -14,7 +14,8 @@
 //! keep its text), drop with all it holds, fold the quoted reply, count what it blocked. Where a browser's tree
 //! builder would do more (close a `<p>`, move a table's text), the sanitizer doesn't: it skips a dropped element to
 //! its end tag, and leaves unclosed what the message left unclosed, for the browser to close. The one exception is
-//! `<head>`, whose end tag a message may leave out: a dropped head ends where a browser ends it (`HEAD_HOLDS`).
+//! `<head>`, whose end tag a message may leave out: a dropped head ends where a browser ends it (`HEAD_HOLDS`), and
+//! its style sheets are kept, as a browser applies them.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -30,8 +31,8 @@ use regex::Regex;
 use super::css::{self, CssContext, DATA_IMAGE, SAFE_URL};
 use super::text::{self, pattern, space};
 
-/// Tags dropped with all they hold, to their end tag, but `<head>`, whose end tag a message may leave out: see
-/// `HEAD_HOLDS`.
+/// Tags dropped with all they hold, to their end tag, but `<head>`, whose end tag a message may leave out (see
+/// `HEAD_HOLDS`) and whose `<style>` sheets are kept.
 const DROP_WITH_CONTENT: &[&str] = &[
     "script", "head", "title", "iframe", "object", "applet", "form", "button", "select", "textarea", "noscript",
     "template", "svg", "math", "frameset", "xml",
@@ -378,6 +379,12 @@ impl Sanitizer {
             } else if self.head_templates == 0 && !HEAD_HOLDS.contains(&name) {
                 self.leave_head();
             }
+        }
+        // A head's style sheet applies as one in the body does, so it is kept, sanitized as any other is. One in a
+        // <template> applies to nothing.
+        if name == "style" && self.in_head() && self.head_templates == 0 {
+            self.style = Some(String::new());
+            return;
         }
         if self.skip > 0 {
             // A browser ignores a <head> inside one, so it never needs a second </head>.
