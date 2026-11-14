@@ -1032,6 +1032,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mm-oneclick"
+version = "0.1.0"
+dependencies = [
+ "mm-kernel",
+ "mm-net",
+ "rcgen",
+ "rustls",
+]
+
+[[package]]
 name = "mm-py"
 version = "0.1.0"
 dependencies = [
