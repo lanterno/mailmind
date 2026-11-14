@@ -327,3 +327,121 @@ pub trait Answers: Send + Sync + fmt::Debug {
     /// Whether the AI's verdict on the message calls it worth a reply drafted ahead.
     fn reply_worthy(&self, pk: i64) -> Result<bool, Fault>;
 }
+
+/// A message a brief or a delta is made from, with what the AI said of it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Glance {
+    pub pk: i64,
+    pub message_key: Option<i64>,
+    pub folder: Option<String>,
+    pub from_name: Option<String>,
+    pub from_addr: Option<String>,
+    pub subject: Option<String>,
+    pub message_id: Option<String>,
+    pub summary: Option<String>,
+    pub importance: Option<i64>,
+    pub category: Option<String>,
+    pub action: Option<String>,
+}
+
+/// A message that still needs the person, for a review.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Needing {
+    pub message_key: Option<i64>,
+    pub uid: Option<i64>,
+    pub folder: Option<String>,
+    pub account: String,
+    pub thread_id: Option<String>,
+    pub from_name: Option<String>,
+    pub from_addr: Option<String>,
+    pub subject: Option<String>,
+    pub importance: Option<i64>,
+    pub action: Option<String>,
+}
+
+/// A thread the person waits on an answer in, by its latest message where it has one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Awaiting {
+    pub account: String,
+    pub thread_id: String,
+    pub message_key: Option<i64>,
+    pub uid: Option<i64>,
+    pub folder: Option<String>,
+    pub first_sent_ts: Option<i64>,
+    pub subject: Option<String>,
+    pub recipients: Option<String>,
+}
+
+/// The week a review looks back on, as the mail, the follow-ups and the unsubscribes count it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WeekRows {
+    pub sent: i64,
+    pub received: i64,
+    /// What kind of mail came in: each bucket, and how many.
+    pub by_bucket: Vec<(Option<String>, i64)>,
+    pub needs: Vec<Needing>,
+    pub waiting: Vec<Awaiting>,
+    pub reply_later: i64,
+    /// None where the unsubscribes can't be counted.
+    pub cleaned: Option<i64>,
+    pub handled: i64,
+}
+
+/// The copy a stored answer's message has now: its folder and uid.
+pub type CopyNow = Option<(Option<String>, Option<i64>)>;
+
+/// What a brief, a delta and a review read of the stored mail. Each confines itself to `accounts`, or reads every
+/// account when none is named.
+pub trait Overview: Send + Sync + fmt::Debug {
+    /// The mail the AI said is worth a glance, most important first.
+    fn brief_rows(&self, accounts: &[String], n: i64) -> Result<Vec<Glance>, Fault>;
+    /// The mail newer than `since_ts`, newest first, with what the AI said of each or its defaults.
+    fn delta_rows(&self, accounts: &[String], since_ts: i64, n: i64) -> Result<Vec<Glance>, Fault>;
+    /// The copy each stored message has now, among them the one in the folder it was read from; None for one that
+    /// has gone.
+    fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault>;
+    /// The week since `since_ts` (`since_iso` as text), with at most `top` of each list.
+    fn week(&self, accounts: &[String], since_ts: f64, since_iso: &str, top: i64) -> Result<WeekRows, Fault>;
+}
+
+/// What a review reads beyond the mail: the calendar, and whether it is written ahead and read all week.
+pub trait Around: Send + Sync + fmt::Debug {
+    /// The events in the mail's invites that hadn't ended at `at` (seconds since the epoch), soonest first, at most
+    /// `limit`, as Today & next lists them.
+    fn events_from(&self, at: i64, limit: usize) -> Result<Vec<Value>, Fault>;
+    /// The `weekly_review` preference.
+    fn weekly_review(&self) -> Result<bool, Fault>;
+}
+
+/// A brief, or a delta, as it is kept: `text` is its narrative or headline, `body` its groups or items as JSON.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StoredCard {
+    pub fingerprint: String,
+    pub text: String,
+    pub body: String,
+    pub model: Option<String>,
+    pub created_at: String,
+}
+
+/// A review as it is kept, its lists as JSON.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StoredReview {
+    pub fingerprint: String,
+    pub narrative: String,
+    pub next: String,
+    pub stats: String,
+    pub needs: String,
+    pub waiting: String,
+    pub model: Option<String>,
+    pub created_at: String,
+}
+
+/// Briefs, deltas and reviews as they are kept: each saved forgets those of its kind made before `forget_before`.
+pub trait Cards: Send + Sync + fmt::Debug {
+    fn brief(&self, accounts: &str, day: &str) -> Result<Option<StoredCard>, Fault>;
+    fn save_brief(&self, accounts: &str, day: &str, brief: &StoredCard, forget_before: &str) -> Result<(), Fault>;
+    fn delta(&self, accounts: &str, since_ts: i64, fingerprint: &str) -> Result<Option<StoredCard>, Fault>;
+    fn save_delta(&self, accounts: &str, since_ts: i64, delta: &StoredCard, forget_before: &str) -> Result<(), Fault>;
+    fn review(&self, accounts: &str, day: &str) -> Result<Option<StoredReview>, Fault>;
+    fn save_review(&self, accounts: &str, day: &str, review: &StoredReview, forget_before: &str) -> Result<(), Fault>;
+}

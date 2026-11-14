@@ -16,7 +16,7 @@ use crate::context::Context;
 use crate::ports::{AskIndex, AskRow};
 use crate::prompts;
 use crate::refusals::{AiFailure, answered, unreachable};
-use crate::text::{cut, length, python_str, strip, truthy};
+use crate::text::{cut, length, python_int, python_str, strip, truthy};
 
 pub const MAX_QUESTION: usize = 8000;
 /// Rows full-text search gives before the texts are chosen.
@@ -59,24 +59,11 @@ pub fn fts_match(question: &str) -> String {
     out.join(" OR ")
 }
 
-/// `int(p)` of what a model named, None where Python's would raise.
-fn as_pk(p: &Value) -> Option<i64> {
-    match p {
-        Value::Bool(b) => Some(i64::from(*b)),
-        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().filter(|f| f.is_finite()).map(|f| f.trunc() as i64)),
-        Value::String(s) => {
-            let s = strip(s).replace('_', "");
-            s.parse().ok()
-        }
-        _ => None,
-    }
-}
-
 /// Ask's citations: each message the reply named and was shown, once, in the order it named them.
 pub fn cited(told: Option<&Value>, shown: &HashSet<i64>) -> Vec<i64> {
     let Some(Value::Array(named)) = told else { return Vec::new() };
     let mut out = Vec::new();
-    for pk in named.iter().filter_map(as_pk) {
+    for pk in named.iter().filter_map(python_int) {
         if shown.contains(&pk) && !out.contains(&pk) {
             out.push(pk);
         }

@@ -1,14 +1,18 @@
 //! What the Assistant keeps in the database (`assistant.adapters.sqlite_ledger` and `assistant.adapters.sqlite`): the
 //! usage ledger, what each day's calls cost; what the Assistant reads of the mail (its `Mail`); and what it keeps of its
-//! answers: thread summaries and replies drafted ahead.
+//! answers: thread summaries, replies drafted ahead, and the briefs, deltas and reviews.
 
 use mm_assistant::ports::{
-    Answers, ConversationBy, Mail, Message, NewDraft, Said, Spend, Stamp, StoredDraft, StoredSummary, UsageLedger,
+    Answers, Awaiting, Cards, ConversationBy, CopyNow, Glance, Mail, Message, Needing, NewDraft, Overview, Said, Spend,
+    Stamp, StoredCard, StoredDraft, StoredReview, StoredSummary, UsageLedger, WeekRows,
 };
 use mm_kernel::errors::Fault;
-use rusqlite::OptionalExtension;
+use rusqlite::types::Value as Sql;
+use rusqlite::{Connection, OptionalExtension, params_from_iter};
 
 use crate::db::Database;
+use crate::discovery::not_snoozed_sql;
+use crate::placeholders;
 
 const ADD: &str = "INSERT INTO ai_usage(day, feature, model, served, outcome, calls, input_tokens, output_tokens, \
                    cache_write_tokens, cache_read_tokens, cost_micros, last_ts) \
@@ -343,6 +347,303 @@ impl Answers for Database {
             .query_row([pk], |_| Ok(()))
             .optional()
             .map(|found| found.is_some())
+        })
+    }
+}
+
+// The briefs, the deltas and the reviews: what each reads of the mail (`mailbox.adapters.sqlite.assistant_reads`,
+// with the follow-ups Attention keeps and the unsubscribes Curation logs), and how each is kept.
+
+/// A clause confining a query to `accounts` by `column`, and its parameters: nothing when none are named.
+fn among(accounts: &[String], column: &str) -> (String, Vec<Sql>) {
+    if accounts.is_empty() {
+        return (String::new(), Vec::new());
+    }
+    let clause = format!(" AND {column} IN ({}) ", placeholders(accounts.len()));
+    (clause, accounts.iter().map(|a| Sql::Text(a.clone())).collect())
+}
+
+/// Muted threads are left out of every card.
+const NOT_MUTED: &str = "NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id)";
+
+fn glance(r: &rusqlite::Row) -> rusqlite::Result<Glance> {
+    Ok(Glance {
+        pk: r.get("pk")?,
+        message_key: r.get("message_key")?,
+        folder: r.get("folder")?,
+        from_name: r.get("from_name")?,
+        from_addr: r.get("from_addr")?,
+        subject: r.get("subject")?,
+        message_id: r.get("message_id")?,
+        summary: r.get("summary")?,
+        importance: r.get("importance")?,
+        category: r.get("category")?,
+        action: r.get("action")?,
+    })
+}
+
+fn glances(c: &Connection, sql: &str, params: Vec<Sql>) -> rusqlite::Result<Vec<Glance>> {
+    c.prepare(sql)?.query_map(params_from_iter(params), glance)?.collect()
+}
+
+fn counted(c: &Connection, sql: &str, params: Vec<Sql>) -> rusqlite::Result<i64> {
+    c.prepare(sql)?.query_row(params_from_iter(params), |r| r.get(0))
+}
+
+fn week_in(
+    c: &Connection,
+    accounts: &[String],
+    since_ts: f64,
+    since_iso: &str,
+    top: i64,
+) -> rusqlite::Result<WeekRows> {
+    let since = || Sql::Real(since_ts);
+    let with = |first: Sql, more: &[Sql]| [first].into_iter().chain(more.iter().cloned()).collect::<Vec<_>>();
+    let (ac, ap) = among(accounts, "account");
+    let sent = counted(
+        c,
+        &format!("SELECT COUNT(*) FROM messages WHERE lower(folder) LIKE '%sent%' AND ts>=?{ac}"),
+        with(since(), &ap),
+    )?;
+    let received =
+        counted(c, &format!("SELECT COUNT(*) FROM messages WHERE folder='INBOX' AND ts>=?{ac}"), with(since(), &ap))?;
+    let by_bucket = c
+        .prepare(&format!(
+            "SELECT bucket, COUNT(*) n FROM messages WHERE folder='INBOX' AND ts>=?{ac} GROUP BY bucket"
+        ))?
+        .query_map(params_from_iter(with(since(), &ap)), |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let (mac, map) = among(accounts, "m.account");
+    let needs_sql = format!(
+        "SELECT m.pk, m.message_key, m.uid, m.folder, m.account, m.thread_id, m.from_name, m.from_addr, m.subject, m.ts, \
+         s.importance, s.action, s.category \
+         FROM messages m JOIN assessments s ON s.message_key=m.message_key \
+         WHERE m.folder='INBOX' AND m.is_junk=0 AND {} AND m.answered=0 AND m.pending_removal IS NULL \
+         AND (s.importance>=4 OR s.category='action-needed' OR TRIM(COALESCE(s.action,''))!='') AND {NOT_MUTED}{mac} \
+         ORDER BY s.importance DESC, m.ts DESC LIMIT ?",
+        not_snoozed_sql("m")
+    );
+    let needs = c
+        .prepare(&needs_sql)?
+        .query_map(params_from_iter(map.iter().cloned().chain([Sql::Integer(top)])), |r| {
+            Ok(Needing {
+                message_key: r.get("message_key")?,
+                uid: r.get("uid")?,
+                folder: r.get("folder")?,
+                account: r.get::<_, Option<String>>("account")?.unwrap_or_default(),
+                thread_id: r.get("thread_id")?,
+                from_name: r.get("from_name")?,
+                from_addr: r.get("from_addr")?,
+                subject: r.get("subject")?,
+                importance: r.get("importance")?,
+                action: r.get("action")?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    // Attention's: whom the person waits on, the threads they wrote in last with no answer yet.
+    let (fac, fap) = among(accounts, "f.account");
+    let waiting = c
+        .prepare(&format!(
+            "SELECT f.account, f.thread_id, m.pk, m.message_key, m.uid, m.folder, f.first_sent_ts, m.subject, m.recipients \
+             FROM followups f LEFT JOIN messages m ON m.account=f.account AND m.thread_id=f.thread_id \
+             AND m.pk=(SELECT pk FROM messages m2 WHERE m2.account=f.account AND m2.thread_id=f.thread_id \
+             ORDER BY m2.ts DESC, m2.pk DESC LIMIT 1) \
+             WHERE f.state='due' AND f.kind='sent'{fac} ORDER BY f.first_sent_ts ASC LIMIT ?"
+        ))?
+        .query_map(params_from_iter(fap.iter().cloned().chain([Sql::Integer(top)])), |r| {
+            Ok(Awaiting {
+                account: r.get("account")?,
+                thread_id: r.get("thread_id")?,
+                message_key: r.get("message_key")?,
+                uid: r.get("uid")?,
+                folder: r.get("folder")?,
+                first_sent_ts: r.get("first_sent_ts")?,
+                subject: r.get("subject")?,
+                recipients: r.get("recipients")?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let reply_later = counted(
+        c,
+        &format!("SELECT COUNT(*) FROM followups f WHERE f.state='due' AND f.kind='replylater'{fac}"),
+        fap.clone(),
+    )?;
+    // Curation's: the senders unsubscribed from since then, in any of the accounts.
+    let (jac, jap) = if accounts.is_empty() {
+        (String::new(), Vec::new())
+    } else {
+        (format!(" AND value IN ({}) ", placeholders(accounts.len())), ap.clone())
+    };
+    let cleaned = counted(
+        c,
+        &format!(
+            "SELECT COUNT(*) FROM unsub_log WHERE ts>=? AND (accounts IS NULL OR EXISTS \
+             (SELECT 1 FROM json_each(unsub_log.accounts) WHERE 1=1{jac}))"
+        ),
+        with(Sql::Text(since_iso.to_owned()), &jap),
+    )
+    .ok();
+    // What a person filed to Archive, by the command log; not one an Undo took back, nor what Tidy filed.
+    let handled = counted(
+        c,
+        &format!(
+            "SELECT COUNT(*) FROM mail_commands WHERE kind='archive' AND applied=1 AND done_at>=? \
+             AND json_extract(params, '$.undone') IS NULL \
+             AND idempotency_key NOT GLOB '*:tidy-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'{ac}"
+        ),
+        with(Sql::Text(since_iso.to_owned()), &ap),
+    )?;
+    Ok(WeekRows { sent, received, by_bucket, needs, waiting, reply_later, cleaned, handled })
+}
+
+impl Overview for Database {
+    fn brief_rows(&self, accounts: &[String], n: i64) -> Result<Vec<Glance>, Fault> {
+        let (ac, ap) = among(accounts, "m.account");
+        let sql = format!(
+            "SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, \
+             s.summary, s.importance, s.category, s.action \
+             FROM messages m JOIN assessments s ON s.message_key=m.message_key \
+             WHERE m.is_junk=0 AND {} AND m.pending_removal IS NULL AND s.importance>=2 AND {NOT_MUTED}{ac} \
+             ORDER BY s.importance DESC, m.ts DESC LIMIT ?",
+            not_snoozed_sql("m")
+        );
+        self.read(|c| glances(c, &sql, ap.into_iter().chain([Sql::Integer(n)]).collect()))
+    }
+
+    fn delta_rows(&self, accounts: &[String], since_ts: i64, n: i64) -> Result<Vec<Glance>, Fault> {
+        let (ac, ap) = among(accounts, "m.account");
+        // A delta is what changed: newsletters and notifications count, so it matches the pill; only spam, the
+        // blocked, the snoozed and the muted are left out.
+        let sql = format!(
+            "SELECT m.pk, NULL AS message_key, NULL AS folder, m.from_name, m.from_addr, m.subject, m.message_id, \
+             COALESCE(s.summary,'') AS summary, COALESCE(s.importance,2) AS importance, \
+             COALESCE(s.category,'other') AS category, NULL AS action \
+             FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key \
+             WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) \
+             AND {} AND m.pending_removal IS NULL AND m.ts > ? AND {NOT_MUTED}{ac} ORDER BY m.ts DESC LIMIT ?",
+            not_snoozed_sql("m")
+        );
+        let params = [Sql::Integer(since_ts)].into_iter().chain(ap).chain([Sql::Integer(n)]).collect();
+        self.read(|c| glances(c, &sql, params))
+    }
+
+    fn copies_now(&self, copies: &[(i64, Option<String>)]) -> Result<Vec<CopyNow>, Fault> {
+        if copies.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.read(|c| {
+            let mut now = c.prepare_cached(
+                "SELECT folder, uid FROM messages WHERE message_key=? AND pending_removal IS NULL \
+                 ORDER BY folder=? DESC, pk DESC LIMIT 1",
+            )?;
+            copies
+                .iter()
+                .map(|(key, folder)| {
+                    now.query_row(rusqlite::params![key, folder], |r| Ok((r.get(0)?, r.get(1)?))).optional()
+                })
+                .collect()
+        })
+    }
+
+    fn week(&self, accounts: &[String], since_ts: f64, since_iso: &str, top: i64) -> Result<WeekRows, Fault> {
+        self.read(|c| week_in(c, accounts, since_ts, since_iso, top))
+    }
+}
+
+fn card(r: &rusqlite::Row) -> rusqlite::Result<StoredCard> {
+    Ok(StoredCard { fingerprint: r.get(0)?, text: r.get(1)?, body: r.get(2)?, model: r.get(3)?, created_at: r.get(4)? })
+}
+
+/// What is kept of a kind is a week's: each saved forgets those made before then.
+fn forget(c: &Connection, table: &str, before: &str) -> rusqlite::Result<()> {
+    c.execute(&format!("DELETE FROM {table} WHERE created_at < ?"), [before]).map(drop)
+}
+
+impl Cards for Database {
+    fn brief(&self, accounts: &str, day: &str) -> Result<Option<StoredCard>, Fault> {
+        self.read(|c| {
+            c.prepare_cached(
+                "SELECT fingerprint, narrative, groups_json, model, created_at FROM briefs WHERE accounts=? AND day=?",
+            )?
+            .query_row([accounts, day], card)
+            .optional()
+        })
+    }
+
+    fn save_brief(&self, accounts: &str, day: &str, b: &StoredCard, forget_before: &str) -> Result<(), Fault> {
+        self.write(|c| {
+            c.execute(
+                "INSERT OR REPLACE INTO briefs(accounts, day, fingerprint, narrative, groups_json, model, created_at) \
+                 VALUES(?,?,?,?,?,?,?)",
+                rusqlite::params![accounts, day, b.fingerprint, b.text, b.body, b.model, b.created_at],
+            )?;
+            forget(c, "briefs", forget_before)
+        })
+    }
+
+    fn delta(&self, accounts: &str, since_ts: i64, fingerprint: &str) -> Result<Option<StoredCard>, Fault> {
+        self.read(|c| {
+            c.prepare_cached(
+                "SELECT fingerprint, headline, items_json, model, created_at FROM deltas \
+                 WHERE accounts=? AND since_ts=? AND fingerprint=?",
+            )?
+            .query_row(rusqlite::params![accounts, since_ts, fingerprint], card)
+            .optional()
+        })
+    }
+
+    fn save_delta(&self, accounts: &str, since_ts: i64, d: &StoredCard, forget_before: &str) -> Result<(), Fault> {
+        self.write(|c| {
+            c.execute(
+                "INSERT OR REPLACE INTO deltas(accounts, since_ts, fingerprint, headline, items_json, model, created_at) \
+                 VALUES(?,?,?,?,?,?,?)",
+                rusqlite::params![accounts, since_ts, d.fingerprint, d.text, d.body, d.model, d.created_at],
+            )?;
+            forget(c, "deltas", forget_before)
+        })
+    }
+
+    fn review(&self, accounts: &str, day: &str) -> Result<Option<StoredReview>, Fault> {
+        self.read(|c| {
+            c.prepare_cached(
+                "SELECT fingerprint, narrative, next_json, stats_json, needs_json, waiting_json, model, created_at \
+                 FROM reviews WHERE accounts=? AND day=?",
+            )?
+            .query_row([accounts, day], |r| {
+                Ok(StoredReview {
+                    fingerprint: r.get(0)?,
+                    narrative: r.get(1)?,
+                    next: r.get(2)?,
+                    stats: r.get(3)?,
+                    needs: r.get(4)?,
+                    waiting: r.get(5)?,
+                    model: r.get(6)?,
+                    created_at: r.get(7)?,
+                })
+            })
+            .optional()
+        })
+    }
+
+    fn save_review(&self, accounts: &str, day: &str, v: &StoredReview, forget_before: &str) -> Result<(), Fault> {
+        self.write(|c| {
+            c.execute(
+                "INSERT OR REPLACE INTO reviews(accounts, day, fingerprint, narrative, next_json, stats_json, \
+                 needs_json, waiting_json, model, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                rusqlite::params![
+                    accounts,
+                    day,
+                    v.fingerprint,
+                    v.narrative,
+                    v.next,
+                    v.stats,
+                    v.needs,
+                    v.waiting,
+                    v.model,
+                    v.created_at
+                ],
+            )?;
+            forget(c, "reviews", forget_before)
         })
     }
 }

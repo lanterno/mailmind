@@ -11,7 +11,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::http::{HeaderMap, Method, Response, Uri};
-use axum::routing::post;
+use axum::routing::{get, post};
 use mm_assistant::governor::allowing_over;
 use mm_assistant::prepared_replies::ReplyAsked;
 use mm_assistant::refusals::{AiFailure, NotSent};
@@ -24,6 +24,7 @@ use crate::answer;
 use crate::app::App;
 use crate::posted::{self, Posted};
 use crate::problem;
+use crate::query::Query;
 
 /// What says a request may go over the daily AI limit, and the value that does.
 pub const AI_OVER_HEADER: &str = "x-mailmind-ai-over-limit";
@@ -37,6 +38,11 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/ai/ask", post(ask))
         .route("/api/ai/do-plan", post(do_plan))
         .route("/api/ai/do-confirm", post(do_confirm))
+        .route("/api/briefing", get(briefing).post(write_briefing))
+        .route("/api/briefing/refresh", post(refresh_briefing))
+        .route("/api/briefing/since", get(delta).post(write_delta))
+        .route("/api/review", get(review).post(write_review))
+        .route("/api/review/refresh", post(refresh_review))
 }
 
 /// A problem document of one of the AI's own kinds.
@@ -251,7 +257,7 @@ async fn ask(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
         Err(problem) => return refused(problem),
     };
     ai(&app, (&method, &uri, &headers), ("ask error", "ask failed"), move |app| {
-        Ok(answer::json(200, &app.assistant.asking.ask(account.as_deref(), question.as_deref())?))
+        Ok(answer::json(200, &app.assistant.asker.ask(account.as_deref(), question.as_deref())?))
     })
     .await
 }
@@ -294,4 +300,86 @@ async fn do_confirm(State(app): State<Arc<App>>, request: Request) -> Response<B
         }
         Some(_) => answer::not_yet(uri.path()),
     }
+}
+
+/// A card's request: a GET only reads what is kept, and a POST, whose body must be a JSON object, writes.
+async fn card(
+    app: Arc<App>,
+    request: Request,
+    what: (&'static str, &'static str),
+    work: impl FnOnce(&App) -> Result<Value, AiFailure> + Send + 'static,
+) -> Response<Body> {
+    let (method, uri, headers) = (request.method().clone(), request.uri().clone(), request.headers().clone());
+    if method == Method::POST
+        && let Err(answer) = posted::read(request).await
+    {
+        return *answer;
+    }
+    ai(&app, (&method, &uri, &headers), what, move |app| Ok(answer::json(200, &work(app)?))).await
+}
+
+/// What is kept of the "Today" card; a POST writes it.
+async fn briefing(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    card(app, request, ("error", "briefing failed"), |app| app.assistant.asking.briefing(false, false)).await
+}
+
+/// The "Today" card, written once if none is kept.
+async fn write_briefing(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    card(app, request, ("briefing error", "briefing failed"), |app| app.assistant.asking.briefing(false, true)).await
+}
+
+/// The "Today" card, written again.
+async fn refresh_briefing(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    card(app, request, ("briefing error", "briefing failed"), |app| app.assistant.asking.briefing(true, true)).await
+}
+
+/// What is kept of the Weekly Review; a POST writes it.
+async fn review(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    card(app, request, ("error", "review failed"), |app| app.assistant.asking.review(false, false)).await
+}
+
+/// The Weekly Review, written once if none is kept.
+async fn write_review(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    card(app, request, ("review error", "review failed"), |app| app.assistant.asking.review(false, true)).await
+}
+
+/// The Weekly Review, written again.
+async fn refresh_review(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    card(app, request, ("review error", "review failed"), |app| app.assistant.asking.review(true, true)).await
+}
+
+/// What is kept of "since you last looked", by `account` and `since` in the query string.
+async fn delta(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let given = Query::parse(request.uri().query().unwrap_or_default().as_bytes());
+    let account = given.text("account").map(|a| Value::String(a.to_owned()));
+    let since = given.text("since").map(|s| Value::String(s.to_owned()));
+    card(app, request, ("error", "delta failed"), move |app| {
+        app.assistant.asking.delta(account.as_ref(), since.as_ref(), false)
+    })
+    .await
+}
+
+/// "Since you last looked", written if none is kept for the mail since `since`.
+async fn write_delta(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let (method, uri, headers, body) = match body_of(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    // `Number | str | None`: text as it is, and a number as `as_int` reads one.
+    let read = (|| -> Result<_, Problem> {
+        let since = match body.get("since") {
+            None => None,
+            Some(Value::String(s)) => Some(Value::String(s.clone())),
+            Some(v) => Some(json!(posted::as_int(v).ok_or_else(Problem::bad_request)?)),
+        };
+        Ok((body.text("account")?.map(Value::String), since))
+    })();
+    let (account, since) = match read {
+        Ok(read) => read,
+        Err(problem) => return refused(problem),
+    };
+    ai(&app, (&method, &uri, &headers), ("delta error", "delta failed"), move |app| {
+        Ok(answer::json(200, &app.assistant.asking.delta(account.as_ref(), since.as_ref(), true)?))
+    })
+    .await
 }

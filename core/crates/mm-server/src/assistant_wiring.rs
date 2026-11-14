@@ -10,6 +10,8 @@ use std::sync::{Arc, Mutex};
 use mm_accounts::credential::{CredentialRef, Style};
 use mm_accounts::ports::ConfigFile;
 use mm_assistant::ask::Asker;
+use mm_assistant::asking::Asking;
+use mm_assistant::briefs::Briefs;
 use mm_assistant::bulk::BulkCommands;
 use mm_assistant::calls::Calls;
 use mm_assistant::context::Context;
@@ -17,21 +19,23 @@ use mm_assistant::extract::Extractor;
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
 use mm_assistant::ports::{
-    AccountList, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, PlanSearch, Reached, Said, Stamp,
+    AccountList, Around, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, PlanSearch, Reached, Said,
+    Stamp,
 };
 use mm_assistant::prepared_replies::PreparedReplies;
 use mm_assistant::reply_draft::ReplyDrafts;
+use mm_assistant::reviews::Reviews;
 use mm_assistant::status::Status;
 use mm_assistant::thread_digest::ThreadDigest;
 use mm_discovery::query::QuerySpec;
-use mm_kernel::errors::Fault;
+use mm_kernel::errors::{Fault, NOT_YET};
 use mm_kernel::seams::{Clock, Keychain, Outside, Secret};
 use mm_kernel::zone::Zone;
 use mm_mailbox::gates::{Gates, Priority, Wait, on_gate};
 use mm_mailbox::session::MailServers;
 use mm_store::Database;
 use mm_store::discovery::DiscoveryStore;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::environment::Environment;
 use crate::wiring::AiConfig;
@@ -141,7 +145,9 @@ pub struct Assistant {
     /// Replies drafted on demand, and ahead.
     pub drafting: Arc<PreparedReplies>,
     /// A question about the person's own mail.
-    pub asking: Arc<Asker>,
+    pub asker: Arc<Asker>,
+    /// The "Today" card, "since you last looked" and the Weekly Review.
+    pub asking: Arc<Asking>,
     /// A command in words, planned and previewed; the plans a preview froze.
     pub bulk: Arc<BulkCommands>,
 }
@@ -162,6 +168,7 @@ const UI_QUIET: [&str; 9] = [
 impl Assistant {
     pub(crate) fn assemble(parts: Parts, environment: &Environment) -> Assistant {
         let Parts { database, accounts, servers, gates, config, keychain, outside, clock, zone } = parts;
+        let around = Arc::new(Surroundings { config: config.clone() });
         let engine = Arc::new(ApiEngine {
             file: config.clone(),
             keychain,
@@ -177,19 +184,30 @@ impl Assistant {
         let status = Arc::new(Status::new(gateway.clone(), clock.clone(), label));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
         let mail = Arc::new(AssistantMail { database: database.clone(), servers, gates });
-        let context = Context::new(mail, accounts);
+        let context = Context::new(mail, accounts.clone());
         let index = Arc::new(DiscoveryStore::new(database.clone(), clock.clone()));
-        let asking = Arc::new(Asker::new(calls.clone(), index.clone(), context.clone(), clock.clone()));
+        let asker = Arc::new(Asker::new(calls.clone(), index.clone(), context.clone(), clock.clone()));
         let planning = Arc::new(Planning { store: index, clock: clock.clone(), zone: zone.clone() });
         let draw: mm_assistant::bulk::Draw =
             Arc::new(|| crate::perimeter::new_token().map_err(|_| Fault::new("Random")));
         let bulk = Arc::new(BulkCommands::new(calls.clone(), planning, clock.clone(), zone.clone(), draw));
         let digest = Arc::new(ThreadDigest::new(calls.clone(), database.clone(), context.clone(), clock.clone()));
-        let extractor = Arc::new(Extractor::new(calls.clone(), context.clone(), clock.clone(), zone));
+        let extractor = Arc::new(Extractor::new(calls.clone(), context.clone(), clock.clone(), zone.clone()));
         let replies = Arc::new(ReplyDrafts::new(calls.clone(), context.clone()));
+        let briefs =
+            Arc::new(Briefs::new(calls.clone(), database.clone(), database.clone(), clock.clone(), zone.clone()));
+        let reviews = Arc::new(Reviews::new(
+            calls.clone(),
+            database.clone(),
+            database.clone(),
+            around.clone(),
+            clock.clone(),
+            zone.clone(),
+        ));
+        let asking = Arc::new(Asking::new(briefs, reviews, accounts, around, clock.clone()));
         let looks_human = Box::new(|local: &str| mm_curation::classifier::looks_human(Some(local)));
         let drafting = Arc::new(PreparedReplies::new(database, context, replies, looks_human, clock));
-        Assistant { calls, status, governor, digest, extractor, drafting, asking, bulk }
+        Assistant { calls, status, governor, digest, extractor, drafting, asker, asking, bulk }
     }
 
     /// Someone is here, for the cost governor's presence gate on drafting ahead: any request to the API that got past
@@ -302,6 +320,26 @@ impl PlanSearch for Planning {
 
     fn sweeps_whole_mailbox(&self, matched: i64) -> Result<bool, Fault> {
         Ok(mm_discovery::guard::sweeps_whole_mailbox(matched, self.store.total()?))
+    }
+}
+
+/// What a review reads beyond the mail: the calendar's invites, and the `weekly_review` preference.
+///
+/// The calendar's agenda (`mm_calendar::agenda::Agenda::soonest(at, limit, 60)`) isn't on this branch: until it is wired
+/// here a review says no meetings, as it does when the calendar can't be read.
+#[derive(Debug)]
+pub(crate) struct Surroundings {
+    config: Arc<dyn ConfigFile>,
+}
+
+impl Around for Surroundings {
+    fn events_from(&self, _at: i64, _limit: usize) -> Result<Vec<Value>, Fault> {
+        Err(NOT_YET)
+    }
+
+    fn weekly_review(&self) -> Result<bool, Fault> {
+        let raw = self.config.read()?;
+        Ok(mm_accounts::preferences::said(&raw, "weekly_review").and_then(Value::as_bool).unwrap_or(false))
     }
 }
 

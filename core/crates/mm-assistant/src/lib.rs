@@ -6,6 +6,9 @@
 
 pub mod action_plan;
 pub mod ask;
+pub mod asking;
+pub mod brief;
+pub mod briefs;
 pub mod bulk;
 pub mod calls;
 pub mod context;
@@ -25,6 +28,8 @@ pub mod pricing;
 pub mod prompts;
 pub mod refusals;
 pub mod reply_draft;
+pub mod review;
+pub mod reviews;
 pub mod rewrite;
 pub mod schema;
 pub mod status;

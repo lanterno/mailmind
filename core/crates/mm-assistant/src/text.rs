@@ -71,6 +71,16 @@ pub fn python_str(value: &Value) -> String {
     }
 }
 
+/// `int(value)` of what JSON parsed, None where Python's would raise.
+pub fn python_int(value: &Value) -> Option<i64> {
+    match value {
+        Value::Bool(b) => Some(i64::from(*b)),
+        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().filter(|f| f.is_finite()).map(|f| f.trunc() as i64)),
+        Value::String(s) => strip(s).replace('_', "").parse().ok(),
+        _ => None,
+    }
+}
+
 /// `repr(value)` of what JSON parsed.
 pub fn repr(value: &Value) -> String {
     match value {
