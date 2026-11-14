@@ -6799,6 +6799,22 @@ extension API {
     }
 }
 
+extension API {
+    /// The limits the page holds a person to, each the server's own (mailmind/http/page_limits.py): a request that
+    /// would name more is sent as more requests, and a setting past one is refused before it is asked.
+    public enum Limits {
+        public static let aiDailyLimitUsd = 1000
+        public static let attachBytes = 26214400
+        public static let bulkRows = 500
+        public static let instructionChars = 400
+        public static let placeBytes = 4096
+        public static let placesAtOnce = 64
+        public static let snoozeCopies = 500
+        public static let undoSendLongest = 60
+        public static let undoSendShortest = 5
+    }
+}
+
 extension API.Get.AccountHealth: GetRoute {
     public static let path = "/api/account-health"
     public typealias Answer = API.Standing
