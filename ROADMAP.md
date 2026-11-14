@@ -54,28 +54,29 @@ Step 3 of the "MailMind client architecture" document is under way ([docs/client
 (`core/crates/mm-server`) takes over the Python app's routes one by one, and `tests/support/rust_ledger.txt` lists the
 served tests it passes against the same scripts. Until the flip, the Python app gets fixes only.
 
-- **Port the rest of the routes** · high value · effort L · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers 69 of the Python app's
+- **Port the rest of the routes** · high value · effort L · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers 76 of the Python app's
   103 routes: the page and settings, the Mailbox's lists, a conversation, a message opened, the digest and the
   Document Hub; search, saved views and contacts; rules, filters, the Screener, the audit trail and Tidy; snooze,
-  mute, follow-ups, Reply Later and tasks; filing, Undo and the tray of changes; sync, refresh and reconcile; and
-  accounts (add, edit, test, delete, trust-cert). `just test-rust` holds 54 of `tests/api`'s 149 served tests and 7 of
-  the browser's. Still Python's: sending (`/api/send`, drafts, the outbox's retry, cancel and send-now, RSVP), cleanup
+  mute, follow-ups, Reply Later and tasks; filing, Undo and the tray of changes; sync, refresh and reconcile;
+  accounts (add, edit, test, delete, trust-cert); and sending (`/api/send`, drafts, the preview, the outbox's Undo,
+  retry and send-now, over `mm-smtp`). `just test-rust` holds 72 of `tests/api`'s 149 served tests and 7 of the
+  browser's. Still Python's: RSVP (`/api/invite/rsvp`, with the calendar), cleanup
   (`/api/cleanup/*`, `/api/sweep`, `/api/tidy/undo`, unsubscribe over SMTP and one-click HTTPS), the assistant
   (`/api/ai/*`, the briefing, the review, the Claude API client, the cost governor, batches), the calendar
   (`/api/upcoming`, `/api/calendar/event`, which need an ICS reader and recurrence), the export's archive
   (`/api/export/archive` answers that it isn't served yet), and `/api/debug/health` and `/api/debug/jobs`, which only
   in-process tests call. `just test-rust-all` says what passes.
 - **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — `mailmind-server` runs the change
-  queue's worker and the snooze, sync and reconcile rounds (`mm-server/src/workers.rs`); `mm-served` drives them one pass
+  queue's and the outbox's workers, and the snooze, sync, reconcile and draft-push rounds (`mm-server/src/workers.rs`); `mm-served` drives them one pass
   at a time through its `work` line. Still to come: IDLE (an IDLE command and its interrupt in `mm-imap`, the
   supervisor, and re-checking when an account changes), `warm_tick` (a per-account `warm_folders`), backfilling bodies,
   `forget`, loading 1Password credentials before the first sync, and the jobs of areas not yet ported (assess, draft
-  ahead, the brief, the review, Tidy, draft push, expiry). Each joins `Workers::start` as a `mm_mailbox::workers::Queue`
+  ahead, the brief, the review, Tidy, expiry). Each joins `Workers::start` as a `mm_mailbox::workers::Queue`
   or a timed lane.
 - **Every change tells the page, the rest of it** · medium value · effort S · [#30](https://github.com/lanterno/mailmind/issues/30) — The Mailbox's,
   Attention's and Curation's changes reach the event stream under the Python app's names (`mm-server/src/heard.rs`),
-  and `/api/stats` keeps its counts until one says they moved. Still silent: the outbox's Sent, Failed and
-  DraftCopyRemoved, CredentialsRejected and the account events, and `folder-synced` at the end of a folder's first scan
+  and `/api/stats` keeps its counts until one says they moved. The outbox's Sent, Failed and DraftCopyRemoved
+  are heard too. Still silent: CredentialsRejected and the account events, and `folder-synced` at the end of a folder's first scan
   (which itself waits on the scan when a folder opens).
 - **The sync's remaining parts** · medium value · effort M · [#31](https://github.com/lanterno/mailmind/issues/31) — `mm_mailbox::ingest` leaves out a person's
   arrival filters (Curation's `arrival_flags`), the invite a message carries kept with its body, and holding back a login
@@ -92,7 +93,10 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   no nameprep; a failed sync or reconcile keeps Rust's class name (`Timeout`, `ConnectionRefused`) where Python kept its
   exception's, and its log line names no account; a snooze commits twice, its undo entry in a block of its own;
   a login reads its password from the Keychain each time where Python keeps it for the process, and a deleted account's
-  sync status stays until a restart (`Syncing` has no `_forget_status`).
+  sync status stays until a restart (`Syncing` has no `_forget_status`). Compose: an attached message/rfc822 is
+  rewritten best-effort (about a third of 1,500 random cases differ from Python's bytes), encoded words a person typed
+  are decoded only in UTF-8, ASCII or Latin-1, a few broken-MIME drafts reopen differently, and an original fetched to
+  reply to isn't stored.
 - **The login hold on the Rust server** · high value · effort S · [#36](https://github.com/lanterno/mailmind/issues/36) — After a server refuses a login, the
   Python app holds it back (five minutes, doubling to an hour: `accounts.domain.login_hold`) so a password gone bad
   doesn't lock the account out. `mailmind-server` has no hold, and its workers now sync every five minutes. Port it into
