@@ -216,8 +216,10 @@ impl Server {
         &self.certificate
     }
 
-    /// Log in. A login the server refused is unreachable, as the Python app's `LoginUnreachable` is; a user or a
-    /// password holding a line break or NUL is never sent, since it would end LOGIN's line and start another.
+    /// Log in. A login that didn't work is unreachable, as the Python app's `LoginUnreachable` is: `LoginRefused`
+    /// when the server said no, `LoginUnavailable` when it said it can't for now; a connection lost during LOGIN is
+    /// lost, as any is. A user or a password holding a line break or NUL is never sent, since it would end LOGIN's
+    /// line and start another.
     pub fn login(mut self, user: &str, password: &Secret) -> Result<Session, Error> {
         let unsendable = |s: &str| s.contains(['\r', '\n', '\0']);
         if unsendable(user) || unsendable(password.expose()) {
@@ -234,10 +236,20 @@ impl Server {
         command.fill(0);
         let answer = answer?;
         if answer.status != "OK" {
-            return Err(Error::Unreachable("LoginRefused"));
+            return Err(login_failed(&answer.text));
         }
         self.connection.learn_capabilities(&answer.text)?;
         Ok(Session { connection: self.connection })
+    }
+}
+
+/// What a server's NO or BAD to LOGIN, with the rest of its line `said`, comes to: a refusal, unless the server says
+/// it can't for now ([UNAVAILABLE], RFC 5530), which is no word on the credential (`login_hold.refuses`).
+fn login_failed(said: &str) -> Error {
+    if said.to_ascii_uppercase().contains("[UNAVAILABLE]") {
+        Error::Unreachable("LoginUnavailable")
+    } else {
+        Error::Unreachable("LoginRefused")
     }
 }
 
