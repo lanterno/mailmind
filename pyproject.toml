@@ -40,6 +40,9 @@ dev = [
     "time-machine>=3.6.0",
     "trustme>=1.2.1",
 ]
+# The Mac app's release (shells/apple/Release/release.sh): its .dmg, with the window laid out, written without
+# driving Finder. Not installed by default; the release runs it with `uv run --group release`.
+release = ["dmgbuild==1.6.7"]
 
 [tool.ruff.lint]
 # Pyflakes' checks only (undefined names, unused imports and the like), the lint this repo
