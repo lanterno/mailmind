@@ -40,11 +40,13 @@ pub(crate) struct Adapters {
     pub(crate) sessions: Arc<dyn MailSessions>,
     pub(crate) config: Arc<dyn ConfigFile>,
     pub(crate) folders: Arc<Folders>,
+    /// The calendar's reading of the invite a message opens with.
+    pub(crate) invites: mm_calendar::invites::Invites,
 }
 
 impl Reading {
     pub(crate) fn assemble(made: Adapters, environment: &Environment, seams: &Seams) -> Reading {
-        let Adapters { accounts, database, sessions, config, folders } = made;
+        let Adapters { accounts, database, sessions, config, folders, invites } = made;
         let clock = seams.clock.clone();
         let syncs = Arc::new(StoredOnly::new(database.clone(), sessions));
         let ai = Status::new(
@@ -55,6 +57,7 @@ impl Reading {
         let opening = MessageOpening {
             drafts: Drafts::new(database.clone(), Arc::new(DraftsFolder(folders)), clock.clone()),
             senders: SenderFacts::new(database.clone(), clock.clone()),
+            invites,
         };
         Reading {
             exports: Exports::new(database.clone(), seams.outside.clone(), clock.clone(), environment.temporary()),

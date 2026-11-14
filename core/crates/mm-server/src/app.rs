@@ -165,7 +165,7 @@ impl App {
             database: database.clone(),
             directory: directory.clone(),
             fetch: Arc::new(mm_mailbox::opening::StoredBody::new(database.clone())),
-            zones,
+            zones: zones.clone(),
             clock: seams.clock.clone(),
             zone: zone.clone(),
         });
@@ -183,6 +183,7 @@ impl App {
                 sessions,
                 config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
                 folders: folders.clone(),
+                invites: mm_calendar::invites::Invites::new(zones, zone.clone()),
             },
             environment,
             seams,

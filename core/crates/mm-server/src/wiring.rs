@@ -65,12 +65,13 @@ impl mm_mailbox::ports::AiStatus for AssistantStatus {
     }
 }
 
-/// What Compose and Discovery add to a message as it opens: a draft's id, and what is said of its sender. An invite
-/// it carries isn't read on the Rust server yet.
+/// What Compose, Discovery and the calendar add to a message as it opens: a draft's id, what is said of its sender,
+/// and the invite it carries.
 #[derive(Debug)]
 pub(crate) struct MessageOpening {
     pub(crate) drafts: mm_compose::drafts::Drafts,
     pub(crate) senders: mm_discovery::senders::SenderFacts,
+    pub(crate) invites: mm_calendar::invites::Invites,
 }
 
 impl mm_mailbox::ports::Opening for MessageOpening {
@@ -80,13 +81,7 @@ impl mm_mailbox::ports::Opening for MessageOpening {
         parts: &[mm_content::mime::Attachment],
         raw: &[u8],
     ) -> Result<(serde_json::Value, serde_json::Value), Fault> {
-        let invite = parts
-            .iter()
-            .any(|a| a.content_type.to_lowercase().contains("calendar") || a.filename.to_lowercase().ends_with(".ics"));
-        if invite && !raw.is_empty() {
-            return Err(mm_mailbox::ports::NOT_YET);
-        }
-        Ok((serde_json::Value::Null, serde_json::Value::Null))
+        Ok(self.invites.of(parts, raw))
     }
 
     fn draft_info(&self, row: &mm_mailbox::ports::Row) -> Result<mm_mailbox::ports::Row, Fault> {
