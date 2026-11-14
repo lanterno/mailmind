@@ -65,7 +65,8 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   `folder-synced` at the end of a folder's first scan, which waits on that scan (#31).
 - **The sync's remaining parts** · medium value · effort M · [#31](https://github.com/lanterno/mailmind/issues/31) — A folder that opens is answered
   from what is stored, and no first scan or catch-up starts (`mm_mailbox::opening::StoredOnly`, where Python runs
-  `folders.on_open`). `mm_mailbox::ingest` leaves out a person's arrival filters (Curation's `arrival_flags`) and the
+  `folders.on_open`); a message that opens with no stored body says it isn't served yet (`opening::StoredBody`, where
+  Python fetches it, `Ingest.fetch_body`, and prefetches the next). `mm_mailbox::ingest` leaves out a person's arrival filters (Curation's `arrival_flags`) and the
   invite a message carries kept with its body, which waits on the calendar's ICS reader (#6). A move's folder catch-up
   (`Folders.touched`) and the 1Password preload aren't ported either.
 - **One adapter for each port** · low value · effort S · [#32](https://github.com/lanterno/mailmind/issues/32) — The areas ported side by side left doubles: three
@@ -83,9 +84,12 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   rewritten best-effort (about a third of 1,500 random cases differ from Python's bytes), encoded words a person typed
   are decoded only in UTF-8, ASCII or Latin-1, a few broken-MIME drafts reopen differently, and an original fetched to
   reply to isn't stored.
-- **The in-process browser tests on the Rust server** · medium value · effort M · [#10](https://github.com/lanterno/mailmind/issues/10) — `tests/e2e/browser/in_process/` patches
-  the Python app's internals, so the ledger can't hold them. Each needs a way in through the Rust server's seams
-  (`Clock`, `Outside`, `Keychain`), or a served test that states the same thing.
+- **The mail frame's browser tests on the Rust server** · medium value · effort M · [#10](https://github.com/lanterno/mailmind/issues/10) — They are served
+  tests now, run against both servers, and take the sanitizer away through the protocol (`unsanitized on`). None passes
+  on the Rust server yet, for three reasons, none of them the frame's: a body that isn't stored isn't fetched as its
+  message opens (#31), and the reader calls `/api/upcoming` and `/api/ai/draft-ahead`, which answer 404 there (#6). With
+  bodies stored ahead and those two 404s set aside, 39 of `test_mail_frame.py` and `test_mail_frame_scripts.py`'s 40 pass
+  on it, every unsanitized case among them; the 40th opens a conversation whose bodies weren't stored. Waits on #6 and #31.
 - **The core runs the migrations** · high value · effort M · [#35](https://github.com/lanterno/mailmind/issues/35) — `mailmind-server`
   starts only over a database at the version it reads (`mm_store::schema::VERSION`, 51) and leaves making and upgrading
   one to the Python app. Before the flip, the core takes the migrations over from 52, with the backup before an upgrade
