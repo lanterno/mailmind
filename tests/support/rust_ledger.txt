@@ -625,3 +625,7 @@ tests/e2e/browser/test_brief.py::test_the_keys_undo_of_a_run_of_tidy_clears_the_
 tests/e2e/browser/test_ask.py::test_do_confirmed_archives_and_one_undo_brings_it_all_back
 tests/e2e/browser/test_ask.py::test_a_destructive_plan_takes_a_second_press
 tests/e2e/browser/test_brief.py::test_the_week_says_what_went_to_archive_and_what_the_invites_hold
+tests/api/test_http_ai.py::test_briefing_and_review_are_written_once_and_a_get_only_reads[/api/review]
+tests/e2e/browser/test_mail_frame.py::test_a_heads_style_sheet_applies_in_the_frame
+tests/e2e/browser/test_mail_frame.py::test_the_text_after_a_nested_form_button_or_select_shows
+tests/e2e/browser/test_mail_frame.py::test_what_a_browser_shows_of_a_dropped_element_shows_in_the_frame
