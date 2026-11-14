@@ -3,6 +3,10 @@
 //! The core does not migrate yet: these are for fixtures and tests. When the core takes over the database, its
 //! migrations continue from 52 and this file goes.
 
+/// The version of the Python app's database this core is written for: `PRAGMA user_version` once its migrations have
+/// run (`tests/golden/schema_v51.sql`). The core doesn't migrate yet, so the Rust server opens no other.
+pub const VERSION: i64 = 51;
+
 pub const LIST_TABLES: &str = "
 CREATE TABLE IF NOT EXISTS messages (
   pk           INTEGER PRIMARY KEY AUTOINCREMENT,

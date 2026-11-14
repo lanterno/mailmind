@@ -46,6 +46,16 @@ impl Database {
         work(&store.conn).map_err(|_| STORAGE)
     }
 
+    /// The database's version (`PRAGMA user_version`, which the Python app's migrations set), or None when there is
+    /// no database yet.
+    pub fn version(&self) -> Result<Option<i64>, Fault> {
+        self.outside.open(&self.path).map_err(|_| TRIPPED)?;
+        if !self.path.exists() {
+            return Ok(None);
+        }
+        self.read(|c| c.query_row("PRAGMA user_version", [], |r| r.get(0))).map(Some)
+    }
+
     /// The key it opens with, for a copy made with it (an export).
     pub(crate) fn key(&self) -> &DbKey {
         &self.key

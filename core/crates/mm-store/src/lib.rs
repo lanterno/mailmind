@@ -138,6 +138,11 @@ impl Store {
         Ok(Store { conn })
     }
 
+    /// Say the database is at `version`, as the Python app's migrations do. For fixtures and tests.
+    pub fn set_version(&self, version: i64) -> Result<(), Refusal> {
+        self.conn.execute_batch(&format!("PRAGMA user_version = {version}")).map_err(storage)
+    }
+
     /// The SQLCipher build this store runs, such as `4.6.1 community`.
     pub fn cipher_version(&self) -> Result<String, Refusal> {
         self.conn.query_row("PRAGMA cipher_version", [], |r| r.get(0)).map_err(storage)
