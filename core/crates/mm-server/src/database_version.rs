@@ -62,7 +62,7 @@ pub(crate) fn ready(database: &Database, clock: &dyn Clock) -> Result<(), String
 }
 
 /// What a person is told of a database that isn't ready.
-pub(crate) fn said(not: &NotReady) -> String {
+fn said(not: &NotReady) -> String {
     let (major, minor) = SQLITE_NEEDED;
     match not {
         NotReady::SqliteTooOld(found) => {
