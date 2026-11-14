@@ -39,24 +39,15 @@ Step 3 of the "MailMind client architecture" document is under way ([docs/client
 (`core/crates/mm-server`) takes over the Python app's routes one by one, and `tests/support/rust_ledger.txt` lists the
 served tests it passes against the same scripts. Until the flip, the Python app gets fixes only.
 
-- **Port the rest of the routes** · high value · effort M · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers every
-  route the page calls, the assistant's among them on `mm-claude`'s Claude API client and the cost governor, and
-  `just test-rust` holds 612 of the 625 served tests. Still short of the Python app: Ask's do-confirm, which says the
-  plan isn't served yet (`routes/assistant.rs`, `do_confirm`; 2 browser tests); a one-click
-  unsubscribe, which needs an HTTPS client (`cleanup_wiring::NoHttps`); the review's meetings, which say none until
-  `mm_calendar::agenda::Agenda::soonest` is wired in (`assistant_wiring.rs`; 1 browser test); batches (`assess --batch`); and
-  `/api/debug/ai`, `/api/debug/health` and `/api/debug/jobs`, which neither the page nor a served test calls. A summary's
-  body (`AssistantMail::fetch_text`) is fetched on a connection of its own rather than through the body fetch
-  (`mm_mailbox::fetching`), and isn't stored. `just test-rust-all` says what passes.
-- **The Rust server's background work** · high value · effort M · [#28](https://github.com/lanterno/mailmind/issues/28) — `mailmind-server` runs the change
-  queue's and the outbox's workers, the snooze, sync, reconcile, draft-push, expiry and forget rounds, and IDLE's workers, one
-  for each account, which follow the accounts as they change (`mm-server/src/workers.rs`, `mm_mailbox::realtime`);
-  `mm-served` drives the rounds one pass at a time through its `work` line. Still to come: the assistant's background
-  work (assess, drafting ahead, the brief and the review written ahead, and Tidy's run), with `mm-served`'s `work
-  assess` and `work tidy`, which answer that they aren't there yet, for the 7 and 3 served tests that wait on them;
-  `warm_tick` (a per-account `warm_folders`); and backfilling bodies. The forget round lets go of the Mailbox's
-  rows only: the Assistant's finished batches (Python's `answers.batch_forget_finished`) join it with the batches.
-  Each joins `Workers::start` as a `mm_mailbox::workers::Queue` or a timed lane.
+- **Port the rest of the routes** · medium value · effort M · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers every
+  route the page calls, and every served test passes on it: `just test-rust` holds all 628. Still short of the Python
+  app: batches, the Claude API's Message Batches that `assess --batch` sends at half the price (the Rust server triages
+  each message as it comes, as Python's does with `MAILMIND_NO_BATCHES`, and leaves alone what a Python batch holds);
+  and `/api/debug/ai`, `/api/debug/health` and `/api/debug/jobs`, which neither the page nor a served test calls.
+- **The Rust server's background work** · medium value · effort S · [#28](https://github.com/lanterno/mailmind/issues/28) — `mailmind-server` runs every
+  job the Python app's workers do (`mm-server/src/workers.rs`, `background.rs`) but two: `warm_tick` (a per-account
+  `warm_folders`) and backfilling bodies. Each joins `Workers::start` as a timed lane, and `mm-served`'s `work` line runs
+  one pass.
 - **1Password credentials on the Rust server** · low value · effort S · [#31](https://github.com/lanterno/mailmind/issues/31) — An account whose
   password is a 1Password reference can't log in there: `mm_accounts::Directory::password` refuses it
   (`CredentialStyleNotOnTheRustServerYet`). It needs a port that reads `op` through `Outside::run`, a cache for the
@@ -100,15 +91,14 @@ served tests it passes against the same scripts. Until the flip, the Python app 
 
 ## Showing and sorting mail
 
-- **Keep a message's head styles** · medium value · effort S · [#17](https://github.com/lanterno/mailmind/issues/17) — `mm_content::sanitize` drops a `<head>` with all it holds,
-  its `<style>` elements included, so newsletters styled from the head show plainer than they were sent. Keep those
-  sheets, sanitized as any other `<style>` is.
-- **End nested dropped elements where a browser ends them** · low value · effort S · [#18](https://github.com/lanterno/mailmind/issues/18) — a `<form>` inside a `<form>`, a
-  `<button>` inside a `<button>` or a `<select>` inside a `<select>` loses the text after it (`DROP_WITH_CONTENT` in
-  `sanitize/html.rs`). The head's fix (`HEAD_HOLDS`) is the mechanism.
-- **Show what a browser shows of dropped elements** · low value · effort M · [#19](https://github.com/lanterno/mailmind/issues/19) — `<noscript>` (the frame runs no script), an
-  `<object>`'s fallback, an unclosed `<xml>`, and the HTML a browser breaks out of `<svg>` and `<math>` to show are dropped
-  whole.
+- **Where the reader still differs from a browser** · low value · effort M · [#37](https://github.com/lanterno/mailmind/issues/37) — `mm_content::sanitize`
+  shows what a browser shows of the elements it drops, but stays short of it where that was safer: an `<object>` of an
+  image type or with file: or ftp: data, HTML inside an svg or math integration point (`foreignObject`, `desc`, `title`,
+  `annotation-xml`), `<applet>`'s content, a closed `<xml>`'s text, and a nested form a browser leaves open
+  (`<form>a<div>b<form>c</form>d</div>e</form>f` shows `f`, Chromium `ef`). It shows more than a browser of `<video>` and
+  `<audio>` content and of `<noembed>` and `<noframes>` text; an ancestor's end tag never ends a dropped element
+  (`<div><svg></div>after` loses `after`); `</br>` isn't a line break; and an unwrapped element loses its `class` and
+  `id`. A snippet still leaves out `<noscript>` text the reader now shows (`mime/fields.rs`).
 - **Reclassify mail sorted under the old patterns** · medium value · effort S · [#20](https://github.com/lanterno/mailmind/issues/20) — the core's classifier
   (`mm_curation::classifier`) no longer matches its patterns inside longer words, but mail sorted before keeps its bucket:
   only rows a rule covers are sorted again.
@@ -149,5 +139,5 @@ implementation.
 1. **The owner's two weeks on the Rust server** (high) — every route the page calls is served there and a message whose
    body isn't stored opens: `just run-rust` starts them, in place of `just run`, and they end in the flip (#11).
    `MAILMIND_WORKERS=account` (#3) can soak in them: both servers read it.
-2. **Step 3's last parts** (high) — the assistant's background work (#28) and what #6 lists: do-confirm, the review's
-   meetings and a one-click unsubscribe. See The move to the Rust core.
+2. **Step 3's last parts** (medium) — batches (#6), `warm_tick` and the body backfill (#28), and 1Password (#31).
+   See The move to the Rust core.
