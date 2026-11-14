@@ -1,7 +1,7 @@
 //! What a sync of one folder asks the server for, and the flags of a message as the columns hold them.
 
 use mm_mailbox::session::Search;
-use mm_mailbox::sync_plan::{CUT, WHOLE, columns_of, plan_flags, plan_folder, reads_bodies};
+use mm_mailbox::sync_plan::{CUT, WHOLE, columns_of, plan_flags, plan_folder, reads_bodies, still_to_say};
 
 #[test]
 fn a_folder_never_read_or_renumbered_is_read_whole() {
@@ -56,4 +56,22 @@ fn flags_are_read_whatever_case_the_server_wrote() {
     let said = ["\\SEEN".to_owned(), "\\flagged".to_owned(), "$Junk".to_owned()];
     assert_eq!(columns_of(&said), [1, 1, 0, 0, 0]);
     assert!(reads_bodies("inbox") && !reads_bodies("Sent"));
+}
+
+#[test]
+fn only_new_inbox_mail_is_arrival() {
+    let incremental = plan_folder(Some(7), Some(7), 40, false, None);
+    assert!(incremental.arrives_in("INBOX") && incremental.arrives_in("inbox"));
+    assert!(!incremental.arrives_in("Archive"), "another folder isn't arrival");
+    assert!(!plan_folder(Some(7), Some(7), 40, true, None).arrives_in("INBOX"), "a whole scan reads what was there");
+    assert!(!plan_folder(Some(7), None, 0, false, None).arrives_in("INBOX"), "so does a first one");
+}
+
+#[test]
+fn a_filter_says_only_what_the_row_lacks() {
+    let wanted = [("flagged", true), ("seen", true)];
+    assert_eq!(still_to_say(&wanted, &[1, 0, 0, 0, 0]), [("flagged", true)]);
+    assert!(still_to_say(&wanted, &[1, 1, 0, 0, 0]).is_empty());
+    assert_eq!(still_to_say(&wanted, &[0; 5]), wanted);
+    assert_eq!(still_to_say(&[("seen", false)], &[1, 0, 0, 0, 0]), [("seen", false)]);
 }
