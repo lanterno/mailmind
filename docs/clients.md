@@ -120,7 +120,9 @@ The first slice was the perimeter, ported check for check with the same statuses
 its files, `/api/accounts` and `/api/folders`. The second, four areas side by side, brought the Mailbox's reads, a
 message opened, search, rules and the Screener, the local states (snooze, mute, follow-ups, Reply Later, tasks), and
 IMAP with the sync and the change queue: on 2026-11-13 the server answered 64 of the Python app's 103 routes, and the
-ledger held 44 served tests. Any other route answers as no route does. How a slice is built:
+ledger held 44 served tests. On 2026-11-14 it answered every route the Python app does, the debug routes last, and
+every served test passed on it: step 3 was done, and the flip (step 4) waits on the owner's two weeks on it. How a
+slice is built:
 
 - **A use case goes in its context's crate** (`mm-mailbox`, `mm-discovery`, `mm-curation`, `mm-attention`,
   `mm-compose`, `mm-accounts`), with what it needs of the world as traits in that crate's `ports`. Its SQL goes in

@@ -35,14 +35,11 @@ L = a week-plus.
 
 ## The move to the Rust core
 
-Step 3 of the "MailMind client architecture" document is under way ([docs/clients.md](docs/clients.md)): the Rust server
-(`core/crates/mm-server`) takes over the Python app's routes one by one, and `tests/support/rust_ledger.txt` lists the
-served tests it passes against the same scripts. Until the flip, the Python app gets fixes only.
+Step 3 of the "MailMind client architecture" document is done ([docs/clients.md](docs/clients.md)): the Rust server
+(`core/crates/mm-server`) answers every route the Python app does, the debug routes last, and every served test passes
+on it against the same scripts, as `tests/support/rust_ledger.txt` and `just test-rust` hold. Until the flip, the
+Python app gets fixes only.
 
-- **Port the rest of the routes** · medium value · effort M · [#6](https://github.com/lanterno/mailmind/issues/6) — The Rust server answers every
-  route the page calls, and every served test passes on it, as `just test-rust` holds, and its assess job sends a
-  backlog as a batch as Python's does. Still short of the Python app: `/api/debug/ai`, `/api/debug/health` and
-  `/api/debug/jobs`, which neither the page nor a served test calls.
 - **One adapter for each port** · low value · effort S · [#32](https://github.com/lanterno/mailmind/issues/32) — The areas ported side by side left doubles: three
   readers of the rule book (`Database::rules_document`, `RulesDocument`, the Curation store's `RuleBook`), three ways of
   reading a POST's fields (`body::Fields`, `posted`, `schema`), two adapters naming the accounts (`wiring::KnownAccounts`,
@@ -61,9 +58,10 @@ served tests it passes against the same scripts. Until the flip, the Python app 
   starting at once on a fresh machine can each make a database key, the second's replacing the first's in the Keychain,
   where Python's second finds the first's (`database_version::made`).
 - **The flip** · high value · effort M · [#11](https://github.com/lanterno/mailmind/issues/11) — Step 4: when the served suites pass against both servers and the owner has used
-  the Rust server daily for two weeks (`just run-rust`), the Python server goes. Waits on #6. The two weeks can begin
-  now; what the Rust server doesn't do yet is under #6. Then step 5 moves the page from routes to the core's
-  views and commands, screen by screen, starting with the message list.
+  the Rust server daily for two weeks (`just run-rust`), the Python server goes. Step 3 is done, so it waits only on
+  those two weeks; `/api/debug/health`, `/api/debug/jobs` and `/api/debug/ai` say how the jobs, the queues and AI
+  spending stand meanwhile. Then step 5 moves the page from routes to the core's views and commands, screen by screen,
+  starting with the message list.
 
 ## The clients
 
@@ -126,7 +124,7 @@ implementation.
 
 ## Next up
 
-1. **The owner's two weeks on the Rust server** (high) — every route the page calls is served there and a message whose
-   body isn't stored opens: `just run-rust` starts them, in place of `just run`, and they end in the flip (#11).
-   `MAILMIND_WORKERS=account` (#3) can soak in them: both servers read it.
-2. **Step 3's last part** (small) — the debug routes (#6). See The move to the Rust core.
+1. **The owner's two weeks on the Rust server** (high) — step 3 is done: every route the Python app answers is served
+   there, the debug routes too, and a message whose body isn't stored opens. `just run-rust` starts them, in place of
+   `just run`, and they end in the flip (#11), which waits on nothing else. `MAILMIND_WORKERS=account` (#3) can soak in
+   them: both servers read it.
