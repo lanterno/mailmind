@@ -433,6 +433,28 @@ fn lines_ending_in_cr_alone_read_as_lines() {
     assert_eq!(parsed.to, "bo@example.test");
 }
 
+#[test]
+fn a_lone_cr_ends_a_delimiter_line_and_the_line_before_one() {
+    // Python ended a body's lines at a lone CR too: the part after the delimiter keeps its Content-Type, and one
+    // after a lone CR is found.
+    for (before, after) in [("\r\n", "\r"), ("\r", "\r\n"), ("\r", "\r"), ("\r\n", " \r")] {
+        let raw = message(&format!(
+            "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi{before}\
+             --b{after}Content-Type: text/html\r\n\r\n<b>x</b>\r\n--b--\r\n"
+        ));
+        assert_eq!(part(&raw, 1), Some((b"hi".to_vec(), "text/plain".to_owned())), "{before:?} {after:?}");
+        assert_eq!(part(&raw, 2), Some((b"<b>x</b>".to_vec(), "text/html".to_owned())), "{before:?} {after:?}");
+    }
+    // What follows the CR is the next line: here a part with no headers, its first line not one.
+    let junk = message(
+        "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\0\nContent-Type: text/plain\r\n\r\n\r\n--b--\r\n",
+    );
+    assert_eq!(part(&junk, 1), Some((b"\0\nContent-Type: text/plain\r\n\r\n".to_vec(), "text/plain".to_owned())));
+    // A close delimiter after a lone CR closes.
+    let closed = message("Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\nhi\r--b--\r\nepilogue\r\n");
+    assert_eq!((part(&closed, 1), part(&closed, 2)), (Some((b"hi".to_vec(), "text/plain".to_owned())), None));
+}
+
 // -- headers -------------------------------------------------------------------------------------------------------
 
 #[test]
