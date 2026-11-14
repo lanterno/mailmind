@@ -30,8 +30,9 @@ use mm_assistant::screening::Screening;
 use mm_assistant::sender_digest::SenderDigest;
 use mm_assistant::status::Status;
 use mm_assistant::thread_digest::ThreadDigest;
+use mm_calendar::agenda::Agenda;
 use mm_discovery::query::QuerySpec;
-use mm_kernel::errors::{Fault, NOT_YET};
+use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Keychain, Outside, Secret};
 use mm_kernel::zone::Zone;
 use mm_mailbox::fetching::{Fetching, FetchingParts};
@@ -179,7 +180,7 @@ const UI_QUIET: [&str; 9] = [
 impl Assistant {
     pub(crate) fn assemble(parts: Parts, environment: &Environment) -> Assistant {
         let Parts { database, accounts, servers, gates, config, keychain, outside, clock, zone } = parts;
-        let around = Arc::new(Surroundings { config: config.clone() });
+        let around = Arc::new(Surroundings::over(&database, config.clone(), &outside, &clock, &zone));
         let engine = Arc::new(ApiEngine {
             file: config.clone(),
             keychain,
@@ -343,18 +344,35 @@ impl PlanSearch for Planning {
     }
 }
 
-/// What a review reads beyond the mail: the calendar's invites, and the `weekly_review` preference.
-///
-/// The calendar's agenda (`mm_calendar::agenda::Agenda::soonest(at, limit, 60)`) isn't on this branch: until it is wired
-/// here a review says no meetings, as it does when the calendar can't be read.
+/// What a review reads beyond the mail: the calendar's invites, as Today & next reads them (`calendar.agenda`), and the
+/// `weekly_review` preference.
 #[derive(Debug)]
 pub(crate) struct Surroundings {
     config: Arc<dyn ConfigFile>,
+    agenda: Agenda,
+}
+
+/// The days of mail Today & next reads invites from (`upcoming`'s `days`).
+const AGENDA_DAYS: i64 = 60;
+
+impl Surroundings {
+    /// Over the invites stored mail holds, a TZID read in the system's zone database.
+    fn over(
+        database: &Arc<Database>,
+        config: Arc<dyn ConfigFile>,
+        outside: &Arc<dyn Outside>,
+        clock: &Arc<dyn Clock>,
+        zone: &Arc<dyn Zone>,
+    ) -> Surroundings {
+        let zones = Arc::new(mm_store::calendar::SystemZones::new(outside.clone()));
+        let roles = Arc::new(crate::calendar_wiring::NamedRoles);
+        Surroundings { config, agenda: Agenda::new(database.clone(), roles, zones, clock.clone(), zone.clone()) }
+    }
 }
 
 impl Around for Surroundings {
-    fn events_from(&self, _at: i64, _limit: usize) -> Result<Vec<Value>, Fault> {
-        Err(NOT_YET)
+    fn events_from(&self, at: i64, limit: usize) -> Result<Vec<Value>, Fault> {
+        self.agenda.soonest(at, limit, AGENDA_DAYS)
     }
 
     fn weekly_review(&self) -> Result<bool, Fault> {
