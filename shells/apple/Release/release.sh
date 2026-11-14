@@ -30,7 +30,7 @@ The owner makes the key once with Sparkle's generate_keys, puts its public half 
 docs/releasing.md, \"Once: the update-signing key\". Copies built without it could never be updated."
 fi
 
-for tool in xcodegen xcodebuild hdiutil codesign lipo; do
+for tool in xcodegen xcodebuild hdiutil codesign lipo python3; do
     command -v "$tool" >/dev/null || stop "$tool is missing (shells/apple/CLAUDE.md says what the build needs)"
 done
 # rustup's env file, where rustup put one. Sourcing a missing file ends bash at once, `|| true` or not.
@@ -73,6 +73,11 @@ xcodebuild -quiet -project "$here/MailMind.xcodeproj" -scheme MailMind-macOS -co
 built="$derived/Build/Products/Release/MailMind.app"
 app="$out/MailMind.app"
 ditto "$built" "$app"
+
+# Every licence the app has to carry, which MailMind › Acknowledgements shows. In the bundle before it is signed, so
+# the signature seals it.
+python3 -I "$here/Release/acknowledgements.py" "$app/Contents/Resources/Acknowledgements.txt" \
+    "$derived/SourcePackages/artifacts/sparkle/Sparkle/LICENSE"
 
 info() { /usr/libexec/PlistBuddy -c "Print :$1" "$app/Contents/Info.plist"; }
 version="$(info CFBundleShortVersionString)"
