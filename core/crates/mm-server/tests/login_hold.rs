@@ -181,6 +181,12 @@ fn world(otherwise: &'static str) -> World {
     let config = json!({"accounts": [{"email": ADA, "type": "imap", "host": "127.0.0.1", "port": imap.port,
                                       "starttls": false, "credential": {"keychain": format!("account:{ADA}")}}]});
     std::fs::write(home.path().join("mailmind.config.json"), config.to_string()).unwrap();
+    // At the version the server reads, as the Python app's migrations leave it.
+    let key = mm_store::DbKey::from_bytes([0x5e; 32]);
+    mm_store::Store::open(&home.path().join("mailmind.db"), &key)
+        .unwrap()
+        .set_version(mm_store::schema::VERSION)
+        .unwrap();
     let clock = Arc::new(Moving::default());
     let environment = Environment::from_pairs([("MAILMIND_DB_KEY", "5e".repeat(32).as_str())]);
     let settings = Settings { home: home.path().to_path_buf() };
