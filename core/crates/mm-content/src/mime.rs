@@ -279,9 +279,13 @@ fn reading(raw: &[u8]) -> Reading<'_> {
 /// One pass of mending: the header blocks' lines are split and ended as Python's were, or else, once they all are,
 /// bytes that read to mail-parser otherwise than to Python are replaced. None when there is nothing to mend.
 fn mend(raw: &[u8], message: &Message<'_>) -> Option<Vec<u8>> {
-    let mut insertions = header_insertions(raw, message);
-    insertions.extend(unread_tails(raw, message));
-    insertions.extend(lone_cr_delimiters(raw, message));
+    // A lone CR at a delimiter moves where a part starts, and with it the header block mail-parser read for the part:
+    // that block's mending waits for the next pass, or a line that ends it would go in twice.
+    let mut insertions = lone_cr_delimiters(raw, message);
+    if insertions.is_empty() {
+        insertions = header_insertions(raw, message);
+        insertions.extend(unread_tails(raw, message));
+    }
     // An empty boundary goes into each `--` line of its part's body, and ending a header block moves where that body
     // starts: those wait for the next pass, which reads the mended blocks.
     if insertions.is_empty() {
