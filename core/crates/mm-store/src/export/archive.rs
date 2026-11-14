@@ -320,3 +320,53 @@ pub(super) fn write_all<W: Write + Seek>(c: &Connection, zip: &mut Zip<W>, form:
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_name_is_made_fit_for_a_path_as_python_makes_it() {
+        assert_eq!(safe("ada@example.test", "acct"), "ada@example.test");
+        assert_eq!(safe("Folders/Clients", "folder"), "Folders_Clients");
+        assert_eq!(safe("[Gmail]/Sent Mail", "folder"), "[Gmail]_Sent Mail");
+        assert_eq!(safe("a//b", "x"), "a_b");
+        assert_eq!(safe("  ._.hidden._ ", "x"), "hidden");
+        assert_eq!(safe("a \t\u{a0} b", "x"), "a _ b");
+        assert_eq!(safe("a\u{2003}\u{2003}b", "x"), "a b");
+        assert_eq!(safe("", "7"), "7");
+        assert_eq!(safe("<>", "7"), "7");
+        assert_eq!(safe(&"é".repeat(70), "x"), "é".repeat(60));
+        assert_eq!(safe(&format!("a{}", "é".repeat(70)), "x"), format!("a{}", "é".repeat(59)));
+        assert_eq!(safe("a_/b", "x"), "a__b");
+        assert_eq!(safe("a_\u{1}_b", "x"), "a___b");
+        assert_eq!(safe("._ \u{2003}x", "x"), " x");
+    }
+
+    #[test]
+    fn a_stored_time_is_written_as_format_datetime_writes_it() {
+        assert_eq!(date("2026-11-02T12:00:00+00:00").as_deref(), Some("Mon, 02 Nov 2026 12:00:00 +0000"));
+        assert_eq!(date("2026-03-01T08:05:09-05:30").as_deref(), Some("Sun, 01 Mar 2026 08:05:09 -0530"));
+        assert_eq!(date("2026-03-01T08:05:09").as_deref(), Some("Sun, 01 Mar 2026 08:05:09 -0000"));
+        assert_eq!(date("2026-03-01T08:05:09+01:00:30").as_deref(), Some("Sun, 01 Mar 2026 08:05:09 +010030"));
+        assert_eq!(date("not a time"), None);
+        assert_eq!(date(""), None);
+    }
+
+    #[test]
+    fn a_value_goes_on_one_line() {
+        assert_eq!(one_line(Some(" a\r\n\r\nb\u{2028}c ")), "a b c");
+        assert_eq!(one_line(None), "");
+    }
+
+    #[test]
+    fn a_line_that_starts_from_gets_a_quote_before_it() {
+        let mut out = Vec::new();
+        mbox_message(&mut out, Some("2026-11-02T12:00:00+00:00"), b"Subject: x\r\n\r\nFrom here\n>From there\nFrom")
+            .unwrap();
+        assert_eq!(
+            out,
+            b"From mailmind@localhost 2026-11-02T12:00:00+00:00\nSubject: x\r\n\r\n>From here\n>>From there\nFrom\n\n"
+        );
+    }
+}

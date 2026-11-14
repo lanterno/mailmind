@@ -290,3 +290,205 @@ impl<W: Write + Seek> Zip<W> {
         Ok(self.out)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use std::io::{Cursor, Read};
+
+    use flate2::read::DeflateDecoder;
+
+    use super::*;
+
+    fn u16_at(b: &[u8], at: usize) -> u16 {
+        u16::from_le_bytes([b[at], b[at + 1]])
+    }
+
+    fn u32_at(b: &[u8], at: usize) -> u32 {
+        u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
+    }
+
+    fn u64_at(b: &[u8], at: usize) -> u64 {
+        u64::from_le_bytes(b[at..at + 8].try_into().unwrap())
+    }
+
+    /// An entry as a reader finds it: its name, its bytes, and whether its sizes and its offset came from ZIP64's.
+    #[derive(Debug, PartialEq)]
+    struct Read_ {
+        name: String,
+        bytes: Vec<u8>,
+        wide: bool,
+    }
+
+    /// Each entry of a zip as a reader finds it, from the end records (ZIP64's, when its locator is there) through
+    /// the central directory to its local header, its bytes inflated once its CRC-32 and sizes agree with them.
+    fn read_back(zip: &[u8]) -> (Vec<Read_>, bool) {
+        let end = zip.len() - 22;
+        assert_eq!(&zip[end..end + 4], b"PK\x05\x06");
+        let (mut count, mut start) = (u64::from(u16_at(zip, end + 10)), u64::from(u32_at(zip, end + 16)));
+        let records64 = end >= 20 && &zip[end - 20..end - 16] == b"PK\x06\x07";
+        if records64 {
+            let record = usize::try_from(u64_at(zip, end - 20 + 8)).unwrap();
+            assert_eq!(&zip[record..record + 4], b"PK\x06\x06");
+            (count, start) = (u64_at(zip, record + 32), u64_at(zip, record + 48));
+        }
+        let mut at = usize::try_from(start).unwrap();
+        let mut entries = Vec::new();
+        for _ in 0..count {
+            assert_eq!(&zip[at..at + 4], b"PK\x01\x02");
+            let crc = u32_at(zip, at + 16);
+            let (mut compressed, mut size) = (u64::from(u32_at(zip, at + 20)), u64::from(u32_at(zip, at + 24)));
+            let (name_len, extra_len) = (usize::from(u16_at(zip, at + 28)), usize::from(u16_at(zip, at + 30)));
+            let mut offset = u64::from(u32_at(zip, at + 42));
+            let name = String::from_utf8(zip[at + 46..at + 46 + name_len].to_vec()).unwrap();
+            let extra = &zip[at + 46 + name_len..at + 46 + name_len + extra_len];
+            let mut wide = (4..extra.len()).step_by(8).map(|i| u64_at(extra, i));
+            let mut from_wide = false;
+            if size == u64::from(IN_ZIP64) {
+                (size, compressed) = (wide.next().unwrap(), wide.next().unwrap());
+                from_wide = true;
+            }
+            if offset == u64::from(IN_ZIP64) {
+                offset = wide.next().unwrap();
+                from_wide = true;
+            }
+            assert_eq!(zip[at + 6], if extra_len > 0 { ZIP64_VERSION } else { VERSION }, "{name}");
+            let local = usize::try_from(offset).unwrap();
+            assert_eq!(&zip[local..local + 4], b"PK\x03\x04");
+            assert_eq!(u32_at(zip, local + 14), crc);
+            assert_eq!(&zip[local + 30..local + 30 + name_len], name.as_bytes());
+            let data = local + 30 + name_len + usize::from(u16_at(zip, local + 28));
+            let deflated = &zip[data..data + usize::try_from(compressed).unwrap()];
+            let mut bytes = Vec::new();
+            DeflateDecoder::new(deflated).read_to_end(&mut bytes).unwrap();
+            assert_eq!(bytes.len() as u64, size, "{name}");
+            let mut sum = Crc::new();
+            sum.update(&bytes);
+            assert_eq!(sum.sum(), crc, "{name}");
+            entries.push(Read_ { name, bytes, wide: from_wide });
+            at += 46 + name_len + extra_len + usize::from(u16_at(zip, at + 32));
+        }
+        (entries, records64)
+    }
+
+    /// Where each entry's local header starts, in order.
+    fn local_headers(zip: &[u8]) -> Vec<usize> {
+        let mut at = 0;
+        let mut found = Vec::new();
+        while &zip[at..at + 4] == b"PK\x03\x04" {
+            found.push(at);
+            let mut compressed = usize::try_from(u32_at(zip, at + 18)).unwrap();
+            let (name_len, extra_len) = (usize::from(u16_at(zip, at + 26)), usize::from(u16_at(zip, at + 28)));
+            if compressed == IN_ZIP64 as usize {
+                compressed = usize::try_from(u64_at(zip, at + 30 + name_len + 12)).unwrap();
+            }
+            at += 30 + name_len + extra_len + compressed;
+        }
+        found
+    }
+
+    const NOW: Moment = Moment::from_micros(1_793_620_800_000_000);
+
+    fn read(name: &str, bytes: &[u8]) -> Read_ {
+        Read_ { name: name.to_owned(), bytes: bytes.to_vec(), wide: false }
+    }
+
+    #[test]
+    fn each_entry_reads_back_as_it_was_given() {
+        let long = "mail ".repeat(20_000);
+        let mut zip = Zip::new(Cursor::new(Vec::new()), NOW, PYTHONS);
+        zip.entry("ada@example.test/INBOX/one-1.eml", Some(5), |out| out.write_all(b"hello")).unwrap();
+        zip.entry("ada@example.test/INBOX.mbox", None, |out| {
+            for piece in long.as_bytes().chunks(777) {
+                out.write_all(piece)?;
+            }
+            Ok::<(), io::Error>(())
+        })
+        .unwrap();
+        zip.entry("ada@example.test/Entw\u{fc}rfe/empty-2.eml", Some(0), |_| Ok::<(), io::Error>(())).unwrap();
+        let zip = zip.finish().unwrap().into_inner();
+        let (entries, records64) = read_back(&zip);
+        assert!(!records64);
+        assert_eq!(
+            entries,
+            [
+                read("ada@example.test/INBOX/one-1.eml", b"hello"),
+                read("ada@example.test/INBOX.mbox", long.as_bytes()),
+                read("ada@example.test/Entw\u{fc}rfe/empty-2.eml", b""),
+            ]
+        );
+        let headers = local_headers(&zip);
+        assert_eq!(headers.len(), 3);
+        // One whose size wasn't known kept room for a ZIP64 one; a name that isn't ASCII says it is UTF-8.
+        assert_eq!(u16_at(&zip, headers[0] + 28), 0);
+        assert_eq!(u16_at(&zip, headers[1] + 28), 20);
+        assert_eq!(u16_at(&zip, headers[1] + 30 + "ada@example.test/INBOX.mbox".len()), 1);
+        assert_eq!(u16_at(&zip, headers[2] + 6) & UTF8_NAME, UTF8_NAME);
+        assert_eq!(u16_at(&zip, headers[0] + 6) & UTF8_NAME, 0);
+        // Each made on Unix, its owner's alone.
+        let directory = zip.windows(4).position(|w| w == b"PK\x01\x02").unwrap();
+        assert_eq!(zip[directory + 5], UNIX);
+        assert_eq!(u32_at(&zip, directory + 38), 0o100_600 << 16);
+    }
+
+    #[test]
+    fn what_fill_fails_with_ends_the_writing() {
+        let mut zip = Zip::new(Cursor::new(Vec::new()), NOW, PYTHONS);
+        let failed = zip.entry("x.eml", None, |_| Err::<(), io::Error>(io::Error::other("refused")));
+        assert!(failed.is_err());
+    }
+
+    /// Limits small enough that a few bytes are past them, so ZIP64's fields and records are written for a test.
+    const SMALL: Limits = Limits { size: 100, count: 3 };
+
+    #[test]
+    fn sizes_and_offsets_past_the_old_fields_go_in_zip64s() {
+        // Bytes that don't deflate to less, so the next entry starts past the limit too.
+        let big: Vec<u8> = (0u32..150).map(|n| (n.wrapping_mul(2_654_435_761) >> 13) as u8).collect();
+        let mut zip = Zip::new(Cursor::new(Vec::new()), NOW, SMALL);
+        zip.entry("big.mbox", None, |out| out.write_all(&big)).unwrap();
+        zip.entry("late.eml", Some(1), |out| out.write_all(b"y")).unwrap();
+        let zip = zip.finish().unwrap().into_inner();
+        let (entries, records64) = read_back(&zip);
+        // The first is past in size, which its header says too; the second is past in where it starts.
+        assert_eq!(
+            entries,
+            [
+                Read_ { name: "big.mbox".to_owned(), bytes: big, wide: true },
+                Read_ { name: "late.eml".to_owned(), bytes: b"y".to_vec(), wide: true },
+            ]
+        );
+        assert_eq!(zip[4], ZIP64_VERSION);
+        assert_eq!(u32_at(&zip, 22), IN_ZIP64);
+        assert_eq!(u64_at(&zip, 30 + "big.mbox".len() + 4), 150);
+        // The directory starts past the limit, so the end records are ZIP64's too.
+        assert!(records64);
+    }
+
+    #[test]
+    fn an_entry_past_the_limit_that_kept_no_room_is_refused() {
+        let mut zip = Zip::new(Cursor::new(Vec::new()), NOW, SMALL);
+        let refused = zip.entry("said-small.eml", Some(10), |out| out.write_all(&[b'z'; 150]));
+        assert!(refused.is_err());
+    }
+
+    #[test]
+    fn more_entries_than_the_old_fields_count_take_the_zip64_end_records() {
+        let mut zip = Zip::new(Cursor::new(Vec::new()), NOW, Limits { size: PYTHONS.size, count: 3 });
+        for n in 0..4 {
+            zip.entry(&format!("{n}.eml"), Some(1), |out| out.write_all(b"x")).unwrap();
+        }
+        let zip = zip.finish().unwrap().into_inner();
+        let (entries, records64) = read_back(&zip);
+        assert!(records64);
+        assert_eq!(entries.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), ["0.eml", "1.eml", "2.eml", "3.eml"]);
+        assert!(entries.iter().all(|e| e.bytes == b"x" && !e.wide));
+    }
+
+    #[test]
+    fn the_time_is_written_as_ms_dos_keeps_one() {
+        // 2026-11-02 12:00:00
+        assert_eq!(dos(NOW), (12 << 11, (46 << 9) | (11 << 5) | 2));
+    }
+}
