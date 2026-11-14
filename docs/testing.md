@@ -103,6 +103,9 @@ with the CSRF token its page carries, and over a line protocol on its standard i
   `world.deliver` runs after delivering. `tests/support/serve_python.py` says what each does.
 - `settle` waits for the work requests started (`app.settle()`), and `check` fails the test on what the server's own checks refused:
   a schema an answer broke, the tripwire.
+- `unsanitized on` (`app.unsanitized()`) has the bodies the reader and its frame show come back as they were given, as if the
+  sanitizer had missed everything, so a test shows the frame's sandbox and policy hold alone; `off` sanitizes them again. The
+  Python launcher patches its own process; `mm-served` hands the Rust server a sanitizer it can switch off, through its seams.
 - The end of its input stops it; `app.restart()` starts it again on the same port, over what it stored.
 
 A test there may read the database file, whose schema the golden `schema_v<N>.sql` pins, and change it only while the server is
@@ -111,10 +114,11 @@ server do something: the server is another process, which that never reaches. A 
 Python app's insides stays in-process, in `tests/characterization/`. Each test starts a server, which takes about a second.
 
 The Rust server (`core/crates/mm-server`) is held to the same suites through `core/crates/mm-served`, its launcher for them: the
-frozen clock, a tripwire equal to `guard.py`, and `fake_keychain`'s file, each handed to the server through its seams. What it
-answers yet is on the ledger, `tests/support/rust_ledger.txt`, one test id a line. `just test-rust` builds the launcher and runs
-the ledger's tests against it; `just verify` runs it. When `MAILMIND_TEST_LEDGER` names the ledger, every served test (`tests/api`,
-and `tests/e2e/browser` but `in_process/`) not on it is `xfail(strict=True, reason="not on the Rust server yet")`, so
+frozen clock, a tripwire equal to `guard.py`, `fake_keychain`'s file and a sanitizer `unsanitized on` takes away, each handed to
+the server through its seams. `mailmind-server`'s seams (`real::seams`) have the sanitizer itself, and nothing in it can take it
+away. What the Rust server answers yet is on the ledger, `tests/support/rust_ledger.txt`, one test id a line. `just test-rust`
+builds the launcher and runs the ledger's tests against it; `just verify` runs it. When `MAILMIND_TEST_LEDGER` names the ledger,
+every served test (`tests/api` and `tests/e2e/browser`) not on it is `xfail(strict=True, reason="not on the Rust server yet")`, so
 `just test-rust-all` runs them all against the Rust server and one that passes errors with `XPASS(strict)`: put it on the
 ledger. A test goes on the ledger only once it passes against both servers, and the `served` workflow runs both on one commit.
 
@@ -154,8 +158,8 @@ changes, outages, refusals, crashes (in a click and on the worker), syncs, Undo,
 
 `tests/e2e/browser/` drives the app in Chromium (Playwright), serving the real build, made once for the session into a folder of
 its own. Its `app` is the server as a program, as in `tests/api/` and under the same rules, so the page's tests hold any server to
-what the Python one does. A test that can only work by patching the app's insides (a timing constant, a stubbed sanitizer) is in
-`tests/e2e/browser/in_process/`, where `app` is the app in the test's own process. In both:
+what the Python one does. The mail frame's tests that take `unsanitized`, and the `wall` cases without a sanitizer, have the
+server take its sanitizer away through the protocol (`app.unsanitized()`), to show the sandbox holds alone. In every test:
 
 - The page may reach only the app's origin.
 - Its clock starts at the server's frozen time.

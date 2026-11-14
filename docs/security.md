@@ -67,7 +67,10 @@ alone cannot execute script. Preserve that ordering when touching either. The sa
 writes everything itself, every tag from the allowlist and every value escaped, so what it returns is safe however the
 input was written. The CSS it writes reads in a browser as it was checked: no comment mark, line break or backslash,
 and every string and bracket closed by its own match. One check over all it writes holds that (`written`, in
-`sanitize/css.rs`), and writes nothing where it fails.
+`sanitize/css.rs`), and writes nothing where it fails. The browser tests take the sanitizer away (`unsanitized on`, on
+either server) to show the sandbox and the frame's own policy hold alone. On the Rust server that makes it a seam
+(`Seams.sanitizer`), which only the test launcher fills with anything else: `mailmind-server`'s seams (`real::seams`)
+have the sanitizer itself, and nothing in it reads a setting that could turn it off.
 
 The reader's frame loads `GET /api/message/body.html?key=<key>&folder=<folder>&uid=<uid>&images=0|1`
 (`Bodies.copy_document`), the same sanitized HTML as `/api/message/body` or the plain text escaped, under

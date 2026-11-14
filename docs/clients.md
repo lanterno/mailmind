@@ -89,7 +89,7 @@ What the numbers say:
 **Step 1.** The golden suites and the browser tests run against the server as a program
 (`tests/support/served.py`, `serve_python.py`): they reach it only through HTTP and a line protocol that sets its
 clock and runs its jobs (`work outbox`, `work sync`, `settle`), so a Rust server can be held to the same tests. The
-browser tests that patch the app's internals stand apart in `tests/e2e/browser/in_process/`.
+mail frame's tests take the sanitizer away through it too (`unsanitized on`), to show the sandbox holds alone.
 
 **Step 2.** The pure functions the Python app calls now run in the core, through `mailmind_leaves`
 (`core/crates/mm-py`, PyO3, built by maturin as a uv path dependency, so `uv run` builds it):
