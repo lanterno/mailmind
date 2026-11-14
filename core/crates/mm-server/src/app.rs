@@ -235,8 +235,13 @@ impl App {
             stats: stats.clone(),
         }));
         // Curation's and Attention's, which file and queue through the Mailbox, and whose changes Undo takes back.
-        let curation_filing = Arc::new(CurationFiling { filing: filing.clone(), stats: stats.clone() });
-        let curation = crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone, curation_filing);
+        let curation_filing = Arc::new(CurationFiling {
+            filing: filing.clone(),
+            stats: stats.clone(),
+            store: Arc::new(mm_store::curation::CurationStore::new(database.clone(), seams.clock.clone())),
+        });
+        let curation =
+            crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone, curation_filing.clone());
         let flags = Arc::new(FilingFlags(filing.clone()));
         let attention = crate::bound::Attention::assemble(&database, &directory, &seams.clock, &zone, flags, heard);
         let undo = Undo::new(
@@ -252,22 +257,13 @@ impl App {
             ],
         );
         let jobs = Arc::new(Jobs::new(seams.clock.clone()));
-        // A sender's cleanup and a sweep, with a filing of their own.
+        // A sender's cleanup and a sweep, which file as the Screener does.
         let cleanups = crate::cleanup_wiring::Cleanups::assemble(crate::cleanup_wiring::CleanupsParts {
             database: database.clone(),
             directory: directory.clone(),
             servers: servers.clone(),
             gates: gates.clone(),
-            filing: Filing::new(FilingParts {
-                commands: commands.clone(),
-                ingest: ingest.clone(),
-                folders: folders.clone(),
-                gates: gates.clone(),
-                clock: seams.clock.clone(),
-                events: mailbox_events.clone(),
-                tokens: Arc::new(RandomTokens::default()),
-                stats: stats.clone(),
-            }),
+            filing: curation_filing,
             clock: seams.clock.clone(),
             secret: csrf.clone(),
             read_only: environment.read_only(),

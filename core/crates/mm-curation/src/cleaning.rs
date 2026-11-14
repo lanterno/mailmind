@@ -11,8 +11,8 @@ use mm_kernel::log;
 use mm_kernel::seams::Clock;
 use serde_json::{Value, json};
 
-use crate::cleanup_ports::{CleanupFiling, CleanupMail, ConfirmTokens, Ids, NamedCopy, SweepTrail, Target};
-use crate::ports::{RuleBook, SenderMail};
+use crate::cleanup_ports::{CleanupMail, ConfirmTokens, Ids, NamedCopy, SweepTrail, Target};
+use crate::ports::{Filing, RuleBook, SenderMail};
 use crate::rulebook::{domain_of, token_of};
 use crate::screener::reclassify;
 use crate::unsubscribe::{self, TOKEN_LIFE, TOKEN_PURPOSE, Unsubscribing};
@@ -172,7 +172,7 @@ pub struct CleaningParts {
     pub classified: Arc<dyn SenderMail>,
     pub mail: Arc<dyn CleanupMail>,
     pub unsubscribing: Unsubscribing,
-    pub filing: Arc<dyn CleanupFiling>,
+    pub filing: Arc<dyn Filing>,
     pub audit: Arc<dyn SweepTrail>,
     pub tokens: Arc<dyn ConfirmTokens>,
     pub ids: Arc<dyn Ids>,
@@ -185,7 +185,7 @@ pub struct Cleaning {
     classified: Arc<dyn SenderMail>,
     mail: Arc<dyn CleanupMail>,
     unsubscribing: Unsubscribing,
-    filing: Arc<dyn CleanupFiling>,
+    filing: Arc<dyn Filing>,
     audit: Arc<dyn SweepTrail>,
     tokens: Arc<dyn ConfirmTokens>,
     ids: Arc<dyn Ids>,

@@ -8,6 +8,7 @@ use std::fmt;
 use mm_kernel::errors::{Failure, Fault};
 use serde_json::Value;
 
+use crate::cleanup_ports::NamedCopy;
 use crate::rulebook::Rules;
 
 /// The rule book's one reader and writer.
@@ -82,10 +83,17 @@ pub trait Mailboxes: Send + Sync + fmt::Debug {
     fn known(&self) -> Result<HashSet<String>, Fault>;
 }
 
-/// What Curation asks of the Mailbox: a change that reaches a mail server, and the counts it keeps.
+/// What Curation asks of the Mailbox (`FilingCommands`): a change that reaches a mail server, the undo stack, and the
+/// counts it keeps.
 pub trait Filing: Send + Sync + fmt::Debug {
     /// Trash the stored copy `pk` now, with nothing for Undo to reverse: whether it went or will go.
     fn trash_now(&self, pk: i64) -> Result<bool, Fault>;
+    /// Trash the stored copy `pk`, as a click on it would, under the undo group: filing's answer.
+    fn trash(&self, pk: i64, group: &str) -> Result<Value, Failure>;
+    /// Trash these copies as filing marked rows does, under the undo group: its answer, which names each one filed.
+    fn trash_many(&self, rows: &[NamedCopy], group: &str) -> Result<Value, Failure>;
+    /// Put `entry` on the undo stack under `group`.
+    fn undo_push(&self, entry: &Value, group: &str) -> Result<(), Fault>;
     /// What is stored was classified again: the counts the page shows have moved.
     fn stats_changed(&self);
 }

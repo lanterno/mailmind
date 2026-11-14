@@ -1,6 +1,6 @@
 //! A sender's cleanup, its unsubscribe and a sweep bound to their adapters (`bootstrap.curation`'s `_Filing`,
-//! `_ListHeaders`, `_Mailboxes`, `_SafeHttp` and `_SystemSend`): the Mailbox's filing and its servers, each account's
-//! gate, the confirm tokens under this run's secret, and Curation's store.
+//! `_ListHeaders`, `_Mailboxes`, `_SafeHttp` and `_SystemSend`): the filing the Screener files through, the Mailbox's
+//! servers, each account's gate, the confirm tokens under this run's secret, and Curation's store.
 //!
 //! The two ways an unsubscribe leaves this machine aren't here yet: the one-click POST wants an HTTPS client, and a
 //! mailto: wants the outbox. Each says it isn't ready, so a cleanup that would use one answers as not yet served
@@ -13,16 +13,14 @@ use std::time::Duration;
 use mm_accounts::Directory;
 use mm_curation::cleaning::{Cleaning, CleaningParts};
 use mm_curation::cleanup_ports::{
-    CleanupFiling, ConfirmTokens, Ids, ListHeaders, LiveError, LiveInboxes, LiveSession, NamedCopy, SafeHttp,
-    SweptAccount, SystemSend, UnsubRow,
+    ConfirmTokens, Ids, ListHeaders, LiveError, LiveInboxes, LiveSession, SafeHttp, SweptAccount, SystemSend, UnsubRow,
 };
 use mm_curation::sweeping::{Sweeps, SweepsParts};
 use mm_curation::unsubscribe::{Unsubscribing, UnsubscribingParts};
-use mm_kernel::errors::{Failure, Fault};
+use mm_kernel::errors::Fault;
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_mailbox::command_ports::Tokens;
-use mm_mailbox::filing::Filing;
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait, on_gate};
 use mm_mailbox::session::{self, MailServer, MailServers, Search, ServerError};
 use mm_store::Database;
@@ -37,31 +35,6 @@ const TAG: &str = "cleanup";
 const UNSUB_READ_WAIT: Duration = Duration::from_secs(5);
 /// How long a sweep's session waits on each answer from a server.
 const SESSION_TIMEOUT: u64 = 60;
-
-/// What the cleanup asks of the Mailbox: its filing, and the undo stack in Curation's store.
-#[derive(Debug)]
-pub(crate) struct MailboxFiling {
-    pub(crate) filing: Filing,
-    pub(crate) store: Arc<CurationStore>,
-}
-
-impl CleanupFiling for MailboxFiling {
-    fn trash(&self, pk: i64, group: &str) -> Result<Value, Failure> {
-        self.filing.file("trash", pk, Some(group), None, None)
-    }
-
-    fn trash_many(&self, rows: &[NamedCopy], group: &str) -> Result<Value, Failure> {
-        let rows: Vec<(NamedCopy, bool)> = rows.iter().map(|copy| (copy.clone(), false)).collect();
-        self.filing.file_many("trash", &rows, Some(group), None)
-    }
-
-    fn undo_push(&self, entry: &Value, group: &str) -> Result<(), Fault> {
-        self.store.push_undo(entry, group)
-    }
-
-    /// The counts are read afresh from what is stored each time they are asked: there is nothing kept to drop.
-    fn stats_changed(&self) {}
-}
 
 /// One stored message's unsubscribe headers, asked of its server on its account's gate, waiting a moment at most.
 #[derive(Debug)]
@@ -271,8 +244,8 @@ pub(crate) struct CleanupsParts {
     pub(crate) directory: Arc<Directory>,
     pub(crate) servers: Arc<dyn MailServers>,
     pub(crate) gates: Arc<dyn Gates>,
-    /// The Mailbox's filing, its own: it files as `App::filing` does.
-    pub(crate) filing: Filing,
+    /// What Curation asks of the Mailbox's filing, as the Screener asks it.
+    pub(crate) filing: Arc<dyn mm_curation::ports::Filing>,
     pub(crate) clock: Arc<dyn Clock>,
     /// This run's secret, which the confirm tokens are keyed with.
     pub(crate) secret: String,
@@ -283,7 +256,6 @@ impl Cleanups {
     pub(crate) fn assemble(parts: CleanupsParts) -> Cleanups {
         let CleanupsParts { database, directory, servers, gates, filing, clock, secret, read_only } = parts;
         let store = Arc::new(CurationStore::new(database, clock.clone()));
-        let filing = Arc::new(MailboxFiling { filing, store: store.clone() });
         let ids: Arc<dyn Ids> = Arc::new(RandomIds::default());
         let unsubscribing = Unsubscribing::new(UnsubscribingParts {
             mail: store.clone(),

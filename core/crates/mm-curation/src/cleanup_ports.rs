@@ -1,10 +1,11 @@
 //! What a sender's cleanup, its unsubscribe and a sweep need of the world (`mailmind.curation.application.ports`): the
-//! stored mail they read and Curation's own tables, the Mailbox's filing and Undo, the mail servers, the two ways an
-//! unsubscribe goes out, the sweep trail and the confirm tokens. The store and the program implement them.
+//! stored mail they read and Curation's own tables, the mail servers, the two ways an unsubscribe goes out, the sweep
+//! trail and the confirm tokens. The store and the program implement them; what they ask of the Mailbox's filing is
+//! Curation's `ports::Filing`.
 
 use std::fmt;
 
-use mm_kernel::errors::{Failure, Fault};
+use mm_kernel::errors::Fault;
 use serde_json::Value;
 
 use crate::unsubscribe::{Attempt, Logged, UnsubWay};
@@ -88,18 +89,6 @@ pub trait SystemSend: Send + Sync + fmt::Debug {
 
 /// A copy as a request names it: its message's key, its folder and its uid there.
 pub type NamedCopy = (i64, String, Option<i64>);
-
-/// What a cleanup asks of the Mailbox: file a message through the command path, and keep what reverses a block.
-pub trait CleanupFiling: Send + Sync + fmt::Debug {
-    /// Trash the stored copy `pk`, as a click on it would, under the undo group: filing's answer.
-    fn trash(&self, pk: i64, group: &str) -> Result<Value, Failure>;
-    /// Trash these copies as filing marked rows does, under the undo group: its answer, which names each one filed.
-    fn trash_many(&self, rows: &[NamedCopy], group: &str) -> Result<Value, Failure>;
-    /// Put `entry` on the undo stack under `group`.
-    fn undo_push(&self, entry: &Value, group: &str) -> Result<(), Fault>;
-    /// Stored mail changed: what counts it may say so.
-    fn stats_changed(&self);
-}
 
 /// A message a sweep trashes, as the sweep trail records it.
 #[derive(Clone, Debug, PartialEq, Eq)]

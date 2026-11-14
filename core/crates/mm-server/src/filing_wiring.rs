@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use mm_attention::muting::Muting;
 use mm_attention::snoozing::Snoozing;
+use mm_curation::cleanup_ports::NamedCopy;
 use mm_curation::screener::Screener;
 use mm_kernel::errors::{Failure, Fault};
 use mm_kernel::log;
@@ -14,6 +15,7 @@ use mm_mailbox::filing::Filing;
 use mm_mailbox::stats::LiveStats;
 use mm_mailbox::sync_ports::AroundSync;
 use mm_mailbox::undo::{Reversed, Reverser};
+use mm_store::curation::CurationStore;
 use serde_json::Value;
 
 use crate::workers::Jobs;
@@ -29,17 +31,33 @@ impl mm_attention::ports::Flags for FilingFlags {
     }
 }
 
-/// What Curation's Screener asks of the Mailbox: a blocked sender's copy trashed with nothing for Undo, and the counts
-/// let go once a rule moved them.
+/// What Curation asks of the Mailbox (`bootstrap.curation`'s `_Filing`): a blocked sender's copy trashed with nothing
+/// for Undo; a cleanup's trashing, under its undo group, and the block's reversal on the undo stack beside it; and the
+/// counts let go once a rule moved them.
 #[derive(Debug)]
 pub(crate) struct CurationFiling {
     pub(crate) filing: Arc<Filing>,
     pub(crate) stats: Arc<LiveStats>,
+    /// Where the undo stack is kept.
+    pub(crate) store: Arc<CurationStore>,
 }
 
 impl mm_curation::ports::Filing for CurationFiling {
     fn trash_now(&self, pk: i64) -> Result<bool, Fault> {
         self.filing.trash_now(pk)
+    }
+
+    fn trash(&self, pk: i64, group: &str) -> Result<Value, Failure> {
+        self.filing.file("trash", pk, Some(group), None, None)
+    }
+
+    fn trash_many(&self, rows: &[NamedCopy], group: &str) -> Result<Value, Failure> {
+        let rows: Vec<(NamedCopy, bool)> = rows.iter().map(|copy| (copy.clone(), false)).collect();
+        self.filing.file_many("trash", &rows, Some(group), None)
+    }
+
+    fn undo_push(&self, entry: &Value, group: &str) -> Result<(), Fault> {
+        self.store.push_undo(entry, group)
     }
 
     fn stats_changed(&self) {

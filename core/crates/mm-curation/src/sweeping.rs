@@ -11,8 +11,8 @@ use mm_kernel::seams::Clock;
 use serde_json::{Map, Value, json};
 
 use crate::classifier::{self, Bucket};
-use crate::cleanup_ports::{Audited, CleanupFiling, LiveError, LiveInboxes, LiveSession, SweepTrail, SweptRows};
-use crate::ports::RuleBook;
+use crate::cleanup_ports::{Audited, LiveError, LiveInboxes, LiveSession, SweepTrail, SweptRows};
+use crate::ports::{Filing, RuleBook};
 use crate::rules::RuleSets;
 use crate::sweep_plan::tally;
 
@@ -137,7 +137,7 @@ pub struct SweepsParts {
     pub boxes: Arc<dyn LiveInboxes>,
     pub audit: Arc<dyn SweepTrail>,
     pub rows: Arc<dyn SweptRows>,
-    pub filing: Arc<dyn CleanupFiling>,
+    pub filing: Arc<dyn Filing>,
     pub clock: Arc<dyn Clock>,
     /// False in a read-only process, which moves nothing.
     pub writes_allowed: bool,
@@ -149,7 +149,7 @@ pub struct Sweeps {
     boxes: Arc<dyn LiveInboxes>,
     audit: Arc<dyn SweepTrail>,
     rows: Arc<dyn SweptRows>,
-    filing: Arc<dyn CleanupFiling>,
+    filing: Arc<dyn Filing>,
     clock: Arc<dyn Clock>,
     writes_allowed: bool,
 }
