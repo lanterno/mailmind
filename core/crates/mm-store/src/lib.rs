@@ -21,6 +21,8 @@ pub mod compose;
 pub mod config;
 // The stored copy a request names.
 pub mod copies;
+// Calendar's: the invites stored mail holds, what the outbox has sent and the zone a TZID names.
+pub mod calendar;
 // Curation's: the rule book, classifications and the audit trail.
 pub mod curation;
 // What Curation reads of each stored inbox.

@@ -8,9 +8,10 @@ use mm_kernel::seams::Outside;
 use mm_kernel::zone::{Rule, Tzif, Utc, Zone};
 
 /// Where the system keeps its zone files.
-const ZONEINFO: &str = "/usr/share/zoneinfo";
+pub(crate) const ZONEINFO: &str = "/usr/share/zoneinfo";
 
-fn read(path: &Path, outside: &dyn Outside) -> Option<Tzif> {
+/// The zone file at `path`, None where it can't be opened or isn't one.
+pub(crate) fn read(path: &Path, outside: &dyn Outside) -> Option<Tzif> {
     outside.open(path).ok()?;
     Tzif::parse(&std::fs::read(path).ok()?)
 }
