@@ -56,6 +56,7 @@ struct MailboxColumn: View {
         .sheet(isPresented: carding) {
             if let address = mailbox.contact { ContactCard(mailbox: mailbox, address: address) }
         }
+        .focusedSceneValue(\.mailbox, mailbox)
         .onAppear { mailbox.undoManager = undoManager }
         .onChange(of: undoManager) { _, now in mailbox.undoManager = now }
     }

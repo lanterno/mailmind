@@ -11,6 +11,7 @@ struct MailMindApp: App {
         .commands {
             UpdateCommands()
             AcknowledgementsCommands()
+            MailboxCommands()
         }
         #if os(macOS)
         .defaultSize(width: 560, height: 820)
