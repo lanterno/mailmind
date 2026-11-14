@@ -19,7 +19,7 @@ from email.header import decode_header
 from email.utils import format_datetime, getaddresses
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 from mailmind.content import mime
@@ -656,13 +656,46 @@ def test_generated_messages_with_lf_line_ends_read_as_python_read_them(raw):
     assert_same(raw)
 
 
+def holds_a_delimiter_python_read_as_text(raw: bytes) -> bool:
+    """Whether a line holds a delimiter of one of the message's multiparts with more on it than Python's parser let a
+    delimiter line hold (`--b` then `--`, blanks and the line break, by its `boundaryendRE`), a close delimiter cut to
+    one dash among them. The core reads such a line as a delimiter, where Python read it as text in a part:
+    test_a_line_that_holds_a_delimiter_delimits."""
+    try:
+        msg = email.message_from_bytes(raw, policy=policy.default)
+        separators = {"--" + boundary for part in msg.walk() if (boundary := part.get_boundary())}
+    except Exception:
+        return False
+    lines = re.findall(r"[^\r\n]*(?:\r\n|\r|\n)?", raw.decode("ascii", "surrogateescape"))   # as Python split them
+    return any(separator in line and not (line.startswith(separator)
+                                          and re.match(r"(--)?[ \t]*(\r\n|\r|\n)?$", line[len(separator):]))
+               for line in lines for separator in separators)
+
+
+# Broken messages Hypothesis found, held every run. A multipart cut off after the CR of a delimiter's line break, which
+# Python read as the line's end and an empty part after it, as the core does now.
+CUT_AFTER_A_CR = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: Ada Lin <ada@example.test>, "
+                  b'"Mr. Ed" <bo.lin@example.test>, =?utf-8?B?5pel5pys?= <Noreply@mail.example.test>\r\nReply-To: Ada Lin '
+                  b"<ada@example.test>, Ada Lin <x+tag@example.test>, =?utf-8?B?5pel5pys?= <Noreply@studio.example.test>\r\n"
+                  b'Content-Type: multipart/report; boundary="=_part_0"\r\n\r\nThis is a multi-part message in MIME format.\r\n'
+                  b"--=_part_0\r")
+# And a close delimiter cut to one dash, which ends the part before it for the core and was its text for Python.
+CLOSE_CUT_TO_ONE_DASH = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\nTo: ada@example.test, "
+                         b"=?utf-8?B?5pel5pys?= <Noreply@mail.example.test>\r\nReply-To: Ada Lin <ada@example.test>, Ada Lin "
+                         b"<x+tag@example.test>, =?utf-8?B?5pel5pys?= <Noreply@studio.example.test>\r\nContent-Type: "
+                         b'multipart/report; boundary="=_part_0"\r\n\r\nThis is a multi-part message in MIME format.\r\n'
+                         b"--=_part_0\r\nContent-Type: text/plain\r\n\r\n\r\n--=_part_0-")
+
+
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(broken())
+@example(CUT_AFTER_A_CR)
+@example(CLOSE_CUT_TO_ONE_DASH)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
-    body cut mid-character decodes to other garbage, a delimiter with junk after it opens a part for the core. So
-    this holds what matters: the core answers whatever comes, what it lists it hands over whole, and it finds every
-    part Python found, with the same bytes where nothing had to be guessed."""
+    body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
+    core. So this holds what matters: the core answers whatever comes, what it lists it hands over whole, and it finds
+    every part Python found, with the same bytes where nothing had to be guessed."""
     new = core_reading(raw)
     parts = new["parts"]
     for a in new["attachments"]:
@@ -678,7 +711,9 @@ def test_a_broken_message_loses_no_part_python_found(raw):
     assert len(parts) >= len(old_parts)
     if [t for _, t in parts] == [t for _, t in old_parts]:
         assert (new["text"] is None, new["html"] is None) == (old["text"] is None, old["html"] is None)
-        if b"base64" not in raw.lower():
+        # A line that holds a delimiter with junk on it delimits for the core, where Python kept it as text in a part:
+        # that part's bytes differ on purpose (test_a_line_that_holds_a_delimiter_delimits).
+        if b"base64" not in raw.lower() and not holds_a_delimiter_python_read_as_text(raw):
             assert [p for p in parts if not p[1].startswith("message/")] == [p for p in old_parts if not str(p[1]).startswith("message/")]
 
 
