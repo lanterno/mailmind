@@ -44,6 +44,7 @@ tests/api/test_http_local.py::test_reply_later_pins_and_unpins
 tests/api/test_http_settings.py::test_reconcile_prunes_what_the_server_no_longer_has
 tests/api/test_http_settings.py::test_sync_retry_runs_a_sync_for_that_account
 tests/api/test_http_settings.py::test_refresh_syncs_every_account
+tests/api/test_http_settings.py::test_the_digest_and_each_accounts_health_say_how_the_sync_stands
 tests/api/test_http_get.py::test_accounts_rules_views_and_audit
 tests/api/test_http_events.py::test_a_queued_move_that_lands_tells_the_open_tabs
 tests/api/test_http_events.py::test_a_queued_move_the_server_refuses_tells_the_open_tabs

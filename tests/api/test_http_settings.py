@@ -127,6 +127,28 @@ def test_refresh_syncs_every_account(app, golden, world):
     golden.record("the digest's sync status", app.get("/api/accounts"))
 
 
+def test_the_digest_and_each_accounts_health_say_how_the_sync_stands(app, world):
+    """What the status pill reads: none has run at the start, then every account synced and what the round came to."""
+    before = app.get("/api/digest").json
+    assert before["sync"] == {"running": False, "last": None, "result": "idle"}
+    assert before["status"] == {}
+    assert {h["live"] for h in app.get("/api/account-health").json["accounts"]} == {""}
+
+    world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml",
+                                                   Message_ID="<lunch-4@example.test>", Subject="Re: Lunch, again"))
+    app.post("/api/refresh", {})
+    app.settle()
+
+    after = app.get("/api/digest").json
+    assert after["sync"]["running"] is False
+    assert after["sync"]["last"] == after["generated"]
+    assert after["sync"]["result"].endswith(" new") and after["sync"]["result"] != "0 new"
+    assert {a: s["health"] for a, s in after["status"].items()} == {w.ADA: "ok", w.BEA: "ok", w.CY: "ok"}
+    assert after["status"][w.ADA]["msg"].startswith("+")
+    health = app.get("/api/account-health").json["accounts"]
+    assert {h["account"]: h["live"] for h in health} == {w.ADA: "ok", w.BEA: "ok", w.CY: "ok"}
+
+
 def test_known_contacts(app, golden):
     post(app, golden, "who is known", "/api/contacts/known", {"addrs": [
         "lin@example.test", "LIN@example.test", "Lin Mori <lin@example.test>", "noor@studio.example.test",
