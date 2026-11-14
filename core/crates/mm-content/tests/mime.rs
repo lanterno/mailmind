@@ -380,6 +380,35 @@ fn a_bare_boundary_with_no_equals_is_an_empty_one() {
 }
 
 #[test]
+fn a_parameter_after_a_vertical_tab_reads_as_python_read_it() {
+    // Python took a vertical tab, a form feed or \x1c to \x1f for white space at a name's edges, and at a boundary's
+    // end.
+    let body = "\r\n\r\n--b1\r\nContent-Type: text/plain\r\n\r\nfirst\r\n--b1\r\nContent-Type: text/html\r\n\r\n\
+                <b>x</b>\r\n--b1--\r\n";
+    for param in
+        ["\x0bboundary=\"b1\"", "boundary\x0c=b1", "\x1c boundary \x1f= b1\x0b", "charset=x;\x1eboundary=\"b1\""]
+    {
+        let raw = message(&format!("Content-Type: multipart/mixed; {param}{body}"));
+        assert_eq!(part(&raw, 2), Some((b"<b>x</b>".to_vec(), "text/html".to_owned())), "{param:?}");
+    }
+    let bare = message(
+        "Content-Type: multipart/mixed; \x0bboundary\r\n\r\npre\r\n--\r\nContent-Type: text/plain\r\n\r\nfirst\r\n--\r\n\r\nsecond\r\n",
+    );
+    assert_eq!(part(&bare, 2), Some((b"second".to_vec(), "text/plain".to_owned())));
+    let charset = message(
+        "Content-Type: text/plain; \x0bcharset=iso-8859-2\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n=B1\r\n",
+    );
+    assert_eq!(text(&charset).as_deref(), Some("\u{105}\r\n"));
+    // One inside a name, or at the start of a value, Python kept.
+    let inside = message(&format!("Content-Type: multipart/mixed; bound\x0bary=\"b1\"{body}"));
+    assert_eq!(part(&inside, 2), None);
+    let value_start = message(
+        "Content-Type: multipart/mixed; boundary=\x0bb1\r\n\r\n--\x0bb1\r\nContent-Type: text/plain\r\n\r\nfirst\r\n--\x0bb1--\r\n",
+    );
+    assert_eq!(part(&value_start, 1), Some((b"first".to_vec(), "text/plain".to_owned())));
+}
+
+#[test]
 fn a_boundary_whose_quote_never_closed_is_an_empty_one() {
     // Python read `boundary="` with only blanks after the quote as `boundary=""`, and split at `--` lines.
     for header in ["boundary=\"", "boundary = \" ", "charset=x; boundary=\""] {
