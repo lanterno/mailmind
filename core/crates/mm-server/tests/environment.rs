@@ -18,3 +18,18 @@ fn printing_the_environment_names_its_variables_and_shows_no_value() {
         assert!(!shown.contains(value), "{shown}");
     }
 }
+
+#[test]
+fn the_bridges_password_and_its_1password_item_are_read_as_set_and_empty_is_unset() {
+    let env = Environment::from_pairs([
+        ("MAILMIND_PROTON_BRIDGE_PASS", " bridge-password "),
+        ("MAILMIND_PROTON_OP_ITEM", "Proton Bridge"),
+    ]);
+    let given = env.bridge();
+    assert_eq!(given.password.as_ref().map(mm_kernel::seams::Secret::expose), Some(" bridge-password "));
+    assert_eq!(given.op_reference().as_deref(), Some("op://Private/Proton Bridge/password"));
+    let given =
+        Environment::from_pairs([("MAILMIND_PROTON_BRIDGE_PASS", ""), ("MAILMIND_PROTON_OP_ITEM", "")]).bridge();
+    assert!(given.password.is_none() && given.op_item.is_none());
+    assert!(Environment::default().bridge().op_reference().is_none());
+}
