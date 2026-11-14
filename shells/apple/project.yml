@@ -81,6 +81,9 @@ targets:
       - Sources/Window/MailList.swift
       # The acknowledgements a release carries
       - Sources/Acknowledgements.swift
+      # Settings, the first run and the status, their models and views
+      - Sources/Mac/Settings
+      - Sources/Mac/Status
     dependencies:
       - framework: build/MailMindCore.xcframework
         embed: false
