@@ -353,14 +353,25 @@ type Insertion = (usize, &'static [u8]);
 /// What goes into each header block of the message's own parts for mail-parser to read its lines as Python did. Its
 /// attached emails are sent on as they came, and are left as they are.
 fn header_insertions(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
-    let mut insertions = Vec::new();
+    let mut insertions: Vec<Insertion> = Vec::new();
     for part in message.root().parts() {
         let headers = part.raw_headers();
         if let Some(start) = offset_in(raw, headers) {
+            if leads_with_a_blank_fold(raw.get(start..).unwrap_or_default()) {
+                insertions.push((start, b"X:"));
+            }
             header_block(headers, start, &mut insertions);
         }
     }
     insertions
+}
+
+/// Whether a header block's first line holds only blanks, then a line break. Python read it as a header line, a fold
+/// with no header to fold into, and left it out, where mail-parser ends the block there: a name goes in before it,
+/// for a header no one reads, and the lines after it stay the block's.
+fn leads_with_a_blank_fold(block: &[u8]) -> bool {
+    let blanks = block.iter().take_while(|&&byte| byte == b' ' || byte == b'\t').count();
+    blanks > 0 && block.get(blanks).is_some_and(|&byte| byte == b'\r' || byte == b'\n')
 }
 
 /// A header block's lines as Python's parser read them. A lone CR ends a line, so an LF goes in after it; a lone CR
