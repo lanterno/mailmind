@@ -6,10 +6,12 @@ import SwiftUI
 /// SwiftUI's `List` kept state for every row it had shown and spent up to 300 ms a frame deep in a long list;
 /// a table with fixed rows knows where every row is without asking, and reuses a screenful of cells.
 struct MessageTable: NSViewRepresentable {
-    let model: ListModel
+    let model: any MessageRows
+    /// What a row chosen (or none) does. Without it, as in step 0's list, rows aren't selected.
+    var choose: (@MainActor (Int?) -> Void)?
 
     func makeCoordinator() -> MessageTableController {
-        MessageTableController(model)
+        MessageTableController(model, choose: choose)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -29,11 +31,13 @@ struct MessageTable: NSViewRepresentable {
 final class MessageTableController: NSObject, NSTableViewDataSource, NSTableViewDelegate, ListDisplay {
     let scrollView = NSScrollView()
     private let table = NSTableView()
-    private let model: ListModel
+    private let model: any MessageRows
+    private let choose: (@MainActor (Int?) -> Void)?
     private lazy var report = OncePerFrame { [weak self] in self?.reportVisible() }
 
-    init(_ model: ListModel) {
+    init(_ model: any MessageRows, choose: (@MainActor (Int?) -> Void)? = nil) {
         self.model = model
+        self.choose = choose
         super.init()
         table.style = .plain
         table.headerView = nil
@@ -43,8 +47,8 @@ final class MessageTableController: NSObject, NSTableViewDataSource, NSTableView
         // Rows touch, so row n starts at n times the row height.
         table.intercellSpacing = .zero
         table.gridStyleMask = []
-        // Step 0 opens nothing, so rows are not selected, as the list before did not select them.
-        table.selectionHighlightStyle = .none
+        // Step 0 opens nothing, so its rows are not selected; the window's open the one chosen.
+        table.selectionHighlightStyle = choose == nil ? .none : .regular
         table.allowsColumnReordering = false
         table.allowsColumnResizing = false
         table.focusRingType = .none
@@ -98,7 +102,21 @@ final class MessageTableController: NSObject, NSTableViewDataSource, NSTableView
         // Every row the table has made, on screen or prepared just past it; the rest are drawn fresh when they come.
         table.enumerateAvailableRowViews { rowView, row in
             guard positions.contains(row), let cell = rowView.view(atColumn: 0) as? MessageCell else { return }
-            cell.show(model.held[row])
+            cell.show(model.row(at: row))
+        }
+        // New mail above the chosen row moves it: keep the message chosen, not the position.
+        if let chosen = model.chosenPosition {
+            select(chosen)
+        }
+    }
+
+    /// Choose the row at a position as a person would, or none: what a list keeps chosen when its rows move.
+    func select(_ position: Int?) {
+        guard choose != nil, position != (table.selectedRow >= 0 ? table.selectedRow : nil) else { return }
+        if let position, position < model.total {
+            table.selectRowIndexes(IndexSet(integer: position), byExtendingSelection: false)
+        } else {
+            table.deselectAll(nil)
         }
     }
 
@@ -110,12 +128,16 @@ final class MessageTableController: NSObject, NSTableViewDataSource, NSTableView
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let cell = tableView.makeView(withIdentifier: MessageCell.identifier, owner: nil) as? MessageCell ?? MessageCell()
-        cell.show(model.held[row])
+        cell.show(model.row(at: row))
         return cell
     }
 
     func selectionShouldChange(in tableView: NSTableView) -> Bool {
-        false
+        choose != nil
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        choose?(table.selectedRow >= 0 ? table.selectedRow : nil)
     }
 }
 

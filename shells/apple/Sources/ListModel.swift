@@ -49,11 +49,28 @@ protocol ListDisplay: AnyObject {
     func rowsChanged(_ positions: IndexSet, totalChanged: Bool)
 }
 
+/// What a message table draws: how many rows there are, the row at a position when it has it, and which rows are on
+/// screen. Step 0's list (`ListModel`, over the core's `ListView`) and the window's (`MailListModel`, over the route the
+/// page lists mail with) both are one.
+@MainActor
+protocol MessageRows: AnyObject {
+    var total: Int { get }
+    var display: (any ListDisplay)? { get set }
+    func row(at position: Int) -> MessageRow?
+    func setVisible(_ rows: Range<Int>)
+    /// Where the message chosen is now, when its row is held: the table keeps it chosen as rows move.
+    var chosenPosition: Int? { get }
+}
+
+extension MessageRows {
+    var chosenPosition: Int? { nil }
+}
+
 /// One open list as the screen sees it: how many rows there are, and the few near the screen.
 /// It decides nothing about mail: the order, the rows and what to keep all come from the core.
 @MainActor
 @Observable
-final class ListModel {
+final class ListModel: MessageRows {
     // The table hears of a batch through `display`, so a batch redraws nothing through SwiftUI.
     @ObservationIgnored private(set) var total = 0
     @ObservationIgnored private(set) var held = HeldRows()
@@ -89,6 +106,10 @@ final class ListModel {
     /// of a window only when it moves.
     func setVisible(_ rows: Range<Int>) {
         ask(rows.clamped(to: 0..<total))
+    }
+
+    func row(at position: Int) -> MessageRow? {
+        held[position]
     }
 
     private func ask(_ window: Range<Int>) {
