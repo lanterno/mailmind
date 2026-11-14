@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::workers::Stop;
-use mm_server::workers::{Jobs, RoundOutcome, reconcile_timing};
+use mm_server::workers::{Jobs, RoundOutcome, expire_timing, reconcile_timing};
 use serde_json::json;
 
 #[derive(Debug)]
@@ -102,4 +102,12 @@ fn reconcile_runs_at_most_twice_a_minute_and_first_within_two_minutes_or_not_at_
     assert_eq!(reconcile_timing(10), Some((30, 10)));
     assert_eq!(reconcile_timing(0), None);
     assert_eq!(reconcile_timing(-1), None);
+}
+
+#[test]
+fn the_expiry_rules_run_at_their_interval_and_first_within_three_minutes_or_not_at_all() {
+    assert_eq!(expire_timing(3600), Some((3600, 180)));
+    assert_eq!(expire_timing(60), Some((60, 60)));
+    assert_eq!(expire_timing(0), None);
+    assert_eq!(expire_timing(-5), None);
 }

@@ -118,7 +118,7 @@ fn listed(app: &App, id: i64) -> Value {
 fn a_send_brought_forward_is_taken_at_once_by_the_worker() {
     let home = tempfile::tempdir().unwrap();
     let app = app(home.path(), "full");
-    let workers = Workers::start(&app, false, 0);
+    let workers = Workers::start(&app, false, 0, 0);
     assert!(app.jobs.names().contains(&"draft-push"), "{:?}", app.jobs.names());
     let id = queued(&app);
     // The worker waits out the send's ten-second window, the clock is frozen: only the kick that Send now gives
@@ -142,7 +142,7 @@ fn a_send_brought_forward_is_taken_at_once_by_the_worker() {
 fn a_process_that_only_reads_starts_neither() {
     let home = tempfile::tempdir().unwrap();
     let app = app(home.path(), "read-only");
-    let workers = Workers::start(&app, true, 0);
+    let workers = Workers::start(&app, true, 0, 0);
     assert_eq!(app.jobs.names(), ["snooze"]);
     workers.stop();
 }
