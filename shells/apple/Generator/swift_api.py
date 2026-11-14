@@ -23,8 +23,9 @@ SWIFT_RESERVED = {
     "if", "in", "repeat", "return", "throw", "switch", "where", "while", "as", "false", "is", "nil", "self", "Self", "super",
     "throws", "true", "try", "Type", "Protocol", "any", "some",
 }
-# What APISupport.swift declares by hand, which no schema may be named.
-SUPPORT = {"JSONValue", "Route", "GetRoute", "PostRoute", "NotJSON", "Union", "API"}
+# What APISupport.swift declares by hand and the Swift names the types use, which no schema may be named.
+SUPPORT = {"JSONValue", "Route", "GetRoute", "PostRoute", "NotJSON", "Union", "API", "Get", "Post",
+           "String", "Int", "Double", "Bool", "Set", "Codable", "Hashable", "Sendable", "CaseIterable"}
 PRIMITIVES = {"string": "String", "integer": "Int", "number": "Double", "boolean": "Bool"}
 HEADER = """\
 // Written by `just apple gen-api` from the routes' schemas: the OpenAPI document tests/support/openapi_doc.py makes, as the
@@ -274,33 +275,35 @@ class Writer:
         unions = {name for method in routes.values() for kind, name, _, _ in method if kind == "union"}
         if unions & {type_name(name) for name in self.schemas}:
             sys.exit(f"routes' unions named as schemas: {sorted(unions & {type_name(n) for n in self.schemas})}")
-        out = [HEADER]
+        # Every type is API's, so a schema named as one of Swift's (Task) or the app's own hides nothing outside it.
+        out = [HEADER, "/// The routes' answers and bodies, each route under /api/ by method (`API.Get`, `API.Post`).", "public enum API {}", ""]
+        out.append("extension API {")
+        inner = "    "
         for name in sorted(self.schemas):
             schema = self.schemas[name]
             values = self.string_set(schema)
             if "properties" in schema or schema.get("type") == "object":
-                out += self.struct(name, schema)
+                out += self.struct(name, schema, inner)
             elif values is not None:
-                out += self.string_enum(type_name(name), values, schema.get("description"))
+                out += self.string_enum(type_name(name), values, schema.get("description"), inner)
             else:
                 kind, _ = self.swift_type(schema, type_name(name), "value")
-                out.append(f"public typealias {type_name(name)} = {kind}")
+                out.append(f"{inner}public typealias {type_name(name)} = {kind}")
             out.append("")
         while self.inline:
             owner, name, members = self.inline.pop(0)
             values = self.string_set({"anyOf": members})
-            out += self.string_enum(name, values) if values is not None else self.union(name, members)
+            out += self.string_enum(name, values, indent=inner) if values is not None else self.union(name, members, indent=inner)
             out.append("")
         for method in ("get", "post"):
             for kind, name, what, _ in routes[method]:
                 if kind == "union":
-                    out += self.union(name, what)
+                    out += self.union(name, what, indent=inner)
                     out.append("")
-        # Each route is declared in API, and says what it answers in an extension: inside API.Get a route named for a
-        # schema (Digest) would hide it, and an extension's body looks its names up here, at the top.
-        out.append("/// Each route under /api/ by method: what it answers (`NotJSON` for what isn't JSON) and what a POST takes.")
-        out.append("public enum API {")
+        # Each route is declared here and says what it answers in an extension of its own, naming API's types in full:
+        # inside API.Get a route named for a schema (Digest) would hide it.
         for method in ("get", "post"):
+            out.append(f"    /// Each route under /api/ a {method.upper()} reaches.")
             out.append(f"    public enum {method.capitalize()} {{")
             for kind, name, what, _ in routes[method]:
                 if kind == "route":
@@ -316,9 +319,9 @@ class Writer:
                 out.append("")
                 out.append(f"extension API.{method.capitalize()}.{name}: {protocol} {{")
                 out.append(f"    public static let path = {literal(path)}")
-                out.append(f"    public typealias Answer = {answer}")
+                out.append(f"    public typealias Answer = {answer if answer == 'NotJSON' else 'API.' + answer}")
                 if method == "post":
-                    out.append(f"    public typealias Body = {body or 'NoBody'}")
+                    out.append(f"    public typealias Body = API.{body or 'NoBody'}")
                 out.append("}")
         return "\n".join(out) + "\n"
 
