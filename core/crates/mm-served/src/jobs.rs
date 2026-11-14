@@ -22,6 +22,8 @@ pub fn work(app: &App, argument: &str) -> String {
         // Compose's: a pass of the outbox, and a round of the drafts' pushes.
         "outbox" => app.compose.delivery.deliver().map_err(|fault| fault.class.to_owned()),
         "drafts" => app.compose.drafting.push_round().map(drop).map_err(|fault| fault.class.to_owned()),
+        // The forget round's Mailbox part: keys with no copy left and finished changes, a month on.
+        "forget" => app.forgetting.round().map(drop).map_err(|fault| fault.class.to_owned()),
         _ => return format!("failed {job}: not on the Rust server yet"),
     };
     match done {
