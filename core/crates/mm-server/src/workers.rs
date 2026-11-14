@@ -195,8 +195,8 @@ pub fn expire_timing(interval: i64) -> Option<(i64, i64)> {
 
 impl Workers {
     /// Start the background work (`wiring.start`): the minute's round always, since it needs no mail server; and,
-    /// unless the process only reads, each durable queue's worker (the change queue's), the sync, reconcile and the
-    /// expiry rules. `reconcile_secs` is about how long reconcile takes to go round every account, and `expire_secs`
+    /// unless the process only reads, each durable queue's worker (the change queue's), the sync, reconcile, the
+    /// expiry rules and IDLE's workers. `reconcile_secs` is about how long reconcile takes to go round every account, and `expire_secs`
     /// the seconds between the expiry rules' rounds, each 0 for never.
     pub fn start(app: &Arc<App>, read_only: bool, reconcile_secs: i64, expire_secs: i64) -> Workers {
         let stop = Arc::new(Stop::default());
