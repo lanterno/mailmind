@@ -622,3 +622,6 @@ tests/api/test_http_post_guards.py::test_only_a_post_that_gets_past_the_guards_c
 tests/e2e/browser/test_brief.py::test_a_dismissed_run_of_tidy_stays_dismissed
 tests/e2e/browser/test_brief.py::test_the_brief_says_what_tidy_filed_shows_it_and_takes_it_all_back
 tests/e2e/browser/test_brief.py::test_the_keys_undo_of_a_run_of_tidy_clears_the_strip
+tests/e2e/browser/test_ask.py::test_do_confirmed_archives_and_one_undo_brings_it_all_back
+tests/e2e/browser/test_ask.py::test_a_destructive_plan_takes_a_second_press
+tests/e2e/browser/test_brief.py::test_the_week_says_what_went_to_archive_and_what_the_invites_hold
