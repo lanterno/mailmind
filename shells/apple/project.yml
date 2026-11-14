@@ -79,6 +79,8 @@ targets:
       # The client over the core in this process, and the window's list over it
       - Sources/Client
       - Sources/Window/MailList.swift
+      # The acknowledgements a release carries
+      - Sources/Acknowledgements.swift
     dependencies:
       - framework: build/MailMindCore.xcframework
         embed: false
