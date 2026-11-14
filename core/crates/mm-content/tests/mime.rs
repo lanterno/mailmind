@@ -380,10 +380,27 @@ fn a_bare_boundary_with_no_equals_is_an_empty_one() {
 }
 
 #[test]
+fn a_boundary_whose_quote_never_closed_is_an_empty_one() {
+    // Python read `boundary="` with only blanks after the quote as `boundary=""`, and split at `--` lines.
+    for header in ["boundary=\"", "boundary = \" ", "charset=x; boundary=\""] {
+        let raw = message(&format!(
+            "Content-Type: multipart/mixed; {header}\r\n\r\npre\r\n--\r\nContent-Type: text/plain\r\n\r\nfirst\r\n--\r\n\r\nsecond\r\n"
+        ));
+        assert_eq!(part(&raw, 1), Some((b"first".to_vec(), "text/plain".to_owned())), "{header}");
+        assert_eq!(part(&raw, 2), Some((b"second".to_vec(), "text/plain".to_owned())), "{header}");
+    }
+    // One with more after the quote is that value.
+    let valued = message(
+        "Content-Type: multipart/mixed; boundary=\"x\r\n\r\npre\r\n--x\r\nContent-Type: text/plain\r\n\r\nfirst\r\n--x--\r\n",
+    );
+    assert_eq!((part(&valued, 1), part(&valued, 2)), (Some((b"first".to_vec(), "text/plain".to_owned())), None));
+}
+
+#[test]
 fn an_empty_boundary_still_splits_when_a_line_of_dashes_ends_the_header_block() {
     // The `--` line ends the header block, so the body it starts is the one split: ending the block and splitting it
     // in one pass split the body mail-parser had read past that line, and lost the part.
-    for boundary in ["boundary", "boundary=\"\""] {
+    for boundary in ["boundary", "boundary=\"\"", "boundary=\""] {
         let raw = message(&format!("Content-Type: multipart/alternative; {boundary}\r\n--\r\n=\"x\"\r\n\r\nbody\r\n"));
         assert_eq!(part(&raw, 1), Some((b"=\"x\"\r\n\r\nbody".to_vec(), "text/plain".to_owned())), "{boundary}");
     }
