@@ -99,6 +99,7 @@ def test_hwf_a_slow_catch_up_answers_with_what_is_stored_then_says_what_came(app
     archive = f"/api/messages?account={w.ADA}&folder=Archive"
     monkeypatch.setattr(mailbox.folders, "CATCH_UP_WAIT", 0.1)
     before = len(app.get(archive).json["items"])
+    assert wait_until(lambda: not mailbox.folders._folder_syncs)     # the first open's catch-up ends before the late mail comes
     world.server.deliver(w.ADA, "Archive", late())
     monkeypatch.setattr(mailbox.folders, "CATCH_UP_EVERY", 0)
     with held_elsewhere(w.ADA):
