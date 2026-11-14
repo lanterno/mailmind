@@ -251,7 +251,8 @@ automatically.
   nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
   `uv run python -m mailmind ai key` keeps the key in the login Keychain and points `"anthropic_api_key"` in
-  `mailmind.config.json` at it (or name it there with `{"op": …}` / `{"env": …}`, like an account password), and
+  `mailmind.config.json` at it (`POST /api/ai/key` does the same from the Mac app, and `POST /api/ai/key/clear`
+  takes it out; or name it there with `{"op": …}` / `{"env": …}`, like an account password), and
   that wins over `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
   accident. The server's startup line names the model and where the key came from.
   The sync menu names the model, and in red the reason ("the API key was rejected",
@@ -677,8 +678,10 @@ back, and the startup line `[imap] …` says how many accounts asked.
   sweeps. Run `uv run python -m mailmind inventory you@company.com` to see the real names.
 - **Proton** — install and run Proton Mail Bridge, then supply the Bridge
   password via `MAILMIND_PROTON_BRIDGE_PASS`, a 1Password item
-  (`MAILMIND_PROTON_OP_ITEM`), or `~/.config/mailmind/proton_bridge_pass`
-  (chmod 600). Only a server on this machine (`127.0.0.1`, `localhost`, `::1`) skips
+  (`MAILMIND_PROTON_OP_ITEM`), the login Keychain (`proton-bridge-password`, which the
+  Mac app's Settings keep through `POST /api/accounts/bridge-password`), or
+  `~/.config/mailmind/proton_bridge_pass` (chmod 600), first found first; the Rust
+  server reads no file. Only a server on this machine (`127.0.0.1`, `localhost`, `::1`) skips
   certificate verification, because Bridge's certificate is self-signed. Instead MailMind
   pins the certificate it meets first, in the account's `tls_pins`, and from then on sends no
   password to a server that shows another. If you reinstall or reset Bridge, Settings says the
@@ -770,7 +773,8 @@ In the repo folder, or in the directory `MAILMIND_HOME` names:
   readable by you only.
 
 The login Keychain's items under the service `mailmind` hold the rest: `database-key`, each account's password
-(`account:<address>`) and the Claude API key (`anthropic-api-key`).
+(`account:<address>`), the Claude API key (`anthropic-api-key`) and the Proton Bridge's password
+(`proton-bridge-password`).
 
 All of the above are in `.gitignore`, and a `MAILMIND_HOME` outside the repo keeps them out of
 it altogether. **Nothing personal is committed.**

@@ -30,7 +30,12 @@ See [Architecture](architecture.md) for the layers around them.
   `account:<address>`, and writes `{"keychain": item, "version": n}`: a new one replaces what the item held and is the next
   version (`keychain_credential`), so IDLE logs in afresh and a process that read the last one reads it again. Removing the
   account takes its item out, and a Keychain that won't is `Unreachable`, the file left as it was. `accounts password` and
-  `ai key` do the same from the command line. A draft's test tries a `Typed` password and keeps it nowhere.
+  `ai key` do the same from the command line. A draft's test tries a `Typed` password and keeps it nowhere. The Claude
+  key and the Proton Bridge's password are kept and taken out from Settings through `/api/ai/key` and
+  `/api/accounts/bridge-password` (`Directory.set_api_key`, `clear_api_key`, `set_bridge_password`,
+  `clear_bridge_password`), in `anthropic-api-key` and `proton-bridge-password`; the Bridge's is found after the
+  environment and 1Password and before its file (`secrets.bridge_password`), and a new one tells each account on the
+  Bridge it changed.
   `Directory` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through
   both. `ConnectionProbe` is bound in `mailmind.bootstrap.accounts`, and is no adapter of Accounts': a login goes through the Mailbox's sessions, which pick the IMAP adapter.
   An account is still a dict, as the file holds it or as `domain.account.normalized` fills it in, and the whole app reads `acct["host"]`. `Endpoint` (`imap_endpoint`, `smtp_endpoint`) works out a server's host, port and TLS from an entry and its type,

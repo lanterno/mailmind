@@ -49,6 +49,17 @@ or moving it to another style, removes its item. A config that holds a secret it
 is refused (`PlaintextSecret`): the app won't start, and `check` says which entry, never the secret. No credential may
 name the database's key.
 
+The Mac app's Settings keep the Claude key and the Proton Bridge's password the same way, through routes both servers
+answer: `POST /api/ai/key` (`{key}`) keeps the key in `anthropic-api-key` and names it in the config one version on, as
+`ai key` does, and `POST /api/ai/key/clear` takes the item and the config's `anthropic_api_key` out, whatever it named;
+`POST /api/accounts/bridge-password` (`{password}`) keeps the Bridge's in `proton-bridge-password`, which the config
+doesn't name, and `.../clear` takes it out. Each is a POST behind the perimeter like every other, and each answer, the
+GETs' too, says only whether one is set (`{"ok": true, "set": …}`): never the secret, its length or any part of it. A
+secret the Keychain can't hold is refused in its words. Keeping one writes nothing to a mail server, so a read-only
+process keeps it too. The Bridge's password is found in the first of `MAILMIND_PROTON_BRIDGE_PASS`, 1Password's
+`op://Private/<MAILMIND_PROTON_OP_ITEM>/password`, that Keychain item and, on the Python app only, the file below; it is
+kept for the process until Settings keeps another or takes it out, when each account on the Bridge hears it changed.
+
 A 1Password credential, `{"op": "op://Vault/Item/Field"}` or a list of references tried in turn, is read with
 `op read <reference>`: the reference alone goes on the command line, since it names an item and holds no secret, and
 the secret comes back on standard output. A read is kept for the process until the credential changes or its account
@@ -140,5 +151,6 @@ doesn't: code running as you, which can ask the Keychain as MailMind does, or a 
 known. The free blocks a plaintext file left on disk before it was encrypted or removed are out of its reach; FileVault
 covers those, and is worth turning on. A copy of the data directory holds no password and no API key. What stays in
 plaintext, readable by you only: `mailmind.config.json` (accounts, preferences, and where each secret is), the log,
-which holds no address or subject, and the Bridge password file `~/.config/mailmind/proton_bridge_pass`, which Proton
-support, kept as it is for the desktop app, still reads.
+which holds no address or subject, and the Bridge password file `~/.config/mailmind/proton_bridge_pass`, which the
+Python app still reads when the Keychain holds no Bridge password. The Rust server, and so the Mac app, reads no such
+file: it keeps the Bridge's password in the Keychain. The tests' tripwire refuses that file.

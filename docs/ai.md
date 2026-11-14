@@ -15,8 +15,9 @@ server does. Only `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthro
 `adapters.wire` holds what it sends and how it reads a reply. `tests/contract/test_ai_contract.py`
 holds it to the contract against the fake API. The key is
 `assistant.config_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
-credential style but the Bridge password: `uv run python -m mailmind ai key` keeps it in the login Keychain and writes
-`{"keychain": "anthropic-api-key", ...}` there) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
+credential style but the Bridge password: `uv run python -m mailmind ai key`, or `POST /api/ai/key` from the Mac app's
+Settings, keeps it in the login Keychain and writes `{"keychain": "anthropic-api-key", ...}` there, and
+`POST /api/ai/key/clear` takes both out) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
 means no key, never a fall-through to the environment's. With no key the model is
 `DisabledModel`: `assistant.calls.engine()` is `"none"`, and a call raises `AIOff` (from
 `application.ports`) before anything is sent.
