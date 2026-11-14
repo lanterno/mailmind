@@ -10,6 +10,9 @@ publish.workspace = true
 [dependencies]
 mm-kernel.workspace = true
 mm-server.workspace = true
+# The sanitizer the `unsanitized` line takes away from the reader's bodies, and gives back.
+mm-content.workspace = true
+mm-mailbox.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 
