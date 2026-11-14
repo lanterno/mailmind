@@ -459,10 +459,15 @@ pub struct SenderStats {
     pub last_ts: Option<i64>,
 }
 
-/// One of a sender's newest messages, as the Screener's pass is told of it: its subject and what the AI said of it.
+/// One of a sender's newest messages, one a message however many folders hold it, with what the AI said of it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SenderRecent {
+    pub account: String,
+    pub thread_id: Option<String>,
+    pub from_name: Option<String>,
     pub subject: Option<String>,
+    pub date_iso: Option<String>,
+    pub snippet: Option<String>,
     pub summary: Option<String>,
 }
 

@@ -153,12 +153,13 @@ fn the_first_word_on_a_sender_stands_and_a_reason_is_held_to_its_length() {
 fn a_senders_line_names_their_subjects_and_the_ais_first_word_and_is_held_to_its_length() {
     let sender = json!({"from_name": "Lin", "from_addr": "lin@example.test", "count": 3});
     let recent = [
-        SenderRecent { subject: None, summary: Some(String::new()) },
+        SenderRecent { summary: Some(String::new()), ..SenderRecent::default() },
         SenderRecent {
             subject: Some("Lunch".into()),
             summary: Some(
                 "Wants lunch on Thursday at the place by the river, and asks whether noon still suits you.".into(),
             ),
+            ..SenderRecent::default()
         },
     ];
     assert_eq!(
@@ -166,7 +167,7 @@ fn a_senders_line_names_their_subjects_and_the_ais_first_word_and_is_held_to_its
         "[2] Lin <lin@example.test>, 3 in the inbox. Subjects: (no subject); Lunch. AI on the latest: Wants lunch on \
          Thursday at the place by the river, and asks whether noon still s"
     );
-    let long = [SenderRecent { subject: Some("s".repeat(2000)), summary: None }];
+    let long = [SenderRecent { subject: Some("s".repeat(2000)), ..SenderRecent::default() }];
     let text = screening::line(1, &json!({"from_name": "N", "from_addr": ADDRS[0], "count": 1}), &long);
     assert!(text.chars().count() == 400 && text.starts_with("[1] N <orders@thimble.example.test>"));
 }

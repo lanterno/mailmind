@@ -883,7 +883,7 @@ impl Senders for Stored {
 
     fn senders_recent(&self, addrs: &[&str], n: i64) -> Result<Vec<Vec<SenderRecent>>, Fault> {
         self.asked.lock().expect("asked").push((addrs.iter().map(|a| (*a).to_owned()).collect(), n));
-        let lunch = SenderRecent { subject: Some("Lunch on Thursday?".into()), summary: None };
+        let lunch = SenderRecent { subject: Some("Lunch on Thursday?".into()), ..SenderRecent::default() };
         Ok(addrs.iter().map(|_| vec![lunch.clone()]).collect())
     }
 }

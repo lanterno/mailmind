@@ -27,6 +27,7 @@ use mm_assistant::rationale::Rationales;
 use mm_assistant::reply_draft::ReplyDrafts;
 use mm_assistant::reviews::Reviews;
 use mm_assistant::screening::Screening;
+use mm_assistant::sender_digest::SenderDigest;
 use mm_assistant::status::Status;
 use mm_assistant::thread_digest::ThreadDigest;
 use mm_discovery::query::QuerySpec;
@@ -156,6 +157,8 @@ pub struct Assistant {
     pub rationales: Arc<Rationales>,
     /// What the AI would say of the senders waiting in the Screener.
     pub screening: Arc<Screening>,
+    /// What one sender has been writing about.
+    pub sender_digest: Arc<SenderDigest>,
 }
 
 /// The API routes a hidden tab fetches on its own, which say nothing of someone being here (`shared.UI_QUIET`).
@@ -213,9 +216,23 @@ impl Assistant {
         let asking = Arc::new(Asking::new(briefs, reviews, accounts, around, clock.clone()));
         let rationales = Arc::new(Rationales::new(calls.clone(), database.clone(), clock.clone()));
         let screening = Arc::new(Screening::new(calls.clone(), database.clone()));
+        let sender_digest = Arc::new(SenderDigest::new(calls.clone(), database.clone()));
         let looks_human = Box::new(|local: &str| mm_curation::classifier::looks_human(Some(local)));
         let drafting = Arc::new(PreparedReplies::new(database, context, replies, looks_human, clock));
-        Assistant { calls, status, governor, digest, extractor, drafting, asker, asking, bulk, rationales, screening }
+        Assistant {
+            calls,
+            status,
+            governor,
+            digest,
+            extractor,
+            drafting,
+            asker,
+            asking,
+            bulk,
+            rationales,
+            screening,
+            sender_digest,
+        }
     }
 
     /// Someone is here, for the cost governor's presence gate on drafting ahead: any request to the API that got past

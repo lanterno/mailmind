@@ -692,7 +692,15 @@ impl Senders for Database {
                 .map(|addr| {
                     recent
                         .query_map(rusqlite::params![addr, n], |r| {
-                            Ok(SenderRecent { subject: r.get(3)?, summary: r.get(9)? })
+                            Ok(SenderRecent {
+                                account: r.get(0)?,
+                                thread_id: r.get(1)?,
+                                from_name: r.get(2)?,
+                                subject: r.get(3)?,
+                                date_iso: r.get(4)?,
+                                snippet: r.get(8)?,
+                                summary: r.get(9)?,
+                            })
                         })?
                         .collect()
                 })

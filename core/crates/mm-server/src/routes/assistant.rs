@@ -46,6 +46,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/review/refresh", post(refresh_review))
         .route("/api/cleanup/rationale", post(cleanup_rationale))
         .route("/api/screener/suggest", post(screener_suggest))
+        .route("/api/contact/summary", post(sender_summary))
 }
 
 /// A problem document of one of the AI's own kinds.
@@ -456,6 +457,22 @@ async fn screener_suggest(State(app): State<Arc<App>>, request: Request) -> Resp
         let queue = app.curation.screener.queue(account.as_deref())?;
         let waiting = queue.get("items").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
         Ok(answer::json(200, &app.assistant.screening.suggest(account.as_deref(), waiting)?))
+    })
+    .await
+}
+
+/// What one sender has been writing about, on a person's click from their card.
+async fn sender_summary(State(app): State<Arc<App>>, request: Request) -> Response<Body> {
+    let (method, uri, headers, body) = match body_of(request).await {
+        Ok(read) => read,
+        Err(answer) => return *answer,
+    };
+    let addr = match body.text("addr") {
+        Ok(addr) => addr,
+        Err(problem) => return refused(problem),
+    };
+    ai(&app, (&method, &uri, &headers), ("sender summary error", "summary failed"), move |app| {
+        Ok(answer::json(200, &app.assistant.sender_digest.summarize(addr.as_deref())?))
     })
     .await
 }

@@ -34,6 +34,7 @@ pub mod reviews;
 pub mod rewrite;
 pub mod schema;
 pub mod screening;
+pub mod sender_digest;
 pub mod status;
 pub mod text;
 pub mod thread_digest;
