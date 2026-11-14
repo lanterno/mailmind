@@ -187,11 +187,18 @@ pub fn reconcile_timing(interval: i64) -> Option<(i64, i64)> {
     (interval > 0).then(|| (interval.max(mm_mailbox::reconcile::EVERY_AT_LEAST), interval.min(120)))
 }
 
+/// The expiry rules' interval and the delay before their first round, from the seconds between rounds (`interval`),
+/// or None when that is 0 or below and they are off.
+pub fn expire_timing(interval: i64) -> Option<(i64, i64)> {
+    (interval > 0).then(|| (interval, interval.min(180)))
+}
+
 impl Workers {
     /// Start the background work (`wiring.start`): the minute's round always, since it needs no mail server; and,
-    /// unless the process only reads, each durable queue's worker (the change queue's), the sync and reconcile.
-    /// `reconcile_secs` is about how long reconcile takes to go round every account, 0 for never.
-    pub fn start(app: &Arc<App>, read_only: bool, reconcile_secs: i64) -> Workers {
+    /// unless the process only reads, each durable queue's worker (the change queue's), the sync, reconcile and the
+    /// expiry rules. `reconcile_secs` is about how long reconcile takes to go round every account, and `expire_secs`
+    /// the seconds between the expiry rules' rounds, each 0 for never.
+    pub fn start(app: &Arc<App>, read_only: bool, reconcile_secs: i64, expire_secs: i64) -> Workers {
         let stop = Arc::new(Stop::default());
         let mut lanes: Vec<(Arc<Job>, Round)> = Vec::new();
         let clocked = app.clone();
@@ -227,6 +234,16 @@ impl Workers {
                 app.jobs.add("draft-push", mm_compose::draft_journal::PUSH_TICK, 5),
                 Box::new(move || pushing.compose.drafting.push_round().map(|_| None).map_err(|fault| fault.class)),
             ));
+            if let Some((every, first)) = expire_timing(expire_secs) {
+                let expiring = app.clone();
+                lanes.push((
+                    app.jobs.add("expire", every, first),
+                    Box::new(move || {
+                        expiring.cleanups.expiry.round().map_err(|fault| fault.class)?;
+                        Ok(None)
+                    }),
+                ));
+            }
         }
         let mut threads = Vec::new();
         for queue in queues {
