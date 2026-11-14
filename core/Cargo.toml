@@ -31,6 +31,8 @@ mm-smtp = { path = "crates/mm-smtp" }
 mm-calendar = { path = "crates/mm-calendar" }
 # The assistant: the Claude API's Messages endpoint, on mm-net.
 mm-claude = { path = "crates/mm-claude" }
+# RFC 8058's one-click unsubscribe POST (a sender's cleanup), on mm-net.
+mm-oneclick = { path = "crates/mm-oneclick" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that
 # opens the database adds that feature for those targets), and LibTomCrypt in the browser, through sqlite-wasm-rs.
