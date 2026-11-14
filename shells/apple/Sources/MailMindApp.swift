@@ -6,8 +6,7 @@ struct MailMindApp: App {
 
     var body: some Scene {
         WindowGroup {
-            InboxView(demo: demo)
-                .task { await demo.start() }
+            Root(demo: demo)
         }
         .commands { UpdateCommands() }
         #if os(macOS)
