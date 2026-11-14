@@ -298,3 +298,11 @@ def test_a_login_in_a_url_goes_nowhere(lists):
 def test_a_url_cant_write_a_line_of_its_own_request(lists, path):
     assert post(lists.url(path))[0] is False
     assert lists.seen == []
+
+
+@pytest.mark.xfail(strict=True, reason="urlparse splits a path's ;params off, and one_click_post builds the path it "
+                                       "posts to without them")
+def test_a_path_goes_as_written_its_params_and_all(lists):
+    lists.routes["/u;list=weekly"] = (200, None)
+    assert post(lists.url("/u;list=weekly?ada=218")) == (True, 200, "ok")
+    assert [r["path"] for r in lists.seen] == ["/u;list=weekly?ada=218"]
