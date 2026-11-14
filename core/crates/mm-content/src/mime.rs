@@ -277,7 +277,7 @@ fn reading(raw: &[u8]) -> Reading<'_> {
 }
 
 /// One pass of mending: the header blocks' lines are split and ended as Python's were, or else, once they all are,
-/// the later copies of a header Python read once are renamed. None when there is nothing to mend.
+/// bytes that read to mail-parser otherwise than to Python are replaced. None when there is nothing to mend.
 fn mend(raw: &[u8], message: &Message<'_>) -> Option<Vec<u8>> {
     let mut insertions = header_insertions(raw, message);
     insertions.extend(unread_tails(raw, message));
@@ -292,29 +292,32 @@ fn mend(raw: &[u8], message: &Message<'_>) -> Option<Vec<u8>> {
     if !insertions.is_empty() {
         return Some(with_insertions(raw, &insertions));
     }
-    let renamed = renames(raw, message);
-    if renamed.is_empty() {
+    let replaced = replacements(raw, message);
+    if replaced.is_empty() {
         return None;
     }
     let mut copy = raw.to_vec();
-    for at in renamed {
-        if let Some(first) = copy.get_mut(at) {
-            *first = b'X';
+    for (at, with) in replaced {
+        if let Some(byte) = copy.get_mut(at) {
+            *byte = with;
         }
     }
     Some(copy)
 }
 
-/// Where a name or a type in the message reads to mail-parser otherwise than it read to Python, and its first byte
-/// becomes an X. A part that names its Content-Type or Content-Transfer-Encoding again: Python read the first. And a
-/// part mail-parser reads as a multipart or an attached email, whose type Python read as none, being without exactly
-/// one `/`: such a part is text/plain, as RFC 2045 has it.
-fn renames(raw: &[u8], message: &Message<'_>) -> Vec<usize> {
-    let mut renamed = Vec::new();
+/// A byte of the message replaced in place, and what with.
+type Replacement = (usize, u8);
+
+/// The bytes in the message's own parts that read to mail-parser otherwise than they read to Python. A name or a type
+/// is renamed, its first byte an X: a part that names its Content-Type or Content-Transfer-Encoding again, of which
+/// Python read the first, and a part mail-parser reads as a multipart or an attached email, whose type Python read as
+/// none, being without exactly one `/`: such a part is text/plain, as RFC 2045 has it.
+fn replacements(raw: &[u8], message: &Message<'_>) -> Vec<Replacement> {
+    let mut replaced = Vec::new();
     for part in message.root().parts() {
         let headers = part.headers();
         for name in [HeaderName::ContentType, HeaderName::ContentTransferEncoding] {
-            renamed.extend(headers.all(name).skip(1).map(|again| again.offset_field() as usize));
+            replaced.extend(headers.all(name).skip(1).map(|again| (again.offset_field() as usize, b'X')));
         }
         let holds_parts = part.content_type().is_some_and(|written| {
             written.ctype().eq_ignore_ascii_case("multipart") || written.ctype().eq_ignore_ascii_case("message")
@@ -326,10 +329,10 @@ fn renames(raw: &[u8], message: &Message<'_>) -> Vec<usize> {
             && blanks < value.len()
             && let Some(start) = offset_in(raw, value)
         {
-            renamed.push(start + blanks);
+            replaced.push((start + blanks, b'X'));
         }
     }
-    renamed
+    replaced
 }
 
 /// Bytes that go into a copy of the message, and where.

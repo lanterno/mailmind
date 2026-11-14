@@ -4,6 +4,7 @@
 //! Python's `email` read the first of a header given twice, and so does everything here.
 
 use std::borrow::Cow;
+use std::ops::Range;
 
 use mail_parser::{Address, HeaderForm, HeaderName, Headers, Mailbox};
 
@@ -92,20 +93,7 @@ fn param(line: &str, name: &str) -> Option<String> {
 /// Python read a bare `name=` as no value, so that is none of them, and an unclosed quote with more after it as that
 /// value.
 pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
-    let (mut start, mut quoted) = (0, false);
-    let mut segments = Vec::new();
-    for (at, &byte) in raw.iter().enumerate() {
-        match byte {
-            b'"' => quoted = !quoted,
-            b';' if !quoted => {
-                segments.push(start..at);
-                start = at + 1;
-            }
-            _ => {}
-        }
-    }
-    segments.push(start..raw.len());
-    segments.into_iter().skip(1).find_map(|segment| {
+    params(raw).find_map(|segment| {
         let text = raw.get(segment.clone())?;
         let Some(equals) = text.iter().position(|&byte| byte == b'=') else {
             if !text.trim_ascii().eq_ignore_ascii_case(name.as_bytes()) {
@@ -125,6 +113,25 @@ pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
             _ => None,
         }
     })
+}
+
+/// Where each parameter of a raw header value lies, as Python's parser split them: at each `;` outside quotes, the
+/// value before the first left out.
+fn params(raw: &[u8]) -> impl Iterator<Item = Range<usize>> {
+    let (mut start, mut quoted) = (0, false);
+    let mut segments = Vec::new();
+    for (at, &byte) in raw.iter().enumerate() {
+        match byte {
+            b'"' => quoted = !quoted,
+            b';' if !quoted => {
+                segments.push(start..at);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    segments.push(start..raw.len());
+    segments.into_iter().skip(1)
 }
 
 /// How a parameter Python read as empty is written, and where: see [`empty_param`].
