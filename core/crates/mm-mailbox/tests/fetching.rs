@@ -1,6 +1,7 @@
 //! A message's body fetched as it opens (`Ingest.fetch_body` as `bodies.message_body` runs it), against a server
 //! that writes down what it was asked and a store in memory: on the account's gate as a person waits, or as a
 //! prefetch that gives way to a held gate; kept with what opening it records; read from the store once it is there.
+//! And as the body backfill fetches one: as a prefetch does, a lost connection told apart from the rest.
 
 #![allow(clippy::unwrap_used)]
 
@@ -10,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use mm_content::mime::Attachment;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment};
+use mm_mailbox::backfill_ports::{BackfillFetch, Tried};
 use mm_mailbox::fetch_ports::{KeptBodies, KeptBody};
 use mm_mailbox::fetching::{Fetching, FetchingParts};
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait};
@@ -348,4 +350,28 @@ fn a_prefetch_gives_way_to_a_held_gate_and_fetches_nothing() {
     assert!(!world.fetching.prefetch(1).unwrap());
     assert!(world.asked().is_empty());
     assert!(world.store.bodies.lock().unwrap().is_empty());
+}
+
+#[test]
+fn the_backfill_fetches_and_keeps_a_body_at_maintenance_priority_without_waiting() {
+    let world = World::new(Body::Gives);
+    assert_eq!(world.fetching.try_body(ADA, 1), Tried::Ran);
+    assert_eq!(world.jobs(), [(ADA.to_owned(), Priority::Maintenance, Wait::Not)]);
+    assert_eq!(world.asked()[1..], ["EXAMINE Archive".to_owned(), "BODY.PEEK[] 7".into(), "LOGOUT".into()]);
+    assert!(world.store.bodies.lock().unwrap().contains_key(&1));
+}
+
+#[test]
+fn the_backfill_hears_of_a_held_gate_and_a_lost_connection_apart_from_the_rest() {
+    let world = World::new(Body::Gives);
+    *world.gates.held.lock().unwrap() = true;
+    assert_eq!(world.fetching.try_body(ADA, 1), Tried::Busy);
+    assert!(world.asked().is_empty());
+    assert_eq!(World::new(Body::Lost).fetching.try_body(ADA, 1), Tried::Unreachable);
+    // A refusal, a folder the server won't select and a row gone each ran, and kept nothing.
+    for (body, pk) in [(Body::Refuses, 1), (Body::RefusesTheSelect, 1), (Body::Gives, 2)] {
+        let world = World::new(body);
+        assert_eq!(world.fetching.try_body(ADA, pk), Tried::Ran);
+        assert!(world.store.bodies.lock().unwrap().is_empty());
+    }
 }
