@@ -61,6 +61,9 @@ fn running(profile: &str) -> Running {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(home.path().join("mailmind.config.json"), r#"{"accounts": []}"#).unwrap();
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    // A database the Python app's migrations brought to the version the server reads.
+    let store = mm_store::Store::open(&home.path().join("mailmind.db"), &mm_store::DbKey::from_bytes([0x5e; 32]));
+    store.unwrap().set_version(mm_store::schema::VERSION).unwrap();
     let server = runtime.block_on(Server::bind(0)).unwrap();
     let port = server.port().unwrap();
     let key = "5e".repeat(32);
