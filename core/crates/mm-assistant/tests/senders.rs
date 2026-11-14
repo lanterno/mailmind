@@ -1,8 +1,10 @@
-//! Why a sender is worth cleaning up, and the AI's pass over the Screener, with no I/O
-//! (`tests/unit/assistant/test_rationale.py` and `test_screening.py`'s): the values here are what the Python app's
-//! `domain.rationale` and `domain.screening` give for the same input.
+//! Why a sender is worth cleaning up, the AI's pass over the Screener, with no I/O,
+//! and what one sender has been writing about (`tests/unit/assistant/test_rationale.py`, `test_screening.py` and
+//! `test_sender_digest.py`'s): the values here are what the Python app's `domain.rationale`, `domain.screening` and
+//! `domain.sender_digest` give for the same input.
 
 use mm_assistant::ports::{SenderRecent, SenderStats};
+use mm_assistant::sender_digest::{self as sd, Said, Thread};
 use mm_assistant::{rationale, screening};
 use serde_json::{Map, Value, json};
 
@@ -170,4 +172,85 @@ fn a_senders_line_names_their_subjects_and_the_ais_first_word_and_is_held_to_its
     let long = [SenderRecent { subject: Some("s".repeat(2000)), ..SenderRecent::default() }];
     let text = screening::line(1, &json!({"from_name": "N", "from_addr": ADDRS[0], "count": 1}), &long);
     assert!(text.chars().count() == 400 && text.starts_with("[1] N <orders@thimble.example.test>"));
+}
+
+fn mail(subject: Option<&str>, thread: Option<&str>, account: &str, summary: Option<&str>) -> SenderRecent {
+    SenderRecent {
+        account: account.into(),
+        thread_id: thread.map(str::to_owned),
+        subject: subject.map(str::to_owned),
+        date_iso: Some("2026-10-20T10:00:00+00:00".into()),
+        summary: summary.map(str::to_owned),
+        snippet: Some("short".into()),
+        ..SenderRecent::default()
+    }
+}
+
+const ADA: &str = "ada@example.test";
+
+#[test]
+fn an_address_reads_as_rows_go_by_it_or_names_nobody() {
+    assert_eq!(sd::address(Some("News@Loom.example.test")).as_deref(), Some(LOOM));
+    assert_eq!(sd::address(Some("  lin@example.test")).as_deref(), Some("lin@example.test"));
+    let long = format!("{}@example.test", "x".repeat(400));
+    for raw in [None, Some(""), Some("nobody"), Some(long.as_str())] {
+        assert_eq!(sd::address(raw), None);
+    }
+}
+
+#[test]
+fn a_thread_is_counted_once_in_each_account_and_lone_mail_is_its_own() {
+    let got = sd::threads_of(&[
+        mail(Some("Lunch?"), Some("t1"), ADA, Some("newest said this")),
+        mail(Some("Lunch?"), Some("t1"), ADA, Some("older")),
+        mail(Some("Other"), Some("t2"), ADA, None),
+        mail(Some("Lunch?"), Some("t1"), "cy@example.test", None),
+        mail(None, None, ADA, None),
+        mail(None, Some(""), ADA, Some("")),
+    ]);
+    let first =
+        Thread { subject: "Lunch?".into(), messages: 2, last: "2026-10-20".into(), gist: "newest said this".into() };
+    assert_eq!(got[0], first);
+    assert_eq!(
+        got.iter().map(|t| (t.subject.as_str(), t.messages)).collect::<Vec<_>>(),
+        [("Lunch?", 2), ("Other", 1), ("Lunch?", 1), ("(no subject)", 2)]
+    );
+    assert_eq!((got[1].gist.as_str(), got[3].gist.as_str()), ("short", "short"));
+    let many: Vec<SenderRecent> =
+        (0..sd::THREADS + 5).map(|i| mail(Some(&format!("s{i}")), Some(&format!("t{i}")), ADA, None)).collect();
+    assert_eq!(sd::threads_of(&many).len(), sd::THREADS);
+}
+
+#[test]
+fn what_the_model_is_told_stays_within_its_budget_and_one_subject_doesnt_crowd_out_the_rest() {
+    let thread =
+        |subject: String, gist: &str| Thread { subject, messages: 1, last: "2026-10-20".into(), gist: gist.into() };
+    let threads: Vec<Thread> = (0..40).map(|_| thread("s".repeat(3000), "g")).collect();
+    assert!(sd::prompt_lines(&threads).chars().count() <= sd::CAP_TOTAL);
+    let long = thread("s".repeat(sd::CAP_TOTAL), "");
+    assert!(
+        sd::prompt_lines(&[long, thread("Lunch?".into(), "")]).ends_with("\n- Lunch? (1 message, latest 2026-10-20)")
+    );
+    let two = Thread { messages: 2, ..thread("Lunch?".into(), "Lin asks") };
+    assert_eq!(sd::prompt_lines(&[two]), "- Lunch? (2 messages, latest 2026-10-20): Lin asks");
+}
+
+#[test]
+fn an_answer_is_held_to_its_caps_and_one_with_nothing_in_it_is_the_mail_itself() {
+    let mut topics = vec![json!("t".repeat(200)); 9];
+    topics.extend([json!(5), Value::Null, json!("  ")]);
+    let got = sd::clean(&object(json!({"summary": "s".repeat(2000), "topics": topics, "open": "o".repeat(900)})));
+    assert_eq!(
+        (got.summary.len(), got.topics.len(), got.topics[0].len(), got.open.len()),
+        (sd::SUMMARY_MAX, sd::TOPICS_MAX, sd::TOPIC_MAX, sd::OPEN_MAX)
+    );
+    let said = sd::clean(&object(json!({"summary": 7, "topics": [5, " fabric "], "open": false})));
+    assert_eq!(said, Said { summary: "7".into(), topics: vec!["fabric".into()], open: String::new() });
+    for told in [json!({}), json!({"summary": "   "})] {
+        assert_eq!(sd::clean(&object(told)), Said::default());
+    }
+    let threads =
+        sd::threads_of(&[mail(Some("Lunch?"), Some("t1"), ADA, None), mail(Some("Other"), Some("t2"), ADA, None)]);
+    assert_eq!(sd::fallback(&threads).summary, "2 recent threads, the latest about Lunch?.");
+    assert_eq!(sd::fallback(&threads[..1]).summary, "1 recent thread, the latest about Lunch?.");
 }

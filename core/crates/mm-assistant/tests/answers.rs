@@ -27,6 +27,7 @@ use mm_assistant::refusals::{AiFailure, NotSent};
 use mm_assistant::reply_draft::ReplyDrafts;
 use mm_assistant::reviews::Reviews;
 use mm_assistant::screening::Screening;
+use mm_assistant::sender_digest::{RECENT, SenderDigest};
 use mm_assistant::status::Status;
 use mm_assistant::thread_digest::{Asked, ThreadDigest};
 use mm_kernel::errors::{Failure, Fault, Kind};
@@ -950,4 +951,51 @@ fn a_screener_pass_reads_no_more_than_its_senders_and_says_only_what_it_is_sure_
     let off = world(false);
     let screening = Screening::new(off.calls.clone(), stored);
     assert_eq!(screening.suggest(Some(ADA), &waiting), Err(AiFailure::NotSent(NotSent::AiOff)));
+}
+
+#[test]
+fn a_senders_summary_reads_what_is_stored_of_them_only_and_falls_back_to_the_mail_itself() {
+    let w = world(true);
+    let stored = Arc::new(Stored::default());
+    let digest = SenderDigest::new(w.calls.clone(), stored.clone());
+    w.model.replies.lock().expect("replies").push(Ok(
+        "{\"summary\": \" Lin plans lunch. \", \"topics\": [\"lunch\"], \"open\": \"Say if noon suits\"}".into(),
+    ));
+    let said = digest.summarize(Some(" Lin@Example.test")).expect("an answer");
+    assert_eq!(
+        said,
+        json!({"ok": true, "addr": "lin@example.test", "threads": 1, "summary": "Lin plans lunch.", "topics": ["lunch"],
+               "open": "Say if noon suits"})
+    );
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.ends_with(
+        "\n\nSender: lin@example.test <lin@example.test>\nThreads (1):\n- Lunch on Thursday? (1 message, latest )\n"
+    ));
+    assert_eq!(stored.asked.lock().expect("asked").clone(), [(vec!["lin@example.test".to_owned()], RECENT)]);
+    w.model.replies.lock().expect("replies").push(Ok("{\"summary\": \"\", \"topics\": [], \"open\": \"\"}".into()));
+    let fell_back = digest.summarize(Some("lin@example.test")).expect("an answer");
+    assert_eq!(fell_back["summary"], "1 recent thread, the latest about Lunch on Thursday?.");
+    sent(&w);
+    assert!(refused_as(&digest.summarize(None), Kind::Refused, "bad address"));
+    assert!(refused_as(&digest.summarize(Some("nobody")), Kind::Refused, "bad address"));
+    let none = SenderDigest::new(w.calls.clone(), Arc::new(Nobody));
+    assert!(refused_as(&none.summarize(Some("zed@example.test")), Kind::NotFound, "no mail from this sender"));
+    assert!(sent(&w).is_empty());
+    let off = world(false);
+    let digest = SenderDigest::new(off.calls.clone(), stored);
+    assert_eq!(digest.summarize(Some("lin@example.test")), Err(AiFailure::NotSent(NotSent::AiOff)));
+}
+
+/// No mail stored from anyone.
+#[derive(Debug)]
+struct Nobody;
+
+impl Senders for Nobody {
+    fn sender_stats(&self, _addrs: &[String]) -> Result<Vec<SenderStats>, Fault> {
+        Ok(Vec::new())
+    }
+
+    fn senders_recent(&self, addrs: &[&str], _n: i64) -> Result<Vec<Vec<SenderRecent>>, Fault> {
+        Ok(addrs.iter().map(|_| Vec::new()).collect())
+    }
 }
