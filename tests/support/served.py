@@ -101,8 +101,8 @@ class Served(AppClient):
 
     def work(self, job, *args):
         """One pass of a background job, as a worker would run it: outbox, commands, drafts, snoozes, follow-ups,
-        assess, tidy, sync with the account and folder, or reconcile with the account (serve_python.py says what
-        each does)."""
+        assess, tidy, forget, sync with the account and folder, or reconcile with the account (serve_python.py says
+        what each does)."""
         self.ask(f"work {job} {json.dumps(list(args))}", timeout=120)
 
     def settle(self, timeout=30):

@@ -91,7 +91,7 @@ def jobs():
             "snoozes": attention.snoozing.wake_due, "follow-ups": attention.followups.tick, "assess": assistant.assessments.round,
             "sync": lambda account, folder: ingest.sync_folder(accounts.get(account), folder),
             "reconcile": lambda account: reconciler.auto_reconcile_one(accounts.get(account)),
-            "tidy": background.tidy_round}
+            "tidy": background.tidy_round, "forget": background.forget_round}
 
 
 def main():
