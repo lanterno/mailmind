@@ -175,6 +175,13 @@ impl Environment {
         given.and_then(|v| v.parse().ok()).unwrap_or(1800)
     }
 
+    /// MAILMIND_EXPIRE_SECS: the seconds between the expiry rules' rounds, 0 or below for none. Unset, empty or not a
+    /// whole number, 3600.
+    pub fn expire_secs(&self) -> i64 {
+        let given = self.raw("MAILMIND_EXPIRE_SECS").map(str::trim).filter(|v| !v.is_empty());
+        given.and_then(|v| v.parse().ok()).unwrap_or(3600)
+    }
+
     /// Whether each account's IMAP work passes a gate of its own (MAILMIND_WORKERS `account`, in any case, with
     /// spaces around); unset, or any other value, one gate is every account's.
     pub fn gate_per_account(&self) -> bool {
