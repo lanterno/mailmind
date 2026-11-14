@@ -152,7 +152,8 @@ impl App {
         let directory = Arc::new(
             Directory::new(config, seams.keychain.clone(), seams.clock.clone())
                 .reading_op(op.clone())
-                .reading_variables(Arc::new(environment.clone())),
+                .reading_variables(Arc::new(environment.clone()))
+                .reading_bridge(environment.bridge()),
         );
         // Every session logs in through `login`, which holds back a login its server refused; a refusal, and an
         // account's change, are heard by its logins. This process's own key names each login.

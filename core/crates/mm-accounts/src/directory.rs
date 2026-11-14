@@ -11,6 +11,7 @@ use mm_kernel::when;
 use serde_json::{Map, Value, json};
 
 use crate::account::{self, Account, truthy};
+use crate::bridge::{Bridge, BridgeGiven};
 use crate::credential::{self, Asked, CredentialRef, Style, credential_from};
 use crate::one_password::OpReads;
 use crate::ports::{ConfigFile, Variables};
@@ -20,8 +21,7 @@ const MALFORMED: Fault = Fault::new("MalformedConfig");
 const TAG: &str = "accounts";
 const NO_CREDENTIAL: Fault = Fault::new("NoCredential");
 const KEYCHAIN: Fault = Fault::new("KeychainProblem");
-/// A credential kept where the Rust server can't read it yet: the Bridge password, or a variable or 1Password when the
-/// Directory was given no way to read it.
+/// A credential kept where the Directory was given no way to read it: a variable, or 1Password.
 const NOT_YET: Fault = Fault::new("CredentialStyleNotOnTheRustServerYet");
 
 /// What a pin check found at an endpoint.
@@ -77,11 +77,14 @@ pub struct Directory {
     op: Option<Arc<OpReads>>,
     /// The process's environment, for a credential that names a variable: none until `reading_variables` gives it.
     variables: Option<Arc<dyn Variables>>,
+    /// The Proton Bridge's password, once found, and what the environment says of it: nothing until `reading_bridge`
+    /// gives it, when only the Keychain's item is read.
+    bridge: Bridge,
 }
 
 impl Directory {
     pub fn new(file: Arc<dyn ConfigFile>, keychain: Arc<dyn Keychain>, clock: Arc<dyn Clock>) -> Directory {
-        Directory { file, keychain, clock, write: Mutex::new(()), op: None, variables: None }
+        Directory { file, keychain, clock, write: Mutex::new(()), op: None, variables: None, bridge: Bridge::default() }
     }
 
     /// The Directory, reading a 1Password credential through `op`, which the Assistant's key shares.
@@ -92,6 +95,11 @@ impl Directory {
     /// The Directory, reading a credential that names a variable from `variables`.
     pub fn reading_variables(self, variables: Arc<dyn Variables>) -> Directory {
         Directory { variables: Some(variables), ..self }
+    }
+
+    /// The Directory, finding the Proton Bridge's password where the environment says first (`bridge`).
+    pub fn reading_bridge(self, given: BridgeGiven) -> Directory {
+        Directory { bridge: Bridge::new(given), ..self }
     }
 
     /// Forget what was read of `credential`'s 1Password references, once it is replaced or its account removed
@@ -175,7 +183,7 @@ impl Directory {
 
     /// The password an account logs in with. A credential that names nothing to read, or a secret that isn't there,
     /// is a fault, as it is in the Python app. A 1Password read is kept for the process, its spaces taken out for an
-    /// account that asks for that (`strip_spaces`, a Gmail app password).
+    /// account that asks for that (`strip_spaces`, a Gmail app password), and so is the Bridge's password (`bridge`).
     pub fn password(&self, account: &Account) -> Result<Secret, Fault> {
         let credential = CredentialRef::parse(Some(&account.credential));
         match credential.style {
@@ -196,7 +204,7 @@ impl Directory {
                     .ok_or(NO_CREDENTIAL),
                 None => Err(NOT_YET),
             },
-            Some(Style::ProtonBridge) => Err(NOT_YET),
+            Some(Style::ProtonBridge) => self.bridge.password(&*self.keychain, self.op.as_deref()),
             _ => Err(NO_CREDENTIAL),
         }
     }

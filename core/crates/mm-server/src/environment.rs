@@ -252,6 +252,16 @@ impl Environment {
         kept.map(|(name, value)| (name.clone(), value.clone())).collect()
     }
 
+    /// What MAILMIND_PROTON_BRIDGE_PASS and MAILMIND_PROTON_OP_ITEM say of the Proton Bridge's password: the password
+    /// itself, before any other source, and the 1Password item that holds it. Each empty is unset, as Python reads them.
+    pub fn bridge(&self) -> mm_accounts::bridge::BridgeGiven {
+        let given = |name: &str| self.raw(name).filter(|value| !value.is_empty());
+        mm_accounts::bridge::BridgeGiven {
+            password: given("MAILMIND_PROTON_BRIDGE_PASS").map(|password| Secret::new(password.to_owned())),
+            op_item: given("MAILMIND_PROTON_OP_ITEM").map(str::to_owned),
+        }
+    }
+
     /// The variable an account's or a setting's credential names (`{"env": NAME}` in mailmind.config.json), as set.
     pub fn credential(&self, name: &str) -> Option<Secret> {
         self.raw(name).map(|value| Secret::new(value.to_owned()))
