@@ -65,10 +65,27 @@ on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-13"
 
 [apple.core_size_mb]
 what = "what the core adds to a stripped arm64 app (iOS device and macOS)"
-limit = 8.0
-measured = 1.61
-on = "Apple M5 Mac, Xcode 26.6, release build, 2026-11-12"
-# 3.7 MB with TLS and OpenPGP key parsing, 5.0 MB with an OpenPGP round trip.
+limit = 12.0
+measured = 9.4
+on = "Apple M5 Mac, Xcode 26.6, release build, 2026-11-14"
+# Raised from 8 MB when the whole app came into the Mac app's process (mm-host): every context, the routes and their
+# perimeter, the runtime, IMAP, SMTP, TLS and the Claude client, not step 0's store and list (1.61 MB). The bytes
+# linked from the core's library, by the link map; the stripped executables are 12.0 MB (macOS) and 11.9 MB (iOS).
+# Step 0's core was 3.7 MB with TLS and OpenPGP key parsing, 5.0 MB with an OpenPGP round trip.
+
+[apple.mac_home_first_rows_ms]
+what = "launch the Mac app's window on the demo home (three fictional accounts, already synced) to its first rows of mail"
+limit = 800.0
+measured = 352.1
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-14"
+# `just apple demo measure`, median of 7. The core opens in the app's process, then the list asks /api/inboxes.
+
+[apple.mac_home_idle_memory_mb]
+what = "the Mac app's footprint, idle three seconds after its window showed the demo home's inbox"
+limit = 200.0
+measured = 42.6
+on = "Apple M5 Mac, macOS 26.4, Xcode 26.6, 2026-11-14"
+# The core's runtime and background work included, with the fake servers on loopback; no message open in the reader.
 
 [web.first_rows_ms]
 what = "navigation to the first rows painted, the fixture already in the browser's private files (median of 7)"
