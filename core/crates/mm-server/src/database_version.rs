@@ -1,6 +1,7 @@
 //! The database as this server opens it (`store.init`): its key, made with the database when there is neither, and
-//! the database itself, made over a data directory with none (`mm_store::migrate`). One the core can't open as it is
-//! (older than the Python app's version 51, or newer than the core) is refused, in words a person can act on.
+//! the database itself, made over a data directory with none and brought to the newest version by the core's
+//! migrations (`mm_store::migrate`). One the core can't upgrade (older than the Python app's version 51, or newer than
+//! the core) is refused, in words a person can act on.
 
 use std::path::Path;
 
@@ -45,7 +46,7 @@ fn made(keychain: &dyn Keychain) -> Result<Secret, String> {
     keychain.find(DATABASE_KEY_ITEM).ok().flatten().ok_or_else(|| NO_KEY.into())
 }
 
-/// Nothing when the database is ready: made if there was none, and at `VERSION`. Otherwise what to do.
+/// Nothing when the database is ready: made if there was none, and upgraded to `VERSION`. Otherwise what to do.
 pub(crate) fn ready(database: &Database) -> Result<(), String> {
     database.ready().map(|_| ()).map_err(|not| said(&not))
 }
@@ -67,5 +68,9 @@ pub(crate) fn said(not: &NotReady) -> String {
         ),
         NotReady::KeyDoesNotFit => "the database key doesn't open the database".into(),
         NotReady::Tripped | NotReady::Storage => "the database can't be made or read".into(),
+        NotReady::Failed(version) => format!(
+            "the database's upgrade to version {version} failed: it is as it was before it, and the next start tries \
+             it again"
+        ),
     }
 }

@@ -1,11 +1,16 @@
-//! The tables a message list reads, exactly as a version-51 database made by the Python app holds them.
+//! The version of the schema the core reads and writes, and the tables a message list reads, exactly as a
+//! version-51 database made by the Python app holds them.
 //!
-//! The core does not migrate yet: these are for fixtures and tests. When the core takes over the database, its
-//! migrations continue from 52 and this file goes.
+//! The tables are for fixtures and tests, which want a message list and nothing else: a database the app opens is
+//! made and upgraded by `migrate`.
 
-/// The version of the Python app's database this core is written for: `PRAGMA user_version` once its migrations have
-/// run (`tests/golden/schema_v51.sql`). The core doesn't migrate yet, so the Rust server opens no other.
-pub const VERSION: i64 = 51;
+/// The version of the schema this core is written for (`PRAGMA user_version`): its newest migration's, or the base's
+/// while there is none (`migrate`). The Python app's migrations bring its database to the same version, which
+/// `tests/golden/schema_v<N>.sql` names, and the Rust server opens no other.
+pub const VERSION: i64 = match crate::migrate::MIGRATIONS.last() {
+    Some(newest) => newest.version,
+    None => crate::migrate::BASE,
+};
 
 pub const LIST_TABLES: &str = "
 CREATE TABLE IF NOT EXISTS messages (
