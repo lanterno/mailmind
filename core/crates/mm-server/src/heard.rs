@@ -51,8 +51,8 @@ impl mm_mailbox::sync_ports::Events for Heard {
 }
 
 /// What happened to an account, heard by its logins: a refusal holds its login back, and a change or a removal lets
-/// the next try go. The page hears of neither, only of the syncs that follow; IDLE, which hears the rest in the
-/// Python app, doesn't run here.
+/// the next try go. The page hears of neither, only of the syncs that follow; IDLE's workers hear the rest after
+/// this (`idle_wiring::IdleHeard`).
 #[derive(Debug)]
 pub(crate) struct AccountsHeard {
     pub(crate) logins: Arc<mm_accounts::logins::Logins>,

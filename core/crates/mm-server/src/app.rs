@@ -75,6 +75,8 @@ pub struct App {
     pub filing: Arc<Filing>,
     /// Each account's INBOX synced, one round at a time (`/api/refresh`).
     pub syncing: Arc<Syncing>,
+    /// IDLE's workers, one for each account, which `Workers::start` starts: none in the served suites.
+    pub realtime: Arc<mm_mailbox::realtime::Realtime>,
     /// Ghosts pruned: mail gone from the server (`/api/reconcile`, `work reconcile`).
     pub reconciler: Reconciler,
     /// The requests being answered now, which a stop waits for.
@@ -147,6 +149,9 @@ impl App {
         let logins = Arc::new(mm_accounts::logins::Logins::new(login_key, seams.clock.clone()));
         let account_events: Arc<dyn mm_accounts::ports::AccountEvents> =
             Arc::new(crate::heard::AccountsHeard { logins: logins.clone() });
+        // IDLE's workers hear an account added, changed or removed once its logins have (`realtime.reconcile`).
+        let idle_heard = crate::idle_wiring::IdleHeard::over(account_events);
+        let account_events: Arc<dyn mm_accounts::ports::AccountEvents> = idle_heard.clone();
         let login = Arc::new(crate::login_wiring::ImapLogin {
             directory: directory.clone(),
             outside: seams.outside.clone(),
@@ -263,6 +268,8 @@ impl App {
             clock: seams.clock.clone(),
             around: Arc::new(AroundRounds { snoozing: attention.snoozing.clone(), jobs: jobs.clone() }),
         }));
+        // IDLE: a worker for each account, which `Workers::start` sets going; what it hears syncs those accounts.
+        let realtime = crate::idle_wiring::realtime(&directory, &login, &syncing, environment.read_only(), &idle_heard);
         let reconciler = Reconciler::new(ReconcilerParts {
             store: database.clone(),
             accounts: move_accounts,
@@ -333,6 +340,7 @@ impl App {
             undo,
             filing,
             syncing,
+            realtime,
             reconciler,
             work: Arc::new(Work::default()),
             reading,

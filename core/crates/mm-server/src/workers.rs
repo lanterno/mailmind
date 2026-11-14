@@ -256,6 +256,10 @@ impl Workers {
             let name = format!("job:{}", job.name);
             threads.extend(std::thread::Builder::new().name(name).spawn(move || app.jobs.lane(&job, &*round, &stop)));
         }
+        // IDLE's workers, one for each account, unless the process only reads (`realtime.start`).
+        if !read_only {
+            threads.extend(crate::idle_wiring::watch(app, &stop));
+        }
         if read_only {
             log::info(
                 TAG,

@@ -51,6 +51,8 @@ mod outbox_worker;
 mod database_version;
 // Every session's login, which a login its server refused waits out.
 mod login_wiring;
+// IDLE's workers bound: the accounts, their sessions, and their news syncing those accounts.
+mod idle_wiring;
 
 pub use app::{App, Seams};
 pub use serve::{Server, Work};
