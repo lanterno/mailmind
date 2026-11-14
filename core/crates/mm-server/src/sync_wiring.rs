@@ -106,3 +106,14 @@ impl Classifier for RuleBookClassifier {
             .collect())
     }
 }
+
+/// Threads a request sets going and answers before they end, counted as work being done so a stop and a test's
+/// `settle` wait for them (`serve::Work`): a folder's sync as it opens.
+#[derive(Debug)]
+pub(crate) struct WorkThreads(pub(crate) Arc<crate::serve::Work>);
+
+impl mm_mailbox::opening_ports::Background for WorkThreads {
+    fn spawn(&self, job: Box<dyn FnOnce() + Send>) {
+        self.0.spawn(job);
+    }
+}

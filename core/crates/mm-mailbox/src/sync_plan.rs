@@ -69,6 +69,16 @@ pub fn reads_bodies(folder: &str) -> bool {
     folder.eq_ignore_ascii_case("INBOX")
 }
 
+/// Whether opening a folder already read should catch it up: not INBOX, which the background sync keeps, and not
+/// again within `every` seconds of the last that started (`since`, None when none has). An open while one runs waits
+/// for it too, or it would answer with what that one is about to change.
+pub fn catch_up_due(folder: &str, running: bool, since: Option<f64>, every: f64) -> bool {
+    if folder.to_uppercase() == "INBOX" {
+        return false;
+    }
+    running || since.is_none_or(|since| since >= every)
+}
+
 /// What to fetch of a folder, from the UIDVALIDITY its select said and what is stored of it.
 pub fn plan_folder(
     uidvalidity: Option<u32>,

@@ -14,8 +14,7 @@ use mm_mailbox::bodies::Bodies;
 use mm_mailbox::digest::{Digest, NotSyncing};
 use mm_mailbox::folders::Folders;
 use mm_mailbox::lists::Lists;
-use mm_mailbox::opening::StoredOnly;
-use mm_mailbox::ports::{BodyFetch, MailSessions};
+use mm_mailbox::ports::{BodyFetch, FolderSyncs};
 use mm_store::Database;
 use mm_store::export::Exports;
 
@@ -37,7 +36,8 @@ pub struct Reading {
 pub(crate) struct Adapters {
     pub(crate) accounts: Arc<KnownAccounts>,
     pub(crate) database: Arc<Database>,
-    pub(crate) sessions: Arc<dyn MailSessions>,
+    /// A folder's sync as it opens.
+    pub(crate) syncs: Arc<dyn FolderSyncs>,
     pub(crate) config: Arc<dyn ConfigFile>,
     pub(crate) folders: Arc<Folders>,
     /// The calendar's reading of the invite a message opens with.
@@ -48,9 +48,8 @@ pub(crate) struct Adapters {
 
 impl Reading {
     pub(crate) fn assemble(made: Adapters, environment: &Environment, seams: &Seams) -> Reading {
-        let Adapters { accounts, database, sessions, config, folders, invites, fetch } = made;
+        let Adapters { accounts, database, syncs, config, folders, invites, fetch } = made;
         let clock = seams.clock.clone();
-        let syncs = Arc::new(StoredOnly::new(database.clone(), sessions));
         let ai = Status::new(
             Arc::new(AiConfig { file: config, environment_key: environment.gives_anthropic_key() }),
             database.clone(),

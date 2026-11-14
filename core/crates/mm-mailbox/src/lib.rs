@@ -28,8 +28,8 @@ pub mod sync_record;
 pub mod syncing;
 pub mod threading;
 
-// The reads a person waits on: the lists and what their rows say, the digest, and what a
-// folder's opening does until the sync is ported; a message opened, and the frame it shows in.
+// The reads a person waits on: the lists and what their rows say, the digest, and a folder's
+// sync as it opens; a message opened, and the frame it shows in.
 pub mod bodies;
 pub mod digest;
 pub mod inline_images;
@@ -49,3 +49,5 @@ pub mod realtime_ports;
 // A message's body from its server where it isn't stored, and what keeping it records.
 pub mod fetch_ports;
 pub mod fetching;
+// A folder's sync as it opens: what it needs of the world.
+pub mod opening_ports;

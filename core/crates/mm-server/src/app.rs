@@ -196,11 +196,22 @@ impl App {
                 gates: gates.clone(),
                 clock: seams.clock.clone(),
             }));
+        // A folder's sync as it opens, on a thread counted as the requests being answered are.
+        let work = Arc::new(Work::default());
+        let syncs = Arc::new(mm_mailbox::opening::FolderOpening::new(mm_mailbox::opening::OpeningParts {
+            stored: database.clone(),
+            sync: ingest.clone(),
+            gates: gates.clone(),
+            events: mailbox_events.clone(),
+            folders: folders.clone(),
+            background: Arc::new(crate::sync_wiring::WorkThreads(work.clone())),
+            waits: mm_mailbox::opening::Waits::default(),
+        }));
         let reading = crate::reading::Reading::assemble(
             crate::reading::Adapters {
                 accounts: Arc::new(KnownAccounts(directory.clone())),
                 database: database.clone(),
-                sessions,
+                syncs,
                 config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
                 folders: folders.clone(),
                 invites: mm_calendar::invites::Invites::new(zones.clone(), zone.clone()),
@@ -342,7 +353,7 @@ impl App {
             syncing,
             realtime,
             reconciler,
-            work: Arc::new(Work::default()),
+            work,
             reading,
             clock: seams.clock.clone(),
             places,

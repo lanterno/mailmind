@@ -43,6 +43,9 @@ pub struct Folders {
     /// One refresh of an account's list at a time, so a cold burst does one live fetch. It stands in for the IMAP
     /// gate (`platform.workers.gates`), which comes with the jobs that share it.
     refreshing: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    /// When the last sync of each (account, folder) as it opened started, in the clock's seconds: what spaces its
+    /// catch-ups (`_caught_up`), and what MailMind putting mail there takes away (`touched`).
+    caught_up: Mutex<HashMap<(String, String), f64>>,
 }
 
 impl Folders {
@@ -62,7 +65,30 @@ impl Folders {
             clock,
             listed: Mutex::new(HashMap::new()),
             refreshing: Mutex::new(HashMap::new()),
+            caught_up: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// MailMind put mail in `folder` (a draft saved there, a message moved there): its next open catches it up at
+    /// once.
+    pub fn touched(&self, account: &str, folder: &str) -> Result<(), Fault> {
+        self.caught_up.lock().map_err(|_| POISONED)?.remove(&(account.to_owned(), folder.to_owned()));
+        Ok(())
+    }
+
+    /// A sync of `folder` as it opened starts now.
+    pub fn catching_up(&self, account: &str, folder: &str) -> Result<(), Fault> {
+        let now = self.clock.now().seconds();
+        self.caught_up.lock().map_err(|_| POISONED)?.insert((account.to_owned(), folder.to_owned()), now);
+        Ok(())
+    }
+
+    /// How many seconds ago the last sync of `folder` as it opened started, None when none has since MailMind
+    /// started, or put mail there.
+    pub fn since_caught_up(&self, account: &str, folder: &str) -> Result<Option<f64>, Fault> {
+        let now = self.clock.now().seconds();
+        let caught_up = self.caught_up.lock().map_err(|_| POISONED)?;
+        Ok(caught_up.get(&(account.to_owned(), folder.to_owned())).map(|at| now - at))
     }
 
     /// The folders with their roles and counts for one account, and the views that aren't folders counted.
