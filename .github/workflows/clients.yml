@@ -101,7 +101,8 @@ jobs:
   apple:
     # The newest macOS image, which carries Xcode 26.
     runs-on: macos-26
-    timeout-minutes: 60
+    # The release check builds the core for four targets and the app for two architectures.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -120,7 +121,8 @@ jobs:
 
       - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
         with:
-          tool: just@1.59.0
+          # uv runs dmgbuild, from pyproject.toml's release group, for the release's .dmg.
+          tool: just@1.59.0,uv@0.13.5
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -143,6 +145,12 @@ jobs:
       - name: The iPhone app's output, when the check failed
         if: failure()
         run: cat shells/apple/build/smoke/ios.log 2>/dev/null || true
+
+      # The release recipe end to end with a throwaway update key, never the owner's: the universal app signed ad hoc,
+      # its acknowledgements, the .dmg and its window, the signed appcast, and the checks a person's Mac and Sparkle
+      # make on them. Nothing is published.
+      - name: The release, checked
+        run: just apple release-check
 
   android:
     runs-on: ubuntu-latest
