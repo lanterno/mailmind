@@ -18,6 +18,8 @@ struct MailMindApp: App {
 
         #if os(macOS)
         AcknowledgementsWindow()
+        // Settings (⌘,), MailMind Help, and the status's commands in the menu bar.
+        StatusScenes()
         #endif
     }
 }
