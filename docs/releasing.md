@@ -14,10 +14,23 @@ on a Developer ID ([#42](https://github.com/lanterno/mailmind/issues/42)).
   (`codesign -s -`) under the hardened runtime, inside out (Sparkle's helpers, Sparkle, then the app), and puts it
   in `MailMind-<version>.dmg` beside a link to /Applications. Everything lands in `shells/apple/build/release`,
   which git ignores.
+- **The .dmg's window.** MailMind on the left, an arrow, Applications on the right, over a picture that says to drag
+  one onto the other and how to open the app the first time. `Release/dmg-background.swift` draws the picture, and
+  `Release/dmg.py` has [dmgbuild](https://github.com/dmgbuild/dmgbuild) (pyproject.toml's `release` group) write the
+  layout into the image, so nothing drives Finder. Finder draws the icons' names black or white as the person's
+  appearance is, so the band under them is a blue both read on.
+- **The acknowledgements.** The licences of what the app is built from ask for their notices to go with every copy.
+  `Release/acknowledgements.py` collects them as the release is built: MailMind's, Sparkle's (with bsdiff's), and
+  every licence file of every crate the core links for either architecture, the C sources they compile in among them
+  (SQLCipher and libtomcrypt, through `sqlcipher-src`). A crate that ships no licence file gets its licence's standard
+  text from `Release/licences`, and the release stops when there is none, rather than ship the crate unacknowledged.
+  They go in the app as `Acknowledgements.txt`, which **MailMind › Acknowledgements** shows.
 - **Updates.** Each copy of the app reads `https://github.com/lanterno/mailmind/releases/latest/download/appcast.xml`,
   the appcast on the latest release. The appcast names the .dmg and carries its EdDSA (Ed25519) signature, made with
   the owner's private key; the app carries the public key and refuses an update whose signature doesn't verify, before
-  it unpacks it (`SUVerifyUpdateBeforeExtraction`). Sparkle asks the person before its first automatic check, then
+  it unpacks it (`SUVerifyUpdateBeforeExtraction`). The appcast itself is signed too, by the same key
+  (`SURequireSignedFeed`), so whoever could change the feed can't change what it says either: which version is
+  newest, what macOS it needs, where its notes are. Sparkle asks the person before its first automatic check, then
   checks once a day if they agree, and **MailMind › Check for Updates…** checks at once.
 - **Only a release checks.** `MAILMIND_CHECKS_FOR_UPDATES` is `NO` in `shells/apple/Release/mac.yml` and only the
   release recipe turns it on, so a debug build, `just apple build`'s, a test and a demo never ask the network, nor
@@ -71,8 +84,9 @@ half in their login Keychain; it never goes in the repo, a file, CI or anyone el
 `just apple release-check` runs the whole recipe with a throwaway key made in a temporary folder, never the login
 Keychain, and checks the result: the .dmg mounts with the app and an Applications link, the app is universal, its
 signature verifies, its Info.plist names the identifier, the version, the key and the feed, a program signed as the
-app is loads its Sparkle, and the appcast's signature verifies against the app's key and no other. Run it after
-changing anything in `shells/apple/Release`.
+app is loads its Sparkle, the app carries the acknowledgements, the .dmg's window is laid out, and the .dmg's
+signature and the appcast's own both verify against the app's key and no other, and the feed changed after signing
+doesn't. Run it after changing anything in `shells/apple/Release`; CI runs it on every change to the clients.
 
 ## What people see the first time
 

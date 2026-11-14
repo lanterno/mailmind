@@ -43,7 +43,7 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | --- | --- |
 | `project.yml` | The Xcode project for XcodeGen. `MailMind.xcodeproj` is generated from it and never committed. |
 | `Release/mac.yml` | What only the Mac target has, which `project.yml` includes: the icon, Sparkle (pinned), the update key and the switch for update checks, the hardened runtime. |
-| `Release/` | Besides `mac.yml`: Sparkle's Info.plist keys, the entitlements, `release.sh` and `check.sh` (`just apple release` and `release-check`), `eddsa.swift` (an appcast's signature checked as Sparkle will), and the release notes' template. |
+| `Release/` | Besides `mac.yml`: Sparkle's Info.plist keys, the entitlements, `release.sh` and `check.sh` (`just apple release` and `release-check`), `eddsa.swift` (an appcast's signatures checked as Sparkle will), `acknowledgements.py` and `licences/` (every licence the app carries), `dmg-background.swift` and `dmg.py` (the .dmg's window), and the release notes' template. |
 | `Icon/` | `icon.swift`, which draws the Mac app's icon, and the asset catalog it renders into. iOS has no icon yet: compiling one needs an iOS simulator runtime installed. |
 | `Generated/` | The UniFFI bindings `just gen-bindings` writes. Never edit them by hand. |
 | `Sources/ListModel.swift` | `HeldRows`, `ListModel`, `OncePerFrame` and `Relay`: the rows near the screen, the window asked for at most once a frame, and the core's batches handed to the main actor. |
@@ -52,6 +52,7 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | `Sources/MessageTable+macOS.swift` | The Mac's list: an `NSTableView` with one row height, its rows and placeholders drawn with Core Text. |
 | `Sources/MessageTable+iOS.swift` | The iPhone and iPad list: a `UICollectionView` over a fixed-row layout, its rows and placeholders. |
 | `Sources/Measure.swift` | Measure mode, run only when `MAILMIND_MEASURE` is set. |
+| `Sources/Acknowledgements.swift` | **MailMind › Acknowledgements**: the licences a release put in the app, in a window of their own. |
 | `Sources/Updates.swift` | Sparkle's updater and **Check for Updates…** in the app menu (`UpdateCommands`), on the Mac only. |
 | `Sources/Client/Core.swift` | `Core`: the host opened over a home, a route's GET or POST as its generated types, a refusal thrown as its `Problem`, the event stream as an `AsyncStream`. `CoreHome.ofThisProcess` picks the home. |
 | `Sources/Client/APISupport.swift` | What the generated types lean on: `JSONValue`, the `GetRoute` and `PostRoute` protocols, `NotJSON`, a union's decoding. |
