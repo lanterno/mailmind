@@ -132,6 +132,7 @@ The docs below say why. These are the ones a change can break without noticing:
 | Claude calls, the cost governor, batches | [docs/ai.md](docs/ai.md) |
 | The classifier, rules, unsubscribe | [docs/classification.md](docs/classification.md) |
 | The Rust core, the shells, budgets.toml | [docs/clients.md](docs/clients.md) |
+| The Mac app's packaging, its updates, a release | [docs/releasing.md](docs/releasing.md) |
 
 ## Conventions
 

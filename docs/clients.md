@@ -176,7 +176,7 @@ mail in the rows it lands on, not just for the scroll.
 just core-verify          # the core: format, clippy as errors, every test
 just budgets              # the core against budgets.toml
 just gen-bindings         # Swift and Kotlin bindings from the core
-just apple build|test|run|smoke|measure
+just apple build|test|run|smoke|measure|icon|release|release-check
 just android build|test|sizes
 just web build|dev|test|check|measure|gen
 just desktop build|dev|check|smoke|measure
@@ -184,3 +184,5 @@ just desktop build|dev|check|smoke|measure
 
 `just verify` runs `core-verify`. The workflow `.github/workflows/clients.yml` builds every shell and writes what
 it measured into each run's summary.
+
+The Mac app ships as a .dmg on a GitHub release and updates itself through Sparkle: [releasing.md](releasing.md).

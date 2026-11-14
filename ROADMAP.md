@@ -71,8 +71,9 @@ Python app gets fixes only.
   `budgets.toml`, and decide each platform's shell from them (see The desktop app).
 - **Run the iPhone smoke check once** · medium value · effort S · [#14](https://github.com/lanterno/mailmind/issues/14) — `just apple smoke` scrolls the list in an iPhone
   simulator on CI's Mac, and has yet to complete there.
-- **Real app identifiers** · medium value · effort S · [#15](https://github.com/lanterno/mailmind/issues/15) — `app.mailmind` is a placeholder (`shells/apple/project.yml`,
-  `shells/android/app/build.gradle.kts`). The real ones need the domain and the entity the store listings will name (#27).
+- **Real app identifiers** · medium value · effort S · [#15](https://github.com/lanterno/mailmind/issues/15) — `app.mailmind` is a placeholder on Android
+  (`shells/android/app/build.gradle.kts`, the Kotlin package in `core/crates/mm-ffi/uniffi.toml`); the Apple app is
+  `io.github.lanterno.mailmind`. Android's needs the domain and the entity the store listings will name (#27).
 - **Tauri's accepted advisories** · medium value · effort S · [#16](https://github.com/lanterno/mailmind/issues/16) — `shells/desktop/src-tauri/osv-scanner.toml` ignores seven
   until 2027-02-12. Upgrade past them, or look at each again, before then.
 
@@ -121,10 +122,10 @@ Python app gets fixes only.
 - **The Mac app: every screen in SwiftUI** · high value · effort L · [#40](https://github.com/lanterno/mailmind/issues/40) — The mailbox and
   search; reading and writing; settings and the first run; the assistant, curation, attention and the calendar. Waits on
   #38 and #39.
-- **The Mac app: packaging, updates and a first release** · high value · effort M · [#41](https://github.com/lanterno/mailmind/issues/41) — Its icon,
-  a universal build, an ad-hoc signature and a .dmg, Sparkle updates from GitHub Releases signed with a key the owner
-  keeps; notifications for new mail, the Dock badge, mailto:; then a first release, once the owner says so. The
-  packaging can start now; the release waits on #40.
+- **The Mac app: packaging, updates and a first release** · high value · effort M · [#41](https://github.com/lanterno/mailmind/issues/41) — The owner's
+  update-signing key, made once ([docs/releasing.md](docs/releasing.md): `just apple release` stops until its public
+  half is in `shells/apple/Release/mac.yml`); notifications for new mail, the Dock badge, mailto:; then a first release
+  with `just apple release`, once the owner says so. The release waits on #40.
 - **Developer ID signing and notarization** · medium value · effort S · [#42](https://github.com/lanterno/mailmind/issues/42) — Waits on the
   owner's paid Apple Developer account.
 

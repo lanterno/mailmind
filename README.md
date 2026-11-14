@@ -557,6 +557,21 @@ automatically.
   and both floats are announced to screen readers. Accessibility checks cover Day, Dusk and Night.
 - **The `?` legend is generated from the commands**, so it can't drift from what the keys do.
 
+## The Mac app
+
+A native Mac app is being built over the Rust core (`shells/apple`). It has no release yet; when it has, it is a .dmg on
+this repo's [Releases](https://github.com/lanterno/mailmind/releases) page, for macOS 26 or later on Apple silicon or
+Intel:
+
+1. Download the .dmg from the latest release, open it, and drag **MailMind** onto **Applications**.
+2. Open MailMind. It is signed ad hoc, not yet with an Apple Developer ID, so macOS stops it the first time and you
+   say once that it may run. On macOS 15 and later: click **Done** on *"MailMind" Not Opened*, open **System Settings ›
+   Privacy & Security**, scroll down to **Security**, click **Open Anyway** beside *"MailMind" was blocked to protect
+   your Mac*, then **Open Anyway** again, and enter your password.
+3. From then on it updates itself: it asks before its first check, and **MailMind › Check for Updates…** checks at once.
+
+How a release is made is in [docs/releasing.md](docs/releasing.md).
+
 ## Prerequisites
 
 - **Python 3.14+.** Live push uses `imaplib`'s IDLE support, new in 3.14.
