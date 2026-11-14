@@ -147,3 +147,9 @@ tests/api/test_http_filters.py::test_a_later_sync_doesnt_take_the_mark_back
 tests/api/test_http_sync.py::test_an_invite_that_arrives_is_kept_with_its_body
 tests/api/test_http_sync.py::test_mail_with_no_invite_waits_to_be_opened
 tests/api/test_http_sync.py::test_an_invite_filed_elsewhere_waits_to_be_opened
+tests/api/test_http_sync.py::test_a_folder_opened_again_soon_is_caught_up_once
+tests/api/test_http_sync.py::test_opening_the_inbox_leaves_it_to_the_background_sync
+tests/api/test_http_sync.py::test_a_draft_saved_lets_drafts_catch_up_on_its_next_open
+tests/api/test_http_sync.py::test_a_move_lets_its_folder_catch_up_on_its_next_open[one]
+tests/api/test_http_sync.py::test_a_move_lets_its_folder_catch_up_on_its_next_open[conversation]
+tests/api/test_http_sync.py::test_a_move_lets_its_folder_catch_up_on_its_next_open[marked]
