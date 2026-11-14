@@ -735,3 +735,15 @@ fn while_someone_uses_ai_no_batch_goes_and_the_backlog_still_waits() {
     w.governor.forget();
     assert_eq!(w.submit(), 100);
 }
+
+#[test]
+fn the_assessments_say_what_is_out_in_a_batch_and_nothing_without_batches() {
+    let w = world(30, true, None);
+    assert_eq!(w.assessments(false).batch_status(), w.batching.status());
+    assert_eq!(w.batching.submit(1, 2).expect("a round"), 28);
+    let out = w.assessments(false).batch_status().expect("its status");
+    assert_eq!((out.waiting, out.state.as_deref()), (28, Some("running")));
+    assert_eq!(Ok(out), w.batching.status());
+    let none = Assessments::new(w.calls.clone(), w.book.clone(), w.clock.clone());
+    assert_eq!(none.batch_status(), Ok(batches::BatchStatus { waiting: 0, state: None, estimate_micros: 0 }));
+}
