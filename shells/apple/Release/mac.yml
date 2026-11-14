@@ -1,0 +1,8 @@
+# The Mac app's packaging and updates, which project.yml includes: XcodeGen merges this into it, appending to its
+# lists. See docs/releasing.md.
+
+targets:
+  MailMind-macOS:
+    sources:
+      # The icon Icon/icon.swift draws. A path here is from this file's folder.
+      - path: ../Icon/Assets.xcassets

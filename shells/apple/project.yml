@@ -1,5 +1,8 @@
 # The Apple shell's Xcode project, for XcodeGen. `just apple project` writes MailMind.xcodeproj from it.
 name: MailMind
+# The Mac app's icon, packaging and updates, which only the Mac target has.
+include:
+  - Release/mac.yml
 options:
   bundleIdPrefix: io.github.lanterno
   deploymentTarget:
