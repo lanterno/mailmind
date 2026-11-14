@@ -26,6 +26,8 @@ mm-attention.workspace = true
 # mailmind.config.json, written back with its keys in the order they came.
 serde_json = { workspace = true, features = ["preserve_order"] }
 zeroize.workspace = true
+# The export's archive: each file deflated into the zip, and its CRC-32.
+flate2.workspace = true
 
 # SQLCipher needs a crypto library: Apple systems have CommonCrypto and the browser build has LibTomCrypt.
 # Everywhere else it is OpenSSL, compiled in so that no system library is assumed.
