@@ -26,8 +26,8 @@ impl SyncRecords {
         SyncRecords { store }
     }
 
-    /// Each account's INBOX record, by account. The Rust server runs no sync of its own yet, so none has run since
-    /// the start: each stands "".
+    /// Each account's INBOX record, by account, as stored. How each account's sync stands now is the `Syncing`'s,
+    /// which the server adds; here each stands "".
     pub fn sync_record(&self) -> Result<Vec<SyncRecord>, Fault> {
         Ok(self
             .store

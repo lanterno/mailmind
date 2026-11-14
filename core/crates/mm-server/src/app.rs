@@ -41,7 +41,7 @@ use crate::heard::Heard;
 use crate::page::Page;
 use crate::serve::Work;
 use crate::sync_wiring::{DirectoryAccounts, ImapServers, RuleBookClassifier};
-use crate::wiring::{CurationPlans, ImapSessions, KnownAccounts, ListedAccounts, MailboxSyncs};
+use crate::wiring::{CurationPlans, ImapSessions, KnownAccounts, ListedAccounts, LiveSync, MailboxSyncs};
 use crate::workers::Jobs;
 
 /// Where the app reads the time and its secrets, and what it asks before it opens a file or reaches a host.
@@ -210,7 +210,9 @@ impl App {
         let places = Places::new(database.clone(), seams.clock.clone());
         let events = Arc::new(Hub::new().map_err(|_| "the system's random source failed")?);
         let snippets = Snippets::new(Arc::new(SnippetsDocument::new(database.clone(), seams.clock.clone())));
-        let syncs = MailboxSyncs(SyncRecords::new(database.clone()));
+        // How the sync stands now, for the digest and each account's health: bound to the Syncing once it exists.
+        let live_sync = Arc::new(LiveSync::default());
+        let syncs = MailboxSyncs(SyncRecords::new(database.clone()), live_sync.clone());
         let health = Health::new(Arc::new(syncs), seams.clock.clone());
         let plans = CurationPlans(StoredPlans::new(database.clone(), database.clone()));
         let stats =
@@ -256,6 +258,7 @@ impl App {
                 folders: folders.clone(),
                 invites: mm_calendar::invites::Invites::new(zones.clone(), zone.clone()),
                 fetch: fetch.clone(),
+                live_sync: live_sync.clone(),
             },
             environment,
             seams,
@@ -331,6 +334,7 @@ impl App {
             around: Arc::new(AroundRounds { snoozing: attention.snoozing.clone(), jobs: jobs.clone() }),
             warm: warming.clone(),
         }));
+        live_sync.bind(syncing.clone());
         // IDLE: a worker for each account, which `Workers::start` sets going; what it hears syncs those accounts.
         let realtime = crate::idle_wiring::realtime(&directory, &login, &syncing, environment.read_only(), &idle_heard);
         let reconciler = Reconciler::new(ReconcilerParts {

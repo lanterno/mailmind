@@ -124,8 +124,7 @@ pub fn quote(text: &str) -> String {
     out
 }
 
-/// The sync as it stands before any has run, and on the Rust server until the sync is ported: no account's
-/// state, and the whole one idle.
+/// The sync as it stands before any has run: no account's state, and the whole one idle.
 #[derive(Debug, Default)]
 pub struct NotSyncing;
 

@@ -1,12 +1,15 @@
 //! Where one context's port is another's use case, or a network crate's connection: the glue `app` binds. A context
 //! never names another, so what the Mailbox asks of the accounts is answered here, from the Directory.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use mm_accounts::Directory;
 use mm_kernel::errors::Fault;
+use mm_mailbox::digest::NotSyncing;
 use mm_mailbox::ports::{Accounts, MailSession, MailSessions, SessionError};
+use mm_mailbox::syncing::Syncing;
+use serde_json::{Value, json};
 
 /// What a session waits for each answer when opened with none named (`pool.KEPT_TIMEOUT`).
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -119,9 +122,47 @@ impl MailSessions for ImapSessions {
     }
 }
 
-/// The Accounts' record of each account's syncs: the Mailbox's (`bootstrap.accounts._sync_record`).
+/// How the sync stands now (`Syncing.status` and `Syncing.sync`), for the digest and each account's health. The
+/// Mailbox's `Syncing` is assembled after both, since its rounds wake Attention's snoozes, so it is bound here once it
+/// exists; until then no sync has run, as at any start.
+#[derive(Debug, Default)]
+pub(crate) struct LiveSync(OnceLock<Arc<Syncing>>);
+
+impl LiveSync {
+    pub(crate) fn bind(&self, syncing: Arc<Syncing>) {
+        // Bound once, as the app is assembled; a second binding would be a wiring mistake, and the first stands.
+        let _ = self.0.set(syncing);
+    }
+
+    /// An account's sync now: "ok", "syncing", "error", or "" when none has run since the start.
+    fn health(&self, account: &str) -> &'static str {
+        let status = self.0.get().and_then(|syncing| syncing.status().ok());
+        status.and_then(|status| status.get(account).map(|a| a.health)).unwrap_or("")
+    }
+}
+
+impl mm_mailbox::ports::SyncStatus for LiveSync {
+    fn status(&self) -> Value {
+        match self.0.get().map(|syncing| syncing.status()) {
+            Some(Ok(status)) => Value::Object(
+                status.into_iter().map(|(account, a)| (account, json!({"health": a.health, "msg": a.msg}))).collect(),
+            ),
+            _ => NotSyncing.status(),
+        }
+    }
+
+    fn sync(&self) -> Value {
+        match self.0.get().map(|syncing| syncing.sync()) {
+            Some(Ok(sync)) => json!({"running": sync.running, "last": sync.last, "result": sync.result}),
+            _ => NotSyncing.sync(),
+        }
+    }
+}
+
+/// The Accounts' record of each account's syncs: the Mailbox's (`bootstrap.accounts._sync_record`), with how each
+/// account's sync stands now.
 #[derive(Debug)]
-pub(crate) struct MailboxSyncs(pub(crate) mm_mailbox::sync_record::SyncRecords);
+pub(crate) struct MailboxSyncs(pub(crate) mm_mailbox::sync_record::SyncRecords, pub(crate) Arc<LiveSync>);
 
 impl mm_accounts::ports::SyncRecord for MailboxSyncs {
     fn sync_record(&self) -> Result<Vec<mm_accounts::ports::Synced>, Fault> {
@@ -130,13 +171,13 @@ impl mm_accounts::ports::SyncRecord for MailboxSyncs {
             .sync_record()?
             .into_iter()
             .map(|r| mm_accounts::ports::Synced {
+                live: self.1.health(&r.health.account).to_owned(),
                 account: r.health.account,
                 last_ok_ts: r.health.last_ok_ts,
                 last_error_ts: r.health.last_error_ts,
                 last_error_kind: r.health.last_error_kind,
                 last_error: r.health.last_error,
                 sync_count: r.health.sync_count,
-                live: r.live.to_owned(),
             })
             .collect())
     }
