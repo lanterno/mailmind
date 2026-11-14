@@ -206,6 +206,8 @@ impl<'a> Folder<'a> {
             let path = parent.join(format!(".mailmind-check-{}-{n}", std::process::id()));
             outside.open(&path).ok()?;
             let mut builder = fs::DirBuilder::new();
+            // A folder of its own: never one already there, nor the folders above it.
+            builder.recursive(false);
             #[cfg(unix)]
             std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
             match builder.create(&path) {

@@ -100,6 +100,8 @@ impl Exports {
             let folder = self.temporary.join(format!("mm-export-{}-{n}", std::process::id()));
             self.outside.open(&folder).map_err(|_| TRIPPED)?;
             let mut builder = fs::DirBuilder::new();
+            // A folder of its own: never one already there, nor the folders above it.
+            builder.recursive(false);
             #[cfg(unix)]
             std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
             match builder.create(&folder) {
@@ -130,7 +132,8 @@ impl Exports {
     pub fn snapshot(&self) -> Result<Download, Fault> {
         let mut download =
             self.folder("application/octet-stream", format!("mailmind-{}.db", stamp(self.clock.now())))?;
-        drop(self.create(&download.file)?);
+        // Made readable by its owner only, and closed again: SQLite opens it next.
+        let _ = self.create(&download.file)?;
         let mut copy = Connection::open(&download.file).map_err(|_| UNWRITABLE)?;
         copy.execute_batch(&self.database.key().pragma()).map_err(|_| UNWRITABLE)?;
         self.database.read(|c| {
