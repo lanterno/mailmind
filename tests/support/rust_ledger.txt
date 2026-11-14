@@ -168,3 +168,5 @@ tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/briefing-body7]
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/briefing/since-body8]
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/review-body9]
+tests/api/test_http_get.py::test_without_a_key_no_mail_leaves_for_the_api
+tests/api/test_http_get.py::test_ai_routes_without_a_key
