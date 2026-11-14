@@ -173,18 +173,6 @@ impl Mail for Database {
     }
 }
 
-/// A copy's account, its folder and its uid there.
-pub type CopyAt = (String, Option<String>, Option<i64>);
-
-/// Where the copy `pk` is.
-pub fn copy_at(db: &Database, pk: i64) -> Result<Option<CopyAt>, Fault> {
-    db.read(|c| {
-        c.prepare_cached("SELECT account, folder, uid FROM messages WHERE pk = ?")?
-            .query_row([pk], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
-            .optional()
-    })
-}
-
 const SAVE_SUMMARY: &str = "INSERT INTO thread_summaries(account, thread_id, scope, fingerprint, tldr, points, action, \
                             participants, message_count, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
                             ON CONFLICT(account, thread_id, scope) DO UPDATE SET \

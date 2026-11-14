@@ -34,7 +34,9 @@ use mm_discovery::query::QuerySpec;
 use mm_kernel::errors::{Fault, NOT_YET};
 use mm_kernel::seams::{Clock, Keychain, Outside, Secret};
 use mm_kernel::zone::Zone;
-use mm_mailbox::gates::{Gates, Priority, Wait, on_gate};
+use mm_mailbox::fetching::{Fetching, FetchingParts};
+use mm_mailbox::gates::Gates;
+use mm_mailbox::ports::BodyFetch;
 use mm_mailbox::session::MailServers;
 use mm_store::Database;
 use mm_store::discovery::DiscoveryStore;
@@ -192,7 +194,14 @@ impl Assistant {
         let label = environment.model().unwrap_or_else(|| mm_assistant::models::DEFAULT.to_owned());
         let status = Arc::new(Status::new(gateway.clone(), clock.clone(), label));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
-        let mail = Arc::new(AssistantMail { database: database.clone(), servers, gates });
+        let fetch = Arc::new(Fetching::new(FetchingParts {
+            stored: database.clone(),
+            kept: database.clone(),
+            servers,
+            gates,
+            clock: clock.clone(),
+        }));
+        let mail = Arc::new(AssistantMail { database: database.clone(), fetch });
         let context = Context::new(mail, accounts.clone());
         let index = Arc::new(DiscoveryStore::new(database.clone(), clock.clone()));
         let asker = Arc::new(Asker::new(calls.clone(), index.clone(), context.clone(), clock.clone()));
@@ -244,20 +253,14 @@ impl Assistant {
     }
 }
 
-/// What the Assistant reads of the mail: the store's rows, and a body that hasn't come down, read from its server.
-///
-/// Python's `Mail.fetch_body` is the Mailbox's `Ingest.fetch_body`, which keeps what it read. Until the Rust server's
-/// Mailbox fetches and keeps a body (area G), the Assistant reads one here, read-only on the account's gate at
-/// interactive priority, as that fetch does, and keeps nothing: the next request reads it again.
+/// What the Assistant reads of the mail: the store's rows, and a body that hasn't come down, through the Mailbox's
+/// body fetch (Python's `Mail.fetch_body`, the Mailbox's `Ingest.fetch_body`): on the account's gate at interactive
+/// priority, and kept, so the next request reads it from the store.
 #[derive(Debug)]
 pub(crate) struct AssistantMail {
     database: Arc<Database>,
-    servers: Arc<dyn MailServers>,
-    gates: Arc<dyn Gates>,
+    fetch: Arc<dyn BodyFetch>,
 }
-
-/// How long a body's read waits on each answer.
-const FETCH_SECONDS: u64 = 30;
 
 impl Mail for AssistantMail {
     fn message(&self, pk: i64) -> Result<Option<Message>, Fault> {
@@ -273,15 +276,7 @@ impl Mail for AssistantMail {
     }
 
     fn fetch_text(&self, pk: i64) -> Result<Option<String>, Fault> {
-        let Some((account, folder, uid)) = mm_store::assistant::copy_at(&self.database, pk)? else { return Ok(None) };
-        let (Some(folder), Some(uid)) = (folder, uid.and_then(|u| u32::try_from(u).ok())) else { return Ok(None) };
-        let read = on_gate(&*self.gates, &account, Priority::Interactive, Wait::Ever, || {
-            let mut session = self.servers.open(&account, FETCH_SECONDS).ok()?;
-            let raw = session.select(&folder, true).ok().and_then(|_| session.body(uid).ok().flatten());
-            session.logout();
-            raw
-        });
-        let raw = read.map_err(|_| Fault::new("Busy"))?.unwrap_or_default();
+        let raw = self.fetch.fetch(pk)?.unwrap_or_default();
         Ok(mm_content::mime::parse(&raw).text.map(std::borrow::Cow::into_owned))
     }
 
