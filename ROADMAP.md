@@ -147,6 +147,10 @@ served tests it passes against the same scripts. Until the flip, the Python app 
 - **Proton Mail goes with the desktop app** — decided on 2026-11-08. Proton offers IMAP only through its Bridge, which has
   to run on the same computer as the app, so only a desktop app can count on it. The `proton` account type, the
   `proton_bridge` credential and the loopback handling stay as they are until that app exists; add no new Bridge special cases.
+- **A native Mac app; the web shell on Windows and Linux** — decided on 2026-11-14 ([#26](https://github.com/lanterno/mailmind/issues/26)).
+  On the Mac the native list opens in 218 ms and idles at 28 MB, against 724 ms and 83.9 MB for the same page in Tauri,
+  so the native Mac app ships after the Tauri build, once the iPad shell it reuses has the screens. Windows and Linux
+  keep the web shell unless their measurements (#12) miss a budget, with a GTK4 shell in Rust as Linux's fallback.
 
 ## Open decisions
 
@@ -159,10 +163,6 @@ implementation.
   folder, where it has always been. Left for later on 2026-11-03.
 - **Default remote-image policy** · [#25](https://github.com/lanterno/mailmind/issues/25) — block-by-default with per-message "Load images" (current, and the
   privacy-preserving choice) vs. allowing images for known/personal senders.
-- **Native shells on the desktop** · [#26](https://github.com/lanterno/mailmind/issues/26) — on the Mac the native list opens in 218 ms and idles at 28 MB; the same page in
-  Tauri, 724 ms and 83.9 MB (`budgets.toml`). The recommendation: commit to the native Mac app, shipped after the Tauri
-  one once the iPad shell has the screens, and keep the web shell on Windows and Linux unless their measurements miss a
-  budget, with a GTK4 shell in Rust as Linux's fallback.
 - **The client's licence, a legal entity, and who runs the push relay** · [#27](https://github.com/lanterno/mailmind/issues/27) — the architecture document's risks section
   recommends an answer for each. The push relay waits on the iPhone app; the other two on the first store listing.
 
