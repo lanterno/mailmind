@@ -315,9 +315,9 @@ type Replacement = (usize, u8);
 /// The bytes in the message's own parts that read to mail-parser otherwise than they read to Python. A name or a type
 /// is renamed, its first byte an X: a part that names its Content-Type or Content-Transfer-Encoding again, of which
 /// Python read the first, and a part mail-parser reads as a multipart or an attached email, whose type Python read as
-/// none, being without exactly one `/`: such a part is text/plain, as RFC 2045 has it. And a byte Python took as white
-/// space at the edge of a Content-Type parameter's name or value, where mail-parser kept it, becomes a space: a
-/// boundary or a charset after a vertical tab was lost.
+/// none, being without exactly one `/`: such a part is text/plain, as RFC 2045 has it. And white space Python took
+/// from a Content-Type parameter, where mail-parser kept it, goes ([`header::param_replacements`]): a boundary or a
+/// charset after a vertical tab was lost, and so was a boundary with a blank before its closing quote.
 fn replacements(raw: &[u8], message: &Message<'_>) -> Vec<Replacement> {
     let mut replaced = Vec::new();
     for part in message.root().parts() {
@@ -328,8 +328,8 @@ fn replacements(raw: &[u8], message: &Message<'_>) -> Vec<Replacement> {
         if let Some(first) = headers.all(HeaderName::ContentType).next()
             && let Some(start) = offset_in(raw, first.raw_value())
         {
-            let blanks = header::stripped_controls(first.raw_value());
-            replaced.extend(blanks.into_iter().map(|at| (start + at, b' ')));
+            let params = header::param_replacements(first.raw_value());
+            replaced.extend(params.into_iter().map(|(at, with)| (start + at, with)));
         }
         let holds_parts = part.content_type().is_some_and(|written| {
             written.ctype().eq_ignore_ascii_case("multipart") || written.ctype().eq_ignore_ascii_case("message")

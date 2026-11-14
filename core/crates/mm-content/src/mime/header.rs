@@ -115,28 +115,55 @@ pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
     })
 }
 
-/// Where a raw Content-Type value holds a byte that Python took for white space and dropped, and mail-parser keeps: a
-/// vertical tab, a form feed or one of the separators `\x1c` to `\x1f`, at either edge of a parameter's name, or at
-/// the end of a boundary, which Python's `get_boundary` stripped on the right. Python kept one at the start of a
-/// value, at the end of any other or inside either, and so does the core.
-pub(super) fn stripped_controls(raw: &[u8]) -> Vec<usize> {
-    let mut found = Vec::new();
+/// The bytes of a raw Content-Type value to replace, and what with, for mail-parser to read its parameters as Python
+/// did. Python took a vertical tab, a form feed or one of the separators `\x1c` to `\x1f` for white space, and
+/// mail-parser keeps them: one at either edge of a parameter's name, or after a boundary, which Python's
+/// `get_boundary` stripped on the right, becomes a space. That strip took blanks inside a boundary's quotes too, where
+/// mail-parser keeps them: the closing quote moves back over them. Python kept a blank at the start of a value, at the
+/// end of any other or inside either, and so does the core.
+pub(super) fn param_replacements(raw: &[u8]) -> Vec<(usize, u8)> {
+    let mut replaced = Vec::new();
     for param in params(raw) {
         let Some(text) = raw.get(param.clone()) else { continue };
         let equals = text.iter().position(|&byte| byte == b'=').map_or(param.end, |equals| param.start + equals);
         let name = raw.get(param.start..equals).unwrap_or_default();
         let lead = name.iter().take_while(|&&byte| python_blank(byte)).count();
         let trail = name.iter().rev().take_while(|&&byte| python_blank(byte)).count().min(name.len() - lead);
-        found.extend((param.start..param.start + lead).chain(equals - trail..equals));
+        let mut edges: Vec<usize> = (param.start..param.start + lead).chain(equals - trail..equals).collect();
         let bare_name = name.get(lead..name.len() - trail).unwrap_or_default();
         let value = raw.get(equals + 1..param.end).unwrap_or_default();
         let blanks = value.iter().rev().take_while(|&&byte| python_blank(byte)).count();
         if bare_name.eq_ignore_ascii_case(b"boundary") && blanks < value.len() {
-            found.extend(param.end - blanks..param.end);
+            edges.extend(param.end - blanks..param.end);
+            replaced.extend(closing_quote_moved(raw, equals + 1..param.end));
         }
+        let spaces = edges.into_iter().filter(|&at| raw.get(at).copied().is_some_and(kept_by_mail_parser));
+        replaced.extend(spaces.map(|at| (at, b' ')));
     }
-    found.retain(|&at| raw.get(at).copied().is_some_and(kept_by_mail_parser));
-    found
+    replaced
+}
+
+/// A quoted value's blanks before its closing quote, as replacements that move the quote back over them, the bytes
+/// after it to the old quote becoming spaces: `"b \x0b"` reads `"b"  `. None for a value not in quotes, with no such
+/// blanks, or with a fold among them, whose leading blank the quote must not take.
+fn closing_quote_moved(raw: &[u8], value: Range<usize>) -> Vec<(usize, u8)> {
+    let bytes = raw.get(value.clone()).unwrap_or_default();
+    let (Some(open), Some(close)) =
+        (bytes.iter().position(|&byte| !python_blank(byte)), bytes.iter().rposition(|&byte| !python_blank(byte)))
+    else {
+        return Vec::new();
+    };
+    if open >= close || bytes.get(open) != Some(&b'"') || bytes.get(close) != Some(&b'"') {
+        return Vec::new();
+    }
+    let inside = bytes.get(open + 1..close).unwrap_or_default();
+    let blanks = inside.iter().rev().take_while(|&&byte| python_blank(byte)).count();
+    let trailing = inside.get(inside.len() - blanks..).unwrap_or_default();
+    if blanks == 0 || trailing.iter().any(|&byte| matches!(byte, b'\r' | b'\n')) {
+        return Vec::new();
+    }
+    let quote = value.start + close - blanks;
+    std::iter::once((quote, b'"')).chain((quote + 1..=value.start + close).map(|at| (at, b' '))).collect()
 }
 
 /// Whether Python's `str.strip` took a byte of a header for white space: an ASCII blank, a line end, a vertical tab, a
