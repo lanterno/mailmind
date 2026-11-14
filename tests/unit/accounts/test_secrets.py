@@ -1,5 +1,6 @@
 """Having a password from wherever its credential says (mailmind.accounts.adapters.secrets): the Keychain, a 1Password
-read, the environment, or Proton Bridge's own sources. `op` never runs here: each test answers for it, as the program
+read, the environment, or Proton Bridge's own sources, as the Rust server reads them too (core/crates/mm-accounts'
+tests/bridge.rs) but for the file. `op` never runs here: each test answers for it, as the program
 would, and the Keychain is the guard's stand-in."""
 import subprocess
 from types import SimpleNamespace
@@ -7,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from mailmind.accounts.adapters import secrets
+from mailmind.platform import keychain
 
 REF = "op://Private/Ada/password"
 OTHER = "op://Private/Ada/old"
@@ -263,10 +265,38 @@ def test_then_the_file_when_op_cant_read_the_item(op, monkeypatch):
     assert secrets.bridge_password() == "from-file"
 
 
+def test_the_1password_item_comes_before_the_keychains(op, monkeypatch, fake_keychain):
+    op({"op://Private/Bridge/password": [(0, "from-op\n", "")]})
+    monkeypatch.setenv("MAILMIND_PROTON_OP_ITEM", "Bridge")
+    fake_keychain.add("proton-bridge-password", "from-keychain", replace=True)
+    assert secrets.bridge_password() == "from-op"
+
+
+def test_then_the_keychains_item_before_the_file(op, monkeypatch, fake_keychain):
+    fake = op({"op://Private/Bridge/password": [(1, "", "[ERROR] item not found")]})
+    monkeypatch.setenv("MAILMIND_PROTON_OP_ITEM", "Bridge")
+    fake_keychain.add("proton-bridge-password", "from-keychain", replace=True)
+    secrets.BRIDGE_FILE.write_text("from-file\n")
+    assert secrets.bridge_password() == "from-keychain"
+    assert fake.asked == ["op://Private/Bridge/password"]
+
+
+def test_the_file_when_the_keychain_cant_be_asked(op, monkeypatch):
+    """A computer with no Keychain, or one locked: the file still answers, as it did before the Keychain was asked."""
+    class Locked:
+        def find(self, name):
+            raise keychain.Unreachable("TimeoutExpired")
+    op({})
+    monkeypatch.setattr(keychain, "_backend", Locked())
+    secrets.BRIDGE_FILE.write_text("from-file\n")
+    assert secrets.bridge_password() == "from-file"
+
+
 def test_with_none_of_them_it_says_where_to_put_it_and_keeps_nothing(op):
     op({})
     with pytest.raises(RuntimeError, match="Proton Bridge password not configured. Set MAILMIND_PROTON_BRIDGE_PASS, "
-                                           "or MAILMIND_PROTON_OP_ITEM"):
+                                           "or MAILMIND_PROTON_OP_ITEM .*, or keep it in the login Keychain as "
+                                           "MailMind's proton-bridge-password, or write it to"):
         secrets.bridge_password()
     secrets.BRIDGE_FILE.write_text("from-file\n")
     assert secrets.bridge_password() == "from-file"
