@@ -612,3 +612,4 @@ tests/api/test_http_export.py::test_the_mail_as_an_archive[mbox]
 tests/api/test_http_export.py::test_a_format_the_export_does_not_offer_is_the_bad_request
 tests/api/test_http_forget.py::test_what_went_a_month_ago_is_let_go
 tests/api/test_http_forget.py::test_a_key_whose_copy_came_back_is_kept_however_old
+tests/e2e/browser/test_status.py::test_the_export_picker_downloads_the_mail_as_a_zip_in_the_format_chosen
