@@ -55,16 +55,6 @@ impl mm_assistant::ports::AiSettings for AiConfig {
     }
 }
 
-/// How AI stands, as the Assistant reports it, for the digest.
-#[derive(Debug)]
-pub(crate) struct AssistantStatus(pub(crate) mm_assistant::status::Status);
-
-impl mm_mailbox::ports::AiStatus for AssistantStatus {
-    fn report(&self) -> Result<serde_json::Value, Fault> {
-        self.0.report()
-    }
-}
-
 /// What Compose, Discovery and the calendar add to a message as it opens: a draft's id, what is said of its sender,
 /// and the invite it carries.
 #[derive(Debug)]

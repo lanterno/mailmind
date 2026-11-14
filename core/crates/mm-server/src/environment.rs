@@ -187,4 +187,39 @@ impl Environment {
     pub fn gate_per_account(&self) -> bool {
         self.raw("MAILMIND_WORKERS").unwrap_or_default().trim().eq_ignore_ascii_case("account")
     }
+
+    // The Assistant's.
+
+    /// ANTHROPIC_API_KEY, without the spaces around it: None when unset or blank.
+    pub fn anthropic_key(&self) -> Option<Secret> {
+        let key = mm_kernel::text::strip(self.raw("ANTHROPIC_API_KEY").unwrap_or_default());
+        (!key.is_empty()).then(|| Secret::new(key.to_owned()))
+    }
+
+    /// ANTHROPIC_BASE_URL: where API calls go, None for the API's own address.
+    pub fn anthropic_base_url(&self) -> Option<String> {
+        self.raw("ANTHROPIC_BASE_URL").filter(|url| !url.is_empty()).map(str::to_owned)
+    }
+
+    /// MAILMIND_MODEL: the Claude model every feature asks, None for the default.
+    pub fn model(&self) -> Option<String> {
+        Some(self.raw("MAILMIND_MODEL")?.trim().to_owned()).filter(|m| !m.is_empty())
+    }
+
+    /// MAILMIND_NO_SCHEMA on: free-form JSON rather than structured output. A value it doesn't take is off.
+    pub fn no_schema(&self) -> bool {
+        ["1", "true", "yes", "on"]
+            .contains(&self.raw("MAILMIND_NO_SCHEMA").unwrap_or_default().trim().to_lowercase().as_str())
+    }
+
+    /// MAILMIND_NO_DRAFT_TICK on: draft no replies ahead. A value it doesn't take is on, which drafts nothing.
+    pub fn no_draft_tick(&self) -> bool {
+        !["", "0", "false", "no", "off"]
+            .contains(&self.raw("MAILMIND_NO_DRAFT_TICK").unwrap_or_default().trim().to_lowercase().as_str())
+    }
+
+    /// The variable an account's or a setting's credential names (`{"env": NAME}` in mailmind.config.json), as set.
+    pub fn credential(&self, name: &str) -> Option<Secret> {
+        self.raw(name).map(|value| Secret::new(value.to_owned()))
+    }
 }

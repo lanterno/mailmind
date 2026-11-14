@@ -58,5 +58,8 @@ mod idle_wiring;
 // A person's filters, as a sync stores new mail.
 mod arrival_wiring;
 
+// The Assistant's use cases bound: the language model for the key in force, the cost governor and every AI call.
+pub mod assistant_wiring;
+
 pub use app::{App, Seams};
 pub use serve::{Server, Work};

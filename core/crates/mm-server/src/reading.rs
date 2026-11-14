@@ -4,8 +4,6 @@
 
 use std::sync::Arc;
 
-use mm_accounts::ports::ConfigFile;
-use mm_assistant::status::Status;
 use mm_compose::drafts::Drafts;
 use mm_compose::outbox::Outbox;
 use mm_discovery::documents::DocumentHub;
@@ -20,7 +18,7 @@ use mm_store::export::Exports;
 
 use crate::app::Seams;
 use crate::environment::Environment;
-use crate::wiring::{AiConfig, AssistantStatus, DraftsFolder, KnownAccounts, MessageOpening};
+use crate::wiring::{DraftsFolder, KnownAccounts, MessageOpening};
 
 #[derive(Debug)]
 pub struct Reading {
@@ -38,7 +36,8 @@ pub(crate) struct Adapters {
     pub(crate) database: Arc<Database>,
     /// A folder's sync as it opens.
     pub(crate) syncs: Arc<dyn FolderSyncs>,
-    pub(crate) config: Arc<dyn ConfigFile>,
+    /// How AI stands, which the digest says.
+    pub(crate) ai: Arc<dyn mm_mailbox::ports::AiStatus>,
     pub(crate) folders: Arc<Folders>,
     /// The calendar's reading of the invite a message opens with.
     pub(crate) invites: mm_calendar::invites::Invites,
@@ -48,13 +47,8 @@ pub(crate) struct Adapters {
 
 impl Reading {
     pub(crate) fn assemble(made: Adapters, environment: &Environment, seams: &Seams) -> Reading {
-        let Adapters { accounts, database, syncs, config, folders, invites, fetch } = made;
+        let Adapters { accounts, database, syncs, ai, folders, invites, fetch } = made;
         let clock = seams.clock.clone();
-        let ai = Status::new(
-            Arc::new(AiConfig { file: config, environment_key: environment.gives_anthropic_key() }),
-            database.clone(),
-            clock.clone(),
-        );
         let opening = MessageOpening {
             drafts: Drafts::new(database.clone(), Arc::new(DraftsFolder(folders)), clock.clone()),
             senders: SenderFacts::new(database.clone(), clock.clone()),
@@ -66,14 +60,7 @@ impl Reading {
             bodies: Bodies::new(database.clone(), fetch, Arc::new(opening), seams.sanitizer.clone()),
             documents: DocumentHub::new(database.clone(), accounts.clone(), clock.clone()),
             outbox: Outbox::new(database.clone(), clock.clone(), environment.profile() == "full"),
-            digest: Digest::new(
-                accounts,
-                database,
-                Arc::new(NotSyncing),
-                Arc::new(AssistantStatus(ai)),
-                environment.profile(),
-                clock,
-            ),
+            digest: Digest::new(accounts, database, Arc::new(NotSyncing), ai, environment.profile(), clock),
         }
     }
 }

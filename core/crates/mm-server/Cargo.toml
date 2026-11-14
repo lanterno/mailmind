@@ -36,6 +36,8 @@ mm-calendar.workspace = true
 mm-attention.workspace = true
 # The outbox's sends, over each account's SMTP server.
 mm-smtp.workspace = true
+# What is asked of Claude, over the Claude API.
+mm-claude.workspace = true
 # An answer's JSON in the order its fields were written, as Python's dicts keep theirs.
 serde_json = { workspace = true, features = ["preserve_order"] }
 sha2.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "mm-claude"
+description = "The network: the Claude API's Messages endpoint, over HTTPS, as the Assistant's language model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mm-assistant.workspace = true
+mm-kernel.workspace = true
+mm-net.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[lints]
+workspace = true

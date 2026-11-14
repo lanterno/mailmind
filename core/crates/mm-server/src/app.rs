@@ -115,6 +115,8 @@ pub struct App {
     pub cleanups: crate::cleanup_wiring::Cleanups,
     /// Today & next, an answer to an invite and an event file.
     pub calendar: crate::calendar_wiring::Calendar,
+    /// The Assistant's: every AI call, the cost governor, and how AI stands.
+    pub assistant: crate::assistant_wiring::Assistant,
 }
 
 impl App {
@@ -152,6 +154,18 @@ impl App {
         crate::database_version::ready(&database, &*seams.clock)?;
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
+        // The Assistant's: every AI call, and how AI stands, which the digest says.
+        let assistant = crate::assistant_wiring::Assistant::assemble(
+            crate::assistant_wiring::Parts {
+                database: database.clone(),
+                config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
+                keychain: seams.keychain.clone(),
+                outside: seams.outside.clone(),
+                clock: seams.clock.clone(),
+                zone: zone.clone(),
+            },
+            environment,
+        );
         let discovery = crate::bound::Discovery::assemble(&database, &directory, &seams.clock, &zone);
         let tidying = crate::bound::Tidying::assemble(&database, &seams.clock);
         // The calendar's, reading a TZID in the system's zone database.
@@ -212,7 +226,7 @@ impl App {
                 accounts: Arc::new(KnownAccounts(directory.clone())),
                 database: database.clone(),
                 syncs,
-                config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
+                ai: Arc::new(crate::assistant_wiring::SharedStatus(assistant.status.clone())),
                 folders: folders.clone(),
                 invites: mm_calendar::invites::Invites::new(zones.clone(), zone.clone()),
                 fetch: fetch.clone(),
@@ -379,6 +393,7 @@ impl App {
             logins,
             cleanups,
             calendar,
+            assistant,
         })
     }
 }

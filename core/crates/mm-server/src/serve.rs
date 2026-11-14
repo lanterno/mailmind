@@ -127,6 +127,8 @@ pub async fn answer(app: &App, routes: Router, request: Request<Incoming>) -> Re
             answer::no_route(method.as_str(), &path)
         }
         None => {
+            // Someone is here: a request past the perimeter, for the cost governor's presence gate.
+            app.assistant.touched(&path);
             let mut routes = routes;
             match routes.call(request).await {
                 Ok(response) => response,

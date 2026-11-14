@@ -29,6 +29,8 @@ mm-compose = { path = "crates/mm-compose" }
 # Sending: an account's SMTP server, on mm-net.
 mm-smtp = { path = "crates/mm-smtp" }
 mm-calendar = { path = "crates/mm-calendar" }
+# The assistant: the Claude API's Messages endpoint, on mm-net.
+mm-claude = { path = "crates/mm-claude" }
 
 # SQLCipher everywhere: Apple's CommonCrypto on Apple systems, a vendored OpenSSL on the others (each crate that
 # opens the database adds that feature for those targets), and LibTomCrypt in the browser, through sqlite-wasm-rs.
