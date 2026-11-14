@@ -144,3 +144,6 @@ tests/api/test_http_filters.py::test_another_folder_isnt_arrival
 tests/api/test_http_filters.py::test_mail_seen_before_isnt_new
 tests/api/test_http_filters.py::test_a_message_brought_back_by_undo_isnt_new
 tests/api/test_http_filters.py::test_a_later_sync_doesnt_take_the_mark_back
+tests/api/test_http_sync.py::test_an_invite_that_arrives_is_kept_with_its_body
+tests/api/test_http_sync.py::test_mail_with_no_invite_waits_to_be_opened
+tests/api/test_http_sync.py::test_an_invite_filed_elsewhere_waits_to_be_opened
