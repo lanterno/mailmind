@@ -1,7 +1,8 @@
 //! Compose bound to its adapters (`mailmind.bootstrap.compose`): the sends and the drafts, the outbox that delivers
 //! them, and what they ask of the world. SMTP is mm-smtp's, over what the configuration says of each account; the
 //! copies in Sent and Drafts are the Mailbox's sessions; \Answered on an original is a flag on its server, mirrored
-//! in its row; a follow-up is Attention's; and what the page hears goes out on the app's events. The outbox's worker
+//! in its row; a follow-up is Attention's; what the page hears goes out on the app's events, and what Compose says
+//! happened (Sent, Failed, DraftCopyRemoved) is heard as the other contexts' events are (`heard`). The outbox's worker
 //! is `outbox_worker`'s.
 
 use std::sync::Arc;
@@ -29,11 +30,13 @@ use mm_mailbox::folders::Folders;
 use mm_mailbox::gates::{Gates, Wait};
 use mm_mailbox::ingest::Ingest;
 use mm_mailbox::session::{MailServer, MailServers, Search, ServerError, find_role, found_by_message_id};
+use mm_mailbox::stats::LiveStats;
 use mm_mailbox::workers::{Kick, Queue};
 use mm_store::Database;
 use mm_store::attention::AttentionStore;
 use serde_json::{Value, json};
 
+use crate::heard::Heard;
 use crate::outbox_worker::{KickWorker, OutboxQueue};
 
 /// What a session waits for each answer (`pool.KEPT_TIMEOUT`), and an SMTP connection for each reply.
@@ -408,6 +411,7 @@ impl Effects for SendEffects {
 pub(crate) struct ComposeScreen {
     pub(crate) folders: Arc<Folders>,
     pub(crate) events: Arc<dyn Events>,
+    pub(crate) stats: Arc<LiveStats>,
 }
 
 impl Screen for ComposeScreen {
@@ -430,8 +434,9 @@ impl Screen for ComposeScreen {
         self.events.publish(Topic::Outbox, json!({}));
     }
 
-    /// The counts are read live on the Rust server: none is kept to drop.
-    fn stats_changed(&self) {}
+    fn stats_changed(&self) {
+        self.stats.invalidate();
+    }
 }
 
 /// Each account's IMAP gate, as Compose asks for it.
@@ -483,6 +488,10 @@ pub(crate) struct Parts {
     pub(crate) ingest: Arc<Ingest>,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) read_only: bool,
+    /// The counts `/api/stats` keeps, which a save lets go of.
+    pub(crate) stats: Arc<LiveStats>,
+    /// Where Sent, Failed and DraftCopyRemoved are heard.
+    pub(crate) heard: Arc<Heard>,
 }
 
 /// Compose's use cases, bound.
@@ -511,7 +520,8 @@ impl Compose {
             ingest: parts.ingest.clone(),
             clock: parts.clock.clone(),
         });
-        let screen: Arc<dyn Screen> = Arc::new(ComposeScreen { folders: parts.folders.clone(), events: parts.events });
+        let screen: Arc<dyn Screen> =
+            Arc::new(ComposeScreen { folders: parts.folders.clone(), events: parts.events, stats: parts.stats });
         let kick = Arc::new(Kick::default());
         let gate: Arc<dyn Gate> = Arc::new(ComposeGate(parts.gates));
         let writes = !parts.read_only;
@@ -532,6 +542,7 @@ impl Compose {
                 read_only: parts.read_only,
             }),
             screen: screen.clone(),
+            events: parts.heard,
             worker: Arc::new(KickWorker(kick.clone())),
             gate: gate.clone(),
             clock: parts.clock.clone(),

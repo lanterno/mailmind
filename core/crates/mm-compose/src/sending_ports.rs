@@ -1,8 +1,8 @@
 //! What sending and saving need of the world (`compose.application.ports`): Compose's own tables a block of work at a
 //! time (`Book`, which also reads the Mailbox's rows Compose needs), the wire (`Transport`), the copies kept on a mail
 //! server (`Copies`), the sending accounts, what a delivered send sets off elsewhere (`Effects`), what the page is
-//! told (`Screen`), the outbox's worker (`Worker`), and the gate each account's IMAP work passes (`Gate`). The store
-//! and the program implement them.
+//! told (`Screen`) and what Compose says happened (`Events`), the outbox's worker (`Worker`), and the gate each
+//! account's IMAP work passes (`Gate`). The store and the program implement them.
 //!
 //! A block (`Book`) is one transaction: what a use case reads in it decides what it writes, and no one comes between.
 //! No block stays open across a network call: a use case commits before it asks a server anything.
@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use mm_kernel::errors::Fault;
 
+use crate::events::ComposeEvent;
 use crate::ports::{Row, Tracked};
 
 /// An outbox row as stored (`outbox`).
@@ -447,6 +448,11 @@ pub trait Screen: Send + Sync + fmt::Debug {
     fn outbox_changed(&self);
     /// The counts of mail stored changed.
     fn stats_changed(&self);
+}
+
+/// Where Compose's events go (`bus.publish`).
+pub trait Events: Send + Sync + fmt::Debug {
+    fn publish(&self, event: ComposeEvent);
 }
 
 /// The outbox's worker, which waits for a send to come due.

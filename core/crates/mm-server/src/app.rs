@@ -266,6 +266,8 @@ impl App {
             ingest: ingest.clone(),
             clock: seams.clock.clone(),
             read_only: environment.read_only(),
+            stats: stats.clone(),
+            heard: Arc::new(Heard { hub: events.clone(), stats: stats.clone(), folders: folders.clone() }),
         });
         Ok(App {
             port,

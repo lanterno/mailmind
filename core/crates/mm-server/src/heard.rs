@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use mm_attention::events::AttentionEvent;
+use mm_compose::events::ComposeEvent;
 use mm_kernel::events::{Events as _, Topic};
 use mm_kernel::log;
 use mm_mailbox::folders::Folders;
@@ -74,6 +75,22 @@ impl mm_attention::ports::Events for Heard {
                 self.hub.publish(Topic::Followup, json!({"account": account}));
             }
             AttentionEvent::TasksChanged => self.hub.publish(Topic::TasksChanged, json!({})),
+        }
+    }
+}
+
+impl mm_compose::sending_ports::Events for Heard {
+    fn publish(&self, event: ComposeEvent) {
+        match event {
+            // A queued send went out or failed a try: the tray and the counts (`wiring._after_send`).
+            ComposeEvent::Sent { .. } | ComposeEvent::Failed { .. } => {
+                self.stats.invalidate();
+                self.hub.publish(Topic::Outbox, json!({}));
+            }
+            // A send's draft left the server: a list of its folder on screen loads again (`folders.list_changed`).
+            ComposeEvent::DraftCopyRemoved { account, folder } => {
+                self.hub.publish(Topic::Reconcile, json!({"account": account, "folder": folder, "pruned": 1}));
+            }
         }
     }
 }

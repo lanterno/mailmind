@@ -15,6 +15,7 @@ pub mod draft;
 pub mod draft_journal;
 pub mod drafting;
 pub mod drafts;
+pub mod events;
 pub mod markdown;
 pub mod outbox;
 pub mod outbox_item;

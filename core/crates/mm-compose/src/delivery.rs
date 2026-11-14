@@ -13,6 +13,8 @@
 //! Each account's sends go in a lane of their own, so one waiting on its IMAP server for a Sent copy holds up no other
 //! account's. `deliver` runs each lane on a thread of its own and waits for them all. The worker that calls it is the
 //! program's: it waits `until_due`, and a send queued, retried or brought forward wakes it (`Worker`).
+//!
+//! What happened is said as Python's outbox says it: Sent, Failed and DraftCopyRemoved (`Events`).
 
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
@@ -27,11 +29,12 @@ use serde_json::{Value, json};
 
 use crate::draft;
 use crate::draft_journal;
+use crate::events::ComposeEvent;
 use crate::outbox_item::{self, OriginalRow, SendMeta};
 use crate::ports::Row;
 use crate::sending_ports::{
-    self, Accounts, Book, ComposeStore, Copies, DraftRow, Effects, Gate, GateWait, Mark, OutboxRow, Priority, Screen,
-    Transport, Worker, on_gate,
+    self, Accounts, Book, ComposeStore, Copies, DraftRow, Effects, Events, Gate, GateWait, Mark, OutboxRow, Priority,
+    Screen, Transport, Worker, on_gate,
 };
 use crate::spec::Built;
 
@@ -51,6 +54,8 @@ pub struct DeliveryParts {
     pub accounts: Arc<dyn Accounts>,
     pub effects: Arc<dyn Effects>,
     pub screen: Arc<dyn Screen>,
+    /// Where Sent, Failed and DraftCopyRemoved go.
+    pub events: Arc<dyn Events>,
     /// The worker a send wakes. In the served suites none waits on it: they run each pass themselves.
     pub worker: Arc<dyn Worker>,
     pub gate: Arc<dyn Gate>,
@@ -329,16 +334,16 @@ impl Delivery {
             );
             let removed = done.map_err(|_| "Busy")??;
             if removed {
-                self.parts.screen.list_changed(&d.account, d.folder.as_deref().unwrap_or_default());
+                let (account, folder) = (d.account.clone(), d.folder.clone().unwrap_or_default());
+                self.parts.events.publish(ComposeEvent::DraftCopyRemoved { account, folder });
             }
         }
         self.write(|book| book.outbox_set(id, &[Mark::DraftDeleted])).map_err(|f| f.class)
     }
 
-    /// A send went out, or a try at it ended: the tray and the counts show it.
-    fn told(&self) {
-        self.parts.screen.stats_changed();
-        self.parts.screen.outbox_changed();
+    /// A try at a send failed: it waits for its next, or, `gave_up`, for a person.
+    fn failed(&self, row: &OutboxRow, gave_up: bool) {
+        self.parts.events.publish(ComposeEvent::Failed { outbox_id: row.id, account: row.account.clone(), gave_up });
     }
 
     /// One try at a queued send (`send_one`).
@@ -349,7 +354,7 @@ impl Delivery {
             _ => {
                 let attempts = row.attempts + 1;
                 self.write(|book| book.outbox_give_up(id, attempts, "account removed"))?;
-                self.told();
+                self.failed(&row, true);
                 return Ok(());
             }
         };
@@ -382,7 +387,7 @@ impl Delivery {
                     "failed; trying again later"
                 };
                 log::warning(TAG, "send", &[(Field::Id, &id.to_string()), (Field::What, what)], Some(tried.error));
-                self.told();
+                self.failed(&row, terminal);
                 return Ok(());
             }
             self.write(|book| book.outbox_delivered(id))?;
@@ -405,7 +410,7 @@ impl Delivery {
                 return Ok(());
             }
         }
-        self.told();
+        self.parts.events.publish(ComposeEvent::Sent { outbox_id: id, account: row.account.clone() });
         Ok(())
     }
 
