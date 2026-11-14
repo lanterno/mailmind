@@ -2,18 +2,22 @@
 //! `test_reply_drafting.py` and the domain's tests): what is sent, what is kept, and what comes back. The expected
 //! texts are what the Python app gives for the same input.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use mm_assistant::action_plan::{out_of_reach, preset_told, verb_told};
+use mm_assistant::ask::{Asker, cited, fts_match};
+use mm_assistant::bulk::BulkCommands;
 use mm_assistant::calls::Calls;
 use mm_assistant::context::{Context, trim};
 use mm_assistant::digest::{fingerprint, parse};
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
 use mm_assistant::ports::{
-    AccountList, AiSettings, Answers, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, ModelError,
-    NewDraft, Prompt, Reply, Said, Spend, Stamp, StoredDraft, StoredSummary, Usage, UsageLedger,
+    AccountList, AiSettings, Answers, AskIndex, AskRow, ConversationBy, Engine, InForce, LanguageModel, Mail, Message,
+    ModelError, NewDraft, PlanSearch, Prompt, Reached, Reply, Said, Spend, Stamp, StoredDraft, StoredSummary, Usage,
+    UsageLedger,
 };
 use mm_assistant::prepared_replies::{PreparedReplies, ReplyAsked};
 use mm_assistant::refusals::{AiFailure, NotSent};
@@ -384,4 +388,224 @@ fn a_default_reply_is_banked_and_the_next_is_served_from_the_bank() {
     assert!(prompt.text.contains("Follow this instruction for the reply: \"Keep it short\"."));
     let nothing = w.drafting.reply(&ReplyAsked::default());
     assert!(matches!(nothing, Err(AiFailure::Failure(Failure::Problem(p))) if p.said == "bad request"));
+}
+
+/// What a question finds: the rows given, whatever it asked; a query that isn't one is rejected.
+#[derive(Debug, Default)]
+struct Index {
+    rows: Vec<AskRow>,
+    asked: Mutex<Vec<(String, Vec<String>)>>,
+}
+
+impl AskIndex for Index {
+    fn for_asking(&self, fts_match: &str, accounts: &[String], _limit: i64) -> Result<Option<Vec<AskRow>>, Fault> {
+        self.asked.lock().expect("asked").push((fts_match.to_owned(), accounts.to_vec()));
+        Ok((!fts_match.contains("broken")).then(|| self.rows.clone()))
+    }
+}
+
+fn row(pk: i64, key: i64, body: Option<&str>, summary: Option<&str>) -> AskRow {
+    AskRow {
+        pk,
+        message_key: Some(key),
+        uid: Some(pk + 100),
+        account: ADA.into(),
+        folder: Some("INBOX".into()),
+        from_name: Some(String::new()),
+        from_addr: Some("lin@example.test".into()),
+        subject: None,
+        snippet: Some("Lunch at noon on Thursday, by the river".into()),
+        body_text: body.map(str::to_owned),
+        date_iso: Some("2026-10-27T09:00:00+00:00".into()),
+        ai_summary: summary.map(str::to_owned),
+    }
+}
+
+fn clock_at(seconds: i64) -> Arc<Frozen> {
+    Arc::new(Frozen(AtomicI64::new(seconds * 1_000_000)))
+}
+
+#[test]
+fn a_question_searches_by_its_content_words_and_cites_only_what_it_was_shown() {
+    assert_eq!(fts_match("When is lunch with Lin?"), "\"lunch\" OR \"Lin\"");
+    assert_eq!(
+        fts_match("\"Quoted\" e-mail, from ada@example.test... and I am x"),
+        "\"Quoted\" OR \"e-mail\" OR \"ada@example.test...\""
+    );
+    assert_eq!(fts_match("the of a"), "");
+    let shown = HashSet::from([1, 3]);
+    assert_eq!(cited(Some(&json!([3, "3", 999, 1.7, "x", true, " 1 "])), &shown), vec![3, 1]);
+    assert!(cited(Some(&json!({"3": 3})), &shown).is_empty());
+}
+
+#[test]
+fn an_answer_reads_each_message_once_and_its_sources_are_what_it_cited() {
+    let w = world(true);
+    let index = Arc::new(Index {
+        rows: vec![
+            row(1, 10, Some("  Lunch moved to Thursday noon.  "), None),
+            row(2, 10, Some("the same message, in another folder"), None),
+            row(3, 30, None, Some("Lin confirms lunch.")),
+            row(4, 40, Some("   "), Some("passed over: its body is there, and blank")),
+        ],
+        ..Index::default()
+    });
+    let context = Context::new(Arc::new(lunch()), Arc::new(Ada));
+    let asker = Asker::new(w.calls.clone(), index.clone(), context, clock_at(NOW));
+    w.model
+        .replies
+        .lock()
+        .expect("replies")
+        .push(Ok("{\"answer\": \" Thursday at noon. \", \"cited_pks\": [3, 2, 999]}".into()));
+    let answered = asker.ask(None, Some("  When is lunch with Lin?  ")).expect("an answer");
+    assert_eq!(
+        answered,
+        json!({"ok": true, "account": "all", "question": "When is lunch with Lin?", "answer": "Thursday at noon.",
+               "sources": [{"key": 30, "folder": "INBOX", "uid": 103, "from": "lin@example.test",
+                            "subject": "(no subject)", "snippet": "Lunch at noon on Thursday, by the river",
+                            "account": ADA, "date": "2026-10-27T09:00:00+00:00"}],
+               "model": "claude-opus-5-5", "generated": "2026-11-02T12:00:00+00:00"})
+    );
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.contains(
+        "[1] lin@example.test \u{2014} (no subject) (2026-10-27T09:00:00+00:00)\nLunch moved to Thursday noon.\n\n[3] lin@example.test \u{2014} (no subject) (2026-10-27T09:00:00+00:00)\nLin confirms lunch."
+    ));
+    assert!(!prompt.text.contains("passed over") && !prompt.text.contains("another folder"));
+    assert_eq!(index.asked.lock().expect("asked")[0], ("\"lunch\" OR \"Lin\"".to_owned(), vec![ADA.to_owned()]));
+}
+
+#[test]
+fn a_question_is_refused_before_any_mail_is_read_and_says_when_nothing_was_found() {
+    let w = world(true);
+    let context = Context::new(Arc::new(lunch()), Arc::new(Ada));
+    let empty = Arc::new(Index::default());
+    let asker = Asker::new(w.calls.clone(), empty.clone(), context, clock_at(NOW));
+    let refused = |r: Result<Value, AiFailure>, said: &str| matches!(r, Err(AiFailure::Failure(Failure::Problem(p))) if p.kind == Kind::Refused && p.said == said);
+    assert!(refused(asker.ask(Some("zed@example.test"), Some("lunch?")), "bad request"));
+    assert!(refused(asker.ask(Some(ADA), Some("   ")), "question required"));
+    assert!(refused(asker.ask(Some(ADA), Some("the broken one")), "bad query"));
+    assert_eq!(empty.asked.lock().expect("asked").len(), 1);
+    let none = asker.ask(Some(ADA), Some("lunch?")).expect("an answer");
+    assert_eq!(
+        (none["account"].clone(), none["answer"].clone(), none["sources"].clone()),
+        (json!(ADA), json!("I couldn\u{2019}t find any messages matching that in your mail."), json!([]))
+    );
+    assert!(sent(&w).is_empty());
+}
+
+/// A filter's reach: three messages, unless it says "nothing"; most of the mailbox where it says "everything".
+#[derive(Debug, Default)]
+struct Reaches {
+    apart: Mutex<Vec<Vec<String>>>,
+}
+
+impl PlanSearch for Reaches {
+    fn narrows(&self, filter: &str) -> (bool, bool) {
+        (!filter.is_empty() && !filter.starts_with('-'), filter.contains("in:"))
+    }
+    fn reach(&self, filter: &str, cap: i64, apart: &[&str], sample: usize) -> Result<Option<Reached>, Fault> {
+        self.apart.lock().expect("apart").push(apart.iter().map(|a| (*a).to_owned()).collect());
+        if filter.contains('"') {
+            return Ok(None);
+        }
+        let n = if filter.contains("nothing") { 0 } else { 3 };
+        let messages: Vec<(i64, String)> = (1..=n).map(|k| (k * 10, "INBOX".to_owned())).collect();
+        let sample = messages.iter().take(sample).map(|(k, _)| json!({"key": k})).collect();
+        let matched = if filter.contains("everything") { 100 } else { n };
+        Ok(Some(Reached { count: n.min(cap) + i64::from(filter.contains("many")) * 600, messages, sample, matched }))
+    }
+    fn sweeps_whole_mailbox(&self, matched: i64) -> Result<bool, Fault> {
+        Ok(matched >= 60)
+    }
+}
+
+fn bulk(w: &World, clock: Arc<Frozen>) -> (BulkCommands, Arc<Reaches>) {
+    let reaches = Arc::new(Reaches::default());
+    let drawn = Arc::new(AtomicI64::new(0));
+    let draw: mm_assistant::bulk::Draw =
+        Arc::new(move || Ok(format!("plan-{}", drawn.fetch_add(1, Ordering::SeqCst) + 1)));
+    (BulkCommands::new(w.calls.clone(), reaches.clone(), clock, Arc::new(Utc), draw), reaches)
+}
+
+fn planned(w: &World, bulk: &BulkCommands, plan: Value) -> Value {
+    w.model.replies.lock().expect("replies").push(Ok(plan.to_string()));
+    bulk.plan(Some(&json!("do that"))).expect("a plan")
+}
+
+#[test]
+fn what_a_plan_takes_from_a_model_and_where_it_may_reach() {
+    let plan = |v: Value| v.as_object().cloned().expect("an object");
+    assert_eq!(verb_told(&plan(json!({"intent": "act", "verb": "delete"}))), None);
+    assert_eq!(verb_told(&plan(json!({"intent": "search", "verb": "trash"}))), None);
+    assert_eq!(verb_told(&plan(json!({"intent": "act", "verb": "trash"}))), Some("trash"));
+    let weekend = plan(json!({"snooze_preset": "weekend"}));
+    assert_eq!((preset_told(&weekend, "snooze"), preset_told(&weekend, "archive")), ("weekend", "tomorrow"));
+    assert_eq!(preset_told(&plan(json!({"snooze_preset": "never"})), "snooze"), "tomorrow");
+    let reach = |verb, names_folder| out_of_reach(verb, names_folder).into_iter().collect::<Vec<_>>();
+    assert_eq!(reach("archive", false), ["all", "archive", "drafts", "junk", "sent", "trash"]);
+    assert_eq!((reach("trash", true), reach("read", true)), (vec!["trash"], vec![]));
+}
+
+#[test]
+fn a_command_is_previewed_as_a_plan_that_is_carried_out_once_within_its_time() {
+    let w = world(true);
+    let clock = clock_at(NOW);
+    let (bulk, reaches) = bulk(&w, clock.clone());
+    let preview = planned(&w, &bulk, json!({"intent": "act", "verb": "trash", "filter": " from:lin "}));
+    assert_eq!(
+        preview,
+        json!({"ok": true, "intent": "act", "verb": "trash", "filter": "from:lin", "snooze_preset": "tomorrow",
+               "count": 3, "cap": 200, "capped": false, "plan": "plan-1",
+               "sample": [{"key": 10}, {"key": 20}, {"key": 30}]})
+    );
+    assert_eq!(reaches.apart.lock().expect("apart")[0], ["drafts", "junk", "sent", "trash"]);
+    let [prompt] = sent(&w).try_into().expect("one call");
+    assert!(prompt.text.contains("2026-11-02") && prompt.text.contains("do that"));
+    let taken = bulk.take("plan-1").expect("the plan");
+    assert_eq!((taken.verb.as_str(), taken.messages.len()), ("trash", 3));
+    assert_eq!(bulk.take("plan-1"), None);
+    assert_eq!(bulk.take("plan-9"), None);
+    // Ten minutes on, a plan has expired.
+    let snooze =
+        planned(&w, &bulk, json!({"intent": "act", "verb": "snooze", "filter": "many", "snooze_preset": "weekend"}));
+    assert_eq!((snooze["snooze_preset"].clone(), snooze["capped"].clone()), (json!("weekend"), json!(true)));
+    clock.0.fetch_add(600 * 1_000_000, Ordering::SeqCst);
+    assert_eq!(bulk.take("plan-2"), None);
+}
+
+#[test]
+fn a_command_that_isnt_a_clean_scoped_act_is_a_search() {
+    let w = world(true);
+    let (bulk, _) = bulk(&w, clock_at(NOW));
+    let search = |filter: &str| json!({"ok": true, "intent": "search", "filter": filter});
+    for (plan, filter) in [
+        (json!({"intent": "search", "filter": "lunch"}), "lunch"),
+        (json!({"intent": "act", "verb": "delete", "filter": "from:lin"}), "from:lin"),
+        (json!({"intent": "act", "verb": "archive", "filter": ""}), ""),
+        (json!({"intent": "act", "verb": "archive", "filter": "-from:lin"}), "-from:lin"),
+        (json!({"intent": "act", "verb": "archive", "filter": "\"unbalanced"}), "\"unbalanced"),
+        (json!({"intent": "act", "verb": "archive", "filter": "everything"}), "everything"),
+    ] {
+        assert_eq!(planned(&w, &bulk, plan), search(filter));
+    }
+    let nothing = planned(&w, &bulk, json!({"intent": "act", "verb": "read", "filter": "nothing"}));
+    assert_eq!(nothing, json!({"ok": true, "intent": "search", "filter": "nothing", "empty": true}));
+    let empty = bulk.plan(Some(&json!("   ")));
+    assert!(matches!(empty, Err(AiFailure::Failure(Failure::Problem(p))) if p.said == "empty command"));
+    w.model.replies.lock().expect("replies").push(Err(ModelError::new("Claude API 400: bad", Some(400))));
+    let failed = bulk.plan(Some(&json!("archive Lin")));
+    assert!(
+        matches!(failed, Err(AiFailure::Failure(Failure::Problem(p))) if p.kind == Kind::Unreachable && p.said == "planner unavailable")
+    );
+}
+
+#[test]
+fn only_the_newest_plans_are_kept() {
+    let w = world(true);
+    let (bulk, _) = bulk(&w, clock_at(NOW));
+    for _ in 0..17 {
+        planned(&w, &bulk, json!({"intent": "act", "verb": "star", "filter": "from:lin"}));
+    }
+    assert_eq!(bulk.take("plan-1"), None);
+    assert!(bulk.take("plan-2").is_some() && bulk.take("plan-17").is_some());
 }
