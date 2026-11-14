@@ -659,7 +659,17 @@ SPECIAL = {"address", "article", "aside", "blockquote", "button", "center", "dd"
            "listing", "main", "menu", "nav", "noembed", "noframes", "noscript", "ol", "p", "plaintext", "pre",
            "script", "search", "section", "style", "summary", "textarea", "title", "ul", "xmp"} | HEADINGS
 OPEN_LIMIT = 256
+# the core now: a browser breaks out of an <svg> or <math> at these, and a <font> with a color, face or size, but in
+# one of their integration points.
+BREAKOUT = {"b", "big", "blockquote", "body", "br", "center", "code", "dd", "div", "dl", "dt", "em", "embed", "head",
+            "hr", "i", "img", "li", "listing", "menu", "meta", "nobr", "ol", "p", "pre", "ruby", "s", "small", "span",
+            "strong", "strike", "sub", "sup", "table", "tt", "u", "ul", "var"} | HEADINGS
 WITHIN, ENDS, ENDS_BEFORE = "within", "ends", "ends before"
+COUNTED = "counted"     # where it ends is past telling: Python's end tag
+# How a browser reads a start tag in an element of an <svg> or <math>: as foreign, as HTML (an HTML integration point),
+# as HTML but <mglyph> and <malignmark> (a MathML text integration point), or as foreign but an <svg> (an
+# <annotation-xml> that isn't an integration point).
+PLAIN, HTML, TEXT, ANNOTATION = "plain", "html", "text", "annotation"
 # What is open in a dropped form, button or select: ("wall", tag), the element's own tag nested in it, the same in an
 # <svg> or <math>, or ("open", tag), any other element open in a form while nothing above is.
 AGAIN, FOREIGN = ("again", ""), ("foreign", "")
@@ -682,13 +692,64 @@ def _last(inside: list[tuple[str, str]], pick) -> int | None:
     return next((at for at in range(len(inside) - 1, -1, -1) if pick(inside[at])), None)
 
 
-def _open_foreign(tag: str, inside: list[tuple[str, str]], name: str, self_closing: bool) -> bool:
+def _attr(attrs: list[tuple[str, str | None]], name: str) -> str | None:
+    """The first value of the attribute `name`, as a browser keeps the first of two."""
+    return next(((value or "") for attr, value in attrs if attr == name), None)
+
+
+def _breaks_out(name: str, attrs: list[tuple[str, str | None]]) -> bool:
+    return name in BREAKOUT or (name == "font" and any(attr in ("color", "face", "size") for attr, _ in attrs))
+
+
+def _leave_foreign(inside: list[tuple[str, str]]) -> bool:
+    """Breaks out of the <svg>s and <math>s open last; whether the tag is HTML's now. In an <annotation-xml> the core
+    stops, and reads the tag as foreign."""
+    while inside and inside[-1] in (("wall", "svg"), ("wall", "math"), FOREIGN):
+        inside.pop()
+    return not _in_foreign(inside)
+
+
+def _foreign_element(name: str, math: bool, attrs: list[tuple[str, str | None]]) -> tuple[str, bool, str]:
+    """An element of a dropped <svg> or <math>: its name, whether it is a <math>'s, and how a start tag in it reads."""
+    if not math and name in ("foreignobject", "desc", "title"):
+        return name, math, HTML
+    if math and name in ("mi", "mo", "mn", "ms", "mtext"):
+        return name, math, TEXT
+    if math and name == "annotation-xml":
+        encoding = _attr(attrs, "encoding") or ""
+        html = re.fullmatch(r"text/html|application/xhtml\+xml", encoding, re.I | re.A)
+        return name, math, HTML if html else ANNOTATION
+    return name, math, PLAIN
+
+
+def _hides(attrs: list[tuple[str, str | None]]) -> bool:
+    """the core now: whether an element's attributes may hide what it holds, which it would lose unwrapped."""
+    return any(attr in ("hidden", "style") for attr, _ in attrs)
+
+
+def _shows_fallback(attrs: list[tuple[str, str | None]]) -> bool:
+    """the core now: whether a browser shows an <object>'s fallback in the frame, which loads no object."""
+    kind = _attr(attrs, "type")
+    if _hides(attrs) or (kind is not None and re.match("image/", kind, re.I | re.A)):
+        return False
+    data = _attr(attrs, "data")
+    if data is None:
+        return True
+    data = data.strip("".join(map(chr, range(0x21)))).translate(dict.fromkeys(map(ord, "\t\n\r")))
+    found = scheme(data)    # an about: page or the document itself with a fragment is a frame of its own
+    return not data.startswith("#") if found is None else found in ("http", "https", "data", "cid", "javascript", "blob")
+
+
+def _open_foreign(tag: str, inside: list[tuple[str, str]], name: str, self_closing: bool,
+                  attrs: list[tuple[str, str | None]]) -> bool:
     if name in ("svg", "math"):
         if not self_closing:
             inside.append(("wall", name))
         return True
     if not _in_foreign(inside):
         return False
+    if _breaks_out(name, attrs):    # the core now
+        return not _leave_foreign(inside)
     within = next((wall for kind, wall in reversed(inside) if kind == "wall" and wall in ("svg", "math")), None)
     if self_closing:
         return True
@@ -700,6 +761,8 @@ def _open_foreign(tag: str, inside: list[tuple[str, str]], name: str, self_closi
 
 
 def _close_foreign(tag: str, inside: list[tuple[str, str]], name: str) -> bool:
+    if name in ("p", "br") and _in_foreign(inside):     # the core now
+        return not _leave_foreign(inside)
     for at in range(len(inside) - 1, -1, -1):
         kind, wall = inside[at]
         if kind == "wall" and (wall in ("svg", "math") or _is_point(wall)):
@@ -748,8 +811,9 @@ def _reach(inside: list[tuple[str, str]]) -> int | str:
     return "root"
 
 
-def _control_start(tag: str, inside: list[tuple[str, str]], name: str, self_closing: bool) -> str:
-    if _open_foreign(tag, inside, name, self_closing):
+def _control_start(tag: str, inside: list[tuple[str, str]], name: str, self_closing: bool,
+                   attrs: list[tuple[str, str | None]]) -> str:
+    if _open_foreign(tag, inside, name, self_closing, attrs):
         return WITHIN
     if tag == "button" and name in ("select", "input"):
         _select_or_input(inside, name)
@@ -794,23 +858,26 @@ def _control_end(tag: str, inside: list[tuple[str, str]], name: str) -> str:
 class _Dropped:
     """the core now: an element dropped with all it holds, to where the core ends it."""
 
-    def __init__(self, tag: str):
+    def __init__(self, tag: str, attrs: list[tuple[str, str | None]]):
         self.tag = tag
-        self.kind = {"head": "head", "button": "control", "select": "control", "form": "form"}.get(tag, "counted")
+        self.kind = {"head": "head", "button": "control", "select": "control", "form": "form", "svg": "foreign",
+                     "math": "foreign"}.get(tag, "counted")
         self.depth = 1          # Python's count of the tag
         self.templates = 0      # how deep in <template>s in a head
         self.inside: list[tuple[str, str]] = []
         self.lost = False       # whether what is open in a form is past telling
+        # what is open in an <svg> or <math>, the root first
+        self.open: list[tuple[str, bool, str]] = [_foreign_element(tag, tag == "math", attrs)]
 
     def foreign(self) -> bool:
-        if self.kind == "counted":
+        if self.kind in ("counted", "foreign"):
             return self.tag in ("svg", "math")
         return self.kind != "head" and _in_foreign(self.inside)
 
     def bare_head(self) -> bool:
         return self.kind == "head" and not self.templates
 
-    def start(self, name: str, self_closing: bool) -> str:
+    def start(self, name: str, self_closing: bool, attrs: list[tuple[str, str | None]]) -> str:
         counts = not (self.foreign() and self_closing)
         if self.kind == "head":
             if name == "template":
@@ -822,18 +889,15 @@ class _Dropped:
             self.depth += 1
         if self.kind == "counted":
             return WITHIN
+        if self.kind == "foreign":
+            return self._next(self._foreign_start(name, self_closing, attrs))
         if self.kind == "control":
-            step = _control_start(self.tag, self.inside, name, self_closing)
+            step = _control_start(self.tag, self.inside, name, self_closing, attrs)
             if step != WITHIN:
                 return step
         else:
-            self._form_start(name, self_closing)
-        if len(self.inside) <= OPEN_LIMIT:
-            return WITHIN
-        if not self.depth:
-            return ENDS
-        self.kind, self.inside = "counted", []
-        return WITHIN
+            self._form_start(name, self_closing, attrs)
+        return WITHIN if len(self.inside) <= OPEN_LIMIT else self._next(COUNTED)
 
     def end(self, name: str) -> str:
         if self.kind == "head":
@@ -846,16 +910,55 @@ class _Dropped:
             self.depth = max(self.depth - 1, 0)
         if self.kind == "counted":
             return ENDS if name == self.tag and not self.depth else WITHIN
+        if self.kind == "foreign":
+            return self._next(self._foreign_end(name))
         if self.kind == "control":
             return _control_end(self.tag, self.inside, name)
-        return self._form_end(name)
+        return self._next(self._form_end(name))
+
+    def _next(self, step: str) -> str:
+        """Past telling, the element goes on to the end tag that ends it in Python's count."""
+        if step != COUNTED:
+            return step
+        if not self.depth:
+            return ENDS
+        self.kind, self.inside, self.open = "counted", [], []
+        return WITHIN
+
+    def _foreign_start(self, name: str, self_closing: bool, attrs: list[tuple[str, str | None]]) -> str:
+        """the core now: a start tag in a dropped <svg> or <math>, where a browser breaks out to HTML."""
+        _, math, kind = self.open[-1]
+        html = kind == HTML or (kind == TEXT and name not in ("mglyph", "malignmark")) \
+            or (kind == ANNOTATION and name == "svg")
+        if html and name not in ("svg", "math"):
+            return COUNTED      # HTML in an integration point, which the core doesn't follow
+        if not html and _breaks_out(name, attrs):
+            return self._break_out()
+        if not self_closing:
+            self.open.append(_foreign_element(name, name == "math" if html else math, attrs))
+        return COUNTED if len(self.open) > OPEN_LIMIT else WITHIN
+
+    def _foreign_end(self, name: str) -> str:
+        if name in ("p", "br"):
+            return self._break_out()
+        at = _last(self.open, lambda open_: open_[0] == name)
+        if at == 0:
+            return ENDS
+        if at is not None:
+            del self.open[at:]
+        return WITHIN
+
+    def _break_out(self) -> str:
+        while self.open and self.open[-1][2] in (PLAIN, ANNOTATION):
+            self.open.pop()
+        return COUNTED if self.open else ENDS_BEFORE
 
     def _last_open(self, pick) -> int | None:
         return _last(self.inside, lambda open_: open_[0] == "open" and pick(open_[1]))
 
-    def _form_start(self, name: str, self_closing: bool) -> None:
+    def _form_start(self, name: str, self_closing: bool, attrs: list[tuple[str, str | None]]) -> None:
         inside = self.inside
-        if _open_foreign("form", inside, name, self_closing):
+        if _open_foreign("form", inside, name, self_closing, attrs):
             return
         if name in ("select", "input"):
             _select_or_input(inside, name)
@@ -904,8 +1007,7 @@ class _Dropped:
             _pop_implied(inside, "")
             if (not inside and not self.lost) or not self.depth:
                 return ENDS
-            self.kind, self.inside = "counted", []     # something is left open: Python's end tag
-            return WITHIN
+            return COUNTED      # something is left open: Python's end tag
         if not _close_wall(inside, name) and all(kind == "open" for kind, _ in inside):
             _pop_implied(inside, name)
             heading = name in HEADINGS
@@ -942,16 +1044,31 @@ class _San(HTMLParser):
         self._in_style = 0      # inside a <style> being captured
         self._style_buf: list[str] = []    # buffered raw CSS text
         self._raw = False           # the core now: inside raw text, which only its end tag ends
+        # the core now: an <xml> is read as any element, and taken back at the end tag that balances Python's count.
+        self._xml_depth = 0
+        self._xml_before: tuple | None = None
+
+    def _before(self) -> tuple:
+        return (len(self.out), self.blocked_images, self.blocked_links, self.blocked_css_urls, self._bq_depth,
+                self._folded, self._has_content)
+
+    def _go_back(self, before: tuple) -> None:
+        written, self.blocked_images, self.blocked_links, self.blocked_css_urls, self._bq_depth, self._folded, \
+            self._has_content = before
+        del self.out[written:]
+        self._dropped, self._raw, self._in_style, self._style_buf = None, False, 0, []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
         self._raw = tag in self.CDATA_CONTENT_ELEMENTS + self.RCDATA_CONTENT_ELEMENTS    # the core now
+        if tag == "xml" and self._xml_depth:    # the core now
+            self._xml_depth += 1
         if tag == "style" and self._dropped and self._dropped.bare_head():     # the core now: a head's sheet
             self._in_style = 1
             self._style_buf = []
             return
         if self._dropped:                                                       # the core now
-            step = self._dropped.start(tag, False)
+            step = self._dropped.start(tag, False, attrs)
             if step == WITHIN:
                 return
             self._dropped = None
@@ -963,8 +1080,16 @@ class _San(HTMLParser):
             self._in_style = 1
             self._style_buf = []
             return                       # emit on close, after sanitizing the CSS
+        # the core now: a browser shows a <noscript>'s content, as the frame runs no script, an <object>'s fallback, as
+        # it loads no object, and an <xml>'s, where no attribute may hide it.
+        if (tag == "noscript" and not _hides(attrs)) or (tag == "object" and _shows_fallback(attrs)):
+            return
+        if tag == "xml" and not _hides(attrs):
+            if not self._xml_depth:
+                self._xml_depth, self._xml_before = 1, self._before()
+            return
         if tag in DROP_WITH_CONTENT:
-            self._dropped = _Dropped(tag)
+            self._dropped = _Dropped(tag, attrs)
             return
         if tag not in ALLOWED:
             return  # unwrap: drop the tag, keep its text content
@@ -987,6 +1112,11 @@ class _San(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
         self._raw = False       # the core now
+        if tag == "xml" and self._xml_depth:    # the core now: a closed <xml> goes with all it holds
+            self._xml_depth -= 1
+            if not self._xml_depth:
+                self._go_back(self._xml_before)
+                return
         if tag == "style" and self._in_style:   # the core now: one in a dropped element reaches it
             css = python_sanitize_css_stylesheet("".join(self._style_buf), self)
             if css:
@@ -1462,7 +1592,8 @@ HOSTILE = [
     "<textarea>", "</textarea>", "<xmp>", "</xmp>", "<iframe>", "</iframe>", "<noembed>", "</noembed>", "<noframes>",
     "<noscript>", "</noscript>", "<plaintext>", "<template>", "</template>", "<svg>", "</svg>", "<svg/>", "<math>",
     "</math>", "<foreignObject>", "<desc>", "<annotation-xml encoding=text/html>", "<mglyph>", "<object>",
-    "</object>", "<embed>", "<head>", "</head>", "<select>", "</select>", "<option>",
+    "</object>", "<embed>", "<head>", "</head>", "<select>", "</select>", "<option>", "<xml>", "</xml>",
+    "<noscript hidden>", "<object data=x>", "<object type=image/png>", "<font color=red>", "<annotation-xml>",
     "<form action=https://e.example.test/>", "</form>", "<button>", "</button>", "<input>", "<base href=https://e.example.test/>", "<link rel=stylesheet href=//e.example.test/s>",
     "<meta http-equiv=refresh content='0;url=https://e.example.test/'>", "<body onload=alert(1)>",
     "<p>", "</p>", "<b>", "</b>", "<div>", "</div>", "<blockquote>", "</blockquote>", "<details>", "<summary>",
@@ -1719,6 +1850,67 @@ def test_a_form_keeps_to_its_end_tag_where_a_browser_leaves_something_open(html,
     it keeps to the end tag as Python did. Chromium shows "ef", nothing, and nothing."""
     assert sanitizer.sanitize(html) == (written, NOTHING_BLOCKED)
     assert_html_as_python_wrote_it(html, load_images=False)
+
+
+@pytest.mark.parametrize(("html", "written"), [
+    ("<noscript><p>n</p></noscript>after", "<p>n</p>after"),
+    ("<noscript><noscript>a</noscript>b</noscript>c", "abc"),
+    ("<object data='x'><p>o</p></object>after", "<p>o</p>after"),
+    ("<object data=' DATA:text/html,x'>fb</object>z", "fbz"),
+    ("<object data=x><object type=image/png>inner</object>outer</object>z", "outerz"),
+    ("<xml>abc", "abc"),
+    ("<xml>a<xml>b</xml>c", "abc"),
+    ("<xml>a<xml hidden>b</xml>c", "ac"),
+    ("<svg><p>x</p></svg>after", "<p>x</p>after"),
+    ("<math><div>x</div></math>after", "<div>x</div>after"),
+    ("<svg><g><font color=red>x</font>after", '<font color="red">x</font>after'),
+    ("<svg></p>x", "</p>x"),
+    ("<svg><svg><p>x</p></svg>y</svg>z", "<p>x</p>yz"),
+    ("<math><annotation-xml><svg><p>x</p></svg></annotation-xml></math>z", "<p>x</p>z"),
+    ("<form><svg><b>x</b></svg></form>after", "after"),
+    ("<button><svg></p></button>after", "after"),
+])
+def test_what_a_browser_shows_of_a_dropped_element_shows(html, written):
+    """Python dropped a <noscript>, an <object> and an <xml> with all each held, and an <svg> or <math> to the end tag
+    that balanced its count. In the frame, which runs no script and loads no object, a browser shows a noscript's
+    content, an object's fallback, an unclosed xml's content as any element's, and the HTML it breaks out of an svg or
+    math at, and Chromium shows the text of each as written here once its svgs, maths, forms and buttons are taken
+    out."""
+    assert sanitizer.sanitize(html) == (written, NOTHING_BLOCKED)
+    assert_html_as_python_wrote_it(html, load_images=False)
+
+
+@pytest.mark.parametrize(("html", "written"), [
+    ("<noscript hidden><p>n</p></noscript>after", "after"),
+    ("<noscript style='color:red'><p>n</p></noscript>after", "after"),
+    ("<object type='IMAGE/GIF' data='https://e.example.test/x.gif'>fb</object>z", "z"),
+    ("<object data=' ABOUT:blank'>fb</object>z", "z"),
+    ("<object data='#x'>fb</object>z", "z"),
+    ("<object data='ftp://e.example.test/x'>fb</object>z", "z"),
+    ("<xml hidden>abc", ""),
+    ("<xml>abc</xml>def", "def"),
+    ("<xml>a<xml>b</xml>c</xml>d", "d"),
+    ("<p>a</p><xml><blockquote>q</blockquote></xml>b", "<p>a</p>b"),
+    ("<svg><font>x</font>after", ""),
+    ("<svg><foreignObject><p>x</p></foreignObject></svg>after", "after"),
+    ("<math><annotation-xml encoding=text/html><p>x</p></annotation-xml></math>z", "z"),
+])
+def test_what_may_hide_a_dropped_elements_content_keeps_it_dropped(html, written):
+    """An attribute that may hide what an element holds, which it would lose unwrapped, keeps it dropped, as do an
+    object that may be an image or a frame of its own, a closed xml (an Office document's settings, which show as stray
+    words), and HTML in an svg's or math's integration point, which the core doesn't follow."""
+    assert sanitizer.sanitize(html) == (written, NOTHING_BLOCKED)
+    assert_html_as_python_wrote_it(html, load_images=False)
+
+
+def test_a_closed_xml_takes_back_what_it_counted():
+    held = ("<xml><img src='https://e.example.test/x.png'><a href=javascript:x>l</a>"
+            "<p style='background:url(https://e.example.test/b.png)'>p</p>")
+    assert sanitizer.sanitize(held + "</xml>after") == ("after", NOTHING_BLOCKED)
+    assert sanitizer.sanitize(held + "after") == \
+        ("<img/><a>l</a><p>p</p>after", {"blocked_images": 1, "blocked_links": 1, "blocked_css_urls": 1})
+    for html in (held + "</xml>after", held + "after", "<p>a</p><xml><blockquote>q</blockquote>b"):
+        assert_html_as_python_wrote_it(html, load_images=False)
 
 
 def test_a_blocked_url_adds_to_what_the_caller_counted_as_python_did():
