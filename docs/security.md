@@ -49,6 +49,15 @@ or moving it to another style, removes its item. A config that holds a secret it
 is refused (`PlaintextSecret`): the app won't start, and `check` says which entry, never the secret. No credential may
 name the database's key.
 
+A 1Password credential, `{"op": "op://Vault/Item/Field"}` or a list of references tried in turn, is read with
+`op read <reference>`: the reference alone goes on the command line, since it names an item and holds no secret, and
+the secret comes back on standard output. A read is kept for the process until the credential changes or its account
+goes, and only once it works. What op says on standard error decides only whether to try again (a timeout or an
+unanswered prompt, three tries at most), and goes into no log and no error. The Rust server (`mm-server`'s
+`one_password`) sends only a reference that starts `op://`, so op can't take one for an option; looks for op only in
+the absolute folders PATH names; asks `Outside` before each start, so the tests' tripwire refuses it as `guard.py` does;
+gives it no standard input; and withholds the database's key and the Claude API key from its environment.
+
 Folder names reach IMAP only through `accounts.mailbox_arg`. It wraps a name in the form LIST
 gave it and refuses one that isn't a valid quoted-string body (CR, LF, NUL, a bare quote, a
 trailing backslash) with `accounts.BadMailbox`, an `IMAP4.error`. Never build `f'"{folder}"'`.
