@@ -285,6 +285,12 @@ impl Workers {
                     forgetting.background.forget_batches_round()
                 }),
             ));
+            // Old mail's bodies, a dozen a round, so it is full-text searchable: a round says when the next is due.
+            let backfilling = app.clone();
+            lanes.push((
+                app.jobs.add("backfill", mm_mailbox::backfill::EVERY, mm_mailbox::backfill::FIRST),
+                Box::new(move || backfilling.backfill.round().map(Some).map_err(|fault| fault.class)),
+            ));
             // The assistant's background work: triage, which a sync with new mail kicks; replies drafted ahead,
             // unless MAILMIND_NO_DRAFT_TICK; and the opt-in rounds, the brief and the review written ahead and Tidy.
             lanes.extend(background_lanes(app));

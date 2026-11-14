@@ -33,7 +33,8 @@ pub fn work(app: &App, argument: &str) -> String {
         // The assistant's triage of what it hasn't summarized, and a run of Tidy for someone who turned it on.
         "assess" => app.background.assess_round().map(drop).map_err(str::to_owned),
         "tidy" => app.background.tidy_round().map(drop).map_err(str::to_owned),
-        // The Mailbox's: a round of warming folders beyond the Inbox, every account's.
+        // The Mailbox's: a round of the body backfill, and one of warming folders beyond the Inbox, every account's.
+        "backfill" => app.backfill.round().map(drop).map_err(|fault| fault.class.to_owned()),
         "warm" => app.warming.tick(None).map_err(|fault| fault.class.to_owned()),
         _ => return format!("failed {job}: not on the Rust server yet"),
     };

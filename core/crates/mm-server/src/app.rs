@@ -125,6 +125,8 @@ pub struct App {
     pub background: crate::background::Background,
     /// Folders beyond the Inbox, warmed as each sync round ends for the accounts asking (`work warm`).
     pub warming: Arc<mm_mailbox::warm::Warming>,
+    /// Old mail's bodies, fetched a little at a time (`work backfill`), which `Workers::start` schedules.
+    pub backfill: mm_mailbox::backfill::Backfill,
 }
 
 impl App {
@@ -313,8 +315,9 @@ impl App {
         // The servers a cleanup, a sweep and expiry read and move live mail on.
         let cleanup_servers = servers.clone();
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
-        // Folders beyond the Inbox, warmed as each sync round ends for the accounts asking.
+        // Folders beyond the Inbox, warmed as each sync round ends for the accounts asking; and the body backfill.
         let warming = crate::backfill_wiring::warming(&directory, &servers, &ingest, environment);
+        let backfill = crate::backfill_wiring::backfill(&directory, &database, &servers, &gates, &seams.clock);
         let syncing = Arc::new(Syncing::new(SyncingParts {
             ingest: ingest.clone(),
             accounts: move_accounts.clone(),
@@ -435,6 +438,7 @@ impl App {
             assistant,
             background,
             warming,
+            backfill,
         })
     }
 }
