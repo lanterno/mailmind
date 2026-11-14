@@ -490,6 +490,30 @@ def test_the_text_after_a_nested_form_button_or_select_shows(page, world):
     clean(page)
 
 
+UNWRAPPED = """<p>Before</p>
+<noscript><p title="shown">From a noscript</p><img src="data:," onerror="parent.document.body.dataset.pwned = 'noscript'"></noscript>
+<object data="https://evil.example.test/object"><p title="shown">An object's fallback</p></object>
+<svg onload="parent.document.body.dataset.pwned = 'svg'"><g><p title="shown">Out of an svg</p></g></svg>
+<xml><o:WordDocument>Normal</o:WordDocument></xml>
+<xml><p title="shown">After an xml left unclosed</p>"""
+
+
+def test_what_a_browser_shows_of_a_dropped_element_shows_in_the_frame(page, world):
+    """A noscript's content, an object's fallback, the HTML a browser breaks out of an svg to show, and what an unclosed
+    xml holds all show, through the same allowlist: nothing of the elements themselves comes through, nor what a closed
+    xml holds, and nothing runs or reaches out."""
+    pk, key = arrives(world, UNWRAPPED)
+    frame = reading(page, key)
+    loaded(page, frame)
+    shown = "f => [...f.contentDocument.querySelectorAll('[title=shown]')].map(p => p.innerText)"
+    assert frame.evaluate(shown) == ["From a noscript", "An object's fallback", "Out of an svg",
+                                     "After an xml left unclosed"]
+    assert frame.evaluate("f => f.contentDocument.querySelectorAll('noscript, object, svg, xml, [onerror]').length") == 0
+    assert "Normal" not in frame.evaluate("f => f.contentDocument.body.innerText")
+    nothing_got_out(page)
+    clean(page)
+
+
 # The walls on mail the sanitizer let everything through: the sandbox and the policy hold alone.
 
 def test_a_hostile_body_runs_nothing_and_reaches_nothing(page, world, unsanitized):
