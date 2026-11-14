@@ -106,8 +106,10 @@ fn path_as_sent(uri: &Uri) -> String {
     whole.split_once('?').map_or(whole.clone(), |(path, _)| path.to_owned())
 }
 
-/// One request's answer: the perimeter's refusal, or the route's answer, with the perimeter's headers added.
-pub async fn answer(app: &App, routes: Router, request: Request<Incoming>) -> Response<Body> {
+/// One request's answer: the perimeter's refusal, or the route's answer, with the perimeter's headers added. The
+/// accept loop calls it with each request a connection reads, and an in-process caller (`mm-host`) with one of its
+/// own making, so both pass the same perimeter and the same routes.
+pub async fn answer(app: &App, routes: Router, request: Request<Body>) -> Response<Body> {
     let _running = app.work.start();
     let method = request.method().clone();
     let path = path_as_sent(request.uri());
@@ -189,9 +191,9 @@ async fn accept(listener: TcpListener, app: Arc<App>) {
         };
         let (app, routes) = (app.clone(), routes.clone());
         tokio::spawn(async move {
-            let service = service_fn(move |request| {
+            let service = service_fn(move |request: Request<Incoming>| {
                 let (app, routes) = (app.clone(), routes.clone());
-                async move { Ok::<_, Infallible>(answer(&app, routes, request).await) }
+                async move { Ok::<_, Infallible>(answer(&app, routes, request.map(Body::new)).await) }
             });
             let _ = http1::Builder::new()
                 .timer(TokioTimer::new())
