@@ -1,10 +1,11 @@
-//! The assistant's background work (`bootstrap.background`'s assess, draft-ahead, brief-ahead and review-ahead), each
-//! a round as Python's `schedule` runs it: triage of new mail; a reply drafted ahead for the best mail that wants one,
-//! with its own breaker, while someone is at the screen; and, for someone who turned each on, the morning's brief and
-//! the week's review written ahead. Every AI call goes through the Assistant's gateway and its cost governor.
+//! The assistant's background work and Tidy's run (`bootstrap.background`'s assess, draft-ahead, brief-ahead,
+//! review-ahead and tidy), each a round as Python's `schedule` runs it: triage of new mail; a reply drafted ahead for
+//! the best mail that wants one, with its own breaker, while someone is at the screen; and, for someone who turned
+//! each on, the morning's brief and the week's review written ahead and Tidy's run. Every AI call goes through the
+//! Assistant's gateway and its cost governor.
 //!
-//! `Workers::start` puts them on lanes, unless the process only reads; `mm-served`'s `work assess` runs one pass of
-//! triage, which the served suites wait on.
+//! `Workers::start` puts them on lanes, unless the process only reads; `mm-served`'s `work assess` and `work tidy` run
+//! one pass of the two the served suites wait on.
 
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -19,6 +20,8 @@ use mm_kernel::errors::{Failure, Fault};
 use mm_kernel::events::Events;
 use mm_kernel::seams::Clock;
 use mm_kernel::zone::Zone;
+use mm_mailbox::filing::Filing;
+use mm_mailbox::tidying::{Tidying, TidyingParts};
 use mm_store::Database;
 use serde_json::Value;
 
@@ -27,9 +30,10 @@ use crate::workers::RoundOutcome;
 /// Seconds between the assess job's rounds, unless a sync with new mail kicks it, and before its first.
 pub const ASSESS_INTERVAL: i64 = 300;
 pub const ASSESS_FIRST: i64 = 20;
-/// The opt-in rounds: the brief's and the review's, each how often and how soon.
+/// The opt-in rounds: the brief's, the review's and Tidy's, each how often and how soon.
 pub const BRIEF_AHEAD: (i64, i64) = (600, 90);
 pub const REVIEW_AHEAD: (i64, i64) = (600, 100);
+pub const TIDY: (i64, i64) = (900, 120);
 
 /// The class of what went wrong, as a round's outcome names it.
 fn class(failure: &Failure) -> &'static str {
@@ -44,6 +48,7 @@ pub(crate) struct Parts<'a> {
     pub(crate) database: Arc<Database>,
     pub(crate) assistant: &'a crate::assistant_wiring::Assistant,
     pub(crate) directory: Arc<Directory>,
+    pub(crate) filing: Arc<Filing>,
     pub(crate) events: Arc<dyn Events>,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) zone: Arc<dyn Zone>,
@@ -62,6 +67,7 @@ pub struct Background {
     candidates: Arc<dyn DraftCandidates>,
     events: Arc<dyn Events>,
     ahead: Ahead,
+    tidying: Tidying,
     directory: Arc<Directory>,
     /// Whether this process drafts replies ahead (MAILMIND_NO_DRAFT_TICK off).
     pub drafts_ahead: bool,
@@ -69,15 +75,17 @@ pub struct Background {
 
 impl Background {
     pub(crate) fn assemble(parts: Parts<'_>) -> Background {
-        let Parts { database, assistant, directory, events, clock, zone, drafts_ahead } = parts;
+        let Parts { database, assistant, directory, filing, events, clock, zone, drafts_ahead } = parts;
         let assessments = Arc::new(Assessments::new(assistant.calls.clone(), database.clone(), clock.clone()));
         let ahead = Ahead::new(
             assistant.asking.clone(),
             Arc::new(crate::wiring::KnownAccounts(directory.clone())),
             database.clone(),
-            clock,
-            zone,
+            clock.clone(),
+            zone.clone(),
         );
+        let tidying =
+            Tidying::new(TidyingParts { log: database.clone(), digest: database.clone(), filing, clock, zone });
         Background {
             assessments,
             calls: assistant.calls.clone(),
@@ -86,6 +94,7 @@ impl Background {
             candidates: database,
             events,
             ahead,
+            tidying,
             directory,
             drafts_ahead,
         }
@@ -130,6 +139,14 @@ impl Background {
     pub fn review_ahead_round(&self) -> RoundOutcome {
         if self.turned_on("weekly_review")? {
             self.ahead.write_review_ahead().map_err(|failure| class(&failure))?;
+        }
+        Ok(None)
+    }
+
+    /// Tidy on its own, for someone who turned it on: it reads what the AI said, so not with AI off or held back.
+    pub fn tidy_round(&self) -> RoundOutcome {
+        if self.turned_on("auto_tidy")? && self.calls.engine() != "none" && self.held_back("auto-tidy").is_none() {
+            self.tidying.round().map_err(|failure| class(&failure))?;
         }
         Ok(None)
     }

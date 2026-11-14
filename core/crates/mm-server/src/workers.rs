@@ -174,10 +174,10 @@ impl Jobs {
 /// What a lane runs each round.
 type Round = Box<dyn Fn() -> RoundOutcome + Send>;
 
-/// The assistant's background jobs, each on a lane of its own (`background.schedule`'s assess, draft-ahead,
-/// brief-ahead and review-ahead).
+/// The assistant's background jobs and Tidy's, each on a lane of its own (`background.schedule`'s assess, draft-ahead,
+/// brief-ahead, review-ahead and tidy).
 fn background_lanes(app: &Arc<App>) -> Vec<(Arc<Job>, Round)> {
-    use crate::background::{ASSESS_FIRST, ASSESS_INTERVAL, BRIEF_AHEAD, REVIEW_AHEAD};
+    use crate::background::{ASSESS_FIRST, ASSESS_INTERVAL, BRIEF_AHEAD, REVIEW_AHEAD, TIDY};
     use mm_assistant::prepared_replies::{DRAFT_TICK_INTERVAL, DRAFT_TICK_STARTUP_DELAY};
     type Of = fn(&crate::background::Background) -> RoundOutcome;
     let mut jobs: Vec<(&'static str, (i64, i64), Of)> =
@@ -191,6 +191,7 @@ fn background_lanes(app: &Arc<App>) -> Vec<(Arc<Job>, Round)> {
     }
     jobs.push(("brief-ahead", BRIEF_AHEAD, crate::background::Background::brief_ahead_round));
     jobs.push(("review-ahead", REVIEW_AHEAD, crate::background::Background::review_ahead_round));
+    jobs.push(("tidy", TIDY, crate::background::Background::tidy_round));
     jobs.into_iter()
         .map(|(name, (every, first), round)| {
             let job = app.jobs.add(name, every, first);
@@ -279,7 +280,7 @@ impl Workers {
                 Box::new(move || forgetting.forgetting.round().map(|_| None).map_err(|fault| fault.class)),
             ));
             // The assistant's background work: triage, which a sync with new mail kicks; replies drafted ahead,
-            // unless MAILMIND_NO_DRAFT_TICK; and the opt-in rounds, the brief and the review written ahead.
+            // unless MAILMIND_NO_DRAFT_TICK; and the opt-in rounds, the brief and the review written ahead and Tidy.
             lanes.extend(background_lanes(app));
         }
         let mut threads = Vec::new();

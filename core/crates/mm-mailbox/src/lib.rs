@@ -36,8 +36,9 @@ pub mod inline_images;
 pub mod listing;
 pub mod lists;
 pub mod opening;
-// Tidy's runs, as the brief reads the newest.
+// Tidy's runs, as the brief reads the newest, and a run by itself.
 pub mod tidy;
+pub mod tidying;
 pub mod undo;
 // What the background workers wait on (a kick, and the stop that ends them), and the worker a queue is drained by.
 pub mod workers;

@@ -63,8 +63,9 @@ pub mod backup;
 pub mod migrate;
 pub mod upgrade_check;
 
-// The background work's: what triage and drafting ahead read and keep.
+// The background work's: what triage and drafting ahead read and keep, and what a run of Tidy reads of the log.
 mod assistant_background;
+mod mailbox_tidy;
 
 use std::collections::HashMap;
 use std::fmt;
