@@ -129,3 +129,4 @@ tests/api/test_http_get.py::test_message_bodies
 tests/api/test_http_get.py::test_attachments
 tests/api/test_http_get.py::test_documents_and_cleanup
 tests/api/test_http_send.py::test_rsvp_to_an_invite
+tests/api/test_http_events.py::test_the_end_of_a_folders_first_scan_tells_the_open_tabs
