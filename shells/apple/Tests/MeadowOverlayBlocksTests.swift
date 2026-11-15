@@ -39,8 +39,8 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         XCTAssertEqual(MeadowKeys.caps(nil), [])
     }
 
-    private func key(_ code: UInt16, _ characters: String = "") -> NSEvent {
-        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+    private func key(_ code: UInt16, _ characters: String = "", held: NSEvent.ModifierFlags = []) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: held, timestamp: 0, windowNumber: 0,
                          context: nil, characters: characters, charactersIgnoringModifiers: characters,
                          isARepeat: false, keyCode: code)!
     }
@@ -116,6 +116,37 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         XCTAssertTrue(parent.makeFirstResponder(said))
         XCTAssertEqual(verdict(125, in: parent), .offer, "text only to read takes no keys")
         XCTAssertFalse(MeadowPopoverKeys.typesText(nil))
+    }
+
+    func testAPopoverTakesNoKeyWithACommandKeyHeld() {
+        let parent = window(), panel = window()
+        func verdict(_ code: UInt16, _ held: NSEvent.ModifierFlags) -> MeadowPopoverKeys.Verdict {
+            MeadowPopoverKeys.verdict(keyCode: code, modifiers: held, typedIn: parent, hungIn: parent, panel: panel)
+        }
+        XCTAssertEqual(verdict(18, .command), .pass, "⌘1 goes to Inbox, not to the chooser")
+        XCTAssertEqual(verdict(36, .command), .pass, "⌘Return sends")
+        XCTAssertEqual(verdict(125, .control), .pass)
+        XCTAssertEqual(verdict(124, .option), .pass)
+        XCTAssertEqual(verdict(53, .command), .pass)
+        XCTAssertEqual(verdict(18, .shift), .offer, "⇧ only makes another character")
+        XCTAssertEqual(verdict(125, [.function, .numericPad]), .offer, "the arrows carry these of their own")
+        XCTAssertEqual(verdict(18, []), .offer)
+
+        var ran: [String] = []
+        var heard = 0
+        let model = MeadowMenuModel()
+        model.items = [MeadowMenuItem(id: "a", title: "A") { ran.append("a") }]
+        model.onKey = { _ in
+            heard += 1
+            return true
+        }
+        XCTAssertFalse(model.key(key(36, "\r", held: .command)))
+        XCTAssertFalse(model.key(key(18, "1", held: .command)))
+        XCTAssertFalse(model.key(key(125, held: [.option, .function])))
+        XCTAssertEqual(heard, 0, "the menu's own keys never hear them")
+        XCTAssertEqual(ran, [])
+        XCTAssertTrue(model.key(key(18, "!", held: .shift)))
+        XCTAssertEqual(heard, 1)
     }
 
     func testAMenusOwnKeysComeFirst() {
