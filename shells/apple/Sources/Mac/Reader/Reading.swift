@@ -2,8 +2,8 @@
 import Observation
 import SwiftUI
 
-/// One message, read: its head, the cards, its content and frame, and the quick replies when it is from a person
-/// you could answer. The reader scrolls as one, as the page's does, its column as wide as the reading settings say.
+/// One message, read as Meadow's document lays it out (#44): its chips and subject, the aside (the summary and the
+/// cards), the message, the reply box, and what is up next. The reader scrolls as one, as the page's does.
 struct MessageReader: View {
     let core: Core
     let copy: MailCopy
@@ -11,38 +11,37 @@ struct MessageReader: View {
     let row: API.FolderRow?
     let prefs: ReadingPrefs
     let mine: Set<String>
+    /// The window, for the account's name and colour, the folder's chips and what is up next: none in a test that
+    /// draws a reader alone.
+    var app: MailApp?
 
     var body: some View {
         let context = ReaderContext(core: core, copy: copy, opened: opened, row: row, conversation: nil)
-        ReaderColumn(width: prefs.width) {
-            MessageHeader(opened: opened)
-            ReaderCards(placement: .top, context: context)
-            MessageContent(core: core, copy: copy, opened: opened, context: context, prefs: prefs, mine: mine)
-            if opened.isDraft != true,
-               QuickReply.offered(to: opened.fromAddr, mine: mine, isJunk: row?.isJunk ?? false, bucket: row?.bucket)
-            {
-                QuickReplies(copy: copy)
+        let place = DocumentPlace.of(app: app, copy: copy, needsYou: row?.needsYou ?? false, replied: false)
+        PaneDocument(chips: place.chips, subject: opened.subject.flatMap { $0.isEmpty ? nil : $0 } ?? "(no subject)",
+                     measure: prefs.measure) {
+            DocumentAside(context: context, opened: opened, filed: place.filed, lane: place.lane, write: place.write,
+                          allMail: place.allMail)
+        } main: {
+            MessageArticle(core: core, copy: copy, opened: opened, context: context, prefs: prefs, mine: mine,
+                           when: row?.when, account: account(place))
+            if opened.isDraft != true, place.offersReply {
+                ReplyBox(copy: copy,
+                         words: ReplyBoxWords(name: opened.fromName.flatMap { $0.isEmpty ? nil : $0 }
+                                                  ?? opened.fromAddr ?? "",
+                                              address: opened.fromAddr, following: place.role == "sent"),
+                         me: place.me,
+                         quick: QuickReply.offered(to: opened.fromAddr, mine: mine, isJunk: row?.isJunk ?? false,
+                                                   bucket: row?.bucket))
             }
+            if let app { UpNext(app: app, inTrash: place.role == "trash") }
         }
     }
-}
 
-/// The reader's column: as wide as the reading measure, centred, scrolling as one.
-struct ReaderColumn<Content: View>: View {
-    let width: API.ReadWidth
-    @ViewBuilder let content: Content
+    @Environment(\.meadow) private var meadow
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                content
-            }
-            .frame(maxWidth: MailLook.width(width), alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 18)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Color(nsColor: .textBackgroundColor))
+    private func account(_ place: DocumentPlace) -> Color? {
+        app.map { _ in meadow.account(place.accountIndex) }
     }
 }
 
@@ -76,6 +75,19 @@ final class ConversationModel {
         }
     }
 
+    /// A member's body, as `/api/message/body` opens it.
+    func body(_ member: API.ThreadMessage) async throws -> API.MessageBodyAnswer {
+        try await routes.get(API.Get.MessageBody.self,
+                             ["key": String(member.key), "folder": member.folder, "uid": String(member.uid)])
+    }
+
+    /// Mark a member read as it opens, if it isn't.
+    func markRead(_ member: API.ThreadMessage) async {
+        guard !member.seen else { return }
+        _ = try? await routes.post(API.Post.Seen.self, API.SeenBody(folder: member.folder, key: member.key, seen: true,
+                                                                    uid: member.uid))
+    }
+
     /// Each copy once, as the page's `eachCopyOnce` keeps them.
     var members: [API.ThreadMessage] {
         guard case .open(let thread) = stage else { return [] }
@@ -83,11 +95,15 @@ final class ConversationModel {
         return thread.items.filter { seen.insert("\($0.key)\n\($0.folder)\n\($0.uid)").inserted }
     }
 
-    /// What a reply answers: the latest message that isn't yours, as the server names it.
+    /// The member a reply answers: the latest message that isn't yours, as the server names it.
+    var replyMember: API.ThreadMessage? {
+        guard case .open(let thread) = stage, let key = thread.replyKey else { return nil }
+        return members.first { $0.key == key }
+    }
+
+    /// What a reply answers, as a copy.
     var replyTo: MailCopy? {
-        guard case .open(let thread) = stage, let key = thread.replyKey,
-              let latest = members.first(where: { $0.key == key }) else { return nil }
-        return MailCopy(latest, account: account)
+        replyMember.map { MailCopy($0, account: account) }
     }
 }
 
@@ -101,13 +117,18 @@ extension MailCopy {
     }
 }
 
-/// A conversation read whole: its subject and count, the cards, then each message, the latest open.
+/// A conversation read whole: its chips and subject, the aside, the earlier messages a line each, the latest open,
+/// then the reply box and what is up next.
 struct ConversationReader: View {
     let core: Core
     let model: ConversationModel
     let row: API.FolderRow?
     let prefs: ReadingPrefs
     let mine: Set<String>
+    var app: MailApp?
+    /// The latest message as it opened, which the aside's cards tell of.
+    @State private var latest: API.MessageOpened?
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         switch model.stage {
@@ -115,130 +136,103 @@ struct ConversationReader: View {
             Fetching()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let why):
-            ContentUnavailableView("Couldn’t load", systemImage: "exclamationmark.triangle", description: Text(why))
+            PaneNote(title: String(localized: "Couldn’t load"), line: why)
         case .open(let thread):
             let members = model.members
-            ReaderColumn(width: prefs.width) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(members.first.map { $0.subject.isEmpty ? "(no subject)" : $0.subject } ?? "(no subject)")
-                        .font(.title2.weight(.semibold))
-                        .textSelection(.enabled)
-                        .accessibilityAddTraits(.isHeader)
-                    Text("\(thread.count) message\(thread.count == 1 ? "" : "s")")
-                        .foregroundStyle(.secondary)
-                }
-                if let latest = model.replyTo ?? members.last.map({ MailCopy($0, account: model.account) }) {
-                    ReaderCards(placement: .top, context: ReaderContext(
-                        core: core, copy: latest, opened: nil, row: row, conversation: (model.id, model.account)))
-                }
-                VStack(spacing: 8) {
-                    ForEach(Array(members.enumerated()), id: \.element.key) { index, member in
-                        ConversationMember(core: core, member: member, account: model.account,
-                                           conversation: (model.id, model.account), row: row,
-                                           startsOpen: index == members.count - 1, prefs: prefs, mine: mine)
+            if let last = members.last {
+                document(thread, members: members, last: last)
+            } else {
+                PaneNote(title: String(localized: "Nothing here."))
+            }
+        }
+    }
+
+    private func document(_ thread: API.Thread, members: [API.ThreadMessage], last: API.ThreadMessage) -> some View {
+        let answers = model.replyMember
+        let replyCopy = model.replyTo ?? MailCopy(last, account: model.account)
+        let conversation = (id: model.id, account: model.account)
+        let context = ReaderContext(core: core, copy: replyCopy, opened: nil, row: row, conversation: conversation)
+        let place = DocumentPlace.of(app: app, copy: MailCopy(last, account: model.account),
+                                     needsYou: row?.needsYou ?? false, replied: answers?.answered ?? false)
+        let subject = row?.subject ?? members.first?.subject ?? ""
+        return PaneDocument(chips: place.chips, subject: subject.isEmpty ? "(no subject)" : subject,
+                            measure: prefs.measure) {
+            DocumentAside(context: context, opened: latest, filed: place.filed, lane: place.lane, write: place.write,
+                          allMail: place.allMail)
+        } main: {
+            if members.count > 1 {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(members.dropLast(), id: \.key) { member in
+                        EarlierMessage(core: core, model: model, member: member, row: row, prefs: prefs, mine: mine)
                     }
                 }
-                if let latest = members.first(where: { $0.key == thread.replyKey }),
-                   QuickReply.offered(to: latest.fromAddr, mine: mine, isJunk: latest.isJunk, bucket: row?.bucket)
-                {
-                    QuickReplies(copy: MailCopy(latest, account: model.account))
-                }
+                .padding(.bottom, 6)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Earlier in this conversation")
             }
+            LatestMessage(core: core, model: model, member: last, row: row, prefs: prefs, mine: mine,
+                          colour: app.map { _ in meadow.account(place.accountIndex) }) {
+                latest = $0
+            }
+            .id(MailCopy(last, account: model.account))
+            if let answers, place.offersReply {
+                ReplyBox(copy: replyCopy,
+                         words: ReplyBoxWords(name: answers.fromName.flatMap { $0.isEmpty ? nil : $0 }
+                                                  ?? answers.fromAddr ?? "",
+                                              address: answers.fromAddr, following: place.role == "sent"),
+                         me: place.me, messages: thread.count,
+                         quick: QuickReply.offered(to: answers.fromAddr, mine: mine, isJunk: answers.isJunk,
+                                                   bucket: row?.bucket))
+            }
+            if let app { UpNext(app: app, inTrash: place.role == "trash") }
         }
     }
 }
 
-/// One message of a conversation: its line, which opens and closes it, and its body once opened. Opening one that
-/// is unread marks it read.
-struct ConversationMember: View {
+/// A conversation's latest message, open: its body loaded, and marked read as it opens.
+private struct LatestMessage: View {
     let core: Core
+    let model: ConversationModel
     let member: API.ThreadMessage
-    let account: String
-    let conversation: (id: String, account: String)
     let row: API.FolderRow?
-    let startsOpen: Bool
     let prefs: ReadingPrefs
     let mine: Set<String>
-    @State private var open: Bool?
+    let colour: Color?
+    let loaded: (API.MessageOpened) -> Void
     @State private var opened: API.MessageOpened?
     @State private var problem: String?
+    @Environment(\.meadow) private var meadow
 
-    private var isOpen: Bool { open ?? startsOpen }
-    private var copy: MailCopy { MailCopy(member, account: account) }
+    private var copy: MailCopy { MailCopy(member, account: model.account) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                open = !isOpen
-            } label: {
-                head
-            }
-            .buttonStyle(.plain)
-            .accessibilityValue(isOpen ? "Open" : "Closed")
-            .accessibilityHint(isOpen ? "Closes this message" : "Opens this message")
-            if isOpen {
-                // Kept once loaded, so closing and opening again doesn't reload the frame.
-                if let opened {
-                    MessageContent(core: core, copy: copy, opened: opened,
-                                   context: ReaderContext(core: core, copy: copy, opened: opened, row: row,
-                                                          conversation: conversation),
-                                   minHeight: 300, pad: 24, prefs: prefs, mine: mine)
-                } else if let problem {
-                    Text(problem).foregroundStyle(.secondary)
-                } else {
-                    Fetching(whole: false)
-                }
+        Group {
+            if let opened {
+                MessageArticle(core: core, copy: copy, opened: opened,
+                               context: ReaderContext(core: core, copy: copy, opened: opened, row: row,
+                                                      conversation: (model.id, model.account)),
+                               prefs: prefs, mine: mine, when: member.when, account: colour)
+            } else if let problem {
+                Text(problem).font(.meadow(.ui, 13)).foregroundStyle(meadow.ink3).padding(.top, 16)
+            } else {
+                Fetching(whole: false)
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
-        .task(id: isOpen) {
-            guard isOpen else { return }
-            if !member.seen { await markRead() }
-            if opened == nil { await load() }
-        }
-    }
-
-    private var head: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text(member.fromName ?? member.fromAddr ?? "").font(.headline).lineLimit(1)
-                if member.flagged {
-                    Image(systemName: "star.fill").foregroundStyle(.yellow).accessibilityLabel("Starred")
+        .task {
+            await model.markRead(member)
+            guard opened == nil else { return }
+            do {
+                switch try await model.body(member) {
+                case .messageOpened(let read):
+                    opened = read
+                    loaded(read)
+                case .prefetched:
+                    problem = String(localized: "Couldn’t load.")
                 }
-                if member.hasAttach {
-                    Image(systemName: "paperclip").foregroundStyle(.secondary).accessibilityLabel("Has files")
-                }
-                if member.answered {
-                    Image(systemName: "arrowshape.turn.up.left").foregroundStyle(.secondary).accessibilityLabel("Answered")
-                }
-                Spacer(minLength: 8)
-                Text(member.folder).font(.caption).foregroundStyle(.secondary)
-                Text(member.when).font(.callout).foregroundStyle(.secondary)
-            }
-            if !isOpen {
-                Text(member.snippet).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            } catch {
+                problem = said(error)
             }
         }
-        .contentShape(Rectangle())
-    }
-
-    private func load() async {
-        do {
-            switch try await core.get(API.Get.MessageBody.self,
-                                      ["key": String(member.key), "folder": member.folder, "uid": String(member.uid)]) {
-            case .messageOpened(let read): opened = read
-            case .prefetched: problem = String(localized: "Couldn’t load.")
-            }
-        } catch {
-            problem = said(error)
-        }
-    }
-
-    private func markRead() async {
-        _ = try? await core.post(API.Post.Seen.self, API.SeenBody(folder: member.folder, key: member.key, seen: true,
-                                                                  uid: member.uid))
     }
 }
 #endif

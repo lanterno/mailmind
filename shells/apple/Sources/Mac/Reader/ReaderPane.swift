@@ -124,23 +124,40 @@ struct ReaderPane: View {
             if case .desk(let screen)? = app.place, screen.besideTheInbox {
                 DeskScreen(place: screen)
             } else {
-                ContentUnavailableView("No message selected.", systemImage: "envelope")
+                PaneEmpty(words: emptyWords) { app.mailbox.tab = .all }
             }
         case .loading:
             Fetching()
         case .failed(_, let why):
-            ContentUnavailableView("This message couldn't be opened", systemImage: "exclamationmark.triangle",
-                                   description: Text(why))
+            PaneNote(title: String(localized: "This message couldn’t be opened"), line: why)
         case .open(let copy, let opened):
             if let core = app.core {
                 if thread != nil, let conversation {
-                    ConversationReader(core: core, model: conversation, row: row, prefs: prefs, mine: composing.mine)
+                    ConversationReader(core: core, model: conversation, row: row, prefs: prefs, mine: composing.mine,
+                                       app: app)
+                        .id(ObjectIdentifier(conversation))
                 } else {
-                    MessageReader(core: core, copy: copy, opened: opened, row: row, prefs: prefs, mine: composing.mine)
+                    MessageReader(core: core, copy: copy, opened: opened, row: row, prefs: prefs, mine: composing.mine,
+                                  app: app)
                         .id(copy)
                 }
             }
         }
+    }
+
+    /// What the empty pane says: the Inbox's Needs you emptied, mail to pick from, or none.
+    private var emptyWords: PaneEmptyWords {
+        let list = app.list
+        let loaded = list?.firstRowsAt != nil
+        let hasMail = loaded && (list?.total ?? 0) > 0
+        var inInbox = false
+        switch app.place {
+        case .allInboxes?: inInbox = true
+        case .folder(_, let folder)?: inInbox = folder.caseInsensitiveCompare("INBOX") == .orderedSame
+        default: break
+        }
+        let needsDone = loaded && !hasMail && inInbox && app.mailbox.tab == .needs
+        return PaneEmptyWords.of(needsDone: needsDone, hasMail: hasMail)
     }
 
     /// Opened unread, a message is marked read after a moment on it; and a reply written ahead is looked for.

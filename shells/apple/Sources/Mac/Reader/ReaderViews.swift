@@ -18,22 +18,23 @@ struct ReadingPrefs: Equatable {
     }
 }
 
-/// What stands around a body, then the body, as the page's `MailContent`: who it's really from, a Reply-To that
-/// would take an answer elsewhere, the cards, the remote images held back, the files, and the frame. Asking for
-/// images loads the frame again with them, and nothing else.
+/// What stands under a message's head, then the body, as the page's `MailContent` and Meadow's `.msg` order them:
+/// the trust line (where it's from, that its frame is a sandbox, the remote images held back a click away), a Reply-To
+/// that would take an answer elsewhere, the invite, the body on the pane's paper, and its files. Asking for images
+/// loads the frame again with them, and nothing else.
 struct MessageContent: View {
     let core: Core
     let copy: MailCopy
     let opened: API.MessageOpened
     let context: ReaderContext
-    /// The least the frame is before its content has measured, and what it adds below the content.
+    /// The least the frame is before its content has measured.
     var minHeight: CGFloat = 400
-    var pad: CGFloat = 30
     let prefs: ReadingPrefs
     let mine: Set<String>
     @State private var images = false
     @State private var height: CGFloat?
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.meadow) private var meadow
+    @Environment(\.meadowLight) private var light
 
     private var blocked: Int { images ? 0 : opened.blockedImages + opened.blockedCssUrls }
     private var senderDomain: String? {
@@ -41,42 +42,32 @@ struct MessageContent: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ExternalBar(domain: senderDomain, blocked: blocked)
+        VStack(alignment: .leading, spacing: 0) {
+            TrustLine(from: MessageWords.from(opened.fromAddr, facts: opened.sender), blocked: blocked,
+                      loadImages: blocked > 0 ? {
+                          images = true
+                          height = nil
+                      } : nil)
+                .padding(.top, 12)
             if let note = ReplyGoesElsewhere.text(opened, mine: mine) {
-                Label(note, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.orange)
-                    .accessibilityAddTraits(.isStaticText)
+                TrustWarning(text: note).padding(.top, 8)
             }
             ReaderCards(placement: .message, context: context)
-            if blocked > 0 {
-                HStack(spacing: 8) {
-                    Image(systemName: "shield.lefthalf.filled")
-                    Text("\(blocked) remote image\(blocked > 1 ? "s" : "") hidden — loading one can let the sender know you opened this email")
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Button("Load Images") {
-                        images = true
-                        height = nil
-                    }
-                }
-                .font(.callout)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.yellow.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
-            }
+            frame
+                .padding(.top, 20)
             let files = AttachmentsRow.shown(opened.attachments)
             if !files.isEmpty {
                 AttachmentsRow(core: core, copy: copy, files: files)
+                    .padding(.top, 18)
             }
-            frame
         }
     }
 
     private var frame: some View {
-        let look = ReaderPalette.look(html: opened.hasHtml, prefs: prefs.look, scheme: scheme)
+        let look = ReaderPalette.look(html: opened.hasHtml, prefs: prefs.look, palette: meadow, dark: light.isDark)
         let url = ReaderModel.frameURL(copy, images: images)
+        // A sheet of the mail's own has its margins inside the frame; mail on the pane's paper has none.
+        let pad: CGFloat = look.sheet ? 30 : 4
         let shown = height.map { $0 > 0 ? $0 + pad : minHeight + pad } ?? minHeight
         return Group {
             if let url {
@@ -90,6 +81,7 @@ struct MessageContent: View {
                           })
                     .id("\(url.absoluteString)\n\(look.css)")
                     .frame(height: min(shown, MailFrame.tallest))
+                    .clipShape(RoundedRectangle(cornerRadius: look.sheet ? 12 : 0))
             }
         }
     }
@@ -98,22 +90,6 @@ struct MessageContent: View {
 extension MailFrame {
     /// The tallest a frame grows to fit its content: past it, the frame scrolls its own.
     static let tallest: CGFloat = 50_000
-}
-
-/// The line over a message: where it's from, and what its frame keeps out.
-struct ExternalBar: View {
-    let domain: String?
-    let blocked: Int
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text("External\(domain.map { " · \($0)" } ?? "")")
-            Label(blocked > 0 ? "Sandboxed · \(blocked) tracker\(blocked > 1 ? "s" : "") blocked" : "Sandboxed · no active content",
-                  systemImage: "checkmark.shield")
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    }
 }
 
 /// A Reply-To that would take an answer out of the sender's organisation, said above the frame, where nothing in
@@ -127,80 +103,17 @@ enum ReplyGoesElsewhere {
     }
 }
 
-/// Who a message is from, to whom and when, as the reader's head shows it.
-struct MessageHeader: View {
-    let opened: API.MessageOpened
-    var showsSubject = true
-
-    private var name: String {
-        [opened.fromName, opened.fromAddr].compactMap { $0 }.first { !$0.isEmpty } ?? ""
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if showsSubject {
-                Text(opened.subject.flatMap { $0.isEmpty ? nil : $0 } ?? "(no subject)")
-                    .font(.title2.weight(.semibold))
-                    .textSelection(.enabled)
-                    .accessibilityAddTraits(.isHeader)
-            }
-            // Who and when on one line where they fit; in a narrow reader, when goes under who, each on one line.
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    who
-                    Spacer(minLength: 12)
-                    when
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    who
-                    when
-                }
-            }
-            .textSelection(.enabled)
-            line("To", opened.to)
-            if !opened.cc.isEmpty { line("Cc", opened.cc) }
-        }
-    }
-
-    private var who: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(name).font(.headline).lineLimit(1)
-            if let address = opened.fromAddr, !address.isEmpty, address != name {
-                Text(address).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-            }
-        }
-    }
-
-    private var when: some View {
-        Text(opened.date).foregroundStyle(.secondary).font(.callout).lineLimit(1)
-    }
-
-    @ViewBuilder private func line(_ label: LocalizedStringKey, _ value: String) -> some View {
-        if !value.isEmpty {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(label).foregroundStyle(.secondary)
-                Text(value).lineLimit(2).textSelection(.enabled)
-            }
-            .font(.callout)
-        }
-    }
-}
-
-/// The quick replies under a message from a person you could answer.
+/// The quick replies, in the reply box under a message from a person you could answer: each opens the reply with
+/// its line.
 struct QuickReplies: View {
     let copy: MailCopy
 
     var body: some View {
         // The chips wrap onto more lines in a narrow reader, as the page's do.
-        FlowLayout(spacing: 8) {
-            Label("Quick reply", systemImage: "arrowshape.turn.up.left")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize()
+        FlowLayout(spacing: 6) {
             ForEach(QuickReply.all, id: \.key) { quick in
                 Button(quick.chip) { Task { await Composing.shared.quickReply(copy, quick) } }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .meadowButton(.quiet, small: true)
             }
         }
         .accessibilityElement(children: .contain)
@@ -212,15 +125,17 @@ struct QuickReplies: View {
 struct Fetching: View {
     var whole = true
     @State private var slow = false
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         VStack(spacing: 10) {
             ProgressView()
+                .controlSize(.small)
             if slow {
                 Text(whole ? "Still fetching from the server — the first open of an older message can take up to a minute."
                      : "Still fetching this message…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.meadow(.ui, 13))
+                    .foregroundStyle(meadow.ink3)
                     .multilineTextAlignment(.center)
             }
         }
