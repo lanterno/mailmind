@@ -81,6 +81,12 @@ icon:
     xcrun swiftc -O "{{here}}/Icon/icon.swift" -o "{{out}}/icon"
     "{{out}}/icon" "{{here}}/Icon/Assets.xcassets"
 
+# Meadow's typefaces: Fonts/fonts.py joins the page's (web/assets/fonts) into one file a face in Fonts (commit the
+# fonts on their own). fontTools, pinned here, reads and writes them; nothing else needs it
+fonts:
+    uv run --no-project --with fonttools==4.68.0 --with brotli==1.2.1 python -I "{{here}}/Fonts/fonts.py" \
+        "{{here}}/../../web/assets/fonts" "{{here}}/Fonts"
+
 # The Mac app to hand to someone, into build/release: universal, signed ad hoc under the hardened runtime, in a .dmg,
 # with the appcast signed with the owner's update key. Prints the `gh release create` command; never publishes
 release:
