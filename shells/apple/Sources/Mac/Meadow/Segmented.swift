@@ -1,7 +1,8 @@
 import SwiftUI
 
 // Meadow's segmented choice (#44), the mockup's `.seg` in its Reading popover: a few words side by side on a sunken
-// strip, the one chosen raised on paper. Settings' light, rows and tones use it, and the composer's draft tone.
+// strip, the one chosen raised on paper. Settings' light, rows and tones use it, the composer's draft tone, how the
+// Document Hub shows its files, and Curate's parts and a block's reach.
 
 /// One of a few choices (`.seg`, `.seg-b`): each a word, the chosen one on raised paper with a soft shadow. The
 /// arrow keys go from one to the next.

@@ -51,10 +51,10 @@ struct DocumentAside: View {
         ReaderCards(placement: .top, context: context)
         if let amount = AsideWords.receipt(context.row, lane: lane) {
             SideCard(title: String(localized: "Paper trail"), icon: .receipt) {
-                SideFact(label: String(localized: "Amount"), value: amount)
-                SideFact(label: String(localized: "From"),
-                         value: context.row?.fromName.flatMap { $0.isEmpty ? nil : $0 } ?? context.row?.fromAddr ?? "")
-                SideFact(label: String(localized: "Filed under"), value: filed, last: true)
+                MeadowFact(String(localized: "Amount"), value: amount)
+                let from = context.row?.fromName.flatMap { $0.isEmpty ? nil : $0 } ?? context.row?.fromAddr
+                MeadowFact(String(localized: "From"), value: from ?? "")
+                MeadowFact(String(localized: "Filed under"), value: filed, last: true)
             }
         }
         if wide, let opened {
@@ -66,7 +66,13 @@ struct DocumentAside: View {
             if !files.isEmpty {
                 SideCard(title: String(localized: "Attachments"), icon: .clip) {
                     ForEach(Array(files.enumerated()), id: \.element.partId) { index, file in
-                        SideFact(label: file.filename, value: FileSize.words(file.size), last: index == files.count - 1)
+                        // A long name gives way in its middle, keeping its kind at the end in sight.
+                        MeadowFact(value: FileSize.words(file.size), last: index == files.count - 1) {
+                            Text(verbatim: file.filename)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: 190, alignment: .leading)
+                        }
                     }
                 }
             }
@@ -101,49 +107,6 @@ struct SideCard<Content: View>: View {
         .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(meadow.line, lineWidth: 1) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
-    }
-}
-
-/// One fact in a card (`.fact`): what it is, and its value in bold, a dashed line under all but the last.
-struct SideFact: View {
-    let label: String
-    let value: String
-    var last = false
-    @Environment(\.meadow) private var meadow
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(verbatim: label)
-                .foregroundStyle(meadow.ink2)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 190, alignment: .leading)
-            Spacer(minLength: 0)
-            Text(verbatim: value)
-                .fontWeight(.bold)
-                .monospacedDigit()
-                .foregroundStyle(meadow.ink)
-                .lineLimit(1)
-        }
-        .font(.meadow(.ui, 13))
-        .padding(.vertical, 5)
-        .overlay(alignment: .bottom) {
-            if !last {
-                Line()
-                    .stroke(meadow.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .frame(height: 1)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private struct Line: Shape {
-        func path(in rect: CGRect) -> Path {
-            Path { line in
-                line.move(to: CGPoint(x: rect.minX, y: rect.midY))
-                line.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-            }
-        }
     }
 }
 

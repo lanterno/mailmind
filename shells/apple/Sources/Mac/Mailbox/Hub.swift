@@ -41,8 +41,8 @@ struct DocumentHub: View {
                 }
                 .scrollIndicators(.never)
             }
-            HubSegments(options: DocumentsModel.Showing.allCases.map { ($0, $0.title) }, selection: $model.showing,
-                        label: String(localized: "Show files"))
+            MeadowSegmentedChoice(label: String(localized: "Show files"), selection: $model.showing,
+                                  options: DocumentsModel.Showing.allCases.map { ($0, $0.title) }, fills: false)
             files
         }
         .padding(.horizontal, 10)
@@ -200,59 +200,6 @@ private struct HubPill: View {
         .focused($focused)
         .focusEffectDisabled()
         .meadowFocusRing(focused, radius: 14)
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-}
-
-/// A choice of a few (`.seg`): the chosen one raised on paper, the others in the quiet ink.
-struct HubSegments<Value: Hashable>: View {
-    let options: [(Value, String)]
-    @Binding var selection: Value
-    let label: String
-    @Environment(\.meadow) private var meadow
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(options.indices, id: \.self) { at in
-                let (value, title) = options[at]
-                HubSegment(title: title, on: selection == value) { selection = value }
-            }
-        }
-        .padding(3)
-        .background(RoundedRectangle(cornerRadius: 10).fill(meadow.paper2))
-        .fixedSize()
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text(label))
-    }
-}
-
-private struct HubSegment: View {
-    let title: String
-    let on: Bool
-    let action: () -> Void
-    @Environment(\.meadow) private var meadow
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.meadow(.ui, 13, .bold))
-                .foregroundStyle(on ? meadow.ink : meadow.ink2)
-                .padding(.horizontal, 10)
-                .frame(minHeight: 28)
-                .background {
-                    if on {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(meadow.paperRaised)
-                            .shadow(color: .black.opacity(0.18), radius: 1.5, y: 1)
-                    }
-                }
-                .contentShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .focused($focused)
-        .focusEffectDisabled()
-        .meadowFocusRing(focused, radius: 8)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
@@ -566,7 +513,7 @@ private struct PaperTrail: View {
                     VStack(spacing: 0) {
                         ForEach(Array(accounts.enumerated()), id: \.offset) { at, share in
                             let value = Ledger.money(share.currency, share.value)
-                            LedgerFact(last: at == accounts.count - 1, value: value) {
+                            MeadowFact(value: value, last: at == accounts.count - 1) {
                                 MeadowChip(mailbox.name(of: share.account),
                                            tone: .account(meadow.account(of: share.account, among: mailbox.accounts)))
                             }
@@ -578,9 +525,8 @@ private struct PaperTrail: View {
             DeskSideCard(title: String(localized: "Filed under"), icon: .folder) {
                 VStack(spacing: 0) {
                     ForEach(Array(folders.enumerated()), id: \.offset) { at, folder in
-                        LedgerFact(last: at == folders.count - 1, value: "\(folder.count)") {
-                            Text(PaperTrail.folderName(folder.folder))
-                        }
+                        MeadowFact(PaperTrail.folderName(folder.folder), value: "\(folder.count)",
+                                   last: at == folders.count - 1)
                     }
                 }
             }
@@ -833,32 +779,6 @@ private struct LedgerAmount: View {
             .monospacedDigit()
             .foregroundStyle(line.amount == nil ? meadow.ink3 : line.refund ? meadow.moss : meadow.ink)
             .lineLimit(1)
-    }
-}
-
-/// A fact in a side card (`.fact`): what on the left, how much on the right, a dashed line between facts.
-private struct LedgerFact<Label: View>: View {
-    let last: Bool
-    let value: String
-    @ViewBuilder let label: Label
-    @Environment(\.meadow) private var meadow
-
-    var body: some View {
-        HStack {
-            label
-            Spacer(minLength: 8)
-            Text(value).font(.meadow(.ui, 13, .bold)).monospacedDigit()
-        }
-        .font(.meadow(.ui, 13))
-        .foregroundStyle(meadow.ink)
-        .padding(.vertical, 5)
-        .overlay(alignment: .bottom) {
-            if !last {
-                Rectangle()
-                    .stroke(meadow.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .frame(height: 1)
-            }
-        }
     }
 }
 

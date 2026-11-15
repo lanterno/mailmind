@@ -31,8 +31,8 @@ struct CurateSheet: View {
         VStack(spacing: 0) {
             DeskSheetHead(title: String(localized: "Curate"), icon: .sliders) {
                 Spacer(minLength: 8)
-                HubSegments(options: Part.allCases.map { ($0, $0.title) }, selection: $part,
-                            label: String(localized: "Part"))
+                MeadowSegmentedChoice(label: String(localized: "Part"), selection: $part,
+                                      options: Part.allCases.map { ($0, $0.title) }, fills: false)
             }
             Group {
                 switch part {
@@ -192,12 +192,14 @@ struct CleanupSheet: View {
                 Step(icon: .check, tag: String(localized: "reversible")) {
                     Text("Block **\(asked.scope == .domain ? preview.domain : preview.fromAddr)** — future mail auto-filed")
                 }
-                HubSegments(options: [(API.BlockScope.sender, String(localized: "this sender")),
-                                      (API.BlockScope.domain, String(localized: "whole domain"))],
-                            selection: Binding(get: { asked.scope }, set: { scope in
-                                model.cleaning?.scope = scope
-                                model.cleaning?.armed = false
-                            }), label: String(localized: "Block"))
+                MeadowSegmentedChoice(label: String(localized: "Block"),
+                                      selection: Binding(get: { asked.scope }, set: { scope in
+                                          model.cleaning?.scope = scope
+                                          model.cleaning?.armed = false
+                                      }),
+                                      options: [(API.BlockScope.sender, String(localized: "this sender")),
+                                                (API.BlockScope.domain, String(localized: "whole domain"))],
+                                      fills: false)
                     .padding(.leading, 26)
                 Step(icon: .check, tag: String(localized: "reversible")) {
                     Text("Move **\(preview.sweepCount)** inbox \(preview.sweepCount == 1 ? "message" : "messages")\(asked.scope == .domain ? " from \(preview.fromAddr)" : "") to Trash")
