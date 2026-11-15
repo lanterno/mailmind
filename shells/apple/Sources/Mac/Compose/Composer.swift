@@ -185,8 +185,8 @@ final class Composer: Identifiable {
     private(set) var closed = false
     /// The Later menu, which a late time's fix opens.
     var laterOpen = false
-    /// Set when a fix asks for the file panel.
-    var wantsFiles = false
+    /// Set when a fix asks for the file panel, until the view that opens it takes the request.
+    private(set) var wantsFiles = false
 
     /// The text view's selection, in UTF-16 offsets, as it last told.
     var selection = NSRange(location: 0, length: 0)
@@ -966,6 +966,14 @@ final class Composer: Identifiable {
         case "to": focusRequest = .field(.to)
         default: break
         }
+    }
+
+    /// Whether a fix asked for the file panel, which the view that opens it takes once: left set, the request would
+    /// never change again, so a later one would open nothing.
+    func takeFilesRequest() -> Bool {
+        guard wantsFiles else { return false }
+        wantsFiles = false
+        return true
     }
 
     /// Send, now or at `after` (epoch seconds). The checks run here and now; past them the composer closes and the

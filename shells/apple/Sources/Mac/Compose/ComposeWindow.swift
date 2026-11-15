@@ -119,11 +119,20 @@ struct ComposerForm: View {
         }
         .onChange(of: composer.focusRequest) { _, wanted in place(wanted) }
         .onChange(of: composer.wantsFiles) { _, wanted in
-            guard wanted else { return }
-            composer.wantsFiles = false
-            choose(pictures: false)
+            if wanted, composer.takeFilesRequest() { choose(pictures: false) }
         }
-        .onAppear { place(composer.focusRequest ?? firstPlace) }
+        .onAppear {
+            let first = composer.focusRequest ?? firstPlace
+            if first == .subject {
+                // A fix in the reader's reply box brought the reply here for its subject: the field takes the keys
+                // once the window it opened is up.
+                Task { place(first) }
+            } else {
+                place(first)
+            }
+            // Asked for before this window was drawn, the panel would wait for a change that never comes.
+            if composer.takeFilesRequest() { choose(pictures: false) }
+        }
     }
 
     /// Where the first keys land: a new message starts at To, anything else in the text.
@@ -884,6 +893,9 @@ struct ChipFlow: Layout {
 struct GuardStrip: View {
     let composer: Composer
     let check: GuardView
+    /// Where a line's fix is done, when not in the composer alone: the reader's reply box, which lacks some of the
+    /// fields a fix asks for.
+    var fixing: ((GuardFix, ComposeField?) -> Void)?
     @Environment(\.meadow) private var meadow
 
     var body: some View {
@@ -902,8 +914,10 @@ struct GuardStrip: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 6)
                     if let fix = line.fix {
-                        Button(fix.label) { composer.fix(fix, field: line.field) }
-                            .meadowButton(small: true)
+                        Button(fix.label) {
+                            if let fixing { fixing(fix, line.field) } else { composer.fix(fix, field: line.field) }
+                        }
+                        .meadowButton(small: true)
                     }
                 }
             }

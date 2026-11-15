@@ -76,6 +76,18 @@ extension Composing {
             self.inlineSlot = nil
         }
     }
+
+    /// A send guard's fix, pressed in the reader's box. The box holds the text, Send later and files, so a fix for
+    /// those is done there (Attach opens the file panel in it); it has no subject or recipients to edit, so a fix
+    /// that asks for one of those takes the reply to a window of its own, whose field takes the keys.
+    func fixInBox(_ fix: GuardFix, field: ComposeField?) {
+        guard let open = inline, !open.composer.closed else { return }
+        open.composer.fix(fix, field: field)
+        switch open.composer.focusRequest {
+        case .subject?, .field?: popOut()
+        default: break
+        }
+    }
 }
 
 /// The closed box (`.ireply`): the line that opens a reply, R, the drafted reply, Forward, and the quick replies.
@@ -197,7 +209,7 @@ private struct OpenReply: View {
             }
             text
             if let check = composer.check {
-                GuardStrip(composer: composer, check: check)
+                GuardStrip(composer: composer, check: check) { composing.fixInBox($0, field: $1) }
             }
             if composing.aiOn { rewriteRow }
             foot
@@ -213,6 +225,9 @@ private struct OpenReply: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Reply to \(words.name)")
+        .onChange(of: composer.wantsFiles) { _, wanted in
+            if wanted, composer.takeFilesRequest() { attach() }   // the send guard's Attach a file
+        }
     }
 
     /// To whom, from which account, Pop out and discard (`.ir-h`).
