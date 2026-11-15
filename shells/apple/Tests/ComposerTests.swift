@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 
@@ -204,6 +205,63 @@ final class ComposerTests: XCTestCase {
         XCTAssertTrue(draft.closed)
         XCTAssertEqual(host.sent.count, 1)
         XCTAssertEqual(host.sent.first?.body.subject, "")
+    }
+
+    func testAHeldSendKeyNeverWavesACheckThrough() {
+        let draft = written("The plan is attached.", subject: "")
+        draft.pressSend()
+        XCTAssertNotNil(draft.check, "the first press shows what holds the send")
+        host.clockNow += SendGuard.armSeconds * 4
+        for _ in 0..<30 { draft.pressSend(held: true) }   // the key's auto-repeat, long past the wait
+        XCTAssertFalse(draft.closed, "a held key never sends")
+        XCTAssertTrue(host.sent.isEmpty)
+        XCTAssertNotNil(draft.check, "the check still stands")
+        draft.pressSend()
+        XCTAssertTrue(draft.closed, "a fresh press sends anyway")
+        XCTAssertEqual(host.sent.count, 1)
+    }
+
+    func testAHeldSendKeyStartsNoSendOfItsOwn() {
+        let draft = written("Lunch on Thursday?")
+        draft.pressSend(held: true)
+        XCTAssertFalse(draft.closed)
+        XCTAssertNil(draft.check)
+        draft.pressSend()
+        XCTAssertTrue(draft.closed)
+        XCTAssertEqual(host.sent.count, 1)
+    }
+
+    func testTheTextsCommandReturnSaysWhenTheKeyIsHeld() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled],
+                              backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        let text = BodyTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 200))
+        window.contentView = text
+        XCTAssertTrue(window.makeFirstResponder(text))
+        var presses: [Bool] = []
+        text.commandReturn = { presses.append($0) }
+        let key = { (repeated: Bool) in
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                             windowNumber: window.windowNumber, context: nil, characters: "\r",
+                             charactersIgnoringModifiers: "\r", isARepeat: repeated, keyCode: 36)!
+        }
+        XCTAssertTrue(text.performKeyEquivalent(with: key(false)))
+        XCTAssertTrue(text.performKeyEquivalent(with: key(true)))
+        XCTAssertTrue(text.performKeyEquivalent(with: key(true)))
+        XCTAssertEqual(presses, [false, true, true], "the press, then the key's repeats, each said for what it is")
+    }
+
+    func testOnlyAPressThatRepeatsOneCountsAsHeld() {
+        let click = { (count: Int) in
+            NSEvent.mouseEvent(with: .leftMouseUp, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                               context: nil, eventNumber: 0, clickCount: count, pressure: 0)!
+        }
+        XCTAssertFalse(click(1).repeatsAPress)
+        XCTAssertTrue(click(2).repeatsAPress, "a double click's second")
+        let other = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                                       windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0)!
+        XCTAssertFalse(other.repeatsAPress, "asked of an event that is neither a key's nor a click's, without raising")
+        XCTAssertFalse(NSEvent.repeatingAPress, "no event being handled")
     }
 
     func testAnEditRetiresTheCheck() {
