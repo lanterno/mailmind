@@ -115,6 +115,8 @@ acknowledged() {
 check "it carries the licences: MailMind's, Sparkle's (bsdiff's), SQLCipher's, libtomcrypt's, ring's, UniFFI's" acknowledged
 check "with the copyright About shows" equal "$(plist "$app" NSHumanReadableCopyright)" \
     "© 2026 MailMind contributors. MIT License."
+check "and takes mailto: links, so it can be the Mac's mail app" equal \
+    "$(plist "$app" CFBundleURLTypes:0:CFBundleURLSchemes:0)" "mailto"
 
 echo "## Sparkle.framework loads under the app's signature"
 # Library validation is checked when dyld maps a framework, before any of the app's code runs. A program signed as the
