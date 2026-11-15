@@ -131,9 +131,10 @@ final class MailboxPictures: XCTestCase {
         try await picture("contact", CGSize(width: 420, height: 360),
                           ContactCard(mailbox: app.mailbox, address: "grace.hopper@example.test"))
         app.mailbox.chose([Fixture.row(1)])
-        try await picture("palette", CGSize(width: 520, height: 420), PaletteSheet(mailbox: app.mailbox))
+        try await picture("palette", CGSize(width: 520, height: 420), PaletteSheet(mailbox: app.mailbox, close: {}))
         try await picture("move-to", CGSize(width: 520, height: 420),
-                          MoveToSheet(mailbox: app.mailbox, ask: MoveAsk(account: Fixture.ada, from: "INBOX")))
+                          MoveToSheet(mailbox: app.mailbox, ask: MoveAsk(account: Fixture.ada, from: "INBOX"),
+                                      close: {}))
     }
 
     /// Whether a picture has more than its background: some pixels differ from the corner's.

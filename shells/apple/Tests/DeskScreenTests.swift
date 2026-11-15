@@ -96,7 +96,8 @@ final class DeskScreenTests: XCTestCase {
         let model = AskModel(link: link)
         await model.ask("When is the dentist appointment?")
         try draw("ask", width: 760, height: 520, AskScreen(model: model, reading: nil, open: { _ in }, askAgain: {}))
-        try draw("ask-sheet", width: 440, AskSheet { _ in })
+        try draw("ask-card", width: 700,
+                 AskCard(model: model, words: "When is the dentist appointment?", open: { _ in }).padding(8))
     }
 
     func testABulkActionArmed() async throws {
@@ -104,7 +105,9 @@ final class DeskScreenTests: XCTestCase {
         let model = PlanModel(link: link, notices: notices)
         await model.plan("delete the shop's newsletters older than a week")
         await model.press()
-        try draw("plan-armed", width: 520, PlanSheet(model: model, showSearch: { _ in }))
+        try draw("plan-armed", width: 700, PlanCard(model: model,
+                                                    words: "delete the shop's newsletters older than a week",
+                                                     showSearch: { _ in }, close: {}).padding(8))
     }
 
     func testTheScreener() async throws {
@@ -162,8 +165,9 @@ final class DeskScreenTests: XCTestCase {
 
     func testSnoozeAndNotices() throws {
         let attention = AttentionModel(link: link, notices: notices)
-        try draw("snooze-until", width: 400, SnoozeUntilSheet(
-            copies: [DeskFixture.ada, DeskFixture.grace], model: attention, canUnsnooze: true))
+        try draw("snooze-until", width: 300, SnoozeChooser(
+            copies: [DeskFixture.ada, DeskFixture.grace], model: attention, canUnsnooze: true, menu: MeadowMenuModel(),
+            close: {}).padding(20))
         notices.say("Snoozed", undoable: true)
         try draw("notice", width: 420, height: 80, DeskNoticeBanner(notices: notices, undo: {}).padding(12))
     }

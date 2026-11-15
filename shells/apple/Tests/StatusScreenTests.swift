@@ -124,7 +124,8 @@ final class StatusScreenTests: XCTestCase {
 
     func testTheStatus() throws {
         let failing = status(failing: true)
-        try render("status-menu", CGSize(width: 340, height: 420), StatusMenu(status: failing, close: {}))
+        try render("status-menu", CGSize(width: 340, height: 420),
+                   StatusMenu(status: failing, model: MeadowMenuModel(), settings: {}, close: {}))
         try render("status-bar", CGSize(width: 900, height: 120), VStack(spacing: 0) {
             HStack(spacing: 10) {
                 StatusPill(status: failing)
@@ -134,7 +135,8 @@ final class StatusScreenTests: XCTestCase {
             AccountAlert(status: failing)
             Spacer()
         })
-        try render("status-menu-ok", CGSize(width: 340, height: 300), StatusMenu(status: status(), close: {}))
+        try render("status-menu-ok", CGSize(width: 340, height: 300),
+                   StatusMenu(status: status(), model: MeadowMenuModel(), settings: {}, close: {}))
     }
 
     func testHelpAndTheGuide() throws {

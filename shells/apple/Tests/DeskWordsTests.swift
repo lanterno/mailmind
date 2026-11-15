@@ -161,7 +161,7 @@ final class DeskWordsTests: XCTestCase {
 
     func testACustomSnoozeStartsTomorrowAtNine() {
         let now = Date(timeIntervalSince1970: 1_794_739_600)
-        let start = SnoozeUntilSheet.tomorrowMorning(from: now, calendar: calendar)
+        let start = SnoozeChooser.tomorrowMorning(from: now, calendar: calendar)
         let parts = calendar.dateComponents([.day, .hour, .minute], from: start)
         XCTAssertEqual(parts.day, 16)
         XCTAssertEqual(parts.hour, 9)
