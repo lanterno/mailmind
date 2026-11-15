@@ -321,7 +321,9 @@ final class Mailbox {
     /// The table's choice changed: one row opens in the reader, several are marked and none is open.
     func chose(_ rows: [API.FolderRow], unheld: IndexSet = []) {
         // A row chosen beside the brief goes back to the Inbox, whose list it is in.
-        if !rows.isEmpty || !unheld.isEmpty, let app, let listed = app.listed, app.place != listed { app.place = listed }
+        if !rows.isEmpty || !unheld.isEmpty, let app, let listed = app.listed, app.place != listed {
+            app.place = listed
+        }
         chosenRows = rows
         self.unheld = unheld
         let one = rows.count == 1 && unheld.isEmpty ? MailCopy(rows[0]) : nil
