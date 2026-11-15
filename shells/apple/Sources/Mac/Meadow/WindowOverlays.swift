@@ -1,4 +1,5 @@
 #if os(macOS)
+import AppKit
 import SwiftUI
 
 /// What stands on the window's scrim, one at a time (the mockup's `openOverlay()`): the palette, with the words it
@@ -44,6 +45,7 @@ struct WindowOverlays: ViewModifier {
     @Environment(Desk.self) private var desk: Desk?
     @State private var anchors = MeadowAnchors()
     @State private var snoozeMenu = MeadowMenuModel()
+    @State private var focus = DialogFocus()
 
     func body(content: Content) -> some View {
         let dialog = WindowDialog.shown(moving: mailbox.moving, savingView: mailbox.savingView, sheet: desk?.sheet,
@@ -52,6 +54,7 @@ struct WindowOverlays: ViewModifier {
         content
             .blur(radius: dialog == nil ? 0 : 2)
             .environment(\.meadowAnchors, anchors)
+            .background { DialogFocusWindow(focus: focus) }
             .overlay(alignment: .topLeading) { snoozeAnchor }
             .overlay(alignment: .bottom) {
                 WindowToasts(mailbox: mailbox, status: status, desk: desk)
@@ -62,11 +65,16 @@ struct WindowOverlays: ViewModifier {
                     view(of: dialog)
                         .id(dialog.kind)
                         .transition(.opacity)
+                        .onDisappear { focus.gone() }
                 }
             }
             .animation(.easeOut(duration: 0.12), value: dialog?.kind)
-            // What a dialog types is its own: the list's keys and the frame's Esc wait while one is up.
-            .onChange(of: dialog != nil) { _, up in mailbox.typing = up }
+            // What a dialog types is its own: the list's keys and the frame's Esc wait while one is up, and the
+            // keyboard goes back to where it was once the last goes.
+            .onChange(of: dialog != nil) { _, up in
+                mailbox.typing = up
+                if up { focus.opened() } else { focus.closing() }
+            }
             .onChange(of: mailbox.typing) { _, now in if !now && dialog != nil { mailbox.typing = true } }
     }
 
@@ -131,6 +139,82 @@ struct WindowOverlays: ViewModifier {
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+        }
+    }
+}
+
+/// The keyboard around the window's dialogs: as one comes up, the list's table lets the keyboard go, so its arrows
+/// and keys wait behind the scrim; once the last has gone, the keyboard goes back to what had it before (the list's
+/// table, as a rule), unless something the dialog opened has taken it since.
+@MainActor
+final class DialogFocus {
+    weak var window: NSWindow?
+    /// What had the keyboard before the dialog came up.
+    private weak var before: NSResponder?
+    /// What the dialog had as it went: while that or nothing has the keyboard, it goes back.
+    private weak var dialogHad: NSResponder?
+    private var going = false
+
+    func opened() {
+        going = false
+        guard let window else { return }
+        before = Self.owner(of: window.firstResponder)
+        if before is MailboxTableView { window.makeFirstResponder(nil) }
+    }
+
+    func closing() {
+        going = true
+        dialogHad = window.flatMap { Self.owner(of: $0.firstResponder) }
+    }
+
+    /// The dialog has left the window.
+    func gone() {
+        guard going, let window else { return }
+        going = false
+        if let back = Self.back(to: before, in: window, dialogHad: dialogHad) { window.makeFirstResponder(back) }
+        (before, dialogHad) = (nil, nil)
+    }
+
+    /// What stands for a responder: a field for its editor, nothing for the window itself.
+    static func owner(of responder: NSResponder?) -> NSResponder? {
+        if let editor = responder as? NSTextView, editor.isFieldEditor, let field = editor.delegate as? NSView {
+            return field
+        }
+        return responder is NSWindow ? nil : responder
+    }
+
+    /// Where the keyboard goes as a dialog goes: to what had it before, while that is still in the window, else to
+    /// the list's table; nowhere while something the dialog didn't have holds it.
+    static func back(to before: NSResponder?, in window: NSWindow, dialogHad: NSResponder?) -> NSResponder? {
+        if let now = owner(of: window.firstResponder), now !== dialogHad, (now as? NSView)?.window === window {
+            return nil
+        }
+        if let before = before as? NSView, before.window === window { return before }
+        return ListTable.find(in: window.contentView)
+    }
+}
+
+/// Tells the window's `DialogFocus` which window it is.
+private struct DialogFocusWindow: NSViewRepresentable {
+    let focus: DialogFocus
+
+    func makeNSView(context: Context) -> NSView { Probe(focus) }
+
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class Probe: NSView {
+        let focus: DialogFocus
+
+        init(_ focus: DialogFocus) {
+            self.focus = focus
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            focus.window = window
         }
     }
 }
