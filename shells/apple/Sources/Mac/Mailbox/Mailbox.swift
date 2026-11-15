@@ -120,6 +120,11 @@ final class Mailbox {
         account.flatMap { folders[$0]?.folders } ?? []
     }
 
+    /// Whether `copy` is in its account's Trash, where the pane's bar restores it.
+    func inTrash(_ copy: MailCopy) -> Bool {
+        folders(of: copy.account).first { $0.name == copy.folder }?.role == "trash"
+    }
+
     /// The list's title (`title` in useMailbox.ts).
     var title: String {
         guard let place = app?.place else { return "" }

@@ -317,9 +317,9 @@ struct PaneWriting: Equatable {
     var draft: MailCopy?
 }
 
-/// The reading pane's bar (`.pbar`, `paneBar()`): over a message, its triage and its writing with their keys, then
-/// reading settings and focus, and where it stands in the list with the next and previous; over anything else only
-/// the last three.
+/// The reading pane's bar (`.pbar`, `paneBar()`): over a message, its triage and its writing with their keys (in
+/// Trash, Restore in their place), then reading settings and focus, and where it stands in the list with the next
+/// and previous; over anything else only the last three.
 struct MeadowPaneBar: View {
     let app: MailApp
     let mailbox: Mailbox
@@ -340,7 +340,9 @@ struct MeadowPaneBar: View {
     var body: some View {
         let fold = PaneBarFold(width: width)
         HStack(spacing: 2) {
-            if message {
+            if message, inTrash {
+                group { restore(fold) }
+            } else if message {
                 group { triage(fold) }
                 if fold.secondary { separator }
                 group { write(fold) }
@@ -391,6 +393,22 @@ struct MeadowPaneBar: View {
                  help: done ? "Reply later — Done · L" : "Reply later · L", second: true, fold: fold) { later?.run() }
                 .disabled(later == nil)
         }
+    }
+
+    // MARK: Trash
+
+    /// The message open is in Trash, where the bar only takes it back out (the mockup's `m.loc === 'trash'`).
+    private var inTrash: Bool {
+        app.selection.copy.map(mailbox.inTrash) ?? false
+    }
+
+    /// Restore, to the account's Inbox as a row's own button does. The mockup's Delete forever has no place here:
+    /// nothing in MailMind removes mail for good.
+    private func restore(_ fold: PaneBarFold) -> some View {
+        verb(.restore, "Restore", help: RowAct.restore.title, fold: fold) {
+            Task { mailbox.restore(await mailbox.targets()) }
+        }
+        .disabled(!mailbox.hasTarget)
     }
 
     // MARK: Writing
