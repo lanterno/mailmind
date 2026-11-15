@@ -2,7 +2,10 @@ import AppKit
 import SwiftUI
 import XCTest
 
-/// The compose window drawn in each light on fictional answers: each must draw, and with `TEST_RUNNER_MEADOW_PICTURES=<folder>` given to `xcodebuild test` each is written there, at
+private typealias F = StatusFixtures
+
+/// The compose window, Settings, the first run and a sender's card drawn in each light on fictional answers: each
+/// must draw, and with `TEST_RUNNER_MEADOW_PICTURES=<folder>` given to `xcodebuild test` each is written there, at
 /// twice the size, to be laid beside the mockup's pictures. They are drawn by an offscreen window, so the AppKit
 /// views inside them (the message's text, a field, a switch) are drawn too.
 @MainActor
@@ -142,6 +145,87 @@ final class MeadowDialogPictures: XCTestCase {
         }
         try draw("compose-snippets", CGSize(width: 360, height: 340)) { _ in
             SnippetsPanel(composer: composer, host: host) {}
+        }
+    }
+
+    // MARK: Settings and the first run
+
+    private let now = F.at("2026-11-14T15:00:00Z")
+
+    private func status(failing: Bool = false, firstRun: Bool = false) -> AppStatus {
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        if firstRun {
+            status.hold(digest: F.digest(accounts: [], aliases: [:], engine: "none", keyFrom: ""),
+                        preferences: F.preferences(), now: now)
+            return status
+        }
+        let accounts = [
+            F.account("ada@example.test", alias: "Work", type: "gmail", signature: "Ada\\nat the example"),
+            F.account("home@example.test", alias: "Home", type: "imap", style: "op", ref: "op://Private/Home/password"),
+            F.account("bridge@example.test", alias: "Proton", type: "proton", style: "proton_bridge"),
+        ]
+        let health = [
+            F.standing("ada@example.test", ok: "2026-11-14T14:52:00Z", count: 12),
+            failing
+                ? F.standing("home@example.test", ok: "2026-11-14T09:00:00Z", error: "LOGIN refused", kind: "AUTH",
+                             errorAt: "2026-11-14T14:30:00Z", count: 4)
+                : F.standing("home@example.test", ok: "2026-11-14T14:50:00Z", count: 5),
+            F.standing("bridge@example.test", ok: "2026-11-14T14:40:00Z", count: 2),
+        ]
+        status.hold(digest: F.digest(accounts: accounts.compactMap(\.email),
+                                     aliases: ["ada@example.test": "Work", "home@example.test": "Home",
+                                               "bridge@example.test": "Proton"],
+                                     last: "2026-11-14T14:52:00Z"),
+                    accounts: accounts, health: health, preferences: F.preferences(quiet: true), now: now)
+        return status
+    }
+
+    func testSettingsInEachPlace() throws {
+        let status = status(failing: true)
+        for tab in SettingsTab.order {
+            status.settingsTab = tab
+            try draw("settings-\(tab.rawValue)", CGSize(width: 840, height: 640)) { _ in
+                SettingsLayout(status: status, lights: false)
+            }
+        }
+    }
+
+    func testTheAccountFormAsADialog() throws {
+        var draft = AccountDraft()
+        draft.email = "ada@example.test"
+        draft.kind = .imap
+        draft.host = "imap.example.test"
+        try draw("settings-account-form", CGSize(width: 560, height: 640)) { _ in
+            AccountForm(status: status(), draft: draft, done: { _ in })
+        }
+    }
+
+    func testTheFirstRunInTheBriefsManner() throws {
+        try draw("first-run", CGSize(width: 1000, height: 760)) { _ in
+            Welcome(status: status(firstRun: true), keySet: false, lights: false)
+        }
+    }
+
+    // MARK: A sender's card
+
+    func testASendersCard() async throws {
+        let mailbox = Mailbox()
+        mailbox.wire = Fixture.server().wire
+        await mailbox.refresh()
+        mailbox.composeTo = { _ in }
+        let card = API.ContactCard(
+            accounts: [Fixture.ada, Fixture.work], addr: "aoi@example.test", count: 380, firstAgo: "4 years",
+            known: true, lastAgo: "2 days", name: "Aoi Nakamura", ok: true, recent: [
+                API.RecentMail(account: Fixture.ada, folder: "INBOX", key: 1, seen: false,
+                               subject: "Lunch on Saturday?", uid: 11, when: "9:12 am"),
+                API.RecentMail(account: Fixture.ada, folder: "INBOX", key: 2, seen: true,
+                               subject: "Photos from the hike", uid: 12, when: "Mon"),
+                API.RecentMail(account: Fixture.work, folder: "INBOX", key: 3, seen: true,
+                               subject: "Re: The guild dinner", uid: 13, when: "Oct 28"),
+            ], replied: 120)
+        try draw("contact-card", CGSize(width: 420, height: 500)) { _ in
+            ContactCard(mailbox: mailbox, address: card.addr, card: card)
         }
     }
 }

@@ -1,6 +1,7 @@
 import XCTest
 
-/// What the compose window says in Meadow's look: the head's title, the From chip, the foot's line, a chip's name.
+/// What the compose window, Settings and a sender's card say in Meadow's look: the head's title, the From chip, the
+/// foot's line, a chip's name, Settings' places and a card's name.
 @MainActor
 final class MeadowDialogTests: XCTestCase {
     func testTheComposersHeadSaysWhatIsWrittenAndToWhom() {
@@ -34,5 +35,23 @@ final class MeadowDialogTests: XCTestCase {
         XCTAssertEqual(ChipField.shown("\"Dee Ash\" <dee@example.test>"), "Dee Ash")
         XCTAssertEqual(ChipField.shown("  bo@example.test "), "bo@example.test")
         XCTAssertEqual(ChipField.shown("not an address"), "not an address")
+    }
+
+    func testSettingsListsItsPlacesInOrderEachWithItsWords() {
+        XCTAssertEqual(SettingsTab.order, [.accounts, .general, .notifications, .ai])
+        XCTAssertEqual(SettingsTab.order.map(\.title), ["Accounts", "General", "Notifications", "AI"])
+        XCTAssertEqual(Set(SettingsTab.order.map(\.lede)).count, SettingsTab.order.count)
+        XCTAssertFalse(SettingsTab.order.contains { $0.lede.isEmpty })
+    }
+
+    func testASendersCardIsNamedForThemByTheirFirstName() {
+        func card(_ name: String) -> API.ContactCard {
+            API.ContactCard(accounts: [], addr: "aoi@example.test", count: 1, known: false, name: name, ok: true,
+                            recent: [], replied: 0)
+        }
+        XCTAssertEqual(ContactCard.heading(card("Aoi Nakamura")), "About Aoi")
+        XCTAssertEqual(ContactCard.heading(card("")), "About this sender")
+        XCTAssertEqual(ContactCard.heading(card("aoi@example.test")), "About this sender")
+        XCTAssertEqual(ContactCard.heading(nil), "About this sender")
     }
 }
