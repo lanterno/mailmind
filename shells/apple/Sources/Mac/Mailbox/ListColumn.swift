@@ -17,6 +17,8 @@ struct MailboxColumn: View {
             ListHead(app: app, mailbox: mailbox)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Mail that landed elsewhere, and what came in since you last looked (Mac/Assistant).
+                .overlay(alignment: .top) { DeskNewMailPill() }
         }
         .overlay(alignment: .bottom) { ToastView(mailbox: mailbox) }
         .navigationTitle(mailbox.title)

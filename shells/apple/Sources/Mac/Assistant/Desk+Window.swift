@@ -45,6 +45,8 @@ final class Desk {
     let invites: InviteReplies
     /// A sentence typed in the search field, turned into the search it means.
     let prose: ProseSearch
+    /// Mail that landed away from the list on screen, and a line on what came in since the Inbox was looked at.
+    let since: SinceLooked
     private(set) var screeners: [String: ScreenerModel] = [:]
     var sheet: Sheet?
 
@@ -67,6 +69,7 @@ final class Desk {
         curate = CurateModel(link: link, notices: notices)
         invites = InviteReplies(link: link, notices: notices)
         prose = ProseSearch(link: link)
+        since = SinceLooked(link: link)
         let readAgain: () -> Void = { [weak self] in self?.readAgain() }
         plan.changed = readAgain
         brief.changed = readAgain
@@ -140,6 +143,12 @@ final class Desk {
             if brief.opened { await brief.refresh() }
         }
         if event.name == "tasks-changed" { await tasks.load() }
+        if event.name == "new-mail", let said = event.decoded(SinceLooked.Arrived.self) {
+            since.newMail(said, on: app?.place, ai: app?.mailbox.aiOn ?? false)
+        }
+        if event.name == "snooze-wake", let said = event.decoded(SinceLooked.Woke.self) {
+            since.snoozeWake(said, on: app?.place)
+        }
     }
 
     // MARK: The window
@@ -329,6 +338,14 @@ struct DeskSurfaces: ViewModifier {
             }
             .task(id: app.stage) {
                 if app.stage == .open { desk.attach(app) }
+            }
+            // An Inbox opened, or the app come back to with one on screen, is a look; away, a line not yet written is.
+            .onChange(of: app.place, initial: true) { _, place in
+                desk.since.lookedAt(place, accounts: desk.accounts)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                desk.since.lookedAt(app.place, accounts: desk.accounts)
+                desk.since.cameBack()
             }
     }
 }
