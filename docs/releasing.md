@@ -20,11 +20,13 @@ on a Developer ID ([#42](https://github.com/lanterno/mailmind/issues/42)).
   layout into the image, so nothing drives Finder. Finder draws the icons' names black or white as the person's
   appearance is, so the band under them is a blue both read on.
 - **The acknowledgements.** The licences of what the app is built from ask for their notices to go with every copy.
-  `Release/acknowledgements.py` collects them as the release is built: MailMind's, Sparkle's (with bsdiff's), and
-  every licence file of every crate the core links for either architecture, the C sources they compile in among them
-  (SQLCipher and libtomcrypt, through `sqlcipher-src`). A crate that ships no licence file gets its licence's standard
-  text from `Release/licences`, and the release stops when there is none, rather than ship the crate unacknowledged.
-  They go in the app as `Acknowledgements.txt`, which **MailMind › Acknowledgements** shows.
+  `Release/acknowledgements.py` collects them as the release is built: MailMind's, Sparkle's (with bsdiff's), the
+  SIL Open Font License of each typeface the app carries (Nunito Sans, Shippori Mincho and Klee One, with their
+  copyrights, from `web/assets/fonts/LICENSES`), and every licence file of every crate the core links for either
+  architecture, the C sources they compile in among them (SQLCipher and libtomcrypt, through `sqlcipher-src`). A
+  crate that ships no licence file gets its licence's standard text from `Release/licences`, and the release stops
+  when there is none, rather than ship the crate unacknowledged. They go in the app as `Acknowledgements.txt`, which
+  **MailMind › Acknowledgements** shows.
 - **Updates.** Each copy of the app reads `https://github.com/lanterno/mailmind/releases/latest/download/appcast.xml`,
   the appcast on the latest release. The appcast names the .dmg and carries its EdDSA (Ed25519) signature, made with
   the owner's private key; the app carries the public key and refuses an update whose signature doesn't verify, before

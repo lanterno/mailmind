@@ -30,6 +30,7 @@ just apple smoke        # the Mac app, then the iPhone app in a simulator: each 
 just apple measure      # cold start, memory, main-thread time, crossing cost, sizes, a web view's memory: build/measure/results.txt
 just gen-bindings       # after a change to the core's contract: rewrites Generated/ (commit that diff on its own)
 just apple icon         # the Mac app's icon, drawn by Icon/icon.swift into Icon/Assets.xcassets (commit the images on their own)
+just apple fonts        # Meadow's typefaces, joined from the page's by Fonts/fonts.py into Fonts/*.ttf (commit them on their own)
 just apple release      # the Mac app universal, signed ad hoc, in a .dmg with its appcast: build/release (docs/releasing.md)
 just apple release-check  # the release recipe end to end with a throwaway update key, then checks on what it made
 ```
@@ -51,6 +52,7 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | `Release/mac.yml` | What only the Mac target has, which `project.yml` includes: the icon, Sparkle (pinned), the update key and the switch for update checks, the hardened runtime. |
 | `Release/` | Besides `mac.yml`: Sparkle's Info.plist keys, the entitlements, `release.sh` and `check.sh` (`just apple release` and `release-check`), `eddsa.swift` (an appcast's signatures checked as Sparkle will), `acknowledgements.py` and `licences/` (every licence the app carries), `dmg-background.swift` and `dmg.py` (the .dmg's window), and the release notes' template. |
 | `Icon/` | `icon.swift`, which draws the Mac app's icon, and the asset catalog it renders into. iOS has no icon yet: compiling one needs an iOS simulator runtime installed. |
+| `Fonts/` | Meadow's typefaces, Nunito Sans (variable, upright and italic), Shippori Mincho (600, 700) and Klee One (600), one TrueType file a face, which `fonts.py` joins from the page's per-script WOFF2 files (`web/assets/fonts`, whose `LICENSES` the acknowledgements carry). The app registers them for its own process as it starts (`MeadowFonts.register()`). |
 | `Generated/` | The UniFFI bindings `just gen-bindings` writes. Never edit them by hand. |
 | `Sources/ListModel.swift` | `HeldRows`, `ListModel`, `OncePerFrame` and `Relay`: the rows near the screen, the window asked for at most once a frame, and the core's batches handed to the main actor. |
 | `Sources/Demo.swift` | Makes the fictional mailbox on first launch, then opens the session and the list off the main thread. |
