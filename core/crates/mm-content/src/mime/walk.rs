@@ -86,7 +86,8 @@ impl Facts {
         let disposition_header = headers.all(HeaderName::ContentDisposition).next();
         let disposition = disposition_header.map_or_else(String::new, |found| header::first_word(found.raw_value()));
         let named = |content_type: Option<mail_parser::ContentType<'_>>, name: &str| {
-            content_type.and_then(|content_type| content_type.attribute(name)).map(|value| value.trim().to_owned())
+            let value = content_type.and_then(|content_type| content_type.attribute(name));
+            value.map(|value| header::py_strip(value).to_owned())
         };
         let filename = match disposition_header.and_then(|found| found.value().as_content_type()) {
             Some(parsed) if parsed.has_attribute("filename") => {

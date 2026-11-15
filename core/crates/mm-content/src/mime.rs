@@ -317,7 +317,8 @@ type Replacement = (usize, u8);
 /// Python read the first, and a part mail-parser reads as a multipart or an attached email, whose type Python read as
 /// none, being without exactly one `/`: such a part is text/plain, as RFC 2045 has it. And white space Python took
 /// from a Content-Type parameter, where mail-parser kept it, goes ([`header::param_replacements`]): a boundary or a
-/// charset after a vertical tab was lost, and so was a boundary with a blank before its closing quote.
+/// charset after a vertical tab was lost, and so was a boundary with a blank before its closing quote, and the body of
+/// a part whose name a vertical tab and a quote started.
 fn replacements(raw: &[u8], message: &Message<'_>) -> Vec<Replacement> {
     let mut replaced = Vec::new();
     for part in message.root().parts() {

@@ -120,7 +120,8 @@ pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
 /// mail-parser keeps them: one at either edge of a parameter's name, or after a boundary, which Python's
 /// `get_boundary` stripped on the right, becomes a space. That strip took blanks inside a boundary's quotes too, where
 /// mail-parser keeps them: the closing quote moves back over them. Python kept a blank at the start of a value, at the
-/// end of any other or inside either, and so does the core.
+/// end of any other or inside either, and so does the core, but for a value of such blanks alone that a quote or a
+/// special cut short ([`cut_short`]).
 pub(super) fn param_replacements(raw: &[u8]) -> Vec<(usize, u8)> {
     let mut replaced = Vec::new();
     for param in params(raw) {
@@ -133,7 +134,10 @@ pub(super) fn param_replacements(raw: &[u8]) -> Vec<(usize, u8)> {
         let bare_name = name.get(lead..name.len() - trail).unwrap_or_default();
         let value = raw.get(equals + 1..param.end).unwrap_or_default();
         let blanks = value.iter().rev().take_while(|&&byte| python_blank(byte)).count();
-        if bare_name.eq_ignore_ascii_case(b"boundary") && blanks < value.len() {
+        let cut = cut_short(raw, equals + 1..param.end);
+        if !cut.is_empty() {
+            replaced.extend(cut);
+        } else if bare_name.eq_ignore_ascii_case(b"boundary") && blanks < value.len() {
             edges.extend(param.end - blanks..param.end);
             replaced.extend(closing_quote_moved(raw, equals + 1..param.end));
         }
@@ -141,6 +145,35 @@ pub(super) fn param_replacements(raw: &[u8]) -> Vec<(usize, u8)> {
         replaced.extend(spaces.map(|at| (at, b' ')));
     }
     replaced
+}
+
+/// A value that starts with blanks Python took for white space and mail-parser keeps, right after its `=`, then a
+/// byte that ended Python's token and not mail-parser's ([`ends_a_token`]), as `name=\x0b"a.pdf"`: as replacements
+/// that make spaces of what follows those blanks to the parameter's end. Python's token ended at that byte, so the
+/// value was the blanks alone, which `get_filename` stripped to no name at all, and what came after was junk it
+/// dropped. mail-parser read on through the quote and named the part `"a.pdf`, a file, where Python showed it as the
+/// body its type makes it. A line break is left as it is. Empty when the value doesn't start so.
+fn cut_short(raw: &[u8], value: Range<usize>) -> Vec<(usize, u8)> {
+    let bytes = raw.get(value.clone()).unwrap_or_default();
+    let blanks = bytes.iter().take_while(|&&byte| kept_by_mail_parser(byte)).count();
+    if blanks == 0 || !bytes.get(blanks).is_some_and(|&byte| ends_a_token(byte)) {
+        return Vec::new();
+    }
+    (value.start + blanks..value.end)
+        .filter(|&at| raw.get(at).is_some_and(|&byte| !matches!(byte, b' ' | b'\r' | b'\n')))
+        .map(|at| (at, b' '))
+        .collect()
+}
+
+/// Whether a byte ended the token Python read as a parameter's value where mail-parser reads on: a quote, a space, a
+/// tab, one of RFC 2045's other tspecials or a `*`, at which Python's `get_extended_attribute` stopped. A `;` ends the
+/// parameter for both and a `(` opens a comment for both, and Python read on past a `'` as the end of an RFC 2231
+/// charset.
+fn ends_a_token(byte: u8) -> bool {
+    matches!(
+        byte,
+        b'"' | b' ' | b'\t' | b')' | b'<' | b'>' | b'@' | b',' | b':' | b'\\' | b'/' | b'[' | b']' | b'?' | b'=' | b'*'
+    )
 }
 
 /// A quoted value's blanks before its closing quote, as replacements that move the quote back over them, the bytes
