@@ -22,11 +22,13 @@ pub const FIRST: i64 = 300;
 pub const LONGEST: i64 = 3600;
 /// The class of a login its server refused (`mm_imap`'s), which a login held back fails with too.
 pub const REFUSED: &str = "LoginRefused";
+/// The classes of Gmail's own refusals (`mm_imap`'s), each saying what to do: refusals all the same.
+pub const GMAIL_REFUSED: [&str; 3] = ["LoginNeedsAppPassword", "LoginNeedsWebSignIn", "LoginImapOff"];
 
 /// Whether a login that didn't work was refused by its server, from the class of its trouble alone. A server saying
 /// it can't for now (`LoginUnavailable`), a connection lost during LOGIN, and a login never sent are no refusal.
 pub fn refuses(class: &str) -> bool {
-    class == REFUSED
+    class == REFUSED || GMAIL_REFUSED.contains(&class)
 }
 
 /// This process's own key for naming logins, drawn at its start, so a login's id says nothing of its credential to

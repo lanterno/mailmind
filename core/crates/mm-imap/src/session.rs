@@ -226,9 +226,9 @@ impl Server {
     }
 
     /// Log in. A login that didn't work is unreachable, as the Python app's `LoginUnreachable` is: `LoginRefused`
-    /// when the server said no, `LoginUnavailable` when it said it can't for now; a connection lost during LOGIN is
-    /// lost, as any is. A user or a password holding a line break or NUL is never sent, since it would end LOGIN's
-    /// line and start another.
+    /// when the server said no, or one of Gmail's own refusals (`login_failed`), `LoginUnavailable` when it said it
+    /// can't for now; a connection lost during LOGIN is lost, as any is. A user or a password holding a line break or
+    /// NUL is never sent, since it would end LOGIN's line and start another.
     pub fn login(mut self, user: &str, password: &Secret) -> Result<Session, Error> {
         let unsendable = |s: &str| s.contains(['\r', '\n', '\0']);
         if unsendable(user) || unsendable(password.expose()) {
@@ -252,14 +252,26 @@ impl Server {
     }
 }
 
+/// Gmail's refusals of a LOGIN, each by the words its answer says it in, and the class it comes to
+/// (`conn_error.refusal`): an App Password needed where a Google password was typed (which is all an account with
+/// Advanced Protection, or one whose Workspace admin switched App Passwords off, hears too), a sign-in Google wants
+/// made on the web first, and IMAP switched off.
+const GOOGLE_SAYS: [(&str, &[&str]); 3] = [
+    ("LoginNeedsAppPassword", &["application-specific password", "log in via your web browser"]),
+    ("LoginNeedsWebSignIn", &["[webalert", "web login required"]),
+    ("LoginImapOff", &["imap access is disabled", "not enabled for imap"]),
+];
+
 /// What a server's NO or BAD to LOGIN, with the rest of its line `said`, comes to: a refusal, unless the server says
-/// it can't for now ([UNAVAILABLE], RFC 5530), which is no word on the credential (`login_hold.refuses`).
+/// it can't for now ([UNAVAILABLE], RFC 5530), which is no word on the credential (`login_hold.refuses`). A refusal
+/// Gmail names is its own class, which says what to do (`mm_accounts::connections::quiet`), and holds nothing it said.
 fn login_failed(said: &str) -> Error {
-    if said.to_ascii_uppercase().contains("[UNAVAILABLE]") {
-        Error::Unreachable("LoginUnavailable")
-    } else {
-        Error::Unreachable("LoginRefused")
+    let low = said.to_ascii_lowercase();
+    if low.contains("[unavailable]") {
+        return Error::Unreachable("LoginUnavailable");
     }
+    let google = GOOGLE_SAYS.iter().find(|(_, words)| words.iter().any(|w| low.contains(w)));
+    Error::Unreachable(google.map_or("LoginRefused", |(class, _)| class))
 }
 
 /// An IMAP quoted string.
