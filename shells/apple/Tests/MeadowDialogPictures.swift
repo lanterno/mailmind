@@ -230,7 +230,7 @@ final class MeadowDialogPictures: XCTestCase {
                                subject: "Re: The guild dinner", uid: 13, when: "Oct 28"),
             ], replied: 120)
         try draw("contact-card", CGSize(width: 420, height: 500)) { _ in
-            ContactCard(mailbox: mailbox, address: card.addr, card: card)
+            ContactCard(mailbox: mailbox, address: card.addr, card: card, close: {})
         }
     }
 }

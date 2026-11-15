@@ -4,25 +4,33 @@ import SwiftUI
 /// Who a sender is (discovery/ContactCard.tsx): how much they've written, whether you answer, the accounts they write
 /// to, their latest mail, what the AI can say of them on a click, and two ways on: write to them, or their mail.
 ///
-/// It is drawn as Meadow's side card about a person (the reader's "About" card): raised paper with its grain, the
-/// avatar beside the name and address, the facts on dashed lines, the AI's words in moss, the actions at its foot.
+/// It is drawn as Meadow's side card about a person (the reader's "About" card), in Meadow's dialog on the window's
+/// scrim (`WindowOverlays`): the avatar beside the name and address, the facts on dashed lines, the AI's words in
+/// moss, the actions at its foot. Esc closes it and Return is Done.
 struct ContactCard: View {
     let mailbox: Mailbox
     let address: String
-    @Environment(\.dismiss) private var dismiss
+    let close: @MainActor () -> Void
     @Environment(\.meadow) private var meadow
     @State private var card: API.ContactCard?
     @State private var failed = false
 
-    init(mailbox: Mailbox, address: String, card: API.ContactCard? = nil) {
+    init(mailbox: Mailbox, address: String, card: API.ContactCard? = nil, close: @escaping @MainActor () -> Void) {
         self.mailbox = mailbox
         self.address = address
+        self.close = close
         _card = State(initialValue: card)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            DeskCardHeading(title: Self.heading(card), icon: .user)
+            HStack(spacing: 8) {
+                DeskCardHeading(title: Self.heading(card), icon: .user)
+                Button(action: close) { MeadowIconView(.x) }
+                    .meadowButton(.quiet, small: true, icon: true)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel("Close")
+            }
             if let card {
                 who(card)
                 facts(card)
@@ -36,7 +44,7 @@ struct ContactCard: View {
                     .foregroundStyle(meadow.ink2)
                 HStack {
                     Spacer()
-                    Button("Done") { dismiss() }
+                    Button("Done", action: close)
                         .meadowButton(.primary, small: true)
                         .keyboardShortcut(.defaultAction)
                 }
@@ -49,19 +57,10 @@ struct ContactCard: View {
             }
         }
         .padding(20)
-        .frame(width: 420, alignment: .leading)
-        .background { paper }
-        .presentationBackground { paper }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: address) { await read() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("About this sender")
-    }
-
-    private var paper: some View {
-        ZStack {
-            meadow.paperRaised
-            MeadowGrain()
-        }
     }
 
     /// The card's name: "About" and the sender's first name, as the reader's card says it.
@@ -130,7 +129,7 @@ struct ContactCard: View {
                 .padding(.bottom, 2)
             ForEach(card.recent, id: \.self) { mail in
                 ContactMailRow(mail: mail) {
-                    dismiss()
+                    close()
                     mailbox.chose([])
                     mailbox.app?.open(MailCopy(key: mail.key, folder: mail.folder, uid: mail.uid,
                                                account: mail.account))
@@ -144,7 +143,7 @@ struct ContactCard: View {
         HStack(spacing: 6) {
             if let compose = mailbox.composeTo {
                 Button {
-                    dismiss()
+                    close()
                     compose(card.addr)
                 } label: {
                     MeadowIconView(.pen, size: 14)
@@ -154,7 +153,7 @@ struct ContactCard: View {
                 .help("Write to this sender")
             }
             Button {
-                dismiss()
+                close()
                 mailbox.app?.place = .search(Search(q: "from:\(card.addr)"))
             } label: {
                 MeadowIconView(.search, size: 14)
@@ -162,7 +161,7 @@ struct ContactCard: View {
             }
             .meadowButton(.quiet, small: true)
             Spacer(minLength: 0)
-            Button("Done") { dismiss() }
+            Button("Done", action: close)
                 .meadowButton(.primary, small: true)
                 .keyboardShortcut(.defaultAction)
         }

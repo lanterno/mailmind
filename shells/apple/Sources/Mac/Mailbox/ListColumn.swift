@@ -4,8 +4,8 @@ import SwiftUI
 /// The list column: the place's head (its name, the Inbox's tabs, a search's scope, a lane's, the rows marked), its
 /// mail, a lane or the Document Hub, and "Load more" when there is more. The brief, in the pane beside the Inbox,
 /// leaves the Inbox’s list here; an answer and the Screener stand here. The search field is the top bar's
-/// (Mac/Meadow); what a person was last told, the palette, Move To and Save View float over the window
-/// (`WindowOverlays`).
+/// (Mac/Meadow); what a person was last told, the palette, Move To, Save View and a sender's card float over the
+/// window (`WindowOverlays`).
 struct MailboxColumn: View {
     let app: MailApp
     @Bindable var mailbox: Mailbox
@@ -22,9 +22,6 @@ struct MailboxColumn: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // Mail that landed elsewhere, and what came in since you last looked (Mac/Assistant).
                 .overlay(alignment: .top) { DeskNewMailPill() }
-        }
-        .sheet(isPresented: carding) {
-            if let address = mailbox.contact { ContactCard(mailbox: mailbox, address: address) }
         }
         .focusedSceneValue(\.mailbox, mailbox)
         .onAppear { mailbox.undoManager = undoManager }
@@ -53,10 +50,6 @@ struct MailboxColumn: View {
         } else {
             ContentUnavailableView("Choose a mailbox", systemImage: "tray")
         }
-    }
-
-    private var carding: Binding<Bool> {
-        Binding(get: { mailbox.contact != nil }, set: { if !$0 { mailbox.contact = nil } })
     }
 }
 

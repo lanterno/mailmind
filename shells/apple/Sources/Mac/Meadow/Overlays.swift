@@ -18,6 +18,8 @@ struct MeadowDialogPlace: Equatable, Sendable {
     static let palette = MeadowDialogPlace(width: 700, top: 0.11)
     static let keys = MeadowDialogPlace(width: 800, top: 0.09)
     static let form = MeadowDialogPlace(width: 520, top: 0.11)
+    /// A card about someone: as wide as the reader's side card was as a sheet.
+    static let card = MeadowDialogPlace(width: 420, top: 0.11)
 
     /// Its frame in a window of `size`: centred, 16 in from each side at least, `top` of the height down.
     func frame(in size: CGSize) -> (x: CGFloat, y: CGFloat, width: CGFloat) {
