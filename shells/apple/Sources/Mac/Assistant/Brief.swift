@@ -27,7 +27,9 @@ struct BriefScreen: View {
     let attention: AttentionModel
     let actions: BriefActions
     var tasks: TasksModel?
-    var now = Date()
+    /// The time a test or a picture shows the brief at. Without one, the greeting, the date and the side follow the
+    /// clock: a brief open since the morning says good evening in the evening.
+    var now: Date?
     /// The person's first name for the greeting: the window passes the one this Mac knows, a test a fictional one.
     var name: String?
     @State private var showAll = false
@@ -83,17 +85,20 @@ struct BriefScreen: View {
     private var hero: some View {
         ZStack(alignment: .topLeading) {
             MeadowScene(seed: 21)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(BriefWords.dateLine(now).uppercased())
-                    .font(.meadow(.ui, 12, .heavy))
-                    .tracking(12 * 0.14)
-                    .foregroundStyle(meadow.ink2)
-                Text(BriefWords.greeting(hour: Calendar.current.component(.hour, from: now), light: light, name: name))
-                    .font(.meadow(.display, narrow ? 30 : 40, .bold))
-                    .foregroundStyle(meadow.ink)
-                    .lineLimit(2)
-                    .padding(.top, 8)
-                    .accessibilityAddTraits(.isHeader)
+            BriefClock(fixed: now) { now in
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(BriefWords.dateLine(now).uppercased())
+                        .font(.meadow(.ui, 12, .heavy))
+                        .tracking(12 * 0.14)
+                        .foregroundStyle(meadow.ink2)
+                    Text(BriefWords.greeting(hour: Calendar.current.component(.hour, from: now), light: light,
+                                             name: name))
+                        .font(.meadow(.display, narrow ? 30 : 40, .bold))
+                        .foregroundStyle(meadow.ink)
+                        .lineLimit(2)
+                        .padding(.top, 8)
+                        .accessibilityAddTraits(.isHeader)
+                }
             }
             .padding(.leading, narrow ? 20 : 40)
             .padding(.trailing, 40)
@@ -358,7 +363,32 @@ struct BriefScreen: View {
     // MARK: Your day
 
     private var side: some View {
-        BriefSide(model: model, tasks: tasks, attention: attention, actions: actions, now: now)
+        BriefClock(fixed: now) { now in
+            BriefSide(model: model, tasks: tasks, attention: attention, actions: actions, now: now)
+        }
+    }
+}
+
+/// What the brief says by the time of day, at the time `fixed` when a test or a picture gives one, else at the
+/// clock's, read again as each minute turns (`schedule`). Nothing runs between the turns, and only what reads the
+/// time is drawn again.
+struct BriefClock<Schedule: TimelineSchedule, Content: View>: View {
+    var fixed: Date?
+    var schedule: Schedule
+    @ViewBuilder var content: (Date) -> Content
+
+    var body: some View {
+        if let fixed {
+            content(fixed)
+        } else {
+            TimelineView(schedule) { context in content(context.date) }
+        }
+    }
+}
+
+extension BriefClock where Schedule == EveryMinuteTimelineSchedule {
+    init(fixed: Date?, @ViewBuilder content: @escaping (Date) -> Content) {
+        self.init(fixed: fixed, schedule: .everyMinute, content: content)
     }
 }
 

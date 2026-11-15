@@ -92,7 +92,8 @@ struct BriefSide: View {
             DeskSideCard(title: String(localized: "Commitments"), icon: .check) {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(lines) { line in
-                        CommitmentLine(line: line, model: model, tasks: tasks, open: actions.open)
+                        CommitmentLine(line: line, model: model, tasks: tasks, today: BriefWords.localDay(now),
+                                       open: actions.open)
                     }
                 }
                 let all = open.count + mail.count
@@ -190,6 +191,8 @@ private struct CommitmentLine: View {
     let line: Commitment
     let model: BriefModel
     let tasks: TasksModel?
+    /// The day the brief is shown on, which a task's due date is said from.
+    let today: String
     let open: (MailCopy) -> Void
     @Environment(\.meadow) private var meadow
     @State private var hovering = false
@@ -231,7 +234,7 @@ private struct CommitmentLine: View {
     private var note: String {
         switch line {
         case .task(let task):
-            let due = BriefWords.due(task.due, today: BriefWords.localDay()).words
+            let due = BriefWords.due(task.due, today: today).words
             return [task.fromName ?? task.fromAddr, due.isEmpty ? nil : due].compactMap { $0 }.joined(separator: " · ")
         case .mail(let item):
             return [item.fromName ?? item.fromAddr, item.when].compactMap { $0 }.joined(separator: " · ")
