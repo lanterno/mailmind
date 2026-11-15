@@ -8,7 +8,7 @@ the use case's to see to: it never reads an endpoint out of the request.
 from collections.abc import Mapping
 from typing import Any
 
-from mailmind.accounts.domain.account import PORT_SAID, TYPE_DEFAULTS, Entry
+from mailmind.accounts.domain.account import PORT_SAID, TYPE_DEFAULTS, Entry, as_kept
 from mailmind.accounts.domain.credential import Typed
 from mailmind.kernel.parsed import as_int
 
@@ -30,16 +30,16 @@ def _port_of(draft: Mapping[str, Any], default: int) -> int:
 
 def throwaway_account(draft: Mapping[str, Any]) -> Entry:
     """What a draft asks to try, as an account a connection can open, and that nothing keeps: its password is `Typed`,
-    which the Keychain never sees and no file can hold."""
+    which the Keychain never sees and no file can hold, and is tried as it would be kept (`as_kept`)."""
     ty = draft.get("type", "imap")
     td = TYPE_DEFAULTS.get(ty, TYPE_DEFAULTS["imap"])
     cs: Entry = draft.get("credential") or {}
     typed = cs.get("value")
+    strip = bool(draft.get("strip_spaces", td["strip_spaces"]))
     acct: Entry = {"email": draft.get("email"), "kind": ty,
                    "host": draft.get("host") or td["host"], "port": _port_of(draft, td["port"]),
-                   "starttls": bool(draft.get("starttls", td["starttls"])),
-                   "strip_spaces": bool(draft.get("strip_spaces", td["strip_spaces"])),
-                   "trash": td["trash"], "credential": Typed(typed if isinstance(typed, str) else "")}
+                   "starttls": bool(draft.get("starttls", td["starttls"])), "strip_spaces": strip,
+                   "trash": td["trash"], "credential": Typed(as_kept(typed, strip) if isinstance(typed, str) else "")}
     if not acct["host"]:
         raise DraftRefused("a host is required")
     if cs.get("style") != "keychain" or not (isinstance(typed, str) and typed):

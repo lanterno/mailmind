@@ -213,3 +213,17 @@ def refuse_bad_endpoints(entry: Entry, before: Mapping[str, Any]) -> None:
 
 def strip_for(entry: Entry) -> bool:
     return entry.get("strip_spaces", _defaults(entry)["strip_spaces"])
+
+
+APP_PASSWORD_LETTERS = 16
+_SPACES = (" ", "\u00a0")       # a space, and the no-break space a copy from a web page may bring
+
+
+def as_kept(typed: str, strip_spaces: object) -> str:
+    """A password typed for an account, as it is kept and sent. Google shows an App Password as four groups of four
+    letters with spaces between, and an account that strips spaces (`strip_spaces`, a Gmail account's by default) keeps it
+    without them; any other password, there or elsewhere, is kept as it was typed, its spaces too."""
+    if not strip_spaces:
+        return typed
+    bare = "".join(ch for ch in typed if ch not in _SPACES)
+    return bare if len(bare) == APP_PASSWORD_LETTERS and bare.isascii() and bare.isalpha() else typed

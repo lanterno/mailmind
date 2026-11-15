@@ -15,12 +15,13 @@ with none, each preference is its default.
 Credential styles (so this works for anyone, with or without 1Password): keychain, op, env and
 proton_bridge, which mailmind.accounts.domain.credential lists and mailmind.accounts.adapters.secrets
 resolves. The file never holds a secret itself: one that does is refused (`refuse_plaintext`), and
-`set_password` or `set_api_key` keeps it in the Keychain instead. A password typed into Settings goes to the login Keychain, in the account's own item
-(`account:<address>`), before the file is written, and the file names the item: a new one replaces
-what the item held, and removing the account takes its item out. A Keychain that won't is
-`Unreachable`, and the file is left as it was. The Claude API key, which the file names, and the
-Proton Bridge's password, which it doesn't, are kept and taken out alike (`set_api_key`,
-`clear_api_key`, `set_bridge_password`, `clear_bridge_password`).
+`set_password` or `set_api_key` keeps it in the Keychain instead. A password typed into Settings goes to the login
+Keychain, in the account's own item (`account:<address>`), before the file is written, and the file names the item. A
+Gmail App Password typed as Google shows it, in four groups of four letters, is kept without its spaces
+(`account.as_kept`). A new one replaces what the item held, and removing the account takes its item out. A Keychain
+that won't is `Unreachable`, and the file is left as it was. The Claude API key, which the file names, and the Proton
+Bridge's password, which it doesn't, are kept and taken out alike (`set_api_key`, `clear_api_key`,
+`set_bridge_password`, `clear_bridge_password`).
 
 Type defaults (override per account as needed):
   gmail  -> imap.gmail.com:993 TLS, trash "[Gmail]/Trash", app-password spaces stripped
@@ -205,7 +206,7 @@ class Directory:
                 raise ValueError("a credential is required")
             account.refuse_bad_endpoints(entry, {})
             account.validate_new(entry)
-            entry["credential"] = self._kept(account_item(entry["email"]), cred, None)
+            entry["credential"] = self._kept(account_item(entry["email"]), _typed_for(entry, cred), None)
             raw["accounts"].append(entry)
             self.save(raw)
         bus.publish(events.AccountAdded(entry["email"]))
@@ -224,7 +225,7 @@ class Directory:
             account.refuse_bad_endpoints(entry, before)
             account.validate_new(entry)
             if new is not None:                 # only replace when a real value/ref/var was given
-                entry["credential"] = self._kept(account_item(entry["email"]), new, old_cred)
+                entry["credential"] = self._kept(account_item(entry["email"]), _typed_for(entry, new), old_cred)
                 own = account_item(entry["email"])
                 if _names(old_cred, own) and not _names(entry["credential"], own):
                     self._let_go(entry["email"])
@@ -256,7 +257,7 @@ class Directory:
             if entry is None:
                 raise KeyError(email)
             old = entry.get("credential")
-            entry["credential"] = self._kept(account_item(entry["email"]), Typed(secret), old)
+            entry["credential"] = self._kept(account_item(entry["email"]), _typed_for(entry, Typed(secret)), old)
             self._secrets.evict(old)
             self.save(raw)
         bus.publish(events.AccountChanged(entry["email"]))
@@ -368,6 +369,14 @@ class Directory:
                 print(f"  ok    {'anthropic_api_key':42} ({len(self._ai_key() or '')} chars)")
             except Exception as e:
                 print(f"  FAIL  {'anthropic_api_key':42} {e}")
+
+
+def _typed_for(entry: Entry, cred: dict[str, Any] | Typed) -> dict[str, Any] | Typed:
+    """A password typed for `entry` as it is kept: a Gmail App Password without the spaces Google shows it with
+    (`account.as_kept`). Where a stored credential points stays as it is."""
+    if isinstance(cred, Typed):
+        return Typed(account.as_kept(cred.password, account.strip_for(entry)))
+    return cred
 
 
 def _names(cred: object, item: str) -> bool:
