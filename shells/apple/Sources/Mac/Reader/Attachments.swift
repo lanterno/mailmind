@@ -110,15 +110,11 @@ struct AttachmentsRow: View {
         }
     }
 
-    /// The file in a folder of its own in this app's temporary folder, for Quick Look, gone when it closes.
+    /// The file where Quick Look's copies are kept (`PreviewFiles`: this user's alone, gone when its preview closes).
     private func look(_ file: API.AttachmentPart) async {
         guard let data = await fetch(file) else { return }
-        let folder = FileManager.default.temporaryDirectory.appending(path: "mailmind-look-\(UUID().uuidString)",
-                                                                     directoryHint: .isDirectory)
-        let url = folder.appending(path: Self.safeName(file.filename))
         do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try data.write(to: url, options: .atomic)
+            let url = try PreviewFiles.write(data, named: Self.safeName(file.filename))
             Self.quarantine(url)
             looking = url
         } catch {
@@ -127,7 +123,7 @@ struct AttachmentsRow: View {
     }
 
     private static func forget(_ url: URL) {
-        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+        PreviewFiles.remove(url)
     }
 
     /// Marked as a download from mail, so the system asks before it opens and checks before anything runs it.
