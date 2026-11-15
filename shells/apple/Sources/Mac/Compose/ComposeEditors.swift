@@ -15,6 +15,8 @@ struct ComposeTextView: NSViewRepresentable {
     let focusBody: Bool
     /// The light's ink and face for the text (Meadow's `.cp-body`).
     var look: ComposeTextLook?
+    /// What ⌘Return does while the text has the keys, where something besides the menu's should answer it.
+    var commandReturn: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(composer: composer)
@@ -41,6 +43,7 @@ struct ComposeTextView: NSViewRepresentable {
         text.isIncrementalSearchingEnabled = true
         text.font = .systemFont(ofSize: NSFont.systemFontSize + 1)
         text.textContainerInset = NSSize(width: 12, height: 10)
+        text.commandReturn = commandReturn
         text.string = composer.body
         if let look {
             // The mockup's padding is the text's own distance from the edge, with no fragment padding inside it.
@@ -59,6 +62,7 @@ struct ComposeTextView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? BodyTextView else { return }
+        view.commandReturn = commandReturn
         if view.string != text {
             // A change the composer made (a snippet, a draft, a picture's mark): the text takes it whole, in the look.
             view.string = text
@@ -124,6 +128,19 @@ final class BodyTextView: NSTextView {
     weak var composer: Composer?
     /// Asked for the keys before it was in a window: it takes them as it gets one.
     var focusOnWindow = false
+    /// ⌘Return while this text has the keys, ahead of the menu's: the reader's reply box sends with it, where the
+    /// main window's View menu would otherwise take it for focus reading.
+    var commandReturn: (() -> Void)?
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if let commandReturn, window?.firstResponder === self,
+           event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers == "\r" {
+            commandReturn()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

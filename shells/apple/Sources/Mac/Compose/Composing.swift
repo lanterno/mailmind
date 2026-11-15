@@ -63,6 +63,28 @@ final class Composing: ComposeHost {
     /// Bumped whenever the tray should read again.
     private(set) var outboxTurn = 0
 
+    /// A reply written in the reader, under the message it answers (#44), rather than in a window of its own.
+    struct InlineReply {
+        let composer: Composer
+        let copy: MailCopy
+        /// Whether its words are the reply MailMind wrote ahead, which the box says.
+        var drafted = false
+    }
+
+    /// The reply open in the reader, if one is.
+    private(set) var inline: InlineReply?
+    /// The message the reader offers its reply box for: a plain reply to it opens there. Moving to another message
+    /// closes a reply left open, which saves it to Drafts as closing a window does.
+    var inlineSlot: MailCopy? {
+        didSet {
+            guard inlineSlot != oldValue, let open = inline, open.copy != inlineSlot else { return }
+            inline = nil
+            open.composer.close()
+        }
+    }
+    /// Bumped each time the reader offers its box, so a box drawn again keeps the slot (`withdrawInline`).
+    @ObservationIgnored var slotTurn = 0
+
     /// Begin with the core: who you are, the preferences, and what the event stream says.
     func attach(_ core: Core) {
         guard self.core == nil else { return }
@@ -231,6 +253,7 @@ final class Composing: ComposeHost {
 
     func closed(_ composer: Composer) {
         composers.removeValue(forKey: composer.id)
+        if inline?.composer === composer { inline = nil }
     }
 
     func send(_ composer: Composer, _ body: API.SendBody, snapshot: ComposeSeed, replyKey: Int?, after: Int,
@@ -398,10 +421,43 @@ final class Composing: ComposeHost {
         return nil
     }
 
+    /// A reply in a window, or a plain reply to the message the reader offers its box for, in that box: the one open
+    /// there already, or a new one, which closes (and saves) a reply open to another message.
     @discardableResult
     func reply(_ copy: MailCopy, all: Bool = false) async -> Composer? {
+        let inBox = !all && inlineSlot == copy
+        if inBox, let open = inline, open.copy == copy, !open.composer.closed {
+            open.composer.focusRequest = .body
+            return open.composer
+        }
         guard let opened = await original(copy) else { return nil }
-        return open(Seeds.reply(opened, all: all, mine: mine))
+        let seed = Seeds.reply(opened, all: all, mine: mine)
+        return inBox && inlineSlot == copy ? openInline(seed, for: copy) : open(seed)
+    }
+
+    /// A composer for the reader's reply box: one of the composers, so everything that knows them knows it, with no
+    /// window.
+    private func openInline(_ seed: ComposeSeed, for copy: MailCopy) -> Composer? {
+        guard !senders.isEmpty else {
+            say("No sending account configured — add one in Settings")
+            return nil
+        }
+        if let open = inline {
+            inline = nil
+            open.composer.close()
+        }
+        let composer = Composer(seed, host: self)
+        composers[composer.id] = composer
+        inline = InlineReply(composer: composer, copy: copy)
+        composer.focusRequest = .body
+        return composer
+    }
+
+    /// The reply in the reader's box, into a window of its own, its words and saves as they are.
+    func popOut() {
+        guard let open = inline, !open.composer.closed else { return }
+        inline = nil
+        openWindow?(open.composer.id)
     }
 
     func forward(_ copy: MailCopy) async {
@@ -512,6 +568,11 @@ final class Composing: ComposeHost {
 
     /// Reply, and r: the reply written ahead if there is one, else a plain reply.
     func answer(_ copy: MailCopy) async {
+        // A reply already being written in the box keeps its words: the keys go back to it.
+        if let open = inline, open.copy == copy, inlineSlot == copy, !open.composer.closed, open.composer.dirty {
+            open.composer.focusRequest = .body
+            return
+        }
         guard chips[copy.key] == .ready else {
             await reply(copy)
             return
@@ -530,6 +591,7 @@ final class Composing: ComposeHost {
         guard !composer.closed else { return }
         if let written {
             composer.place(written)
+            if inline?.composer === composer { inline?.drafted = true }
         } else {
             chips.removeValue(forKey: copy.key)
             composer.say("Thread moved on — drafting a fresh reply…")
