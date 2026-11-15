@@ -1,0 +1,203 @@
+import Foundation
+import XCTest
+
+/// What the desk works out with no view and no server: how it words counts, days and refusals, how a suggestion's
+/// time goes into a form and back, and a calendar file's name.
+@MainActor
+final class DeskWordsTests: XCTestCase {
+    private let utc = TimeZone(identifier: "UTC")!
+    private let paris = TimeZone(identifier: "Europe/Paris")!
+
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = paris
+        return calendar
+    }
+
+    func testCountsAndGreetings() {
+        XCTAssertEqual(countNoun(1, "thread", "threads"), "1 thread")
+        XCTAssertEqual(countNoun(3, "thread", "threads"), "3 threads")
+        XCTAssertEqual(BriefWords.greeting(hour: 3), "Working late")
+        XCTAssertEqual(BriefWords.greeting(hour: 9), "Good morning")
+        XCTAssertEqual(BriefWords.greeting(hour: 14), "Good afternoon")
+        XCTAssertEqual(BriefWords.greeting(hour: 21), "Good evening")
+        XCTAssertEqual(BriefWords.needsNote(0), "Nothing needs you")
+        XCTAssertEqual(BriefWords.needsNote(1), "1 needs you")
+        XCTAssertEqual(BriefWords.needsNote(4), "4 need you")
+    }
+
+    func testWhatNeedsYouIsTheMostImportantThenTheNewest() {
+        let items = [
+            DeskFixture.item(110, from: "a@example.test", name: "A", subject: "a", importance: 3),
+            DeskFixture.item(111, from: "b@example.test", name: "B", subject: "b", importance: 5),
+            DeskFixture.item(112, from: "c@example.test", name: "C", subject: "c", importance: 3),
+            DeskFixture.item(113, from: "d@example.test", name: "D", subject: "d", needs: false, importance: 5),
+        ]
+        XCTAssertEqual(BriefWords.needsYou(items).map(\.key), [111, 112, 110])
+    }
+
+    func testATopicNamesOnlyTheMailStillHeld() {
+        let items = DeskFixture.digest().items
+        let copies = [API.Copy(folder: "INBOX", key: 104, uid: 4), API.Copy(folder: "INBOX", key: 999, uid: 99),
+                      API.Copy(folder: "INBOX", key: 101, uid: 1)]
+        XCTAssertEqual(BriefWords.topicItems(copies, items).map(\.key), [104, 101])
+    }
+
+    func testWaitsNamesAndDueDays() {
+        let now = Date(timeIntervalSince1970: 1_794_739_600)
+        XCTAssertEqual(BriefWords.waitAge(sent: 1_794_739_600 - 3600, now: now), "today")
+        XCTAssertEqual(BriefWords.waitAge(sent: 1_794_739_600 - 86400 - 60, now: now), "1 day")
+        XCTAssertEqual(BriefWords.waitAge(sent: 1_794_739_600 - 4 * 86400, now: now), "4 days")
+        XCTAssertEqual(BriefWords.nameIn("\"Ruth Lane\" <ruth@example.test>"), "Ruth Lane")
+        XCTAssertEqual(BriefWords.nameIn("<ruth@example.test>"), "ruth@example.test")
+        XCTAssertEqual(BriefWords.nameIn(nil), "")
+
+        let late = BriefWords.due("2026-11-14", today: "2026-11-15")
+        XCTAssertTrue(late.late)
+        XCTAssertTrue(late.words.hasSuffix("· overdue"), late.words)
+        let today = BriefWords.due("2026-11-15", today: "2026-11-15")
+        XCTAssertFalse(today.late)
+        XCTAssertTrue(today.words.hasSuffix("· today"), today.words)
+        XCTAssertEqual(BriefWords.due(nil, today: "2026-11-15").words, "")
+        XCTAssertEqual(BriefWords.localDay(Date(timeIntervalSince1970: 1_794_785_400), zone: paris), "2026-11-16")
+    }
+
+    func testAReviewSaysWhatWeekItLookedBackOn() {
+        let now = Date(timeIntervalSince1970: 1_794_739_600) // Sun 15 Nov 2026, 11:46 in Paris
+        XCTAssertEqual(BriefWords.reviewRange(generated: "2026-11-15T07:00:00Z", now: now, calendar: calendar),
+                       "last 7 days")
+        XCTAssertEqual(BriefWords.reviewRange(generated: "2026-11-09T07:00:00Z", now: now, calendar: calendar),
+                       "the 7 days to Monday")
+    }
+
+    func testASuggestedTimeGoesIntoAFormAndBack() {
+        // A day stays that day here.
+        let day = SuggestedTime.field("2026-11-20", allDay: true, in: paris)
+        XCTAssertEqual(day.map { SuggestedTime.sent($0, allDay: true, in: paris) }, "2026-11-20")
+        // A time named in a zone is that instant.
+        let instant = SuggestedTime.field("2026-11-20T12:30:00Z", allDay: false, in: paris)
+        XCTAssertEqual(instant, Date(timeIntervalSince1970: 1_795_177_800))
+        XCTAssertEqual(instant.map { SuggestedTime.sent($0, allDay: false, in: paris) }, "2026-11-20T12:30:00.000Z")
+        // A time named in no zone is its clock reading here.
+        let clock = SuggestedTime.field("2026-11-20T12:30", allDay: false, in: paris)
+        XCTAssertEqual(clock, Date(timeIntervalSince1970: 1_795_174_200))
+        XCTAssertNil(SuggestedTime.field("", allDay: false, in: paris))
+        XCTAssertNil(SuggestedTime.field(nil, allDay: true, in: paris))
+    }
+
+    func testWhenAnEventIs() {
+        let now = Date(timeIntervalSince1970: 1_794_739_600) // Sun 15 Nov 2026, 11:46 in Paris
+        let english = Locale(identifier: "en_US")
+        func plain(_ text: String) -> String { text.replacingOccurrences(of: "\u{202F}", with: " ") }
+        let later = EventWhen.short(start: "2026-11-15T15:00:00Z", allDay: false, now: now, calendar: calendar,
+                                    locale: english)
+        XCTAssertEqual(plain(later.big), "4:00 pm")
+        XCTAssertEqual(later.small, "today")
+        let tuesday = EventWhen.short(start: "2026-11-18T10:00:00Z", allDay: false, now: now, calendar: calendar,
+                                      locale: english)
+        XCTAssertEqual(tuesday.big, "Wed")
+        XCTAssertEqual(plain(tuesday.small), "11:00 am")
+        let trip = EventWhen.short(start: "2026-11-26", allDay: true, now: now, calendar: calendar, locale: english)
+        XCTAssertEqual(trip.small, "all day")
+        XCTAssertTrue(trip.big.contains("26"), trip.big)
+        XCTAssertEqual(EventWhen.short(start: "2026-11-15", allDay: true, now: now, calendar: calendar, locale: english).big,
+                       "Today")
+        XCTAssertEqual(plain(EventWhen.long(start: "2026-11-20T14:30:00Z", allDay: false, calendar: calendar,
+                                            locale: english)), "Fri, Nov 20, 3:30 pm")
+        XCTAssertEqual(EventWhen.short(start: "soon", allDay: false, now: now, calendar: calendar).big, "soon")
+    }
+
+    func testRefusalsReadAsThePageReadsThem() {
+        let off = Problem(CoreAnswer(status: 409, contentType: "application/problem+json", headers: [], body: Data(
+            #"{"type": "/problems/ai-off", "title": "AI is off", "status": 409, "detail": "No key.", "ai_off": true}"#.utf8)))
+        let limit = Problem(CoreAnswer(status: 402, contentType: "application/problem+json", headers: [], body: Data(
+            #"{"type": "/problems/over-limit", "title": "Limit", "status": 402, "detail": "", "over_limit": true}"#.utf8)))
+        XCTAssertTrue(DeskRefusal.isAIOff(off))
+        XCTAssertFalse(DeskRefusal.isAIOff(limit))
+        XCTAssertTrue(DeskRefusal.isOverLimit(limit))
+        XCTAssertEqual(DeskRefusal.words(off, else: "fallback"), "No key.")
+        XCTAssertEqual(DeskRefusal.words(limit, else: "fallback"), "fallback", "an empty detail says only the fallback")
+        XCTAssertEqual(DeskRefusal.words(CancellationError(), else: "fallback"), "fallback")
+        XCTAssertEqual(DeskRefusal.message(off), "No key.")
+        XCTAssertEqual(DeskRefusal.message(CancellationError()), "")
+        XCTAssertEqual(AttentionModel.couldnt("Couldn’t mute", ""), "Couldn’t mute")
+        XCTAssertEqual(AttentionModel.couldnt("Couldn’t mute", "why"), "Couldn’t mute: why")
+    }
+
+    func testTheVerbsWordsAndWhichTakeASecondPress() {
+        XCTAssertEqual(PlanModel.label(.trash), "Delete")
+        XCTAssertEqual(PlanModel.done(.star), "Updated")
+        XCTAssertTrue(PlanModel.destructive(.trash))
+        XCTAssertTrue(PlanModel.destructive(.junk))
+        XCTAssertFalse(PlanModel.destructive(.archive))
+        XCTAssertEqual(Snoozing.words(.tomorrow), "Tomorrow 8am")
+        XCTAssertEqual(AttentionStack(folder: "__replylater__"), .replyLater)
+        XCTAssertNil(AttentionStack(folder: "INBOX"))
+        XCTAssertNil(AttentionStack(folder: nil))
+        XCTAssertEqual(CurateModel.cleaned("mailto_sent"), "unsub email sent")
+        XCTAssertEqual(CurateModel.cleaned("something new"), "")
+        XCTAssertEqual(CurateModel.does(API.MailFilter(id: "f", q: "x", read: true, star: true)), "Star and mark read")
+        XCTAssertEqual(InviteReplies.words(.tentative), "Tentative ?")
+        XCTAssertEqual(BriefModel.filedWords(.archive, API.Filed(msg: "", ok: true, status: "queued", undoable: true)),
+                       "Archived · once the server is back")
+    }
+
+    func testAnInviteNamesItsPeople() {
+        XCTAssertEqual(InviteCard.attendees(DeskFixture.invite.attendees),
+                       "3 attendees: Ada Lovelace, Alan Turing, Grace Hopper")
+        let many = (1...10).map { API.Party(email: "p\($0)@example.test", name: nil) }
+        XCTAssertEqual(InviteCard.attendees(many)?.hasSuffix("p8@example.test +2"), true)
+        XCTAssertNil(InviteCard.attendees([API.Party(email: "", name: "")]))
+        XCTAssertEqual(InviteCard.kind("CANCEL"), "Cancelled")
+    }
+
+    func testACalendarFileNameStaysInItsFolder() {
+        XCTAssertEqual(CalendarFile.safeName("Lunch with Grace"), "Lunch with Grace.ics")
+        XCTAssertEqual(CalendarFile.safeName("../../etc/passwd"), "-..-etc-passwd.ics")
+        XCTAssertEqual(CalendarFile.safeName("a:b.ics"), "a-b.ics")
+        XCTAssertEqual(CalendarFile.safeName("  . "), "event.ics")
+        XCTAssertFalse(CalendarFile.safeName("../x").contains("/"))
+    }
+
+    func testACustomSnoozeStartsTomorrowAtNine() {
+        let now = Date(timeIntervalSince1970: 1_794_739_600)
+        let start = SnoozeUntilSheet.tomorrowMorning(from: now, calendar: calendar)
+        let parts = calendar.dateComponents([.day, .hour, .minute], from: start)
+        XCTAssertEqual(parts.day, 16)
+        XCTAssertEqual(parts.hour, 9)
+        XCTAssertEqual(parts.minute, 0)
+    }
+
+    func testACopyNamedByARouteIsTheListsCopy() {
+        let named = MailCopy.named(key: 101, folder: "INBOX", uid: 11, account: "ada@example.test")
+        XCTAssertEqual(named, DeskFixture.ada)
+        XCTAssertEqual(named.aCopy, API.ACopy(folder: "INBOX", key: 101, uid: 11))
+        XCTAssertTrue(newUndoGroup().hasPrefix("ug-"))
+        XCTAssertNotEqual(newUndoGroup(), newUndoGroup())
+    }
+
+    /// The page's own cases (features/assistant/prose.test.ts), so the two decide alike what costs a call.
+    func testWhatReadsAsASentence() {
+        for typed in [
+            "invoices from last month", "emails from sarah about the budget", "show me unread mail from lin",
+            "find the invoice from acme", "what did stripe send me", "where is my boarding pass?", "receipts since october",
+            "mail about the quilt", "anything from lin yesterday", "flights last week", "the invoice lin sent me",
+            "Show Me Unread Mail", "look for invoices from acme",
+        ] {
+            XCTAssertTrue(Prose.readsAsProse(typed), typed)
+        }
+    }
+
+    func testWhatStaysALiteralSearch() {
+        for typed in [
+            "budget", "from lin", "quarterly budget review", "quarterly budget review meeting", "invoice 12345 acme",
+            "bank of america", "lord of the rings", "the new york times", "thanks for lunch", "meeting with john",
+            "do not reply", "list of attendees", "get well soon", "have a nice day", "find invoice acme",
+            "annual report from", "from the desk", "from:lin last month", "mail from lin is:unread",
+            "mail from lin -newsletter", "\"a phrase from lin\" budget", "this year's budget",
+            "Rechnungen vom letzten Monat", "   ", Array(repeating: "mail from lin", count: 31).joined(separator: " "),
+        ] {
+            XCTAssertFalse(Prose.readsAsProse(typed), typed)
+        }
+    }
+}
