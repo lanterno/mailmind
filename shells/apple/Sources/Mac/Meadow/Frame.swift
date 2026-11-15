@@ -53,7 +53,9 @@ struct MeadowFrame<Pane: View>: View {
                          lights: lights ? WindowLights.room : 0)
                 // The search's suggestions hang over the panels.
                 .zIndex(1)
-            MeadowAccountAlert(status: status)
+            // The list says itself when its accounts can't connect (`OfflineNote`); the alert is for a place with no
+            // list on screen.
+            if spans { MeadowAccountAlert(status: status) }
             GeometryReader { area in
                 let layout = ShellLayout(size: area.size, railOpen: shell.railOpen, listWidth: shell.listWidth,
                                          mode: shell.mode(spanning: spans))
@@ -263,7 +265,8 @@ private struct MeadowSplitter: View {
     }
 }
 
-/// The account alert under the top bar, in the light's sun: while an account can't connect, until it is closed.
+/// The account alert under the top bar, in the light's sun: while an account can't connect, until it is closed, over a
+/// place that spans the window.
 private struct MeadowAccountAlert: View {
     let status: AppStatus
 
