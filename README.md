@@ -562,7 +562,9 @@ automatically.
 
 MailMind has a native Mac app over the Rust core (`shells/apple`). It runs the whole of MailMind in its own process,
 with no port open: the mailbox and search, reading and writing, Settings and the first run, and the assistant,
-curation, attention and the calendar, as the page has them, with the menu bar's commands and a Mac's keys. It can be
+curation, attention and the calendar, as the page has them, with the menu bar's commands and a Mac's keys. It wears
+the page's Meadow look: paper panels on a painted sky in Day, Dusk or Night, the page's typefaces and icons, a rail
+that folds to icons, the summary note and a reply under the message, the brief beside the Inbox. It can be
 your Mac's mail app (**Mail › Settings › General › Default email reader**), so a mailto: link opens its composer. It
 is a .dmg on this repo's [Releases](https://github.com/lanterno/mailmind/releases/latest) page, for macOS 26 or later
 on Apple silicon or Intel:
