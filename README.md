@@ -564,8 +564,8 @@ MailMind has a native Mac app over the Rust core (`shells/apple`). It runs the w
 with no port open: the mailbox and search, reading and writing, Settings and the first run, and the assistant,
 curation, attention and the calendar, as the page has them, with the menu bar's commands and a Mac's keys. It can be
 your Mac's mail app (**Mail › Settings › General › Default email reader**), so a mailto: link opens its composer. It
-has no release yet; when it has, it is a .dmg on this repo's [Releases](https://github.com/lanterno/mailmind/releases)
-page, for macOS 26 or later on Apple silicon or Intel:
+is a .dmg on this repo's [Releases](https://github.com/lanterno/mailmind/releases/latest) page, for macOS 26 or later
+on Apple silicon or Intel:
 
 1. Download the .dmg from the latest release, open it, and drag **MailMind** onto **Applications**.
 2. Open MailMind. It is signed ad hoc, not yet with an Apple Developer ID, so macOS stops it the first time and you

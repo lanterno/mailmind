@@ -111,9 +111,6 @@ Python app gets fixes only.
   identifier is `io.github.lanterno.mailmind`; it is signed ad hoc until there is a Developer ID (#42), and updates
   through Sparkle from the repo's GitHub Releases. Windows and Linux keep the web shell unless their measurements (#12)
   miss a budget, with a GTK4 shell in Rust as Linux's fallback.
-- **The Mac app: packaging, updates and a first release** · high value · effort M · [#41](https://github.com/lanterno/mailmind/issues/41) — The owner's
-  update-signing key, made once ([docs/releasing.md](docs/releasing.md): `just apple release` stops until its public
-  half is in `shells/apple/Release/mac.yml`); then a first release with `just apple release`, once the owner says so.
 - **Developer ID signing and notarization** · medium value · effort S · [#42](https://github.com/lanterno/mailmind/issues/42) — Waits on the
   owner's paid Apple Developer account.
 
@@ -133,8 +130,9 @@ implementation.
 
 ## Next up
 
-1. **The native Mac app** (high) — it does all the page does; a first release to share (#41) waits on the owner's
-   update key and their say-so. It runs only the Rust core, so it is also the owner's way into their two weeks on it.
+1. **The native Mac app** (high) — it does all the page does, and 0.1.0 is out to share; signing it with a Developer
+   ID (#42) waits on the owner's Apple account. It runs only the Rust core, so it is also the owner's way into their
+   two weeks on it.
 2. **The owner's two weeks on the Rust server** (high) — step 3 is done: every route the Python app answers is served
    there, the debug routes too, and a message whose body isn't stored opens. `just run-rust` starts them, in place of
    `just run`, and they end in the flip (#11), which waits on nothing else. `MAILMIND_WORKERS=account` (#3) can soak in
