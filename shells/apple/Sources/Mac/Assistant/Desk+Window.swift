@@ -150,17 +150,18 @@ final class Desk {
     }
 
     private func heard(_ event: CoreEvent) async {
-        if MailApp.mailChanged.contains(event.name) {
-            await readScreeners()
-            if brief.tallied { await brief.refresh() }
-        }
-        if event.name == "tasks-changed" { await tasks.load() }
+        // New mail is told of first: nothing read again below holds it up.
         if event.name == "new-mail", let said = event.decoded(SinceLooked.Arrived.self) {
             since.newMail(said, on: app?.place, ai: app?.mailbox.aiOn ?? false)
         }
         if event.name == "snooze-wake", let said = event.decoded(SinceLooked.Woke.self) {
             since.snoozeWake(said, on: app?.place)
         }
+        if MailApp.mailChanged.contains(event.name) {
+            brief.reread()
+            await readScreeners()
+        }
+        if event.name == "tasks-changed" { await tasks.load() }
     }
 
     // MARK: The window
@@ -217,10 +218,8 @@ final class Desk {
     /// Read the lists, the sidebar and what is open here again, as the page's `readAgain` does after a change.
     func readAgain() {
         app?.mailbox.readAgain()
-        Task { [weak self] in
-            if self?.brief.tallied == true { await self?.brief.refresh() }
-            await self?.readScreeners()
-        }
+        brief.reread()
+        Task { [weak self] in await self?.readScreeners() }
     }
 
     // MARK: Asking
@@ -442,6 +441,7 @@ struct DeskScreen: View {
                         await desk.tasks.load()
                         await desk.brief.load()
                     }
+                    .onDisappear { desk.brief.close() }
             case .ask:
                 AskScreen(model: desk.asking, reading: desk.chosen, open: desk.open) { desk.sheet = .ask }
             case .screener(let account):

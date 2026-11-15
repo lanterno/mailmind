@@ -83,31 +83,77 @@ final class BriefModel {
         .named(key: item.key, folder: item.folder, uid: item.uid, account: item.account)
     }
 
-    /// Whether the brief has been opened, so what changes reads it again.
+    /// Whether the brief is on screen, so mail changing reads all it shows again.
     private(set) var opened = false
-    /// Its tallies have been read, for the rail's count and the Inbox's brief row, so mail changing reads them again.
+    /// Its tallies are kept, for the rail's count and the Inbox's brief row, so mail changing reads them again.
     @ObservationIgnored private(set) var tallied = false
+    /// The read under way after mail changed, and whether another waits behind it.
+    @ObservationIgnored private var rereading: Task<Void, Never>?
+    @ObservationIgnored private var rereadsAgain = false
 
     /// Open the brief: everything it shows, and with none written today and AI on, today's written.
     func load() async {
         guard let routes = link.routes else { return }
         let first = !opened
         opened = true
-        await refresh()
+        await reread()?.value
         if first || brief == nil, !writing { await readBrief(routes) }
+    }
+
+    /// The brief left the screen: mail changing reads only its tallies again.
+    func close() {
+        opened = false
+    }
+
+    /// Keep the tallies the rail and the Inbox's brief row show: read now, and again whenever mail changes.
+    @discardableResult
+    func keepTallied() -> Task<Void, Never>? {
+        tallied = true
+        return reread()
+    }
+
+    /// Mail changed: read the tallies again, and while the brief is on screen all it shows. One read runs at a time,
+    /// and at most one more waits behind it to read whatever changed meanwhile, so a burst of events costs two reads,
+    /// never one each, and never two at once.
+    @discardableResult
+    func reread() -> Task<Void, Never>? {
+        guard tallied || opened else { return nil }
+        if let rereading {
+            rereadsAgain = true
+            return rereading
+        }
+        let task = Task { [weak self] in
+            repeat {
+                guard let self else { return }
+                self.rereadsAgain = false
+                if self.opened { await self.refresh() } else { await self.readTallies() }
+            } while self?.rereadsAgain == true
+            self?.rereading = nil
+        }
+        rereading = task
+        return task
     }
 
     /// Read again what the digest and the side say, as the page does when mail changes. The brief itself stays.
     func refresh() async {
         guard let routes = link.routes else { return }
-        tallied = true
+        await readDigest(routes)
+        await readSide(routes)
+        tidyRun = try? await routes.get(API.Get.Tidy.self, [:])
+        await readStacks(routes)
+    }
+
+    /// Read only the digest, which the tallies come from: what needs you and what can wait.
+    func readTallies() async {
+        guard let routes = link.routes else { return }
+        await readDigest(routes)
+    }
+
+    private func readDigest(_ routes: any RouteCaller) async {
         if let read = try? await routes.get(API.Get.Digest.self, [:]) {
             digest = read
             filing.removeAll()
         }
-        await readSide(routes)
-        tidyRun = try? await routes.get(API.Get.Tidy.self, [:])
-        await readStacks(routes)
     }
 
     private func readBrief(_ routes: any RouteCaller) async {

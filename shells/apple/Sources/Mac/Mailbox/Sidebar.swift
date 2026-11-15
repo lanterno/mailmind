@@ -52,7 +52,7 @@ struct MailboxSidebar: View {
         }
         .task(id: desk == nil) {
             // The Inbox counts what the brief says needs you, so its tallies are read once the rail shows.
-            if let desk, !desk.brief.tallied { await desk.brief.refresh() }
+            if let desk, !desk.brief.tallied { await desk.brief.keepTallied()?.value }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Mailboxes")
