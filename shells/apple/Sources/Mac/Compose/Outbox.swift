@@ -2,7 +2,7 @@
 import Observation
 import SwiftUI
 
-/// The tray the toolbar's outbox opens, as the page's `compose/Outbox.tsx`: changes waiting for a server, drafts
+/// The tray the top bar's outbox opens, as the page's `compose/Outbox.tsx`: changes waiting for a server, drafts
 /// waiting to reach theirs, and what the outbox holds, each with its way out.
 @MainActor
 @Observable
@@ -134,7 +134,7 @@ extension API.PendingChange: Identifiable {}
 extension API.WaitingDraft: Identifiable {}
 extension API.OutboxItem: Identifiable {}
 
-/// The toolbar's outbox: shown while something is going or failed, with how many.
+/// The top bar's outbox: shown while something is going or failed, with how many.
 struct OutboxButton: View {
     @State private var tray: OutboxTray?
     @State private var shown = false
@@ -143,13 +143,17 @@ struct OutboxButton: View {
     var body: some View {
         Group {
             if let tray, tray.active + tray.failed > 0 || shown {
+                // In the top bar, a button beside the light's: the outbox's icon, or the alert's while one
+                // failed, and how many wait.
                 Button {
                     shown.toggle()
                 } label: {
-                    Label("Outbox", systemImage: tray.failed > 0 ? "exclamationmark.arrow.triangle.2.circlepath" : "tray.and.arrow.up")
+                    MeadowIconView(tray.failed > 0 ? .alert : .outbox)
+                    Text(verbatim: "\(tray.active + tray.failed)").monospacedDigit()
                 }
-                .badge(tray.active + tray.failed)
+                .meadowButton()
                 .help("Outbox and changes waiting: \(tray.active + tray.failed)")
+                .accessibilityLabel("Outbox: \(tray.active + tray.failed) waiting")
                 .popover(isPresented: $shown, arrowEdge: .bottom) {
                     OutboxList(tray: tray, readOnly: composing.digest?.profile == "read-only")
                         .task { await tray.load() }

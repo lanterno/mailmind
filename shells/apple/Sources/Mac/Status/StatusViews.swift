@@ -1,28 +1,61 @@
 #if os(macOS)
 import SwiftUI
 
-/// The status in the toolbar (the page's `StatusPill`): one thing that matters about syncing, and its menu with the
-/// rest.
+/// The status in the top bar (the mockup's `.status`, the page's `StatusPill`): one thing that matters about syncing,
+/// on a pill of paper over the sky, and its menu with the rest.
 struct StatusPill: View {
     let status: AppStatus
     @State private var open = false
+    @State private var hovering = false
+    @FocusState private var focused: Bool
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let pill = status.pill
         Button {
             open.toggle()
         } label: {
-            HStack(spacing: 6) {
-                Circle().fill(pill.dot.color).frame(width: 7, height: 7)
+            HStack(spacing: 8) {
+                MeadowStatusDot(dot: pill.dot)
                 Text(pill.text).lineLimit(1)
             }
-            .padding(.horizontal, 4)
+            .font(.meadow(.ui, 12.5, .semibold))
+            .foregroundStyle(meadow.ink2)
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(Capsule().fill(hovering ? meadow.paper3 : meadow.paper.opacity(0.62)))
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .focused($focused)
+        .focusEffectDisabled()
+        .meadowFocusRing(focused, radius: 17)
+        .onHover { hovering = $0 }
         .help("Sync, reconcile and curation")
         .accessibilityLabel("Sync status: \(pill.text)")
         .popover(isPresented: $open, arrowEdge: .bottom) {
             StatusMenu(status: status, close: { open = false })
         }
+    }
+}
+
+/// The status's dot (`.dot`): moss once synced, sun while it works, rust when it fails, each with a ring of itself.
+struct MeadowStatusDot: View {
+    let dot: StatusWords.Dot
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        let (color, ring): (Color, Double) = switch dot {
+        case .ok: (meadow.moss, 0.22)
+        case .busy: (meadow.sun, 0.25)
+        case .error: (meadow.rust, 0.25)
+        case .none: (meadow.ink3, 0.22)
+        }
+        Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+            .background { Circle().fill(color.opacity(ring)).frame(width: 14, height: 14) }
+            .accessibilityHidden(true)
     }
 }
 
@@ -142,35 +175,38 @@ struct StatusMenu: View {
     }
 }
 
-/// Across the top of the window, until it is closed, for as long as an account can't connect (`AccountAlert`).
+/// Under the top bar, until it is closed, for as long as an account can't connect (`AccountAlert`), in the light's
+/// sun.
 struct AccountAlert: View {
     let status: AppStatus
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let bad = status.alerting
         if !bad.isEmpty {
             HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-                Text(words(bad)).lineLimit(2)
+                MeadowIconView(.alert).foregroundStyle(meadow.sunInk)
+                Text(words(bad)).lineLimit(2).foregroundStyle(meadow.ink2)
                 Spacer()
                 Button("Open Settings") {
                     status.settingsTab = .accounts
                     openSettings()
                 }
+                .meadowButton(small: true)
                 Button {
                     status.alertsClosed.formUnion(bad)
                 } label: {
-                    Image(systemName: "xmark")
+                    MeadowIconView(.x, size: 15)
                 }
-                .buttonStyle(.borderless)
+                .meadowButton(.quiet, small: true, icon: true)
                 .accessibilityLabel("Dismiss")
             }
-            .font(.callout)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(.yellow.opacity(0.14))
-            .overlay(alignment: .bottom) { Divider() }
+            .font(.meadow(.ui, 13))
+            .padding(.leading, 12)
+            .padding(.trailing, 8)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 12).fill(meadow.sunWash))
         }
     }
 
@@ -182,28 +218,46 @@ struct AccountAlert: View {
     }
 }
 
-/// The meeting about to start, beside the status (`SoonPill`), until it is closed.
+/// The meeting about to start, beside the status (`SoonPill`), until it is closed: a pill in the sun's wash, ringed in
+/// sun, as the page's top bar shows it.
 struct SoonPill: View {
     let status: AppStatus
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         if let meeting = status.soon {
             let when = meeting.when(now: status.now)
-            HStack(spacing: 6) {
-                Image(systemName: "calendar")
-                Text(meeting.title).fontWeight(.semibold).lineLimit(1)
-                Text(when).foregroundStyle(.secondary)
+            HStack(spacing: 0) {
+                HStack(spacing: 7) {
+                    MeadowIconView(.cal, size: 15)
+                    Text(meeting.title).fontWeight(.semibold).foregroundStyle(meadow.ink).lineLimit(1)
+                        .frame(maxWidth: 200, alignment: .leading)
+                    Text(when).lineLimit(1)
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 4)
                 Button {
                     status.soonClosed.insert(meeting.id)
                 } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    MeadowIconView(.x, size: 13)
+                        .padding(.leading, 6)
+                        .padding(.trailing, 11)
+                        .frame(maxHeight: .infinity)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .opacity(0.7)
                 .accessibilityLabel("Dismiss the reminder")
             }
+            .font(.meadow(.ui, 12.5, .semibold))
+            .foregroundStyle(meadow.sunInk)
+            .frame(height: 32)
+            .background(Capsule().fill(meadow.sunWash))
+            .overlay(Capsule().strokeBorder(meadow.sun.opacity(0.45), lineWidth: 1))
             .help([meeting.detail, meeting.organizer].filter { !$0.isEmpty }.joined(separator: " · "))
             .accessibilityElement(children: .contain)
-            .accessibilityLabel(meeting.message(now: status.now) + (meeting.location.isEmpty ? "" : ", \(meeting.location)"))
+            .accessibilityLabel(meeting.message(now: status.now)
+                                + (meeting.location.isEmpty ? "" : ", \(meeting.location)"))
         }
     }
 }
