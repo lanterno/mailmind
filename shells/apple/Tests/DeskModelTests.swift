@@ -318,6 +318,31 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(routes.sent("GET", "/api/briefing").count, 1, "a second open reads only the digest again")
     }
 
+    func testMailChangingReadsOnlyTheTalliesUntilTheBriefIsOpenAndABurstReadsOnceMore() async {
+        scriptTheBrief(briefing: .brief(DeskFixture.brief))
+        let model = briefModel()
+        XCTAssertNil(model.reread(), "nothing is kept yet, so mail changing reads nothing")
+        await model.keepTallied()?.value
+        XCTAssertEqual(model.needs.count, 3, "the rail's count")
+
+        // A burst of events while a read is under way: one more read, not one each.
+        let burst = (0..<5).map { _ in model.reread() }
+        for read in burst { await read?.value }
+        XCTAssertEqual(routes.sent("GET", "/api/digest").count, 2)
+        for path in ["/api/upcoming", "/api/waiting-on-others", "/api/tidy", "/api/folders", "/api/search"] {
+            XCTAssertEqual(routes.sent("GET", path).count, 0, "\(path) waits for the brief to open")
+        }
+
+        await model.load()
+        XCTAssertEqual(routes.sent("GET", "/api/upcoming").count, 1)
+        await model.reread()?.value
+        XCTAssertEqual(routes.sent("GET", "/api/upcoming").count, 2, "open, all it shows is read again")
+        model.close()
+        await model.reread()?.value
+        XCTAssertEqual(routes.sent("GET", "/api/upcoming").count, 2, "closed, only the tallies")
+        XCTAssertEqual(routes.sent("GET", "/api/digest").count, 5)
+    }
+
     func testWritingAgainAtTheLimitSaysSo() async {
         scriptTheBrief(briefing: .brief(DeskFixture.brief))
         overLimit("POST", "/api/briefing/refresh")
