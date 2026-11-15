@@ -13,8 +13,7 @@ extension FocusedValues {
     @Entry var mailWriting: MailWriting?
 }
 
-/// The menu bar's writing: New Message in File, and Reply, Reply All, Forward and Edit Draft in Message, each with
-/// the key Mail gives it.
+/// The menu bar's New Message, in File, with the key Mail gives it.
 struct ComposeCommands: Commands {
     @FocusedValue(\.mailWriting) private var writing
 
@@ -25,7 +24,14 @@ struct ComposeCommands: Commands {
             }
             .keyboardShortcut("n")
         }
-        CommandMenu("Message") {
+    }
+}
+
+/// Reply, Reply All, Forward and Edit Draft, at the top of the mailbox's Message menu, each with the key Mail gives it.
+struct ComposeMessageItems: View {
+    @FocusedValue(\.mailWriting) private var writing
+
+    var body: some View {
             Button("Reply") {
                 if let to = writing?.replyTo { Task { await Composing.shared.answer(to) } }
             }
@@ -46,7 +52,6 @@ struct ComposeCommands: Commands {
                 if let draft = writing?.draft { Task { await Composing.shared.editDraft(draft) } }
             }
             .disabled(writing?.draft == nil)
-        }
     }
 }
 #endif

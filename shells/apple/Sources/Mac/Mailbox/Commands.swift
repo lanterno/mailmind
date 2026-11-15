@@ -14,6 +14,8 @@ struct MailboxCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Message") {
+            ComposeMessageItems()
+            Divider()
             let acting = mailbox.map { $0.hasTarget && !$0.asking } ?? false
             Button("Archive") { mailbox?.file(.archive) }
                 .keyboardShortcut("a", modifiers: [.control, .command])

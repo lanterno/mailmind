@@ -19,8 +19,10 @@ struct ReaderPane: View {
     }
 
     /// The account the window is in, which a new message goes from when it can.
-    private var current: String? {
-        if case .folder(let account, _)? = app.place { return account }
+    private var current: String? { Self.current(in: app.place) }
+
+    static func current(in place: Place?) -> String? {
+        if case .folder(let account, _)? = place { return account }
         return nil
     }
 
@@ -67,6 +69,10 @@ struct ReaderPane: View {
                     Task { await app?.mailbox.readCounts() }
                 }
                 if let core = app.core { composing.attach(core) }
+                // A sender's card writes to them from the account the window is in.
+                app.mailbox.composeTo = { [weak composing, weak app] address in
+                    composing?.newMessage(to: [address], current: Self.current(in: app?.place))
+                }
             }
             .task(id: thread) {
                 guard let thread, let core = app.core else {
