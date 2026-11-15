@@ -1,0 +1,297 @@
+#if os(macOS)
+import Foundation
+import Observation
+
+/// Looking after the mailbox itself, as the page's Curate drawer does: senders flooding you and cleaning them up
+/// (block, sweep, unsubscribe), what each inbox holds and its sweep, the rules MailMind has learned, your filters, and
+/// what it has done. Cleaning up and sweeping both show what they would do before they do it, and a destructive one
+/// takes a second press.
+@MainActor
+@Observable
+final class CurateModel {
+    /// One sender's cleanup, previewed: how far the block goes, whether to unsubscribe too, and the second press.
+    struct Cleaning: Equatable {
+        var preview: API.SenderPreview
+        var scope: API.BlockScope
+        var unsubscribe: Bool
+        var armed = false
+
+        var method: String { preview.unsub.method }
+    }
+
+    /// Several senders' cleanup, previewed, with why each is here once Claude has said.
+    struct Batching: Equatable {
+        var preview: API.BatchPreview
+        var armed = false
+        var reasons: [String: String] = [:]
+        var reasoning = false
+    }
+
+    /// The filter a sheet holds: one being made, or with an id one being edited.
+    struct FilterForm: Equatable, Identifiable {
+        var id: String?
+        var query: String
+        var star: Bool
+        var read: Bool
+
+        /// A filter has to do something, so a new one stars.
+        static func new(_ query: String = "") -> FilterForm {
+            FilterForm(id: nil, query: query, star: true, read: false)
+        }
+    }
+
+    private(set) var flood: API.NoisySenders?
+    private(set) var floodFailed = false
+    private(set) var stats: API.Stats?
+    private(set) var rules: API.Rules?
+    private(set) var audit: [API.AuditEvent] = []
+    var marked: Set<String> = []
+    var cleaning: Cleaning?
+    var batching: Batching?
+    /// An account's sweep, planned and waiting for Confirm.
+    private(set) var sweepArmed: (account: String, planned: Int)?
+    var filterForm: FilterForm?
+
+    @ObservationIgnored let link: CoreLink
+    @ObservationIgnored let notices: DeskNotices
+    @ObservationIgnored var changed: () -> Void = {}
+    /// Opens a sender's unsubscribe page in the person's browser, where nothing is sent on its own.
+    @ObservationIgnored var openPage: (URL) -> Void = { _ in }
+
+    init(link: CoreLink, notices: DeskNotices) {
+        self.link = link
+        self.notices = notices
+    }
+
+    // MARK: Reading
+
+    func load() async {
+        guard let routes = link.routes else { return }
+        do {
+            flood = try await routes.get(API.Get.CleanupSenders.self, [:])
+            floodFailed = false
+        } catch {
+            floodFailed = flood == nil
+        }
+        await readRules(routes)
+        stats = try? await routes.get(API.Get.Stats.self, [:])
+        audit = (try? await routes.get(API.Get.Audit.self, ["limit": "60"]).events) ?? audit
+    }
+
+    private func readRules(_ routes: any RouteCaller) async {
+        if let read = try? await routes.get(API.Get.Rules.self, [:]) { rules = read.rules }
+    }
+
+    // MARK: One sender
+
+    func previewCleanup(_ sender: String) async {
+        guard let routes = link.routes else { return }
+        do {
+            let preview = try await routes.get(API.Get.CleanupSender.self, ["addr": sender])
+            let method = preview.unsub.method
+            cleaning = Cleaning(preview: preview, scope: .sender, unsubscribe: method == "one-click" || method == "mailto")
+        } catch let problem as Problem {
+            notices.say(problem.detail ?? String(localized: "error"))
+        } catch {
+            notices.say(String(localized: "Couldn’t load sender"))
+        }
+    }
+
+    /// The first press arms the cleanup; the second runs it.
+    func pressCleanup() async {
+        guard var asked = cleaning else { return }
+        guard asked.armed else {
+            asked.armed = true
+            cleaning = asked
+            return
+        }
+        await runCleanup(asked)
+    }
+
+    private func runCleanup(_ asked: Cleaning) async {
+        guard let routes = link.routes else { return }
+        cleaning = nil
+        let sender = asked.preview.fromAddr
+        notices.say(String(localized: "Cleaning up \(sender)…"))
+        let done: API.CleanedUp
+        do {
+            done = try await routes.post(API.Post.CleanupExecute.self, API.CleanupBody(
+                blockScope: asked.scope, confirmToken: asked.preview.confirmToken, doUnsubscribe: asked.unsubscribe,
+                fromAddr: sender, undoGroup: newUndoGroup()))
+        } catch {
+            notices.say(String(localized: "Cleanup failed"))
+            return
+        }
+        if asked.method == "http-page", asked.unsubscribe, let page = done.browserUrl.flatMap(URL.init(string:)),
+           page.scheme == "https" || page.scheme == "http" {
+            openPage(page)
+        }
+        let extra = Self.cleaned(done.status)
+        notices.say(String(localized: "Blocked · swept \(done.swept)") + (extra.isEmpty ? "" : " · \(extra)"), undoable: true)
+        await again()
+    }
+
+    /// What became of an unsubscribe, in the page's words.
+    static func cleaned(_ status: String) -> String {
+        switch status {
+        case "unsubscribed_oneclick": String(localized: "unsubscribed")
+        case "mailto_sent": String(localized: "unsub email sent")
+        case "needs_browser": String(localized: "opened the unsub page")
+        case "no_method": String(localized: "no unsub link")
+        case "failed": String(localized: "unsub couldn’t send — retry later")
+        case "no_token": String(localized: "unsub not sent — reopen to retry")
+        case "read_only": String(localized: "unsub not sent — MailMind is read-only")
+        default: ""
+        }
+    }
+
+    // MARK: Several senders
+
+    func previewBatch() async {
+        guard let routes = link.routes else { return }
+        let senders = (flood?.senders ?? []).map(\.fromAddr).filter { marked.contains($0) }
+        guard !senders.isEmpty else { return }
+        do {
+            batching = Batching(preview: try await routes.post(API.Post.CleanupBatchPreview.self,
+                                                               API.BatchSendersBody(senders: senders)))
+        } catch {
+            notices.say(DeskRefusal.words(error, else: String(localized: "Couldn’t load those senders")))
+            return
+        }
+        await explainBatch(senders)
+    }
+
+    /// Why each is worth cleaning up: an extra the preview stands without, so it makes no fuss at the limit or with
+    /// AI off.
+    private func explainBatch(_ senders: [String]) async {
+        guard let routes = link.routes else { return }
+        batching?.reasoning = true
+        let reasons = try? await routes.post(API.Post.CleanupRationale.self, API.RationaleBody(senders: senders))
+        batching?.reasoning = false
+        batching?.reasons = reasons?.rationales ?? [:]
+    }
+
+    func pressBatch() async {
+        guard var asked = batching else { return }
+        guard asked.armed else {
+            asked.armed = true
+            batching = asked
+            return
+        }
+        guard let routes = link.routes else { return }
+        let senders = asked.preview.senders.map(\.fromAddr)
+        batching = nil
+        marked.removeAll()
+        notices.say(String(localized: "Cleaning up \(countNoun(senders.count, "sender", "senders"))…"))
+        do {
+            let done = try await routes.post(API.Post.CleanupBatch.self, API.BatchCleanupBody(
+                senders: senders, undoGroup: newUndoGroup()))
+            let failed = done.sweepFailed > 0 ? String(localized: " · \(done.sweepFailed) failed") : ""
+            notices.say(String(localized: "Blocked \(done.blocked.count) · swept \(done.swept)") + failed, undoable: true)
+        } catch {
+            notices.say(String(localized: "Cleanup failed"))
+            return
+        }
+        await again()
+    }
+
+    // MARK: Sweeps
+
+    /// Plan an account's sweep, and wait for Confirm.
+    func armSweep(_ account: String) async {
+        guard let routes = link.routes else { return }
+        do {
+            let planned = try await routes.post(API.Post.Sweep.self, API.SweepBody(account: account, dryRun: true))
+            guard let result = planned.results.first else { return notices.say(String(localized: "Nothing to sweep")) }
+            if let error = result.error {
+                notices.say(String(localized: "Sweep: \(error)"))
+            } else if result.planned == 0 {
+                notices.say(String(localized: "Nothing to sweep"))
+            } else {
+                sweepArmed = (account, result.planned)
+            }
+        } catch {
+            notices.say(String(localized: "Plan failed"))
+        }
+    }
+
+    func abortSweep() {
+        sweepArmed = nil
+        notices.say(String(localized: "Aborted"))
+    }
+
+    func sweep() async {
+        guard let routes = link.routes, let armed = sweepArmed else { return }
+        let (account, planned) = armed
+        sweepArmed = nil
+        notices.say(String(localized: "Sweeping \(planned)…"))
+        do {
+            let swept = try await routes.post(API.Post.Sweep.self, API.SweepBody(account: account, dryRun: false))
+            if let result = swept.results.first {
+                let unverified = (result.stragglers ?? []).count
+                notices.say(String(localized: "Swept \(result.moved ?? 0)/\(result.planned)")
+                    + (unverified > 0 ? String(localized: " · \(unverified) unverified") : ""))
+            }
+        } catch {
+            notices.say(String(localized: "Sweep failed"))
+        }
+        await again()
+    }
+
+    // MARK: Rules and filters
+
+    /// Keep or block a sender or a domain, or remove a rule.
+    func rule(_ token: String, _ verdict: API.RuleChange) async {
+        let token = token.trimmingCharacters(in: .whitespaces)
+        guard let routes = link.routes, !token.isEmpty else { return }
+        do {
+            let changed = try await routes.post(API.Post.Rules.self, API.RuleBody(token: token, verdict: verdict))
+            rules = changed.rules
+            switch verdict {
+            case .keep: notices.say(String(localized: "Keeping \(token)"))
+            case .block: notices.say(String(localized: "Blocked \(token)"))
+            case .remove: notices.say(String(localized: "Removed \(token)"))
+            }
+            stats = try? await routes.get(API.Get.Stats.self, [:])
+            // A rule changed how stored mail reads.
+            if changed.reclassified > 0 { self.changed() }
+        } catch {
+            notices.say(String(localized: "Rule failed"))
+        }
+    }
+
+    /// Save the filter the sheet holds. A refusal says, in the server's words, what a filter can't look at; it is
+    /// thrown for the sheet to show.
+    func save(_ form: FilterForm) async throws {
+        guard let routes = link.routes else { return }
+        _ = try await routes.post(API.Post.Filters.self, API.FilterChange(
+            id: form.id, q: form.query, read: form.read, star: form.star, verb: form.id == nil ? .create : .update))
+        notices.say(form.id == nil ? String(localized: "Filter created") : String(localized: "Filter saved"))
+        filterForm = nil
+        await readRules(routes)
+    }
+
+    func removeFilter(_ filter: API.MailFilter) async {
+        guard let routes = link.routes else { return }
+        do {
+            _ = try await routes.post(API.Post.Filters.self, API.FilterChange(id: filter.id, verb: .delete))
+            notices.say(String(localized: "Filter removed"))
+            await readRules(routes)
+        } catch {
+            notices.say(String(localized: "Couldn’t remove the filter"))
+        }
+    }
+
+    /// What a filter does, in the page's words.
+    static func does(_ filter: API.MailFilter) -> String {
+        filter.star && filter.read ? String(localized: "Star and mark read")
+            : filter.star ? String(localized: "Star") : String(localized: "Mark read")
+    }
+
+    /// Read the lists and everything here again, as the page does after a cleanup or sweep.
+    private func again() async {
+        changed()
+        await load()
+    }
+}
+#endif
