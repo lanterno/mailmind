@@ -31,6 +31,9 @@ struct MailLook: Equatable, Sendable {
     var sheet = false
     /// Set in the reading face the app carries, whose rule `dress` writes ahead of the look.
     var readingFace = false
+    /// The pane's paper under a mail that lies on it, which a frame that can't be clear paints itself; nil for a
+    /// sheet, which paints its own.
+    var paper: String?
 
     /// The line's length (the mockup's `--measure`): the text's size times as many of its widths as the setting says.
     static func measure(_ width: API.ReadWidth, size: API.ReadSize) -> CGFloat {
@@ -104,6 +107,8 @@ struct MailLook: Equatable, Sendable {
         let sheet = darkened != darkAppearance
         let colors = darkened ? dark : darkAppearance ? Self.light : light
         let back = sheet ? colors.background : "transparent", margin = sheet ? 14 : 0
+        // Whichever palette a mail on the paper takes, the paper under it is the light's own.
+        let paper = sheet ? nil : light.background
         let set = html ? Prefs(colors: prefs.colors) : prefs
         let size = Self.size(set.size)
         let px = size == size.rounded() ? String(Int(size)) : String(size)
@@ -118,7 +123,7 @@ struct MailLook: Equatable, Sendable {
             return MailLook(css: "html{background:\(back)}body{margin:\(margin)px;\(type);overflow-wrap:break-word;"
                 + "\(holds);filter:invert(.92) hue-rotate(180deg)}body img,body picture,body video,body svg,"
                 + "body [style*=background-image]{filter:invert(1) hue-rotate(180deg)}\(media)"
-                + quote(dark, face: face), inverted: true, sheet: sheet, readingFace: sans)
+                + quote(dark, face: face), inverted: true, sheet: sheet, readingFace: sans, paper: paper)
         }
         if html && sheet {
             // Its own light colours at night, as a printed page would be.
@@ -133,19 +138,23 @@ struct MailLook: Equatable, Sendable {
             + "color:\(colors.quoteInk)}"
         if html {
             return MailLook(css: prose + media + quote(colors, face: face), inverted: false, sheet: sheet,
-                            readingFace: sans)
+                            readingFace: sans, paper: paper)
         }
         return MailLook(css: prose + "pre{white-space:pre-wrap;font:inherit;margin:0}" + quote(colors, face: face),
-                        inverted: false, sheet: sheet, readingFace: sans)
+                        inverted: false, sheet: sheet, readingFace: sans, paper: paper)
     }
 
     /// The core's document for a frame with this look in its head: the reading face's rule when it is set in it,
     /// then the look. The style is ours, never the mail's; the document's policy allows an inline style and a font
     /// from a data: URL, and nothing here asks for more. The mail's own HTML is in the body, after the head.
-    func dress(_ document: String) -> String {
+    /// `clear`: whether the frame shows what lies under it. One that can't paints the pane's paper itself, so a
+    /// night's light ink never sits on the web view's own white.
+    func dress(_ document: String, clear: Bool = true) -> String {
         guard let head = document.range(of: "</head>") else { return document }
         var dressed = document
-        dressed.insert(contentsOf: "<style>\(readingFace ? FrameFont.face : "")\(css)</style>", at: head.lowerBound)
+        let under = clear ? "" : paper.map { "html{background:\($0)}" } ?? ""
+        dressed.insert(contentsOf: "<style>\(readingFace ? FrameFont.face : "")\(css)\(under)</style>",
+                       at: head.lowerBound)
         return dressed
     }
 }

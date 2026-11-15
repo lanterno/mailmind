@@ -56,11 +56,9 @@ struct MailFrame: NSViewRepresentable {
         view.allowsMagnification = true
         view.allowsLinkPreview = false
         view.setAccessibilityLabel(title)
-        // Clear, so a mail that lies on the pane's paper has the paper's grain under it too. WebKit offers this only
-        // through key-value coding; where it can't, the frame keeps its own white, as a sheet's is anyway.
-        if view.responds(to: NSSelectorFromString("_setDrawsBackground:")) {
-            view.setValue(false, forKey: "drawsBackground")
-        }
+        // Clear, so a mail that lies on the pane's paper has the paper's grain under it too. Where it can't be, the
+        // document paints the paper itself (`MailLook.dress`), set before the load below asks for it.
+        context.coordinator.clear = view.clearBackground()
         // Hidden until the script first measures it: the web view's own white never flashes in the dark.
         view.isHidden = true
         context.coordinator.view = view
@@ -194,6 +192,16 @@ final class FrameWebView: WKWebView {
         "WKMenuItemIdentifierTranslate", "WKMenuItemIdentifierSearchWeb",
     ]
 
+    /// Turns off the view's own white, and says whether it could. No public API does this on macOS 26
+    /// (`underPageBackgroundColor` paints only where a page bounces past its edge), so it is WebKit's private
+    /// `_setDrawsBackground:`, reached by key-value coding. That raises for a key it can't find, so the switch is
+    /// asked for only where the view answers to it.
+    func clearBackground() -> Bool {
+        guard responds(to: NSSelectorFromString("_setDrawsBackground:")) else { return false }
+        setValue(false, forKey: "drawsBackground")
+        return true
+    }
+
     override func scrollWheel(with event: NSEvent) {
         if forwardsScroll, abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX), let next = nextResponder {
             next.scrollWheel(with: event)
@@ -227,6 +235,8 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
     private let html: Bool
     weak var view: WKWebView?
     var told: ((FrameMessage) -> Void)?
+    /// Whether the web view could be made clear: a document dressed for one that couldn't paints its own paper.
+    var clear = true
     /// The loads still going: one the web view stopped gets nothing more.
     private var going: Set<ObjectIdentifier> = []
 
@@ -253,7 +263,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
             task.didFailWithError(URLError(.unsupportedURL))
             return
         }
-        let (core, look, html) = (core, look, html)
+        let (core, look, html, clear) = (core, look, html, clear)
         Task { @MainActor in
             let answer = await core.send("GET", target, Data())
             guard going.remove(id) != nil else { return }
@@ -261,7 +271,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
             for header in answer.headers where header.name.lowercased() != "content-length" {
                 fields[header.name] = header.value
             }
-            let body = Self.dressed(answer, look: look, html: html)
+            let body = Self.dressed(answer, look: look, html: html, clear: clear)
             let response = HTTPURLResponse(url: asked, statusCode: Int(answer.status), httpVersion: "HTTP/1.1",
                                            headerFields: fields)
             if let response { task.didReceive(response) }
@@ -271,12 +281,12 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
     }
 
     /// The document with its look, and a plain mail's quote folded. A document that isn't one (a refusal) is left as
-    /// the core wrote it.
-    nonisolated static func dressed(_ answer: CoreAnswer, look: MailLook, html: Bool) -> Data {
+    /// the core wrote it. `clear`: whether the frame shows the pane's paper under the document.
+    nonisolated static func dressed(_ answer: CoreAnswer, look: MailLook, html: Bool, clear: Bool = true) -> Data {
         guard answer.contentType.hasPrefix("text/html"), let document = String(data: answer.body, encoding: .utf8) else {
             return answer.body
         }
-        return Data(look.dress(html ? document : PlainQuote.foldDocument(document)).utf8)
+        return Data(look.dress(html ? document : PlainQuote.foldDocument(document), clear: clear).utf8)
     }
 
     func webView(_ webView: WKWebView, stop task: any WKURLSchemeTask) {

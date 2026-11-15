@@ -79,7 +79,7 @@ struct MessageContent: View {
                           measured: { measured in
                               if abs((height ?? -1) - measured) >= 1 { height = measured }
                           })
-                    .id("\(url.absoluteString)\n\(look.css)")
+                    .id("\(url.absoluteString)\n\(look.css)\n\(look.paper ?? "")")
                     .frame(height: min(shown, MailFrame.tallest))
                     .clipShape(RoundedRectangle(cornerRadius: look.sheet ? 12 : 0))
             }
