@@ -86,6 +86,7 @@ fn running(config: &str, built: bool) -> Running {
         outside: Arc::new(Open),
         keychain: Arc::new(Empty),
         sanitizer: Arc::new(Sanitizing),
+        mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
     };
     let app = Arc::new(App::assemble(&environment, &settings, dist, port, &seams).unwrap());
     let csrf = app.csrf.clone();

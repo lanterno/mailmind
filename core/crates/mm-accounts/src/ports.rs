@@ -74,3 +74,9 @@ pub enum AccountChange {
 pub trait AccountEvents: Send + Sync + std::fmt::Debug {
     fn publish(&self, change: AccountChange);
 }
+
+/// A domain's mail servers, as its MX records name them (`MailHosts` in the Python app's ports): none when there is no
+/// answer, the domain has none, or the lookup failed. It never fails, and asks no nameserver the program may not reach.
+pub trait MailHosts: Send + Sync + std::fmt::Debug {
+    fn of(&self, domain: &str) -> Vec<String>;
+}

@@ -357,6 +357,7 @@ fn world(emails: &[&str], profile: &str) -> World {
         outside: Arc::new(Loopback),
         keychain,
         sanitizer: Arc::new(mm_server::real::Sanitizing),
+        mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
     };
     let app = Arc::new(App::assemble(&environment, &settings, home.path().join("dist"), 1, &seams).unwrap());
     World { app, imap, home }

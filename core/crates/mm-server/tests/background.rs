@@ -67,6 +67,7 @@ fn assembled(home: &Path, config: &Value, pairs: &[(&str, &str)]) -> Arc<App> {
         outside: Arc::new(Closed),
         keychain: Arc::new(Empty),
         sanitizer: Arc::new(Sanitizing),
+        mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
     };
     Arc::new(App::assemble(&environment, &settings, home.join("dist"), 0, &seams).unwrap())
 }

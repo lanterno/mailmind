@@ -23,6 +23,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
     Router::new()
         .route("/api/accounts", get(listed))
         .route("/api/account-health", get(account_health))
+        .route("/api/accounts/preset", get(preset))
         .route("/api/accounts/test", post(test))
         .route("/api/accounts/trust-cert", post(trust_cert))
         .route("/api/accounts/add", post(add))
@@ -38,6 +39,13 @@ async fn listed(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respon
 /// How each account stands: its last sync that worked and its last that failed, and how its sync stands now.
 async fn account_health(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
     super::run(&app, &method, &uri, |app| app.health.answer()).await
+}
+
+/// The preset an address's account takes (`PresetArgs`): Gmail's for Google's own domains, offered where the
+/// domain's MX records name Google's servers.
+async fn preset(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    let email = super::reading::query(&uri).text("email").map(str::to_owned);
+    super::run(&app, &method, &uri, move |app| app.presets.preset(email.as_deref())).await
 }
 
 /// Try a saved account's login at its saved server, or a draft's where it was typed (`TryBody`).

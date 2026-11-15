@@ -53,6 +53,9 @@ pub struct Seams {
     /// What makes a body's HTML safe for the reader and its frame: the sanitizer itself (`real::Sanitizing`), which
     /// only the test launcher takes away, to show the frame's walls hold alone.
     pub sanitizer: Arc<dyn mm_mailbox::ports::Sanitizer>,
+    /// A domain's mail servers, which Settings asks of an address's domain (`mail_hosts::SystemMailHosts`): a test's
+    /// asks its own nameserver, or none.
+    pub mail_hosts: Arc<dyn mm_accounts::ports::MailHosts>,
 }
 
 #[derive(Debug)]
@@ -111,6 +114,8 @@ pub struct App {
     pub tidying: crate::bound::Tidying,
     // Accounts' changes, and their test login.
     pub connections: mm_accounts::connections::Connections,
+    /// The preset an address's account takes, as Settings asks while it is typed.
+    pub presets: mm_accounts::presets::Presets,
     /// Compose's: a send, a draft, the outbox (`work outbox`) and the drafts' pushes (`work drafts`).
     pub compose: crate::compose_wiring::Compose,
     /// Which logins are held back after their server refused them (`/api/sync-retry-account` lets one go).
@@ -440,6 +445,7 @@ impl App {
             attention,
             tidying,
             connections,
+            presets: mm_accounts::presets::Presets::new(seams.mail_hosts.clone()),
             compose,
             logins,
             cleanups,

@@ -67,7 +67,13 @@ impl Keychain for Empty {
 const KEY: &str = "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e";
 
 fn seams(keychain: Arc<Empty>) -> Seams {
-    Seams { clock: Arc::new(Frozen), outside: Arc::new(Open), keychain, sanitizer: Arc::new(Sanitizing) }
+    Seams {
+        clock: Arc::new(Frozen),
+        outside: Arc::new(Open),
+        keychain,
+        sanitizer: Arc::new(Sanitizing),
+        mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
+    }
 }
 
 /// A database the core made in `home`, holding a muted thread.

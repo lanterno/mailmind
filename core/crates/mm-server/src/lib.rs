@@ -6,7 +6,8 @@
 //! `environment` is the one place the environment is read.
 //!
 //! The app holds no test hooks. What a test must control comes in through `Seams`: the clock, the Keychain,
-//! `Outside`, asked before a file is opened or a host reached, and the sanitizer a body's HTML goes through.
+//! `Outside`, asked before a file is opened or a host reached, the sanitizer a body's HTML goes through, and the
+//! nameservers a domain's mail servers are asked of.
 //! `mailmind-server` passes the real ones (`real::seams`); the test launcher (`mm-served`) passes a frozen clock, a
 //! Keychain of its own, a tripwire and a sanitizer it can take away.
 
@@ -43,6 +44,8 @@ pub mod workers;
 // The login Keychain, through /usr/bin/security; and the accounts' changes and their test login.
 mod account_wiring;
 pub mod login_keychain;
+// A domain's mail servers, asked of a nameserver.
+pub mod mail_hosts;
 // 1Password, through its CLI: an account's password or the Claude API key, read once a process.
 pub mod one_password;
 // Compose's use cases bound: the sends, the drafts and the outbox that delivers them, and the outbox's worker.

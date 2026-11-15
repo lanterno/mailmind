@@ -316,13 +316,14 @@ impl Drop for Subscription {
 }
 
 /// The seams a demo or test home runs on: the system's clock and the sanitizer itself, as `real::seams`, with the
-/// Keychain a file and no host but this machine.
+/// Keychain a file, no host but this machine, and no nameserver asked.
 fn stand_in_seams(file: PathBuf) -> Seams {
     Seams {
         clock: Arc::new(SystemClock),
         outside: Arc::new(stand_in::LoopbackOnly),
         keychain: Arc::new(stand_in::FileKeychain::new(file)),
         sanitizer: Arc::new(Sanitizing),
+        mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
     }
 }
 

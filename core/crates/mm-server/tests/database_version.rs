@@ -75,7 +75,13 @@ impl Keychain for Held {
 fn start_with(home: &Path, environment: &Environment, keychain: Arc<Held>) -> Result<(), String> {
     std::fs::write(home.join("mailmind.config.json"), r#"{"accounts": []}"#).unwrap();
     let settings = Settings { home: home.to_path_buf() };
-    let seams = Seams { clock: Arc::new(Frozen), outside: Arc::new(Open), keychain, sanitizer: Arc::new(Sanitizing) };
+    let seams = Seams {
+        clock: Arc::new(Frozen),
+        outside: Arc::new(Open),
+        keychain,
+        sanitizer: Arc::new(Sanitizing),
+        mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
+    };
     App::assemble(environment, &settings, home.join("dist"), 8721, &seams).map(|_| ())
 }
 
