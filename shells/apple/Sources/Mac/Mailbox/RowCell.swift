@@ -232,8 +232,10 @@ final class MailRowCell: NSTableCellView {
     /// Show `row` (nil while its page comes) under `head`, with `acts` for its buttons; `account` is its account's
     /// name where the list says each row's.
     func show(_ row: API.FolderRow?, head: String?, account: String? = nil, acts: [RowAct], look: RowLook) {
+        // The accounts' order colours the dot, and comes after the first rows at launch.
         guard row != self.row || head != self.head || account != self.account || acts != self.acts
-            || look.inks !== self.look?.inks || look.measure != self.look?.measure || lines == nil && row != nil
+            || look.inks !== self.look?.inks || look.measure != self.look?.measure
+            || look.accounts != self.look?.accounts || lines == nil && row != nil
         else { return }
         self.row = row
         self.head = head
