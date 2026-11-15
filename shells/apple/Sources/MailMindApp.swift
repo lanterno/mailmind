@@ -21,7 +21,8 @@ struct MailMindApp: App {
             MailboxCommands()
         }
         #if os(macOS)
-        .defaultSize(width: 560, height: 820)
+        // Three columns want room; step 0's list keeps the size its measurements were taken at.
+        .defaultSize(width: Root.stepZero ? 560 : 1180, height: Root.stepZero ? 820 : 760)
         // The menu bar's writing, and each composer in a window of its own: Mac/Compose.
         .commands { ComposeCommands() }
         #endif
