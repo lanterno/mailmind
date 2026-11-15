@@ -121,7 +121,8 @@ _swift-api out:
 
 # The Mac app on fictional mail (`just demo`'s world): fake mail servers and the fake Claude API on loopback, a temp
 # home with a key of its own and a file in the login Keychain's place. `demo smoke` waits for the inbox's rows and
-# quits; `demo measure` times launch to first rows and idle memory. Nothing of yours is read or changed.
+# quits; `demo measure` times launch to first rows and idle memory; `demo picture` has the app draw its window, light
+# and dark, into build/screenshots/window. Nothing of yours is read or changed.
 demo mode="": build
     #!/usr/bin/env bash
     set -euo pipefail
@@ -129,6 +130,6 @@ demo mode="": build
     app="{{here}}/build/DerivedData/Build/Products/Release/MailMind.app/Contents/MacOS/MailMind"
     case "{{mode}}" in
         "") uv run python "{{here}}/Measure/demo_home.py" "$app" ;;
-        smoke|measure) uv run python "{{here}}/Measure/demo_home.py" "$app" "--{{mode}}" ;;
-        *) echo "just apple demo [smoke|measure]" >&2; exit 2 ;;
+        smoke|measure|picture) uv run python "{{here}}/Measure/demo_home.py" "$app" "--{{mode}}" ;;
+        *) echo "just apple demo [smoke|measure|picture]" >&2; exit 2 ;;
     esac

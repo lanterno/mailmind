@@ -10,6 +10,7 @@ tripwire as well.
     python shells/apple/Measure/demo_home.py APP            # the app, until you quit it (or Ctrl-C here)
     python shells/apple/Measure/demo_home.py APP --smoke    # opens, waits for mail in the inbox's rows, quits: 0 if it showed
     python shells/apple/Measure/demo_home.py APP --measure  # launch to first rows and idle memory: one launch to sync, then 7
+    python shells/apple/Measure/demo_home.py APP --picture  # the window drawn light and dark: build/screenshots/window
 """
 import os
 import secrets
@@ -40,11 +41,11 @@ LAUNCHES = 7
 LIMIT = 120
 
 
-def launch(app, env):
+def launch(app, env, pictures=None):
     """One measured run of the app: its output's `name=value` lines, or None when it didn't show mail."""
+    env = {**env, "MAILMIND_MEASURE": "home", **({"MAILMIND_PICTURE": pictures} if pictures else {})}
     try:
-        run = subprocess.run([app], env={**env, "MAILMIND_MEASURE": "home"}, capture_output=True, text=True,
-                             timeout=LIMIT)
+        run = subprocess.run([app], env=env, capture_output=True, text=True, timeout=LIMIT)
     except subprocess.TimeoutExpired:
         print(f"the app said nothing in {LIMIT} s: did it get a window?")
         return None
@@ -73,6 +74,13 @@ def main():
             if said is None:
                 sys.exit("The Mac app never showed mail in its inbox on the demo home.")
             print(f"the Mac app showed {said['rows_total']} rows of fictional mail, {said['first_rows_ms']} ms after it started")
+            return
+        if mode == "--picture":
+            pictures = os.path.join(ROOT, "shells", "apple", "build", "screenshots", "window")
+            said = launch(app, env, pictures)
+            if said is None:
+                sys.exit("The Mac app never showed mail in its inbox on the demo home.")
+            print(f"the Mac app drew its window on fictional mail into {pictures}")
             return
         if mode == "--measure":
             first = launch(app, env)     # syncs the world into the new database first: not counted
