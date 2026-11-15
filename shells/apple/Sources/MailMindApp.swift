@@ -4,6 +4,13 @@ import SwiftUI
 struct MailMindApp: App {
     @State private var demo = Demo()
 
+    #if os(macOS)
+    init() {
+        // Quick Look's copies of attachments, decrypted: what a crash left, now, and what is still open, at quit.
+        PreviewFiles.sweepNowAndAtQuit()
+    }
+    #endif
+
     var body: some Scene {
         WindowGroup {
             Root(demo: demo)

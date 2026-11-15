@@ -44,7 +44,7 @@ struct DocumentHub: View {
         .padding(.top, 4)
         .quickLookPreview($looking)
         .onChange(of: looking) { old, _ in
-            if let old { try? FileManager.default.removeItem(at: old.deletingLastPathComponent()) }
+            if let old { PreviewFiles.remove(old) }
         }
     }
 
@@ -131,13 +131,7 @@ struct DocumentHub: View {
         Task {
             do {
                 let file = try await calls.bytes(at: target)
-                let folder = FileManager.default.temporaryDirectory
-                    .appending(path: "MailMind-Preview", directoryHint: .isDirectory)
-                    .appending(path: UUID().uuidString, directoryHint: .isDirectory)
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                let url = folder.appending(path: Self.safeName(doc.filename))
-                try file.data.write(to: url, options: .atomic)
-                looking = url
+                looking = try PreviewFiles.write(file.data, named: Self.safeName(doc.filename))
             } catch {
                 mailbox.say(String(localized: "Couldn’t preview the file"), detail: (error as? Problem)?.detail)
             }
