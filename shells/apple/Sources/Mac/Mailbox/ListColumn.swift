@@ -262,7 +262,16 @@ private struct SearchHead: View {
                     .buttonStyle(.link)
                 }
             }
-            if let asked = search.asked {
+            if let going = mailbox.translating?(), going == search.q {
+                // The sentence is searched as typed while the assistant works out the search it means.
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text("Translating…")
+                }
+                .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.updatesFrequently)
+            } else if let asked = search.asked {
                 Button {
                     mailbox.keepsLiteral?(asked)
                     app.place = .search(Search(q: asked, account: search.account))

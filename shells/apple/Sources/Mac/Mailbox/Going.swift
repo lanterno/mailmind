@@ -129,6 +129,7 @@ extension Mailbox {
 
     /// Out of a search, back to the Inbox it was asked from (`leave`).
     func leaveSearch() {
+        stopsTranslating?()
         guard case .search(let search) = app?.place else { return }
         app?.place = search.account.isEmpty ? .allInboxes : .folder(account: search.account, folder: "INBOX")
     }

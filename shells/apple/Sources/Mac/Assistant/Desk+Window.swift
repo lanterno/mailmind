@@ -102,6 +102,8 @@ final class Desk {
                 await self?.prose.translate(typed, aiOn: mailbox?.aiOn ?? false)
             }
             mailbox.keepsLiteral = { self?.prose.keepLiteral($0) }
+            mailbox.translating = { self?.prose.translating }
+            mailbox.stopsTranslating = { self?.prose.stop() }
             for key: Character in ["h", "w", "l", "i"] {
                 mailbox.keys[key] = {
                     guard let self else { return }

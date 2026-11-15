@@ -87,6 +87,9 @@ final class Mailbox {
     /// to leave as typed from now on (the translated chip's ×).
     @ObservationIgnored var translates: (@MainActor (String) async -> String?)?
     @ObservationIgnored var keepsLiteral: ((String) -> Void)?
+    /// The sentence being turned into a search now, if one is; and the search left before its translation came.
+    @ObservationIgnored var translating: (@MainActor () -> String?)?
+    @ObservationIgnored var stopsTranslating: (() -> Void)?
     /// The areas that have hung their hooks here, each once however often its view appears.
     @ObservationIgnored private var joined: Set<String> = []
 
