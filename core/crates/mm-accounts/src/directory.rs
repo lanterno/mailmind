@@ -309,6 +309,15 @@ const UNNAMEABLE: &str = "A Keychain item MailMind keeps is named in letters, di
 /// What a secret the Keychain can't hold as itself is told.
 const UNPRINTABLE: &str = "A secret MailMind keeps in the Keychain is printable ASCII, and not empty: letters, digits, punctuation and spaces.";
 
+/// A password typed for `entry` as it is kept: a Gmail App Password without the spaces Google shows it with
+/// (`account::as_kept`). Where a stored credential points stays as it is.
+fn typed_for(entry: &Map<String, Value>, asked: Asked) -> Asked {
+    match asked {
+        Asked::Typed(typed) => Asked::Typed(account::as_kept(typed, account::strip_for(entry))),
+        stored => stored,
+    }
+}
+
 fn writing(lock: &Mutex<()>) -> Result<MutexGuard<'_, ()>, Fault> {
     lock.lock().map_err(|_| Fault::new("PoisonedLock"))
 }
@@ -376,6 +385,7 @@ impl Directory {
             credential_from(asked.get("credential"))?.ok_or_else(|| Problem::refused("a credential is required"))?;
         account::refuse_bad_endpoints(&entry, &Map::new())?;
         account::validate_new(&entry)?;
+        let credential = typed_for(&entry, credential);
         entry.insert("credential".into(), self.kept(&credential::account_item(email), credential, None)?);
         let row = account::masked_row(&Value::Object(entry.clone())).map_err(|_| MALFORMED)?;
         match raw.entry("accounts").or_insert_with(|| json!([])) {
@@ -408,7 +418,7 @@ impl Directory {
         if let Some(new) = new {
             let saved_as = email_of(entry)?;
             let own = credential::account_item(&saved_as);
-            entry.insert("credential".into(), self.kept(&own, new, old)?);
+            entry.insert("credential".into(), self.kept(&own, typed_for(entry, new), old)?);
             if credential::names(old, &own) && !credential::names(entry.get("credential"), &own) {
                 self.let_go(&saved_as)?;
             }

@@ -37,7 +37,7 @@ pub enum NotTried {
 }
 
 /// The draft as an account a connection can open (`throwaway_account`). Its port is judged first, then its host,
-/// then its credential.
+/// then its credential. Its password is tried as it would be kept (`account::as_kept`).
 pub fn throwaway_account(draft: &Map<String, Value>) -> Result<Draft, NotTried> {
     let defaults = account::defaults(draft);
     let port = match draft.get("port").filter(|p| truthy(p)) {
@@ -57,6 +57,7 @@ pub fn throwaway_account(draft: &Map<String, Value>) -> Result<Draft, NotTried> 
         Some(Value::String(typed)) if keychain && !typed.is_empty() => Secret::new(typed.clone()),
         _ => return Err(NotTried::Refused(SAVE_FIRST)),
     };
+    let password = account::as_kept(password, draft.get("strip_spaces").map_or(defaults.strip_spaces, truthy));
     let email = draft.get("email").and_then(Value::as_str).map(str::to_owned);
     Ok(Draft { email, host, port, starttls, password })
 }

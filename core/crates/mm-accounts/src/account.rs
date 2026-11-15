@@ -5,6 +5,7 @@
 //! read as Python reads it (`truthy`), so both apps answer one file alike.
 
 use mm_kernel::errors::Problem;
+use mm_kernel::seams::Secret;
 use mm_kernel::{parsed, text};
 use serde_json::{Map, Value, json};
 
@@ -210,7 +211,7 @@ impl Account {
             port: imap.port,
             starttls: truthy(&imap.starttls),
             credential: entry.get("credential").cloned().unwrap_or_else(|| json!({})),
-            strip_spaces: entry.get("strip_spaces").map_or(defaults(entry).strip_spaces, truthy),
+            strip_spaces: strip_for(entry),
             alias: entry
                 .get("alias")
                 .and_then(Value::as_str)
@@ -403,5 +404,29 @@ pub fn find<'a>(raw: &'a mut Map<String, Value>, email: &str) -> Option<&'a mut 
     match raw.get_mut("accounts") {
         Some(Value::Array(entries)) => entries.get_mut(at).and_then(Value::as_object_mut),
         _ => None,
+    }
+}
+
+/// Whether the entry strips the spaces out of its password: as it says, or as its type does (Gmail's does).
+pub fn strip_for(entry: &Map<String, Value>) -> bool {
+    entry.get("strip_spaces").map_or(defaults(entry).strip_spaces, truthy)
+}
+
+/// How many letters an App Password has.
+pub const APP_PASSWORD_LETTERS: usize = 16;
+
+/// A password typed for an account, as it is kept and sent (`as_kept`). Google shows an App Password as four groups of
+/// four letters with spaces between, and an account that strips spaces (`strip_spaces`, a Gmail account's by default)
+/// keeps it without them; any other password, there or elsewhere, is kept as it was typed, its spaces too. A space is
+/// a space or the no-break space a copy from a web page may bring.
+pub fn as_kept(typed: Secret, strip_spaces: bool) -> Secret {
+    if !strip_spaces {
+        return typed;
+    }
+    let bare: String = typed.expose().chars().filter(|c| !matches!(c, ' ' | '\u{a0}')).collect();
+    if bare.chars().count() == APP_PASSWORD_LETTERS && bare.chars().all(|c| c.is_ascii_alphabetic()) {
+        Secret::new(bare)
+    } else {
+        typed
     }
 }
