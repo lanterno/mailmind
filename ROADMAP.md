@@ -94,6 +94,10 @@ Python app gets fixes only.
   itself, so two addresses that differ only there match one rule (the strict xfail in
   `tests/unit/curation/test_classifier_in_rust.py`). No Rust string holds one: the test goes with Python at the flip (#11),
   and then the question is only whether the core should compare such addresses as the bytes the server sent.
+- **Say when each snooze preset wakes** · low value · effort S · [#45](https://github.com/lanterno/mailmind/issues/45) — Meadow's snooze menu shows
+  each preset's time beneath it. Only the server and the core work those times out (`wake_time`), and no route returns
+  them, so the Mac app's chooser and the page's `SnoozeMenu` only name the presets: a route, or a field on one, that
+  says each preset's time from the same function.
 - **Simplify the search grammar after the flip** · low value · effort S · [#22](https://github.com/lanterno/mailmind/issues/22) — `mm_discovery` copies Python's quirks (its
   `fromisoformat`, a Unicode 16 case table) only so the two answer alike. Once Python goes (#11), keep strict `before:` and
   `after:` dates and Rust's own Unicode.
