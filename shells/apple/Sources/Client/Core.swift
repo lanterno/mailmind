@@ -33,6 +33,15 @@ public final class Core: Sendable {
         return try Self.decoded(R.Answer.self, from: await send("POST", R.path, sent))
     }
 
+    /// What `route` answers to a POST of `body` with the person's leave to go over today's AI limit, as the page sends
+    /// one again once they say yes to its question.
+    public func postOverLimit<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer
+        where R.Answer: Decodable
+    {
+        let sent = try JSONEncoder().encode(body)
+        return try Self.decoded(R.Answer.self, from: await send("POST", R.path, sent, overLimit: true))
+    }
+
     /// A route that answers no JSON (a mail body's frame, an attachment): its bytes and their type, or its problem.
     public func document<R: GetRoute>(_ route: R.Type, _ query: KeyValuePairs<String, String?> = [:]) async throws
         -> NotJSON where R.Answer == NotJSON
@@ -43,10 +52,14 @@ public final class Core: Sendable {
     }
 
     /// Any request as the page would send it, answered as it would read it, a refusal included: for what loads a
-    /// document by its URL (the reader's frame).
-    public func send(_ method: String, _ target: String, _ body: Data) async -> CoreAnswer {
+    /// document by its URL (the reader's frame). `overLimit` carries the person's leave to go over today's AI limit
+    /// (`X-MailMind-AI-Over-Limit: allow`), the one header the core lets a shell add.
+    public func send(_ method: String, _ target: String, _ body: Data, overLimit: Bool = false) async -> CoreAnswer {
         let host = host
-        return await Self.onQueue { host.request(method: method, target: target, body: body) }
+        return await Self.onQueue {
+            overLimit ? host.requestOverLimit(method: method, target: target, body: body)
+                : host.request(method: method, target: target, body: body)
+        }
     }
 
     /// The event stream from now on, beginning with its `hello`. It ends when the core closes, and cancelling the
