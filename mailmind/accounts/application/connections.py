@@ -16,7 +16,7 @@ PROBE_TIMEOUT = 10      # seconds, for each step of one: a short one gives quick
 
 class Connections:
     def __init__(self, config: Directory, get: Callable[[str], Entry], accounts: Callable[[], list[Entry]],
-                 probe: ConnectionProbe, quiet_error: Callable[[BaseException], str],
+                 probe: ConnectionProbe, quiet_error: Callable[[BaseException, str | None], str],
                  retry_sync: Callable[[Entry], dict[str, Any]], forget_status: Callable[[str | None], None]):
         self._config = config
         self._get = get
@@ -29,18 +29,21 @@ class Connections:
     def test(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Test a SAVED account ({email}), at its saved server, or an UNSAVED draft (no disk write; what it may try
         is mailmind.accounts.domain.draft's to say). Errors are sanitized — never echoes the attempted password or
-        server banner. A login that didn't work is an answer (`connect: false`); an account it doesn't know raises NotFound,
-        and a draft it may not try Refused."""
+        server banner, and a Gmail account's refusal is said as Gmail's (`conn_error.quiet`). A login that didn't work is an
+        answer (`connect: false`); an account it doesn't know raises NotFound, and a draft it may not try Refused."""
         t0 = time.time()
         if body.get("draft") and not is_object(body["draft"]):
             raise Refused()
+        kind = None
         try:
             # no IMAP gate: holding it here froze all mail ops for up to 60s on a mistyped/black-holed host
             if body.get("draft"):
+                kind = body["draft"].get("type", "imap")
                 acct = throwaway_account(body["draft"])
                 self._probe.draft(acct, timeout=PROBE_TIMEOUT)
             else:
                 acct = self._get(body["email"])
+                kind = acct["kind"]
                 self._probe.saved(acct, timeout=PROBE_TIMEOUT)
             return {"ok": True, "connect": True, "email": acct["email"],
                     "detail": "login ok", "ms": int((time.time() - t0) * 1000)}
@@ -52,7 +55,7 @@ class Connections:
             draft: Entry = body.get("draft") or {}
             return {"ok": True, "connect": False,
                     "email": body.get("email") or draft.get("email"),
-                    "error": self._quiet_error(e)}
+                    "error": self._quiet_error(e, kind)}
 
 
     def trust_cert(self, body: Mapping[str, Any]) -> dict[str, Any]:
