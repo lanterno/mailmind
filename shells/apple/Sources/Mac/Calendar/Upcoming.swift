@@ -49,28 +49,43 @@ struct UpcomingList: View {
     let events: [API.UpcomingEvent]
     let now: Date
     let open: (MailCopy) -> Void
+    @Environment(\.meadow) private var meadow
 
+    /// Each event as the mockup's `.ev`: when in a column of its own, the day or the hour over the other, then its
+    /// title, which opens the invite's message, and where and who under it.
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(events.enumerated()), id: \.offset) { _, event in
                 let when = EventWhen.short(start: event.start, allDay: event.allDay, now: now)
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text(when.big).font(.callout.weight(.semibold).monospacedDigit())
-                        Text(when.small).font(.caption).foregroundStyle(.secondary)
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(when.big)
+                            .font(.meadow(.ui, 13, .heavy))
+                            .monospacedDigit()
+                            .foregroundStyle(meadow.ink)
+                        Text(when.small)
+                            .font(.meadow(.ui, 12, .semibold))
+                            .foregroundStyle(meadow.ink3)
                     }
-                    .frame(width: 64, alignment: .trailing)
+                    .lineLimit(1)
+                    .frame(width: 62, alignment: .leading)
                     VStack(alignment: .leading, spacing: 2) {
                         Button(event.summary.isEmpty ? String(localized: "(no title)") : event.summary) {
                             open(.named(key: event.key, folder: event.folder, uid: event.uid, account: event.account))
                         }
-                        .buttonStyle(.link)
+                        .deskTitle()
+                        .font(.meadow(.ui, 13.5, .bold))
+                        .foregroundStyle(meadow.ink)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         if let line = Self.line(event) {
-                            Text(line).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            Text(line)
+                                .font(.meadow(.ui, 12.5))
+                                .foregroundStyle(meadow.ink3)
+                                .lineLimit(2)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .accessibilityElement(children: .combine)
             }

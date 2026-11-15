@@ -85,6 +85,7 @@ final class Desk {
         attention.changed = readAgain
         curate.changed = readAgain
         curate.openPage = { NSWorkspace.shared.open($0) }
+        brief.paperTrailQuery = { [weak self] in self?.paperTrail?.search?.q }
     }
 
     /// Reach the window's core once it is open, and hear what changes.
@@ -198,6 +199,13 @@ final class Desk {
 
     func go(_ place: Place) {
         app?.place = place
+    }
+
+    /// The paper trail's lane, as the rail's views open it, where the server's views have one.
+    var paperTrail: Place? {
+        guard let mailbox = app?.mailbox,
+              let view = mailbox.views.first(where: { Lane(view: $0.id) == .papertrail }) else { return nil }
+        return .search(Search(q: viewQuery(view), account: mailbox.searchAccount, lane: .papertrail))
     }
 
     /// A stack as the brief's tallies open it: the account the window is in, else every account's.
@@ -425,8 +433,14 @@ struct DeskScreen: View {
             case .brief:
                 BriefScreen(model: desk.brief, attention: desk.attention, actions: BriefActions(
                     open: desk.open, goToStack: desk.goToStack, commitments: { desk.sheet = .commitments },
-                    week: { desk.sheet = .review }, reply: desk.reply, askUntil: { desk.askWhen($0) }))
-                    .task { await desk.brief.load() }
+                    week: { desk.sheet = .review }, reply: desk.reply, askUntil: { desk.askWhen($0) },
+                    draftReady: { Composing.shared.chips[$0] == .ready },
+                    paperTrail: desk.paperTrail.map { place in { desk.go(place) } }), tasks: desk.tasks,
+                    name: BriefWords.firstName(NSFullUserName()))
+                    .task {
+                        await desk.tasks.load()
+                        await desk.brief.load()
+                    }
             case .ask:
                 AskScreen(model: desk.asking, reading: desk.chosen, open: desk.open) { desk.sheet = .ask }
             case .screener(let account):

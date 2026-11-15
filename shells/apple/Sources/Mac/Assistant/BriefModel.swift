@@ -29,6 +29,10 @@ final class BriefModel {
     private(set) var filing: Set<MailCopy> = []
     /// The Tidy run a person dismissed, kept as the page keeps it in its storage.
     private(set) var dismissedTidy: String?
+    /// The paper trail's receipts, newest first, for its card beside the brief: as far as one page of the search goes.
+    private(set) var receipts: [API.SearchHit] = []
+    /// The paper trail's query, as the server's views name it, where the window has one.
+    @ObservationIgnored var paperTrailQuery: () -> String? = { nil }
 
     @ObservationIgnored let link: CoreLink
     @ObservationIgnored let notices: DeskNotices
@@ -53,6 +57,7 @@ final class BriefModel {
 
     var needs: [API.DigestItem] { BriefWords.needsYou(items) }
     var tidy: [API.DigestItem] { BriefWords.safeToFile(items) }
+    var worthARead: [API.DigestItem] { BriefWords.worthARead(items) }
 
     /// The brief's topics, each with the mail it names still here.
     var topics: [(label: String, items: [API.DigestItem])] {
@@ -123,6 +128,24 @@ final class BriefModel {
     func readSide(_ routes: any RouteCaller) async {
         upcoming = (try? await routes.get(API.Get.Upcoming.self, [:]).items) ?? []
         waiting = (try? await routes.get(API.Get.WaitingOnOthers.self, [:]).items) ?? []
+        await readReceipts(routes)
+    }
+
+    /// The paper trail's first page, a local search that spends nothing; none where the window has no paper trail.
+    private func readReceipts(_ routes: any RouteCaller) async {
+        guard let q = paperTrailQuery(), !q.isEmpty else {
+            receipts = []
+            return
+        }
+        let read = try? await routes.get(API.Get.Search.self, [
+            "q": q, "scope": API.SearchScope.all.rawValue, "account": "", "limit": String(Lists.pageSize),
+            "offset": "0",
+        ])
+        switch read {
+        case .searchPage(let page)?: receipts = page.items
+        case .nothingAsked(let none)?: receipts = none.items
+        case nil: break
+        }
     }
 
     private func readStacks(_ routes: any RouteCaller) async {

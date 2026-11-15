@@ -8,38 +8,63 @@ struct BriefActions {
     var goToStack: (AttentionStack) -> Void = { _ in }
     var commitments: () -> Void = {}
     var week: () -> Void = {}
-    /// A reply to a message, where the window has a composer.
+    /// A reply to a message, where the window has a composer: the reply written ahead when there is one.
     var reply: ((MailCopy) -> Void)?
     var askUntil: ([MailCopy]) -> Void = { _ in }
+    /// Whether a reply is written ahead for a message (by its key), so its card offers to use it.
+    var draftReady: (Int) -> Bool = { _ in false }
+    /// The paper trail, where the window has one.
+    var paperTrail: (() -> Void)?
 }
 
-/// Today's brief, in the reading pane beside the Inbox: a greeting, what Claude made of today's mail, what needs you, what can be
-/// filed, and beside it today and next and who you're waiting on. The cards, tallies and side come from the digest,
-/// so they stand with AI off.
+/// Today's brief, in the reading pane beside the Inbox, as Meadow draws it (`briefHTML()`): the scene with the date
+/// and a greeting, the brief Claude wrote on a card over the hills with the mail it names as links and the tallies
+/// under it, then what needs you, what is worth a read and what can wait, and beside them (below them in a narrow
+/// pane) today and next, who you're waiting on, the paper trail and your commitments. The cards, tallies and side
+/// come from the digest, so they stand with AI off.
 struct BriefScreen: View {
     let model: BriefModel
     let attention: AttentionModel
     let actions: BriefActions
+    var tasks: TasksModel?
     var now = Date()
+    /// The person's first name for the greeting: the window passes the one this Mac knows, a test a fictional one.
+    var name: String?
     @State private var showAll = false
+    @State private var showAllReads = false
     @State private var topic: String?
     @State private var reviewingTidy = false
     @State private var askingTidy = false
     @State private var tidyRunOpen = false
+    @State private var width: CGFloat = 1000
+    @Environment(\.meadow) private var meadow
+    @Environment(\.meadowLight) private var light
+
+    /// The mockup's container queries on the pane: a column beside from 940, the narrow brief to 700.
+    private var wide: Bool { width >= 940 }
+    private var narrow: Bool { width <= 700 }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                hero
-                briefCard
-                needsSection
-                tidySection
-                side
+        ScrollViewReader { scroll in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    hero
+                    VStack(alignment: .leading, spacing: 0) {
+                        briefCard(scroll)
+                            .frame(maxWidth: 800, alignment: .leading)
+                            .padding(.top, -84)
+                        grid
+                            .padding(.top, 28)
+                    }
+                    .padding(.horizontal, narrow ? 18 : 40)
+                    .padding(.bottom, narrow ? 70 : 80)
+                    .frame(maxWidth: 1180, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                }
             }
-            .padding(16)
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .scrollContentBackground(.hidden)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .confirmationDialog(tidyQuestion, isPresented: $askingTidy) {
             Button("File to Archive") { Task { await model.fileTidy() } }
             Button("Cancel", role: .cancel) {}
@@ -54,66 +79,105 @@ struct BriefScreen: View {
 
     // MARK: The top
 
+    /// The scene, 220 high, with the date and the greeting on its sky (`.bhero`).
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text(verbatim: BriefWords.greeting(hour: Calendar.current.component(.hour, from: now)) + ".")
-                .font(.largeTitle.weight(.semibold))
+        ZStack(alignment: .topLeading) {
+            MeadowScene(seed: 21)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(BriefWords.dateLine(now).uppercased())
+                    .font(.meadow(.ui, 12, .heavy))
+                    .tracking(12 * 0.14)
+                    .foregroundStyle(meadow.ink2)
+                Text(BriefWords.greeting(hour: Calendar.current.component(.hour, from: now), light: light, name: name))
+                    .font(.meadow(.display, narrow ? 30 : 40, .bold))
+                    .foregroundStyle(meadow.ink)
+                    .lineLimit(2)
+                    .padding(.top, 8)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            .padding(.leading, narrow ? 20 : 40)
+            .padding(.trailing, 40)
+            .padding(.top, narrow ? 22 : 32)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 20)
-        .background(
-            LinearGradient(colors: [Color.orange.opacity(0.22), Color.yellow.opacity(0.10), Color.blue.opacity(0.12)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(height: 220)
+        .frame(maxWidth: .infinity)
+        .clipped()
     }
 
-    private var briefCard: some View {
-        DeskCard {
-            DeskCardHeading(title: "Your Brief", symbol: "sparkles")
-                // Refresh at the heading's end, where the mockup's brief has it now the window has no toolbar.
-                .overlay(alignment: .trailing) {
-                    Button { Task { await model.write(again: true) } } label: {
-                        MeadowIconView(.refresh, size: 15)
-                        Text("Refresh")
-                    }
-                    .meadowButton(.quiet, small: true)
-                    .help("Write the brief again from your mail as it is now (runs the AI)")
-                    .disabled(model.writing)
+    /// The brief on a raised card over the hills (`.brief-card`).
+    private func briefCard(_ scroll: ScrollViewProxy) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                MeadowAIMark("Your brief")
+                if let written = BriefWords.written(model.brief) {
+                    Text(written)
+                        .font(.meadow(.ui, 12.5))
+                        .foregroundStyle(meadow.ink3)
+                        .lineLimit(1)
                 }
+                Spacer(minLength: 0)
+                Button { Task { await model.write(again: true) } } label: {
+                    MeadowIconView(.refresh, size: 15)
+                    Text("Refresh")
+                }
+                .meadowButton(.quiet, small: true)
+                .help("Write the brief again from your mail as it is now (runs the AI)")
+                .disabled(model.writing)
+            }
+            .padding(.bottom, 10)
             narrative
             if !model.topics.isEmpty {
-                BriefFlow {
+                BriefFlow(spacing: 6) {
                     ForEach(model.topics, id: \.label) { group in
-                        BriefChip(text: group.label, count: group.items.count, on: topic == group.label) {
+                        BriefTopic(label: group.label, count: group.items.count, on: topic == group.label) {
                             topic = topic == group.label ? nil : group.label
+                            scroll.scrollTo(Self.needsID, anchor: .top)
                         }
                     }
                 }
+                .padding(.top, 12)
+                .accessibilityElement(children: .contain)
                 .accessibilityLabel("Topics in today’s mail")
             }
-            BriefFlow {
-                let needs = model.needs.count
-                if needs > 0 {
-                    BriefChip(text: needs == 1 ? "needs you" : "need you", count: needs, sun: true) { topic = nil; showAll = true }
-                        .help("List them")
+            BriefFlow(spacing: 8) {
+                ForEach(tallies, id: \.goes) { tally in
+                    BriefTallyButton(tally: tally) { go(tally.goes, scroll) }
                 }
-                if model.waitingCount > 0 {
-                    BriefChip(text: "waiting on others", count: model.waitingCount) { actions.goToStack(.waiting) }
-                }
-                if model.replyLaterCount > 0 {
-                    BriefChip(text: "to reply later", count: model.replyLaterCount) { actions.goToStack(.replyLater) }
-                }
-                let commits = BriefWords.commitments(model.items).count
-                if commits > 0 {
-                    BriefChip(text: commits == 1 ? "commitment" : "commitments", count: commits, symbol: "checklist",
-                         action: actions.commitments)
-                }
-                BriefChip(text: "Your week", symbol: "calendar", action: actions.week)
             }
+            .padding(.top, 14)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .meadowPanel(radius: 18, raised: true)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Today’s brief")
+    }
+
+    private var tallies: [BriefWords.Tally] {
+        let commitments = BriefWords.commitments(model.items).count + (tasks?.open ?? 0)
+        return BriefWords.tallies(needs: model.needs.count, waiting: model.waitingCount,
+                                  replyLater: model.replyLaterCount, worthARead: model.worthARead.count,
+                                  canWait: model.tidy.count, commitments: commitments)
+    }
+
+    private func go(_ goes: BriefWords.Tally.Goes, _ scroll: ScrollViewProxy) {
+        switch goes {
+        case .needs:
+            topic = nil
+            showAll = true
+            scroll.scrollTo(Self.needsID, anchor: .top)
+        case .waiting: actions.goToStack(.waiting)
+        case .replyLater: actions.goToStack(.replyLater)
+        case .worthARead:
+            showAllReads = true
+            scroll.scrollTo(Self.readsID, anchor: .top)
+        case .canWait:
+            reviewingTidy = true
+            scroll.scrollTo(Self.tidyID, anchor: .top)
+        case .commitments: actions.commitments()
+        case .week: actions.week()
         }
     }
 
@@ -121,28 +185,74 @@ struct BriefScreen: View {
         if model.aiOn == false && (model.brief?.narrative ?? "").isEmpty {
             AIOffNote()
         } else if model.writing {
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Reading your inbox…")
-            }
-            .foregroundStyle(.secondary)
+            DeskThinking(saying: "Reading your inbox…")
         } else if let narrative = model.brief?.narrative, !narrative.isEmpty {
-            Text(narrative).textSelection(.enabled)
+            BriefText(text: narrative, items: model.items, open: actions.open)
         } else if model.trouble == .limit {
-            HStack {
-                Text("Today’s AI limit is reached, so the brief isn’t written yet.")
-                Button("Write It") { Task { await model.write(again: false) } }.buttonStyle(.link)
-            }
-            .foregroundStyle(.secondary)
+            quiet("Today’s AI limit is reached, so the brief isn’t written yet.", button: "Write it")
         } else if case .failed(let why)? = model.trouble {
-            HStack {
-                Text("The brief isn’t available right now (\(model.failing ?? why)).")
-                Button("Try Again") { Task { await model.write(again: false) } }.buttonStyle(.link)
-            }
-            .foregroundStyle(.secondary)
+            quiet("The brief isn’t available right now (\(model.failing ?? why)).", button: "Try again")
         } else {
-            Text("Nothing to brief yet.").foregroundStyle(.secondary)
+            Text("Nothing to brief yet.")
+                .font(.meadow(.ui, 15))
+                .foregroundStyle(meadow.ink3)
         }
+    }
+
+    private func quiet(_ words: String, button: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(words)
+            Button(button) { Task { await model.write(again: false) } }
+                .deskLink()
+        }
+        .font(.meadow(.ui, 15))
+        .foregroundStyle(meadow.ink3)
+    }
+
+    // MARK: Beside each other
+
+    static let needsID = "brief-needs"
+    static let readsID = "brief-reads"
+    static let tidyID = "brief-tidy"
+
+    @ViewBuilder private var grid: some View {
+        if wide {
+            HStack(alignment: .top, spacing: 28) {
+                main.frame(maxWidth: .infinity, alignment: .leading)
+                side.frame(width: 320)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 28) {
+                main
+                side
+            }
+        }
+    }
+
+    private var main: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            needsSection.id(Self.needsID)
+            readsSection.id(Self.readsID)
+            tidySection.id(Self.tidyID)
+        }
+    }
+
+    /// A section's heading (`.sec-h`), with a note at its end; in a topic, the way back to what needs you.
+    private func sectionHead(_ title: String, note: String? = nil, inTopic: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(title)
+                .font(.meadow(.display, 19, .bold))
+                .foregroundStyle(meadow.ink)
+                .accessibilityAddTraits(.isHeader)
+            if inTopic {
+                Button("Show what needs you") { topic = nil }.deskLink()
+            }
+            Spacer(minLength: 0)
+            if let note {
+                Text(note).font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
+            }
+        }
+        .padding(.bottom, 12)
     }
 
     // MARK: What needs you
@@ -151,257 +261,261 @@ struct BriefScreen: View {
         let topical = topic.flatMap { label in model.topics.first { $0.label == label }?.items }
         let needs = topical ?? model.needs
         let shown = showAll || topical != nil ? needs : Array(needs.prefix(BriefWords.briefCap))
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(topic ?? String(localized: "Needs You")).font(.title3.weight(.semibold))
-                if topic != nil {
-                    Button("Show What Needs You") { topic = nil }.buttonStyle(.link)
+        VStack(alignment: .leading, spacing: 0) {
+            sectionHead(topic ?? String(localized: "Needs you"),
+                        note: needs.isEmpty ? nil : String(localized: "click a title to read it here"),
+                        inTopic: topic != nil)
+            if needs.isEmpty {
+                Text("Nothing needs you right now.")
+                    .font(.meadow(.ui, 14.5))
+                    .foregroundStyle(meadow.ink3)
+            }
+            VStack(spacing: 10) {
+                ForEach(shown, id: \.self) { item in
+                    NeedCard(item: item, model: model, attention: attention, actions: actions)
                 }
             }
-            if needs.isEmpty {
-                Text("Nothing needs you right now.").foregroundStyle(.secondary)
-            }
-            ForEach(shown, id: \.self) { item in
-                NeedCard(item: item, multi: model.multi, model: model, attention: attention, actions: actions)
-            }
             if needs.count > shown.count {
-                Button("Show All \(needs.count)") { showAll = true }
+                let all = BriefWords.Tally(words: String(localized: "Show all \(needs.count)"), goes: .needs)
+                BriefTallyButton(tally: all) { showAll = true }
+                .padding(.top, 12)
             }
         }
     }
 
-    // MARK: Filing
+    // MARK: Worth a read
+
+    @ViewBuilder private var readsSection: some View {
+        let reads = model.worthARead
+        if !reads.isEmpty {
+            let shown = showAllReads ? reads : Array(reads.prefix(3))
+            VStack(alignment: .leading, spacing: 0) {
+                sectionHead(String(localized: "Worth a read"))
+                VStack(spacing: 2) {
+                    ForEach(shown, id: \.self) { item in
+                        ReadRow(item: item) { actions.open(BriefModel.copy(of: item)) }
+                    }
+                }
+                if reads.count > shown.count {
+                    Button("Show all \(reads.count)") { showAllReads = true }
+                        .deskLink()
+                        .padding(.top, 6)
+                }
+            }
+            .padding(.top, 28)
+        }
+    }
+
+    // MARK: What can wait
 
     @ViewBuilder private var tidySection: some View {
-        if let run = model.tidyShown {
-            DeskCard(tint: .green) {
-                Label {
-                    Text("We filed \(countNoun(run.filed, "low-priority message", "low-priority messages")) for you.")
-                } icon: {
-                    Image(systemName: "sparkles")
-                }
-                HStack {
-                    Button(tidyRunOpen ? "Hide" : "Review") { tidyRunOpen.toggle() }
-                    Button("Undo") { Task { await model.undoTidy() } }
-                    Button("Dismiss") { model.dismissTidy() }
-                }
-                .controlSize(.small)
-                if tidyRunOpen {
-                    ForEach(Array(run.items.enumerated()), id: \.offset) { _, filed in
-                        Text("**\(filed.who ?? String(localized: "Unknown"))** \(filed.subject ?? String(localized: "(no subject)"))")
-                            .font(.callout)
-                    }
-                }
-            }
-        }
-        let tidy = model.tidy
-        if !tidy.isEmpty {
-            DeskCard(tint: .green) {
-                Label {
-                    Text("\(countNoun(tidy.count, "low-priority message", "low-priority messages")) the AI rates as safe to file: no next step, nothing asked of you.")
-                } icon: {
-                    Image(systemName: "sparkles")
-                }
-                HStack {
-                    Button(reviewingTidy ? "Hide" : "Review") { reviewingTidy.toggle() }
-                    Button("File to Archive") { askingTidy = true }
-                }
-                .controlSize(.small)
-                if reviewingTidy {
-                    ForEach(tidy, id: \.self) { item in
-                        Button {
-                            actions.open(BriefModel.copy(of: item))
-                        } label: {
-                            Text("**\(item.fromName ?? item.fromAddr ?? "—")** \(item.subject.isEmpty ? String(localized: "(no subject)") : item.subject)")
-                                .font(.callout)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 12) {
+            if let run = model.tidyShown {
+                let filed = countNoun(run.filed, "low-priority message", "low-priority messages")
+                TidyRow(icon: .wind, title: String(localized: "We filed \(filed) for you"),
+                        words: String(localized: """
+                            Each one is in its mailbox’s Archive, and Undo brings them all back.
+                            """)) {
+                    Button(tidyRunOpen ? "Hide" : "Review") { tidyRunOpen.toggle() }.meadowButton(.quiet)
+                    Button("Undo") { Task { await model.undoTidy() } }.meadowButton()
+                    Button("Dismiss") { model.dismissTidy() }.meadowButton(.quiet)
+                } more: {
+                    if tidyRunOpen {
+                        ForEach(Array(run.items.enumerated()), id: \.offset) { _, filed in
+                            TidyLine(who: filed.who ?? String(localized: "Unknown"),
+                                     subject: filed.subject ?? String(localized: "(no subject)"))
                         }
-                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            let tidy = model.tidy
+            if !tidy.isEmpty {
+                TidyRow(icon: .archive, title: tidy.count == 1 ? String(localized: "1 message can wait")
+                            : String(localized: "\(tidy.count) messages can wait"),
+                        words: String(localized: """
+                            The AI rates them as safe to file: no next step, nothing asked of you.
+                            """)) {
+                    Button(reviewingTidy ? "Hide" : "Review") { reviewingTidy.toggle() }.meadowButton(.quiet)
+                    Button("File \(tidy.count) to Archive") { askingTidy = true }.meadowButton()
+                } more: {
+                    if reviewingTidy {
+                        ForEach(tidy, id: \.self) { item in
+                            let subject = item.subject.isEmpty ? String(localized: "(no subject)") : item.subject
+                            Button { actions.open(BriefModel.copy(of: item)) } label: {
+                                TidyLine(who: item.fromName ?? item.fromAddr ?? "—", subject: subject)
+                            }
+                            .deskTitle()
+                        }
                     }
                 }
             }
         }
+        .padding(.top, 24)
     }
 
     // MARK: Your day
 
-    @ViewBuilder private var side: some View {
-        let upcoming = Array(model.upcoming.prefix(4))
-        if !upcoming.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("Today & Next", systemImage: "calendar").font(.headline)
-                UpcomingList(events: upcoming, now: now, open: actions.open)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Today and next")
-        }
-        let waiting = model.waiting
-        if !waiting.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Waiting on Others", systemImage: "hourglass").font(.headline)
-                ForEach(waiting.prefix(3), id: \.self) { row in
-                    let who = BriefWords.nameIn(row.to)
-                    Button {
-                        actions.open(.named(key: row.key, folder: row.folder, uid: row.uid, account: row.account))
-                    } label: {
-                        HStack(spacing: 8) {
-                            SenderInitials(name: who, address: row.to, size: 24)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(who.isEmpty ? "—" : who).fontWeight(.medium)
-                                Text(verbatim: [row.subject.isEmpty ? String(localized: "(no subject)") : row.subject,
-                                                BriefWords.waitAge(sent: row.ts, now: now),
-                                                model.multi ? (model.digest?.aliases[row.account] ?? nil) ?? row.account : nil]
-                                    .compactMap { $0 }.joined(separator: " · "))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                if waiting.count > 3 {
-                    Button("See All \(waiting.count)") { actions.goToStack(.waiting) }.buttonStyle(.link)
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
-        }
+    private var side: some View {
+        BriefSide(model: model, tasks: tasks, attention: attention, actions: actions, now: now)
     }
 }
 
 /// AI off, in the page's words, with where a key goes in this app.
 struct AIOffNote: View {
+    @Environment(\.meadow) private var meadow
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             Text("**AI is off.** Summaries, this brief and reply drafts come from Claude, and MailMind has no Anthropic API key. Your mail works the same without it.")
+                .font(.meadow(.ui, 14.5))
+                .foregroundStyle(meadow.ink2)
+                .lineSpacing(MeadowFace.ui.lineSpacing(size: 14.5, lineHeight: 1.55))
             Text("To turn it on, add your key in MailMind’s Settings.")
-                .foregroundStyle(.secondary)
-            Label("With AI on, the text of a message goes to Anthropic only when it is summarized, briefed or drafted; nothing else leaves this Mac.",
-                  systemImage: "lock")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.meadow(.ui, 13))
+                .foregroundStyle(meadow.ink3)
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                MeadowIconView(.lock, size: 14).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                Text("""
+                    With AI on, the text of a message goes to Anthropic only when it is summarized, briefed or \
+                    drafted; nothing else leaves this Mac.
+                    """)
+            }
+            .font(.meadow(.ui, 13))
+            .foregroundStyle(meadow.ink3)
         }
     }
 }
 
-/// One message that needs you: who, when, what, what Claude made of it, the next step, and what to do about it.
-struct NeedCard: View {
-    let item: API.DigestItem
-    let multi: Bool
-    let model: BriefModel
-    let attention: AttentionModel
-    let actions: BriefActions
+/// The brief's text in the AI's hand (`.brief-text`): Klee One in moss, each message it names a link that opens it.
+struct BriefText: View {
+    let text: String
+    let items: [API.DigestItem]
+    let open: (MailCopy) -> Void
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
-        let copy = BriefModel.copy(of: item)
-        let subject = item.subject.isEmpty ? String(localized: "(no subject)") : item.subject
-        HStack(alignment: .top, spacing: 10) {
-            SenderInitials(name: item.fromName, address: item.fromAddr, size: 32)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(item.fromName ?? item.fromAddr ?? "—").fontWeight(.semibold).lineLimit(1)
-                    if multi {
-                        CardTag(LocalizedStringKey(item.alias.flatMap { $0.isEmpty ? nil : $0 } ?? Self.short(item.account)))
-                    }
-                    Spacer(minLength: 4)
-                    Text(item.when).font(.caption).foregroundStyle(.secondary)
+        let runs = BriefWords.runs(text, items)
+        Text(attributed(runs))
+            .font(.meadow(.hand, 18, .semibold))
+            .foregroundStyle(meadow.moss)
+            .tint(meadow.ink)
+            .lineSpacing(MeadowFace.hand.lineSpacing(size: 18, lineHeight: 1.7, weight: .semibold))
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+            .environment(\.openURL, OpenURLAction { url in
+                guard let at = Self.index(url), runs.indices.contains(at), let item = runs[at].names else {
+                    return .discarded
                 }
-                Button(subject) { actions.open(copy) }
-                    .buttonStyle(.link)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                if let summary = item.summary, !summary.isEmpty {
-                    Text(summary).font(.callout).foregroundStyle(.secondary)
-                }
-                if !item.action.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text(item.action)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.18), in: Capsule())
-                }
-                HStack(spacing: 6) {
-                    if let reply = actions.reply {
-                        Button("Reply", systemImage: "arrowshape.turn.up.left") { reply(copy) }
-                    }
-                    Button("Read", systemImage: "eye") { actions.open(copy) }
-                    Spacer()
-                    SnoozeMenu(copies: [copy], stack: nil, model: attention, askUntil: actions.askUntil)
-                        .labelStyle(.iconOnly)
-                        .menuIndicator(.hidden)
-                        .fixedSize()
-                        .help("Snooze")
-                        .accessibilityLabel("Snooze “\(subject)”")
-                    Button("Archive", systemImage: "archivebox") { Task { await model.file(item, .archive) } }
-                        .labelStyle(.iconOnly)
-                        .help("Archive")
-                        .accessibilityLabel("Archive “\(subject)”")
-                    Button("Delete", systemImage: "trash") { Task { await model.file(item, .trash) } }
-                        .labelStyle(.iconOnly)
-                        .help("Delete")
-                        .accessibilityLabel("Delete “\(subject)”")
-                }
-                .controlSize(.small)
-                .buttonStyle(.borderless)
-                .padding(.top, 2)
-            }
-        }
-        .padding(12)
-        .background(.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.separator))
+                open(BriefModel.copy(of: item))
+                return .handled
+            })
     }
 
-    /// An address as the page shortens one for a chip: the part before the @.
-    static func short(_ address: String) -> String {
-        address.split(separator: "@").first.map(String.init) ?? address
+    /// The runs as one text, each link carrying its run's place.
+    private func attributed(_ runs: [BriefWords.Run]) -> AttributedString {
+        var all = AttributedString()
+        for (at, run) in runs.enumerated() {
+            var piece = AttributedString(run.text)
+            if run.names != nil {
+                piece.link = URL(string: "mailmind-brief:run/\(at)")
+                piece[AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute.self] = meadow.ink
+                piece[AttributeScopes.SwiftUIAttributes.UnderlineStyleAttribute.self] =
+                    Text.LineStyle(pattern: .solid, color: meadow.moss.opacity(0.45))
+            }
+            all += piece
+        }
+        return all
+    }
+
+    static func index(_ url: URL) -> Int? {
+        guard url.scheme == "mailmind-brief" else { return nil }
+        return Int(url.lastPathComponent)
     }
 }
 
-/// A tally or a topic: a count and its words, pressed to go there.
-struct BriefChip: View {
-    let text: LocalizedStringKey
-    var count: Int?
-    var symbol: String?
-    var on = false
-    var sun = false
+/// A tally under the brief (`.tally`): a pill with its count and its words, in sunlight for what needs you.
+struct BriefTallyButton: View {
+    let tally: BriefWords.Tally
     let action: () -> Void
-
-    init(text: String, count: Int? = nil, symbol: String? = nil, on: Bool = false, sun: Bool = false,
-         action: @escaping () -> Void) {
-        self.text = LocalizedStringKey(text)
-        self.count = count
-        self.symbol = symbol
-        self.on = on
-        self.sun = sun
-        self.action = action
-    }
+    @Environment(\.meadow) private var meadow
+    @FocusState private var focused: Bool
+    @State private var hovering = false
 
     var body: some View {
+        let sun = tally.sun
         Button(action: action) {
-            HStack(spacing: 4) {
-                if let symbol { Image(systemName: symbol) }
-                if let count { Text(count, format: .number).fontWeight(.bold).monospacedDigit() }
-                Text(text)
+            HStack(spacing: 8) {
+                if sun { Circle().fill(meadow.sun).frame(width: 8, height: 8) }
+                if let icon = Self.icon(tally.goes) { MeadowIconView(icon, size: 15) }
+                if let count = tally.count {
+                    Text(count, format: .number)
+                        .font(.meadow(.ui, 15, .heavy))
+                        .monospacedDigit()
+                        .foregroundStyle(sun ? meadow.sunInk : meadow.ink)
+                }
+                Text(tally.words)
             }
-            .font(.callout)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(sun ? AnyShapeStyle(Color.orange.opacity(0.25)) : on ? AnyShapeStyle(.selection) : AnyShapeStyle(.quaternary),
-                        in: Capsule())
+            .font(.meadow(.ui, 13.5, .bold))
+            .foregroundStyle(sun ? meadow.sunInk : hovering ? meadow.ink : meadow.ink2)
+            .padding(.horizontal, 15)
+            .frame(minHeight: 36)
+            .background(Capsule().fill(sun ? meadow.sunWash : meadow.paper))
+            .overlay {
+                Capsule().strokeBorder(sun ? meadow.sun.opacity(0.45) : hovering ? meadow.ink3 : meadow.line2,
+                                       lineWidth: 1)
+            }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .focused($focused)
+        .focusEffectDisabled()
+        .meadowFocusRing(focused, radius: 18)
+        .onHover { hovering = $0 }
+        .help(tally.goes == .needs ? String(localized: "List them") : "")
+    }
+
+    static func icon(_ goes: BriefWords.Tally.Goes) -> MeadowIcon? {
+        switch goes {
+        case .commitments: .todo
+        case .week: .cal
+        default: nil
+        }
     }
 }
 
-/// Chips in rows that wrap at the width they have.
+/// One of the brief's topics (`.bf-topic`): a quieter pill, which narrows what needs you to the topic's mail.
+struct BriefTopic: View {
+    let label: String
+    let count: Int
+    let on: Bool
+    let action: () -> Void
+    @Environment(\.meadow) private var meadow
+    @FocusState private var focused: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(label)
+                Text(count, format: .number).monospacedDigit().foregroundStyle(on ? meadow.primaryInk : meadow.ink3)
+            }
+            .font(.meadow(.ui, 12.5, .semibold))
+            .foregroundStyle(on ? meadow.primaryInk : meadow.ink)
+            .padding(.horizontal, 11)
+            .frame(height: 26)
+            .background(Capsule().fill(on ? meadow.primaryWash : hovering ? meadow.paper3 : meadow.paper2))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .focused($focused)
+        .focusEffectDisabled()
+        .meadowFocusRing(focused, radius: 13)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+/// Pills in rows that wrap at the width they have.
 struct BriefFlow: Layout {
     var spacing: CGFloat = 6
 
