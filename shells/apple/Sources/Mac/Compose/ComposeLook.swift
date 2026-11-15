@@ -131,6 +131,7 @@ struct ComposeTextLook: Equatable {
     }
 
     /// Dress the view in this look: what is typed next, and what it holds already.
+    @MainActor
     func dress(_ view: NSTextView) {
         view.font = font
         view.textColor = ink

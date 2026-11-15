@@ -638,6 +638,7 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
 /// none while that window's keyboard is in something that takes text, whose keys are that thing's, and none with ⌘,
 /// ⌃ or ⌥ held, which are the menus' and the window's (⌘1 goes to Inbox, ⌘Return sends). A click on the button it
 /// hangs from closes it, and goes no further.
+@MainActor
 enum MeadowPopoverKeys {
     enum Verdict: Equatable {
         /// Esc: the popover closes.
