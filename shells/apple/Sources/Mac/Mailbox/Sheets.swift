@@ -179,8 +179,9 @@ struct Entries: View {
 }
 
 /// ⌘K: everything there is to do from here, found by typing (app/Palette.tsx), as the mockup's palette draws it: what
-/// to try while nothing is typed, the commands in their groups with their keys, a search for what is typed, and the
-/// window's modes (`?` asks your inbox and `!` acts on many, where the window has an assistant).
+/// to try while nothing is typed, then where to go and what to do with their keys (a place's g then a letter), a
+/// search for what is typed, and the window's modes (`?` asks your inbox and `!` acts on many, where the window has
+/// an assistant).
 struct PaletteSheet: View {
     let mailbox: Mailbox
     var initial = ""
@@ -190,8 +191,9 @@ struct PaletteSheet: View {
 
     var body: some View {
         let ai = !modes.isEmpty
+        // The places and the verbs stand under one head, as the mockup's palette has them.
         Entries(entries: mailbox.commands().map {
-            Entries.Entry(id: $0.id, group: $0.group.rawValue, label: $0.label, hint: $0.hint,
+            Entries.Entry(id: $0.id, group: Self.goAndDo, label: $0.label, hint: $0.hint,
                           icon: PaletteIcons.of($0.id), run: $0.run)
         }, starters: starters(ai: ai), typed: { words in
             Entries.Entry(id: "search-all", label: String(localized: "Search all mail for “\(words)”"),
@@ -206,6 +208,8 @@ struct PaletteSheet: View {
     }
 
     static let operators = ["from:", "has:attachment", "before:", "is:unread"]
+    /// The head over every command while nothing is typed.
+    static let goAndDo = String(localized: "Go & do")
 
     static func hints(ai: Bool) -> [MeadowPaletteFoot.Hint] {
         Entries.moveHints + (ai ? [

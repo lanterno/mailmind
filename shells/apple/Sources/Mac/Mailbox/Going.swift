@@ -29,11 +29,10 @@ extension Mailbox {
         if let role = Self.roleKeys[key] { go(role: role) }
     }
 
-    /// The folder that plays `role` on this account. Gmail archives into All Mail.
+    /// The folder that plays `role` on this account.
     func go(role: String) {
         guard let account = goingAccount else { return }
-        let held = folders(of: account)
-        guard let found = held.first(where: { $0.role == role }) ?? (role == "archive" ? held.first { $0.role == "all" } : nil) else {
+        guard let found = folder(playing: role, on: account) else {
             say("No \(role) folder on this account")
             return
         }
@@ -43,6 +42,31 @@ extension Mailbox {
     /// A virtual folder: over every account from All Inboxes, else the account's own (`goToFolder`).
     func go(_ virtual: VirtualFolder) {
         app?.place = .virtual(virtual, account: overEveryAccount ? nil : goingAccount)
+    }
+
+    /// The folder that plays `role` on `account`. Gmail archives into All Mail.
+    private func folder(playing role: String, on account: String) -> API.RailFolder? {
+        let held = folders(of: account)
+        return held.first { $0.role == role } ?? (role == "archive" ? held.first { $0.role == "all" } : nil)
+    }
+
+    /// Where g then each letter goes from here, for the palette to show beside the place ("g i"): only what the keys
+    /// reach from where the window is, and nothing while single keys are off.
+    func chordsHere() -> [Place: String] {
+        guard singleKeys else { return [:] }
+        var chords: [Place: String] = [:]
+        for key in "isatkdzwl" {
+            let place: Place? = if let virtual = Self.virtualKeys[key] {
+                .virtual(virtual, account: overEveryAccount ? nil : goingAccount)
+            } else if let role = Self.roleKeys[key], let account = goingAccount,
+                      let found = folder(playing: role, on: account) {
+                .folder(account: account, folder: found.name)
+            } else {
+                nil
+            }
+            if let place, chords[place] == nil { chords[place] = "g \(key)" }
+        }
+        return chords
     }
 
     // MARK: Up and down the list
@@ -184,28 +208,28 @@ extension Mailbox {
     func commands() -> [MailCommand] {
         var out: [MailCommand] = []
         let some = app?.selection.copy != nil || !marked.isEmpty
-        out.append(MailCommand(id: "all-inboxes", group: .navigation, label: "All inboxes") { [weak self] in
-            self?.app?.place = .allInboxes
-        })
+        let chords = chordsHere()
+        // A way to a place, with the keys that go there too.
+        func going(_ id: String, _ label: String, to place: Place) -> MailCommand {
+            MailCommand(id: id, group: .navigation, label: label, hint: chords[place]) { [weak self] in
+                self?.app?.place = place
+            }
+        }
+        out.append(going("all-inboxes", "All inboxes", to: .allInboxes))
         for virtual in VirtualFolder.allCases {
-            out.append(MailCommand(id: "across:\(virtual.rawValue)", group: .navigation, label: "All inboxes / \(virtual.title)") { [weak self] in
-                self?.app?.place = .virtual(virtual, account: nil)
-            })
+            out.append(going("across:\(virtual.rawValue)", "All inboxes / \(virtual.title)",
+                             to: .virtual(virtual, account: nil)))
         }
         for account in accounts {
             let name = name(of: account)
-            out.append(MailCommand(id: "acct:\(account)", group: .navigation, label: "Account · \(name)") { [weak self] in
-                self?.app?.place = .folder(account: account, folder: "INBOX")
-            })
+            out.append(going("acct:\(account)", "Account · \(name)", to: .folder(account: account, folder: "INBOX")))
             for folder in folders(of: account) {
-                out.append(MailCommand(id: "fold:\(account):\(folder.name)", group: .navigation, label: "\(name) / \(Words.role(folder))") { [weak self] in
-                    self?.app?.place = .folder(account: account, folder: folder.name)
-                })
+                out.append(going("fold:\(account):\(folder.name)", "\(name) / \(Words.role(folder))",
+                                 to: .folder(account: account, folder: folder.name)))
             }
             for virtual in [VirtualFolder.snoozed, .waiting] {
-                out.append(MailCommand(id: "fold:\(account):\(virtual.rawValue)", group: .navigation, label: "\(name) / \(virtual.title)") { [weak self] in
-                    self?.app?.place = .virtual(virtual, account: account)
-                })
+                out.append(going("fold:\(account):\(virtual.rawValue)", "\(name) / \(virtual.title)",
+                                 to: .virtual(virtual, account: account)))
             }
         }
         out.append(MailCommand(id: "docs", group: .navigation, label: "Documents — find any attachment") { [weak self] in
