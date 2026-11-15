@@ -15,7 +15,10 @@ From the repo root (`just apple` lists them; recipes run from here whatever the 
 
 ```bash
 just apple build        # the core as build/MailMindCore.xcframework, the Xcode project, then the iOS simulator and macOS apps
-just apple test         # the list models', the client's, the mailbox's, Settings' and the status's tests, on macOS; pictures in build/screens and build/screenshots
+just apple test         # every area's tests on macOS: the list models', the client's, the mailbox's, the reader's, the
+                        # composer's, Settings' and the status's; pictures in build/screens and build/screenshots
+TEST_RUNNER_SCREENS=1 just apple test   # the same, and the screens tests draw the reader's and composer's views, light
+                                        # and dark, into build/screens/*.png (read them after a change to a view)
 just apple demo         # the Mac app on fictional mail: fake servers on loopback, a temp home, a keychain stand-in
 just apple demo smoke   # the same until the inbox shows rows (exit 0), or not; `demo measure`: first rows and memory
 just apple run          # the Mac app as a person runs it: MailMind's own data folder and the login Keychain
@@ -57,11 +60,13 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | `Sources/Client/Core.swift` | `Core`: the host opened over a home, a route's GET or POST as its generated types, a refusal thrown as its `Problem`, the event stream as an `AsyncStream`. `CoreHome.ofThisProcess` picks the home. |
 | `Sources/Client/APISupport.swift` | What the generated types lean on: `JSONValue`, the `GetRoute` and `PostRoute` protocols, `NotJSON`, a union's decoding. |
 | `Sources/Client/API.gen.swift` | The routes' answers and bodies as Swift types, all inside `API`, each route as `API.Get.X` or `API.Post.X`. Written by `just apple gen-api`; never edit it. |
-| `Sources/Window/` | The Mac app's window: `Root` (the window or step 0), `MailApp` (the core, the sidebar's accounts and folders, where the window is), `MailList` (`Place`, `Selection`, the list a page at a time), `Reader` (the message chosen, its frame's URL), `MailWindow+macOS` (the views, the frame's web view), `HomeMeasure` (`MAILMIND_MEASURE=home`). |
+| `Sources/Window/` | The Mac app's window: `Root` (the window or step 0), `MailApp` (the core, the sidebar's accounts and folders, where the window is), `MailList` (`Place`, `Selection`, the list a page at a time), `Reader` (the message chosen, its frame's URL), `MailWindow+macOS` (the sidebar and the list; the reader pane is `Mac/Reader`'s), `HomeMeasure` (`MAILMIND_MEASURE=home`). |
 | `Sources/Mac/Settings/` | Settings (⌘,): Accounts (each connection, its health, Test, Trust It, + with the page's presets, Edit, Remove), General, Notifications and AI; the Claude key and the Bridge's password (`KeptSecretView`, `SecretPost`), and the first run's `Welcome`. |
 | `Sources/Mac/Status/` | `AppStatus` (what the status, Settings and the first run show, heard on an event stream of its own), the status pill and its menu, the account alert, the meeting reminder, new mail's notifications and Dock badge (`NewMailAlerts`), Help and the guide, and `StatusHooks`, the one modifier the window applies. |
 | `Sources/Mac/Mailbox/` | The Mac window's mailbox: `Mailbox` (the sidebar's accounts, folders, labels, views and counts, each place's list, the rows chosen), its verbs (`Verbs`) and ways about (`Going`), the lists' reads (`Lists`), the sidebar, the list's table (`Table`), its column and toolbar (`ListColumn`), the lanes and the Document Hub (`Hub`), Move To and the palette (`Sheets`), a sender's card, and the menu bar's commands (`Commands`). Its hooks (`asks`, `plans`, `composeTo`, `more`, `keys`, `rowMenu`) are where the other areas join in. |
 | `Sources/Mac/Shared/` | What the areas share: `PreviewFiles`, Quick Look's copies of attachments (this user's alone, removed as their preview closes, swept at launch and quit). |
+| `Sources/Mac/Reader/` | The reader, as the page's `features/reader` and `mailbox/MailFrame` show it: `ReaderPane` (a message or a conversation, its Reply buttons, and what the menu bar's Reply acts on), `Reading` (the conversation's model, its folds, quick replies), `ReaderViews` (the headers, images on request, the notes above a body), `MailFrame` (the body's web view and its walls), `MailLook` (the frame's look and the plain-text quote fold), `LinkRisk` and `LinkOpener` (a link's check, then the browser or the composer), `Attachments` (Quick Look and a save panel), `ReadingSettings` (Aa), and `ReaderCards`, the slot for the cards other areas put above the conversation or into each message. |
+| `Sources/Mac/Compose/` | Writing, as the page's `features/compose`: `Composer` (one message's model: its saves, the send guard, its fixes), `Composing` (the composers, Undo send's float, a reply drafted ahead), `ComposeWindow` (the composer's window and its parts), `ComposeEditors` (the body and the recipients' AppKit fields), `ComposeCommands` (the menu bar's New Message, Reply, Reply All, Forward), `SendGuard`, `LinkClean` and `ComposeModel` (the rules the page's tests hold), `Outbox`, `QuoteFrame` (the Markdown preview), and `Routes`, the seam the tests answer in place of the core. |
 | `Generator/swift_api.py` | Writes `API.gen.swift` from the OpenAPI document `tests/support/openapi_doc.py` makes. `just apple check-api`, in `just verify`, fails when the two differ. |
 | `Measure/` | `measure.sh` and the probes it compiles (the crossing cost, a web view's memory), `smoke.sh`, which CI runs, and `demo_home.py`, which `just apple demo` runs. |
 | `build/` | The XCFramework, derived data, measurements and releases. Ignored by git. |
@@ -88,9 +93,16 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   lives in a folder of its own, never inside the app's.
 - **The window speaks the page's routes,** in-process, through the same perimeter as the served app, and keeps no
   closed set or limit the server owns: those come with the generated types.
-- **A mail body's frame has walls of its own.** The web view runs no JavaScript, keeps nothing on disk, follows no
-  link or redirect, and its scheme (`mailmind-frame:`) answers only `/api/message/body.html` through the core. The
-  document's own sandbox policy stays the boundary, as in the page.
+- **A mail body's frame has walls of its own.** The mail's content world runs no JavaScript; the web view keeps
+  nothing on disk, follows no link or redirect, and its scheme (`mailmind-frame:`) answers only
+  `/api/message/body.html` through the core. The document's own sandbox policy stays the boundary, as in the page.
+  The app's one script runs in an isolated world of its own (`mailmind-frame`), which the mail's page can't see or
+  reach, and says only that a link was clicked and how tall the content is; the shell checks the link with
+  `LinkRisk` and opens it in the default browser, never in the frame. The frame's look and the plain-text quote
+  fold are written into the document's bytes before WebKit reads them, never by a script.
+- **Links, images and files leave the frame only on a person's say.** A link opens after `LinkRisk`'s check (a
+  warning asks first); remote images load only when asked, as the page's do; an attachment is saved through a save
+  panel or shown in Quick Look, never opened by the app.
 - **Fixtures are fictional.** Every address is at example.test, and the fixture key guards only fictional mail.
 - **Only a release checks for updates.** `MAILMIND_CHECKS_FOR_UPDATES` stays `NO` in `Release/mac.yml`; only
   `just apple release` turns it on. A debug build, `just apple build`'s, a test or a demo never asks the network.
