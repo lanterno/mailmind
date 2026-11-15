@@ -70,76 +70,119 @@ struct SnoozeMenu: View {
     }
 }
 
-/// When to bring the mail back, as the page's snooze chooser asks after `h`: one of the presets (keys 1 to 4), or a
-/// day and an hour of a person's own; and in Snoozed, bringing it back now.
-struct SnoozeUntilSheet: View {
+/// When to bring the mail back, as the mockup's snooze popover asks after `h` (`snoozeMenu()`): one of the presets
+/// (keys 1 to 4), or a day and an hour of a person's own; and in Snoozed, bringing it back now. Its keys come through
+/// `menu`, as a popover's do.
+struct SnoozeChooser: View {
     let copies: [MailCopy]
     let model: AttentionModel
     var canUnsnooze = false
-    @Environment(\.dismiss) private var dismiss
-    @State private var until = SnoozeUntilSheet.tomorrowMorning()
+    let menu: MeadowMenuModel
+    let close: @MainActor () -> Void
+    @State private var picking = false
+    @State private var until = SnoozeChooser.tomorrowMorning()
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(copies.count == 1 ? "Snooze Until" : "Snooze \(copies.count) Messages Until", systemImage: "clock")
-                .font(.headline)
-            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-                ForEach(Self.rows, id: \.self) { row in
-                    GridRow {
-                        ForEach(row, id: \.self) { preset in
-                            presetButton(preset)
-                        }
-                    }
-                }
+        Group {
+            if picking {
+                ownTime
+            } else {
+                MeadowMenu(parts: parts, width: 260, model: menu, close: close, label: title)
             }
-            .controlSize(.large)
-            Divider()
-            DatePicker("Comes back", selection: $until, in: Date()..., displayedComponents: [.date, .hourAndMinute])
-                .datePickerStyle(.graphical)
-                .labelsHidden()
+        }
+        .onAppear { listen() }
+        .onChange(of: picking) { listen() }
+    }
+
+    private var title: String {
+        copies.count == 1 ? String(localized: "Snooze until") : String(localized: "Snooze \(copies.count) until")
+    }
+
+    private var parts: [MeadowMenu.Part] {
+        var parts: [MeadowMenu.Part] = [.title(title)]
+        for (index, preset) in API.SnoozePreset.allCases.enumerated() {
+            parts.append(.item(MeadowMenuItem(id: preset.rawValue, title: Snoozing.words(preset),
+                                              keys: ["\(index + 1)"]) { pick(.preset(preset)) }))
+        }
+        parts.append(.rule)
+        parts.append(.item(MeadowMenuItem(id: "own", title: String(localized: "Pick a date & time…"), icon: .cal,
+                                          closes: false) { picking = true }))
+        if canUnsnooze {
+            parts.append(.rule)
+            parts.append(.item(MeadowMenuItem(id: "unsnooze", title: String(localized: "Unsnooze"), icon: .restore) {
+                let (model, copies) = (model, copies)
+                Task { await model.unsnooze(copies) }
+            }))
+        }
+        return parts
+    }
+
+    /// The keys the chooser takes before the menu's: a preset's digit picks it, as the page's chooser numbers them;
+    /// while a time of a person's own is being picked, Return snoozes until it and the arrows are the pickers'.
+    private func listen() {
+        if picking {
+            menu.items = []
+            menu.onKey = { event in
+                guard event.keyCode == 36 || event.keyCode == 76 else { return false }
+                snoozeUntil()
+                return true
+            }
+        } else {
+            menu.onKey = { event in
+                guard let preset = Self.preset(forKey: event.charactersIgnoringModifiers ?? "") else { return false }
+                close()
+                pick(.preset(preset))
+                return true
+            }
+        }
+    }
+
+    /// The preset a digit picks: 1 to 4, in the menu's order.
+    static func preset(forKey key: String) -> API.SnoozePreset? {
+        guard let digit = Int(key), (1...API.SnoozePreset.allCases.count).contains(digit) else { return nil }
+        return API.SnoozePreset.allCases[digit - 1]
+    }
+
+    /// A day and an hour of a person's own, in the popover.
+    private var ownTime: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            MeadowPaletteSection(title, pop: true)
+            // The day on a calendar, and the hour in a field beside it: the graphical clock would double the width.
+            HStack(alignment: .top, spacing: 10) {
+                DatePicker("Day", selection: $until, in: Date()..., displayedComponents: [.date])
+                    .datePickerStyle(.graphical)
+                DatePicker("Time", selection: $until, displayedComponents: [.hourAndMinute])
+                    .datePickerStyle(.stepperField)
+            }
+            .labelsHidden()
+            .padding(.horizontal, 10)
             Text(until.formatted(date: .complete, time: .shortened))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            HStack {
-                if canUnsnooze {
-                    Button("Unsnooze") {
-                        dismiss()
-                        let (model, copies) = (model, copies)
-                        Task { await model.unsnooze(copies) }
-                    }
-                }
+                .font(.meadow(.ui, 12.5))
+                .foregroundStyle(meadow.ink3)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+            MeadowPopRule()
+            HStack(spacing: 8) {
                 Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Snooze") { pick(.until(until)) }
-                    .keyboardShortcut(.defaultAction)
+                Button("Back") { picking = false }
+                    .meadowButton(.quiet, small: true)
+                Button("Snooze", action: snoozeUntil)
+                    .meadowButton(.primary, small: true)
             }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 4)
         }
-        .padding(20)
-        .frame(width: 400)
+        .fixedSize()
+        .meadowPop()
     }
 
-    /// The presets two to a row, in the page's order.
-    private static let rows: [[API.SnoozePreset]] = stride(from: 0, to: API.SnoozePreset.allCases.count, by: 2).map {
-        Array(API.SnoozePreset.allCases[$0..<min($0 + 2, API.SnoozePreset.allCases.count)])
-    }
-
-    /// A preset's button, with the digit that picks it, as the page's chooser numbers them.
-    private func presetButton(_ preset: API.SnoozePreset) -> some View {
-        let digit = (API.SnoozePreset.allCases.firstIndex(of: preset) ?? 0) + 1
-        return Button { pick(.preset(preset)) } label: {
-            HStack {
-                Text(Snoozing.words(preset))
-                Spacer(minLength: 4)
-                Text(verbatim: "\(digit)").foregroundStyle(.tertiary).monospacedDigit()
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .keyboardShortcut(KeyEquivalent(Character("\(digit)")), modifiers: [])
+    private func snoozeUntil() {
+        close()
+        pick(.until(until))
     }
 
     private func pick(_ when: Snoozing) {
-        dismiss()
         let (model, copies) = (model, copies)
         Task { await model.snooze(copies, when) }
     }

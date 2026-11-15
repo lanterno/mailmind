@@ -39,6 +39,8 @@ final class AppStatus {
     var settingsTab = SettingsTab.accounts
     /// Whether the guide is showing.
     var guiding = false
+    /// Whether the keyboard's legend is over the window.
+    var showingKeys = false
 
     /// New mail's notifications and the Dock's badge.
     let newMail: NewMailAlerts

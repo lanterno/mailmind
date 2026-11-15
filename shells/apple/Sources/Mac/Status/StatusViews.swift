@@ -7,8 +7,10 @@ struct StatusPill: View {
     let status: AppStatus
     @State private var open = false
     @State private var hovering = false
+    @State private var menu = MeadowMenuModel()
     @FocusState private var focused: Bool
     @Environment(\.meadow) private var meadow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         let pill = status.pill
@@ -33,9 +35,11 @@ struct StatusPill: View {
         .onHover { hovering = $0 }
         .help("Sync, reconcile and curation")
         .accessibilityLabel("Sync status: \(pill.text)")
-        .popover(isPresented: $open, arrowEdge: .bottom) {
-            StatusMenu(status: status, close: { open = false })
+        .meadowPopover(isPresented: $open, keys: { menu.key($0) }) {
+            // Settings opens from the window's own environment: the popover's panel is outside the app's scenes.
+            StatusMenu(status: status, model: menu, settings: { openSettings() }, close: { open = false })
         }
+        .onChange(of: open) { _, shown in if shown { menu.at = 0 } }
     }
 }
 
@@ -59,121 +63,134 @@ struct MeadowStatusDot: View {
     }
 }
 
-/// What the status says when asked (`StatusMenu`): how syncing stands, the Inboxes and AI, each account when there
-/// is more than one or one fails, and what a person can start from here.
+/// What the status says when asked (`StatusMenu`, the mockup's `syncPop()`): each account and how it stands, and what
+/// a person can start from here, on a popover's paper; above those, a read-only run's note and AI that is failing.
 struct StatusMenu: View {
     let status: AppStatus
-    let close: () -> Void
-    @Environment(\.openSettings) private var openSettings
-    @State private var inboxes: Int?
+    let model: MeadowMenuModel
+    let settings: @MainActor () -> Void
+    let close: @MainActor () -> Void
+    @Environment(\.meadow) private var meadow
     @State private var notAsked = false
 
     var body: some View {
-        let pill = status.pill
+        MeadowMenu(parts: parts, width: 280, model: model, close: close, label: String(localized: "Sync status"))
+            .task { notAsked = await status.newMail.allowed() == nil }
+    }
+
+    /// How an account stands on the right of its row: can't connect, syncing, or when its mail last came in.
+    static func state(of account: String, digest: API.Digest?, health: [API.AccountStanding],
+                      now: Date) -> (standing: StatusWords.Standing, words: String) {
+        let standing = StatusWords.standing(of: account, digest: digest, health: health)
+        switch standing {
+        case .cantConnect: return (standing, String(localized: "Can’t connect"))
+        case .syncing: return (standing, String(localized: "Syncing…"))
+        case .connected, .unknown:
+            if case .synced(let when, _) = StatusWords.healthLine(health.first { $0.account == account }, now: now),
+               !when.isEmpty {
+                return (standing, String(localized: "Synced \(when)"))
+            }
+            return (standing, standing == .connected ? String(localized: "Connected") : "")
+        }
+    }
+
+    private var parts: [MeadowMenu.Part] {
         let digest = status.digest
         let bad = StatusWords.bad(status.addresses, digest: digest, health: status.health)
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Circle().fill(pill.dot.color).frame(width: 9, height: 9)
-                Text(pill.text).font(.headline)
-            }
-            if digest?.profile == "read-only" {
-                small(String(localized: "MailMind is running read-only: it writes nothing to your mail servers and syncs only when asked. What you file, star or send waits for a full run."))
-            }
-            if let sync = digest?.sync, sync.last != nil, !sync.result.isEmpty {
-                small(String(localized: "Last sync: \(sync.result)"))
-            }
-            small(inboxLine(summarized: digest?.stats.summarized ?? 0))
-            if let ai = digest?.ai {
-                let line = StatusWords.ai(ai)
-                Label { Text(line.text) } icon: { Image(systemName: "wind") }
-                    .font(.callout)
-                    .foregroundStyle(line.failing ? .red : .secondary)
-                if ai.engine != "none" {
-                    Label { Text(StatusWords.aiPrivacy) } icon: { Image(systemName: "lock") }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            let accounts = status.addresses
-            if accounts.count > 1 || !bad.isEmpty {
-                Divider()
-                ForEach(accounts, id: \.self) { account in
-                    let standing = StatusWords.standing(of: account, digest: digest, health: status.health)
-                    HStack(spacing: 8) {
-                        Circle().fill(standing.color).frame(width: 7, height: 7)
-                            .opacity(standing == .unknown ? 0.3 : 1)
-                        Text(status.name(account))
-                        Spacer()
-                        Text(standing.words).font(.caption)
-                            .foregroundStyle(standing == .cantConnect ? .red : .secondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
-            Divider()
-            VStack(alignment: .leading, spacing: 2) {
-                action("Sync Now", "arrow.clockwise", disabled: status.syncing) { Task { await status.syncNow() } }
-                action("Reconcile", "arrow.uturn.backward", note: String(localized: "drop mail deleted elsewhere"),
-                       disabled: status.reconciling) { Task { await status.reconcile() } }
-                if let curate = status.curate {
-                    action("Curate", "leaf", note: String(localized: "noisy senders, rules, audit"), run: curate)
-                }
-                if !bad.isEmpty {
-                    action("Fix Connections in Settings", "slider.horizontal.3") {
-                        status.settingsTab = .accounts
-                        openSettings()
-                    }
-                }
-                if notAsked {
-                    action("Turn On Notifications", "bell") {
-                        Task {
-                            let yes = await status.newMail.ask()
-                            status.say(yes ? String(localized: "Notifications on") : String(localized: "Notifications blocked"))
-                        }
-                    }
-                }
-            }
+        var parts: [MeadowMenu.Part] = []
+        if !status.addresses.isEmpty {
+            parts.append(.title(String(localized: "Accounts")))
+            parts.append(.view(AnyView(accounts)))
+            parts.append(.rule)
         }
-        .padding(16)
-        .frame(width: 340, alignment: .leading)
-        .task {
-            notAsked = await status.newMail.allowed() == nil
-            // The page counts the Inboxes on their servers only when its menu opens: an IMAP scan.
-            inboxes = try? await status.core?.get(API.Get.Stats.self).totals.inInbox
+        if let note = note(digest) {
+            parts.append(.view(AnyView(note)))
+            parts.append(.rule)
+        }
+        parts.append(.item(MeadowMenuItem(id: "sync", title: String(localized: "Check for mail now"), icon: .refresh,
+                                          disabled: status.syncing) { [status] in Task { await status.syncNow() } }))
+        parts.append(.item(MeadowMenuItem(id: "reconcile", title: String(localized: "Reconcile with the servers"),
+                                          detail: String(localized: "Drop mail deleted elsewhere"), icon: .restore,
+                                          disabled: status.reconciling) {
+            [status] in Task { await status.reconcile() }
+        }))
+        if let curate = status.curate {
+            parts.append(.item(MeadowMenuItem(id: "curate",
+                                              title: String(localized: "Tidy up — senders flooding you"),
+                                              icon: .archive, run: curate)))
+        }
+        if notAsked {
+            parts.append(.item(MeadowMenuItem(id: "notify", title: String(localized: "Turn on notifications"),
+                                              icon: .bell) { [status] in
+                Task {
+                    let yes = await status.newMail.ask()
+                    status.say(yes ? String(localized: "Notifications on") : String(localized: "Notifications blocked"))
+                }
+            }))
+        }
+        parts.append(.item(MeadowMenuItem(id: "settings", title: bad.isEmpty
+            ? String(localized: "Sync & account settings") : String(localized: "Fix connections in Settings"),
+                                          icon: bad.isEmpty ? .sliders : .alert) { [status, settings] in
+            status.settingsTab = .accounts
+            settings()
+        }))
+        return parts
+    }
+
+    /// Each account (`.health`): its dot, its name and address, and how it stands.
+    private var accounts: some View {
+        VStack(spacing: 0) {
+            ForEach(status.addresses, id: \.self) { account in
+                let state = Self.state(of: account, digest: status.digest, health: status.health, now: status.now)
+                MeadowHealthRow(dot: dot(state.standing), title: status.name(account), detail: account,
+                                state: state.words, stateColor: state.standing == .cantConnect ? meadow.rust : nil)
+            }
         }
     }
 
-    private func inboxLine(summarized: Int) -> String {
-        let first = inboxes.map { String(localized: "\($0.formatted()) in your inboxes") }
-            ?? String(localized: "counting your inboxes…")
-        return first + " · " + String(localized: "\(summarized.formatted()) summarized")
-    }
-
-    private func small(_ text: String) -> some View {
-        Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func action(_ title: LocalizedStringKey, _ symbol: String, note: String? = nil, disabled: Bool = false,
-                        run: @escaping @MainActor () -> Void) -> some View
-    {
-        Button {
-            close()
-            run()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: symbol).frame(width: 18)
-                Text(title)
-                if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
-                Spacer()
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, 4)
+    private func dot(_ standing: StatusWords.Standing) -> Color {
+        switch standing {
+        case .connected: meadow.moss
+        case .syncing: meadow.sun
+        case .cantConnect: meadow.rust
+        case .unknown: meadow.ink3.opacity(0.5)
         }
-        .buttonStyle(.plain)
-        .disabled(disabled)
+    }
+
+    /// What a person should know before they start anything: that the run is read-only, and AI failing, in rust. The
+    /// day's spend and how AI treats mail are Settings' to say.
+    private func note(_ digest: API.Digest?) -> AnyView? {
+        let readOnly = digest?.profile == "read-only"
+        let ai = digest.map { StatusWords.ai($0.ai) }
+        guard readOnly || ai?.failing == true else { return nil }
+        return AnyView(VStack(alignment: .leading, spacing: 4) {
+            if readOnly {
+                line(String(localized: """
+                    MailMind is running read-only: it writes nothing to your mail servers and syncs only when asked. \
+                    What you file, star or send waits for a full run.
+                    """))
+            }
+            if let ai, ai.failing {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    MeadowIconView(.wind, size: 13).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                    line(ai.text, colour: meadow.rust)
+                }
+                .foregroundStyle(meadow.rust)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading))
+    }
+
+    private func line(_ text: String, colour: Color? = nil) -> some View {
+        Text(text)
+            .font(.meadow(.ui, 12.5))
+            .foregroundStyle(colour ?? meadow.ink3)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
+
 
 /// Under the top bar, until it is closed, for as long as an account can't connect (`AccountAlert`), in the light's
 /// sun.

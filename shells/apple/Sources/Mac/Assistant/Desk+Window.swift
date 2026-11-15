@@ -29,6 +29,15 @@ final class Desk {
             case .snoozeUntil: "snooze"
             }
         }
+
+        /// Whether it floats over the window (`WindowOverlays`) rather than opening as a sheet: Ask and a bulk action
+        /// in the palette, the snooze chooser as a popover.
+        var floats: Bool {
+            switch self {
+            case .ask, .plan, .snoozeUntil: true
+            case .review, .commitments, .curate, .filter: false
+            }
+        }
     }
 
     @ObservationIgnored let link = CoreLink(asking: { await OverLimitQuestion.onScreen.ask($0) })
@@ -321,8 +330,8 @@ extension FocusedValues {
     @Entry var mailDesk: Desk?
 }
 
-/// What the desk adds to the window, in one modifier: the desk in the environment and the menu bar's reach, the
-/// notice at the window's foot, and the sheets.
+/// What the desk adds to the window, in one modifier: the desk in the environment and the menu bar's reach, and the
+/// sheets that don't float over the window.
 struct DeskSurfaces: ViewModifier {
     let app: MailApp
     @State private var desk = Desk()
@@ -331,11 +340,9 @@ struct DeskSurfaces: ViewModifier {
         content
             .environment(desk)
             .focusedSceneValue(\.mailDesk, desk)
-            .overlay(alignment: .bottom) {
-                DeskNoticeBanner(notices: desk.notices) { Task { await desk.undo() } }
-                    .animation(.snappy, value: desk.notices.shown)
-            }
-            .sheet(item: $desk.sheet) { sheet in
+            // Ask, a bulk action and the snooze chooser float over the window (`WindowOverlays`), as its notice does.
+            .sheet(item: Binding(get: { desk.sheet?.floats == false ? desk.sheet : nil },
+                                 set: { desk.sheet = $0 })) { sheet in
                 DeskSheetView(sheet: sheet, desk: desk)
             }
             .task(id: app.stage) {
@@ -358,12 +365,8 @@ private struct DeskSheetView: View {
 
     var body: some View {
         switch sheet {
-        case .ask:
-            AskSheet { question in Task { await desk.ask(question) } }
-        case .plan:
-            PlanSheet(model: desk.plan, showSearch: desk.showSearch)
-                .onChange(of: desk.plan.doing == nil) { _, done in if done { desk.sheet = nil } }
-                .onDisappear { if desk.plan.doing != nil { desk.plan.stop() } }
+        case .ask, .plan, .snoozeUntil:
+            EmptyView()
         case .review:
             ReviewSheet(model: desk.review, open: desk.open)
         case .commitments:
@@ -375,8 +378,6 @@ private struct DeskSheetView: View {
             }
         case .filter(let form):
             FilterSheet(form: form, model: desk.curate)
-        case .snoozeUntil(let copies, let canUnsnooze):
-            SnoozeUntilSheet(copies: copies, model: desk.attention, canUnsnooze: canUnsnooze)
         }
     }
 }

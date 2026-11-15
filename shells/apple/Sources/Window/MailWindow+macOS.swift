@@ -12,6 +12,9 @@ struct MailWindow: View {
             .frame(minWidth: 900, minHeight: 560)
             .task { await app.start() }
             .task { await HomeMeasure.shared.watch(app) }
+            // The palette and the dialogs on the scrim, the snooze chooser and the toasts; inside the desk's surfaces,
+            // whose desk the palette asks and acts with.
+            .modifier(WindowOverlays(mailbox: app.mailbox))
             // Settings, the first run and the status: alerts, the welcome and the guide.
             .modifier(StatusHooks(core: app.stage == .open ? app.core : nil, mailbox: app.mailbox))
             // The assistant, curation, attention and the calendar: their sheets, the mailbox's hooks (Mac/Assistant).

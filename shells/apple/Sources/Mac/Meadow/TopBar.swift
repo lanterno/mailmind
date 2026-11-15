@@ -14,7 +14,6 @@ struct MeadowTopBar: View {
     var lights: CGFloat = WindowLights.room
     @Environment(\.meadow) private var meadow
     @Environment(\.meadowLight) private var light
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 12) {
@@ -62,7 +61,7 @@ struct MeadowTopBar: View {
     }
 
     private var keysButton: some View {
-        Button { openWindow(id: HelpWindow.id) } label: { MeadowIconView(.keyboard) }
+        Button { status.showingKeys = true } label: { MeadowIconView(.keyboard) }
             .meadowButton(icon: true)
             .help("Keyboard shortcuts (?)")
             .accessibilityLabel("Keyboard shortcuts")

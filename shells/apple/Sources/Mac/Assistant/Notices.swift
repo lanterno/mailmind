@@ -44,36 +44,23 @@ final class DeskNotices {
     }
 }
 
-/// The notice at the foot of the window, with Undo when what it says can be taken back.
+/// The notice as one of the window's toasts, with Undo when what it says can be taken back. Once the window relays
+/// notices to the mailbox, its toast says them instead, and this stays empty.
 struct DeskNoticeBanner: View {
     let notices: DeskNotices
     let undo: () -> Void
 
     var body: some View {
         if let notice = notices.shown {
-            HStack(spacing: 12) {
-                Text(notice.text)
-                    .lineLimit(2)
+            MeadowToast(icon: MailboxToast.icon(notice.text), text: Text(notice.text)) {
                 if notice.undoable {
-                    Button("Undo") {
+                    MeadowToastButton(title: String(localized: "Undo"), icon: .undo) {
                         notices.clear()
                         undo()
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.tint)
-                    .fontWeight(.semibold)
                 }
             }
-            .font(.callout)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.separator))
-            .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-            .padding(.bottom, 18)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
             .id(notice.id)
-            .accessibilityElement(children: .combine)
         }
     }
 }

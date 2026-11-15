@@ -163,41 +163,4 @@ private struct SourceRow: View {
         address.split(separator: "@").first.map(String.init) ?? address
     }
 }
-
-/// The question, asked in a sheet from the Assistant menu or the palette.
-struct AskSheet: View {
-    let ask: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var question = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Ask Your Mail", systemImage: "sparkles").font(.headline)
-            TextField("When is the dentist appointment?", text: $question, axis: .vertical)
-                .lineLimit(1...4)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(submit)
-            Text("Claude reads your mail to answer and cites what it read. Nothing is changed.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Ask", action: submit)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 440)
-    }
-
-    private func submit() {
-        let asked = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !asked.isEmpty else { return }
-        dismiss()
-        ask(asked)
-    }
-}
 #endif

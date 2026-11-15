@@ -154,7 +154,7 @@ struct OutboxButton: View {
                 .meadowButton()
                 .help("Outbox and changes waiting: \(tray.active + tray.failed)")
                 .accessibilityLabel("Outbox: \(tray.active + tray.failed) waiting")
-                .popover(isPresented: $shown, arrowEdge: .bottom) {
+                .meadowPopover(isPresented: $shown) {
                     OutboxList(tray: tray, readOnly: composing.digest?.profile == "read-only")
                         .task { await tray.load() }
                 }
@@ -169,131 +169,145 @@ struct OutboxButton: View {
     }
 }
 
+/// What waits to go out, in the outbox's popover: the changes held for a server, the drafts waiting and the outbox's
+/// mail, each with how it stands and what can be done about it, on a popover's paper.
 struct OutboxList: View {
     let tray: OutboxTray
     let readOnly: Bool
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                if !tray.held.isEmpty { heading("Changes waiting") }
+        MeadowFitScroll(maxHeight: 448) {
+            VStack(alignment: .leading, spacing: 0) {
+                if !tray.held.isEmpty { MeadowPaletteSection(String(localized: "Changes waiting"), pop: true) }
                 ForEach(tray.held) { change in
                     let stuck = change.state == "error"
-                    row(state: stuck ? "stuck" : change.state == "running" ? "trying" : "waiting", failed: stuck,
-                        title: "\(OutboxTray.whatItDoes(change)): \(change.subject.flatMap { $0.isEmpty ? nil : $0 } ?? "(no subject)")",
-                        detail: "\(OutboxTray.why(change, readOnly: readOnly)) · \(change.account)") {
-                        if stuck { Button("Retry") { Task { await tray.act("retry", change.id) } } }
-                        Button("Discard") { Task { await tray.act("discard", change.id) } }
+                    OutboxRow(state: stuck ? "stuck" : change.state == "running" ? "trying" : "waiting", failed: stuck,
+                              title: "\(OutboxTray.whatItDoes(change)): \(subject(change.subject))",
+                              detail: "\(OutboxTray.why(change, readOnly: readOnly)) · \(change.account)") {
+                        if stuck { act("Retry") { await tray.act("retry", change.id) } }
+                        act("Discard") { await tray.act("discard", change.id) }
                     }
                 }
-                if !tray.drafts.isEmpty { heading("Drafts waiting") }
+                if !tray.drafts.isEmpty { MeadowPaletteSection(String(localized: "Drafts waiting"), pop: true) }
                 ForEach(tray.drafts) { draft in
-                    row(state: draft.discarding ? "discarded" : "draft", failed: false,
-                        title: draft.subject.isEmpty ? "(no subject)" : draft.subject,
-                        detail: "\(OutboxTray.why(draft, readOnly: readOnly)) · \(draft.account)") {
+                    OutboxRow(state: draft.discarding ? "discarded" : "draft", failed: false,
+                              title: draft.subject.isEmpty ? "(no subject)" : draft.subject,
+                              detail: "\(OutboxTray.why(draft, readOnly: readOnly)) · \(draft.account)") {
                         if !draft.discarding {
-                            Button("Edit") { Task { await Composing.shared.editDraft(nil, draftId: draft.id) } }
-                            Button("Discard") { Task { await tray.discardDraft(draft.id) } }
+                            act("Edit") { await Composing.shared.editDraft(nil, draftId: draft.id) }
+                            act("Discard") { await tray.discardDraft(draft.id) }
                         }
                     }
                 }
-                if !tray.items.isEmpty || (tray.held.isEmpty && tray.drafts.isEmpty) { heading("Outbox") }
+                if !tray.items.isEmpty || (tray.held.isEmpty && tray.drafts.isEmpty) {
+                    MeadowPaletteSection(String(localized: "Outbox"), pop: true)
+                }
                 if tray.items.isEmpty && tray.held.isEmpty && tray.drafts.isEmpty {
-                    Text("Nothing queued.").foregroundStyle(.secondary)
+                    Text("Nothing queued.")
+                        .font(.meadow(.ui, 13))
+                        .foregroundStyle(meadow.ink3)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
                 }
                 ForEach(tray.items) { item in
                     let to = item.to.joined(separator: ", ") + (item.bccCount > 0 ? " +\(item.bccCount) bcc" : "")
                     let when = item.scheduled ? " · \(SendTimes.words(item.nextAttemptAt))" : ""
-                    row(state: OutboxTray.label(item), failed: item.state == "error", title: item.subject,
-                        detail: "to \(to)\(when)\(item.error.map { " · \($0)" } ?? "")") {
+                    OutboxRow(state: OutboxTray.label(item), failed: item.state == "error", title: item.subject,
+                              detail: "to \(to)\(when)\(item.error.map { " · \($0)" } ?? "")") {
                         if item.scheduled || item.retrying {
-                            Button(item.retrying ? "Try Now" : "Send Now") { Task { await tray.sendNow(item.id) } }
-                            Button("Cancel") { Task { await tray.cancel(item.id) } }
+                            act(item.retrying ? "Try Now" : "Send Now") { await tray.sendNow(item.id) }
+                            act("Cancel") { await tray.cancel(item.id) }
                         }
                         if item.state == "error" {
-                            Button(item.unsure ? "Send Again" : "Retry") { Task { await tray.retry(item.id) } }
+                            act(item.unsure ? "Send Again" : "Retry") { await tray.retry(item.id) }
                         }
                     }
                 }
             }
-            .padding(14)
         }
-        .frame(width: 420)
-        .frame(maxHeight: 460)
+        .meadowPop(width: 420)
     }
 
-    private func heading(_ text: String) -> some View {
-        Text(text).font(.headline).padding(.top, 4)
+    private func subject(_ subject: String?) -> String {
+        subject.flatMap { $0.isEmpty ? nil : $0 } ?? "(no subject)"
     }
 
-    private func row(state: String, failed: Bool, title: String, detail: String,
-                     @ViewBuilder actions: () -> some View) -> some View
-    {
-        HStack(alignment: .top, spacing: 8) {
-            Text(state)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background((failed ? Color.red : Color.secondary).opacity(0.15), in: Capsule())
-                .foregroundStyle(failed ? .red : .secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).lineLimit(2)
-                Text(detail).font(.caption).foregroundStyle(failed ? .red : .secondary).lineLimit(2)
-            }
-            Spacer(minLength: 6)
-            HStack(spacing: 4) { actions() }
-                .controlSize(.small)
-        }
-        .accessibilityElement(children: .combine)
+    private func act(_ title: LocalizedStringKey, _ run: @escaping @MainActor () async -> Void) -> some View {
+        Button(title) { Task { await run() } }
+            .meadowButton(small: true)
     }
 }
 
-/// What a send is doing once its composer has gone, at the foot of the reader: the countdown with Undo, the time
-/// it went out for, or what failed with Edit; and what the window says for a moment.
+/// One thing waiting: how it stands on a chip, sun's when it failed, what it is and why it waits, and its buttons.
+private struct OutboxRow<Actions: View>: View {
+    let state: String
+    let failed: Bool
+    let title: String
+    let detail: String
+    @ViewBuilder let actions: () -> Actions
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            MeadowChip(state, tone: failed ? .sun : .plain)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.meadow(.ui, 13.5, .semibold))
+                    .foregroundStyle(meadow.ink)
+                Text(detail)
+                    .font(.meadow(.ui, 12))
+                    .foregroundStyle(failed ? meadow.rust : meadow.ink3)
+            }
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 6)
+            HStack(spacing: 4) { actions() }.fixedSize()
+        }
+        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+    }
+}
+
+/// What a send is doing once its composer has gone, as the window's toasts say it: the seconds with Undo, the time
+/// it went out for, or what failed with Edit; and what writing says for a moment.
 struct SendFloatView: View {
     private var composing: Composing { .shared }
 
     var body: some View {
-        VStack(spacing: 8) {
-            if let float = composing.float {
-                floating(float)
-            }
-            if let notice = composing.notice {
-                Text(notice)
-                    .font(.callout)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(.regularMaterial, in: Capsule())
-                    .shadow(radius: 3, y: 1)
-                    .transition(.opacity)
-            }
+        if let float = composing.float {
+            floating(float)
         }
-        .padding(.bottom, 16)
-        .animation(.easeOut(duration: 0.15), value: composing.notice)
-        .animation(.easeOut(duration: 0.15), value: composing.float)
+        if let notice = composing.notice {
+            MeadowToast(notice)
+        }
     }
 
+    @ViewBuilder
     private func floating(_ float: SendFloat) -> some View {
-        HStack(spacing: 10) {
-            switch float {
-            case .progress(let text, let clock), .done(let text, let clock):
-                if clock { Image(systemName: "clock") }
-                Text(text)
-            case .countdown(_, let left, _):
-                Text("↑ Sending in \(left)s…").monospacedDigit()
-                Button("Undo") { composing.undo() }
-            case .failed(let text):
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                Text(text)
-                Button("Edit") { composing.editFailed() }
-                Button("Dismiss") { composing.dismissFloat() }
+        switch float {
+        case .progress(let text, let clock), .done(let text, let clock):
+            let said = Self.said(text, clock: clock)
+            MeadowToast(icon: said.icon, said.words)
+        case .countdown(_, let left, _):
+            // The seconds in tabular figures, a little quieter (`.toast .count`), as the mockup counts them.
+            let count = Text(verbatim: "\(left)s").monospacedDigit().foregroundStyle(.secondary)
+            MeadowToast(icon: .send, text: Text("Sending in \(count)")) {
+                MeadowToastButton(title: String(localized: "Undo"), icon: .undo) { composing.undo() }
+            }
+        case .failed(let text):
+            MeadowToast(icon: .alert, text: Text(text)) {
+                MeadowToastButton(title: String(localized: "Edit")) { composing.editFailed() }
+                MeadowToastButton(title: String(localized: "Dismiss")) { composing.dismissFloat() }
             }
         }
-        .font(.callout)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: Capsule())
-        .shadow(radius: 3, y: 1)
+    }
+
+    /// A float's words without the arrow or tick they start with, which the toast's icon says instead.
+    static func said(_ text: String, clock: Bool) -> (icon: MeadowIcon, words: String) {
+        let words = text.replacingOccurrences(of: #"^[↑✓]\s*"#, with: "", options: .regularExpression)
+        if clock { return (.clock, words) }
+        return (text.hasPrefix("✓") ? .check : .send, words)
     }
 }
 #endif

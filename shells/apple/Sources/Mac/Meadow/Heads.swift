@@ -381,6 +381,8 @@ struct MeadowPaneBar: View {
         let snooze = commands.first { $0.id == "snooze" }
         verb(.clock, "Snooze", key: "H", help: "Snooze · H", fold: fold) { snooze?.run() }
             .disabled(snooze == nil)
+            // Its chooser opens under it, from here or from H.
+            .meadowAnchor("snooze")
         if fold.secondary {
             let later = commands.first { $0.id == "later" }
             let done = desk?.stack == .replyLater

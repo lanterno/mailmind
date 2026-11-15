@@ -93,7 +93,6 @@ struct ReaderPane: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .overlay(alignment: .bottom) { SendFloatView() }
         .focusedSceneValue(\.mailWriting, MailWriting(replyTo: replyTo, draft: draft, current: current))
         .task {
             composing.openWindow = { id in openWindow(id: ComposeWindow.scene, value: id) }

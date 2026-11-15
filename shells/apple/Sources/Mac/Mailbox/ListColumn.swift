@@ -2,9 +2,10 @@
 import SwiftUI
 
 /// The list column: the place's head (its name, the Inbox's tabs, a search's scope, a lane's, the rows marked), its
-/// mail, a lane or the Document Hub, "Load more" when there is more, and what a person was last told, with its Undo.
-/// The brief, in the pane beside the Inbox, leaves the Inbox’s list here; an answer and the Screener stand here.
-/// The search field is the top bar's (Mac/Meadow).
+/// mail, a lane or the Document Hub, and "Load more" when there is more. The brief, in the pane beside the Inbox,
+/// leaves the Inbox’s list here; an answer and the Screener stand here. The search field is the top bar's
+/// (Mac/Meadow); what a person was last told, the palette, Move To and Save View float over the window
+/// (`WindowOverlays`).
 struct MailboxColumn: View {
     let app: MailApp
     @Bindable var mailbox: Mailbox
@@ -21,10 +22,6 @@ struct MailboxColumn: View {
                 // Mail that landed elsewhere, and what came in since you last looked (Mac/Assistant).
                 .overlay(alignment: .top) { DeskNewMailPill() }
         }
-        .overlay(alignment: .bottom) { ToastView(mailbox: mailbox) }
-        .sheet(item: $mailbox.moving) { ask in MoveToSheet(mailbox: mailbox, ask: ask) }
-        .sheet(isPresented: $mailbox.paletteOpen) { PaletteSheet(mailbox: mailbox) }
-        .sheet(isPresented: saving) { SaveViewSheet(mailbox: mailbox, query: mailbox.savingView ?? "") }
         .sheet(isPresented: carding) {
             if let address = mailbox.contact { ContactCard(mailbox: mailbox, address: address) }
         }
@@ -57,10 +54,6 @@ struct MailboxColumn: View {
         }
     }
 
-    private var saving: Binding<Bool> {
-        Binding(get: { mailbox.savingView != nil }, set: { if !$0 { mailbox.savingView = nil } })
-    }
-
     private var carding: Binding<Bool> {
         Binding(get: { mailbox.contact != nil }, set: { if !$0 { mailbox.contact = nil } })
     }
@@ -71,52 +64,6 @@ extension Place {
     var isDesk: Bool {
         if case .desk = self { return true }
         return false
-    }
-}
-
-/// What a person was last told, with its Undo, at the foot of the list for a moment (lib/toast.tsx). VoiceOver says it
-/// as it comes.
-struct ToastView: View {
-    let mailbox: Mailbox
-
-    var body: some View {
-        ZStack {
-            if let toast = mailbox.toast {
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(toast.text).font(.callout.weight(.medium))
-                        if let detail = toast.detail, !detail.isEmpty {
-                            Text(detail).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    if toast.undo != nil {
-                        Button("Undo") { mailbox.undo() }
-                            .buttonStyle(.borderless)
-                            .fontWeight(.semibold)
-                            .help("Undo (⌘Z)")
-                    }
-                    Button {
-                        mailbox.dismissToast()
-                    } label: {
-                        Image(systemName: "xmark").font(.caption)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel("Dismiss")
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(.regularMaterial, in: .capsule)
-                .overlay(Capsule().strokeBorder(.separator))
-                .shadow(radius: 6, y: 2)
-                .padding(14)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .id(toast.id)
-                .onAppear {
-                    AccessibilityNotification.Announcement(toast.text).post()
-                }
-            }
-        }
-        .animation(.snappy(duration: 0.2), value: mailbox.toast)
     }
 }
 #endif

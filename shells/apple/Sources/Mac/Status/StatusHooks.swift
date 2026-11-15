@@ -1,10 +1,11 @@
 #if os(macOS)
 import SwiftUI
 
-/// What settings, the first run and the status add to the mail window, as one modifier the window applies: a moment's
-/// notice at the foot, the welcome in place of everything while there is no account, the guide, offered once, and the
-/// keys and palette entries for help, Settings and a sync. The status, a meeting's reminder and the alert while an
-/// account can't connect stand in Meadow's top bar and under it (Mac/Meadow).
+/// What settings, the first run and the status add to the mail window, as one modifier the window applies: the
+/// welcome in place of everything while there is no account, the guide, offered once, and the keys and palette entries
+/// for the keyboard's legend, Settings and a sync. Its moment's notice is one of the window's toasts. The status, a
+/// meeting's reminder and the alert while an account can't connect stand in Meadow's top bar and under it
+/// (Mac/Meadow).
 ///
 /// It is handed the core once the window has opened it, and hands it to `AppStatus`.
 struct StatusHooks: ViewModifier {
@@ -12,7 +13,6 @@ struct StatusHooks: ViewModifier {
     /// The window's mailbox, whose keys and palette reach help, Settings, a sync and a reconcile.
     var mailbox: Mailbox?
     var status = AppStatus.shared
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     func body(content: Content) -> some View {
@@ -21,7 +21,6 @@ struct StatusHooks: ViewModifier {
             .overlay {
                 if status.firstRun { Welcome(status: status) }
             }
-            .overlay(alignment: .bottom) { NoticeBanner(status: status) }
             .sheet(isPresented: $status.guiding) {
                 GuideSheet(steps: Guide.steps(ai: status.digest?.ai.engine != "none",
                                               singleKeys: status.preferences?.singleKeys ?? true)) {
@@ -41,14 +40,15 @@ struct StatusHooks: ViewModifier {
     }
 
     private func joinMailbox() {
-        let status = status, openWindow = openWindow, openSettings = openSettings
+        let status = status, openSettings = openSettings
         mailbox?.join("status") { mailbox in
-            mailbox.keys["?"] = { openWindow(id: HelpWindow.id) }
+            mailbox.keys["?"] = { status.showingKeys = true }
             mailbox.keys[","] = { openSettings() }
             mailbox.more.append { _ in
                 [
-                    MailCommand(id: "help", group: .commands, label: String(localized: "Keyboard help"), hint: "?") {
-                        openWindow(id: HelpWindow.id)
+                    MailCommand(id: "help", group: .commands, label: String(localized: "Keyboard shortcuts"),
+                                hint: "?") {
+                        status.showingKeys = true
                     },
                     MailCommand(id: "settings", group: .commands, label: String(localized: "Settings"), hint: ",") {
                         openSettings()
