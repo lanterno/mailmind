@@ -74,6 +74,14 @@ Python app gets fixes only.
 - **Real app identifiers** · medium value · effort S · [#15](https://github.com/lanterno/mailmind/issues/15) — `app.mailmind` is a placeholder on Android
   (`shells/android/app/build.gradle.kts`, the Kotlin package in `core/crates/mm-ffi/uniffi.toml`); the Apple app is
   `io.github.lanterno.mailmind`. Android's needs the domain and the entity the store listings will name (#27).
+- **Make Gmail's App Password painless to set up** · medium value · effort S · [#46](https://github.com/lanterno/mailmind/issues/46) —
+  Gmail and Workspace log in with an App Password, the hardest step of adding an account. Recognise a Google address
+  and choose its preset, open Google's App Password page from the form with three short steps beside it, take the
+  password with the spaces Google shows, test the connection at once and say plainly what failed.
+- **Sign in with Google and Microsoft** · high value · effort L · [#47](https://github.com/lanterno/mailmind/issues/47) — Sign in in the browser, as Spark
+  does, in place of an App Password: OAuth for an installed app, the token in the Keychain, XOAUTH2 in `mm-imap` and
+  `mm-smtp`. Microsoft can come first; Google waits on the owner: a Cloud project, restricted-scope verification for
+  `https://mail.google.com/` (and perhaps the Gmail API in place of IMAP), and possibly a yearly security assessment.
 - **Tauri's accepted advisories** · medium value · effort S · [#16](https://github.com/lanterno/mailmind/issues/16) — `shells/desktop/src-tauri/osv-scanner.toml` ignores seven
   until 2027-02-12. Upgrade past them, or look at each again, before then.
 
