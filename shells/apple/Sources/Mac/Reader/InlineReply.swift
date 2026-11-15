@@ -166,9 +166,9 @@ private struct OpenReply: View {
     @State private var translating = false
     @State private var language = ""
     @Environment(\.meadow) private var meadow
+    @Environment(\.meadowLight) private var light
 
     private var composing: Composing { .shared }
-    private var prefs: ReadingPrefs { ReadingPrefs(composing.preferences) }
 
     /// The rewrites the box offers, as the mockup names them.
     private static let rewrites: [(op: API.RewriteOp, label: LocalizedStringKey)] = [
@@ -253,30 +253,19 @@ private struct OpenReply: View {
         .padding(.vertical, 10)
     }
 
-    /// The text (`.ir-body`), in the reading face and size, its lines as far apart as the mockup sets a reply's.
+    /// The text (`.ir-body`), as the compose dialog sets a message's: the reading face, its lines 1.65 apart.
     private var text: some View {
-        let size = CGFloat(MailLook.size(prefs.look.size))
-        let font: NSFont = switch prefs.look.font {
-        case .sans: .meadow(.read, size)
-        case .serif:
-            NSFont(descriptor: NSFont.systemFont(ofSize: size).fontDescriptor.withDesign(.serif)
-                       ?? NSFont.systemFont(ofSize: size).fontDescriptor, size: size)
-                ?? .systemFont(ofSize: size)
-        case .mono: .monospacedSystemFont(ofSize: size - 1, weight: .regular)
-        }
+        let look = ComposeTextLook(meadow, light: light)
         return ComposeTextView(composer: composer, text: composer.body, selectionRequest: composer.selectionRequest,
-                               focusBody: composer.focusRequest == .body,
-                               look: .init(font: font, lineHeight: 1.65, color: NSColor(meadow.ink),
-                                           inset: NSSize(width: 12, height: 12)),
-                               commandReturn: send)
-            .frame(height: max(190, size * 1.65 * 7 + 24))
+                               focusBody: composer.focusRequest == .body, look: look, commandReturn: send)
+            .frame(height: max(190, ComposeTextLook.size * ComposeTextLook.lineHeight * 7 + 24))
             .overlay(alignment: .topLeading) {
                 if composer.body.isEmpty {
                     Text("Write your reply…")
-                        .font(Font(font))
+                        .font(Font(look.font))
                         .foregroundStyle(meadow.ink3)
-                        .padding(.horizontal, 17)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, ComposeTextLook.inset.width)
+                        .padding(.top, ComposeTextLook.inset.height)
                         .allowsHitTesting(false)
                 }
             }
