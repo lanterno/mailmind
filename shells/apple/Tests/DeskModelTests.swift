@@ -334,6 +334,18 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(model.brief, DeskFixture.brief)
     }
 
+    func testTheRailsTalliesAreReadOnceTheCoreIsReachedWhenTheRailAskedFirst() async {
+        scriptTheBrief(briefing: .brief(DeskFixture.brief))
+        let desk = Desk()
+        await desk.brief.keepTallied()?.value
+        XCTAssertNil(desk.brief.digest, "the rail showed before the window's core was open")
+
+        desk.connect(routes)
+        await until { desk.brief.digest != nil }
+        XCTAssertEqual(desk.brief.needs.count, 3, "the rail's count")
+        XCTAssertEqual(routes.sent("GET", "/api/digest").count, 1)
+    }
+
     func testMailChangingReadsOnlyTheTalliesUntilTheBriefIsOpenAndABurstReadsOnceMore() async {
         scriptTheBrief(briefing: .brief(DeskFixture.brief))
         let model = briefModel()
