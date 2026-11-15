@@ -7,6 +7,8 @@ final class FakeRoutes: Routes, @unchecked Sendable {
         let path: String
         let query: [String: String]
         let body: JSONValue
+        /// Sent with the person's leave to go over today's AI limit.
+        let overLimit: Bool
     }
 
     private let lock = NSLock()
@@ -39,9 +41,18 @@ final class FakeRoutes: Routes, @unchecked Sendable {
         return try reply(R.path, [:], sent)
     }
 
-    private func reply<A: Decodable>(_ path: String, _ query: [String: String], _ body: JSONValue) throws -> A {
+    func postOverLimit<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer
+        where R.Answer: Decodable
+    {
+        let sent = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(body))
+        return try reply(R.path, [:], sent, overLimit: true)
+    }
+
+    private func reply<A: Decodable>(_ path: String, _ query: [String: String], _ body: JSONValue,
+                                     overLimit: Bool = false) throws -> A
+    {
         let make = lock.withLock { () -> (@Sendable (JSONValue) throws -> String)? in
-            made.append(Call(path: path, query: query, body: body))
+            made.append(Call(path: path, query: query, body: body, overLimit: overLimit))
             return answers[path]
         }
         guard let make else { throw FakeRoutes.problem(404, "Not found") }
@@ -53,6 +64,13 @@ final class FakeRoutes: Routes, @unchecked Sendable {
         Problem(CoreAnswer(status: status, contentType: "application/problem+json", headers: [],
                            body: Data(#"{"title": "\#(title)", "status": \#(status)}"#.utf8)))
     }
+
+    /// Today's AI limit reached, as the server says it: $15.25 spent of $15.
+    static let overLimit = Problem(CoreAnswer(status: 402, contentType: "application/problem+json", headers: [], body: Data(#"""
+        {"type": "/problems/over-limit", "title": "Over the daily AI limit", "status": 402,
+         "detail": "today's AI spending has reached the daily limit", "over_limit": true,
+         "spent_micros": 15250000, "limit_micros": 15000000}
+        """#.utf8)))
 }
 
 extension JSONValue {

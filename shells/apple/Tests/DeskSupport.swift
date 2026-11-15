@@ -12,6 +12,8 @@ final class DeskRoutes: RouteCaller, @unchecked Sendable {
         let path: String
         let query: [String: String]
         let body: JSONValue?
+        /// Sent with the person's leave to go over today's AI limit.
+        let overLimit: Bool
     }
 
     private let lock = NSLock()
@@ -57,6 +59,13 @@ final class DeskRoutes: RouteCaller, @unchecked Sendable {
         return try Core.decoded(R.Answer.self, from: reply("POST", R.path, [:], sent))
     }
 
+    func postOverLimit<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer
+        where R.Answer: Decodable
+    {
+        let sent = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(body))
+        return try Core.decoded(R.Answer.self, from: reply("POST", R.path, [:], sent, overLimit: true))
+    }
+
     func document<R: GetRoute>(_ route: R.Type, _ query: KeyValuePairs<String, String?>) async throws -> NotJSON
         where R.Answer == NotJSON
     {
@@ -65,13 +74,13 @@ final class DeskRoutes: RouteCaller, @unchecked Sendable {
         return NotJSON(data: answer.body, contentType: answer.contentType)
     }
 
-    private func reply(_ method: String, _ path: String, _ query: KeyValuePairs<String, String?>, _ body: JSONValue?)
-        -> CoreAnswer
+    private func reply(_ method: String, _ path: String, _ query: KeyValuePairs<String, String?>, _ body: JSONValue?,
+                       overLimit: Bool = false) -> CoreAnswer
     {
         var named: [String: String] = [:]
         for (key, value) in query { if let value { named[key] = value } }
         return lock.withLock {
-            log.append(Sent(method: method, path: path, query: named, body: body))
+            log.append(Sent(method: method, path: path, query: named, body: body, overLimit: overLimit))
             let key = "\(method) \(path)"
             guard var queue = answers[key], let next = queue.first else {
                 return CoreAnswer(status: 404, contentType: "application/problem+json", headers: [], body: Data(

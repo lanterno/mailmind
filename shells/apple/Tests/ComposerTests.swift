@@ -361,6 +361,7 @@ final class FakeHost: ComposeHost {
     var tone = API.DraftTone.balanced
     var attachLimit: Int?
     var aiOn = true
+    var asksOverLimit: AskOverLimit?
     var snippets: [API.Snippet] = []
     var signatures: [String: String] = [:]
     var clockNow = 100.0
