@@ -49,47 +49,70 @@ struct UpcomingList: View {
     let events: [API.UpcomingEvent]
     let now: Date
     let open: (MailCopy) -> Void
+    /// The window's answers to invites: where it has them, an invite asking for one offers Accept and Open.
+    var replies: InviteReplies?
     @Environment(\.meadow) private var meadow
 
     /// Each event as the mockup's `.ev`: when in a column of its own, the day or the hour over the other, then its
-    /// title, which opens the invite's message, and where and who under it.
+    /// title, which opens the invite's message, and where and who under it; under an invite, its answer (`.acts`).
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(events.enumerated()), id: \.offset) { _, event in
-                let when = EventWhen.short(start: event.start, allDay: event.allDay, now: now)
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(when.big)
-                            .font(.meadow(.ui, 13, .heavy))
-                            .monospacedDigit()
-                            .foregroundStyle(meadow.ink)
-                        Text(when.small)
-                            .font(.meadow(.ui, 12, .semibold))
-                            .foregroundStyle(meadow.ink3)
-                    }
-                    .lineLimit(1)
-                    .frame(width: 62, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Button(event.summary.isEmpty ? String(localized: "(no title)") : event.summary) {
-                            open(.named(key: event.key, folder: event.folder, uid: event.uid, account: event.account))
-                        }
-                        .deskTitle()
-                        .font(.meadow(.ui, 13.5, .bold))
-                        .foregroundStyle(meadow.ink)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        if let line = Self.line(event) {
-                            Text(line)
-                                .font(.meadow(.ui, 12.5))
-                                .foregroundStyle(meadow.ink3)
-                                .lineLimit(2)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 8) {
+                    row(event)
+                    if event.invite, let replies { answers(event, replies) }
                 }
-                .accessibilityElement(children: .combine)
             }
         }
+    }
+
+    private func row(_ event: API.UpcomingEvent) -> some View {
+        let when = EventWhen.short(start: event.start, allDay: event.allDay, now: now)
+        return HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(when.big)
+                    .font(.meadow(.ui, 13, .heavy))
+                    .monospacedDigit()
+                    .foregroundStyle(meadow.ink)
+                Text(when.small)
+                    .font(.meadow(.ui, 12, .semibold))
+                    .foregroundStyle(meadow.ink3)
+            }
+            .lineLimit(1)
+            .frame(width: 62, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Button(event.summary.isEmpty ? String(localized: "(no title)") : event.summary) {
+                    open(.named(key: event.key, folder: event.folder, uid: event.uid, account: event.account))
+                }
+                .deskTitle()
+                .font(.meadow(.ui, 13.5, .bold))
+                .foregroundStyle(meadow.ink)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                if let line = Self.line(event) {
+                    Text(line)
+                        .font(.meadow(.ui, 12.5))
+                        .foregroundStyle(meadow.ink3)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Accept, and Open for the other answers and the invite itself, under the title's column. The brief can't tell
+    /// an invite already answered, but the same answer asked again finds the reply the outbox holds for it rather
+    /// than sending another.
+    private func answers(_ event: API.UpcomingEvent, _ replies: InviteReplies) -> some View {
+        let copy = MailCopy.named(key: event.key, folder: event.folder, uid: event.uid, account: event.account)
+        return HStack(spacing: 6) {
+            InviteAnswers(copy: copy, replies: replies, brief: true)
+            Button("Open") { open(copy) }
+                .meadowButton(small: true)
+                .help("Open the invite to answer Maybe or Decline, or add it to your calendar")
+        }
+        .padding(.leading, 62 + 12)
     }
 
     /// Where, who asked, the series it repeats in, and whether it's an invite.

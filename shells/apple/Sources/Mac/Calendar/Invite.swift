@@ -124,7 +124,7 @@ struct InviteCard: View {
                         .padding(.top, 4)
                 }
                 FlowLayout(spacing: 6) {
-                    if answerable { answers }
+                    if answerable { InviteAnswers(copy: copy, replies: replies) }
                     if let part {
                         Button { Task { await addToCalendar(part) } } label: {
                             MeadowIconView(.cal, size: 14)
@@ -176,51 +176,6 @@ struct InviteCard: View {
             .padding(.top, 4)
     }
 
-    @ViewBuilder private var answers: some View {
-        switch replies.said[copy] {
-        case nil, .failed:
-            Button { reply(.accept) } label: {
-                MeadowIconView(.check, size: 14)
-                Text("Accept")
-            }
-            .meadowButton(.primary, small: true)
-            Button("Maybe") { reply(.tentative) }
-                .meadowButton(small: true)
-            Button("Decline") { reply(.decline) }
-                .meadowButton(small: true)
-            if case .failed(let why)? = replies.said[copy] {
-                said(why, in: meadow.rust)
-            }
-        case .sending:
-            ProgressView().controlSize(.small)
-            said(String(localized: "Sending RSVP…"), in: meadow.ink3)
-        case .queued(let queued, _):
-            said(Self.sent(queued), in: meadow.moss)
-            Button("Undo") { Task { await replies.undo(copy) } }
-                .buttonStyle(ReaderLinkStyle())
-                .focusEffectDisabled()
-        case .sent(let queued):
-            said(Self.sent(queued), in: meadow.moss)
-        case .taken:
-            said(String(localized: "RSVP not sent"), in: meadow.ink3)
-            Button("Answer again") { replies.again(copy) }
-                .buttonStyle(ReaderLinkStyle())
-                .focusEffectDisabled()
-        }
-    }
-
-    private func said(_ text: String, in colour: Color) -> some View {
-        Text(text)
-            .font(.meadow(.ui, 13, .semibold))
-            .foregroundStyle(colour)
-            .frame(minHeight: 28)
-    }
-
-    private static func sent(_ queued: API.RsvpQueued) -> String {
-        let to = queued.organizer.isEmpty ? String(localized: "organizer") : queued.organizer
-        return String(localized: "\(InviteReplies.words(queued.decision)) — reply sent to \(to)")
-    }
-
     /// The month, short and in capitals, and the day, of an event that starts at `iso`: the date as the invite
     /// writes it, in the event's own time, so the leaf shows the day the invite names.
     static func calendarDay(_ iso: String, locale: Locale = .current) -> (month: String, day: String)? {
@@ -239,10 +194,6 @@ struct InviteCard: View {
         let parts = [who(organizer).map { String(localized: "From \($0)") }, Self.attendees(attendees)]
             .compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private func reply(_ decision: API.RsvpDecision) {
-        Task { await replies.reply(to: copy, decision) }
     }
 
     private func addToCalendar(_ part: String) async {
@@ -279,6 +230,69 @@ struct InviteCard: View {
         guard !names.isEmpty else { return nil }
         let more = people.count > 8 ? " +\(people.count - 8)" : ""
         return countNoun(people.count, "attendee", "attendees") + ": " + names.joined(separator: ", ") + more
+    }
+}
+
+/// An invite's answer as far as it has gone (`InviteReplies.said`): the answers to give while none is on its way,
+/// then sending, sent with Undo while it can be taken back, or taken back with Answer again. The message's card
+/// offers each answer and says whom the reply went to; the brief's Today & next, narrower, offers Accept and says
+/// only the answer, as the mockup's does. Its parts stand side by side in whatever lays them out.
+struct InviteAnswers: View {
+    let copy: MailCopy
+    let replies: InviteReplies
+    var brief = false
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        switch replies.said[copy] {
+        case nil, .failed:
+            Button { reply(.accept) } label: {
+                if !brief { MeadowIconView(.check, size: 14) }
+                Text("Accept")
+            }
+            .meadowButton(.primary, small: true)
+            if !brief {
+                Button("Maybe") { reply(.tentative) }
+                    .meadowButton(small: true)
+                Button("Decline") { reply(.decline) }
+                    .meadowButton(small: true)
+            }
+            if case .failed(let why)? = replies.said[copy] {
+                said(why, in: meadow.rust)
+            }
+        case .sending:
+            ProgressView().controlSize(.small)
+            said(String(localized: "Sending RSVP…"), in: meadow.ink3)
+        case .queued(let queued, _):
+            said(words(queued), in: meadow.moss)
+            Button("Undo") { Task { await replies.undo(copy) } }
+                .buttonStyle(ReaderLinkStyle())
+                .focusEffectDisabled()
+        case .sent(let queued):
+            said(words(queued), in: meadow.moss)
+        case .taken:
+            said(String(localized: "RSVP not sent"), in: meadow.ink3)
+            Button("Answer again") { replies.again(copy) }
+                .buttonStyle(ReaderLinkStyle())
+                .focusEffectDisabled()
+        }
+    }
+
+    private func reply(_ decision: API.RsvpDecision) {
+        Task { await replies.reply(to: copy, decision) }
+    }
+
+    private func said(_ text: String, in colour: Color) -> some View {
+        Text(text)
+            .font(.meadow(.ui, 13, .semibold))
+            .foregroundStyle(colour)
+            .frame(minHeight: 28)
+    }
+
+    private func words(_ queued: API.RsvpQueued) -> String {
+        if brief { return InviteReplies.words(queued.decision) }
+        let to = queued.organizer.isEmpty ? String(localized: "organizer") : queued.organizer
+        return String(localized: "\(InviteReplies.words(queued.decision)) — reply sent to \(to)")
     }
 }
 #endif

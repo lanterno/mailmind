@@ -10,6 +10,8 @@ struct BriefSide: View {
     let actions: BriefActions
     let now: Date
     @Environment(\.meadow) private var meadow
+    /// The window's desk, whose answers to invites the reader's cards share.
+    @Environment(Desk.self) private var desk: Desk?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -28,7 +30,7 @@ struct BriefSide: View {
         let upcoming = Array(model.upcoming.prefix(4))
         if !upcoming.isEmpty {
             DeskSideCard(title: String(localized: "Today & next"), icon: .cal) {
-                UpcomingList(events: upcoming, now: now, open: actions.open)
+                UpcomingList(events: upcoming, now: now, open: actions.open, replies: desk?.invites)
             }
         }
     }
