@@ -105,10 +105,25 @@ extension Mailbox {
     /// Search for `text`, or hand a question or a plan to the assistant.
     func submit(_ text: String) {
         switch submitted(text) {
-        case .search(let search): app?.place = .search(search)
+        case .search(let search):
+            app?.place = .search(search)
+            translate(search)
         case .question(let words): asks?(words)
         case .command(let words): plans?(words)
         case .leave: leaveSearch()
+        }
+    }
+
+    /// A sentence searched for as typed stands until the assistant says what search it means, which then takes its
+    /// place with the sentence on its chip (`ProseSearch`); a search held to a conversation stays as typed.
+    private func translate(_ search: Search) {
+        guard search.thread == nil, let translates else { return }
+        Task { [weak self] in
+            guard let filter = await translates(search.q), self?.app?.place == .search(search) else { return }
+            var meant = search
+            meant.q = filter
+            meant.asked = search.q
+            self?.app?.place = .search(meant)
         }
     }
 

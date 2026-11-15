@@ -264,6 +264,7 @@ private struct SearchHead: View {
                 Button {
                     app.place = .search(Search(q: asked, account: search.account))
                 } label: {
+                    mailbox.keepsLiteral?(asked)
                     Label("Translated from “\(asked)”", systemImage: "xmark.circle.fill").labelStyle(TrailingIcon())
                 }
                 .buttonStyle(.borderless)

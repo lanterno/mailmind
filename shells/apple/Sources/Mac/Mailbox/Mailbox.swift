@@ -83,9 +83,21 @@ final class Mailbox {
     @ObservationIgnored var keys: [Character: @MainActor () -> Void] = [:]
     /// The other areas' items in a row's context menu, for the rows it acts on.
     @ObservationIgnored var rowMenu: [@MainActor ([API.FolderRow]) -> [NSMenuItem]] = []
+    /// The assistant's: the search a sentence typed in the field means, or nil to leave it as typed; and a sentence
+    /// to leave as typed from now on (the translated chip's ×).
+    @ObservationIgnored var translates: (@MainActor (String) async -> String?)?
+    @ObservationIgnored var keepsLiteral: ((String) -> Void)?
+    /// The areas that have hung their hooks here, each once however often its view appears.
+    @ObservationIgnored private var joined: Set<String> = []
 
     init(app: MailApp? = nil) {
         self.app = app
+    }
+
+    /// Let an area hang its hooks (`asks`, `keys`, `more`, `rowMenu` and the rest) on the mailbox, once.
+    func join(_ area: String, _ hooks: (Mailbox) -> Void) {
+        guard joined.insert(area).inserted else { return }
+        hooks(self)
     }
 
     /// The routes: the test's, else the app's core's once it is open.
