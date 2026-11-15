@@ -330,41 +330,4 @@ private struct SummaryFailed: View {
         }
     }
 }
-
-/// What a message asks of you next, as the page's "→ action".
-struct SummaryNextStep: View {
-    let text: String
-
-    init(_ text: String) {
-        self.text = text
-    }
-
-    var body: some View {
-        Label {
-            Text(text).textSelection(.enabled)
-        } icon: {
-            Image(systemName: "arrow.right")
-        }
-        .font(.callout.weight(.medium))
-        .foregroundStyle(.tint)
-    }
-}
-
-/// A small word beside a heading: "cached", "invite".
-struct CardTag: View {
-    let text: LocalizedStringKey
-
-    init(_ text: LocalizedStringKey) {
-        self.text = text
-    }
-
-    var body: some View {
-        Text(text)
-            .font(.caption2.weight(.medium))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(.quaternary, in: Capsule())
-            .foregroundStyle(.secondary)
-    }
-}
 #endif
