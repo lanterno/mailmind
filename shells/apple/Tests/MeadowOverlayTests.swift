@@ -117,6 +117,105 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertEqual(routes.sent("POST", "/api/ai/do-confirm").count, 1)
     }
 
+    private static let deleting = "delete the shop's newsletters older than a week"
+
+    /// A destructive plan for `deleting`, its first press made.
+    private func armed(_ routes: DeskRoutes = DeskRoutes()) async -> PlanModel {
+        routes.answer("POST", "/api/ai/do-plan", API.AiDoPlanAnswer.planPreview(DeskFixture.preview(.trash)))
+        let model = PlanModel(link: CoreLink(routes), notices: DeskNotices())
+        await model.plan(Self.deleting)
+        model.press {}
+        return model
+    }
+
+    private func isArmed(_ model: PlanModel) -> Bool {
+        if case .plan(_, _, let armed)? = model.shown(for: Self.deleting) { return armed }
+        return false
+    }
+
+    /// Draw `host` until `done`, as the window would over a few frames: a window off screen draws only when asked.
+    private func settle(_ host: NSView, until done: () -> Bool) async throws {
+        for _ in 0..<50 where !done() {
+            host.layoutSubtreeIfNeeded()
+            if let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func testAFirstPressIsTakenBackAndTheNextOnlyArmsAgain() async throws {
+        let routes = DeskRoutes()
+        let model = await armed(routes)
+        XCTAssertTrue(isArmed(model))
+        model.disarm()
+        XCTAssertFalse(isArmed(model))
+        XCTAssertNotNil(model.shown(for: Self.deleting), "the preview stays")
+        var closed = 0
+        model.press { closed += 1 }
+        XCTAssertEqual(closed, 0, "the next press only arms it again")
+        XCTAssertTrue(routes.sent("POST", "/api/ai/do-confirm").isEmpty)
+    }
+
+    func testThePlanCardTakesBackAFirstPressAsItsWordsChangeOrItGoes() async throws {
+        let model = await armed()
+        func card(_ words: String) -> AnyView {
+            AnyView(PlanCard(model: model, words: words, showSearch: nil, close: {}).meadowLight(.day))
+        }
+        let host = NSHostingView(rootView: card(Self.deleting))
+        host.frame = CGRect(x: 0, y: 0, width: 600, height: 500)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        try await settle(host) { false }
+        XCTAssertTrue(isArmed(model), "showing it takes nothing back")
+
+        host.rootView = card(Self.deleting + "s")
+        try await settle(host) { !isArmed(model) }
+        XCTAssertFalse(isArmed(model), "an edit, even one taken back, needs a first press again")
+
+        model.press {}
+        host.rootView = card(Self.deleting)
+        try await settle(host) { !isArmed(model) }
+        model.press {}
+        XCTAssertTrue(isArmed(model))
+        host.rootView = AnyView(EmptyView())
+        try await settle(host) { !isArmed(model) }
+        XCTAssertFalse(isArmed(model), "a card gone from the screen takes it back")
+        window.contentView = nil
+    }
+
+    func testAPlanStopsHoweverThePaletteGoes() async throws {
+        let mailbox = Mailbox()
+        let desk = Desk()
+        let routes = DeskRoutes()
+        desk.link.routes = routes
+        routes.answer("POST", "/api/ai/do-plan", API.AiDoPlanAnswer.planPreview(DeskFixture.preview(.trash)))
+        await desk.plan.plan(Self.deleting)
+        desk.plan.press {}
+        let host = NSHostingView(rootView: Color.clear.frame(width: 1000, height: 700)
+            .modifier(WindowOverlays(mailbox: mailbox))
+            .environment(desk)
+            .meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 1000, height: 700)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        mailbox.paletteOpen = true
+        try await settle(host) { mailbox.typing }
+        XCTAssertTrue(mailbox.typing, "the palette is up")
+        XCTAssertTrue(isArmed(desk.plan))
+
+        // Move To takes the palette's place, never through the palette's close.
+        mailbox.moving = MoveAsk(account: "ada@example.test", from: "INBOX")
+        try await settle(host) { desk.plan.doing == nil }
+        XCTAssertNil(desk.plan.doing, "nothing waits armed for the palette to come back")
+        mailbox.moving = nil
+        mailbox.paletteOpen = false
+        window.contentView = nil
+    }
+
     // MARK: Popovers
 
     /// The snooze chooser drawn in a window, as its popover shows it, until its menu has offered its items.
