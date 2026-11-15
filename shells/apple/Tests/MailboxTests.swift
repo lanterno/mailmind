@@ -492,6 +492,16 @@ final class MailboxGoingTests: XCTestCase {
         XCTAssertEqual(asked, [sentence])
     }
 
+    func testLeavingASearchDropsATranslationStillOnItsWay() async {
+        let (app, mailbox) = await mailbox()
+        var stopped = 0
+        mailbox.stopsTranslating = { stopped += 1 }
+        app.place = .search(Search(q: "mail from grace about the figures", account: Fixture.ada))
+        mailbox.leaveSearch()
+        XCTAssertEqual(stopped, 1)
+        XCTAssertEqual(app.place, .folder(account: Fixture.ada, folder: "INBOX"))
+    }
+
     func testTheDesksScreensStandInTheListsPlaceUnderTheirOwnTitles() async {
         let (app, mailbox) = await mailbox()
         app.place = .desk(.brief)
