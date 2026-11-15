@@ -36,9 +36,11 @@ struct ReaderCards: View {
         VStack(alignment: .leading, spacing: 8) {
             switch placement {
             case .top:
-                EmptyView()
+                // The summary and what the message proposes, with the reader's attention and AI verbs.
+                DeskTopCards(context: context)
             case .message:
-                EmptyView()
+                // The invite, with RSVP.
+                DeskInviteCard(context: context)
             }
         }
     }

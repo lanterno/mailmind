@@ -41,6 +41,8 @@ struct MailboxCommands: Commands {
                 .keyboardShortcut("l", modifiers: [.shift, .command])
                 .disabled(!acting)
             Divider()
+            DeskMessageItems()
+            Divider()
             Button("Next Unread") { mailbox?.moveUnread(by: 1) }
                 .keyboardShortcut(.downArrow, modifiers: [.option, .command])
                 .disabled(mailbox == nil)

@@ -19,6 +19,7 @@ struct MailMindApp: App {
             UpdateCommands()
             AcknowledgementsCommands()
             MailboxCommands()
+            DeskCommands()
         }
         #if os(macOS)
         // Three columns want room; step 0's list keeps the size its measurements were taken at.

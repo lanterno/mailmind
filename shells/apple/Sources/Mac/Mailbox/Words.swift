@@ -67,6 +67,7 @@ extension Place {
         case .virtual(let virtual, _): return virtual.title
         case .search(let search): return search.lane?.title ?? String(localized: "Search")
         case .documents: return String(localized: "Documents")
+        case .desk(let screen): return screen.title
         }
     }
 }

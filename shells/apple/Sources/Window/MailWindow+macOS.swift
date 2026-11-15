@@ -13,6 +13,8 @@ struct MailWindow: View {
             .task { await HomeMeasure.shared.watch(app) }
             // Settings, the first run and the status: the toolbar's status, alerts, the welcome and the guide.
             .modifier(StatusHooks(core: app.stage == .open ? app.core : nil, mailbox: app.mailbox))
+            // The assistant, curation, attention and the calendar: their sheets, the mailbox's hooks (Mac/Assistant).
+            .modifier(DeskSurfaces(app: app))
     }
 
     @ViewBuilder private var content: some View {

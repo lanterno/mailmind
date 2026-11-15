@@ -246,6 +246,9 @@ final class Mailbox {
             self.documents = documents
             documents.reload()
             return nil
+        case .desk:
+            // The desk's screens read what they show themselves.
+            return nil
         }
         if place.isInbox && tab != .all {
             let gathered = Gathered(read: read, keep: { tab.keeps($0, opened: $1) },

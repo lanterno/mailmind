@@ -21,6 +21,8 @@ struct MailboxSidebar: View {
                 }
                 Label("Documents", systemImage: "doc.on.doc")
                     .tag(Place.documents)
+                // Today's brief, and each account's Screener while senders wait in it (Mac/Assistant).
+                DeskSidebar()
             }
             if !mailbox.views.isEmpty {
                 Section("Views") {

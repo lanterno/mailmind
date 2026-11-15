@@ -62,7 +62,9 @@ struct MailboxColumn: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let documents = mailbox.documents {
+        if case .desk(let screen)? = app.place {
+            DeskScreen(place: screen)
+        } else if let documents = mailbox.documents {
             DocumentHub(mailbox: mailbox, model: documents)
         } else if let lane = mailbox.lane {
             LaneColumn(mailbox: mailbox, model: lane)
@@ -262,9 +264,9 @@ private struct SearchHead: View {
             }
             if let asked = search.asked {
                 Button {
+                    mailbox.keepsLiteral?(asked)
                     app.place = .search(Search(q: asked, account: search.account))
                 } label: {
-                    mailbox.keepsLiteral?(asked)
                     Label("Translated from “\(asked)”", systemImage: "xmark.circle.fill").labelStyle(TrailingIcon())
                 }
                 .buttonStyle(.borderless)

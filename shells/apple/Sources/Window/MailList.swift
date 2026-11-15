@@ -1,8 +1,7 @@
 import Foundation
 import Observation
 
-/// Where the window is: the list the sidebar chose. The screens the next wave adds (search, the Screener, a brief)
-/// come in as places of their own.
+/// Where the window is: the list the sidebar chose, or a screen that stands in the list's place.
 enum Place: Hashable, Sendable {
     /// Every account's Inbox, newest first (`/api/inboxes`).
     case allInboxes
@@ -15,6 +14,8 @@ enum Place: Hashable, Sendable {
     case search(Search)
     /// Every attachment across the accounts: the Document Hub.
     case documents
+    /// A screen of the assistant's or curation's in the list's place: the brief, an answer, a Screener.
+    case desk(DeskPlace)
 }
 
 /// A copy of a message, as the page names one: its key, the folder it is in and its uid there. A row's number is no
