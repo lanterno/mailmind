@@ -98,8 +98,8 @@ final class ReaderPictures: XCTestCase {
         Composing.shared.use(world.routes, digest: Fixture.digest(), preferences: Fixture.preferences().preferences)
         for light in MeadowLight.allCases {
             let palette = MeadowPalette.of(light)
+            // On the pane's paper, as Meadow's popover hangs it: its paper, corners and shadow are its own.
             let view = ReadingSettings()
-                .clipShape(RoundedRectangle(cornerRadius: 14))
                 .padding(28)
                 .background(palette.paper)
                 .meadowLight(light)

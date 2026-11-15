@@ -109,6 +109,43 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertEqual(faces, "MailMind Read:loaded", "the reading face loaded from its data: URL")
     }
 
+    // MARK: The reading settings
+
+    private func key(_ code: UInt16) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                         context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false,
+                         keyCode: code)!
+    }
+
+    func testTheReadingSettingsKeysGoFromSettingToSettingAndChooseInOne() {
+        let keys = ReadingKeys()
+        var steps: [[Int]] = []
+        keys.step = { steps.append([$0, $1]) }
+        XCTAssertNil(keys.at, "nothing ringed as it opens")
+        XCTAssertTrue(keys.key(key(124)))
+        XCTAssertEqual(steps, [[0, 1]], "→ with none ringed chooses in the first, and rings it")
+        XCTAssertTrue(keys.ringed(0))
+        XCTAssertTrue(keys.key(key(125)))
+        XCTAssertTrue(keys.key(key(125)))
+        XCTAssertEqual(keys.at, 2)
+        XCTAssertTrue(keys.key(key(123)))
+        XCTAssertEqual(steps.last, [2, -1])
+        XCTAssertTrue(keys.key(key(126)))
+        XCTAssertTrue(keys.key(key(126)))
+        XCTAssertTrue(keys.key(key(126)))
+        XCTAssertEqual(keys.at, ReadingKeys.settings - 1, "↑ from the first goes round to the last")
+        XCTAssertFalse(keys.key(key(36)), "Return isn't the settings'")
+        XCTAssertFalse(keys.key(key(53)), "nor Esc, which closes the popover")
+    }
+
+    func testASettingStepsOnlyWhereThereIsAChoiceThatWay() {
+        let sizes: [API.ReadSize] = [.s, .m, .l, .xl]
+        XCTAssertEqual(ReadingSettings.next(API.ReadSize.m, in: sizes, by: 1), .l)
+        XCTAssertEqual(ReadingSettings.next(API.ReadSize.m, in: sizes, by: -1), .s)
+        XCTAssertNil(ReadingSettings.next(API.ReadSize.xl, in: sizes, by: 1), "no larger than the largest")
+        XCTAssertNil(ReadingSettings.next(API.ReadSize.s, in: sizes, by: -1))
+    }
+
     // MARK: The chips and the place
 
     func testTheChipsSayTheAccountTheFolderTheSunAndWhereItLies() {
