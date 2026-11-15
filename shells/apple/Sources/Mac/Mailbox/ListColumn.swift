@@ -14,7 +14,8 @@ struct MailboxColumn: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !(app.place?.listed.isDesk ?? false) {
+            // A place that is a page across the window (the paper trail) has a head of its own.
+            if !(app.place?.listed.isDesk ?? false), !(app.place?.spansTheWindow == true && app.selection.copy == nil) {
                 MeadowListHead(app: app, mailbox: mailbox)
             }
             content

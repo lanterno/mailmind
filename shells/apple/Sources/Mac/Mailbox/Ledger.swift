@@ -127,5 +127,99 @@ enum Ledger {
         }
         return months
     }
+
+    // MARK: A month's totals
+
+    /// What a month's card says (`.money`, `.money-sub`): the total in its first currency, how many receipts and
+    /// refunds, and the month before's total in the same currency, when the trail has one.
+    struct Summary: Equatable {
+        var yearMonth: String
+        var currency: String
+        var total: Double
+        var receipts: Int
+        var refunds: Int
+        var before: Double?
+        var beforeMonth: String?
+    }
+
+    /// The summary of `months[index]`; none for a month with no amount in it.
+    static func summary(_ months: [Month], at index: Int) -> Summary? {
+        guard months.indices.contains(index), let first = months[index].totals.first else { return nil }
+        let month = months[index]
+        let previous = months.indices.contains(index + 1) ? months[index + 1] : nil
+        let before = previous.flatMap { $0.yearMonth.isEmpty ? nil : $0 }?.totals
+            .first { $0.currency == first.currency }?.value
+        return Summary(yearMonth: month.yearMonth, currency: first.currency, total: first.value,
+                       receipts: month.lines.count { $0.amount != nil && !$0.refund },
+                       refunds: month.lines.count(where: \.refund), before: before,
+                       beforeMonth: before == nil ? nil : previous?.yearMonth)
+    }
+
+    /// "4 receipts · 1 refund · $41.00 less than September".
+    static func words(_ summary: Summary, locale: Locale = .current) -> String {
+        var parts = [countNoun(summary.receipts, "receipt", "receipts")]
+        if summary.refunds > 0 { parts.append(countNoun(summary.refunds, "refund", "refunds")) }
+        if let before = summary.before, let month = summary.beforeMonth {
+            let difference = summary.total - before
+            let name = monthOnly(month)
+            if abs(difference) < 0.005 {
+                parts.append(String(localized: "the same as \(name)"))
+            } else {
+                let amount = money(summary.currency, abs(difference), locale: locale)
+                parts.append(difference < 0 ? String(localized: "\(amount) less than \(name)")
+                    : String(localized: "\(amount) more than \(name)"))
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// "October", for a month the card names without its year; "Undated" for mail with no date.
+    static func monthOnly(_ yearMonth: String) -> String {
+        let name = monthName(yearMonth)
+        return name.split(separator: " ").first.map(String.init) ?? name
+    }
+
+    /// The bars under a month's total (`.bars`): up to `count` months ending at `months[index]`, oldest first, each
+    /// its total in the summary's currency over the largest of them (from 0 to 1), the last the month itself.
+    static func bars(_ months: [Month], at index: Int, count: Int = 6) -> [Double] {
+        guard let summary = summary(months, at: index) else { return [] }
+        let dated = months.enumerated().filter { !$0.element.yearMonth.isEmpty && $0.offset >= index }.prefix(count)
+        let values = dated.map { _, month in
+            max(0, month.totals.first { $0.currency == summary.currency }?.value ?? 0)
+        }.reversed()
+        let most = values.max() ?? 0
+        return values.map { most > 0 ? $0 / most : 0 }
+    }
+
+    /// Each account's total in a month's currencies, the largest first (`By account`).
+    static func byAccount(_ month: Month) -> [(account: String, currency: String, value: Double)] {
+        var totals: [(account: String, currency: String, value: Double)] = []
+        for line in month.lines {
+            guard let amount = line.amount, let shown = line.shown else { continue }
+            if let at = totals.firstIndex(where: { $0.account == line.hit.account && $0.currency == amount.currency }) {
+                totals[at].value += shown
+            } else {
+                totals.append((line.hit.account, amount.currency, shown))
+            }
+        }
+        return totals.enumerated().sorted { a, b in
+            a.element.value != b.element.value ? a.element.value > b.element.value : a.offset < b.offset
+        }.map(\.element)
+    }
+
+    /// How many of a month's lines sit in each folder, the fullest first (`Filed under`).
+    static func byFolder(_ month: Month) -> [(folder: String, count: Int)] {
+        var counts: [(folder: String, count: Int)] = []
+        for line in month.lines {
+            if let at = counts.firstIndex(where: { $0.folder == line.hit.folder }) {
+                counts[at].count += 1
+            } else {
+                counts.append((line.hit.folder, 1))
+            }
+        }
+        return counts.enumerated().sorted { a, b in
+            a.element.count != b.element.count ? a.element.count > b.element.count : a.offset < b.offset
+        }.map(\.element)
+    }
 }
 #endif

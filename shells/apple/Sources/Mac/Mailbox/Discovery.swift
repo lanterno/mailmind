@@ -219,14 +219,15 @@ final class DocumentsModel {
         }
     }
 
-    static func symbol(_ kind: API.DocumentKind) -> String {
+    /// Meadow's icon for a kind of file.
+    static func icon(_ kind: API.DocumentKind) -> MeadowIcon {
         switch kind {
-        case .pdf, .doc, .text: "doc.text"
-        case .image: "photo"
-        case .sheet: "tablecells"
-        case .slide: "rectangle.on.rectangle"
-        case .archive: "archivebox"
-        case .other: "paperclip"
+        case .pdf, .doc, .text: .file
+        case .image: .image
+        case .sheet: .table
+        case .slide: .slides
+        case .archive: .archive
+        case .other: .clip
         }
     }
 }
