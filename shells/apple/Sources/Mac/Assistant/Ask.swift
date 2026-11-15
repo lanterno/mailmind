@@ -164,7 +164,7 @@ private struct SourceRow: View {
     }
 }
 
-/// The question, asked in a sheet from the Assistant menu or the toolbar.
+/// The question, asked in a sheet from the Assistant menu or the palette.
 struct AskSheet: View {
     let ask: (String) -> Void
     @Environment(\.dismiss) private var dismiss

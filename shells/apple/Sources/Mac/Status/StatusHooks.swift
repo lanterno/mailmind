@@ -1,9 +1,10 @@
 #if os(macOS)
 import SwiftUI
 
-/// What settings, the first run and the status add to the mail window, as one modifier the window applies: the status
-/// and a meeting's reminder in the toolbar, an alert across the top while an account can't connect, a moment's notice
-/// at the foot, the welcome in place of everything while there is no account, and the guide, offered once.
+/// What settings, the first run and the status add to the mail window, as one modifier the window applies: a moment's
+/// notice at the foot, the welcome in place of everything while there is no account, the guide, offered once, and the
+/// keys and palette entries for help, Settings and a sync. The status, a meeting's reminder and the alert while an
+/// account can't connect stand in Meadow's top bar and under it (Mac/Meadow).
 ///
 /// It is handed the core once the window has opened it, and hands it to `AppStatus`.
 struct StatusHooks: ViewModifier {
@@ -17,19 +18,10 @@ struct StatusHooks: ViewModifier {
     func body(content: Content) -> some View {
         @Bindable var status = status
         content
-            .safeAreaInset(edge: .top, spacing: 0) { AccountAlert(status: status) }
             .overlay {
                 if status.firstRun { Welcome(status: status) }
             }
             .overlay(alignment: .bottom) { NoticeBanner(status: status) }
-            .toolbar {
-                ToolbarItem(placement: .status) {
-                    HStack(spacing: 10) {
-                        StatusPill(status: status)
-                        SoonPill(status: status)
-                    }
-                }
-            }
             .sheet(isPresented: $status.guiding) {
                 GuideSheet(steps: Guide.steps(ai: status.digest?.ai.engine != "none",
                                               singleKeys: status.preferences?.singleKeys ?? true)) {

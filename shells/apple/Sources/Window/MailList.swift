@@ -14,7 +14,8 @@ enum Place: Hashable, Sendable {
     case search(Search)
     /// Every attachment across the accounts: the Document Hub.
     case documents
-    /// A screen of the assistant's or curation's in the list's place: the brief, an answer, a Screener.
+    /// A screen of the assistant's or curation's: the brief, an answer, a Screener (`DeskPlace` says where each
+    /// stands).
     case desk(DeskPlace)
 }
 

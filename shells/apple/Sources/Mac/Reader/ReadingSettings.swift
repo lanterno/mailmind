@@ -1,25 +1,8 @@
 #if os(macOS)
 import SwiftUI
 
-/// Reading settings (Aa), as the page's `reader/ReadMenu.tsx` offers them: the column's width, plain text's face and
-/// size, and mail's colours, each kept with the rest of the preferences on the server.
-struct ReadingSettingsButton: View {
-    @State private var shown = false
-
-    var body: some View {
-        Button {
-            shown.toggle()
-        } label: {
-            Label("Reading Settings", systemImage: "textformat.size")
-        }
-        .help("Reading settings — column width, text and mail colors")
-        .popover(isPresented: $shown, arrowEdge: .bottom) {
-            ReadingSettings()
-                .task { await Composing.shared.readPreferences() }
-        }
-    }
-}
-
+/// Reading settings (Aa, in the pane's bar), as the page's `reader/ReadMenu.tsx` offers them: the column's width,
+/// plain text's face and size, and mail's colours, each kept with the rest of the preferences on the server.
 struct ReadingSettings: View {
     private var composing: Composing { .shared }
 

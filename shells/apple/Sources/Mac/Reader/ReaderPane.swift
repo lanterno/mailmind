@@ -1,9 +1,9 @@
 #if os(macOS)
 import SwiftUI
 
-/// The reader in the window: the message chosen, or its whole conversation; the toolbar's writing (new message,
-/// reply, reply all, forward, edit a draft), the reading settings and the outbox tray; and what a send says once its
-/// composer has gone.
+/// The reader in the window: the pane's bar (Mac/Meadow: triage, reply, reply all, forward or edit a draft, the
+/// reading settings and focus), the message chosen or its whole conversation, or with none the brief beside the
+/// Inbox; and what a send says once its composer has gone.
 struct ReaderPane: View {
     let app: MailApp
     @State private var conversation: ConversationModel?
@@ -86,40 +86,47 @@ struct ReaderPane: View {
     }
 
     var body: some View {
-        content
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .bottom) { SendFloatView() }
-            .toolbar { toolbar }
-            .focusedSceneValue(\.mailWriting, MailWriting(replyTo: replyTo, draft: openMessage?.isDraft == true ? openCopy : nil,
-                                                          current: current))
-            .task {
-                composing.openWindow = { id in openWindow(id: ComposeWindow.scene, value: id) }
-                composing.mailChanged = { [weak app] in
-                    app?.list?.refresh()
-                    Task { await app?.mailbox.readCounts() }
-                }
-                if let core = app.core { composing.attach(core) }
-                joinMailbox()
+        let draft = openMessage?.isDraft == true ? openCopy : nil
+        VStack(spacing: 0) {
+            MeadowPaneBar(app: app, mailbox: app.mailbox, message: app.reader.stage != .empty,
+                          writing: PaneWriting(replyTo: replyTo, draft: draft))
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .overlay(alignment: .bottom) { SendFloatView() }
+        .focusedSceneValue(\.mailWriting, MailWriting(replyTo: replyTo, draft: draft, current: current))
+        .task {
+            composing.openWindow = { id in openWindow(id: ComposeWindow.scene, value: id) }
+            composing.mailChanged = { [weak app] in
+                app?.list?.refresh()
+                Task { await app?.mailbox.readCounts() }
             }
-            .task(id: thread) {
-                guard let thread, let core = app.core else {
-                    conversation = nil
-                    return
-                }
-                let model = ConversationModel(routes: core, account: thread.account, id: thread.id)
-                conversation = model
-                await model.load()
+            if let core = app.core { composing.attach(core) }
+            joinMailbox()
+        }
+        .task(id: thread) {
+            guard let thread, let core = app.core else {
+                conversation = nil
+                return
             }
-            .task(id: openCopy) { await dwell() }
-            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                Task { await composing.readPreferences() }
-            }
+            let model = ConversationModel(routes: core, account: thread.account, id: thread.id)
+            conversation = model
+            await model.load()
+        }
+        .task(id: openCopy) { await dwell() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await composing.readPreferences() }
+        }
     }
 
     @ViewBuilder private var content: some View {
         switch app.reader.stage {
         case .empty:
-            ContentUnavailableView("No message selected.", systemImage: "envelope")
+            if case .desk(let screen)? = app.place, screen.besideTheInbox {
+                DeskScreen(place: screen)
+            } else {
+                ContentUnavailableView("No message selected.", systemImage: "envelope")
+            }
         case .loading:
             Fetching()
         case .failed(_, let why):
@@ -149,78 +156,6 @@ struct ReaderPane: View {
         try? await Task.sleep(for: .milliseconds(1200))
         guard !Task.isCancelled else { return }
         _ = try? await core.post(API.Post.Seen.self, API.SeenBody(folder: copy.folder, key: copy.key, seen: true, uid: copy.uid))
-    }
-
-    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                composing.newMessage(current: current)
-            } label: {
-                Label("New Message", systemImage: "square.and.pencil")
-            }
-            .help("New message (⌘N)")
-            if let draft = openMessage?.isDraft == true ? openCopy : nil {
-                Button {
-                    Task { await composing.editDraft(draft) }
-                } label: {
-                    Label("Edit Draft", systemImage: "pencil")
-                }
-                .help("Edit draft")
-            } else {
-                ReplyButtons(replyTo: replyTo)
-            }
-            ReadingSettingsButton()
-            OutboxButton()
-        }
-    }
-}
-
-/// Reply says which of three it is: a draft written ahead, one being written, or just Reply; then Reply All and
-/// Forward.
-struct ReplyButtons: View {
-    let replyTo: MailCopy?
-
-    var body: some View {
-        let composing = Composing.shared
-        let chip = replyTo.flatMap { composing.chips[$0.key] }
-        Group {
-            switch chip {
-            case .ready?:
-                Button {
-                    if let replyTo { Task { await composing.answer(replyTo) } }
-                } label: {
-                    Label("Draft Ready", systemImage: "wand.and.sparkles")
-                }
-                .help("AI pre-drafted a reply — opens in the composer for review; nothing sends until you do (⌘R)")
-            case .drafting?:
-                Button {
-                    if let replyTo { Task { await composing.replyNow(replyTo) } }
-                } label: {
-                    Label("Drafting…", systemImage: "wand.and.sparkles")
-                }
-                .help("AI is drafting a reply in the background — click for a plain reply now")
-            case nil:
-                Button {
-                    if let replyTo { Task { await composing.answer(replyTo) } }
-                } label: {
-                    Label("Reply", systemImage: "arrowshape.turn.up.left")
-                }
-                .help("Reply (⌘R)")
-            }
-            Button {
-                if let replyTo { Task { await composing.reply(replyTo, all: true) } }
-            } label: {
-                Label("Reply All", systemImage: "arrowshape.turn.up.left.2")
-            }
-            .help("Reply all (⇧⌘R)")
-            Button {
-                if let replyTo { Task { await composing.forward(replyTo) } }
-            } label: {
-                Label("Forward", systemImage: "arrowshape.turn.up.right")
-            }
-            .help("Forward (⇧⌘F)")
-        }
-        .disabled(replyTo == nil)
     }
 }
 #endif

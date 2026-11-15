@@ -1,8 +1,8 @@
 #if os(macOS)
 import SwiftUI
 
-/// The attention verbs for the messages chosen, as menu items: in the menu bar's Message menu, the reader's toolbar
-/// and a row's context menu alike. Which verbs show follows the stack the list is (`stack`), as the page's reader does:
+/// The attention verbs for the messages chosen, as menu items: in the menu bar's Message menu and a row's context
+/// menu alike. Which verbs show follows the stack the list is (`stack`), as the page's reader does:
 /// Unsnooze in Snoozed, Unmute in Muted, Done in Reply Later, Dismiss in Waiting.
 struct AttentionMenuItems: View {
     let copies: [MailCopy]

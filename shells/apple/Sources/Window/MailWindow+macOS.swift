@@ -2,7 +2,8 @@
 import AppKit
 import SwiftUI
 
-/// The Mac app's window: the accounts and their folders, the mail in the one chosen, and the message chosen in it.
+/// The Mac app's window, as Meadow draws it (Mac/Meadow): the top bar on the sky, and below it the accounts and their
+/// places, the mail in the one chosen, and the message chosen in it.
 struct MailWindow: View {
     @State private var app = MailApp()
 
@@ -11,10 +12,11 @@ struct MailWindow: View {
             .frame(minWidth: 900, minHeight: 560)
             .task { await app.start() }
             .task { await HomeMeasure.shared.watch(app) }
-            // Settings, the first run and the status: the toolbar's status, alerts, the welcome and the guide.
+            // Settings, the first run and the status: alerts, the welcome and the guide.
             .modifier(StatusHooks(core: app.stage == .open ? app.core : nil, mailbox: app.mailbox))
             // The assistant, curation, attention and the calendar: their sheets, the mailbox's hooks (Mac/Assistant).
             .modifier(DeskSurfaces(app: app))
+            .meadowLit()
     }
 
     @ViewBuilder private var content: some View {
@@ -26,15 +28,9 @@ struct MailWindow: View {
             ContentUnavailableView("MailMind didn't open", systemImage: "exclamationmark.triangle",
                                    description: Text(why))
         case .open:
-            NavigationSplitView {
-                // The mailbox's sidebar and list (Mac/Mailbox).
-                MailboxSidebar(app: app, mailbox: app.mailbox)
-                    .navigationSplitViewColumnWidth(min: 180, ideal: 220)
-            } content: {
-                MailboxColumn(app: app, mailbox: app.mailbox)
-                    .navigationSplitViewColumnWidth(min: 300, ideal: 380)
-            } detail: {
-                // The reader and writing: Mac/Reader and Mac/Compose.
+            // The rail, the list and the top bar are the mailbox's (Mac/Mailbox); the reader and writing are
+            // Mac/Reader's and Mac/Compose's.
+            MeadowFrame(app: app, mailbox: app.mailbox) {
                 ReaderPane(app: app)
             }
         }

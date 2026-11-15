@@ -22,9 +22,14 @@ final class MailApp {
     ]
 
     private(set) var stage = Stage.opening
-    /// Where the window is. Choosing a place opens its list.
+    /// Where the window is. Choosing a place opens its list; the brief, in the pane beside the Inbox, keeps the
+    /// Inbox's list and closes the message open, as the pane is the brief's.
     var place: Place? = .allInboxes {
-        didSet { if place != oldValue { openList() } }
+        didSet {
+            guard place != oldValue else { return }
+            if place?.listed != oldValue?.listed { openList() }
+            if let place, place != place.listed { closeMessage() }
+        }
     }
     let selection = Selection()
     private(set) var list: MailListModel?
@@ -63,11 +68,21 @@ final class MailApp {
         reader.open(copy)
     }
 
-    /// Open the place's list, read as the mailbox reads each of its places (Mac/Mailbox/Mailbox.swift), or none for a
-    /// place that isn't a list of mail. The mailbox opens it again when its tab or grouping changes.
+    /// No message open, and on the Mac no rows chosen in the list.
+    private func closeMessage() {
+        #if os(macOS)
+        mailbox.chose([])
+        #else
+        selection.copy = nil
+        reader.open(nil)
+        #endif
+    }
+
+    /// Open the list the place shows, read as the mailbox reads each of its places (Mac/Mailbox/Mailbox.swift), or none
+    /// for a place that isn't a list of mail. The mailbox opens it again when its tab or grouping changes.
     func openList() {
         #if os(macOS)
-        let load = place.flatMap { mailbox.loader(for: $0) }
+        let load = place.flatMap { mailbox.loader(for: $0.listed) }
         #else
         let load: MailListModel.Loader? = nil
         #endif

@@ -8,7 +8,7 @@ extension FocusedValues {
 
 /// The page's commands (app/commands.ts) in the menu bar, with a Mac's keys: the Message menu acts on what is chosen
 /// or open, the Mailbox menu goes places and searches, and View holds how the list is shown. Each runs as its key, its
-/// toolbar button and its palette entry do. Edit ▸ Undo undoes what the mailbox did last.
+/// button in the pane's bar and its palette entry do. Edit ▸ Undo undoes what the mailbox did last.
 struct MailboxCommands: Commands {
     @FocusedValue(\.mailbox) private var mailbox
 

@@ -1,7 +1,7 @@
 #if os(macOS)
 import Foundation
 
-/// What a person can do to mail from the list, the toolbar, the menus and the keys, as the page's
+/// What a person can do to mail from the list, the pane's bar, the menus and the keys, as the page's
 /// features/mailbox/actions.ts does it: one message or conversation by its own route, several under one undo group as
 /// many requests as the server's limit asks, each told in the page's words, a refusal with the server's reason, and an
 /// Undo offered where the server says one is possible.

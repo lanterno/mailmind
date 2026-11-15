@@ -13,7 +13,7 @@ struct BriefActions {
     var askUntil: ([MailCopy]) -> Void = { _ in }
 }
 
-/// Today's brief, in the list's place: a greeting, what Claude made of today's mail, what needs you, what can be
+/// Today's brief, in the reading pane beside the Inbox: a greeting, what Claude made of today's mail, what needs you, what can be
 /// filed, and beside it today and next and who you're waiting on. The cards, tallies and side come from the digest,
 /// so they stand with AI off.
 struct BriefScreen: View {
@@ -46,13 +46,6 @@ struct BriefScreen: View {
         } message: {
             Text("They stay searchable and you can undo it.")
         }
-        .toolbar {
-            ToolbarItem {
-                Button("Refresh Brief", systemImage: "arrow.clockwise") { Task { await model.write(again: true) } }
-                    .help("Write the brief again from your mail as it is now (runs the AI)")
-                    .disabled(model.writing)
-            }
-        }
     }
 
     private var tidyQuestion: String {
@@ -81,6 +74,16 @@ struct BriefScreen: View {
     private var briefCard: some View {
         DeskCard {
             DeskCardHeading(title: "Your Brief", symbol: "sparkles")
+                // Refresh at the heading's end, where the mockup's brief has it now the window has no toolbar.
+                .overlay(alignment: .trailing) {
+                    Button { Task { await model.write(again: true) } } label: {
+                        MeadowIconView(.refresh, size: 15)
+                        Text("Refresh")
+                    }
+                    .meadowButton(.quiet, small: true)
+                    .help("Write the brief again from your mail as it is now (runs the AI)")
+                    .disabled(model.writing)
+                }
             narrative
             if !model.topics.isEmpty {
                 BriefFlow {

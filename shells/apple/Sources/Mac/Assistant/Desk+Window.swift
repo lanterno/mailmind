@@ -380,7 +380,7 @@ private struct DeskSheetView: View {
 }
 
 /// The cards under a message's or a conversation's subject (the reader's `.top` slot): its summary and what it
-/// proposes. The reader's toolbar gains the verbs on the message from here too.
+/// proposes. The verbs on the message are the pane's bar's (Mac/Meadow) and the Message menu's.
 struct DeskTopCards: View {
     let context: ReaderContext
     @Environment(Desk.self) private var desk: Desk?
@@ -393,11 +393,6 @@ struct DeskTopCards: View {
             VStack(spacing: 8) {
                 SummaryCard(copy: copy, stored: stored, cards: desk.summaries)
                 SuggestionCard(copy: copy, cards: desk.suggestions, notices: desk.notices)
-            }
-            .toolbar {
-                ToolbarItemGroup {
-                    ReaderTools(copy: copy, desk: desk)
-                }
             }
         }
     }
@@ -416,42 +411,7 @@ struct DeskInviteCard: View {
     }
 }
 
-/// The reader's toolbar items for the message open: summarize, find dates, snooze, Reply Later and mute.
-private struct ReaderTools: View {
-    let copy: MailCopy
-    let desk: Desk
-
-    var body: some View {
-        Button("Summarize", systemImage: "sparkles") { Task { await desk.summaries.summarize(copy) } }
-            .help("AI summary")
-        Button("Find Events and Tasks", systemImage: "calendar.badge.plus") { Task { await desk.suggestions.find(in: copy) } }
-            .help("Find events and tasks in this message")
-        SnoozeMenu(copies: [copy], stack: desk.stack, model: desk.attention) { desk.askWhen($0) }
-            .help("Snooze")
-        let later = desk.stack == .replyLater
-        Button(later ? "Done" : "Reply Later", systemImage: later ? "checkmark" : "bookmark") {
-            Task {
-                if later { await desk.attention.replyLaterDone([copy]) } else { await desk.attention.replyLater([copy]) }
-            }
-        }
-        .help(later ? "Done — remove from Reply later" : "Reply later")
-        let muted = desk.stack == .muted
-        Button(muted ? "Unmute" : "Mute", systemImage: muted ? "bell" : "bell.slash") {
-            Task {
-                if muted { await desk.attention.unmute([copy]) } else { await desk.attention.mute([copy]) }
-            }
-        }
-        .help(muted ? "Unmute thread" : "Mute thread")
-        if desk.stack == .waiting {
-            Button("Dismiss Follow-Up", systemImage: "checkmark.circle") {
-                Task { await desk.attention.dismissFollowup([copy]) }
-            }
-            .help("Dismiss follow-up")
-        }
-    }
-}
-
-/// A desk place, where the list stands: the brief, an answer, a Screener.
+/// A desk place: the brief in the reading pane, an answer where the list stands, a Screener across both.
 struct DeskScreen: View {
     let place: DeskPlace
     @Environment(Desk.self) private var desk: Desk?
