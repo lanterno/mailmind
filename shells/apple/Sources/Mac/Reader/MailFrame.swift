@@ -56,6 +56,11 @@ struct MailFrame: NSViewRepresentable {
         view.allowsMagnification = true
         view.allowsLinkPreview = false
         view.setAccessibilityLabel(title)
+        // Clear, so a mail that lies on the pane's paper has the paper's grain under it too. WebKit offers this only
+        // through key-value coding; where it can't, the frame keeps its own white, as a sheet's is anyway.
+        if view.responds(to: NSSelectorFromString("_setDrawsBackground:")) {
+            view.setValue(false, forKey: "drawsBackground")
+        }
         // Hidden until the script first measures it: the web view's own white never flashes in the dark.
         view.isHidden = true
         context.coordinator.view = view
