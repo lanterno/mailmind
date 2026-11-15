@@ -2,10 +2,18 @@
 import SwiftUI
 
 /// MailMind Help, from the Help menu (the page's `Help`): where the keys are, the search operators, how MailMind uses
-/// AI, the one setting WCAG 2.1.4 asks for (single keys off), and the guide again.
+/// AI, the one setting WCAG 2.1.4 asks for (single keys off), and the guide again, written as the mockup's design
+/// notes (`.notes`) on Meadow's paper.
 struct HelpWindow: View {
     static let id = "mailmind-help"
+    static let size = CGSize(width: 620, height: 760)
+    /// The band the traffic lights stand in, which moves the window as a title bar does.
+    static let barHeight: CGFloat = 40
     let status: AppStatus
+    /// Whether the window's traffic lights stand on its paper; a test draws it without a window of its own.
+    var lights = true
+    @Environment(\.meadow) private var meadow
+    @FocusState private var keysFocused: Bool
 
     /// The page's operators, as its legend lists them.
     static let operators = [
@@ -15,31 +23,130 @@ struct HelpWindow: View {
     ]
 
     var body: some View {
-        Form {
-            Section("Keyboard") {
-                Text("Every command is in the menu bar, with its keys beside it.")
-                Toggle("Disable single-key shortcuts (use ⌘ chords only)", isOn: Binding(
-                    get: { !(status.preferences?.singleKeys ?? true) },
-                    set: { status.setPreferences(.init(singleKeys: !$0)) }))
-                    .disabled(status.preferences == nil)
-            }
-            Section("Search operators") {
-                Text(Self.operators.map { "`\($0)`" }.joined(separator: "  ").markdown)
-                    .lineSpacing(4)
-                    .textSelection(.enabled)
-            }
-            Section {
-                Text(Self.howAI)
-                    .fixedSize(horizontal: false, vertical: true)
-            } header: {
-                Label("How MailMind uses AI", systemImage: "wind")
-            }
-            Section {
-                Button("Show Me Around") { status.guiding = true }
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: Self.barHeight)
+                .background { WindowDragArea() }
+            ScrollView {
+                notes
+                    .padding(.horizontal, 40)
+                    .padding(.top, 8)
+                    .padding(.bottom, 44)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 520, height: 560)
+        .frame(width: Self.size.width, height: Self.size.height)
+        .background {
+            ZStack {
+                meadow.paper
+                MeadowGrain()
+            }
+        }
+        .ignoresSafeArea()
+        .background { if lights { WindowChrome(barHeight: Self.barHeight) } }
+    }
+
+    /// The notes: a kicker over the title (`.hero-date`, `h1`), the lede, then each part under its `h2`.
+    private var notes: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Help")
+                .font(.meadow(.ui, 12, .heavy))
+                .tracking(12 * 0.14)
+                .textCase(.uppercase)
+                .foregroundStyle(meadow.ink2)
+            Text("Finding your way in MailMind")
+                .font(.meadow(.display, 34, .bold))
+                .foregroundStyle(meadow.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.top, 6)
+            Text("Where the keys are, what search understands, and what MailMind sends to Claude.")
+                .font(.meadow(.ui, 17))
+                .lineSpacing(MeadowFace.ui.lineSpacing(size: 17, lineHeight: 1.65))
+                .foregroundStyle(meadow.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 12)
+            // The guide stands under the lede, where it is seen before the page is scrolled.
+            Button("Show Me Around") { status.guiding = true }
+                .meadowButton()
+                .padding(.top, 16)
+
+            heading("Keyboard")
+            paragraph(String(localized: "Every command is in the menu bar, with its keys beside it."))
+            MeadowCheckbox(isOn: Binding(get: { !(status.preferences?.singleKeys ?? true) },
+                                         set: { status.setPreferences(.init(singleKeys: !$0)) }),
+                           focused: $keysFocused) {
+                Text("Disable single-key shortcuts (use ⌘ chords only)")
+                    .font(.meadow(.ui, 15))
+                    .foregroundStyle(meadow.ink)
+            }
+            .disabled(status.preferences == nil)
+            .padding(.top, 12)
+
+            heading("Search operators")
+            FlowLayout(spacing: 8) {
+                ForEach(Self.operators, id: \.self) { code($0) }
+            }
+            .textSelection(.enabled)
+
+            aboutAI
+                .padding(.top, 40)
+        }
+    }
+
+    /// A part's heading (`.notes h2`).
+    private func heading(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(.meadow(.display, 22, .bold))
+            .foregroundStyle(meadow.ink)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.top, 40)
+            .padding(.bottom, 12)
+    }
+
+    /// The notes' prose: 15 points, lines 1.65 apart.
+    private func paragraph(_ words: String) -> some View {
+        Text(words)
+            .font(.meadow(.ui, 15))
+            .lineSpacing(MeadowFace.ui.lineSpacing(size: 15, lineHeight: 1.65))
+            .foregroundStyle(meadow.ink)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// An operator as the notes set code (`.notes code`): the mono face on the deepest paper.
+    private func code(_ words: String) -> some View {
+        Text(verbatim: words)
+            .font(.meadow(.mono, 13, .semibold))
+            .foregroundStyle(meadow.ink)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(meadow.paper3, in: RoundedRectangle(cornerRadius: 5))
+    }
+
+    /// How MailMind uses AI, set apart as the notes set their revision (`.rev`): the moss wash and its grain.
+    private var aboutAI: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 9) {
+                MeadowIconView(.wind, size: 18)
+                    .foregroundStyle(meadow.moss)
+                Text("How MailMind uses AI")
+                    .font(.meadow(.display, 19, .bold))
+                    .foregroundStyle(meadow.ink)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            paragraph(Self.howAI)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                meadow.mossWash
+                MeadowGrain()
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
     }
 
     static let howAI = String(localized: """
@@ -48,10 +155,6 @@ struct HelpWindow: View {
         being summarized, drafted or asked about is sent to Anthropic; your mailbox itself stays in a database on this \
         Mac. Email bodies show inside a locked sandbox that can't run code or phone home.
         """)
-}
-
-private extension String {
-    var markdown: AttributedString { (try? AttributedString(markdown: self)) ?? AttributedString(self) }
 }
 
 /// The first-run guide's steps and when it is offered (status/guideSteps.ts). The Mac has no coach-marks to place:
