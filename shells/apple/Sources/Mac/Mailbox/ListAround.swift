@@ -1,7 +1,12 @@
 #if os(macOS)
 import SwiftUI
 
-/// The window's list of mail, today's brief first in the Inbox.
+// What stands around the list's rows (#44), as the mockup draws it: the note while an account can't reach its server
+// (`.offline`), the bulk bar while rows are checked (`.bulk`), the rows themselves, and what the list says when it
+// has none (`.lempty`).
+
+/// The window's list of mail: the offline note and the bulk bar over the rows, today's brief first in the Inbox, and
+/// the empty list's words under it.
 struct MailboxTable: View {
     let list: MailListModel
     let mailbox: Mailbox
@@ -17,12 +22,23 @@ struct MailboxTable: View {
     var body: some View {
         let place = mailbox.app?.place
         let measure = RowMeasure(status.preferences?.density ?? .comfortable)
-        MailboxRowsTable(list: list, mailbox: mailbox, chosen: chosen, showsAccount: showsAccount,
-                         look: RowLook(inks: RowInks.of(meadow, light: light,
-                                                        highContrast: status.preferences?.highContrast ?? false),
-                                       measure: measure, accounts: mailbox.accounts),
-                         brief: briefLine(place), briefChosen: place == .desk(.brief),
-                         sections: DayGroup.sections(place))
+        let brief = briefLine(place)
+        VStack(spacing: 0) {
+            OfflineNote(mailbox: mailbox, account: place?.listed.account, status: status)
+            if mailbox.chosenRows.count + mailbox.unheld.count > 1 {
+                BulkBar(mailbox: mailbox, inTrash: inTrash)
+            }
+            MailboxRowsTable(list: list, mailbox: mailbox, chosen: chosen, showsAccount: showsAccount,
+                             look: RowLook(inks: RowInks.of(meadow, light: light,
+                                                            highContrast: status.preferences?.highContrast ?? false),
+                                           measure: measure, accounts: mailbox.accounts),
+                             brief: brief, briefChosen: place == .desk(.brief),
+                             sections: DayGroup.sections(place))
+                .overlay(alignment: .top) {
+                    EmptyList(app: mailbox.app, mailbox: mailbox, list: list)
+                        .padding(.top, brief == nil ? 0 : RowMeasure.listTop + measure.height(.brief))
+                }
+        }
     }
 
     /// Today's brief over the Inbox's rows (`BriefRow`): in every Inbox, or one account's, while not searching.
@@ -30,6 +46,198 @@ struct MailboxTable: View {
         guard let desk, let place, place.listed.isInbox else { return nil }
         return BriefLine(needs: desk.brief.needs, waiting: mailbox.across?.waiting ?? 0,
                          canWait: desk.brief.tidy.count)
+    }
+
+    /// The rows checked are in Trash, where the bulk bar restores them.
+    private var inTrash: Bool {
+        guard let first = mailbox.chosenRows.first else { return false }
+        return mailbox.folders(of: first.account).first { $0.name == first.folder }?.role == "trash"
+    }
+}
+
+/// The bulk bar (`.bulk`), while rows are checked: how many, then filing, deleting and snoozing them, or in Trash
+/// restoring them, and clearing the selection.
+struct BulkBar: View {
+    let mailbox: Mailbox
+    let inTrash: Bool
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        let count = mailbox.chosenRows.count + mailbox.unheld.count
+        HStack(spacing: 4) {
+            // The count gives way before the buttons' words do.
+            Text("\(count) selected")
+                .font(.meadow(.ui, 13, .heavy))
+                .foregroundStyle(meadow.primaryInk)
+                .lineLimit(2)
+                .layoutPriority(-1)
+            Spacer(minLength: 8)
+            if inTrash {
+                button(.restore, "Restore") { mailbox.restore(mailbox.chosenRows) }
+            } else {
+                button(.archive, "File") { mailbox.file(.archive) }
+                button(.trash, "Delete", del: true) { mailbox.file(.trash) }
+                button(.clock, "Snooze") { mailbox.snoozes?(mailbox.chosenRows) }
+            }
+            Button { mailbox.clearMarks() } label: { MeadowIconView(.x, size: 15) }
+                .meadowButton(.quiet, small: true, icon: true)
+                .help("Clear the selection (Esc)")
+                .accessibilityLabel("Clear the selection")
+        }
+        .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 8))
+        .background(RoundedRectangle(cornerRadius: 12).fill(meadow.primaryWash))
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 0, trailing: 8))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Bulk actions")
+    }
+
+    private func button(_ icon: MeadowIcon, _ title: LocalizedStringKey, del: Bool = false,
+                        run: @escaping () -> Void) -> some View {
+        Button(action: run) {
+            MeadowIconView(icon, size: 15)
+            Text(title)
+        }
+        .meadowButton(.standard, del: del, small: true)
+        .fixedSize()
+    }
+}
+
+/// The note while an account the list shows can't reach its server (`.offline`): work goes on, and the changes made
+/// meanwhile wait here and go once it's back; Try again syncs it now.
+struct OfflineNote: View {
+    let mailbox: Mailbox
+    /// The account the list is of, or nil for every account's.
+    let account: String?
+    let status: AppStatus
+    @Environment(\.meadow) private var meadow
+    @State private var waiting = 0
+
+    var body: some View {
+        let accounts = account.map { [$0] } ?? mailbox.accounts
+        let bad = StatusWords.bad(accounts, digest: status.digest, health: status.health)
+        if let first = bad.first {
+            HStack(alignment: .top, spacing: 10) {
+                MeadowIconView(.cloudOff).foregroundStyle(meadow.sunInk).padding(.top, 1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(Text(said(bad)).fontWeight(.bold).foregroundStyle(meadow.ink)) \(kept)")
+                        .font(.meadow(.ui, 13))
+                        .lineSpacing(MeadowFace.ui.lineSpacing(size: 13, lineHeight: 1.45))
+                        .foregroundStyle(meadow.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Try again") { Task { for one in bad { await status.retry(one) } } }
+                        .buttonStyle(MeadowLinkStyle())
+                        .padding(.leading, -4)
+                        .help("Sync \(mailbox.name(of: first)) again")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+            .background(RoundedRectangle(cornerRadius: 12).fill(meadow.sunWash))
+            .padding(EdgeInsets(top: 8, leading: 8, bottom: 0, trailing: 8))
+            .accessibilityElement(children: .combine)
+            .task(id: bad) { await readWaiting(bad) }
+        }
+    }
+
+    private func said(_ bad: [String]) -> String {
+        bad.count == 1 ? String(localized: "\(mailbox.name(of: bad[0])) can’t reach its server.")
+            : String(localized: "\(bad.count) accounts can’t reach their servers.")
+    }
+
+    private var kept: String {
+        switch waiting {
+        case 0: String(localized: "Keep working — what you change is saved here and applies once it’s back.")
+        case 1: String(localized: "Keep working — your change is saved here and applies once it’s back.")
+        default: String(localized: "Keep working — your \(waiting) changes are saved here and apply once it’s back.")
+        }
+    }
+
+    /// The changes waiting to reach the accounts that can't connect (`/api/pending`).
+    private func readWaiting(_ bad: [String]) async {
+        guard let calls = mailbox.calls, let pending = try? await calls.get(API.Get.Pending.self) else { return }
+        waiting = pending.items.filter { bad.contains($0.account) && $0.state != "failed" }.count
+    }
+}
+
+/// A link's button (`.linkbtn`): the primary's ink, bold, underlined.
+struct MeadowLinkStyle: ButtonStyle {
+    @Environment(\.meadow) private var meadow
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.meadow(.ui, 12.5, .bold))
+            .underline()
+            .foregroundStyle(meadow.primaryInk)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .contentShape(Rectangle())
+    }
+}
+
+/// What the list says when it has no rows to show, in the page's words (`.lempty`): a line in the display face, and
+/// under it what to do.
+struct EmptyList: View {
+    let app: MailApp?
+    let mailbox: Mailbox
+    let list: MailListModel
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        let facts = mailbox.facts
+        let place = app?.place?.listed
+        let searching = place?.search != nil
+        if list.firstRowsAt == nil {
+            if let problem = list.problem {
+                failed(searching ? "Search failed." : "Couldn’t load messages.", problem)
+            } else {
+                ProgressView().controlSize(.small).padding(28)
+            }
+        } else if (facts.total ?? list.total) == 0 {
+            if let problem = list.problem {
+                failed(searching ? "Search failed." : "Couldn’t load messages.", problem)
+            } else if place?.isInbox == true, mailbox.tab != .all, (facts.read ?? 0) > 0 {
+                said(mailbox.tab == .needs ? Words.needsYou : Words.unread) {
+                    HStack(spacing: 0) {
+                        Text("Everything else is in ")
+                        Button("Everything") { mailbox.tab = .all }.buttonStyle(MeadowLinkStyle())
+                        Text(".")
+                    }
+                }
+            } else if facts.syncing {
+                said("Reading this folder for the first time…") { ProgressView().controlSize(.small) }
+            } else if facts.syncFailed {
+                said("Couldn’t sync this folder.") {
+                    Button("Retry") { list.refresh() }.buttonStyle(MeadowLinkStyle())
+                }
+            } else {
+                said(searching ? Words.matches : Words.list) { EmptyView() }
+            }
+        }
+    }
+
+    private func said(_ title: String, @ViewBuilder then: () -> some View) -> some View {
+        VStack(spacing: 6) {
+            Text(title)
+                .font(.meadow(.display, 18, .bold))
+                .lineSpacing(MeadowFace.display.lineSpacing(size: 18, lineHeight: 1.3))
+                .foregroundStyle(meadow.ink)
+            then()
+                .font(.meadow(.ui, 14))
+                .foregroundStyle(meadow.ink2)
+        }
+        .multilineTextAlignment(.center)
+        .padding(EdgeInsets(top: 28, leading: 18, bottom: 28, trailing: 18))
+        .frame(maxWidth: .infinity)
+    }
+
+    private func failed(_ title: String, _ why: String) -> some View {
+        said(title) {
+            VStack(spacing: 6) {
+                Text(why)
+                Button("Retry") { list.refresh() }.buttonStyle(MeadowLinkStyle())
+            }
+        }
     }
 }
 #endif

@@ -45,7 +45,6 @@ struct MailboxColumn: View {
                 MailboxTable(list: list, mailbox: mailbox, chosen: mailbox.marked,
                              showsAccount: app.place?.listed.showsAccount ?? true)
                     .id(ObjectIdentifier(list))
-                    .overlay { EmptyList(app: app, mailbox: mailbox, list: list) }
                 if mailbox.facts.hasMore {
                     Rectangle().fill(meadow.line).frame(height: 1)
                     Button(app.place?.search != nil ? "Load more results" : "Load 200 more") { mailbox.readMore() }
@@ -72,62 +71,6 @@ extension Place {
     var isDesk: Bool {
         if case .desk = self { return true }
         return false
-    }
-}
-
-/// What the list says when it has no rows to show, in the page's words.
-private struct EmptyList: View {
-    let app: MailApp
-    let mailbox: Mailbox
-    let list: MailListModel
-
-    var body: some View {
-        let facts = mailbox.facts
-        let place = app.place?.listed
-        let searching = place?.search != nil
-        if list.firstRowsAt == nil {
-            if let problem = list.problem {
-                failed(searching ? "Search failed." : "Couldn’t load messages.", problem)
-            } else {
-                ProgressView().controlSize(.small)
-            }
-        } else if (facts.total ?? list.total) == 0 {
-            if let problem = list.problem {
-                failed(searching ? "Search failed." : "Couldn’t load messages.", problem)
-            } else if place?.isInbox == true, mailbox.tab != .all, (facts.read ?? 0) > 0 {
-                ContentUnavailableView {
-                    Text(mailbox.tab == .needs ? Words.needsYou : Words.unread)
-                } description: {
-                    Text("Everything else is in Everything.")
-                } actions: {
-                    Button("Show Everything") { mailbox.tab = .all }
-                }
-            } else if facts.syncing {
-                ContentUnavailableView {
-                    ProgressView().controlSize(.small)
-                    Text("Reading this folder for the first time…")
-                }
-            } else if facts.syncFailed {
-                ContentUnavailableView {
-                    Text("Couldn’t sync this folder.")
-                } actions: {
-                    Button("Retry") { list.refresh() }
-                }
-            } else {
-                ContentUnavailableView(searching ? Words.matches : Words.list,
-                                       systemImage: searching ? "magnifyingglass" : "tray")
-            }
-        }
-    }
-
-    private func failed(_ title: String, _ why: String) -> some View {
-        ContentUnavailableView {
-            Label(title, systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(why)
-        } actions: {
-            Button("Retry") { list.refresh() }
-        }
     }
 }
 
