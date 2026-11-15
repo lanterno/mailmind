@@ -186,7 +186,8 @@ final class MailRowCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("mail")
 
     private(set) var row: API.FolderRow?
-    private var head: String?
+    /// The day's head it draws over the row, which its height makes room for.
+    private(set) var head: String?
     /// The account's name, said to VoiceOver where the list holds several accounts' mail: drawn, it is only a dot.
     private var account: String?
     private var acts: [RowAct] = []

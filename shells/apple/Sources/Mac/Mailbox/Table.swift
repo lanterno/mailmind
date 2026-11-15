@@ -202,6 +202,7 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
 
     func rowsChanged(_ positions: IndexSet, totalChanged: Bool) {
         now = Date()
+        var reshown = positions
         if totalChanged {
             // New mail above moves every row down: their shapes are worked out again as they show.
             shapes = Array(repeating: 0, count: list.total)
@@ -213,16 +214,17 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         } else {
             // A page come: its rows, and the row after it, whose head the page's last row decides.
             var changed = IndexSet()
-            var touched = positions
-            if let last = positions.last, last + 1 < list.total { touched.insert(last + 1) }
-            for position in touched where position < shapes.count {
+            if let last = positions.last, last + 1 < list.total { reshown.insert(last + 1) }
+            for position in reshown where position < shapes.count {
                 let was = shapes[position]
                 shapes[position] = 0
                 if shape(at: position).packed != was || was == 0 { changed.insert(row(at: position)) }
             }
             if !changed.isEmpty { keepingPlace { table.noteHeightOfRows(withIndexesChanged: changed) } }
         }
-        redraw(rows: IndexSet(positions.map { row(at: $0) }))
+        // Every row worked out again is shown again, the one after the page too: a page that came after the one
+        // below it gives that row its day's head, and its height already made room for it.
+        redraw(rows: IndexSet(reshown.map { row(at: $0) }))
         // New mail above the rows chosen moves them: keep the rows, not the positions.
         follow(mailbox?.marked ?? [], scroll: false)
     }
