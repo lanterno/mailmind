@@ -3640,6 +3640,27 @@ extension API {
         static let required: Set<String> = ["ok", "prefetched"]
     }
 
+    public enum Preset: String, Codable, Hashable, Sendable, CaseIterable {
+        case gmail
+    }
+
+    /// `Presets.preset`: Gmail's preset for an address at one of Google's own domains, `sure`, which the form chooses; for
+    /// one whose domain's mail servers are Google's, offered (`sure` false); none for any other. `domain` is the address's,
+    /// in lower case, or None when it names none a lookup could ask about.
+    public struct PresetFound: Codable, Hashable, Sendable {
+        public var domain: String?
+        public var ok: Bool
+        public var preset: Preset?
+        public var sure: Bool
+
+        public init(domain: String? = nil, ok: Bool, preset: Preset? = nil, sure: Bool) {
+            self.domain = domain
+            self.ok = ok
+            self.preset = preset
+            self.sure = sure
+        }
+    }
+
     public struct Preview: Codable, Hashable, Sendable {
         public var formatted: Bool
         public var html: String
@@ -6561,6 +6582,8 @@ extension API {
         public enum Accounts {}
         /// GET /api/accounts/bridge-password
         public enum AccountsBridgePassword {}
+        /// GET /api/accounts/preset
+        public enum AccountsPreset {}
         /// GET /api/ai/draft-ahead
         public enum AiDraftAhead {}
         /// GET /api/ai/key
@@ -6828,6 +6851,11 @@ extension API.Get.Accounts: GetRoute {
 extension API.Get.AccountsBridgePassword: GetRoute {
     public static let path = "/api/accounts/bridge-password"
     public typealias Answer = API.Kept
+}
+
+extension API.Get.AccountsPreset: GetRoute {
+    public static let path = "/api/accounts/preset"
+    public typealias Answer = API.PresetFound
 }
 
 extension API.Get.AiDraftAhead: GetRoute {
