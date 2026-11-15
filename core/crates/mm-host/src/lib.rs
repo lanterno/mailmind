@@ -6,8 +6,9 @@
 //! goes through `serve::answer`, the very perimeter and router the HTTP server runs, with the Host, the Origin, the
 //! fetch metadata and this run's CSRF token a page of the app's own would send: so an answer, a refusal included, is
 //! what the page gets, byte for byte. The one header a shell can add is the page's leave to go over the day's AI limit
-//! (`request_over_limit`), so nothing else the perimeter reads can be forged through the host. The event stream (`/api/events`) is read as it comes and each event handed to a
-//! `Subscriber`. `close` ends the streams, stops the workers and waits for the work the requests set going.
+//! (`request_over_limit`), so nothing else the perimeter reads can be forged through the host. The event stream
+//! (`/api/events`) is read as it comes and each event handed to a `Subscriber`. `close` ends the streams, stops the
+//! workers and waits for the work the requests set going.
 //!
 //! The host owns the runtime the routes run on. `request` blocks its caller until the answer is whole, so a shell calls
 //! it off its main thread.
