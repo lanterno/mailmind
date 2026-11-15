@@ -601,22 +601,53 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
             return panel
         }
 
-        /// Close on a click outside the menu and on Esc, and hand it the other keys it wants.
+        /// Close on a click outside the menu and on Esc, and hand it the other keys it wants: only those typed in the
+        /// window it hangs in, as `MeadowPopoverKeys` says.
         private func watch(_ panel: NSPanel) {
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) {
                 [weak self, weak panel] event in
                 guard let self else { return event }
                 if event.type == .keyDown {
-                    if event.keyCode == 53 {
+                    switch MeadowPopoverKeys.verdict(keyCode: event.keyCode, typedIn: event.window,
+                                                     hungIn: panel?.parent, panel: panel) {
+                    case .close:
                         self.close()
                         return nil
+                    case .offer: return self.keys(event) ? nil : event
+                    case .pass: return event
                     }
-                    return self.keys(event) ? nil : event
                 }
                 if event.window !== panel { self.close() }
                 return event
             }
         }
+    }
+}
+
+/// Which keys typed while a Meadow popover is open are its own. Its panel is never the key window, so it hears the
+/// keys through a monitor of the whole app's: it takes only those typed in the window it hangs in (or its own panel),
+/// and none while that window's keyboard is in something that takes text, whose keys are that thing's.
+enum MeadowPopoverKeys {
+    enum Verdict: Equatable {
+        /// Esc: the popover closes.
+        case close
+        /// The popover's keys may take it.
+        case offer
+        /// Not the popover's: it goes on untouched.
+        case pass
+    }
+
+    static func verdict(keyCode: UInt16, typedIn window: NSWindow?, hungIn parent: NSWindow?,
+                        panel: NSWindow?) -> Verdict {
+        guard let window, window === parent || window === panel else { return .pass }
+        // Esc closes it even from a field: what is typed there goes on once the popover is gone.
+        if keyCode == 53 { return .close }
+        return window !== panel && typesText(window.firstResponder) ? .pass : .offer
+    }
+
+    /// Whether `responder` takes typed text: a field's editor while a field is edited, or a text view that can be.
+    static func typesText(_ responder: NSResponder?) -> Bool {
+        (responder as? NSTextView)?.isEditable ?? false
     }
 }
 
