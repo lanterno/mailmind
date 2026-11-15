@@ -5,7 +5,8 @@
 //! gives the app (never the process's own), and for a demo or test home a stand-in for the login Keychain. A request
 //! goes through `serve::answer`, the very perimeter and router the HTTP server runs, with the Host, the Origin, the
 //! fetch metadata and this run's CSRF token a page of the app's own would send: so an answer, a refusal included, is
-//! what the page gets, byte for byte. The event stream (`/api/events`) is read as it comes and each event handed to a
+//! what the page gets, byte for byte. The one header a shell can add is the page's leave to go over the day's AI limit
+//! (`request_over_limit`), so nothing else the perimeter reads can be forged through the host. The event stream (`/api/events`) is read as it comes and each event handed to a
 //! `Subscriber`. `close` ends the streams, stops the workers and waits for the work the requests set going.
 //!
 //! The host owns the runtime the routes run on. `request` blocks its caller until the answer is whole, so a shell calls
@@ -169,12 +170,23 @@ impl Host {
     /// The answer to `method` on `target` (a path and its query, as a request line names it), with `body` for a POST:
     /// the route's, or the perimeter's refusal, as a problem document. After `close`, a 503.
     pub fn request(&self, method: &str, target: &str, body: &[u8]) -> Answer {
+        self.answer(method, target, body, false)
+    }
+
+    /// `request`, with the person's leave to go over today's AI limit: `X-MailMind-AI-Over-Limit: allow`, which the
+    /// page adds when it sends a request again once they say yes to its question. Without it, an AI call at the limit
+    /// is the 402 that asks.
+    pub fn request_over_limit(&self, method: &str, target: &str, body: &[u8]) -> Answer {
+        self.answer(method, target, body, true)
+    }
+
+    fn answer(&self, method: &str, target: &str, body: &[u8], over_limit: bool) -> Answer {
         if self.closing.load(Ordering::SeqCst) {
             return fixed(503, "MailMind has closed");
         }
         let runtime = self.runtime.read().unwrap_or_else(PoisonError::into_inner);
         let Some(runtime) = runtime.as_ref() else { return fixed(503, "MailMind has closed") };
-        let Some(request) = self.made(method, target, body) else { return fixed(400, "bad request") };
+        let Some(request) = self.made(method, target, body, over_limit) else { return fixed(400, "bad request") };
         runtime.block_on(async {
             let response = mm_server::serve::answer(&self.app, self.routes.clone(), request).await;
             whole(response).await
@@ -189,7 +201,7 @@ impl Host {
         }
         let runtime = self.runtime.read().unwrap_or_else(PoisonError::into_inner);
         let Some(runtime) = runtime.as_ref() else { return Err(fixed(503, "MailMind has closed")) };
-        let Some(request) = self.made("GET", EVENTS, &[]) else { return Err(fixed(400, "bad request")) };
+        let Some(request) = self.made("GET", EVENTS, &[], false) else { return Err(fixed(400, "bad request")) };
         let response = runtime.block_on(mm_server::serve::answer(&self.app, self.routes.clone(), request));
         if response.status() != 200 || !is_stream(&response) {
             return Err(runtime.block_on(whole(response)));
@@ -244,9 +256,10 @@ impl Host {
     }
 
     /// The request a page of the app's own would send: this server's Host, same-origin, this run's CSRF token on
-    /// every request as the page's client attaches it, and on any method but GET and HEAD the Origin and the body's
-    /// length and type. None for a method or target no request line could carry.
-    fn made(&self, method: &str, target: &str, body: &[u8]) -> Option<Request<Body>> {
+    /// every request as the page's client attaches it, the leave to go over the AI limit where the person gave it,
+    /// and on any method but GET and HEAD the Origin and the body's length and type. None for a method or target no
+    /// request line could carry.
+    fn made(&self, method: &str, target: &str, body: &[u8], over_limit: bool) -> Option<Request<Body>> {
         let method = Method::from_bytes(method.as_bytes()).ok()?;
         if !target.starts_with('/') {
             return None;
@@ -258,6 +271,9 @@ impl Host {
             .header(header::HOST, format!("127.0.0.1:{PORT}"))
             .header("sec-fetch-site", "same-origin")
             .header("x-csrf-token", HeaderValue::from_str(&self.app.csrf).ok()?);
+        if over_limit {
+            request = request.header(mm_server::routes::AI_OVER_HEADER, "allow");
+        }
         if reads {
             return request.body(Body::empty()).ok();
         }

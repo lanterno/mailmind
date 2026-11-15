@@ -1,6 +1,7 @@
 //! The app in the shell's own process (`mm_host`), for Swift: a home opened, the routes the page calls answered, and
-//! the event stream heard through a listener. What crosses is a request's method, target and body, and an answer's
-//! status, headers and bytes: the routes' own JSON, which the shell decodes with the types the API's schemas make.
+//! the event stream heard through a listener. What crosses is a request's method, target and body (with, once a person
+//! says yes to going over the day's AI limit, their leave), and an answer's status, headers and bytes: the routes' own
+//! JSON, which the shell decodes with the types the API's schemas make.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -119,6 +120,12 @@ impl CoreHost {
     /// (JSON). It blocks until the answer is whole: call it off the main thread.
     pub fn request(&self, method: String, target: String, body: Vec<u8>) -> CoreAnswer {
         self.inner.request(&method, &target, &body).into()
+    }
+
+    /// `request`, with the person's leave to go over today's AI limit, as the page sends a request again once they
+    /// say yes to its question. It is the only header a shell can add. It blocks as `request` does.
+    pub fn request_over_limit(&self, method: String, target: String, body: Vec<u8>) -> CoreAnswer {
+        self.inner.request_over_limit(&method, &target, &body).into()
     }
 
     /// Hear the event stream until the subscription is cancelled or released, or the host closes.

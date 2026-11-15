@@ -51,6 +51,8 @@ use serde_json::Value;
 use crate::answer;
 use crate::app::App;
 
+pub use assistant::AI_OVER_HEADER;
+
 pub fn router(app: Arc<App>) -> Router {
     Router::new()
         .merge(page::routes())
