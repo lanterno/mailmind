@@ -3,8 +3,8 @@ import SwiftUI
 import XCTest
 
 /// What floats over Meadow's window, drawn over the frame on fictional mail at the mockup's 1440 by 900: the palette,
-/// an answer in it, a bulk action's preview, the snooze chooser, the status's menu, the keyboard's legend, the
-/// toasts and the outbox. Day's palette is drawn on every run and must draw; with
+/// an answer in it, a bulk action's preview, the snooze chooser and its time of one's own, the status's menu, the
+/// keyboard's legend, the toasts and the outbox. Day's palette is drawn on every run and must draw; with
 /// `TEST_RUNNER_MEADOW_PICTURES=<folder>` given to `xcodebuild test`, every light of each is written there as
 /// `overlay-<light>-<what>.png`, to lay beside the mockup's `1440-*-palette.png`, `-ask`, `-bulk`, `-snooze`,
 /// `-sync` and `-keys`.
@@ -121,6 +121,8 @@ final class MeadowOverlayPictures: XCTestCase {
             try await draw("save-view", light, try dialog(SaveViewSheet(
                 mailbox: app.mailbox, query: "from:grace@example.test has:attachment", close: {}), place: .form))
             try await draw("keys", light, try dialog(KeysLegend(status: status, close: {}), place: .keys))
+            try await draw("snooze-time", light, try dialog(SnoozeTimeDialog(
+                copies: [DeskFixture.ada, DeskFixture.grace], model: desk.attention, close: {}), place: .form))
         }
     }
 

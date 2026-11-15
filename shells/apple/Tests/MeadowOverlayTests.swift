@@ -119,6 +119,51 @@ final class MeadowOverlayTests: XCTestCase {
 
     // MARK: Popovers
 
+    /// The snooze chooser drawn in a window, as its popover shows it, until its menu has offered its items.
+    private func chooser(_ copies: [MailCopy], model: AttentionModel, menu: MeadowMenuModel,
+                         close: @escaping @MainActor () -> Void) async throws -> NSWindow {
+        let host = NSHostingView(rootView: SnoozeChooser(copies: copies, model: model, menu: menu, close: close)
+            .meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 300, height: 400)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        for _ in 0..<50 where menu.items.isEmpty {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return window
+    }
+
+    func testPickingATimeOfOnesOwnClosesTheChooserAndAsksTheWindow() async throws {
+        let attention = AttentionModel(link: CoreLink(DeskRoutes()), notices: DeskNotices())
+        let menu = MeadowMenuModel()
+        var closed = 0
+        let window = try await chooser([DeskFixture.ada, DeskFixture.grace], model: attention, menu: menu) {
+            closed += 1
+        }
+        let own = try XCTUnwrap(menu.items.firstIndex { $0.id == "own" })
+        menu.at = own
+        XCTAssertTrue(menu.key(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                                windowNumber: 0, context: nil, characters: "\r",
+                                                charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)!))
+        XCTAssertEqual(closed, 1, "the popover goes, so the dialog can have the keyboard")
+        XCTAssertEqual(attention.choosingTime, [DeskFixture.ada, DeskFixture.grace])
+        XCTAssertEqual(WindowDialog.shown(moving: nil, savingView: nil, choosingTime: attention.choosingTime,
+                                          sheet: nil, planned: nil, palette: false, keys: false),
+                       .snoozeTime([DeskFixture.ada, DeskFixture.grace]))
+        window.contentView = nil
+    }
+
+    func testATypedTimeIsTextThatAPopoverLeavesAlone() {
+        let field = NSDatePicker()
+        field.datePickerStyle = .textFieldAndStepper
+        XCTAssertTrue(MeadowPopoverKeys.typesText(field))
+        let calendar = NSDatePicker()
+        calendar.datePickerStyle = .clockAndCalendar
+        XCTAssertFalse(MeadowPopoverKeys.typesText(calendar))
+    }
+
     func testADigitPicksASnoozePreset() {
         XCTAssertEqual(SnoozeChooser.preset(forKey: "1"), API.SnoozePreset.allCases.first)
         XCTAssertEqual(SnoozeChooser.preset(forKey: "\(API.SnoozePreset.allCases.count)"),
@@ -165,6 +210,15 @@ final class MeadowOverlayTests: XCTestCase {
                                           keys: true), .keys)
         XCTAssertNil(WindowDialog.shown(moving: nil, savingView: nil, sheet: .snoozeUntil([], canUnsnooze: false),
                                         planned: nil, palette: false, keys: false), "the snooze chooser is a popover")
+    }
+
+    func testASnoozesTimeOfOnesOwnIsAskedBeforeWhatTheDeskOpened() {
+        let copies = [DeskFixture.ada]
+        XCTAssertEqual(WindowDialog.shown(moving: nil, savingView: nil, choosingTime: copies, sheet: .ask,
+                                          planned: nil, palette: true, keys: true), .snoozeTime(copies))
+        XCTAssertEqual(WindowDialog.shown(moving: nil, savingView: "from:x", choosingTime: copies, sheet: nil,
+                                          planned: nil, palette: false, keys: false), .saveView("from:x"))
+        XCTAssertEqual(WindowDialog.snoozeTime(copies).kind, "snooze-time")
     }
 
     func testOnlyTheDesksOwnSheetsOpenAsSheets() {
