@@ -102,8 +102,9 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 - **A list is a native table, drawn with Core Text.** The table asks only for the rows on screen, and a batch redraws
   only the rows it changed. SwiftUI's `List` spent up to 20 ms a frame deep in the list and kept memory for every row
   it had shown. Step 0's list keeps one row height, so row n is at n times it. The window's rows take the height their
-  content needs (a summary's lines, chips, a day's head), worked out by arithmetic from a row's shape and kept a byte
-  a row, so the table never lays out text to measure one.
+  content needs (a summary's one line or two, chips, a day's head), worked out by arithmetic from a row's shape, kept
+  a byte a row, and its summary's width on one line, set once as its page comes. A new width works the lines out
+  again from those widths, so the table never lays out text to measure a row as it scrolls or as the splitter moves.
 - **The shell holds no list of its own.** It keeps only the rows in the range the latest batch says to hold, and drops
   the rest when a batch arrives.
 - **Generated files are never edited by hand.** Change the core, run `just gen-bindings`, commit the diff on its own.
