@@ -58,6 +58,11 @@ Python app gets fixes only.
   reply to isn't stored. Expiry: with no INTERNALDATE, a Date of `-0000` is read as UTC, where Python read it as local time. Two Rust servers
   starting at once on a fresh machine can each make a database key, the second's replacing the first's in the Keychain,
   where Python's second finds the first's (`database_version::made`).
+- **The rarer broken MIME parameters** · low value · effort M · [#48](https://github.com/lanterno/mailmind/issues/48) — A scan of the `name` and
+  `filename` parameters found broken mail the core reads apart from Python, which the property tests rarely draw: a stray
+  quote in an earlier parameter, a value or name starting with a tspecial, `*` or `\`, an apostrophe in an unquoted value,
+  an unclosed comment in the type, and three two-byte boundary cases. Decide each by the RFCs and mail clients, and mend
+  the core where Python's reading is the sound one.
 - **The flip** · high value · effort M · [#11](https://github.com/lanterno/mailmind/issues/11) — Step 4: when the served suites pass against both servers and the owner has used
   the Rust server daily for two weeks (`just run-rust`), the Python server goes. Step 3 is done, so it waits only on
   those two weeks; `/api/debug/health`, `/api/debug/jobs` and `/api/debug/ai` say how the jobs, the queues and AI
