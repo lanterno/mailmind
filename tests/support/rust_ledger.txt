@@ -703,3 +703,5 @@ tests/api/test_http_presets.py::test_no_address_at_all_is_a_bad_request[none]
 tests/api/test_http_presets.py::test_no_address_at_all_is_a_bad_request[blank]
 tests/api/test_http_presets.py::test_no_address_at_all_is_a_bad_request[a-space]
 tests/api/test_http_presets.py::test_with_no_nameserver_named_none_is_asked
+tests/e2e/browser/test_gmail_setup.py::test_an_address_google_takes_the_mail_of_is_offered_gmails_settings_and_how_to_make_an_app_password
+tests/e2e/browser/test_gmail_setup.py::test_a_connection_is_tested_as_soon_as_it_is_saved_and_a_refusal_said_plainly
