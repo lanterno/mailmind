@@ -457,6 +457,50 @@ final class MailboxGoingTests: XCTestCase {
         XCTAssertTrue(mailbox.commands().contains { $0.id == "snooze" }, "another area's command joins the palette")
     }
 
+    func testThePalettesPlacesShowTheKeysThatGoThereFromHere() async {
+        let (app, mailbox) = await mailbox()
+        func hints() -> [String: String] {
+            Dictionary(mailbox.commands().compactMap { command in command.hint.map { (command.id, $0) } },
+                       uniquingKeysWith: { first, _ in first })
+        }
+        app.place = .allInboxes
+        var shown = hints()
+        XCTAssertEqual(shown["fold:\(Fixture.ada):INBOX"], "g i", "from every inbox, the first account's folders")
+        XCTAssertEqual(shown["acct:\(Fixture.ada)"], "g i")
+        XCTAssertEqual(shown["fold:\(Fixture.ada):Trash"], "g t")
+        XCTAssertEqual(shown["across:\(VirtualFolder.waiting.rawValue)"], "g w", "and the stacks over every account")
+        XCTAssertNil(shown["fold:\(Fixture.ada):\(VirtualFolder.waiting.rawValue)"])
+        XCTAssertNil(shown["fold:\(Fixture.work):INBOX"], "another account's folder is no chord away")
+        XCTAssertNil(shown["all-inboxes"])
+        XCTAssertNil(shown["fold:\(Fixture.ada):Receipts"], "a folder of a person's own has no key")
+
+        let work = Place.folder(account: Fixture.work, folder: "INBOX")
+        app.place = work
+        shown = hints()
+        XCTAssertEqual(shown["fold:\(Fixture.work):[Gmail]/All Mail"], "g a", "Gmail archives into All Mail")
+        XCTAssertEqual(shown["fold:\(Fixture.work):\(VirtualFolder.waiting.rawValue)"], "g w")
+        XCTAssertNil(shown["across:\(VirtualFolder.waiting.rawValue)"])
+        XCTAssertNil(shown["fold:\(Fixture.ada):INBOX"])
+        // Each key shown goes where its command goes.
+        for command in mailbox.commands() {
+            guard let hint = command.hint, hint.hasPrefix("g "), let key = hint.last else { continue }
+            command.run()
+            let there = app.place
+            app.place = work
+            mailbox.go(chord: key)
+            XCTAssertEqual(app.place, there, command.id)
+            app.place = work
+        }
+    }
+
+    func testThePaletteShowsNoChordWhileSingleKeysAreOff() async {
+        let app = MailApp()
+        app.mailbox.wire = Fixture.server(singleKeys: false).wire
+        await app.mailbox.refresh()
+        app.place = .allInboxes
+        XCTAssertFalse(app.mailbox.commands().contains { $0.hint?.hasPrefix("g ") == true })
+    }
+
     func testAnAreaHangsItsHooksOnce() async {
         let (_, mailbox) = await mailbox()
         var joins = 0
