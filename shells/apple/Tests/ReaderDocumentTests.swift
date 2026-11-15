@@ -1,0 +1,360 @@
+import AppKit
+import SwiftUI
+import WebKit
+import XCTest
+
+/// The reading pane's document (#44): where it stands in a pane of each width, the measure, the reading face in the
+/// frame and what it refuses, and what the document's parts say.
+@MainActor
+final class ReaderDocumentTests: XCTestCase {
+    // MARK: The layout
+
+    func testTheAsideStandsBesideTheMessageFrom1100() {
+        XCTAssertFalse(PaneLayout(width: 1099, measure: 680).twoColumns)
+        XCTAssertTrue(PaneLayout(width: 1100, measure: 680).twoColumns)
+        XCTAssertTrue(PaneLayout(width: 700, measure: 680).tight)
+        XCTAssertFalse(PaneLayout(width: 701, measure: 680).tight)
+    }
+
+    func testTheDocumentsMarginsAndColumns() {
+        let one = PaneLayout(width: 970, measure: 680)
+        XCTAssertEqual(one.padding, EdgeInsets(top: 26, leading: 48, bottom: 96, trailing: 48))
+        XCTAssertEqual(one.widest, 776, "the measure and its margins")
+        XCTAssertEqual(one.content, 680, "the measure, in a pane wider than it")
+        XCTAssertEqual(one.main, 680)
+
+        let narrow = PaneLayout(width: 600, measure: 680)
+        XCTAssertEqual(narrow.padding, EdgeInsets(top: 18, leading: 20, bottom: 80, trailing: 20))
+        XCTAssertEqual(narrow.content, 560, "a pane narrower than the measure: all of it but the margins")
+
+        let two = PaneLayout(width: 1400, measure: 680)
+        XCTAssertEqual(two.widest, 680 + 300 + 44 + 96)
+        XCTAssertEqual(two.content, 1024)
+        XCTAssertEqual(two.main, 680, "the message keeps the measure, the aside beside it")
+
+        let tightTwo = PaneLayout(width: 1150, measure: 850)
+        XCTAssertEqual(tightTwo.content, 1054)
+        XCTAssertEqual(tightTwo.main, 710, "where the pane can't hold both, the message gives way")
+        XCTAssertEqual(PaneLayout(width: 0, measure: 680).content, 0)
+    }
+
+    func testTheAsideIsHeldBelowTheTopButNeverPastItsRow() {
+        // Not scrolled to it yet: it stays where it stands.
+        XCTAssertEqual(PaneLayout.stuck(scrolled: 0, rowTop: 200, rowHeight: 2000, asideHeight: 500), 0)
+        // Scrolled past its top: held 18 below the pane's top.
+        XCTAssertEqual(PaneLayout.stuck(scrolled: 400, rowTop: 200, rowHeight: 2000, asideHeight: 500), 218)
+        // Never past the foot of the row.
+        XCTAssertEqual(PaneLayout.stuck(scrolled: 5000, rowTop: 200, rowHeight: 2000, asideHeight: 500), 1500)
+        // Taller than the row: it never moves.
+        XCTAssertEqual(PaneLayout.stuck(scrolled: 400, rowTop: 200, rowHeight: 300, asideHeight: 500), 0)
+    }
+
+    func testTheMeasureIsTheTextsSizeTimesItsWidths() {
+        let sizes: [API.ReadSize] = [.s, .m, .l, .xl]
+        XCTAssertEqual(sizes.map(MailLook.size), [15, 17, 19, 21])
+        XCTAssertEqual(sizes.map { MailLook.measure(.narrow, size: $0) }, [495, 561, 627, 693])
+        XCTAssertEqual(sizes.map { MailLook.measure(.medium, size: $0) }, [600, 680, 760, 840])
+        XCTAssertEqual(sizes.map { MailLook.measure(.wide, size: $0) }, [750, 850, 950, 1050])
+        var prefs = ReadingPrefs()
+        XCTAssertEqual(prefs.measure, 680, "the mockup's --measure, with nothing said")
+        prefs.width = .wide
+        prefs.look.size = .l
+        XCTAssertEqual(prefs.measure, 950)
+    }
+
+    // MARK: The reading face in the frame
+
+    func testTheFontRuleIsTheFilesBytesAsADataURLAndNothingElse() throws {
+        let face = FrameFont.face
+        XCTAssertTrue(face.hasPrefix("@font-face{font-family:\"MailMind Read\";src:url(data:font/ttf;base64,"))
+        XCTAssertEqual(face.components(separatedBy: "url(").count, 2, "one source, and it is the data: URL")
+        XCTAssertFalse(face.contains("http"))
+        XCTAssertFalse(face.contains("mailmind-frame:"))
+        XCTAssertGreaterThan(face.count, 100_000, "the whole file")
+    }
+
+    func testOnlyATrueTypeFilesBytesBecomeARule() {
+        XCTAssertEqual(FrameFont.rule(Data()), "")
+        XCTAssertEqual(FrameFont.rule(Data("<style>body{}</style> and more".utf8)), "", "not a font")
+        XCTAssertEqual(FrameFont.rule(Data([0x77, 0x4F, 0x46, 0x32] + Array(repeating: 0, count: 40))), "",
+                       "a WOFF2 file isn't the TrueType the rule says")
+        XCTAssertEqual(FrameFont.rule(Data([0, 1, 0, 0])), "", "too short to be one")
+        let tiny = Data([0, 1, 0, 0] + Array(repeating: 0x41, count: 20))
+        XCTAssertTrue(FrameFont.rule(tiny).contains("src:url(data:font/ttf;base64,\(tiny.base64EncodedString()))"))
+        XCTAssertFalse(FrameFont.rule(Data(Array("true".utf8) + Array(repeating: 0, count: 20))).isEmpty)
+    }
+
+    func testTheFrameSetsTheMailInTheReadingFaceUnderItsPolicy() async throws {
+        let look = MailLook.of(html: false, prefs: .init(), darkAppearance: false, dark: ReaderPalette.of(dark: true),
+                               light: ReaderPalette.of(dark: false))
+        let policy = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none';"
+            + " form-action 'none'"
+        let document = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta http-equiv="
+            + "\"Content-Security-Policy\" content=\"\(policy)\"></head><body><pre>Hi Ada,\n\nThursday, then.</pre>"
+            + "</body></html>"
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 480, height: 200), configuration: configuration)
+        let loaded = FrameLoaded()
+        view.navigationDelegate = loaded
+        view.loadHTMLString(look.dress(document), baseURL: nil)
+        await loaded.wait()
+        // The app's own question, in a world of its own: the mail's runs no script.
+        // WebKit names a family with its quotes or without, by version, so they are dropped.
+        let faces = try await view.callAsyncJavaScript(
+            "await document.fonts.ready; return [...document.fonts]"
+                + ".map(f => f.family.replaceAll('\"', '') + ':' + f.status).join(',');",
+            contentWorld: .defaultClient) as? String
+        XCTAssertEqual(faces, "MailMind Read:loaded", "the reading face loaded from its data: URL")
+    }
+
+    // MARK: The chips and the place
+
+    func testTheChipsSayTheAccountTheFolderTheSunAndWhereItLies() {
+        let rail = [Fixture.folder("INBOX", role: "inbox"), Fixture.folder("Archive", role: "archive"),
+                    Fixture.folder("Clients", role: "custom")]
+        func kinds(_ chips: [DocumentChip]) -> [String] { chips.map(\.text) }
+        XCTAssertEqual(kinds(DocumentChip.of(account: "Work", accountIndex: 1, folder: "INBOX", rail: rail,
+                                             needsYou: true, replied: false)), ["Work", "Needs you"])
+        XCTAssertEqual(DocumentChip.of(account: "Work", accountIndex: 1, folder: "INBOX", rail: rail, needsYou: false,
+                                       replied: false).first?.kind, .account(1))
+        XCTAssertEqual(kinds(DocumentChip.of(account: "Ada", accountIndex: 0, folder: "Clients", rail: rail,
+                                             needsYou: false, replied: true)), ["Ada", "Clients", "Replied"])
+        XCTAssertEqual(kinds(DocumentChip.of(account: "Ada", accountIndex: 0, folder: "Archive", rail: rail,
+                                             needsYou: false, replied: false)), ["Ada", "In Archive"])
+        XCTAssertEqual(kinds(DocumentChip.of(account: "Ada", accountIndex: 0, folder: "Unknown/Box", rail: [],
+                                             needsYou: false, replied: false)), ["Ada", "Unknown/Box"],
+                       "a folder the rail doesn't know is the person's")
+        XCTAssertEqual(DocumentChip.role(of: "inbox", rail: []), "inbox")
+        XCTAssertEqual(DocumentChip.role(of: "Archive", rail: rail), "archive")
+    }
+
+    func testTheReplyBoxStandsWhereTheMockupHasIt() {
+        func offers(_ folder: String) -> Bool {
+            DocumentPlace.of(app: nil, copy: MailCopy(Fixture.row(1, folder: folder)), needsYou: false,
+                             replied: false).offersReply
+        }
+        XCTAssertTrue(offers("INBOX"))
+        XCTAssertTrue(offers("Clients"))
+        XCTAssertEqual(DocumentPlace.of(app: nil, copy: MailCopy(Fixture.row(1)), needsYou: false, replied: false).me,
+                       "ada", "with no window, the address's own name")
+    }
+
+    func testTheReplyBoxStandsNowhereMailIsPutAway() async {
+        let app = MailApp()
+        app.mailbox.wire = Fixture.server().wire
+        await app.mailbox.refresh()
+        func place(_ folder: String) -> DocumentPlace {
+            DocumentPlace.of(app: app, copy: MailCopy(Fixture.row(1, folder: folder)), needsYou: false, replied: false)
+        }
+        let folders = ["INBOX", "Sent", "Receipts", "Archive", "Trash", "Junk", "Drafts"]
+        XCTAssertEqual(folders.map { place($0).offersReply }, [true, true, true, false, false, false, false])
+        XCTAssertEqual(place("Receipts").filed, "Receipts")
+        XCTAssertEqual(place("INBOX").me, "Ada", "the account's alias")
+        XCTAssertEqual(place("Trash").chips.map(\.text), ["Ada", "In Trash"])
+    }
+
+    // MARK: The message's words
+
+    func testToWhom() {
+        let mine = SendGuard.mineSet(["ada@example.test"])
+        XCTAssertEqual(MessageWords.toWhom("ada@example.test", mine: mine), "to you")
+        XCTAssertEqual(MessageWords.toWhom("", mine: mine), "to you")
+        XCTAssertEqual(MessageWords.toWhom("Ada <ada@example.test>, bo@example.test", mine: mine), "to you and 1 more")
+        XCTAssertEqual(MessageWords.toWhom("Team <team@example.test>", mine: mine), "to Team")
+        XCTAssertEqual(MessageWords.toWhom("\"Bo Brown\" <bo@example.test>, cy@example.test", mine: mine),
+                       "to Bo Brown and 1 more")
+        XCTAssertEqual(MessageWords.toWhom("list@example.test", mine: mine), "to list@example.test")
+    }
+
+    func testWhereAMailIsFrom() {
+        XCTAssertEqual(MessageWords.from("ren@Kumo.example.test", facts: API.SenderFacts(count: 41, firstAgo: "8mo",
+                                                                                          replied: 12)),
+                       .known(domain: "kumo.example.test", relation: "41 messages, the first 8mo ago"))
+        XCTAssertEqual(MessageWords.from("ren@kumo.example.test", facts: API.SenderFacts(count: 3, replied: 0)),
+                       .known(domain: "kumo.example.test", relation: "3 messages"))
+        XCTAssertEqual(MessageWords.from("new@clinic.example.test", facts: API.SenderFacts(count: 1, replied: 0)),
+                       .external(domain: "clinic.example.test"), "the first from them")
+        XCTAssertEqual(MessageWords.from("new@clinic.example.test", facts: nil),
+                       .external(domain: "clinic.example.test"))
+        XCTAssertEqual(MessageWords.from(nil, facts: nil), .unknown)
+        XCTAssertEqual(MessageWords.from("no-at-sign", facts: nil), .unknown)
+        XCTAssertEqual(MessageWords.sandbox(blocked: 0), "Sandboxed")
+        XCTAssertEqual(MessageWords.sandbox(blocked: 1), "Sandboxed · 1 tracker blocked")
+        XCTAssertEqual(MessageWords.sandbox(blocked: 4), "Sandboxed · 4 trackers blocked")
+    }
+
+    func testAFilesBadge() {
+        XCTAssertEqual(FileKind.label(filename: "contract-v3.pdf", contentType: "application/pdf"), "PDF")
+        XCTAssertEqual(FileKind.label(filename: "plan.docx", contentType: ""), "DOCX")
+        XCTAssertEqual(FileKind.label(filename: "../../evil/photo.JPEG", contentType: "image/jpeg"), "JPEG")
+        XCTAssertEqual(FileKind.label(filename: "archive.backup", contentType: "application/octet-stream"), "FILE",
+                       "too long an ending to say")
+        XCTAssertEqual(FileKind.label(filename: "scan", contentType: "image/png"), "IMG")
+        XCTAssertEqual(FileKind.label(filename: ".profile", contentType: "text/plain"), "TXT")
+        XCTAssertEqual(FileKind.label(filename: "notes.t-x", contentType: "application/pdf"), "PDF")
+    }
+
+    func testTheSummarysFootNamesTheSendersFirstName() {
+        XCTAssertEqual(SummaryCard.foot("Ren Takeda"), "Not Ren’s words — the message is the source.")
+        XCTAssertEqual(SummaryCard.foot("ren@example.test"), "Not the sender’s words — the message is the source.")
+        XCTAssertEqual(SummaryCard.foot(nil), "Not the sender’s words — the message is the source.")
+        XCTAssertEqual(SummaryCard.foot("  "), "Not the sender’s words — the message is the source.")
+    }
+
+    func testTheInvitesLeafAndWhoIsComing() {
+        let english = Locale(identifier: "en_US")
+        XCTAssertEqual(InviteCard.calendarDay("2026-11-06T09:30:00+09:00", locale: english)?.month, "NOV")
+        XCTAssertEqual(InviteCard.calendarDay("2026-11-06T09:30:00+09:00", locale: english)?.day, "6")
+        XCTAssertEqual(InviteCard.calendarDay("2026-01-31T00:00:00", locale: english)?.month, "JAN")
+        XCTAssertNil(InviteCard.calendarDay("", locale: english))
+        XCTAssertNil(InviteCard.calendarDay("2026-13-01T00:00:00", locale: english))
+        let organizer = API.Party(email: "sato@example.test", name: "Dr. Emi Sato")
+        XCTAssertEqual(InviteCard.people(organizer: organizer, attendees: []), "From Dr. Emi Sato")
+        XCTAssertEqual(InviteCard.people(organizer: API.Party(), attendees: []), nil)
+    }
+
+    func testTheAsidesFacts() {
+        var receipt = Fixture.row(5, subject: "Your order is on its way")
+        receipt.snippet = "Order #4521 · Total $48.00 · arriving Thursday"
+        XCTAssertNil(AsideWords.receipt(receipt, lane: nil), "only a receipt has a paper trail")
+        receipt.bucket = "receipts/transactional"
+        XCTAssertEqual(AsideWords.receipt(receipt, lane: nil), Ledger.money("$", 48))
+        XCTAssertNil(AsideWords.receipt(Fixture.row(6), lane: .papertrail), "no amount, no card")
+        XCTAssertNil(AsideWords.relation(nil))
+        XCTAssertNil(AsideWords.relation(API.SenderFacts(count: 0, replied: 0)))
+        XCTAssertEqual(AsideWords.relation(API.SenderFacts(count: 1, replied: 0)),
+                       "This is the first message from them.")
+        XCTAssertEqual(AsideWords.relation(API.SenderFacts(count: 41, firstAgo: "8mo", replied: 12)),
+                       "41 messages, the first 8mo ago. You replied 12 times.")
+        XCTAssertEqual(AsideWords.relation(API.SenderFacts(count: 2, replied: 1)), "2 messages. You replied once.")
+    }
+
+    func testUpNextAndTheEmptyPane() {
+        XCTAssertEqual(UpNextPlace(position: 3, total: 13).nextWords, "5 of 13")
+        XCTAssertFalse(UpNextPlace(position: 3, total: 13).isLast)
+        XCTAssertTrue(UpNextPlace(position: 12, total: 13).isLast)
+        XCTAssertEqual(UpNextPlace.end(title: "Inbox", tab: .needs), "End of Inbox · Needs you")
+        XCTAssertEqual(UpNextPlace.end(title: "Archive", tab: nil), "End of Archive")
+        XCTAssertEqual(PaneEmptyWords.of(needsDone: true, hasMail: false).title, "Nothing needs you.")
+        XCTAssertTrue(PaneEmptyWords.of(needsDone: true, hasMail: false).everything)
+        XCTAssertEqual(PaneEmptyWords.of(needsDone: false, hasMail: true).line, "Or press J to start at the top.")
+        XCTAssertEqual(PaneEmptyWords.of(needsDone: false, hasMail: false).title, "Nothing here.")
+    }
+
+    func testTheReplyBoxsWords() {
+        let ren = ReplyBoxWords(name: "Ren Takeda", address: "ren@example.test", following: false)
+        XCTAssertEqual(ren.placeholder, "Reply to Ren…")
+        XCTAssertEqual(ReplyBoxWords(name: "Ren Takeda", address: nil, following: true).placeholder,
+                       "Follow up with Ren…")
+        XCTAssertEqual(ReplyBoxWords(name: "ren@example.test", address: "ren@example.test", following: false)
+            .placeholder, "Reply to ren@example.test…")
+        XCTAssertEqual(ReplyBoxWords.drafted(messages: 3),
+                       "Drafted by MailMind from the 3-message thread. "
+                           + "Edit freely — nothing is sent until you press Send.")
+        XCTAssertEqual(ReplyBoxWords.drafted(messages: 1),
+                       "Drafted by MailMind from the message. Edit freely — nothing is sent until you press Send.")
+    }
+
+    // MARK: The reply in the box
+
+    private func composing() throws -> (Composing, FakeRoutes) {
+        let composing = Composing()
+        let routes = FakeRoutes()
+        let opened = API.MessageOpened(
+            account: Fixture.ada, attachments: [], blockedCssUrls: 0, blockedImages: 0, cc: "", date: "Mon",
+            folder: "INBOX", fromAddr: "bo@example.test", fromName: "Bo Brown", hasHtml: false, key: 7,
+            messageId: "<m7@example.test>", ok: true, replyTo: "", subject: "Lunch", text: "Thursday?",
+            to: Fixture.ada, uid: 7)
+        let body = String(decoding: try JSONEncoder().encode(opened), as: UTF8.self)
+        routes.answer(API.Get.MessageBody.path, body)
+        composing.use(routes, digest: Fixture.digest())
+        return (composing, routes)
+    }
+
+    func testAReplyOpensInTheBoxOnlyForTheMessageTheReaderOffersItFor() async throws {
+        let (composing, _) = try composing()
+        var windows: [UUID] = []
+        composing.openWindow = { windows.append($0) }
+        let copy = MailCopy(Fixture.row(7))
+
+        let inWindow = try await replied(composing, copy)
+        XCTAssertEqual(windows, [inWindow.id], "no box offered: a window")
+        XCTAssertNil(composing.inline)
+        inWindow.close(force: true)
+
+        composing.inlineSlot = copy
+        let boxed = try await replied(composing, copy)
+        XCTAssertEqual(windows.count, 1, "in the box, with no window")
+        XCTAssertTrue(composing.inline?.composer === boxed)
+        XCTAssertNotNil(composing.composers[boxed.id], "one of the composers, as a window's is")
+        let again = await composing.reply(copy)
+        XCTAssertTrue(again === boxed, "the reply already in the box")
+
+        let all = try await replied(composing, copy, all: true)
+        XCTAssertEqual(windows.last, all.id, "Reply All takes a window")
+        XCTAssertTrue(composing.inline?.composer === boxed)
+        all.close(force: true)
+
+        composing.popOut()
+        XCTAssertNil(composing.inline)
+        XCTAssertEqual(windows.last, boxed.id, "popped out into a window, the same composer")
+        XCTAssertFalse(boxed.closed)
+        boxed.close(force: true)
+    }
+
+    func testMovingToAnotherMessageClosesTheReplyLeftInTheBox() async throws {
+        let (composing, _) = try composing()
+        composing.openWindow = { _ in XCTFail("no window") }
+        let copy = MailCopy(Fixture.row(7))
+        composing.inlineSlot = copy
+        let boxed = try await replied(composing, copy)
+        composing.inlineSlot = MailCopy(Fixture.row(8))
+        XCTAssertTrue(boxed.closed)
+        XCTAssertNil(composing.inline)
+        XCTAssertNil(composing.composers[boxed.id])
+
+        composing.inlineSlot = copy
+        let second = try await replied(composing, copy)
+        await second.discard()
+        XCTAssertNil(composing.inline, "discarded, the box closes")
+    }
+
+    func testABoxDrawnAgainKeepsItsSlotAndOneGoneGivesItUp() async throws {
+        let (composing, _) = try composing()
+        let copy = MailCopy(Fixture.row(7))
+        composing.offerInline(copy)
+        composing.withdrawInline(copy)
+        composing.offerInline(copy)
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(composing.inlineSlot, copy, "offered again at once: kept")
+        composing.withdrawInline(copy)
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertNil(composing.inlineSlot, "gone for good")
+    }
+}
+
+/// A web view's first load, finished.
+private final class FrameLoaded: NSObject, WKNavigationDelegate {
+    private var done = false
+    private var waiting: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if done { return }
+        await withCheckedContinuation { waiting = $0 }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        done = true
+        waiting?.resume()
+        waiting = nil
+    }
+}
+
+/// A reply `composing` opened for `copy`, which must open.
+@MainActor
+func replied(_ composing: Composing, _ copy: MailCopy, all: Bool = false) async throws -> Composer {
+    let composer = await composing.reply(copy, all: all)
+    return try XCTUnwrap(composer, "the reply opened")
+}
