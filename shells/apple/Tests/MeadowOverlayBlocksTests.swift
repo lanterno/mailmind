@@ -149,6 +149,23 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         XCTAssertEqual(heard, 1)
     }
 
+    func testAPressOnThePopoversButtonIsOnlyItsClosing() {
+        let parent = window(), other = window()
+        let button = NSView(frame: NSRect(x: 50, y: 40, width: 80, height: 30))
+        parent.contentView?.addSubview(button)
+        XCTAssertTrue(MeadowPopoverKeys.presses(button, at: NSPoint(x: 60, y: 50), in: parent))
+        XCTAssertFalse(MeadowPopoverKeys.presses(button, at: NSPoint(x: 10, y: 10), in: parent),
+                       "a press elsewhere closes it and goes on")
+        XCTAssertFalse(MeadowPopoverKeys.presses(button, at: NSPoint(x: 60, y: 50), in: other))
+        XCTAssertFalse(MeadowPopoverKeys.presses(nil, at: NSPoint(x: 60, y: 50), in: parent))
+        let nowhere = NSView(frame: .zero)
+        parent.contentView?.addSubview(nowhere)
+        XCTAssertFalse(MeadowPopoverKeys.presses(nowhere, at: .zero, in: parent),
+                       "the chooser hung in the middle has no button")
+        button.removeFromSuperview()
+        XCTAssertFalse(MeadowPopoverKeys.presses(button, at: NSPoint(x: 60, y: 50), in: parent))
+    }
+
     func testAMenusOwnKeysComeFirst() {
         let model = MeadowMenuModel()
         model.items = [MeadowMenuItem(id: "a", title: "A") {}]
