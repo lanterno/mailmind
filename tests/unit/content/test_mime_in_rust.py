@@ -775,6 +775,16 @@ BLANK_FOLD_BEFORE_A_NESTED_MULTIPART = _BLANK_FOLD_FIRST + (
     b'Content-Type: multipart/mixed; boundary="b2"\r\n\r\n--b2\r\nContent-Type: text/plain\r\nContent-ID: '
     b"<p1@example.test>\r\n\r\n\r\n--b2--\r\n\r\n--b1--\r\n\r\n--b0--\r\n")
 BLANK_FOLD_BEFORE_A_TYPE = _BLANK_FOLD_FIRST + b"Content-Type: text/plain\r\n\r\n\r\n--b1--\r\n\r\n--b0--\r\n"
+# And an HTML part whose `name=` a vertical tab and a quoted file name follow: Python's token for the value ended at the
+# quote, so the name was the tab alone, none once stripped, and the part was the HTML body, as it is for the core now.
+VERTICAL_TAB_BEFORE_A_QUOTED_NAME = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\n"
+                                     b"To: Ada Lin <ada@example.test>, Ada Lin <bo.lin@mail.example.test>, "
+                                     b"=?utf-8?q?Caf=C3=A9?= <Noreply@studio.example.test>\r\nCc: Ada Lin "
+                                     b"<bo.lin@example.test>,\r\n =?utf-8?B?5pel5pys?= <x+tag@studio.example.test>\r\n"
+                                     b'Content-Type: multipart/mixed; boundary="----=_NextPart_0000"\r\n\r\n'
+                                     b'------=_NextPart_0000\r\nContent-Type: text/html; charset="gbk"; '
+                                     b'name=\x0b"a.pdf"\r\n\r\n\r\n------=_NextPart_0000\r\n'
+                                     b"Content-Type: text/plain\r\n\r\n\r\n------=_NextPart_0000--\r\n")
 
 
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -790,6 +800,7 @@ BLANK_FOLD_BEFORE_A_TYPE = _BLANK_FOLD_FIRST + b"Content-Type: text/plain\r\n\r\
 @example(BLANK_BEFORE_A_CLOSING_QUOTE)
 @example(BLANK_FOLD_BEFORE_A_NESTED_MULTIPART)
 @example(BLANK_FOLD_BEFORE_A_TYPE)
+@example(VERTICAL_TAB_BEFORE_A_QUOTED_NAME)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
     body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
