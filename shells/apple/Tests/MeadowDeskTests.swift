@@ -1,10 +1,11 @@
-import Foundation
+import AppKit
+import SwiftUI
 import XCTest
 
 /// What the desk's screens in Meadow's look work out before they draw: the brief's greeting by the light and the
 /// hour, its date line and when it was written, the mail its words name as links, its tallies and what is worth a
 /// read; the paper trail's month against the one before, its bars and its facts; and the gate's queue, what it puts
-/// off and remembers deciding, and how it reads a visitor's letter.
+/// off and remembers deciding, how it reads a visitor's letter, and the keys it takes.
 @MainActor
 final class MeadowDeskTests: XCTestCase {
     private var english: Calendar {
@@ -246,5 +247,56 @@ final class MeadowDeskTests: XCTestCase {
                                             "account": "ada@example.test", "limit": "1", "offset": "0"])
         XCTAssertEqual(model.letters["hello@studio.example.test"]??.subject, "Hello")
         XCTAssertEqual(ScreenerModel.quoted(#"a"b\c"#), #""a\"b\\c""#)
+    }
+
+    func testTheGatesKeysWorkWheneverItHasTheKeyboardAndNeverFromAField() async throws {
+        let routes = DeskRoutes()
+        routes.answer("GET", "/api/screener", DeskFixture.screener)
+        routes.answer("GET", "/api/search", API.SearchAnswer.searchPage(API.SearchPage(
+            generated: "2026-11-15T09:00:00Z", hasMore: false, items: [], offset: 0, ok: true, query: "",
+            scope: "account")))
+        routes.answer("POST", "/api/rules", API.RuleChanged(ok: true, reclassified: 0, rules: DeskFixture.rules,
+                                                            token: "hello@studio.example.test", trashed: false))
+        let model = ScreenerModel(account: "ada@example.test", link: CoreLink(routes), notices: DeskNotices())
+        await model.load()
+        let host = NSHostingView(rootView: VStack(spacing: 0) {
+            TextField("Search", text: .constant(""))
+            ScreenerScreen(model: model)
+        }
+        .meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.contentView = nil }
+        func settle() async throws {
+            for _ in 0..<20 {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        func type(_ key: String, _ code: UInt16) throws {
+            window.sendEvent(try XCTUnwrap(NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code)))
+        }
+        try await settle()
+
+        // Whether or not its buttons can take the keyboard, the gate holds it as it shows.
+        try type("y", 16)
+        try await settle()
+        XCTAssertEqual(routes.sent("POST", "/api/rules").first?["token"], .string("hello@studio.example.test"))
+        XCTAssertEqual(routes.sent("POST", "/api/rules").first?["verdict"], .string("keep"))
+
+        // A field with the keyboard keeps what is typed in it.
+        let field = try XCTUnwrap(Self.views(in: host).first { $0 is NSTextField })
+        window.makeFirstResponder(field)
+        try type("n", 45)
+        try await settle()
+        XCTAssertEqual(routes.sent("POST", "/api/rules").count, 1, "an n typed in a field decides no one")
+    }
+
+    private static func views(in view: NSView) -> [NSView] {
+        [view] + view.subviews.flatMap(views(in:))
     }
 }
