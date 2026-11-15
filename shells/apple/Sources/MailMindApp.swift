@@ -8,12 +8,14 @@ struct MailMindApp: App {
     @NSApplicationDelegateAdaptor(MailMindDelegate.self) private var delegate
     #endif
 
-    #if os(macOS)
     init() {
+        // Meadow's typefaces, for this process, before the first window sets any text in them.
+        MeadowFonts.register()
+        #if os(macOS)
         // Quick Look's copies of attachments, decrypted: what a crash left, now, and what is still open, at quit.
         PreviewFiles.sweepNowAndAtQuit()
+        #endif
     }
-    #endif
 
     var body: some Scene {
         WindowGroup {

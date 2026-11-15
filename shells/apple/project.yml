@@ -36,6 +36,10 @@ targetTemplates:
     sources:
       - Sources
       - Generated/MailMindCore.swift
+      # Meadow's typefaces, which the app registers as it starts (Fonts/fonts.py makes them from the page's).
+      - path: Fonts
+        includes: ["*.ttf"]
+        buildPhase: resources
     dependencies:
       - framework: build/MailMindCore.xcframework
         embed: false
@@ -89,6 +93,10 @@ targets:
       - path: Sources/Mac
         excludes:
           - Reader/ReaderPane.swift
+      # Meadow's typefaces, which the tests register as the app does
+      - path: Fonts
+        includes: ["*.ttf"]
+        buildPhase: resources
     dependencies:
       - framework: build/MailMindCore.xcframework
         embed: false
