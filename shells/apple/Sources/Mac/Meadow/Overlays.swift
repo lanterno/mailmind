@@ -552,9 +552,12 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
         private var panel: NSPanel?
         private var host: NSHostingView<AnyView>?
         private var monitor: Any?
+        /// What it hangs from: the button that opened it.
+        private weak var anchor: NSView?
 
         func show(_ content: Content, under anchor: NSView) {
             guard let window = anchor.window else { return }
+            self.anchor = anchor
             let root = AnyView(content.padding(Self.room))
             let panel = panel ?? made(root)
             host?.rootView = root
@@ -618,8 +621,11 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
                     case .pass: return event
                     }
                 }
-                if event.window !== panel { self.close() }
-                return event
+                guard event.window !== panel else { return event }
+                self.close()
+                // A press on the button it hangs from only closes it: the button's own press would open it again.
+                let again = MeadowPopoverKeys.presses(self.anchor, at: event.locationInWindow, in: event.window)
+                return again ? nil : event
             }
         }
     }
@@ -628,7 +634,8 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
 /// Which keys typed while a Meadow popover is open are its own. Its panel is never the key window, so it hears the
 /// keys through a monitor of the whole app's: it takes only those typed in the window it hangs in (or its own panel),
 /// none while that window's keyboard is in something that takes text, whose keys are that thing's, and none with ⌘,
-/// ⌃ or ⌥ held, which are the menus' and the window's (⌘1 goes to Inbox, ⌘Return sends).
+/// ⌃ or ⌥ held, which are the menus' and the window's (⌘1 goes to Inbox, ⌘Return sends). A click on the button it
+/// hangs from closes it, and goes no further.
 enum MeadowPopoverKeys {
     enum Verdict: Equatable {
         /// Esc: the popover closes.
@@ -645,6 +652,12 @@ enum MeadowPopoverKeys {
         // Esc closes it even from a field: what is typed there goes on once the popover is gone.
         if keyCode == 53 { return .close }
         return window !== panel && typesText(window.firstResponder) ? .pass : .offer
+    }
+
+    /// Whether a click at `point` in `window` lands on `anchor`, the button a popover hangs from.
+    static func presses(_ anchor: NSView?, at point: NSPoint, in window: NSWindow?) -> Bool {
+        guard let anchor, let window, anchor.window === window else { return false }
+        return anchor.convert(anchor.bounds, to: nil).contains(point)
     }
 
     /// Whether a key is typed with nothing held that makes it a command's: ⇧ makes another character, not a command.
