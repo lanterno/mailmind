@@ -3,11 +3,11 @@ import SwiftUI
 import XCTest
 
 /// What floats over Meadow's window, drawn over the frame on fictional mail at the mockup's 1440 by 900: the palette,
-/// an answer in it, a bulk action's preview, the snooze chooser and its time of one's own, the status's menu, the
-/// keyboard's legend, the toasts and the outbox. Day's palette is drawn on every run and must draw; with
-/// `TEST_RUNNER_MEADOW_PICTURES=<folder>` given to `xcodebuild test`, every light of each is written there as
-/// `overlay-<light>-<what>.png`, to lay beside the mockup's `1440-*-palette.png`, `-ask`, `-bulk`, `-snooze`,
-/// `-sync` and `-keys`.
+/// an answer in it, a bulk action's preview, the snooze chooser and its time of one's own, a sender's card, the
+/// status's menu, the keyboard's legend, the toasts and the outbox. Day's palette is drawn on every run and must
+/// draw; with `TEST_RUNNER_MEADOW_PICTURES=<folder>` given to `xcodebuild test`, every light of each is written
+/// there as `overlay-<light>-<what>.png`, to lay beside the mockup's `1440-*-palette.png`, `-ask`, `-bulk`,
+/// `-snooze`, `-sync` and `-keys`.
 @MainActor
 final class MeadowOverlayPictures: XCTestCase {
     private static var folder: URL? {
@@ -93,6 +93,16 @@ final class MeadowOverlayPictures: XCTestCase {
 
     private var modes: [Entries.Mode] { desk.paletteModes(undoKey: "Z") }
 
+    /// A sender who writes to two of the accounts.
+    private static let card = API.ContactCard(
+        accounts: [Fixture.ada, Fixture.work], addr: "aoi@example.test", count: 380, firstAgo: "4 years",
+        known: true, lastAgo: "2 days", name: "Aoi Nakamura", ok: true, recent: [
+            API.RecentMail(account: Fixture.ada, folder: "INBOX", key: 1, seen: false,
+                           subject: "Lunch on Saturday?", uid: 11, when: "9:12 am"),
+            API.RecentMail(account: Fixture.work, folder: "INBOX", key: 3, seen: true,
+                           subject: "Re: The guild dinner", uid: 13, when: "Oct 28"),
+        ], replied: 120)
+
     func testThePalette() async throws {
         for light in lights {
             try await draw("palette", light, try dialog(PaletteSheet(mailbox: app.mailbox, modes: modes, close: {})))
@@ -123,6 +133,8 @@ final class MeadowOverlayPictures: XCTestCase {
             try await draw("keys", light, try dialog(KeysLegend(status: status, close: {}), place: .keys))
             try await draw("snooze-time", light, try dialog(SnoozeTimeDialog(
                 copies: [DeskFixture.ada, DeskFixture.grace], model: desk.attention, close: {}), place: .form))
+            try await draw("contact", light, try dialog(ContactCard(
+                mailbox: app.mailbox, address: Self.card.addr, card: Self.card, close: {}), place: .card))
         }
     }
 

@@ -129,7 +129,8 @@ final class MailboxPictures: XCTestCase {
             ], replied: 3))
         let app = await opened(server, place: .allInboxes)
         try await picture("contact", CGSize(width: 420, height: 360),
-                          ContactCard(mailbox: app.mailbox, address: "grace.hopper@example.test", close: {}))
+                          ContactCard(mailbox: app.mailbox, address: "grace.hopper@example.test", close: {})
+                            .meadowPanel(radius: 18, raised: true))
         app.mailbox.chose([Fixture.row(1)])
         try await picture("palette", CGSize(width: 520, height: 420), PaletteSheet(mailbox: app.mailbox, close: {}))
         try await picture("move-to", CGSize(width: 520, height: 420),

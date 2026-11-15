@@ -320,6 +320,36 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertEqual(WindowDialog.snoozeTime(copies).kind, "snooze-time")
     }
 
+    func testASendersCardStandsOnTheScrimBeforeWhatTheDeskOpened() {
+        let aoi = "aoi@example.test"
+        XCTAssertEqual(WindowDialog.shown(moving: nil, savingView: nil, contact: aoi, sheet: .ask, planned: nil,
+                                          palette: true, keys: true), .contact(aoi))
+        XCTAssertEqual(WindowDialog.shown(moving: nil, savingView: nil, choosingTime: [DeskFixture.ada], contact: aoi,
+                                          sheet: nil, planned: nil, palette: false, keys: false),
+                       .snoozeTime([DeskFixture.ada]))
+        XCTAssertEqual(MeadowDialogPlace.card.frame(in: CGSize(width: 1440, height: 900)).width, 420)
+    }
+
+    func testASendersCardOpensOverTheWindowAndItsCloseLetsItGo() async throws {
+        let mailbox = Mailbox()
+        let host = NSHostingView(rootView: Color.clear.frame(width: 1000, height: 700)
+            .modifier(WindowOverlays(mailbox: mailbox))
+            .meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 1000, height: 700)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        mailbox.contact = "aoi@example.test"
+        try await settle(host) { mailbox.typing }
+        XCTAssertTrue(mailbox.typing, "the card is a dialog of the window's, whose keys wait behind it")
+        XCTAssertTrue(mailbox.asking, "and the Message menu's verbs wait for it")
+        mailbox.contact = nil
+        try await settle(host) { !mailbox.typing }
+        XCTAssertFalse(mailbox.typing)
+        window.contentView = nil
+    }
+
     func testOnlyTheDesksOwnSheetsOpenAsSheets() {
         XCTAssertTrue(Desk.Sheet.ask.floats)
         XCTAssertTrue(Desk.Sheet.plan.floats)
