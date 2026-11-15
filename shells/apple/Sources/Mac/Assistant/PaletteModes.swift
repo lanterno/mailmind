@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The desk in the palette, as the mockup's palette has it: `?` and a question asks your inbox and shows the answer
 /// there, with the mail it cites; `!` and a command plans a bulk action and shows what it would do. Each waits for
-/// Return before it asks the AI anything.
+/// Return before it asks the AI anything. A question asked here opens the answer page behind the palette, as the
+/// search field's `?` and Ask Your Mail… (⌥⌘A) always have, so the answer stays once the palette goes.
 extension Desk {
     func paletteModes(undoKey: String) -> [Entries.Mode] {
         let asking = asking, plan = plan, showSearch = showSearch
@@ -11,11 +12,11 @@ extension Desk {
             Entries.Mode(prefix: "?", card: { [weak self] words, close in
                 AnyView(AskCard(model: asking, words: words) { copy in
                     close()
-                    self?.open(copy)
+                    self?.openCited(copy)
                 })
-            }, submit: { words, _ in
+            }, submit: { [weak self] words, _ in
                 guard AskCard.asks(words, now: asking.asking) else { return }
-                Task { await asking.ask(words) }
+                Task { await self?.ask(words) }
             }),
             Entries.Mode(prefix: "!", card: { words, close in
                 AnyView(PlanCard(model: plan, words: words, showSearch: showSearch, undoKey: undoKey, close: close))
@@ -32,6 +33,13 @@ extension Desk {
                 }
             }),
         ]
+    }
+
+    /// A message an answer cites, opened with the answer page in the list's place, as the answer page opens its own:
+    /// the answer stays there beside it.
+    func openCited(_ copy: MailCopy) {
+        go(.desk(.ask))
+        open(copy)
     }
 }
 
