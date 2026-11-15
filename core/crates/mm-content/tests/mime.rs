@@ -240,6 +240,23 @@ fn file_names_read_as_their_senders_wrote_them() {
     assert_eq!(names, ["r\u{e9}sum\u{e9}.pdf", "r\u{e9}sum\u{e9}.txt", "spaced.pdf", "part-4"]);
 }
 
+#[test]
+fn a_percent_sign_that_starts_no_escape_in_a_file_name_stays_as_written() {
+    // Python's unquote_to_bytes kept it, cut off at the value's end too.
+    let named = |headers: &str| {
+        let raw = message(&format!("{headers}\r\n\r\n<b>x</b>\r\n"));
+        parse(&raw).attachments.into_iter().map(|a| a.filename).collect::<Vec<_>>()
+    };
+    assert_eq!(named("Content-Type: text/html; name*=utf-8''%"), ["%"]);
+    assert_eq!(named("Content-Type: text/html; name*=\"utf-8''a%4\""), ["a%4"]);
+    assert_eq!(named("Content-Type: text/html; name*=utf-8''r%C3%A9%ZZ"), ["r\u{e9}%ZZ"]);
+    assert_eq!(named("Content-Type: text/html; name*0*=utf-8''a%; name*1*=%41"), ["a%A"]);
+    assert_eq!(named("Content-Type: text/html\r\nContent-Disposition: attachment; filename*=a%"), ["a%"]);
+    // With one `'`, Python read no parameter, and the part is the body.
+    let raw = message("Content-Type: text/html; name*=utf-8'%\r\n\r\n<b>x</b>\r\n");
+    assert_eq!(parse(&raw).html.as_deref(), Some("<b>x</b>\r\n"));
+}
+
 // -- transfer encodings and charsets -------------------------------------------------------------------------------
 
 #[test]
