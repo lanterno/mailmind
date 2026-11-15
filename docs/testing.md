@@ -86,6 +86,10 @@ The fixtures, from the bottom up:
 - `ai` gives the fake Claude API (`tests/fakes/anthropic_api.py`) a key it accepts. It answers
   each call from the call's own schema unless the test sets `ai.queue(...)` or `ai.responder`.
   Without `ai` there is no key, and AI calls get a 401.
+- `dns` starts a nameserver on loopback (`tests/fakes/dns_server.py`) whose MX records a test sets (`dns.mx(domain, hosts)`),
+  the one a domain's mail servers are asked of: by the app in the test's process, and by a served one, which
+  `MAILMIND_TEST_DNS` names it to (`mm-served` hands it to the Rust server through its seams). Without it no test asks any
+  nameserver, nor reads which this computer's are, and every domain's mail servers are none.
 - `golden` records exchanges in `tests/golden/<suite>/<test>.json`, after it normalizes ports,
   paths and random ids. `uv run pytest --update-golden` rewrites the files; review the diff like
   code. `tests/golden/schema_v<N>.sql` is the schema snapshot: rename it in the commit that adds
