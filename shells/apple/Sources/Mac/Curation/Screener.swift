@@ -15,10 +15,21 @@ final class ScreenerModel {
         let at: Date
     }
 
+    /// What the AI said of a sender at the gate.
+    enum Said: Equatable {
+        /// Not asked yet: the AI never was, or the sender came to the gate after it was.
+        case notAsked
+        /// Asked, and not sure enough to say.
+        case unsure
+        case suggests(API.ScreenerSuggestion)
+    }
+
     let account: String
     private(set) var queue: API.ScreenerQueue?
     /// The AI's verdicts, by sender, once asked for.
     private(set) var suggestions: [String: API.ScreenerSuggestion]?
+    /// The senders the AI was last asked about, sure of them or not.
+    private(set) var asked: Set<String> = []
     private(set) var suggesting = false
     /// Senders decided on, gone from the tray before the server's answer comes.
     private(set) var decided: Set<String> = []
@@ -82,15 +93,24 @@ final class ScreenerModel {
         "\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 
-    /// Ask the AI which senders it is sure of.
+    /// What the AI said of `sender`, if it was asked about them.
+    func said(of sender: String) -> Said {
+        if let hint = suggestions?[sender] { return .suggests(hint) }
+        return asked.contains(sender) ? .unsure : .notAsked
+    }
+
+    /// Ask the AI which senders it is sure of, on a press: again later for those who came since.
     func suggest() async {
         guard let routes = link.routes, !suggesting else { return }
         suggesting = true
         defer { suggesting = false }
+        // The server asks about the senders waiting in the queue's order, as many as its answer says.
+        let waiting = (queue?.items ?? []).map(\.fromAddr)
         do {
             let answer = try await routes.post(API.Post.ScreenerSuggest.self, API.ScreenerSuggestBody(account: account),
                                                asking: link.asksOverLimit)
             suggestions = Dictionary(answer.suggestions.map { ($0.fromAddr, $0) }, uniquingKeysWith: { first, _ in first })
+            asked = Set(waiting.prefix(answer.asked)).union(answer.suggestions.map(\.fromAddr))
             if answer.suggestions.isEmpty { notices.say(String(localized: "The AI isn’t sure of any of these")) }
         } catch {
             notices.say(DeskRefusal.isAIOff(error) ? String(localized: "AI is off")
@@ -464,6 +484,17 @@ private struct GateVisitor: View {
         }
     }
 
+    /// Suggest, or Suggest again: the AI asked about every sender waiting now, and at today's limit asked first.
+    private func suggestButton(again: Bool) -> some View {
+        Button { Task { await model.suggest() } } label: {
+            MeadowIconView(.wind, size: 15)
+            Text(model.suggesting ? "Reading…" : again ? "Suggest again" : "Suggest")
+        }
+        .meadowButton(.ai, small: true)
+        .disabled(model.suggesting)
+        .help("Ask the AI about the senders waiting now (runs the AI)")
+    }
+
     private func decideLabel(_ icon: MeadowIcon, _ words: LocalizedStringKey, key: String?) -> some View {
         HStack(spacing: 7) {
             MeadowIconView(icon)
@@ -473,34 +504,35 @@ private struct GateVisitor: View {
         }
     }
 
-    /// Who the AI thinks this is (`.note`), once asked; before that, the way to ask.
+    /// Who the AI thinks this is (`.note`), once asked; before that, the way to ask, and once asked, the way to ask
+    /// again about everyone waiting now.
     @ViewBuilder private var note: some View {
-        let hint = model.suggestions?[sender.fromAddr]
         VStack(alignment: .leading, spacing: 8) {
             MeadowAIMark("Who is this?")
-            if let hint {
+            switch model.said(of: sender.fromAddr) {
+            case .suggests(let hint):
                 Text("\(Text(ScreenerModel.word(hint.verdict) + "?").font(.meadow(.ui, 15, .heavy))) \(hint.why)")
                     .font(.meadow(.ui, 15, .semibold))
                     .foregroundStyle(meadow.moss)
                     .lineSpacing(MeadowFace.ui.lineSpacing(size: 15, lineHeight: 1.6, weight: .semibold))
                     .fixedSize(horizontal: false, vertical: true)
-            } else if model.suggestions != nil {
+            case .unsure:
                 Text("The AI isn’t sure about this one. Their message is the best guide.")
                     .font(.meadow(.ui, 14, .semibold))
                     .foregroundStyle(meadow.moss)
                     .fixedSize(horizontal: false, vertical: true)
-            } else {
+            case .notAsked where model.suggestions != nil:
+                Text("Not asked yet: they came to the gate after the AI was asked. Suggest again to ask about them.")
+                    .font(.meadow(.ui, 13.5))
+                    .foregroundStyle(meadow.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .notAsked:
                 Text("The AI can suggest a verdict for the senders it’s sure of. You still decide.")
                     .font(.meadow(.ui, 13.5))
                     .foregroundStyle(meadow.ink2)
                     .fixedSize(horizontal: false, vertical: true)
-                Button { Task { await model.suggest() } } label: {
-                    MeadowIconView(.wind, size: 15)
-                    Text(model.suggesting ? "Reading…" : "Suggest")
-                }
-                .meadowButton(.ai, small: true)
-                .disabled(model.suggesting)
             }
+            suggestButton(again: model.suggestions != nil)
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
