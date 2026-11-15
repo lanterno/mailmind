@@ -259,6 +259,16 @@ final class MailboxVerbsTests: XCTestCase {
         API.Filed(msg: "ok", ok: true, status: status, undoable: undoable)
     }
 
+    func testACopyIsInTrashByItsFoldersRoleOnItsOwnAccount() async {
+        let app = await opened(Fixture.server())
+        let mailbox = app.mailbox
+        XCTAssertTrue(mailbox.inTrash(MailCopy(key: 1, folder: "Trash", uid: 1, account: Fixture.ada)))
+        XCTAssertTrue(mailbox.inTrash(MailCopy(key: 1, folder: "[Gmail]/Trash", uid: 1, account: Fixture.work)))
+        XCTAssertFalse(mailbox.inTrash(MailCopy(key: 1, folder: "INBOX", uid: 1, account: Fixture.ada)))
+        XCTAssertFalse(mailbox.inTrash(MailCopy(key: 1, folder: "Trash", uid: 1, account: Fixture.work)),
+                       "a name is only Trash where its account says so")
+    }
+
     func testOneMessageFilesByItsOwnRouteAndMovesOnToTheNext() async throws {
         let server = Fixture.server(grouped: false)
         server.on("POST", API.Post.Archive.path, filed())
