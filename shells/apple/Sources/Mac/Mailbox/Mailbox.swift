@@ -83,6 +83,9 @@ final class Mailbox {
     @ObservationIgnored var keys: [Character: @MainActor () -> Void] = [:]
     /// The other areas' items in a row's context menu, for the rows it acts on.
     @ObservationIgnored var rowMenu: [@MainActor ([API.FolderRow]) -> [NSMenuItem]] = []
+    /// The desk's: today's brief in the pane, opened on purpose (a click, Return) or only arrived at (the arrow
+    /// keys onto its row), which writes none.
+    @ObservationIgnored var opensBrief: (@MainActor (_ deliberately: Bool) -> Void)?
     /// The desk's: ask when to bring these rows back, for a row's snooze button and the bulk bar's.
     @ObservationIgnored var snoozes: (@MainActor ([API.FolderRow]) -> Void)?
     /// The assistant's: the search a sentence typed in the field means, or nil to leave it as typed; and a sentence
@@ -318,12 +321,17 @@ final class Mailbox {
     /// The table's choice changed: one row opens in the reader, several are marked and none is open.
     func chose(_ rows: [API.FolderRow], unheld: IndexSet = []) {
         // A row chosen beside the brief goes back to the Inbox, whose list it is in.
-        if !rows.isEmpty || !unheld.isEmpty, let place = app?.place, place != place.listed { app?.place = place.listed }
+        if !rows.isEmpty || !unheld.isEmpty, let app, let listed = app.listed, app.place != listed { app.place = listed }
         chosenRows = rows
         self.unheld = unheld
         let one = rows.count == 1 && unheld.isEmpty ? MailCopy(rows[0]) : nil
         app?.open(one)
         if let one { warmNext(after: one) }
+    }
+
+    /// Show today's brief in the pane beside the list: opened on purpose, or arrived at by the arrow keys.
+    func openBrief(deliberately: Bool) {
+        if let opensBrief { opensBrief(deliberately) } else { app?.place = .desk(.brief) }
     }
 
     /// Mark no rows but the one open.

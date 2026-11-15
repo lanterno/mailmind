@@ -22,9 +22,9 @@ struct MailboxTable: View {
     var body: some View {
         let place = mailbox.app?.place
         let measure = RowMeasure(status.preferences?.density ?? .comfortable)
-        let brief = briefLine(place)
+        let brief = briefLine
         VStack(spacing: 0) {
-            OfflineNote(mailbox: mailbox, account: place?.listed.account, status: status)
+            OfflineNote(mailbox: mailbox, account: mailbox.app?.listed?.account, status: status)
             if mailbox.chosenRows.count + mailbox.unheld.count > 1 {
                 BulkBar(mailbox: mailbox, inTrash: inTrash)
             }
@@ -42,8 +42,8 @@ struct MailboxTable: View {
     }
 
     /// Today's brief over the Inbox's rows (`BriefRow`): in every Inbox, or one account's, while not searching.
-    private func briefLine(_ place: Place?) -> BriefLine? {
-        guard let desk, let place, place.listed.isInbox else { return nil }
+    private var briefLine: BriefLine? {
+        guard let desk, mailbox.app?.listed?.isInbox == true else { return nil }
         return BriefLine(needs: desk.brief.needs, waiting: mailbox.across?.waiting ?? 0,
                          canWait: desk.brief.tidy.count)
     }
@@ -185,7 +185,7 @@ struct EmptyList: View {
 
     var body: some View {
         let facts = mailbox.facts
-        let place = app?.place?.listed
+        let place = app?.listed
         let searching = place?.search != nil
         if list.firstRowsAt == nil {
             if let problem = list.problem {

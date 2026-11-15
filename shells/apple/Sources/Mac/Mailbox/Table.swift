@@ -61,7 +61,8 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private(set) var sections: Bool
     private(set) var look: RowLook
     private var brief: BriefLine?
-    private var briefChosen = false
+    /// The brief is open in the pane, so its row is the chosen one.
+    private(set) var briefChosen = false
     /// Each position's shape as last worked out (`RowShape.packed`), zero where it isn't yet.
     private var shapes: [UInt8] = []
     /// The day the heads were worked out on.
@@ -392,12 +393,13 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         refreshStates()
     }
 
-    /// The brief's row is never chosen with mail: alone, it opens the brief in the pane.
+    /// The brief's row is never chosen with mail: alone, it shows the brief in the pane. A click opens it, writing
+    /// today's if there is none; the arrow keys only pass over it, showing the one written and writing none.
     func tableView(_ tableView: NSTableView,
                    selectionIndexesForProposedSelection proposed: IndexSet) -> IndexSet {
         guard lead > 0, proposed.contains(0) else { return proposed }
         if proposed.count == 1 {
-            mailbox?.app?.place = .desk(.brief)
+            mailbox?.openBrief(deliberately: !table.keyed)
             return IndexSet()
         }
         var rest = proposed
@@ -618,6 +620,10 @@ final class MailboxTableView: NSTableView {
         }
         if key == "\u{1b}" {
             return mailbox.chosenRows.count > 1 ? mailbox.clearMarks() : mailbox.leaveSearch()
+        }
+        // Return on the brief's row opens it, as a click does.
+        if key == "\r" || key == "\u{3}", controller?.briefChosen == true {
+            return mailbox.openBrief(deliberately: true)
         }
         guard mailbox.singleKeys, event.modifierFlags.intersection([.shift]).isEmpty || "#?".contains(key) else {
             return super.keyDown(with: event)

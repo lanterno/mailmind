@@ -192,6 +192,8 @@ struct BriefScreen: View {
             quiet("Today’s AI limit is reached, so the brief isn’t written yet.", button: "Write it")
         } else if case .failed(let why)? = model.trouble {
             quiet("The brief isn’t available right now (\(model.failing ?? why)).", button: "Try again")
+        } else if model.missing, model.aiOn == true {
+            quiet("Today’s brief isn’t written yet.", button: "Write it")
         } else {
             Text("Nothing to brief yet.")
                 .font(.meadow(.ui, 15))

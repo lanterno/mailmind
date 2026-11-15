@@ -27,10 +27,15 @@ final class MailApp {
     var place: Place? = .allInboxes {
         didSet {
             guard place != oldValue else { return }
-            if place?.listed != oldValue?.listed { openList() }
-            if let place, place != place.listed { closeMessage() }
+            let was = listed
+            listed = place.map { Self.listed($0, beside: was) }
+            if listed != was { openList() }
+            if let place, place != listed { closeMessage() }
         }
     }
+    /// The place whose list the window shows: the place's own (`Place.listed`), but beside the brief the Inbox the
+    /// person was in, one account's or every account's, so opening the brief from its row keeps the list as it was.
+    private(set) var listed: Place? = .allInboxes
     let selection = Selection()
     private(set) var list: MailListModel?
     let reader = ReaderModel()
@@ -78,11 +83,19 @@ final class MailApp {
         #endif
     }
 
+    /// The list a place shows, when the list before it was `was`: an Inbox stays beside the brief; any other list
+    /// gives way to every account's Inbox.
+    static func listed(_ place: Place, beside was: Place?) -> Place {
+        guard place.listed != place else { return place }
+        if let was, was.isInbox { return was }
+        return place.listed
+    }
+
     /// Open the list the place shows, read as the mailbox reads each of its places (Mac/Mailbox/Mailbox.swift), or none
     /// for a place that isn't a list of mail. The mailbox opens it again when its tab or grouping changes.
     func openList() {
         #if os(macOS)
-        let load = place.flatMap { mailbox.loader(for: $0.listed) }
+        let load = listed.flatMap { mailbox.loader(for: $0) }
         #else
         let load: MailListModel.Loader? = nil
         #endif

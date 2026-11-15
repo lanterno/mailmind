@@ -5,7 +5,8 @@ import Observation
 /// Today's brief, as the page's BriefPane reads it: the digest (what needs you, what can be filed, the AI's state),
 /// the brief Claude wrote of it, today and next, who you're waiting on, and what Tidy filed. A GET reads only what is
 /// stored; opening the brief writes the day's one if there is none and AI is on, and never asks at the daily limit:
-/// only a person's press asks to go over it.
+/// only a person's press asks to go over it. Passing over its row with the arrow keys isn't opening it: that shows
+/// what is stored, and offers to write the rest.
 @MainActor
 @Observable
 final class BriefModel {
@@ -18,6 +19,8 @@ final class BriefModel {
     private(set) var digest: API.Digest?
     private(set) var brief: API.Brief?
     private(set) var writing = false
+    /// None is stored for today and none was written on opening: the brief offers to write it.
+    private(set) var missing = false
     private(set) var trouble: Trouble?
     private(set) var upcoming: [API.UpcomingEvent] = []
     private(set) var waiting: [API.WaitingRow] = []
@@ -87,17 +90,27 @@ final class BriefModel {
     private(set) var opened = false
     /// Its tallies are kept, for the rail's count and the Inbox's brief row, so mail changing reads them again.
     @ObservationIgnored private(set) var tallied = false
+    /// The brief was arrived at, not opened: its next load writes none.
+    @ObservationIgnored private var glancing = false
     /// The read under way after mail changed, and whether another waits behind it.
     @ObservationIgnored private var rereading: Task<Void, Never>?
     @ObservationIgnored private var rereadsAgain = false
 
-    /// Open the brief: everything it shows, and with none written today and AI on, today's written.
+    /// Open the brief: everything it shows, and with none written today and AI on, today's written, unless it was
+    /// only arrived at (`glance`).
     func load() async {
         guard let routes = link.routes else { return }
+        let writes = !glancing
+        glancing = false
         let first = !opened
         opened = true
         await reread()?.value
-        if first || brief == nil, !writing { await readBrief(routes) }
+        if first || brief == nil, !writing { await readBrief(routes, writes: writes) }
+    }
+
+    /// The brief is about to show without being opened (the arrow keys onto its row): the load it makes writes none.
+    func glance() {
+        glancing = true
     }
 
     /// The brief left the screen: mail changing reads only its tallies again.
@@ -156,14 +169,17 @@ final class BriefModel {
         }
     }
 
-    private func readBrief(_ routes: any RouteCaller) async {
+    private func readBrief(_ routes: any RouteCaller, writes: Bool) async {
         do {
             switch try await routes.get(API.Get.Briefing.self, [:]) {
             case .brief(let stored):
                 brief = stored
+                missing = false
             case .briefMissing:
                 brief = nil
-                if aiOn == true, !writing { await write(again: false, asking: nil) }   // no one pressed: never asks
+                missing = true
+                // No one pressed: it never asks at the limit.
+                if writes, aiOn == true, !writing { await write(again: false, asking: nil) }
             }
         } catch {
             trouble = Self.trouble(error)
@@ -220,6 +236,7 @@ final class BriefModel {
             brief = again
                 ? try await routes.post(API.Post.BriefingRefresh.self, API.NoBody(), asking: asking)
                 : try await routes.post(API.Post.Briefing.self, API.NoBody(), asking: asking)
+            missing = false
             if again { await readSide(routes) }
         } catch {
             trouble = Self.trouble(error)

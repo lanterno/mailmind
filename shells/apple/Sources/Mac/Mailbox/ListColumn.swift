@@ -15,7 +15,7 @@ struct MailboxColumn: View {
     var body: some View {
         VStack(spacing: 0) {
             // A place that is a page across the window (the paper trail) has a head of its own.
-            if !(app.place?.listed.isDesk ?? false), !(app.place?.spansTheWindow == true && app.selection.copy == nil) {
+            if !(app.listed?.isDesk ?? false), !(app.place?.spansTheWindow == true && app.selection.copy == nil) {
                 MeadowListHead(app: app, mailbox: mailbox)
             }
             content
@@ -29,7 +29,7 @@ struct MailboxColumn: View {
     }
 
     @ViewBuilder private var content: some View {
-        if case .desk(let screen)? = app.place?.listed {
+        if case .desk(let screen)? = app.listed {
             DeskScreen(place: screen)
         } else if let documents = mailbox.documents {
             DocumentHub(mailbox: mailbox, model: documents)
@@ -38,7 +38,7 @@ struct MailboxColumn: View {
         } else if let list = app.list {
             VStack(spacing: 0) {
                 MailboxTable(list: list, mailbox: mailbox, chosen: mailbox.marked,
-                             showsAccount: app.place?.listed.showsAccount ?? true)
+                             showsAccount: app.listed?.showsAccount ?? true)
                     .id(ObjectIdentifier(list))
                 if mailbox.facts.hasMore {
                     Rectangle().fill(meadow.line).frame(height: 1)

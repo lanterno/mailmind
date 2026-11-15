@@ -134,6 +134,7 @@ final class Desk {
             }
             // A row's snooze button asks when, as the row's menu does.
             mailbox.snoozes = { rows in self?.askWhen(rows.map(MailCopy.init)) }
+            mailbox.opensBrief = { self?.openBrief(deliberately: $0) }
             mailbox.rowMenu.append { rows in
                 guard let self else { return [] }
                 return self.commands(for: rows.map(MailCopy.init), stack: self.stack).map { command in
@@ -200,6 +201,17 @@ final class Desk {
 
     func go(_ place: Place) {
         app?.place = place
+    }
+
+    /// Show today's brief in the pane. Opened on purpose (a click or Return on its row) it writes today's when none is
+    /// stored, as opening it does; arrived at by the arrow keys it shows what is stored and offers to write the rest.
+    func openBrief(deliberately: Bool) {
+        guard app?.place != .desk(.brief) else {
+            if deliberately, brief.brief == nil, !brief.writing { Task { await brief.load() } }
+            return
+        }
+        if !deliberately { brief.glance() }
+        go(.desk(.brief))
     }
 
     /// The paper trail's lane, as the rail's views open it, where the server's views have one.

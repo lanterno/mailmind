@@ -16,7 +16,7 @@ struct MeadowListHead: View {
     @Environment(\.meadow) private var meadow
 
     var body: some View {
-        let place = app.place?.listed
+        let place = app.listed
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Text(verbatim: place?.title(folders: mailbox.folders(of: place?.account)) ?? "")
