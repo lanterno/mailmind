@@ -401,8 +401,9 @@ struct DeskTopCards: View {
             let copy = context.copy
             // The summary ingest stored on the message's row, when the row is this message's.
             let stored = context.row.flatMap { MailCopy($0) == copy ? (summary: $0.summary, action: $0.action) : nil }
-            VStack(spacing: 8) {
-                SummaryCard(copy: copy, stored: stored, cards: desk.summaries)
+            VStack(spacing: 14) {
+                SummaryCard(copy: copy, stored: stored, cards: desk.summaries,
+                            author: context.opened?.fromName ?? context.row?.fromName)
                 SuggestionCard(copy: copy, cards: desk.suggestions, notices: desk.notices)
             }
         }
