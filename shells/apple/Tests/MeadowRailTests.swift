@@ -55,6 +55,92 @@ final class MeadowRailTests: XCTestCase {
         XCTAssertFalse(RailPlaces.places(entries, open: false).contains(trash), "the arrows skip what's folded")
     }
 
+    func testFoldedEveryAccountsGateIsOneThatCountsEveryoneWaiting() async {
+        let mailbox = await mailbox()
+        func gates(_ ada: Int, _ work: Int) -> [RailEntry] {
+            RailPlaces.entries(mailbox, desk: DeskRail(brief: true, gates: [
+                DeskRail.Gate(account: Fixture.ada, waiting: ada), DeskRail.Gate(account: Fixture.work, waiting: work),
+            ]))
+        }
+        func folded(_ entries: [RailEntry]) -> [RailItem] {
+            entries.filter { $0.shows(open: false) }.compactMap(\.item).filter { $0.icon == .gate }
+        }
+        func open(_ entries: [RailEntry]) -> [RailItem] {
+            entries.filter { $0.shows(open: true) }.compactMap(\.item).filter { $0.icon == .gate }
+        }
+
+        // Senders wait in both: open, a gate each, named; folded, one, counting them all, opening the first.
+        let both = gates(2, 3)
+        XCTAssertEqual(open(both).map(\.title), ["At the gate · Ada", "At the gate · work"])
+        XCTAssertEqual(open(both).map(\.count), [.badge(2), .badge(3)])
+        XCTAssertEqual(folded(both), [RailItem(place: .desk(.screener(account: Fixture.ada)), icon: .gate,
+                                               title: "At the gate", count: .badge(5))])
+        // Only in the second: it opens that one.
+        let second = gates(0, 3)
+        XCTAssertEqual(open(second).map(\.title), ["At the gate · work"], "named, as there are two accounts")
+        XCTAssertEqual(folded(second).map(\.place), [.desk(.screener(account: Fixture.work))])
+        XCTAssertEqual(folded(second).map(\.count), [.badge(3)])
+        // No one: the open rail shows none, the folded rail its gate with no badge, opening the first account's.
+        let none = gates(0, 0)
+        XCTAssertEqual(open(none), [])
+        XCTAssertEqual(folded(none).map(\.place), [.desk(.screener(account: Fixture.ada))])
+        XCTAssertEqual(folded(none).map(\.count), [RailItem.Count.none])
+        // One account names none.
+        let one = RailPlaces.entries(mailbox, desk: DeskRail(brief: true, gates: [
+            DeskRail.Gate(account: Fixture.ada, waiting: 2),
+        ]))
+        XCTAssertEqual(open(one).map(\.title), ["At the gate"])
+        // Folded, the gate stands for any account's Screener.
+        XCTAssertEqual(RailPlaces.current(.desk(.screener(account: Fixture.work)), in: both, open: false), "gate")
+        XCTAssertEqual(RailPlaces.current(.desk(.screener(account: Fixture.work)), in: both, open: true),
+                       "gate:\(Fixture.work)")
+    }
+
+    func testFoldedTheViewsWaitBehindOneButton() async {
+        let mailbox = await mailbox()
+        let entries = RailPlaces.entries(mailbox, desk: DeskRail(brief: true))
+        let folded = entries.filter { $0.shows(open: false) }.map(\.id)
+        XCTAssertTrue(folded.contains("views"))
+        XCTAssertFalse(folded.contains("view:v1"), "a person's views fold away")
+        XCTAssertTrue(folded.contains("view:__lane_feed__"), "the lanes stay, as the mockup's do")
+        XCTAssertFalse(entries.filter { $0.shows(open: true) }.contains { $0.id == "views" })
+        let view = try? XCTUnwrap(entries.first { $0.id == "view:v1" }?.item?.place)
+        XCTAssertEqual(RailPlaces.current(view, in: entries, open: false), "views")
+        XCTAssertEqual(RailPlaces.current(view, in: entries, open: true), "view:v1")
+
+        // With no views of a person's own, no button.
+        mailbox.views = mailbox.views.filter { Lane(view: $0.id) != nil }
+        let lanes = RailPlaces.entries(mailbox, desk: DeskRail(brief: true))
+        XCTAssertFalse(lanes.contains { $0.id == "views" })
+    }
+
+    func testTheArrowsGoThroughThePlacesTheRailShows() async throws {
+        let mailbox = await mailbox()
+        let entries = RailPlaces.entries(mailbox, desk: DeskRail(brief: true, gates: [
+            DeskRail.Gate(account: Fixture.ada, waiting: 2), DeskRail.Gate(account: Fixture.work, waiting: 3),
+        ]))
+        let ada = Place.desk(.screener(account: Fixture.ada)), work = Place.desk(.screener(account: Fixture.work))
+        let waiting = Place.virtual(.waiting, account: nil)
+        func step(_ place: Place?, _ by: Int, open: Bool) -> String? {
+            RailPlaces.step(from: place, by: by, in: entries, open: open)?.id
+        }
+        // Open: each gate in turn.
+        XCTAssertEqual(step(.allInboxes, 1, open: true), "gate:\(Fixture.ada)")
+        XCTAssertEqual(step(ada, 1, open: true), "gate:\(Fixture.work)")
+        XCTAssertEqual(step(work, 1, open: true), "virtual:\(waiting)")
+        // Folded: the one gate, from either account's Screener on.
+        XCTAssertEqual(step(.allInboxes, 1, open: false), "gate")
+        XCTAssertEqual(RailPlaces.step(from: .allInboxes, by: 1, in: entries, open: false)?.place, ada)
+        XCTAssertEqual(step(work, 1, open: false), "virtual:\(waiting)")
+        XCTAssertEqual(step(work, -1, open: false), "inbox")
+        // From a view folded away, on from its button; from the brief up, nowhere.
+        let view = try XCTUnwrap(entries.first { $0.id == "view:v1" }?.item?.place)
+        XCTAssertEqual(step(view, -1, open: false), "documents")
+        XCTAssertEqual(step(view, 1, open: true), "folder:\(Fixture.ada)\u{0}INBOX")
+        XCTAssertNil(step(.desk(.brief), -1, open: false))
+        XCTAssertEqual(step(nil, 1, open: false), "brief")
+    }
+
     func testAnAccountFoldsAwayAndItsLabelsOpen() async {
         let mailbox = await mailbox()
         let closed = RailPlaces.entries(mailbox, desk: DeskRail(), closed: [Fixture.ada])
