@@ -409,6 +409,28 @@ fn a_parameter_after_a_vertical_tab_reads_as_python_read_it() {
 }
 
 #[test]
+fn a_value_a_vertical_tab_and_a_quote_start_is_the_tab_alone() {
+    // Python's token ended at the quote, a blank or a special after the tab, so the value was the tab alone, no name
+    // once stripped, and the part was the body its type makes it.
+    let raw = message(
+        "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/html; charset=\"gbk\"; \
+         name=\x0b\"a.pdf\"\r\n\r\n<b>x</b>\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b--\r\n",
+    );
+    let parsed = parse(&raw);
+    assert_eq!((parsed.html.as_deref(), parsed.text.as_deref()), (Some("<b>x</b>"), Some("hi")));
+    assert!(parsed.attachments.is_empty());
+    for value in ["\x0c\x1c\"a.pdf\"", "\x1f a.pdf", "\x0b/a.pdf", "\x0b=?utf-8?Q?a.pdf?=", "\x1e\"a;b\"; charset=x"] {
+        let raw = message(&format!("Content-Type: text/html; name={value}\r\n\r\n<b>x</b>\r\n"));
+        let parsed = parse(&raw);
+        assert_eq!(parsed.html.as_deref(), Some("<b>x</b>\r\n"), "{value:?}");
+        assert!(parsed.attachments.is_empty(), "{value:?}");
+    }
+    // One a byte of a token follows Python read on, as a file name.
+    let named = message("Content-Type: text/html; name=\x0ba.pdf\r\n\r\n<b>x</b>\r\n");
+    assert_eq!(parse(&named).attachments, [file(1, "a.pdf", "text/html", 10)]);
+}
+
+#[test]
 fn a_boundary_ends_at_its_last_byte_that_isnt_a_blank_inside_its_quotes_too() {
     // Python's get_boundary stripped the boundary on the right once its quotes were off.
     let body = "\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b--\r\n";
