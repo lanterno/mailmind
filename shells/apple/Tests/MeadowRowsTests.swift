@@ -206,6 +206,48 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertFalse(alone.contains("Account"), "one account's own folder says none")
     }
 
+    func testARowAfterAPageThatCameLateDrawsTheHeadItsHeightMadeRoomFor() async throws {
+        let now = Int(Date().timeIntervalSince1970)
+        // The first page's mail is from the past week, the rest a month old: row 200 starts "Earlier".
+        let rows = (0..<650).map { index in
+            var row = Fixture.row(index + 1)
+            row.ts = now - (index < MailListModel.pageSize ? 3 : 30) * 86_400 - index
+            return row
+        }
+        let gate = PageGate()
+        let list = MailListModel(load: { offset, limit in
+            while offset == 0, gate.shut { try await Task.sleep(for: .milliseconds(5)) }
+            return MailListModel.Page(total: rows.count, rows: Array(rows.dropFirst(offset).prefix(limit)))
+        })
+        list.start()
+        await until { list.copy(at: 0) != nil }
+        let app = MailApp()
+        let look = RowLook(inks: RowInks.of(.day, light: .day, highContrast: false), measure: RowMeasure(.comfortable),
+                           accounts: [Fixture.ada])
+        let controller = MailboxTableController(list: list, mailbox: app.mailbox, look: look, sections: true)
+        let window = shown(controller)
+        defer { window.close() }
+        let table = controller.table
+
+        // Down at the foot the first page is let go; back up, the page under it comes before it does.
+        gate.shut = true
+        table.scrollRowToVisible(649)
+        await until { list.copy(at: 640) != nil && list.copy(at: 0) == nil }
+        table.scrollRowToVisible(200)
+        await until { list.copy(at: 200) != nil }
+        table.layoutSubtreeIfNeeded()
+        let before = try XCTUnwrap(table.view(atColumn: 0, row: 200, makeIfNecessary: false) as? MailRowCell)
+        XCTAssertNil(before.head, "the row before it isn't here yet")
+        gate.shut = false
+        await until { list.copy(at: 199) != nil }
+        table.layoutSubtreeIfNeeded()
+
+        let cell = try XCTUnwrap(table.view(atColumn: 0, row: 200, makeIfNecessary: false) as? MailRowCell)
+        XCTAssertEqual(table.rect(ofRow: 200).height, RowMeasure(.comfortable).height(RowShape(head: true)))
+        XCTAssertEqual(cell.head, "Earlier", "it draws the head its height made room for")
+        withExtendedLifetime(app) {}
+    }
+
     // MARK: A row's buttons
 
     /// The table in a window that never shows, so its rows on screen have cells.
@@ -264,5 +306,16 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertTrue(cell.state.hovering, "the pointer came over the list without moving over a row")
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
         XCTAssertFalse(cell.state.hovering, "a window in the back shows no row's buttons")
+    }
+}
+
+/// Holds the first page back while it is shut, as a slow read would.
+private final class PageGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held = false
+
+    var shut: Bool {
+        get { lock.withLock { held } }
+        set { lock.withLock { held = newValue } }
     }
 }
