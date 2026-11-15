@@ -147,6 +147,20 @@ enum RowFaces {
         return NSFont(descriptor: described, size: font.pointSize) ?? font
     }
 
+    /// A summary as the rows set it: on one line, in moss from the context.
+    static func gistText(_ summary: String) -> NSAttributedString {
+        NSAttributedString(string: TextLine.flat(summary), attributes: [
+            .font: gist,
+            NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
+        ])
+    }
+
+    /// A summary's width on one line, which says whether it fits on one (`RowMeasure.fits`): a single line set, the
+    /// least a row's height can be worked out from.
+    static func gistWidth(_ summary: String) -> Float {
+        Float(CTLineGetTypographicBounds(CTLineCreateWithAttributedString(gistText(summary)), nil, nil, nil))
+    }
+
     /// The baseline of a line of `font` in a CSS line box `height` tall whose top is `top`: the font's ascent and
     /// descent stand in the middle of the box.
     static func baseline(_ font: NSFont, top: CGFloat, height: CGFloat) -> CGFloat {
@@ -210,6 +224,8 @@ final class MailRowCell: NSTableCellView {
         var subject: TextLine
         var third: RowWords.Third
         var gist: NSAttributedString?
+        /// The summary's width on one line, measured as the table measures it for the row's height.
+        var gistWidth: Float?
         var amount: TextLine?
         var preview: TextLine?
         var chips: [(chip: RowWords.Chip, text: TextLine)]
@@ -246,13 +262,11 @@ final class MailRowCell: NSTableCellView {
         lines = row.map { row in
             let unread = !row.seen
             let third = RowWords.third(row)
-            var gist: NSAttributedString?, amount: TextLine?, preview: TextLine?
+            var gist: NSAttributedString?, gistWidth: Float?, amount: TextLine?, preview: TextLine?
             switch third {
             case .gist(let text):
-                gist = NSAttributedString(string: TextLine.flat(text), attributes: [
-                    .font: RowFaces.gist,
-                    NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
-                ])
+                gist = RowFaces.gistText(text)
+                gistWidth = RowFaces.gistWidth(text)
             case .amount(let money, let snippet):
                 amount = TextLine(money, RowFaces.amount)
                 preview = TextLine(" · " + snippet, RowFaces.preview)
@@ -265,7 +279,7 @@ final class MailRowCell: NSTableCellView {
                 time: TextLine(row.when, RowWords.needs(row) ? RowFaces.timeNeeds : RowFaces.time),
                 subject: TextLine(row.subject.isEmpty ? String(localized: "(no subject)") : row.subject,
                                   unread ? RowFaces.subjectUnread : RowFaces.subject),
-                third: third, gist: gist, amount: amount, preview: preview,
+                third: third, gist: gist, gistWidth: gistWidth, amount: amount, preview: preview,
                 chips: RowWords.chips(row).map { ($0, TextLine($0.text, RowFaces.chip)) },
                 initials: TextLine(RowWords.initials(row), RowFaces.initials, kern: 0.24),
                 head: head.map { TextLine($0.uppercased(), RowFaces.head, kern: 1.1) })
@@ -356,7 +370,10 @@ final class MailRowCell: NSTableCellView {
             drawWaiting(inks, measure: measure)
             return
         }
-        let stops = measure.stops(RowShape(head: head != nil, gist: lines.gist != nil, chips: !lines.chips.isEmpty))
+        // The shape the table gave the row its height by: the summary on one line where it fits this wide.
+        let shape = RowShape(head: head != nil, gist: lines.gist != nil, chips: !lines.chips.isEmpty)
+            .fitting(lines.gistWidth, in: bounds.width)
+        let stops = measure.stops(shape)
         if let head = lines.head {
             head.draw(in: context, x: RowMeasure.listSide + RowMeasure.side,
                       baseline: RowFaces.baseline(RowFaces.head, top: 14, height: 11), width: box.width - 20,
@@ -420,7 +437,7 @@ final class MailRowCell: NSTableCellView {
 
         // The summary in moss, the snippet, or a receipt's amount.
         if let gist = lines.gist {
-            for (index, line) in gistLines(gist, width: width, count: measure.gistLines).enumerated() {
+            for (index, line) in gistLines(gist, width: width, count: measure.lines(shape)).enumerated() {
                 let top = stops.third + CGFloat(index) * measure.gistLine
                 TextLine(line).draw(in: context, x: textX,
                                     baseline: RowFaces.baseline(RowFaces.gist, top: top, height: measure.gistLine),
@@ -596,7 +613,7 @@ final class BriefRowCell: NSTableCellView {
 
     private var line: BriefLine?
     private var look: RowLook?
-    private var texts: (who: TextLine, date: TextLine, tally: TextLine, gist: NSAttributedString)?
+    private var texts: (who: TextLine, date: TextLine, tally: TextLine, gist: NSAttributedString, gistWidth: Float)?
     var state = RowState() {
         didSet { if state != oldValue { needsDisplay = true } }
     }
@@ -618,11 +635,7 @@ final class BriefRowCell: NSTableCellView {
         self.line = line
         self.look = look
         texts = (TextLine(String(localized: "Today’s brief"), RowFaces.whoUnread), TextLine(line.date, RowFaces.time),
-                 TextLine(line.tally, RowFaces.subject),
-                 NSAttributedString(string: line.gist, attributes: [
-                    .font: RowFaces.gist,
-                    NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
-                 ]))
+                 TextLine(line.tally, RowFaces.subject), RowFaces.gistText(line.gist), RowFaces.gistWidth(line.gist))
         needsDisplay = true
     }
 
@@ -648,7 +661,8 @@ final class BriefRowCell: NSTableCellView {
             ring.lineWidth = 2
             ring.stroke()
         }
-        let stops = measure.stops(.brief)
+        let shape = RowShape.brief.fitting(texts.gistWidth, in: bounds.width)
+        let stops = measure.stops(shape)
         let thumb = mirrored(NSRect(x: box.minX + RowMeasure.side, y: stops.who, width: RowMeasure.avatar,
                                     height: RowMeasure.avatar))
         NSGraphicsContext.saveGraphicsState()
@@ -666,7 +680,8 @@ final class BriefRowCell: NSTableCellView {
         texts.tally.draw(in: context, x: textX,
                          baseline: RowFaces.baseline(RowFaces.subject, top: stops.subject, height: RowMeasure.line),
                          width: right - textX, color: inks.ink, mirrored: mirrored)
-        for (index, line) in TextLine.clamp(texts.gist, width: right - textX, lines: measure.gistLines).enumerated() {
+        let gist = TextLine.clamp(texts.gist, width: right - textX, lines: measure.lines(shape))
+        for (index, line) in gist.enumerated() {
             let top = stops.third + CGFloat(index) * measure.gistLine
             TextLine(line).draw(in: context, x: textX,
                                 baseline: RowFaces.baseline(RowFaces.gist, top: top, height: measure.gistLine),

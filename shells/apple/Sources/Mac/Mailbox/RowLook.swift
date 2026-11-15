@@ -3,8 +3,8 @@ import Foundation
 
 // What a row of the list shows and how tall that makes it (#44), as the mockup's `.row` and `rowHTML()` lay it out
 // with the page's real fields (features/mailbox/MessageList.tsx): who, when, the subject, then the AI's summary in
-// two lines or the snippet in one, or a receipt's amount, and its chips. No drawing here: the table asks these
-// for each row's height and the cell for where each line stands.
+// at most two lines or the snippet in one, or a receipt's amount, and its chips. No drawing here: the table asks
+// these for each row's height and the cell for where each line stands.
 
 /// How much each row shows, from the `density` preference (the page's `body[data-density]`): comfortable, cozy, or
 /// compact with one line of summary and no chips.
@@ -45,6 +45,23 @@ struct RowMeasure: Equatable {
 
     var gistLine: CGFloat { Self.gistSize * gistLeading }
 
+    /// The summary's lines in a row of this shape: one where it fits on one, else as many as the density shows.
+    func lines(_ shape: RowShape) -> Int {
+        shape.oneLine ? 1 : gistLines
+    }
+
+    /// The width the summary has in a row `width` wide: inside the list's sides, from where the words start to the
+    /// row's padding at the right.
+    static func room(_ width: CGFloat) -> CGFloat {
+        width - 2 * listSide - textX - side
+    }
+
+    /// Whether a summary `width` wide on one line (`RowFaces.gistWidth`) fits on one line of a row `rowWidth` wide.
+    /// The table and the cell both ask this, so a row's height and its drawing agree.
+    static func fits(_ width: Float, in rowWidth: CGFloat) -> Bool {
+        CGFloat(width) <= room(rowWidth)
+    }
+
     /// The tops of each part of a row of this shape, from the row's own top.
     struct Stops: Equatable {
         let who: CGFloat
@@ -60,7 +77,7 @@ struct RowMeasure: Equatable {
         let who = top + padTop
         let subject = who + Self.line + 2
         let third = subject + Self.line + (shape.gist ? 4 : 3)
-        var end = third + (shape.gist ? gistLine * CGFloat(gistLines) : Self.previewLine)
+        var end = third + (shape.gist ? gistLine * CGFloat(lines(shape)) : Self.previewLine)
         var chips: CGFloat?
         if shape.chips, self.chips {
             chips = end + Self.chipsGap
@@ -80,17 +97,27 @@ struct RowShape: Hashable {
     var head = false
     var gist = false
     var chips = false
+    /// The summary fits on one line of the row as wide as it is now, so the row makes room for one: `.gist` is
+    /// clamped to two lines, and a row is as tall as what it holds.
+    var oneLine = false
 
     /// Packed into a byte, for the table's note of every row's shape; zero is a row not read yet.
-    var packed: UInt8 { 1 | (head ? 2 : 0) | (gist ? 4 : 0) | (chips ? 8 : 0) }
+    var packed: UInt8 { 1 | (head ? 2 : 0) | (gist ? 4 : 0) | (chips ? 8 : 0) | (oneLine ? 16 : 0) }
 
-    init(head: Bool = false, gist: Bool = false, chips: Bool = false) {
-        (self.head, self.gist, self.chips) = (head, gist, chips)
+    init(head: Bool = false, gist: Bool = false, chips: Bool = false, oneLine: Bool = false) {
+        (self.head, self.gist, self.chips, self.oneLine) = (head, gist, chips, gist && oneLine)
     }
 
     init?(packed: UInt8) {
         guard packed & 1 == 1 else { return nil }
-        self.init(head: packed & 2 != 0, gist: packed & 4 != 0, chips: packed & 8 != 0)
+        self.init(head: packed & 2 != 0, gist: packed & 4 != 0, chips: packed & 8 != 0, oneLine: packed & 16 != 0)
+    }
+
+    /// This shape with its summary, `width` wide on one line, in a row `rowWidth` wide: on one line where it fits.
+    func fitting(_ width: Float?, in rowWidth: CGFloat) -> RowShape {
+        var shape = self
+        shape.oneLine = gist && width.map { RowMeasure.fits($0, in: rowWidth) } ?? false
+        return shape
     }
 
     /// A row's shape: a summary takes its lines, a receipt's amount or a snippet one, and the next step or a junk
@@ -104,6 +131,17 @@ struct RowShape: Hashable {
     static let waiting = RowShape(gist: true)
     /// Today's brief: who, the tally, and a summary.
     static let brief = RowShape(gist: true)
+
+    /// A row's shape `rowWidth` wide, and its summary's width on one line where it has a summary: the one line of
+    /// text the table sets for a row, once, as its page comes, so that a new width sets none.
+    @MainActor
+    static func of(_ row: API.FolderRow, head: Bool, rowWidth: CGFloat) -> (shape: RowShape, gistWidth: Float?) {
+        let third = RowWords.third(row)
+        let shape = RowShape(head: head, gist: third.isGist, chips: !RowWords.chips(row).isEmpty)
+        guard case .gist(let text) = third else { return (shape, nil) }
+        let width = RowFaces.gistWidth(text)
+        return (shape.fitting(width, in: rowWidth), width)
+    }
 }
 
 /// A row's words and marks from its fields, as the page's row says them.

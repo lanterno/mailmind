@@ -65,9 +65,16 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private(set) var briefChosen = false
     /// Each position's shape as last worked out (`RowShape.packed`), zero where it isn't yet.
     private var shapes: [UInt8] = []
+    /// Each position's summary's width on one line, where its shape was worked out and it has a summary: whether it
+    /// fits on one line is worked out again from this when the column's width changes, with no text set.
+    private var gistWidths: [Float] = []
     /// The positions whose shape was worked out since every row's height was last noted: the only ones whose height
     /// can be other than a waiting row's.
     private var measured = IndexSet()
+    /// How wide the rows are, which the summaries' lines were worked out for: the column's width.
+    private var rowWidth: CGFloat = 0
+    /// The brief's summary's width on one line.
+    private var briefWidth: Float?
     /// The day the heads were worked out on.
     private var now = Date()
     /// The row under the pointer, and which of its parts.
@@ -98,6 +105,7 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         let column = NSTableColumn(identifier: MailRowCell.identifier)
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column)
+        rowWidth = column.width
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.dataSource = self
         table.delegate = self
@@ -167,8 +175,7 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     func setSections(_ on: Bool) {
         guard on != sections else { return }
         sections = on
-        shapes = Array(repeating: 0, count: list.total)
-        measured = IndexSet()
+        forgetShapes()
         keepingPlace { table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows)) }
         redrawShown()
     }
@@ -176,15 +183,24 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     func setBrief(_ line: BriefLine?, chosen: Bool) {
         let had = brief != nil
         let changed = line != brief || chosen != briefChosen
+        let height = briefHeight
+        if line?.gist != brief?.gist { briefWidth = line.map { RowFaces.gistWidth($0.gist) } }
         brief = line
         briefChosen = chosen
         if had != (line != nil) {
             table.reloadData()
             follow(mailbox?.marked ?? [], scroll: false)
         } else if changed, line != nil {
+            // Who needs you may now take one line, or two.
+            if briefHeight != height { keepingPlace { table.noteHeightOfRows(withIndexesChanged: [0]) } }
             redraw(rows: IndexSet(integer: 0))
             refreshStates()
         }
+    }
+
+    /// The brief's row's height: its summary on one line where it fits.
+    private var briefHeight: CGFloat {
+        look.measure.height(RowShape.brief.fitting(briefWidth, in: rowWidth))
     }
 
     // MARK: The scroll position, once a frame
@@ -214,8 +230,7 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
             // before and after, and the table asks the new rows' heights itself. A folder holds 100,000 rows.
             var remeasured = measured.union(positions)
             remeasured.shift(startingAt: 0, by: lead)
-            shapes = Array(repeating: 0, count: list.total)
-            measured = IndexSet()
+            forgetShapes()
             keepingPlace {
                 table.noteNumberOfRowsChanged()
                 let rows = table.numberOfRows
@@ -257,15 +272,46 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
 
     /// A position's shape: as worked out last, else from its row once its page is here.
     private func shape(at position: Int) -> RowShape {
-        if shapes.count != list.total { shapes = Array(repeating: 0, count: list.total) }
+        if shapes.count != list.total {
+            shapes = Array(repeating: 0, count: list.total)
+            gistWidths = Array(repeating: 0, count: list.total)
+        }
         if position < shapes.count, let known = RowShape(packed: shapes[position]) { return known }
         guard let row = list.copy(at: position) else { return .waiting }
-        let shape = RowShape(row, head: head(at: position, row) != nil)
+        let (shape, gistWidth) = RowShape.of(row, head: head(at: position, row) != nil, rowWidth: rowWidth)
         if position < shapes.count {
             shapes[position] = shape.packed
+            gistWidths[position] = gistWidth ?? 0
             measured.insert(position)
         }
         return shape
+    }
+
+    /// Forget every row's shape: each is worked out again as it shows.
+    private func forgetShapes() {
+        shapes = Array(repeating: 0, count: list.total)
+        gistWidths = Array(repeating: 0, count: list.total)
+        measured = IndexSet()
+    }
+
+    /// The rows are as wide as `width` now: a summary that fit on one line may need two, or one that needed two fit
+    /// on one. Each is worked out again from its width on one line, with no text set, and the table measures again
+    /// only the rows whose lines changed; a row not worked out yet is worked out at this width as it comes.
+    private func rewrap(_ width: CGFloat) {
+        guard width != rowWidth else { return }
+        let was = briefHeight
+        rowWidth = width
+        var changed = IndexSet()
+        for position in measured where position < shapes.count {
+            guard let shape = RowShape(packed: shapes[position]), shape.gist else { continue }
+            let now = shape.fitting(gistWidths[position], in: width)
+            guard now != shape else { continue }
+            shapes[position] = now.packed
+            changed.insert(row(at: position))
+        }
+        if brief != nil, briefHeight != was { changed.insert(0) }
+        guard !changed.isEmpty else { return }
+        keepingPlace { table.noteHeightOfRows(withIndexesChanged: changed) }
     }
 
     private func head(at position: Int, _ row: API.FolderRow) -> String? {
@@ -384,8 +430,13 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        guard let position = position(row) else { return look.measure.height(.brief) }
+        guard let position = position(row) else { return briefHeight }
         return look.measure.height(shape(at: position))
+    }
+
+    /// The splitter moved or the window was resized: the rows are as wide as the column.
+    func tableViewColumnDidResize(_ notification: Notification) {
+        rewrap(table.tableColumns.first?.width ?? rowWidth)
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {

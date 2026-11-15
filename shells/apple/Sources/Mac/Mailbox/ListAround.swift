@@ -18,11 +18,14 @@ struct MailboxTable: View {
     @Environment(\.meadow) private var meadow
     @Environment(\.meadowLight) private var light
     @Environment(Desk.self) private var desk: Desk?
+    /// The brief's summary fits on one line of the list as wide as it is, as the table's brief row has it.
+    @State private var briefOneLine = false
 
     var body: some View {
         let place = mailbox.app?.place
         let measure = RowMeasure(status.preferences?.density ?? .comfortable)
         let brief = briefLine
+        let briefWidth = brief.map { RowFaces.gistWidth($0.gist) }
         VStack(spacing: 0) {
             OfflineNote(mailbox: mailbox, account: mailbox.app?.listed?.account, status: status)
             if mailbox.chosenRows.count + mailbox.unheld.count > 1 {
@@ -36,8 +39,13 @@ struct MailboxTable: View {
                              sections: DayGroup.sections(place))
                 .overlay(alignment: .top) {
                     EmptyList(app: mailbox.app, mailbox: mailbox, list: list)
-                        .padding(.top, brief == nil ? 0 : RowMeasure.listTop + measure.height(.brief))
+                        .padding(.top, brief == nil ? 0
+                                    : RowMeasure.listTop + measure.height(RowShape(gist: true, oneLine: briefOneLine)))
                 }
+                // Only whether it fits is kept, so moving the splitter changes nothing here until that does.
+                .onGeometryChange(for: Bool.self) { proxy in
+                    briefWidth.map { RowMeasure.fits($0, in: proxy.size.width) } ?? false
+                } action: { briefOneLine = $0 }
         }
     }
 
