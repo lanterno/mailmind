@@ -188,6 +188,24 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(controller.position(0), 0)
     }
 
+    func testARowSaysItsAccountWhereTheListHoldsSeveral() async throws {
+        let (app, _, controller) = try await table(brief: nil)
+        let window = shown(controller)
+        defer { window.close() }
+        // The mailbox names the accounts, and the table holds it weakly: the window's app keeps it.
+        defer { withExtendedLifetime(app) {} }
+        func said(_ row: Int) throws -> String {
+            let cell = try XCTUnwrap(controller.table.view(atColumn: 0, row: row, makeIfNecessary: false) as? MailRowCell)
+            return try XCTUnwrap(cell.accessibilityLabel())
+        }
+        let first = try said(0), second = try said(1)
+        XCTAssertTrue(first.contains("Account: Ada"), first)
+        XCTAssertTrue(second.contains("Account: work"), "its account is only a coloured dot on screen")
+        controller.setShowsAccount(false)
+        let alone = try said(0)
+        XCTAssertFalse(alone.contains("Account"), "one account's own folder says none")
+    }
+
     // MARK: A row's buttons
 
     /// The table in a window that never shows, so its rows on screen have cells.
