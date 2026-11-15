@@ -65,6 +65,9 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private(set) var briefChosen = false
     /// Each position's shape as last worked out (`RowShape.packed`), zero where it isn't yet.
     private var shapes: [UInt8] = []
+    /// The positions whose shape was worked out since every row's height was last noted: the only ones whose height
+    /// can be other than a waiting row's.
+    private var measured = IndexSet()
     /// The day the heads were worked out on.
     private var now = Date()
     /// The row under the pointer, and which of its parts.
@@ -165,6 +168,7 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         guard on != sections else { return }
         sections = on
         shapes = Array(repeating: 0, count: list.total)
+        measured = IndexSet()
         keepingPlace { table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows)) }
         redrawShown()
     }
@@ -205,11 +209,17 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         now = Date()
         var reshown = positions
         if totalChanged {
-            // New mail above moves every row down: their shapes are worked out again as they show.
+            // New mail above moves every row down: their shapes are worked out again as they show. Only a row whose
+            // shape was worked out, or whose page just came, can change height: every other row is a waiting row
+            // before and after, and the table asks the new rows' heights itself. A folder holds 100,000 rows.
+            var remeasured = measured.union(positions)
+            remeasured.shift(startingAt: 0, by: lead)
             shapes = Array(repeating: 0, count: list.total)
+            measured = IndexSet()
             keepingPlace {
                 table.noteNumberOfRowsChanged()
-                table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows))
+                let rows = table.numberOfRows
+                table.noteHeightOfRows(withIndexesChanged: remeasured.filteredIndexSet { $0 < rows })
             }
             moved(Notification(name: NSView.boundsDidChangeNotification))
         } else {
@@ -251,7 +261,10 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         if position < shapes.count, let known = RowShape(packed: shapes[position]) { return known }
         guard let row = list.copy(at: position) else { return .waiting }
         let shape = RowShape(row, head: head(at: position, row) != nil)
-        if position < shapes.count { shapes[position] = shape.packed }
+        if position < shapes.count {
+            shapes[position] = shape.packed
+            measured.insert(position)
+        }
         return shape
     }
 
