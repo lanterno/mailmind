@@ -3,8 +3,9 @@
 //! by the caller on it), and the stream a protocol reads and writes.
 //!
 //! What goes wrong is named by its class alone (`Lost`), never by what a server said. Reaching a host is asked of
-//! `Outside` by the caller, before `connect`.
+//! `Outside` by the caller, before `connect`. A domain's mail servers are asked of a nameserver (`dns`).
 
+pub mod dns;
 pub mod tls;
 // A wait as long as a protocol says, and its end from another thread (IMAP's IDLE).
 mod waiting;
