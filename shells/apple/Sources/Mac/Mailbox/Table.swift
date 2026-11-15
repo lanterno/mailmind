@@ -34,7 +34,7 @@ struct MailboxRowsTable: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let controller = context.coordinator
-        controller.showsAccount = showsAccount
+        controller.setShowsAccount(showsAccount)
         controller.setSections(sections)
         controller.setLook(look)
         controller.setBrief(brief, chosen: briefChosen)
@@ -56,7 +56,8 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     let table = MailboxTableView()
     private let list: MailListModel
     private weak var mailbox: Mailbox?
-    var showsAccount = true
+    /// Each row says its account to VoiceOver: everywhere but one account's own folder.
+    private(set) var showsAccount = true
     private(set) var sections: Bool
     private(set) var look: RowLook
     private var brief: BriefLine?
@@ -150,6 +151,12 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
             keepingPlace { table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows)) }
         }
         if measured || painted { redrawShown() }
+    }
+
+    func setShowsAccount(_ on: Bool) {
+        guard on != showsAccount else { return }
+        showsAccount = on
+        redrawShown()
     }
 
     /// Days' heads on or off: every row's shape is worked out again.
@@ -267,7 +274,9 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
             let role = mail.flatMap { mail in
                 mailbox?.folders(of: mail.account).first { $0.name == mail.folder }?.role
             }
-            cell.show(mail, head: mail.flatMap { head(at: position, $0) }, acts: RowAct.shown(role: role), look: look)
+            let account = showsAccount ? mail.flatMap { mail in mailbox?.name(of: mail.account) } : nil
+            cell.show(mail, head: mail.flatMap { head(at: position, $0) }, account: account,
+                      acts: RowAct.shown(role: role), look: look)
         } else if let cell = view as? BriefRowCell, let brief {
             cell.show(brief, look: look)
         }

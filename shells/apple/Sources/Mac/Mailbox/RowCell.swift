@@ -187,6 +187,8 @@ final class MailRowCell: NSTableCellView {
 
     private(set) var row: API.FolderRow?
     private var head: String?
+    /// The account's name, said to VoiceOver where the list holds several accounts' mail: drawn, it is only a dot.
+    private var account: String?
     private var acts: [RowAct] = []
     private var look: RowLook?
     var state = RowState() {
@@ -226,12 +228,15 @@ final class MailRowCell: NSTableCellView {
 
     override var isFlipped: Bool { true }
 
-    /// Show `row` (nil while its page comes) under `head`, with `acts` for its buttons.
-    func show(_ row: API.FolderRow?, head: String?, acts: [RowAct], look: RowLook) {
-        guard row != self.row || head != self.head || acts != self.acts || look.inks !== self.look?.inks
-            || look.measure != self.look?.measure || lines == nil && row != nil else { return }
+    /// Show `row` (nil while its page comes) under `head`, with `acts` for its buttons; `account` is its account's
+    /// name where the list says each row's.
+    func show(_ row: API.FolderRow?, head: String?, account: String? = nil, acts: [RowAct], look: RowLook) {
+        guard row != self.row || head != self.head || account != self.account || acts != self.acts
+            || look.inks !== self.look?.inks || look.measure != self.look?.measure || lines == nil && row != nil
+        else { return }
         self.row = row
         self.head = head
+        self.account = account
         self.acts = acts
         self.look = look
         gistCut = nil
@@ -568,6 +573,7 @@ final class MailRowCell: NSTableCellView {
         said.append(row.when)
         if row.flagged { said.append(String(localized: "Starred")) }
         if row.hasAttach { said.append(String(localized: "Has attachments")) }
+        if let account { said.append(String(localized: "Account: \(account)")) }
         switch RowWords.third(row) {
         case .gist(let text): said.append(String(localized: "MailMind summary: \(text)"))
         case .amount(let money, let snippet): said.append("\(money), \(snippet)")
