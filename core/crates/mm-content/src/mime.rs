@@ -256,8 +256,8 @@ const MENDS: usize = 8;
 /// before the next one. A blank line goes in before that line. A part that names its Content-Type or
 /// Content-Transfer-Encoding twice is read by the first, as Python read it, where mail-parser reads the last: the
 /// later one is renamed, and so is a type `multipart` or `message` with no subtype, which Python read as text/plain.
-/// A multipart with an empty boundary gets one. And a message whose lines all end in CR alone,
-/// as old Macs wrote them, has them end in CRLF.
+/// A multipart with an empty boundary gets one, and a `%` that starts no escape in an RFC 2231 value is escaped, as
+/// Python kept it. And a message whose lines all end in CR alone, as old Macs wrote them, has them end in CRLF.
 fn reading(raw: &[u8]) -> Reading<'_> {
     let mut copy = match cr_lines(raw) {
         Some(lines) => lines,
@@ -290,6 +290,7 @@ fn mend(raw: &[u8], message: &Message<'_>) -> Option<Vec<u8>> {
     // starts: those wait for the next pass, which reads the mended blocks.
     if insertions.is_empty() {
         insertions.extend(empty_boundaries(raw, message));
+        insertions.extend(bare_percents(raw, message));
     }
     insertions.sort_by_key(|&(at, _)| at);
     insertions.dedup();
@@ -535,6 +536,26 @@ fn empty_boundaries(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
                 }
             }
             at += line.len();
+        }
+    }
+    insertions
+}
+
+/// A `%` that starts no escape in an RFC 2231 value, a file name among them, of the first Content-Type or
+/// Content-Disposition of each of the message's own parts ([`header::bare_percents`]): Python kept it as written,
+/// where mail-parser drops one cut off at the value's end, so `name*=utf-8''%` named no file. `25` goes in after it,
+/// making it the escape of a `%`.
+fn bare_percents(raw: &[u8], message: &Message<'_>) -> Vec<Insertion> {
+    let mut insertions = Vec::new();
+    for part in message.root().parts() {
+        let headers = part.headers();
+        for name in [HeaderName::ContentType, HeaderName::ContentDisposition] {
+            if let Some(first) = headers.all(name).next()
+                && let Some(start) = offset_in(raw, first.raw_value())
+            {
+                let percents = header::bare_percents(first.raw_value());
+                insertions.extend(percents.into_iter().map(|at| (start + at + 1, b"25".as_slice())));
+            }
         }
     }
     insertions

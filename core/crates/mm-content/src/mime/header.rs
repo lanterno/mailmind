@@ -211,6 +211,38 @@ fn closing_quote_moved(raw: &[u8], value: Range<usize>) -> Vec<(usize, u8)> {
     std::iter::once((quote, b'"')).chain((quote + 1..=value.start + close).map(|at| (at, b' '))).collect()
 }
 
+/// Where a `%` that starts no escape lies in the RFC 2231 values of a raw Content-Type or Content-Disposition value,
+/// those of a parameter whose name ends in `*`: one not followed by two hex digits, after the charset and language a
+/// value's first two `'` close, or anywhere in a value with no `'`. Python's `unquote_to_bytes` kept such a `%` as
+/// written, so `name*=utf-8''%` named a file `%`. mail-parser drops one cut off at a value's end, so the part had no
+/// name and was read as the body its type makes it, and one before the end left the whole value undecoded. A value
+/// with one `'` Python read as no parameter, and mail-parser as no name: it is left as it is.
+pub(super) fn bare_percents(raw: &[u8]) -> Vec<usize> {
+    let mut found = Vec::new();
+    for param in params(raw) {
+        let Some(text) = raw.get(param.clone()) else { continue };
+        let Some(equals) = text.iter().position(|&byte| byte == b'=') else { continue };
+        let name = text.get(..equals).unwrap_or_default();
+        let blanks = name.iter().rev().take_while(|&&byte| python_blank(byte)).count();
+        if !name.get(..name.len() - blanks).is_some_and(|name| name.ends_with(b"*")) {
+            continue;
+        }
+        let start = param.start + equals + 1;
+        let value = raw.get(start..param.end).unwrap_or_default();
+        let mut quotes = value.iter().enumerate().filter(|&(_, &byte)| byte == b'\'').map(|(at, _)| at);
+        let from = match (quotes.next(), quotes.next()) {
+            (None, _) => 0,
+            (Some(_), None) => continue,
+            (Some(_), Some(second)) => second + 1,
+        };
+        let escape = |at: usize| value.get(at..at + 2).is_some_and(|hex| hex.iter().all(u8::is_ascii_hexdigit));
+        found.extend(
+            (from..value.len()).filter(|&at| value.get(at) == Some(&b'%') && !escape(at + 1)).map(|at| start + at),
+        );
+    }
+    found
+}
+
 /// Whether Python's `str.strip` took a byte of a header for white space: an ASCII blank, a line end, a vertical tab, a
 /// form feed or a separator from `\x1c` to `\x1f`.
 fn python_blank(byte: u8) -> bool {
