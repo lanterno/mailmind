@@ -90,19 +90,54 @@ final class MailLookTests: XCTestCase {
     }
 
     func testPlainTextTakesTheAppsColorsAndIsNeverInverted() {
-        XCTAssertFalse(look(html: false, dark: true).inverted)
-        XCTAssertTrue(look(html: false, dark: true).css.contains("color:#fff;background:#111"))
-        XCTAssertTrue(look(html: false).css.contains("color:#24221E;background:#FFFDF8"))
+        let atNight = look(html: false, dark: true)
+        XCTAssertFalse(atNight.inverted)
+        XCTAssertTrue(atNight.css.contains("html{background:transparent}body{margin:0px;"), "on the pane's paper")
+        XCTAssertTrue(atNight.css.contains("color:#fff;"))
+        XCTAssertFalse(atNight.sheet)
+        let byDay = look(html: false)
+        XCTAssertTrue(byDay.css.contains("html{background:transparent}"))
+        XCTAssertTrue(byDay.css.contains("color:#24221E;"))
         let darkInDaylight = look(html: false, colors: .dark)
-        XCTAssertTrue(darkInDaylight.css.contains("color:#fff;background:#111"))
+        XCTAssertTrue(darkInDaylight.sheet, "darker than the light: a sheet of its own")
+        XCTAssertTrue(darkInDaylight.css.contains("html{background:#111}body{margin:14px;"))
+        XCTAssertTrue(darkInDaylight.css.contains("color:#fff;"))
         XCTAssertTrue(darkInDaylight.css.contains("a{color:#9cf}"))
-        XCTAssertTrue(darkInDaylight.css.contains("border-left:3px solid #555"))
+        XCTAssertTrue(darkInDaylight.css.contains("border-left:2px solid #555"))
+        let lightAtNight = look(html: false, colors: .original, dark: true)
+        XCTAssertTrue(lightAtNight.sheet, "lighter than the night: a sheet of its own")
+        XCTAssertTrue(lightAtNight.css.contains("html{background:#FFFDF8}"))
+        XCTAssertTrue(lightAtNight.css.contains("color:#24221E;"))
     }
 
     func testPlainTextIsSetByTheReadingSettingsAndRichMailKeepsItsType() {
-        XCTAssertTrue(look(html: false, font: .mono, size: .xl).css.contains("font:20px/1.55 ui-monospace"))
-        XCTAssertTrue(look(html: false, size: .m).css.contains("font:16.5px/1.62"))
-        XCTAssertFalse(look(html: true, font: .mono, size: .xl).css.contains("monospace"))
+        XCTAssertTrue(look(html: false, font: .mono, size: .xl).css.contains("font:21px/1.55 ui-monospace"))
+        XCTAssertTrue(look(html: false, size: .m).css.contains("font:17px/1.72 \"MailMind Read\""))
+        XCTAssertTrue(look(html: false, font: .serif, size: .s).css.contains("font:15px/1.72 \"Iowan Old Style\""))
+        let rich = look(html: true, font: .mono, size: .xl)
+        XCTAssertFalse(rich.css.contains("monospace"))
+        XCTAssertTrue(rich.css.contains("body{margin:0px;font:17px/1.72 \"MailMind Read\""),
+                      "where it sets no type of its own, the reading face at the size with nothing said")
+        XCTAssertFalse(rich.sheet)
+    }
+
+    func testRichMailInItsOwnColoursAtNightIsAWhiteSheet() {
+        let rich = look(html: true, colors: .original, dark: true)
+        XCTAssertTrue(rich.sheet)
+        XCTAssertFalse(rich.inverted)
+        XCTAssertTrue(rich.css.contains("html{background:#ffffff}"))
+    }
+
+    func testTheReadingFaceGoesInOnlyWhereTheTextIsSetInIt() {
+        let document = "<html><head></head><body></body></html>"
+        XCTAssertTrue(look(html: false).readingFace)
+        XCTAssertTrue(look(html: true, font: .serif).readingFace)
+        XCTAssertFalse(look(html: false, font: .serif).readingFace)
+        XCTAssertFalse(look(html: false, font: .mono).readingFace)
+        XCTAssertFalse(look(html: false, font: .mono).dress(document).contains("@font-face"))
+        let face = FrameFont.face
+        XCTAssertFalse(face.isEmpty, "the app carries Nunito Sans")
+        XCTAssertTrue(look(html: false).dress(document).contains("<style>" + face))
     }
 
     func testTheFoldIsDrawnInEveryLook() {
@@ -132,7 +167,9 @@ final class MailLookTests: XCTestCase {
         let document = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><base target=\"_blank\"></head><body><pre>"
             + PlainQuote.escaped(text) + "</pre></body></html>"
         let folded = PlainQuote.foldDocument(document)
-        XCTAssertTrue(folded.contains("<pre>Hi &lt;Bo&gt; &amp; &quot;Cy&quot;</pre><details class=\"mm-quote\"><summary>··· quoted text</summary>"))
+        XCTAssertTrue(folded.contains("<pre>Hi &lt;Bo&gt; &amp; &quot;Cy&quot;</pre>"
+            + "<details class=\"mm-quote\"><summary><span class=\"mm-show\">··· Show quoted text</span>"
+            + "<span class=\"mm-hide\">··· Hide quoted text</span></summary>"))
         XCTAssertTrue(folded.hasSuffix("<pre>On Mon Bo wrote:\n&gt; it&#x27;s &lt;b&gt;old&lt;/b&gt;</pre></body></html>"))
         XCTAssertFalse(folded.contains("<b>"), "the mail's text never becomes markup")
         XCTAssertEqual(PlainQuote.unescaped(PlainQuote.escaped("a &amp; <b> \"q\" 'x'")), "a &amp; <b> \"q\" 'x'")
@@ -143,7 +180,7 @@ final class MailLookTests: XCTestCase {
     }
 
     func testTheReadingMeasureAndAFilesSize() {
-        XCTAssertEqual([API.ReadWidth.narrow, .medium, .wide].map(MailLook.width), [640, 760, 920])
+        XCTAssertEqual([API.ReadWidth.narrow, .medium, .wide].map { MailLook.measure($0, size: .m) }, [561, 680, 850])
         XCTAssertEqual([0, 512, 2048, 3_500_000].map(FileSize.words), ["", "512 B", "2 KB", "3.3 MB"])
     }
 }
