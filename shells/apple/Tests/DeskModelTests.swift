@@ -467,6 +467,35 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(said, "Screened out offers · trashed")
     }
 
+    func testASenderWhoCameAfterTheAIWasAskedIsNotAskedYetUntilSuggestAgain() async {
+        let newcomer = API.ScreenerItem(count: 1, domain: "example.test", fromAddr: "rosalind@example.test",
+                                        fromName: "Rosalind Franklin", when: "now")
+        var later = DeskFixture.screener
+        later.items.insert(newcomer, at: 0)
+        later.total = 4
+        routes.answer("GET", "/api/screener", DeskFixture.screener)
+        routes.answer("GET", "/api/screener", later)
+        routes.answer("POST", "/api/screener/suggest", DeskFixture.suggestions)
+        var again = DeskFixture.suggestions
+        again.asked = 4
+        routes.answer("POST", "/api/screener/suggest", again)
+        let model = ScreenerModel(account: "ada@example.test", link: link, notices: notices)
+        await model.load()
+        XCTAssertEqual(model.said(of: "hello@studio.example.test"), .notAsked)
+
+        await model.suggest()
+        XCTAssertEqual(model.said(of: "hello@studio.example.test"), .unsure, "asked, and not sure")
+        XCTAssertEqual(model.said(of: "marie@example.test"), .suggests(DeskFixture.suggestions.suggestions[0]))
+
+        await model.load()
+        XCTAssertEqual(model.said(of: "rosalind@example.test"), .notAsked, "she came after the AI was asked")
+        XCTAssertEqual(routes.sent("POST", "/api/screener/suggest").count, 1, "only a press asks")
+
+        await model.suggest()
+        XCTAssertEqual(model.said(of: "rosalind@example.test"), .unsure)
+        XCTAssertEqual(routes.sent("POST", "/api/screener/suggest").count, 2)
+    }
+
     func testScreenerSuggestionsWithAIOffSaySo() async {
         aiOff("POST", "/api/screener/suggest")
         let model = ScreenerModel(account: "ada@example.test", link: link, notices: notices)
