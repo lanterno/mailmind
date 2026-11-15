@@ -331,6 +331,7 @@ struct MeadowPaneBar: View {
     @Environment(MeadowShell.self) private var shell: MeadowShell?
     @Environment(Desk.self) private var desk: Desk?
     @State private var reading = false
+    @State private var readingKeys = ReadingKeys()
 
     /// The bar's height: its groups' padding (the mockup's `.grp`, which the list's groups share) makes it 70 over a
     /// message and leaves it 52 over anything else.
@@ -439,8 +440,8 @@ struct MeadowPaneBar: View {
                 .meadowButton(.quiet, icon: true)
                 .help("Reading settings")
                 .accessibilityLabel("Reading settings")
-                .popover(isPresented: $reading, arrowEdge: .bottom) {
-                    ReadingSettings()
+                .meadowPopover(isPresented: $reading, keys: { readingKeys.key($0) }) {
+                    ReadingSettings(keys: readingKeys)
                         .task { await Composing.shared.readPreferences() }
                 }
             let focus = shell?.focus ?? false

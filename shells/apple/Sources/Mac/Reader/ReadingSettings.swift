@@ -5,9 +5,17 @@ import SwiftUI
 /// size, its face, the line's length and the light, then mail's colours, each kept with the rest of the preferences
 /// on the server. There is no setting for where filing moves on to: filing always opens the next message.
 struct ReadingSettings: View {
+    /// The keys while it is open in Meadow's popover.
+    var keys = ReadingKeys()
     private var composing: Composing { .shared }
     private var status: AppStatus { .shared }
     @Environment(\.meadow) private var meadow
+
+    private static let sizes: [API.ReadSize] = [.s, .m, .l, .xl]
+    private static let faces: [API.ReadFont] = [.sans, .serif, .mono]
+    private static let widths: [API.ReadWidth] = [.narrow, .medium, .wide]
+    private static let lights: [MeadowLight] = [.day, .dusk, .night]
+    private static let colours: [API.MailColors] = [.auto, .dark, .original]
 
     var body: some View {
         let prefs = ReadingPrefs(composing.preferences)
@@ -25,20 +33,20 @@ struct ReadingSettings: View {
                 .init(value: .m, label: "A", look: .meadow(.ui, 14, .bold), name: "Medium"),
                 .init(value: .l, label: "A", look: .meadow(.ui, 16, .bold), name: "Large"),
                 .init(value: .xl, label: "A", look: .meadow(.ui, 18, .bold), name: "Extra large"),
-            ], chosen: prefs.look.size) { change(API.ChangedPreferences(readSize: $0)) }
+            ], chosen: prefs.look.size, ringed: keys.ringed(0)) { change(API.ChangedPreferences(readSize: $0)) }
             ReadingSet(label: String(localized: "Typeface"), options: [
                 .init(value: API.ReadFont.sans, label: "Sans", look: .meadow(.ui, 13, .bold)),
                 .init(value: .serif, label: "Serif", look: .system(size: 13, weight: .bold, design: .serif)),
                 .init(value: .mono, label: "Mono", look: .system(size: 12, weight: .bold, design: .monospaced)),
-            ], chosen: prefs.look.font) { change(API.ChangedPreferences(readFont: $0)) }
+            ], chosen: prefs.look.font, ringed: keys.ringed(1)) { change(API.ChangedPreferences(readFont: $0)) }
             ReadingSet(label: String(localized: "Line length"), options: [
                 .init(value: API.ReadWidth.narrow, label: "Narrow"),
                 .init(value: .medium, label: "Medium"),
                 .init(value: .wide, label: "Wide"),
-            ], chosen: prefs.width) { change(API.ChangedPreferences(readWidth: $0)) }
-            ReadingSet(label: String(localized: "Light"), options: [MeadowLight.day, .dusk, .night].map { light in
+            ], chosen: prefs.width, ringed: keys.ringed(2)) { change(API.ChangedPreferences(readWidth: $0)) }
+            ReadingSet(label: String(localized: "Light"), options: Self.lights.map { light in
                 ReadingSet<MeadowLight>.Option(value: light, label: light.name)
-            }, chosen: status.light) { light in
+            }, chosen: status.light, ringed: keys.ringed(3)) { light in
                 status.setPreferences(API.ChangedPreferences(theme: light.theme))
             }
             .disabled(status.core == nil)
@@ -46,7 +54,7 @@ struct ReadingSettings: View {
                 .init(value: API.MailColors.auto, label: "Auto"),
                 .init(value: .dark, label: "Dark"),
                 .init(value: .original, label: "Original"),
-            ], chosen: prefs.look.colors) { change(API.ChangedPreferences(mailColors: $0)) }
+            ], chosen: prefs.look.colors, ringed: keys.ringed(4)) { change(API.ChangedPreferences(mailColors: $0)) }
             Text("""
                 Size and face set plain-text mail; rich mail keeps the sender’s own type. \
                 Auto shows rich mail in its own colours and plain text in the light’s.
@@ -57,13 +65,71 @@ struct ReadingSettings: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 8)
         }
-        .padding(6)
-        .frame(width: 262)
-        .background(meadow.paperRaised)
+        .frame(width: 250)
+        .meadowPop(width: 262)
+        .onAppear {
+            keys.at = nil
+            keys.step = { row, by in step(row, by: by) }
+        }
+    }
+
+    /// Choose the next or the one before in setting `row`, as ← and → do.
+    private func step(_ row: Int, by: Int) {
+        let prefs = ReadingPrefs(composing.preferences)
+        switch row {
+        case 0:
+            if let size = Self.next(prefs.look.size, in: Self.sizes, by: by) { change(.init(readSize: size)) }
+        case 1:
+            if let face = Self.next(prefs.look.font, in: Self.faces, by: by) { change(.init(readFont: face)) }
+        case 2:
+            if let width = Self.next(prefs.width, in: Self.widths, by: by) { change(.init(readWidth: width)) }
+        case 3:
+            if status.core != nil, let light = Self.next(status.light, in: Self.lights, by: by) {
+                status.setPreferences(.init(theme: light.theme))
+            }
+        default:
+            if let colours = Self.next(prefs.look.colors, in: Self.colours, by: by) {
+                change(.init(mailColors: colours))
+            }
+        }
+    }
+
+    /// The choice `by` along from `chosen`, if there is one that way.
+    static func next<Value: Equatable>(_ chosen: Value, in values: [Value], by: Int) -> Value? {
+        guard let at = values.firstIndex(of: chosen), values.indices.contains(at + by) else { return nil }
+        return values[at + by]
     }
 
     private func change(_ changed: API.ChangedPreferences) {
         Task { await composing.change(changed) }
+    }
+}
+
+/// The reading settings' keys while Meadow's popover holds them: its panel is never the key window, so they come
+/// here through `meadowPopover`'s `keys`. ↓ and ↑ go from setting to setting, ringing the one they are on, and ← and
+/// → choose in it.
+@MainActor
+@Observable
+final class ReadingKeys {
+    static let settings = 5
+    /// The setting the keys are on: none until one is pressed, so a click alone rings nothing.
+    var at: Int?
+    @ObservationIgnored var step: ((Int, Int) -> Void)?
+
+    func ringed(_ row: Int) -> Bool { at == row }
+
+    /// Say whether the key was the settings'.
+    func key(_ event: NSEvent) -> Bool {
+        switch event.keyCode {
+        case 125: at = at.map { ($0 + 1) % Self.settings } ?? 0
+        case 126: at = at.map { ($0 - 1 + Self.settings) % Self.settings } ?? Self.settings - 1
+        case 123, 124:
+            let row = at ?? 0
+            at = row
+            step?(row, event.keyCode == 124 ? 1 : -1)
+        default: return false
+        }
+        return true
     }
 }
 
@@ -80,6 +146,8 @@ private struct ReadingSet<Value: Hashable>: View {
     let label: String
     let options: [Option]
     let chosen: Value
+    /// Whether the keys are on it.
+    var ringed = false
     let choose: (Value) -> Void
     @Environment(\.meadow) private var meadow
 
@@ -101,6 +169,7 @@ private struct ReadingSet<Value: Hashable>: View {
             }
             .padding(3)
             .background(meadow.paper2, in: RoundedRectangle(cornerRadius: 10))
+            .meadowFocusRing(ringed, radius: 10)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(label)
         }
