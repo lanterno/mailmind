@@ -65,14 +65,22 @@ final class SendGuardTests: XCTestCase {
         let runs = ["QUJD".repeated(12500), "-".repeated(50000), "_".repeated(50000), "a-".repeated(25000),
                     ".".repeated(50000), "@".repeated(50000), "ال".repeated(25000), ", ".repeated(25000),
                     "a" + " ".repeated(49998) + "b"]
-        let started = Date()
+        let started = Self.threadSeconds()
         for text in runs {
             for mode in [API.ComposeMode.new, .reply] {
                 _ = SendGuard.check(snapshot(mode: mode, body: text))
                 _ = SendGuard.check(snapshot(mode: mode, subject: text))
             }
         }
-        XCTAssertLessThan(Date().timeIntervalSince(started), 4, "all of them, as the page's are each under a second")
+        XCTAssertLessThan(Self.threadSeconds() - started, 4, "all of them, as the page's are each under a second")
+    }
+
+    /// The processor time this thread has had: a slow check shows in it as in the wall clock, but a busy machine
+    /// (a build beside the tests) doesn't stretch it.
+    private static func threadSeconds() -> Double {
+        var now = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &now)
+        return Double(now.tv_sec) + Double(now.tv_nsec) / 1_000_000_000
     }
 
     func testWhatYouTypedLeavesOutSignatureAndQuote() {
