@@ -1,9 +1,10 @@
 import Foundation
 import Observation
 
-/// The window's state: the core opened over this process's home, the accounts and their folders the sidebar shows,
-/// where the window is (`place`), the list there and the message chosen in it (`selection`), and the reader. What
-/// changed is heard on the event stream, and what it touches is read again, as the page's realtime.ts does.
+/// The window's state: the core opened over this process's home, where the window is (`place`), the list there and
+/// the message chosen in it (`selection`), and the reader. What changed is heard on the event stream, and what it
+/// touches is read again, as the page's realtime.ts does; on the Mac the mailbox reads the sidebar's accounts,
+/// folders and counts.
 @MainActor
 @Observable
 final class MailApp {
@@ -21,8 +22,6 @@ final class MailApp {
     ]
 
     private(set) var stage = Stage.opening
-    private(set) var accounts: [API.AccountRow] = []
-    private(set) var folders: [String: [API.RailFolder]] = [:]
     /// Where the window is. Choosing a place opens its list.
     var place: Place? = .allInboxes {
         didSet { if place != oldValue { openList() } }
@@ -37,7 +36,7 @@ final class MailApp {
     @ObservationIgnored private(set) lazy var mailbox = Mailbox(app: self)
     #endif
 
-    /// Open the core over this process's home, then the sidebar and the first list, then listen.
+    /// Open the core over this process's home, then the first list and the sidebar, then listen.
     func start() async {
         guard stage == .opening, core == nil else { return }
         do {
@@ -46,29 +45,12 @@ final class MailApp {
             reader.core = core
             stage = .open
             openList()
-            await readSidebar()
             #if os(macOS)
             await mailbox.refresh()
             #endif
             listen(to: core)
         } catch {
             stage = .failed((error as? Problem)?.description ?? String(describing: error))
-        }
-    }
-
-    /// The accounts, then each one's folders.
-    func readSidebar() async {
-        guard let core else { return }
-        do {
-            accounts = try await core.get(API.Get.Accounts.self).accounts
-        } catch {
-            return
-        }
-        for account in accounts {
-            guard let email = account.email else { continue }
-            if let read = try? await core.get(API.Get.Folders.self, ["account": email]) {
-                folders[email] = read.folders
-            }
         }
     }
 
@@ -114,7 +96,6 @@ final class MailApp {
                 #endif
                 if Self.mailChanged.contains(event.name) || Self.readAFolder(event) {
                     self.list?.refresh()
-                    await self.readSidebar()
                 }
             }
         }

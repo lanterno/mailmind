@@ -64,7 +64,7 @@ struct ReaderPane: View {
                 composing.openWindow = { id in openWindow(id: ComposeWindow.scene, value: id) }
                 composing.mailChanged = { [weak app] in
                     app?.list?.refresh()
-                    Task { await app?.readSidebar() }
+                    Task { await app?.mailbox.readCounts() }
                 }
                 if let core = app.core { composing.attach(core) }
             }
