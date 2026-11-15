@@ -390,8 +390,9 @@ final class MeadowMenuModel {
     @ObservationIgnored var onKey: ((NSEvent) -> Bool)?
     @ObservationIgnored var close: @MainActor () -> Void = {}
 
-    /// Say whether the key was the menu's.
+    /// Say whether the key was the menu's: never one with ⌘, ⌃ or ⌥ held, as `MeadowPopoverKeys` has it.
     func key(_ event: NSEvent) -> Bool {
+        guard MeadowPopoverKeys.plain(event.modifierFlags) else { return false }
         if let onKey, onKey(event) { return true }
         let items = items.filter { !$0.disabled }
         guard !items.isEmpty else { return false }
@@ -608,8 +609,8 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
                 [weak self, weak panel] event in
                 guard let self else { return event }
                 if event.type == .keyDown {
-                    switch MeadowPopoverKeys.verdict(keyCode: event.keyCode, typedIn: event.window,
-                                                     hungIn: panel?.parent, panel: panel) {
+                    switch MeadowPopoverKeys.verdict(keyCode: event.keyCode, modifiers: event.modifierFlags,
+                                                     typedIn: event.window, hungIn: panel?.parent, panel: panel) {
                     case .close:
                         self.close()
                         return nil
@@ -626,7 +627,8 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
 
 /// Which keys typed while a Meadow popover is open are its own. Its panel is never the key window, so it hears the
 /// keys through a monitor of the whole app's: it takes only those typed in the window it hangs in (or its own panel),
-/// and none while that window's keyboard is in something that takes text, whose keys are that thing's.
+/// none while that window's keyboard is in something that takes text, whose keys are that thing's, and none with ⌘,
+/// ⌃ or ⌥ held, which are the menus' and the window's (⌘1 goes to Inbox, ⌘Return sends).
 enum MeadowPopoverKeys {
     enum Verdict: Equatable {
         /// Esc: the popover closes.
@@ -637,12 +639,17 @@ enum MeadowPopoverKeys {
         case pass
     }
 
-    static func verdict(keyCode: UInt16, typedIn window: NSWindow?, hungIn parent: NSWindow?,
-                        panel: NSWindow?) -> Verdict {
-        guard let window, window === parent || window === panel else { return .pass }
+    static func verdict(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, typedIn window: NSWindow?,
+                        hungIn parent: NSWindow?, panel: NSWindow?) -> Verdict {
+        guard let window, window === parent || window === panel, plain(modifiers) else { return .pass }
         // Esc closes it even from a field: what is typed there goes on once the popover is gone.
         if keyCode == 53 { return .close }
         return window !== panel && typesText(window.firstResponder) ? .pass : .offer
+    }
+
+    /// Whether a key is typed with nothing held that makes it a command's: ⇧ makes another character, not a command.
+    static func plain(_ modifiers: NSEvent.ModifierFlags) -> Bool {
+        modifiers.isDisjoint(with: [.command, .control, .option])
     }
 
     /// Whether `responder` takes typed text: a field's editor while a field is edited, or a text view that can be.

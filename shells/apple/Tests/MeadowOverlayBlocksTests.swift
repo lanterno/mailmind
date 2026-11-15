@@ -91,7 +91,7 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         let field = NSTextField(frame: NSRect(x: 300, y: 0, width: 100, height: 22))
         for view in [list, body, said, field] { parent.contentView?.addSubview(view) }
         func verdict(_ code: UInt16, in window: NSWindow?) -> MeadowPopoverKeys.Verdict {
-            MeadowPopoverKeys.verdict(keyCode: code, typedIn: window, hungIn: parent, panel: panel)
+            MeadowPopoverKeys.verdict(keyCode: code, modifiers: [], typedIn: window, hungIn: parent, panel: panel)
         }
 
         XCTAssertTrue(parent.makeFirstResponder(list))
