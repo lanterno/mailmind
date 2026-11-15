@@ -315,6 +315,36 @@ final class MailboxVerbsTests: XCTestCase {
         XCTAssertEqual(app.mailbox.toast?.text, "Archived 1198, 2 failed")
     }
 
+    func testTheBulkBarsRestoreAndSnoozeTakeEveryRowChosenHeldOrNot() async throws {
+        let rows = (1...450).map { Fixture.row($0, folder: "Trash") }
+        let server = Fixture.server(rows: rows, grouped: false)
+        server.on("POST", API.Post.BulkMove.path) { asked in
+            let body = try! JSONDecoder().decode(API.BulkMoveBody.self, from: asked.body)
+            return FakeServer.ok(API.RowsFiled(count: body.rows?.count ?? 0, failed: 0, filed: [], msg: "", ok: true,
+                                               partial: false, queued: 0, rowsFailed: 0, undoable: true))
+        }
+        let app = await opened(server, place: .folder(account: Fixture.ada, folder: "Trash"))
+        let mailbox = app.mailbox
+        // Select All in a long list: the rows held, and the positions whose pages the list has let go.
+        mailbox.chose((0..<MailListModel.pageSize).compactMap { app.list?.copy(at: $0) },
+                      unheld: IndexSet(MailListModel.pageSize..<450))
+        XCTAssertEqual(mailbox.chosenRows.count + mailbox.unheld.count, 450, "the bulk bar says 450 selected")
+        var snoozed: [API.FolderRow] = []
+        mailbox.snoozes = { snoozed = $0 }
+        mailbox.snoozeChosen()
+        await until { !snoozed.isEmpty }
+        XCTAssertEqual(Set(snoozed.map(\.key)), Set(1...450))
+        mailbox.restore()
+        func moved() throws -> [API.BulkRow] {
+            try server.asked(API.Post.BulkMove.path)
+                .flatMap { try JSONDecoder().decode(API.BulkMoveBody.self, from: $0.body).rows ?? [] }
+        }
+        await until { (try? moved().count) == 450 }
+        XCTAssertEqual(Set(try moved().map(\.key)), Set(1...450))
+        XCTAssertEqual(Set(try server.asked(API.Post.BulkMove.path)
+            .map { try JSONDecoder().decode(API.BulkMoveBody.self, from: $0.body).to }), ["INBOX"])
+    }
+
     func testARefusalSaysTheServersReason() async throws {
         let server = Fixture.server(grouped: false)
         server.on("POST", API.Post.Junk.path) { _ in FakeServer.refused(409, "That message moved on the server.") }
