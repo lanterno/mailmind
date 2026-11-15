@@ -73,11 +73,11 @@ struct BulkBar: View {
                 .layoutPriority(-1)
             Spacer(minLength: 8)
             if inTrash {
-                button(.restore, "Restore") { mailbox.restore(mailbox.chosenRows) }
+                button(.restore, "Restore") { mailbox.restore() }
             } else {
                 button(.archive, "File") { mailbox.file(.archive) }
                 button(.trash, "Delete", del: true) { mailbox.file(.trash) }
-                button(.clock, "Snooze") { mailbox.snoozes?(mailbox.chosenRows) }
+                button(.clock, "Snooze") { mailbox.snoozeChosen() }
             }
             Button { mailbox.clearMarks() } label: { MeadowIconView(.x, size: 15) }
                 .meadowButton(.quiet, small: true, icon: true)

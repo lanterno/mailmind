@@ -91,8 +91,10 @@ extension Mailbox {
         Task { await moveNow(to: folder.name, label: Words.role(folder)) }
     }
 
-    func moveNow(to folder: String, label: String) async {
-        let rows = await targets().filter { $0.folder != folder }
+    /// Move `given`, else what is chosen or open, to `folder`.
+    func moveNow(to folder: String, label: String, rows given: [API.FolderRow]? = nil) async {
+        let chosen = if let given { given } else { await targets() }
+        let rows = chosen.filter { $0.folder != folder }
         guard let calls, !rows.isEmpty else { return }
         let after = nextOpen(leaving: rows)
         if rows.count > 1 {

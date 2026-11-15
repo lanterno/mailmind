@@ -445,12 +445,24 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
 }
 
 extension Mailbox {
-    /// Put `rows` back in their account's Inbox: out of Trash, or out of Archive (`.row-acts`' restore).
-    func restore(_ rows: [API.FolderRow]) {
-        guard let first = rows.first else { return }
-        let inbox = folders(of: first.account).first { $0.role == "inbox" }
-        chose(rows)
-        Task { await moveNow(to: inbox?.name ?? "INBOX", label: inbox.map(Words.role) ?? String(localized: "Inbox")) }
+    /// Put rows back in their account's Inbox: out of Trash, or out of Archive (`.row-acts`' restore). `given` are a
+    /// row's own; with none, every row chosen, those whose pages aren't held too, as many as the bulk bar counts.
+    func restore(_ given: [API.FolderRow]? = nil) {
+        Task {
+            let rows = if let given { given } else { await targets() }
+            guard let first = rows.first else { return }
+            let inbox = folders(of: first.account).first { $0.role == "inbox" }
+            await moveNow(to: inbox?.name ?? "INBOX", label: inbox.map(Words.role) ?? String(localized: "Inbox"),
+                          rows: rows)
+        }
+    }
+
+    /// Ask when to bring back every row chosen, those whose pages aren't held too (the bulk bar's Snooze).
+    func snoozeChosen() {
+        Task {
+            let rows = await targets()
+            if !rows.isEmpty { snoozes?(rows) }
+        }
     }
 }
 
