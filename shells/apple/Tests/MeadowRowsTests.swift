@@ -296,6 +296,50 @@ final class MeadowRowsTests: XCTestCase {
         withExtendedLifetime(app) {}
     }
 
+    func testNewMailAboveMeasuresAgainOnlyTheRowsWhoseHeightCanChange() async throws {
+        let now = Int(Date().timeIntervalSince1970)
+        let total = 100_000
+        let above = Locked(0)
+        // Three of today's, then mail from days ago: the fourth row starts a day, until new mail comes above it.
+        let list = MailListModel(load: { offset, limit in
+            let added = above.value
+            let rows = (offset..<min(offset + limit, total + added)).map { position in
+                let index = position - added
+                var row = Fixture.row(index < 0 ? 500_000 + position : index + 1)
+                row.ts = index < 3 ? now - 60 - index : now - 3 * 86_400 - index
+                return row
+            }
+            return MailListModel.Page(total: total + added, rows: rows)
+        })
+        list.start()
+        await until { list.copy(at: 0) != nil }
+        let app = MailApp()
+        let look = RowLook(inks: RowInks.of(.day, light: .day, highContrast: false), measure: RowMeasure(.comfortable),
+                           accounts: [Fixture.ada])
+        let controller = MailboxTableController(list: list, mailbox: app.mailbox, look: look, sections: true)
+        let window = shown(controller)
+        defer { window.close() }
+        let table = controller.table
+        func height(_ position: Int, head: Bool) throws -> CGFloat {
+            RowMeasure(.comfortable).height(RowShape(try XCTUnwrap(list.copy(at: position)), head: head))
+        }
+        let started = try height(3, head: true)
+        XCTAssertEqual(table.rect(ofRow: 3).height, started)
+
+        let noted = try await NotedHeights.during {
+            above.value = 1
+            list.refresh()
+            await until { list.total == total + 1 }
+            table.layoutSubtreeIfNeeded()
+        }
+        XCTAssertLessThan(noted.count, 2_000, "the rows measured, not the folder's 100,000")
+        let today = try height(3, head: false), days = try height(4, head: true)
+        XCTAssertEqual(table.rect(ofRow: 3).height, today, "today's third row now, under no head")
+        XCTAssertEqual(table.rect(ofRow: 4).height, days, "the row that starts the days before")
+        XCTAssertEqual(table.numberOfRows, total + 1)
+        withExtendedLifetime(app) {}
+    }
+
     func testARowsDotTakesItsAccountsColourOnceTheAccountsAreRead() throws {
         let inks = RowInks.of(.day, light: .day, highContrast: false)
         let measure = RowMeasure(.comfortable)
@@ -396,5 +440,41 @@ private final class PageGate: @unchecked Sendable {
     var shut: Bool {
         get { lock.withLock { held } }
         set { lock.withLock { held = newValue } }
+    }
+}
+
+/// A value the loader reads on its own task while the test sets it.
+private final class Locked<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held: Value
+
+    init(_ value: Value) {
+        held = value
+    }
+
+    var value: Value {
+        get { lock.withLock { held } }
+        set { lock.withLock { held = newValue } }
+    }
+}
+
+/// The rows every table is told changed height while `body` runs, as the table itself is then told.
+@MainActor
+private enum NotedHeights {
+    static func during(_ body: () async throws -> Void) async rethrows -> IndexSet {
+        let noted = Locked(IndexSet())
+        let selector = #selector(NSTableView.noteHeightOfRows(withIndexesChanged:))
+        guard let method = class_getInstanceMethod(NSTableView.self, selector) else { return [] }
+        typealias Note = @convention(c) (NSTableView, Selector, NSIndexSet) -> Void
+        let original = method_getImplementation(method)
+        let note = unsafeBitCast(original, to: Note.self)
+        let recording: @convention(block) (NSTableView, NSIndexSet) -> Void = { table, rows in
+            noted.value.formUnion(rows as IndexSet)
+            note(table, selector, rows)
+        }
+        method_setImplementation(method, imp_implementationWithBlock(recording))
+        defer { method_setImplementation(method, original) }
+        try await body()
+        return noted.value
     }
 }
