@@ -41,6 +41,52 @@ final class MeadowDeskTests: XCTestCase {
         XCTAssertNil(BriefWords.firstName("   "))
     }
 
+    func testTheBriefReadsTheTimeAsTheClockTurnsNotWhenItWasMade() throws {
+        // Made in the morning, the brief is drawn again as the clock turns in the evening: it reads the evening.
+        let evening = try XCTUnwrap(english.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 21)))
+        var read: [Date] = []
+        let calendar = english
+        let clock = BriefClock(fixed: nil, schedule: ExplicitTimelineSchedule([evening])) { now in
+            let _ = read.append(now)
+            Text(verbatim: BriefWords.greeting(hour: calendar.component(.hour, from: now), light: .day))
+        }
+        try host(clock)
+        XCTAssertEqual(read.last, evening)
+
+        // A test or a picture gives its own time, which stays.
+        let morning = try XCTUnwrap(english.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 9)))
+        read = []
+        try host(BriefClock(fixed: morning) { now in
+            let _ = read.append(now)
+            Text(verbatim: "")
+        })
+        XCTAssertEqual(read, [morning])
+
+        // On its own, the brief's clock turns each minute: it shows this minute, whenever the brief was made.
+        read = []
+        try host(BriefClock(fixed: nil) { now in
+            let _ = read.append(now)
+            Text(verbatim: "")
+        })
+        let shown = try XCTUnwrap(read.last)
+        XCTAssertLessThanOrEqual(abs(shown.timeIntervalSinceNow), 61)
+    }
+
+    /// Lay `view` out in a window, as the screen would.
+    private func host(_ view: some View) throws {
+        let host = NSHostingView(rootView: view.frame(width: 200, height: 40))
+        host.frame = CGRect(x: 0, y: 0, width: 200, height: 40)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        window.contentView = nil
+        window.close()
+    }
+
     func testTheDateLineAndWhenTheBriefWasWritten() throws {
         let sunday = try XCTUnwrap(english.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 14)))
         XCTAssertEqual(BriefWords.dateLine(sunday, calendar: english, locale: Locale(identifier: "en_GB")),
