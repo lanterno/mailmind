@@ -12,6 +12,8 @@ with every copy, the compiled ones too. It holds:
   with every licence file the crate ships, those of the sources it vendors among them. Over-including a crate that
   only builds costs a few lines; leaving one out would ship code without its notice.
 - Sparkle's LICENSE, which carries bsdiff's, sais-lite's and ed25519's notices.
+- The typefaces the app carries (shells/apple/Fonts, made from the page's): each under the SIL Open Font License, which
+  asks that its text and the face's copyright go with every copy of the fonts (web/assets/fonts/LICENSES).
 
 A crate that ships no licence file gets the standard text of its licence from Release/licences, and the release stops
 when there isn't one, rather than shipping the crate unacknowledged. The same text, a licence many crates share, is
@@ -32,6 +34,13 @@ NAMES = ("license", "licence", "copying", "notice", "unlicense", "copyright")
 # Inside a crate, licences that cover only what never ships: its tests, benchmarks and examples.
 SKIPPED = {"tests", "test", "benches", "examples", "fuzz", ".github"}
 RULE = "-" * 78
+# Each typeface's licence, as the page's fonts folder keeps it, and what the app sets in it.
+FONTS = REPO / "web" / "assets" / "fonts" / "LICENSES"
+TYPEFACES = {
+    "NunitoSans.txt": "Nunito Sans, https://github.com/Fonthausen/NunitoSans: the interface and the mail",
+    "ShipporiMincho.txt": "Shippori Mincho, https://github.com/fontdasu/ShipporiMincho: headings",
+    "KleeOne.txt": "Klee One, https://github.com/fontworks-fonts/Klee: the brief",
+}
 
 
 def stop(words: str) -> None:
@@ -100,6 +109,9 @@ def main() -> None:
     out, sparkle = Path(sys.argv[1]), Path(sys.argv[2])
     if not sparkle.is_file():
         stop(f"Sparkle's licence isn't at {sparkle}")
+    for name in TYPEFACES:
+        if not (FONTS / name).is_file():
+            stop(f"the typeface's licence isn't at {FONTS / name}")
 
     crates: dict[tuple[str, str], dict] = {}
     for target in TARGETS:
@@ -132,7 +144,7 @@ def main() -> None:
         "MailMind's acknowledgements",
         "",
         "MailMind is built on the work of many others. Their licences ask that their notices go with every copy,",
-        "and here they are: MailMind's own, then Sparkle's, then each library the core is built from.",
+        "and here they are: MailMind's own, Sparkle's, the typefaces', then each library the core is built from.",
         "",
         RULE,
         "MailMind, https://github.com/lanterno/mailmind",
@@ -144,6 +156,8 @@ def main() -> None:
         "",
         sparkle.read_text(encoding="utf-8").strip(),
     ]
+    for name, label in TYPEFACES.items():
+        parts += ["", RULE, label, "", (FONTS / name).read_text(encoding="utf-8").strip()]
     for text, labels in covers.items():
         parts += ["", RULE, *labels, "", text]
     out.write_text("\n".join(parts) + "\n", encoding="utf-8")
