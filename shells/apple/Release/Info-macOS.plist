@@ -9,8 +9,8 @@
   macOS, the links. generate_appcast signs it when it finds this key in the app it reads. Sparkle needs
   SUVerifyUpdateBeforeExtraction with it.
 
-  CFBundleURLTypes: mailto: links, so MailMind can be chosen as the Mac's mail app (Mail › Settings › Default email
-  reader) and a link opens its composer.
+  CFBundleURLTypes: mailto: links, so MailMind can be chosen as the Mac's mail app (Mail › Settings › General ›
+  Default email reader) and a link opens its composer.
 -->
 <plist version="1.0">
 <dict>
