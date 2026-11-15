@@ -8,6 +8,8 @@ The suite starts it with these in its environment, beside MAILMIND_HOME and MAIL
     MAILMIND_TEST_DIST      the build of the page it serves
     MAILMIND_TEST_PORT      the loopback port to listen on, when the suite restarts it; else any free one
     MAILMIND_TEST_GUARDED   folders whose data files the tripwire refuses, besides the repo root (os.pathsep between)
+    MAILMIND_TEST_DNS       the one nameserver a domain's mail servers are asked of (`host:port`, the suite's fake on
+                            loopback); with none named, none is asked and every domain's are none
 
 It writes `ready <port>` on standard output once it answers, then reads one command a line from standard input and answers
 each with one line:
@@ -33,7 +35,8 @@ each with one line:
     (end of input)      it stops and exits
 
 Test hooks live here and never in the app: the frozen clock, the tripwire, the schema checks, the sanitizer taken
-away and the Bridge password's file, kept out of the person's home, are this program's.
+away, the Bridge password's file, kept out of the person's home, and the nameserver asked in place of the computer's,
+are this program's.
 The app runs as `serve` runs it, without the workers that would sync and sweep on their own, so an answer depends only on
 what the suite sends: requests, and a worker's pass when it says (`work`).
 """
@@ -126,6 +129,11 @@ def main():
     # test's data directory that isn't there, so the two find the same, and the tripwire's on the real one never trips.
     from mailmind.accounts.adapters import secrets
     patches.setattr(secrets, "BRIDGE_FILE", pathlib.Path(settings.current().home, "proton_bridge_pass"))
+    from mailmind.accounts.adapters import mail_hosts
+    named = os.environ.get("MAILMIND_TEST_DNS", "")
+    host, _, port = named.rpartition(":")
+    asked = [(host, int(port))] if named else []
+    patches.setattr(mail_hosts, "system_nameservers", lambda: asked)
     wiring.assemble()
     wiring.wire()                     # as wiring.start does, without starting the workers' threads
     assistant.governor().forget()     # someone here at the frozen time, not at the real time the process began

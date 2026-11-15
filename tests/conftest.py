@@ -137,6 +137,25 @@ def _anthropic_reset(anthropic_api):
     anthropic_api.reset()
 
 
+@pytest.fixture(autouse=True)
+def _no_nameserver(monkeypatch):
+    """No test asks this computer's nameservers, or reads which they are: a domain's mail servers are none, unless `dns`."""
+    from mailmind.accounts.adapters import mail_hosts
+    monkeypatch.setattr(mail_hosts, "system_nameservers", lambda: [])
+
+
+@pytest.fixture
+def dns(monkeypatch, _no_nameserver):
+    """A fake nameserver on loopback (fakes.dns_server), the only one a domain's mail servers are asked of: by the app in
+    this process, and by a served one, which MAILMIND_TEST_DNS names it to. Without it no test asks any."""
+    from fakes.dns_server import FakeDNSServer
+    from mailmind.accounts.adapters import mail_hosts
+    with FakeDNSServer() as fake:
+        monkeypatch.setattr(mail_hosts, "system_nameservers", lambda: [fake.address])
+        monkeypatch.setenv("MAILMIND_TEST_DNS", "%s:%d" % fake.address)
+        yield fake
+
+
 @pytest.fixture
 def ai(anthropic_api, monkeypatch):
     """AI on: a key the fake API accepts. It answers each call from the call's own schema unless
