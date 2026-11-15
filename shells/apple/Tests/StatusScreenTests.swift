@@ -140,7 +140,7 @@ final class StatusScreenTests: XCTestCase {
     }
 
     func testHelpAndTheGuide() throws {
-        try render("help", CGSize(width: 520, height: 560), HelpWindow(status: status()))
+        try render("help", HelpWindow.size, HelpWindow(status: status(), lights: false))
         try render("guide", CGSize(width: 420, height: 230),
                    GuideSheet(steps: Guide.steps(ai: true, singleKeys: true), end: {}))
     }

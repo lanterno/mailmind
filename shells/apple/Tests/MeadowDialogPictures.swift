@@ -207,6 +207,11 @@ final class MeadowDialogPictures: XCTestCase {
         }
     }
 
+    /// Help as the mockup's design notes, to lay beside reference/1440-*-notes.png.
+    func testHelpAsTheMockupsNotes() throws {
+        try draw("help", HelpWindow.size) { _ in HelpWindow(status: status(), lights: false) }
+    }
+
     // MARK: A sender's card
 
     func testASendersCard() async throws {
