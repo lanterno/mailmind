@@ -29,6 +29,8 @@ mm-discovery.workspace = true
 mm-imap.workspace = true
 mm-kernel.workspace = true
 mm-mailbox.workspace = true
+# A domain's mail servers, asked of a nameserver as Settings recognises a Google address.
+mm-net.workspace = true
 mm-store.workspace = true
 # Calendar's use cases: Today & next, an answer to an invite, an event file and the invite a message opens with.
 mm-calendar.workspace = true
