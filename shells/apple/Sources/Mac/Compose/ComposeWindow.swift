@@ -5,7 +5,8 @@ import UniformTypeIdentifiers
 
 /// A composer in a window of its own, the Mac's way: several can be open at once, each with its own draft. The
 /// window holds what `Composing` opened under its id, and closes once that composer has (sent, discarded, or
-/// closed with what it held saved).
+/// closed with what it held saved). It is drawn as Meadow's compose dialog (#44): the window is the dialog's paper,
+/// with no title bar of its own, and its traffic lights stand in the dialog's head.
 struct ComposeWindow: View {
     static let scene = "compose"
     let id: UUID?
@@ -14,9 +15,12 @@ struct ComposeWindow: View {
 
     var body: some View {
         if let id, let composer = composing.composers[id] {
-            ComposerForm(composer: composer, host: composing, aliases: composing.digest?.aliases ?? [:]) { tone in
+            ComposerForm(composer: composer, host: composing, aliases: composing.digest?.aliases ?? [:],
+                         accounts: composing.digest?.accounts ?? []) { tone in
                 Task { await Composing.shared.change(API.ChangedPreferences(draftTone: tone)) }
             }
+            .ignoresSafeArea()
+            .background { WindowChrome(barHeight: ComposerForm.headHeight) }
             .navigationTitle(ComposerForm.title(composer.mode))
             // The window closed: what's unsaved is saved, as the page's close does. Sending or discarding closed
             // the composer first, and closing twice does nothing.
@@ -29,13 +33,17 @@ struct ComposeWindow: View {
     }
 }
 
-/// What the composer's window shows, as the page's `compose/Composer.tsx` lays it out: From, the recipients with
-/// completion, the subject, the AI's rewrites, the text or its preview, the quote, the files, the send guard's
-/// lines, and the foot's buttons.
+/// What the composer's window shows, as the mockup's compose dialog (`.compose`) lays it out over the page's
+/// `compose/Composer.tsx`: the head, From, the recipients with completion, the subject, the AI's row, the text or
+/// its preview, the quote, the files, the send guard's lines, and the foot with Send.
 struct ComposerForm: View {
     let composer: Composer
     let host: any ComposeHost
     let aliases: [String: String?]
+    /// The accounts in the config's order, which gives each its colour.
+    var accounts: [String] = []
+    /// Whether the window's traffic lights stand at the head's left; a test's picture has none.
+    var lights = true
     let chooseTone: (API.DraftTone) -> Void
 
     @FocusState private var subjectFocused: Bool
@@ -43,9 +51,19 @@ struct ComposerForm: View {
     @State private var snippetsShown = false
     @State private var draftOptions = false
     @State private var translating = false
+    @State private var choosingFrom = false
+    @State private var fromMenu = MeadowMenuModel()
     @State private var language = "Spanish"
     @State private var dropping = false
+    @Environment(\.meadow) private var meadow
+    @Environment(\.meadowLight) private var light
+    @Environment(\.dismiss) private var dismiss
 
+    /// The head's height: the close button's 34 and its padding, 14 above and 10 below. The traffic lights are
+    /// centred on the button, so the title bar is grown to twice the button's middle.
+    static let headHeight: CGFloat = 2 * (14 + 17)
+
+    /// The window's title, which the Window menu lists.
     static func title(_ mode: API.ComposeMode) -> String {
         switch mode {
         case .new: "New Message"
@@ -55,29 +73,46 @@ struct ComposerForm: View {
         }
     }
 
+    /// The head's words, as the mockup's dialog says them: "New message", or "Reply to" and the first name of whom
+    /// it answers.
+    static func heading(_ mode: API.ComposeMode, to: [Recipient]) -> String {
+        switch mode {
+        case .new: return String(localized: "New message")
+        case .forward: return String(localized: "Forward")
+        case .reply, .replyall:
+            guard let first = to.first.map({ ChipField.shown($0.value) }), !first.isEmpty else {
+                return mode == .reply ? String(localized: "Reply") : String(localized: "Reply all")
+            }
+            let name = first.contains("@") ? first : String(first.split(separator: " ").first ?? "")
+            return String(localized: "Reply to \(name)")
+        }
+    }
+
     private static let rewrites: [API.RewriteOp] = [.shorten, .elaborate, .formal, .friendly, .fix, .translate]
 
     var body: some View {
         VStack(spacing: 0) {
-            heading
+            head
+            if !composer.note.isEmpty { noteLine }
+            fields
                 .zIndex(1)   // a completion list hangs over the text below it
-            modeBar
+            if host.aiOn { aiRow }
             writing
             if let check = composer.check {
                 GuardStrip(composer: composer, check: check)
             }
-            Divider()
             foot
         }
-        .frame(minWidth: 640, idealWidth: 720, minHeight: 460, idealHeight: 640)
-        .background(Color(nsColor: .textBackgroundColor))
+        .frame(minWidth: 640, idealWidth: 760, minHeight: 460, idealHeight: 600)
+        .background { ComposePaper().ignoresSafeArea() }
         .overlay(alignment: .bottom) { noticeView }
         .overlay {
             if dropping {
-                RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor, lineWidth: 3).padding(4)
+                RoundedRectangle(cornerRadius: 14).strokeBorder(meadow.focus, lineWidth: 2).padding(6)
                     .allowsHitTesting(false)
             }
         }
+        .background { shortcuts }
         .onDrop(of: [.fileURL], isTargeted: $dropping) { providers in
             Self.urls(from: providers) { urls in composer.add(urls.map { .file($0) }) }
             return true
@@ -113,77 +148,140 @@ struct ComposerForm: View {
         }
     }
 
+    /// Send and Save Draft's keys. Send's button is Meadow's split one, whose parts are its own; the keys live here,
+    /// out of sight, so ⌘Return sends and ⌘S saves wherever the keys are in the window.
+    private var shortcuts: some View {
+        HStack {
+            Button("Send") { send() }
+                .keyboardShortcut(.return, modifiers: .command)
+            Button("Save Draft") { _ = composer.save() }
+                .keyboardShortcut("s")
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
     // MARK: The head
 
-    private var heading: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if !composer.note.isEmpty {
-                Text(composer.note)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 8)
-                Divider()
+    private var head: some View {
+        HStack(spacing: 8) {
+            Text(Self.heading(composer.mode, to: composer.to))
+                .font(.meadow(.display, 18, .bold))
+                .foregroundStyle(meadow.ink)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+            Button {
+                if composer.previewing { composer.write() } else { Task { await composer.showPreview() } }
+            } label: {
+                MeadowIconView(.eye)
             }
-            row("From") { fromChoice }
-            Divider()
-            row("To") {
-                ChipField(composer: composer, field: .to, label: "To", routes: host.routes)
-                if !composer.showCc {
-                    Button("Cc/Bcc") {
-                        composer.showCopies()
-                        composer.focusRequest = .field(.cc)
+            .meadowButton(.quiet, icon: true, pressed: composer.previewing)
+            .help(composer.previewing ? "Back to writing" : "See how your message will read")
+            .accessibilityLabel(composer.previewing ? "Back to writing" : "Preview")
+            Button { dismiss() } label: { MeadowIconView(.x) }
+                .meadowButton(.quiet, icon: true)
+                .help("Close — your draft is kept")
+                .accessibilityLabel("Close — your draft is kept")
+        }
+        .padding(.leading, lights ? WindowLights.room : 16)
+        .padding(.trailing, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+        .background { WindowDragArea() }
+    }
+
+    /// What reopening a draft changed in it, said once above its fields.
+    private var noteLine: some View {
+        HStack(alignment: .top, spacing: 8) {
+            MeadowIconView(.info, size: 15).padding(.top, 1)
+            Text(composer.note).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .font(.meadow(.ui, 12.5))
+        .foregroundStyle(meadow.ink3)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(meadow.paper2, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+    }
+
+    // MARK: The fields
+
+    private var fields: some View {
+        VStack(spacing: 0) {
+            ComposeFieldRow("From") { fromChoice }
+            ComposeFieldRow("To") {
+                HStack(alignment: .top, spacing: 6) {
+                    ChipField(composer: composer, field: .to, label: "To", routes: host.routes)
+                    if !composer.showCc {
+                        Button("Cc Bcc") {
+                            composer.showCopies()
+                            composer.focusRequest = .field(.cc)
+                        }
+                        .meadowButton(.quiet, small: true)
+                        .padding(.top, 3)
+                        .help("Copy someone in")
                     }
-                    .buttonStyle(.link)
                 }
             }
             if composer.showCc {
-                Divider()
-                row("Cc") { ChipField(composer: composer, field: .cc, label: "Cc", routes: host.routes) }
-                Divider()
-                row("Bcc") { ChipField(composer: composer, field: .bcc, label: "Bcc", routes: host.routes) }
+                ComposeFieldRow("Cc") { ChipField(composer: composer, field: .cc, label: "Cc", routes: host.routes) }
+                ComposeFieldRow("Bcc") { ChipField(composer: composer, field: .bcc, label: "Bcc", routes: host.routes) }
             }
-            Divider()
-            row("Subject") {
-                TextField("Subject", text: Binding(get: { composer.subject }, set: { composer.setSubject($0) }))
+            ComposeFieldRow("Subject") {
+                TextField(text: Binding(get: { composer.subject }, set: { composer.setSubject($0) }),
+                          prompt: Text(verbatim: "")) { Text("Subject") }
                     .textFieldStyle(.plain)
+                    .font(.meadow(.ui, 14.5))
+                    .foregroundStyle(meadow.ink)
+                    .frame(minHeight: 34)
                     .focused($subjectFocused)
             }
-            if host.aiOn {
-                Divider()
-                rewriteRow
-            }
-            Divider()
         }
-        .padding(.horizontal, 16)
     }
 
-    private func row(_ label: String, @ViewBuilder _ content: () -> some View) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label)
-                .foregroundStyle(.secondary)
-                .frame(width: 58, alignment: .trailing)
-            content()
-        }
-        .padding(.vertical, 6)
-    }
-
+    /// From (`.fromsel`): the account's colour, its name and address, and with more than one account to send from, a
+    /// chevron that lists the others.
     @ViewBuilder
     private var fromChoice: some View {
         let senders = host.senders
-        if senders.count > 1 {
-            Picker("From", selection: Binding(get: { composer.from }, set: { composer.setFrom($0) })) {
-                ForEach(senders, id: \.self) { address in
-                    Text("\(Self.alias(address, aliases)) — \(address)").tag(address)
-                }
+        // One account to send from has nothing to choose.
+        Button { if senders.count > 1 { choosingFrom.toggle() } } label: {
+            HStack(spacing: 8) {
+                Circle().fill(colour(of: composer.from)).frame(width: 8, height: 8)
+                Text(Self.fromWords(composer.from, aliases)).lineLimit(1)
+                if senders.count > 1 { MeadowIconView(.down, size: 15) }
             }
-            .labelsHidden()
-            .fixedSize()
-            Spacer(minLength: 0)
-        } else {
-            Text(composer.from)
-            Spacer(minLength: 0)
+            .font(.meadow(.ui, 13.5, .bold))
+            .foregroundStyle(meadow.ink)
+            .padding(.horizontal, 11)
+            .frame(height: 32)
+            .background(meadow.paper, in: RoundedRectangle(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(meadow.line))
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel("From")
+        .accessibilityValue(composer.from)
+        .meadowPopover(isPresented: $choosingFrom, keys: { fromMenu.key($0) }) {
+            MeadowMenu(parts: [.title(String(localized: "Send from"))] + senders.map { address in
+                .item(MeadowMenuItem(id: address, title: Self.alias(address, aliases), detail: address,
+                                     leading: AnyView(Circle().fill(colour(of: address)).frame(width: 8, height: 8)
+                                        .frame(width: 18, height: 18)),
+                                     check: address == composer.from) { composer.setFrom(address) })
+            }, model: fromMenu, close: { choosingFrom = false }, label: String(localized: "Send from"))
+        }
+        .onChange(of: choosingFrom) { _, shown in if shown { fromMenu.at = 0 } }
+        Spacer(minLength: 0)
+    }
+
+    /// An account's colour, by its place in the config.
+    private func colour(of address: String) -> Color {
+        meadow.account(accounts.firstIndex(of: address) ?? 0)
     }
 
     /// An account's name as the window shows it: its alias, or the part before the @.
@@ -192,10 +290,21 @@ struct ComposerForm: View {
         return String(address.split(separator: "@", omittingEmptySubsequences: false).first ?? "")
     }
 
-    private var rewriteRow: some View {
-        HStack(spacing: 6) {
-            Label(composer.busy == .rewrite ? "Rewriting…" : "Rewrite", systemImage: "wind")
-                .foregroundStyle(.secondary)
+    /// From's words: the account's alias and its address, as "Work · hana@kumo.studio", or the address alone.
+    static func fromWords(_ address: String, _ aliases: [String: String?]) -> String {
+        if let named = aliases[address] ?? nil, !named.isEmpty { return "\(named) · \(address)" }
+        return address
+    }
+
+    // MARK: The AI's row
+
+    /// The AI's row (`.rw`), in moss: the rewrites, which act on the selection or the whole message, and the reply
+    /// drafted when there is one to draft.
+    private var aiRow: some View {
+        HStack(spacing: 4) {
+            MeadowAIMark(composer.busy == .rewrite ? "Rewriting…" : "Rewrite")
+                .padding(.leading, 4)
+                .padding(.trailing, 6)
             ForEach(Self.rewrites, id: \.self) { op in
                 Button(op.label) {
                     if op == .translate {
@@ -204,39 +313,53 @@ struct ComposerForm: View {
                         Task { await composer.rewrite(op) }
                     }
                 }
+                .meadowButton(.quiet, small: true)
                 .disabled(composer.busy != .none)
                 .popover(isPresented: op == .translate ? $translating : .constant(false), arrowEdge: .bottom) {
                     translateAsk
                 }
             }
             if composer.undoRewrite != nil {
-                Button("↩ Undo") { composer.undoTheRewrite() }
+                Button { composer.undoTheRewrite() } label: {
+                    MeadowIconView(.undo, size: 15)
+                    Text("Undo")
+                }
+                .meadowButton(.quiet, small: true)
+                .help("Put back what the rewrite changed")
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+            if composer.aiOffered { draftButtons }
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
+        .padding(.horizontal, 10)
         .padding(.vertical, 6)
+        .frame(minHeight: 40)
+        .background(meadow.paper2)
+        .overlay(alignment: .top) { ComposeHairline() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("AI rewrite (acts on the selection, or the whole message)")
     }
 
     private var translateAsk: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Translate to which language?")
-            TextField("Language", text: $language)
-                .frame(width: 200)
-                .onSubmit(translate)
-            HStack {
-                Spacer()
-                Button("Cancel") { translating = false }
-                    .keyboardShortcut(.cancelAction)
-                Button("Translate", action: translate)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(language.trimmingCharacters(in: .whitespaces).isEmpty)
+        ComposePop(title: String(localized: "Translate to")) {
+            VStack(alignment: .leading, spacing: 10) {
+                TextField("Language", text: $language)
+                    .meadowComposeField()
+                    .frame(width: 220)
+                    .onSubmit(translate)
+                HStack(spacing: 6) {
+                    Spacer()
+                    Button("Cancel") { translating = false }
+                        .meadowButton(small: true)
+                        .keyboardShortcut(.cancelAction)
+                    Button("Translate", action: translate)
+                        .meadowButton(.ai, small: true)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(language.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
             }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
         }
-        .padding(14)
     }
 
     private func translate() {
@@ -246,55 +369,67 @@ struct ComposerForm: View {
         Task { await composer.rewrite(.translate, language: to) }
     }
 
-    // MARK: The text
-
-    private var modeBar: some View {
-        HStack {
-            if let offer = composer.offer {
-                Text("Tab brings in \(Text(";\(offer.trigger)").bold())")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private var draftButtons: some View {
+        let tone = host.tone
+        let drafting = composer.busy == .draft
+        return HStack(spacing: 2) {
+            Button {
+                Task { await composer.draftReply() }
+            } label: {
+                MeadowIconView(.wind, size: 15)
+                Text(drafting ? "Drafting…" : tone == .balanced ? "Draft" : "Draft · \(tone.label.lowercased())")
             }
-            Spacer()
-            Picker("Write or preview the message", selection: Binding(get: { composer.previewing }, set: { wanted in
-                if wanted { Task { await composer.showPreview() } } else { composer.write() }
-            })) {
-                Text("Write").tag(false)
-                Text("Preview").tag(true)
+            .meadowButton(.ai, small: true)
+            .help("Draft a reply with AI, \(tone.label.lowercased()) tone")
+            Button {
+                draftOptions.toggle()
+            } label: {
+                MeadowIconView(.down, size: 15)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            .meadowButton(.ai, small: true, icon: true)
+            .accessibilityLabel("Draft options")
+            .popover(isPresented: $draftOptions, arrowEdge: .top) {
+                DraftOptions(tone: tone, chooseTone: chooseTone) { instruction in
+                    draftOptions = false
+                    Task { await composer.draftReply(instruction: instruction) }
+                }
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .fixedSize()
+        .disabled(drafting)
     }
+
+    // MARK: The text
 
     @ViewBuilder
     private var writing: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             if composer.previewing {
                 if let preview = composer.preview {
                     if !preview.formatted {
                         Text("No Markdown here: this goes out as plain text.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
+                            .font(.meadow(.ui, 12.5))
+                            .foregroundStyle(meadow.ink3)
+                            .padding(.horizontal, 18)
+                            .padding(.top, 10)
                     }
                     QuoteFrame(html: preview.html, title: "How your message will read")
+                        .padding(.horizontal, 4)
                 } else {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
                 ComposeTextView(composer: composer, text: composer.body, selectionRequest: composer.selectionRequest,
-                                focusBody: composer.focusRequest == .body)
+                                focusBody: composer.focusRequest == .body, look: ComposeTextLook(meadow, light: light))
                     .overlay(alignment: .topLeading) {
                         if composer.body.isEmpty {
                             Text("Write your message…")
-                                .foregroundStyle(.tertiary)
-                                .padding(.horizontal, 17)
-                                .padding(.vertical, 10)
+                                .font(.meadow(.read, ComposeTextLook.size))
+                                .foregroundStyle(meadow.ink3)
+                                .padding(.leading, ComposeTextLook.inset.width)
+                                .padding(.top, ComposeTextLook.inset.height)
                                 .allowsHitTesting(false)
+                                .accessibilityHidden(true)
                         }
                     }
             }
@@ -307,67 +442,80 @@ struct ComposerForm: View {
     @ViewBuilder
     private var quote: some View {
         if let quote = composer.quote, quote.html != nil || !quote.text.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                Button(Seeds.quoteLabel(mode: composer.mode, fwdAttach: composer.fwdAttach, open: quoteOpen)) {
-                    quoteOpen.toggle()
+            VStack(alignment: .leading, spacing: 8) {
+                Button { quoteOpen.toggle() } label: {
+                    Text(Seeds.quoteLabel(mode: composer.mode, fwdAttach: composer.fwdAttach, open: quoteOpen))
+                        .font(.meadow(.ui, 12, .bold))
+                        .foregroundStyle(meadow.ink3)
+                        .padding(.horizontal, 11)
+                        .frame(height: 28)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(meadow.paperRaised))
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(meadow.line2))
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
                 .accessibilityValue(quoteOpen ? "shown" : "hidden")
                 if quoteOpen {
                     if let html = quote.html {
                         QuoteFrame(html: html, title: "The message you’re answering")
                             .frame(height: 240)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(meadow.line))
                     } else {
                         ScrollView {
                             Text(quote.text.isEmpty ? "(no preview)" : quote.text)
-                                .font(.callout)
+                                .font(.meadow(.read, 15))
+                                .foregroundStyle(meadow.ink3)
                                 .textSelection(.enabled)
+                                .padding(.leading, 14)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .overlay(alignment: .leading) { Rectangle().fill(meadow.line2).frame(width: 2) }
                         }
                         .frame(maxHeight: 200)
                     }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 18)
         }
     }
 
     @ViewBuilder
     private var files: some View {
         if !composer.attachments.isEmpty || !composer.reading.isEmpty {
-            FlowLayout(spacing: 6) {
+            ChipFlow(spacing: 6, stretchesLast: false) {
                 ForEach(Array(composer.attachments.enumerated()), id: \.offset) { index, file in
-                    HStack(spacing: 4) {
-                        Image(systemName: file.cid != nil ? "photo" : "paperclip")
-                        Text(file.filename).lineLimit(1)
-                        if file.cid != nil { Text("in the text").foregroundStyle(.secondary) }
-                        Text(FileSize.words(file.size)).foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        MeadowIconView(file.cid != nil ? .image : .clip, size: 15).foregroundStyle(meadow.ink3)
+                        Text(file.filename).lineLimit(1).foregroundStyle(meadow.ink)
+                        if file.cid != nil { Text("in the text").foregroundStyle(meadow.ink3) }
+                        Text(Words.size(file.size)).foregroundStyle(meadow.ink3)
                         Button {
                             composer.removeAttachment(at: index)
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
+                            MeadowIconView(.x, size: 13)
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(meadow.ink3)
                         .accessibilityLabel("Remove \(file.filename)")
                     }
-                    .font(.callout)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(.quaternary, in: Capsule())
+                    .font(.meadow(.ui, 13, .bold))
+                    .padding(.leading, 10)
+                    .padding(.trailing, 9)
+                    .frame(height: 28)
+                    .background(Capsule().fill(meadow.paper3))
                 }
                 ForEach(composer.reading) { reading in
-                    HStack(spacing: 4) {
+                    HStack(spacing: 6) {
                         ProgressView().controlSize(.mini)
-                        Text("Reading \(reading.name)…").foregroundStyle(.secondary)
+                        Text("Reading \(reading.name)…")
                     }
-                    .font(.callout)
+                    .font(.meadow(.ui, 13))
+                    .foregroundStyle(meadow.ink3)
+                    .frame(height: 28)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
+            .padding(.horizontal, 18)
+            .padding(.bottom, 10)
         }
     }
 
@@ -388,79 +536,57 @@ struct ComposerForm: View {
             : "Send (⌘Return)"
     }
 
+    /// Nothing goes without the person pressing Send: the button, or its key.
+    private func send() {
+        if composer.check != nil { composer.confirmGuard() } else { composer.send(after: composer.pendingAfter) }
+    }
+
+    /// The foot's quiet words: a snippet Tab would bring in, else how the draft stands.
+    static func footLine(savedLine: String, offer: String?) -> String {
+        if let offer { return String(localized: "Tab brings in ;\(offer)") }
+        return savedLine.isEmpty ? String(localized: "Saves once you type") : savedLine
+    }
+
     private var foot: some View {
         HStack(spacing: 8) {
-            Button { choose(pictures: false) } label: { Label("Attach", systemImage: "paperclip") }
-                .labelStyle(.iconOnly)
-                .help("Attach files")
-            Button { choose(pictures: true) } label: { Label("Picture", systemImage: "photo") }
-                .labelStyle(.iconOnly)
-                .help("Put a picture in the text")
-            Button { snippetsShown.toggle() } label: { Text("Snippets").fixedSize() }
-                .help("Words you keep, to bring in with ;name and Tab")
-                .popover(isPresented: $snippetsShown, arrowEdge: .top) {
-                    SnippetsPanel(composer: composer, host: host) { snippetsShown = false }
-                }
-            if host.aiOn && composer.aiOffered {
-                draftButtons
-            }
-            Text(composer.savedLine)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .layoutPriority(-1)   // the first to give way when the window is narrow
-            Spacer(minLength: 8)
-            Button { Task { await composer.discard() } } label: { Label("Discard", systemImage: "trash") }
-                .labelStyle(.iconOnly)
-                .help("Discard this message, and its draft")
-            Button { _ = composer.save() } label: { Text("Save Draft").fixedSize() }
-                .keyboardShortcut("s")
-                .help("Save draft (⌘S)")
-            Button { composer.laterOpen.toggle() } label: { Label("Later", systemImage: "clock").fixedSize() }
-                .help("Send later")
+            MeadowSplitButton(kind: .primary, action: send, label: {
+                MeadowIconView(.send)
+                Text(sendLabel)
+                MeadowKey("⌘↵")
+            }, moreLabel: String(localized: "Send later"), more: { composer.laterOpen.toggle() })
+                .help(sendHelp)
                 .popover(isPresented: Binding(get: { composer.laterOpen }, set: { composer.laterOpen = $0 }),
                          arrowEdge: .top) {
                     LaterChoices(composer: composer)
                 }
-            Button {
-                if composer.check != nil { composer.confirmGuard() } else { composer.send(after: composer.pendingAfter) }
-            } label: {
-                Label(sendLabel, systemImage: "paperplane.fill").fixedSize()
-            }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.return, modifiers: .command)
-            .help(sendHelp)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-    }
-
-    private var draftButtons: some View {
-        let tone = host.tone
-        let drafting = composer.busy == .draft
-        return HStack(spacing: 2) {
-            Button {
-                Task { await composer.draftReply() }
-            } label: {
-                Label(drafting ? "Drafting…" : tone == .balanced ? "Draft" : "Draft · \(tone.label.lowercased())",
-                      systemImage: "wind")
-                    .fixedSize()
-            }
-            .help("Draft a reply with AI, \(tone.label.lowercased()) tone")
-            Button {
-                draftOptions.toggle()
-            } label: {
-                Image(systemName: "chevron.down")
-            }
-            .accessibilityLabel("Draft options")
-            .popover(isPresented: $draftOptions, arrowEdge: .top) {
-                DraftOptions(tone: tone, chooseTone: chooseTone) { instruction in
-                    draftOptions = false
-                    Task { await composer.draftReply(instruction: instruction) }
+            Button { choose(pictures: false) } label: { MeadowIconView(.clip) }
+                .meadowButton(.quiet, icon: true)
+                .help("Attach files")
+                .accessibilityLabel("Attach a file")
+            Button { choose(pictures: true) } label: { MeadowIconView(.image) }
+                .meadowButton(.quiet, icon: true)
+                .help("Put a picture in the text")
+                .accessibilityLabel("Put a picture in the text")
+            Button("Snippets") { snippetsShown.toggle() }
+                .meadowButton(.quiet, small: true)
+                .help("Words you keep, to bring in with ;name and Tab")
+                .popover(isPresented: $snippetsShown, arrowEdge: .top) {
+                    SnippetsPanel(composer: composer, host: host) { snippetsShown = false }
                 }
-            }
+            Spacer(minLength: 8)
+            Text(Self.footLine(savedLine: composer.savedLine, offer: composer.offer?.trigger))
+                .font(.meadow(.ui, 12.5))
+                .foregroundStyle(meadow.ink3)
+                .lineLimit(1)
+                .layoutPriority(-1)   // the first to give way when the window is narrow
+            Button { Task { await composer.discard() } } label: { MeadowIconView(.trash) }
+                .meadowButton(.quiet, del: true, icon: true)
+                .help("Discard this message, and its draft")
+                .accessibilityLabel("Discard")
         }
-        .disabled(drafting)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .overlay(alignment: .top) { ComposeHairline() }
     }
 
     /// Files from a panel: attachments, or pictures for the text where the cursor is.
@@ -498,23 +624,26 @@ struct ComposerForm: View {
         }
     }
 
+    /// What the composer was last told, for a moment, in the toast's ink over the foot.
     @ViewBuilder
     private var noticeView: some View {
         if let notice = composer.notice {
             Text(notice)
-                .font(.callout)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(.regularMaterial, in: Capsule())
-                .shadow(radius: 3, y: 1)
-                .padding(.bottom, 64)
+                .font(.meadow(.ui, 14, .semibold))
+                .foregroundStyle(light.isDark ? Color(meadow: 0x1B2238) : Color(meadow: 0xF5EFE2))
+                .padding(.horizontal, 16)
+                .frame(minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: 14)
+                    .fill(light.isDark ? Color(meadow: 0xEDE7D7) : Color(meadow: 0x24221E)))
+                .shadow(color: .black.opacity(0.3), radius: 18, y: 12)
+                .padding(.bottom, 72)
                 .transition(.opacity)
                 .allowsHitTesting(false)
         }
     }
 }
 
-/// A recipient field: its chips, what is being typed, and the addresses the server suggests for it.
+/// A recipient field: its chips (`.rcpt`), what is being typed, and the addresses the server suggests for it.
 struct ChipField: View {
     let composer: Composer
     let field: ComposeField
@@ -524,6 +653,15 @@ struct ChipField: View {
     @State private var at = -1
     @State private var lookup: Task<Void, Never>?
     @State private var editing = false
+    @Environment(\.meadow) private var meadow
+
+    /// A chip's words: the name a recipient was written with, else the address.
+    static func shown(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard let open = trimmed.firstIndex(of: "<"), open > trimmed.startIndex else { return trimmed }
+        let name = trimmed[..<open].trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
+        return name.isEmpty ? Addresses.recipient(trimmed) : name
+    }
 
     var body: some View {
         let chips = composer.recipients(field)
@@ -533,7 +671,7 @@ struct ChipField: View {
             }
             RecipientInput(
                 label: label,
-                placeholder: field == .to && chips.isEmpty ? "name@example.com" : "",
+                placeholder: field == .to && chips.isEmpty ? String(localized: "Name or address") : "",
                 text: Binding(get: { composer.typed[field] ?? "" }, set: { value in
                     composer.setTyped(field, value)
                     lookUp(value)
@@ -560,8 +698,11 @@ struct ChipField: View {
                 lostFocus: {
                     editing = false
                     close()
-                }
+                },
+                ink: NSColor(meadow.ink),
+                quiet: NSColor(meadow.ink3)
             )
+            .frame(minHeight: 34)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .bottomLeading) {
@@ -572,55 +713,74 @@ struct ChipField: View {
     private func chip(_ recipient: Recipient, at index: Int) -> some View {
         let address = recipient.address
         let fresh = !recipient.bad && composer.isNew(address)
-        return HStack(spacing: 3) {
-            Text(recipient.value).lineLimit(1)
+        let shown = Self.shown(recipient.value)
+        return HStack(spacing: 6) {
+            MeadowAvatar(name: shown, size: .small)
+            Text(shown).lineLimit(1)
             if fresh {
                 Text("new")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .font(.meadow(.ui, 10.5, .heavy))
+                    .textCase(.uppercase)
+                    .tracking(0.6)
+                    .foregroundStyle(meadow.sunInk)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 3)
+                    .background(meadow.sunWash, in: RoundedRectangle(cornerRadius: 5))
                     .accessibilityLabel(", new to you")
             }
             Button {
                 composer.removeChip(field, at: index)
             } label: {
-                Image(systemName: "xmark")
-                    .font(.caption2.weight(.bold))
+                MeadowIconView(.x, size: 13)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(recipient.bad ? meadow.rust : meadow.ink3)
             .accessibilityLabel("Remove \(recipient.value)\(recipient.bad ? ", not a valid address" : fresh ? ", new to you" : "")")
         }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2)
-        .background(recipient.bad ? Color.red.opacity(0.15) : Color.accentColor.opacity(0.12), in: Capsule())
-        .overlay(Capsule().stroke(recipient.bad ? Color.red.opacity(0.6) : .clear))
+        .font(.meadow(.ui, 13, .bold))
+        .foregroundStyle(recipient.bad ? meadow.rust : meadow.ink)
+        .padding(.leading, 3)
+        .padding(.trailing, 9)
+        .frame(height: 28)
+        .background(RoundedRectangle(cornerRadius: 14).fill(recipient.bad ? meadow.rustWash : meadow.paper3))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(recipient.bad ? meadow.rust.opacity(0.4) : .clear))
+        .padding(.vertical, 3)
         .help(fresh ? "No earlier mail with this address in MailMind" : recipient.bad ? "Not a valid address" : address)
     }
 
+    /// The server's suggestions, as Meadow's popover lists its choices (`.pop`, `.pal-i`).
     private var suggestions: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.addr) { index, item in
                 Button {
                     take(item)
                 } label: {
-                    HStack {
-                        Text(item.name.isEmpty ? item.addr : item.name)
-                        Text(item.addr).foregroundStyle(index == at ? .primary : .secondary)
+                    HStack(spacing: 12) {
+                        MeadowAvatar(name: item.name.isEmpty ? item.addr : item.name, size: .small)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.name.isEmpty ? item.addr : item.name).foregroundStyle(meadow.ink)
+                            if !item.name.isEmpty {
+                                Text(item.addr).font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
+                            }
+                        }
+                        .lineLimit(1)
                         Spacer(minLength: 0)
                     }
+                    .font(.meadow(.ui, 14))
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.vertical, 4)
+                    .frame(minHeight: 38)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(index == at ? meadow.primaryWash : .clear))
                     .contentShape(Rectangle())
-                    .background(index == at ? Color.accentColor.opacity(0.25) : .clear)
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(index == at ? .isSelected : [])
             }
         }
-        .frame(minWidth: 260, alignment: .leading)
+        .padding(6)
+        .frame(minWidth: 280, alignment: .leading)
         .fixedSize()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
-        .shadow(radius: 6, y: 2)
+        .meadowPanel(radius: 14, raised: true)
         .alignmentGuide(.bottom) { $0[.top] - 4 }
         .accessibilityLabel("Addresses for \(label)")
     }
@@ -666,17 +826,20 @@ struct ChipField: View {
 }
 
 /// Chips in lines, with the field after them taking what is left of its line (a line of its own when little is).
+/// Without `stretchesLast`, every item keeps its own width, as the files do.
 struct ChipFlow: Layout {
     var spacing: CGFloat = 4
     var fieldMin: CGFloat = 140
+    var stretchesLast = true
 
     private func lines(_ width: CGFloat, _ subviews: Subviews) -> [(frame: CGRect, index: Int)] {
         var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0
         var placed: [(CGRect, Int)] = []
         for (index, view) in subviews.enumerated() {
-            let last = index == subviews.count - 1
+            let last = stretchesLast && index == subviews.count - 1
             var size = view.sizeThatFits(.unspecified)
             if last { size.width = fieldMin }
+            size.width = min(size.width, width)
             if x > 0 && x + size.width > width {
                 y += line + spacing
                 x = 0
@@ -687,7 +850,13 @@ struct ChipFlow: Layout {
             x += size.width + spacing
             line = max(line, size.height)
         }
-        return placed
+        // Each item stands in the middle of its line's height.
+        var lineHeights: [CGFloat: CGFloat] = [:]
+        for (frame, _) in placed { lineHeights[frame.minY] = max(lineHeights[frame.minY] ?? 0, frame.height) }
+        return placed.map { frame, index in
+            let room = (lineHeights[frame.minY] ?? frame.height) - frame.height
+            return (frame.offsetBy(dx: 0, dy: (room / 2).rounded()), index)
+        }
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -704,74 +873,91 @@ struct ChipFlow: Layout {
     }
 }
 
-/// The send guard's strip: what holds this send, each line's fix, and the way past it when there is one.
+/// The send guard's strip: what holds this send, each line's fix, and the way past it when there is one, on the
+/// sunlit wash Meadow keeps for what needs you.
 struct GuardStrip: View {
     let composer: Composer
     let check: GuardView
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let later = check.sendAfter > 0
-        VStack(alignment: .leading, spacing: 6) {
-            Text(later ? "Not scheduled yet" : "Not sent yet").font(.headline)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(later ? "Not scheduled yet" : "Not sent yet")
+                .font(.meadow(.ui, 13.5, .heavy))
+                .foregroundStyle(meadow.ink)
             ForEach(check.lines) { line in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: line.soft ? "info.circle" : "exclamationmark.triangle.fill")
-                        .foregroundStyle(line.soft ? Color.secondary : Color.orange)
+                HStack(alignment: .firstTextBaseline, spacing: 9) {
+                    MeadowIconView(line.soft ? .info : .alert, size: 15)
+                        .foregroundStyle(line.soft ? meadow.ink3 : meadow.sunInk)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
                     Text(line.text)
-                        .foregroundStyle(line.soft ? .secondary : .primary)
+                        .foregroundStyle(line.soft ? meadow.ink3 : meadow.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 6)
                     if let fix = line.fix {
                         Button(fix.label) { composer.fix(fix, field: line.field) }
-                            .controlSize(.small)
+                            .meadowButton(small: true)
                     }
                 }
             }
-            HStack {
+            HStack(spacing: 6) {
                 Text(check.hard ? "Esc keeps editing" : "⌘Return \(later ? "schedules" : "sends") anyway · Esc keeps editing")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.meadow(.ui, 12))
+                    .foregroundStyle(meadow.ink3)
                 Spacer()
                 Button("Keep Editing") { composer.dismissGuard() }
+                    .meadowButton(small: true)
                     .keyboardShortcut(.cancelAction)
                 if !check.hard {
                     Button(later ? "Schedule Anyway" : "Send Anyway") { composer.confirmGuard() }
+                        .meadowButton(.primary, small: true)
                         .disabled(!check.armed)
                 }
             }
         }
-        .padding(12)
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.orange.opacity(0.35)))
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        .font(.meadow(.ui, 13))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(meadow.sunWash, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(meadow.sun.opacity(0.45)))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(later ? "Not scheduled yet" : "Not sent yet")
     }
 }
 
 /// Send later's choices, made as it opens so "in 1 hour" means an hour from now however long the window has been
-/// open.
+/// open: Meadow's popover (`.pop`), each with its key.
 struct LaterChoices: View {
     let composer: Composer
     @State private var custom = Date().addingTimeInterval(3600)
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let presets = SendTimes.presets()
-        VStack(alignment: .leading, spacing: 4) {
+        ComposePop(title: String(localized: "Send later")) {
             if composer.pendingAfter > 0 {
-                choice("·", "Send now instead") { pick(0) }
+                Button { pick(0) } label: {
+                    MeadowPaletteRow(String(localized: "Send now instead"), icon: .send, pop: true)
+                }
+                .buttonStyle(.plain)
             }
             ForEach(Array(presets.enumerated()), id: \.offset) { index, preset in
-                choice("\(index + 1)", preset.label) { pick(preset.epoch) }
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
+                Button { pick(preset.epoch) } label: {
+                    MeadowPaletteRow(preset.label, icon: .clock, keys: ["\(index + 1)"], pop: true)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
             }
-            Divider().padding(.vertical, 4)
-            HStack {
-                Text("Custom…")
-                DatePicker("Custom…", selection: $custom)
+            MeadowPopRule()
+            HStack(spacing: 8) {
+                MeadowIconView(.cal).foregroundStyle(meadow.ink3)
+                DatePicker("Pick a date & time", selection: $custom)
                     .datePickerStyle(.compact)
                     .labelsHidden()
+                Spacer(minLength: 6)
                 Button("Schedule") {
                     let when = Int(custom.timeIntervalSince1970)
                     if Double(when) > Date().timeIntervalSince1970 {
@@ -780,23 +966,12 @@ struct LaterChoices: View {
                         composer.say("Pick a future time")
                     }
                 }
+                .meadowButton(small: true)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
         }
-        .padding(12)
-        .frame(minWidth: 280)
-    }
-
-    private func choice(_ key: String, _ label: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Text(key).foregroundStyle(.secondary).monospacedDigit().frame(width: 12)
-                Text(label)
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, 3)
-        }
-        .buttonStyle(.plain)
+        .frame(minWidth: 300)
     }
 
     private func pick(_ when: Int) {
@@ -811,6 +986,7 @@ struct DraftOptions: View {
     let go: (String) -> Void
     @State private var tone: API.DraftTone
     @State private var say = ""
+    @Environment(\.meadow) private var meadow
 
     init(tone: API.DraftTone, chooseTone: @escaping (API.DraftTone) -> Void, go: @escaping (String) -> Void) {
         _tone = State(initialValue: tone)
@@ -819,32 +995,36 @@ struct DraftOptions: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Tone").font(.headline)
-            Picker("Tone", selection: $tone) {
-                ForEach([API.DraftTone.brief, .balanced, .warm, .formal], id: \.self) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .onChange(of: tone) { _, chosen in chooseTone(chosen) }
-            HStack(spacing: 4) {
-                Text("What should it say?")
-                Text("optional").foregroundStyle(.secondary)
-            }
-            TextField("e.g. yes, but not before 3 pm", text: $say)
-                .onSubmit { go(say.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            HStack {
-                Spacer()
-                Button {
-                    go(say.trimmingCharacters(in: .whitespacesAndNewlines))
-                } label: {
-                    Label("Draft", systemImage: "wind")
+        ComposePop(title: String(localized: "Draft a reply")) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Tone").font(.meadow(.ui, 12.5, .bold)).foregroundStyle(meadow.ink2)
+                MeadowSegmentedChoice(label: String(localized: "Tone"), selection: $tone,
+                                      options: [API.DraftTone.brief, .balanced, .warm, .formal].map { ($0, $0.label) })
+                    .onChange(of: tone) { _, chosen in chooseTone(chosen) }
+                HStack(spacing: 4) {
+                    Text("What should it say?").foregroundStyle(meadow.ink2)
+                    Text("optional").foregroundStyle(meadow.ink3)
                 }
-                .keyboardShortcut(.defaultAction)
+                .font(.meadow(.ui, 12.5, .bold))
+                TextField("e.g. yes, but not before 3 pm", text: $say)
+                    .meadowComposeField()
+                    .onSubmit { go(say.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                HStack {
+                    Spacer()
+                    Button {
+                        go(say.trimmingCharacters(in: .whitespacesAndNewlines))
+                    } label: {
+                        MeadowIconView(.wind, size: 15)
+                        Text("Draft")
+                    }
+                    .meadowButton(.ai, small: true)
+                    .keyboardShortcut(.defaultAction)
+                }
             }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
         }
-        .padding(14)
-        .frame(width: 320)
+        .frame(width: 340)
     }
 }
 
@@ -855,6 +1035,7 @@ struct SnippetsPanel: View {
     let close: () -> Void
     @State private var trigger = ""
     @State private var text: String
+    @Environment(\.meadow) private var meadow
 
     init(composer: Composer, host: any ComposeHost, close: @escaping () -> Void) {
         self.composer = composer
@@ -864,62 +1045,74 @@ struct SnippetsPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        ComposePop(title: String(localized: "Snippets")) {
             if host.snippets.isEmpty {
                 Text("Words you use often, kept under a name. Type ;name in your message and press Tab.")
-                    .foregroundStyle(.secondary)
+                    .font(.meadow(.ui, 13))
+                    .foregroundStyle(meadow.ink2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 4)
             }
             ForEach(host.snippets, id: \.trigger) { snippet in
-                HStack {
+                HStack(spacing: 2) {
                     Button {
                         close()
                         composer.insertSnippet(snippet)
                     } label: {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(";\(snippet.trigger)").bold()
-                            Text(snippet.text).lineLimit(1).foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                        MeadowPaletteRow(title: ";\(snippet.trigger)", detail: snippet.text, pop: true) { EmptyView() }
                     }
                     .buttonStyle(.plain)
                     .help("Put it in the message")
-                    Button("Edit") {
+                    Button {
                         trigger = snippet.trigger
                         text = snippet.text
+                    } label: {
+                        MeadowIconView(.pen, size: 15)
                     }
+                    .meadowButton(.quiet, small: true, icon: true)
                     .accessibilityLabel("Edit ;\(snippet.trigger)")
-                    Button("Delete") { change(API.SnippetChange(trigger: snippet.trigger, verb: .delete)) }
-                        .accessibilityLabel("Delete ;\(snippet.trigger)")
-                }
-                .controlSize(.small)
-            }
-            Divider()
-            Text("Name").font(.caption).foregroundStyle(.secondary)
-            TextField("thanks", text: $trigger)
-            HStack(spacing: 4) {
-                Text("Text").font(.caption).foregroundStyle(.secondary)
-                Text("Tab goes through each {{placeholder}}").font(.caption2).foregroundStyle(.tertiary)
-            }
-            TextEditor(text: $text)
-                .font(.body)
-                .frame(height: 64)
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(.separator))
-            HStack {
-                Spacer()
-                Button("Save") {
-                    change(API.SnippetChange(text: text, trigger: trigger, verb: .save)) {
-                        trigger = ""
-                        text = ""
+                    Button {
+                        change(API.SnippetChange(trigger: snippet.trigger, verb: .delete))
+                    } label: {
+                        MeadowIconView(.trash, size: 15)
                     }
+                    .meadowButton(.quiet, del: true, small: true, icon: true)
+                    .accessibilityLabel("Delete ;\(snippet.trigger)")
                 }
-                .disabled(trigger.trimmingCharacters(in: .whitespaces).isEmpty
-                    || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            MeadowPopRule()
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Name").font(.meadow(.ui, 12.5, .bold)).foregroundStyle(meadow.ink2)
+                TextField("thanks", text: $trigger).meadowComposeField()
+                HStack(spacing: 6) {
+                    Text("Text").font(.meadow(.ui, 12.5, .bold)).foregroundStyle(meadow.ink2)
+                    Text("Tab goes through each {{placeholder}}").font(.meadow(.ui, 12)).foregroundStyle(meadow.ink3)
+                }
+                TextEditor(text: $text)
+                    .font(.meadow(.ui, 14))
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+                    .frame(height: 64)
+                    .background(meadow.paper, in: RoundedRectangle(cornerRadius: 9))
+                    .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(meadow.line2))
+                HStack {
+                    Spacer()
+                    Button("Save") {
+                        change(API.SnippetChange(text: text, trigger: trigger, verb: .save)) {
+                            trigger = ""
+                            text = ""
+                        }
+                    }
+                    .meadowButton(.primary, small: true)
+                    .disabled(trigger.trimmingCharacters(in: .whitespaces).isEmpty
+                        || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
         }
-        .padding(14)
-        .frame(width: 340)
+        .frame(width: 360)
     }
 
     private func change(_ change: API.SnippetChange, then done: @escaping () -> Void = {}) {

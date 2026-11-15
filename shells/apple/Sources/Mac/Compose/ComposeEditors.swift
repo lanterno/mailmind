@@ -13,6 +13,8 @@ struct ComposeTextView: NSViewRepresentable {
     let text: String
     let selectionRequest: NSRange?
     let focusBody: Bool
+    /// The light's ink and face for the text (Meadow's `.cp-body`).
+    var look: ComposeTextLook?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(composer: composer)
@@ -40,6 +42,14 @@ struct ComposeTextView: NSViewRepresentable {
         text.font = .systemFont(ofSize: NSFont.systemFontSize + 1)
         text.textContainerInset = NSSize(width: 12, height: 10)
         text.string = composer.body
+        if let look {
+            // The mockup's padding is the text's own distance from the edge, with no fragment padding inside it.
+            text.textContainer?.lineFragmentPadding = 0
+            text.textContainerInset = ComposeTextLook.inset
+            text.drawsBackground = false
+            look.dress(text)
+            context.coordinator.look = look
+        }
         text.setAccessibilityLabel("message body")
         text.registerForDraggedTypes([.fileURL])
         scroll.drawsBackground = false
@@ -50,9 +60,13 @@ struct ComposeTextView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let view = scroll.documentView as? BodyTextView else { return }
         if view.string != text {
-            // A change the composer made (a snippet, a draft, a picture's mark): the text takes it whole.
+            // A change the composer made (a snippet, a draft, a picture's mark): the text takes it whole, in the look.
             view.string = text
+            look?.dress(view)
+        } else if let look, context.coordinator.look != look {
+            look.dress(view)
         }
+        context.coordinator.look = look
         if let wanted = selectionRequest {
             let length = (view.string as NSString).length
             let range = NSRange(location: min(wanted.location, length),
@@ -77,6 +91,8 @@ struct ComposeTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         let composer: Composer
         weak var text: BodyTextView?
+        /// The look the text was last dressed in.
+        var look: ComposeTextLook?
 
         init(composer: Composer) {
             self.composer = composer
@@ -178,9 +194,22 @@ struct RecipientInput: NSViewRepresentable {
     let focused: Bool
     let focusTaken: () -> Void
     let lostFocus: () -> Void
+    /// What is typed, and the placeholder: the light's ink and its quietest (Meadow's 14.5-point field).
+    var ink: NSColor?
+    var quiet: NSColor?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
+    }
+
+    /// The field's face and its placeholder in the light's inks.
+    private func dress(_ field: RecipientField) {
+        guard let ink else { return }
+        field.font = .meadow(.ui, 14.5)
+        field.textColor = ink
+        field.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
+            .font: NSFont.meadow(.ui, 14.5), .foregroundColor: quiet ?? ink,
+        ])
     }
 
     func makeNSView(context: Context) -> RecipientField {
@@ -194,11 +223,15 @@ struct RecipientInput: NSViewRepresentable {
         field.cell?.isScrollable = true
         field.cell?.wraps = false
         field.stringValue = text
+        dress(field)
         return field
     }
 
     func updateNSView(_ field: RecipientField, context: Context) {
         context.coordinator.input = self
+        if ink != nil, field.textColor != ink || field.placeholderAttributedString?.string != placeholder {
+            dress(field)
+        }
         if field.stringValue != text { field.stringValue = text }
         guard focused else { return }
         if let window = field.window {
