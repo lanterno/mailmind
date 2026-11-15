@@ -386,6 +386,11 @@ void uniffi_mailmind_core_fn_method_corehost_close(uint64_t ptr, RustCallStatus 
 RustBuffer uniffi_mailmind_core_fn_method_corehost_request(uint64_t ptr, RustBuffer method, RustBuffer target, RustBuffer body, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_REQUEST_OVER_LIMIT
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_REQUEST_OVER_LIMIT
+RustBuffer uniffi_mailmind_core_fn_method_corehost_request_over_limit(uint64_t ptr, RustBuffer method, RustBuffer target, RustBuffer body, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_SUBSCRIBE
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_SUBSCRIBE
 uint64_t uniffi_mailmind_core_fn_method_corehost_subscribe(uint64_t ptr, uint64_t listener, RustCallStatus *_Nonnull out_status
@@ -794,6 +799,12 @@ uint16_t uniffi_mailmind_core_checksum_method_corehost_close(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_REQUEST
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_REQUEST
 uint16_t uniffi_mailmind_core_checksum_method_corehost_request(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_REQUEST_OVER_LIMIT
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_REQUEST_OVER_LIMIT
+uint16_t uniffi_mailmind_core_checksum_method_corehost_request_over_limit(void
     
 );
 #endif

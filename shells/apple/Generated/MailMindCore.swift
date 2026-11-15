@@ -641,6 +641,12 @@ public protocol CoreHostProtocol: AnyObject, Sendable {
     func request(method: String, target: String, body: Data)  -> CoreAnswer
     
     /**
+     * `request`, with the person's leave to go over today's AI limit, as the page sends a request again once they
+     * say yes to its question. It is the only header a shell can add. It blocks as `request` does.
+     */
+    func requestOverLimit(method: String, target: String, body: Data)  -> CoreAnswer
+    
+    /**
      * Hear the event stream until the subscription is cancelled or released, or the host closes.
      */
     func subscribe(listener: EventListener) throws  -> EventSubscription
@@ -735,6 +741,22 @@ open func request(method: String, target: String, body: Data) -> CoreAnswer  {
     return try!  FfiConverterTypeCoreAnswer_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_mailmind_core_fn_method_corehost_request(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(target),
+        FfiConverterData.lower(body),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * `request`, with the person's leave to go over today's AI limit, as the page sends a request again once they
+     * say yes to its question. It is the only header a shell can add. It blocks as `request` does.
+     */
+open func requestOverLimit(method: String, target: String, body: Data) -> CoreAnswer  {
+    return try!  FfiConverterTypeCoreAnswer_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_request_over_limit(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(method),
         FfiConverterString.lower(target),
@@ -2699,6 +2721,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_mailmind_core_checksum_method_corehost_request() != 34461) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_request_over_limit() != 25052) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_mailmind_core_checksum_method_corehost_subscribe() != 56883) {
