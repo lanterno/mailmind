@@ -92,7 +92,7 @@ final class Desk {
     func attach(_ app: MailApp) {
         guard self.app == nil, let core = app.core else { return }
         self.app = app
-        link.routes = core
+        connect(core)
         listening = Task { [weak self] in
             guard let events = try? await core.events() else { return }
             for await event in events {
@@ -102,6 +102,13 @@ final class Desk {
         }
         Task { await readScreeners() }
         join(app.mailbox)
+    }
+
+    /// Reach the core's routes, and read what was asked for before they were there.
+    func connect(_ routes: any RouteCaller) {
+        link.routes = routes
+        // The rail asks for the brief's tallies as it first shows, which can be before the window's core is open.
+        brief.reread()
     }
 
     /// The desk in the mailbox: `?` and `!` in the search field, a sentence searched for, the list's h, w, l and i, the
