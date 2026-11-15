@@ -115,13 +115,13 @@ pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
     })
 }
 
-/// The bytes of a raw Content-Type value to replace, and what with, for mail-parser to read its parameters as Python
-/// did. Python took a vertical tab, a form feed or one of the separators `\x1c` to `\x1f` for white space, and
-/// mail-parser keeps them: one at either edge of a parameter's name, but for a name Python didn't read
-/// ([`unread_name`]), or after a boundary, which Python's `get_boundary` stripped on the right, becomes a space. That
-/// strip took blanks inside a boundary's quotes too, where mail-parser keeps them: the closing quote moves back over
-/// them. Python kept a blank at the start of a value, at the end of any other or inside either, and so does the core,
-/// but for a value of such blanks alone that a quote or a special cut short ([`cut_short`]).
+/// The bytes of a raw Content-Type or Content-Disposition value to replace, and what with, for mail-parser to read its
+/// parameters as Python did. Python took a vertical tab, a form feed or one of the separators `\x1c` to `\x1f` for
+/// white space, and mail-parser keeps them: one at either edge of a parameter's name, but for a name Python didn't
+/// read ([`unread_name`]), or after a boundary, which Python's `get_boundary` stripped on the right, becomes a space.
+/// That strip took blanks inside a boundary's quotes too, where mail-parser keeps them: the closing quote moves back
+/// over them. Python kept a blank at the start of a value, at the end of any other or inside either, and so does the
+/// core, but for a value of such blanks alone that a quote or a special cut short ([`cut_short`]).
 pub(super) fn param_replacements(raw: &[u8]) -> Vec<(usize, u8)> {
     let mut replaced = Vec::new();
     for param in params(raw) {
