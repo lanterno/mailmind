@@ -460,6 +460,9 @@ automatically.
 - **A hung server costs a click about twelve seconds, not two minutes,** and Undo is offered as soon as it answers;
   the worker keeps trying. Two processes changing your rules can't lose each other's change.
 - **A first read counts as it goes.** A folder read for the first time says how many messages have arrived so far.
+- **Gmail's App Password, step by step.** Adding an account picks Gmail for a Gmail address and offers it for a
+  Workspace domain, shows the three steps to an App Password with a button to Google's page for it, takes the password
+  as Google shows it, spaces and all, and tests the connection as soon as it is saved, saying plainly what Gmail refused.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect.
