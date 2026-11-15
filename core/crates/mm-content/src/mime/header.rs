@@ -117,18 +117,18 @@ pub(super) fn empty_param(raw: &[u8], name: &str) -> Option<EmptyParam> {
 
 /// The bytes of a raw Content-Type value to replace, and what with, for mail-parser to read its parameters as Python
 /// did. Python took a vertical tab, a form feed or one of the separators `\x1c` to `\x1f` for white space, and
-/// mail-parser keeps them: one at either edge of a parameter's name, or after a boundary, which Python's
-/// `get_boundary` stripped on the right, becomes a space. That strip took blanks inside a boundary's quotes too, where
-/// mail-parser keeps them: the closing quote moves back over them. Python kept a blank at the start of a value, at the
-/// end of any other or inside either, and so does the core, but for a value of such blanks alone that a quote or a
-/// special cut short ([`cut_short`]).
+/// mail-parser keeps them: one at either edge of a parameter's name, but for a name Python didn't read
+/// ([`unread_name`]), or after a boundary, which Python's `get_boundary` stripped on the right, becomes a space. That
+/// strip took blanks inside a boundary's quotes too, where mail-parser keeps them: the closing quote moves back over
+/// them. Python kept a blank at the start of a value, at the end of any other or inside either, and so does the core,
+/// but for a value of such blanks alone that a quote or a special cut short ([`cut_short`]).
 pub(super) fn param_replacements(raw: &[u8]) -> Vec<(usize, u8)> {
     let mut replaced = Vec::new();
     for param in params(raw) {
         let Some(text) = raw.get(param.clone()) else { continue };
         let equals = text.iter().position(|&byte| byte == b'=').map_or(param.end, |equals| param.start + equals);
         let name = raw.get(param.start..equals).unwrap_or_default();
-        let lead = name.iter().take_while(|&&byte| python_blank(byte)).count();
+        let lead = if unread_name(name) { 0 } else { name.iter().take_while(|&&byte| python_blank(byte)).count() };
         let trail = name.iter().rev().take_while(|&&byte| python_blank(byte)).count().min(name.len() - lead);
         let mut edges: Vec<usize> = (param.start..param.start + lead).chain(equals - trail..equals).collect();
         let bare_name = name.get(lead..name.len() - trail).unwrap_or_default();
@@ -145,6 +145,18 @@ pub(super) fn param_replacements(raw: &[u8]) -> Vec<(usize, u8)> {
         replaced.extend(spaces.map(|at| (at, b' ')));
     }
     replaced
+}
+
+/// Whether Python read no parameter of this name: one that starts with blanks mail-parser keeps, no space or tab
+/// before them, then a space or a tab and the rest of the name, as `;\x0b name=`. Python's token for the name was
+/// those blanks alone, and no `=` came after it, so it dropped the parameter, as mail-parser does once the blanks
+/// stay. After a space or a tab, `; \x0bname=`, Python took them for white space with it, and read the name.
+fn unread_name(name: &[u8]) -> bool {
+    let blanks = name.iter().take_while(|&&byte| kept_by_mail_parser(byte)).count();
+    let rest = name.get(blanks..).unwrap_or_default();
+    blanks > 0
+        && rest.first().is_some_and(|&byte| byte == b' ' || byte == b'\t')
+        && rest.iter().any(|&byte| !python_blank(byte))
 }
 
 /// A value that starts with blanks Python took for white space and mail-parser keeps, right after its `=`, then a
