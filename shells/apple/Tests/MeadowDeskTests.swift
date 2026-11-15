@@ -13,6 +13,139 @@ final class MeadowDeskTests: XCTestCase {
         return calendar
     }
 
+    // MARK: The brief's greeting
+
+    func testTheGreetingFollowsTheHourAndTheLight() {
+        XCTAssertEqual(BriefWords.greeting(hour: 3, light: .night), "Working late")
+        XCTAssertEqual(BriefWords.greeting(hour: 9, light: .night), "Good morning")
+        XCTAssertEqual(BriefWords.greeting(hour: 14, light: .dusk), "Good afternoon")
+        // Dusk's light turns a late afternoon into the evening; Day's keeps it the afternoon.
+        XCTAssertEqual(BriefWords.greeting(hour: 17, light: .day), "Good afternoon")
+        XCTAssertEqual(BriefWords.greeting(hour: 17, light: .dusk), "Good evening")
+        XCTAssertEqual(BriefWords.greeting(hour: 17, light: .night), "Good evening")
+        XCTAssertEqual(BriefWords.greeting(hour: 19, light: .day), "Good evening")
+        // Night's light turns a late evening into working late.
+        XCTAssertEqual(BriefWords.greeting(hour: 22, light: .day), "Good evening")
+        XCTAssertEqual(BriefWords.greeting(hour: 22, light: .dusk), "Good evening")
+        XCTAssertEqual(BriefWords.greeting(hour: 22, light: .night), "Working late")
+    }
+
+    func testTheGreetingNamesThePersonWhenTheMacKnowsTheirName() {
+        XCTAssertEqual(BriefWords.greeting(hour: 15, light: .day, name: "Ada"), "Good afternoon, Ada.")
+        XCTAssertEqual(BriefWords.greeting(hour: 23, light: .night, name: "Ada"), "Working late, Ada.")
+        XCTAssertEqual(BriefWords.greeting(hour: 15, light: .day, name: nil), "Good afternoon.")
+        XCTAssertEqual(BriefWords.greeting(hour: 15, light: .day, name: ""), "Good afternoon.")
+        XCTAssertEqual(BriefWords.firstName("Ada King Lovelace"), "Ada")
+        XCTAssertEqual(BriefWords.firstName("  Grace  "), "Grace")
+        XCTAssertNil(BriefWords.firstName("   "))
+    }
+
+    func testTheDateLineAndWhenTheBriefWasWritten() throws {
+        let sunday = try XCTUnwrap(english.date(from: DateComponents(year: 2026, month: 11, day: 15, hour: 14)))
+        XCTAssertEqual(BriefWords.dateLine(sunday, calendar: english, locale: Locale(identifier: "en_GB")),
+                       "Sunday · 15 November")
+        let us = Locale(identifier: "en_US")
+        // The formatter puts a narrow no-break space before "am".
+        func written(_ brief: API.Brief) -> String? {
+            BriefWords.written(brief, calendar: english, locale: us)?.replacingOccurrences(of: "\u{202F}", with: " ")
+        }
+        var brief = DeskFixture.brief
+        brief.generated = "2026-11-15T08:10:00Z"
+        XCTAssertEqual(written(brief), "written at 8:10 am")
+        brief.stale = true
+        XCTAssertEqual(written(brief), "written at 8:10 am · mail has changed since")
+        XCTAssertNil(BriefWords.written(nil, calendar: english, locale: us))
+    }
+
+    // MARK: The brief's links
+
+    private func person(_ key: Int, _ name: String, subject: String, importance: Int) -> API.DigestItem {
+        let address = name.lowercased().replacingOccurrences(of: " ", with: ".") + "@example.test"
+        return DeskFixture.item(key, from: address, name: name, subject: subject, importance: importance)
+    }
+
+    func testTheBriefLinksEachMessageWhereItIsFirstNamedToTheEndOfItsClause() {
+        let items = [
+            person(101, "Ruth Lane", subject: "Office lease", importance: 5),
+            person(102, "Grace Hopper", subject: "Re: Q3 figures", importance: 4),
+            person(103, "Alan Turing", subject: "The river walk", importance: 4),
+            person(104, "Alan Kay", subject: "Lunch", importance: 1),
+        ]
+        let text = "Three things need you: Ruth needs the signed lease back by Monday, Grace Hopper wants the "
+            + "regional split, and Alan is waiting to hear about Saturday. Ruth wrote again."
+        let runs = BriefWords.runs(text, items)
+        XCTAssertEqual(runs.map(\.text), [
+            "Three things need you: ", "Ruth needs the signed lease back by Monday", ", ",
+            "Grace Hopper wants the regional split",
+            // Two senders are called Alan, so "Alan" alone names neither; Ruth is linked once, where first named.
+            ", and Alan is waiting to hear about Saturday. Ruth wrote again.",
+        ])
+        XCTAssertEqual(runs.map { $0.names?.key }, [nil, 101, nil, 102, nil])
+    }
+
+    func testABriefLinkStopsBeforeAnotherClauseAndAfterItsWords() {
+        let marie = person(105, "Marie Curie", subject: "Photos from the pottery class", importance: 2)
+        XCTAssertEqual(BriefWords.runs("Marie sent photos and a date for the next class.", [marie]).map(\.text),
+                       ["Marie sent photos", " and a date for the next class."])
+        // A subject names its message too, before the sender does.
+        XCTAssertEqual(BriefWords.runs("Your photos from the pottery class arrived.", [marie]).map(\.text),
+                       ["Your ", "photos from the pottery class arrived", "."])
+        XCTAssertEqual(BriefWords.runs("Marie wrote a long note about the kiln the glaze and the next three classes",
+                                       [marie], words: 5).map(\.text),
+                       ["Marie wrote a long note", " about the kiln the glaze and the next three classes"])
+    }
+
+    func testABriefLinkMatchesWholeWordsInAnyCaseAndAccent() {
+        let cafe = person(106, "Café Lumen", subject: "Your order", importance: 1)
+        XCTAssertEqual(BriefWords.runs("A receipt from cafe lumen came in.", [cafe]).map(\.text),
+                       ["A receipt from ", "cafe lumen came in", "."])
+        let ann = person(107, "Ann Lee", subject: "Notes", importance: 1)
+        XCTAssertEqual(BriefWords.runs("The Annual report is out.", [ann]).map(\.text), ["The Annual report is out."])
+        // An address is never a name to look for.
+        let robot = DeskFixture.item(108, from: "noreply@example.test", name: "noreply@example.test", subject: "Hi",
+                                     importance: 1)
+        XCTAssertEqual(BriefWords.runs("Mail from noreply@example.test.", [robot]).count, 1)
+    }
+
+    // MARK: The brief's tallies
+
+    func testTheTalliesCountWhatThereIsInTheMockupsOrderAndEndWithTheWeek() {
+        typealias Tally = BriefWords.Tally
+        XCTAssertEqual(BriefWords.tallies(needs: 3, waiting: 1, replyLater: 0, worthARead: 2, canWait: 5,
+                                          commitments: 1),
+                       [Tally(count: 3, words: "need you", goes: .needs, sun: true),
+                        Tally(count: 1, words: "waiting on others", goes: .waiting),
+                        Tally(count: 2, words: "worth a read", goes: .worthARead),
+                        Tally(count: 5, words: "can wait", goes: .canWait),
+                        Tally(count: 1, words: "commitment", goes: .commitments),
+                        Tally(words: "Your week", goes: .week)])
+        XCTAssertEqual(BriefWords.tallies(needs: 1, waiting: 0, replyLater: 2, worthARead: 0, canWait: 0,
+                                          commitments: 3),
+                       [Tally(count: 1, words: "needs you", goes: .needs, sun: true),
+                        Tally(count: 2, words: "to reply later", goes: .replyLater),
+                        Tally(count: 3, words: "commitments", goes: .commitments),
+                        Tally(words: "Your week", goes: .week)])
+        XCTAssertEqual(BriefWords.tallies(needs: 0, waiting: 0, replyLater: 0, worthARead: 0, canWait: 0,
+                                          commitments: 0),
+                       [Tally(words: "Your week", goes: .week)])
+    }
+
+    func testWorthAReadIsUnreadMailThatAsksNothingTheMostImportantFirst() {
+        var seen = DeskFixture.item(201, from: "a@example.test", name: "A", subject: "Seen", needs: false,
+                                    importance: 5)
+        seen.seen = true
+        let items = [
+            DeskFixture.item(202, from: "b@example.test", name: "B", subject: "Needs", needs: true, importance: 5),
+            DeskFixture.item(203, from: "c@example.test", name: "C", subject: "Safe", needs: false, importance: 4,
+                             safe: true),
+            seen,
+            DeskFixture.item(204, from: "d@example.test", name: "D", subject: "Essay", needs: false, importance: 2),
+            DeskFixture.item(205, from: "e@example.test", name: "E", subject: "Ticket", needs: false, importance: 3),
+            DeskFixture.item(206, from: "f@example.test", name: "F", subject: "Photos", needs: false, importance: 2),
+        ]
+        XCTAssertEqual(BriefWords.worthARead(items).map(\.key), [205, 206, 204])
+    }
+
     // MARK: The paper trail
 
     private func receipt(_ date: String, _ subject: String, account: String = "ada@example.test",
