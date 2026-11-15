@@ -35,12 +35,83 @@ final class MeadowRowsTests: XCTestCase {
         for head in [false, true] {
             for gist in [false, true] {
                 for chips in [false, true] {
-                    let shape = RowShape(head: head, gist: gist, chips: chips)
-                    XCTAssertEqual(RowShape(packed: shape.packed), shape)
+                    for oneLine in [false, true] {
+                        let shape = RowShape(head: head, gist: gist, chips: chips, oneLine: oneLine)
+                        XCTAssertEqual(RowShape(packed: shape.packed), shape)
+                    }
                 }
             }
         }
         XCTAssertNil(RowShape(packed: 0), "zero is a row not worked out yet")
+    }
+
+    func testASummaryThatFitsOnOneLineTakesOne() {
+        let comfortable = RowMeasure(.comfortable), cozy = RowMeasure(.cozy), compact = RowMeasure(.compact)
+        // 10 + 20.3 + 2 + 20.3 + 4 + 19.575 + 7 + 22 + 11: the chips right under the one line.
+        XCTAssertEqual(comfortable.height(RowShape(gist: true, chips: true, oneLine: true)), 116)
+        XCTAssertEqual(comfortable.height(RowShape(head: true, gist: true, oneLine: true)), 31 + 87)
+        XCTAssertEqual(cozy.height(RowShape(gist: true, oneLine: true)),
+                       cozy.height(RowShape(gist: true)) - (13.5 * 1.35).rounded(), accuracy: 1)
+        XCTAssertEqual(compact.height(RowShape(gist: true, oneLine: true)), compact.height(RowShape(gist: true)),
+                       "compact shows one line of any summary")
+        XCTAssertFalse(RowShape(oneLine: true).oneLine, "only a summary has lines")
+
+        // The summary has the row's width less the list's sides, the avatar and the padding.
+        XCTAssertEqual(RowMeasure.room(420), 420 - 12 - 55 - 10)
+        XCTAssertTrue(RowMeasure.fits(343, in: 420))
+        XCTAssertFalse(RowMeasure.fits(343.5, in: 420))
+        let short = RowFaces.gistWidth("Stub summary."), long = RowFaces.gistWidth(Self.middle)
+        XCTAssertTrue(RowMeasure.fits(short, in: 300))
+        XCTAssertTrue(RowMeasure.fits(long, in: 420))
+        XCTAssertFalse(RowMeasure.fits(long, in: 300))
+        let row = Fixture.row(1, action: "Stub action", summary: "Stub summary.")
+        XCTAssertEqual(RowShape.of(row, head: false, rowWidth: 420).shape,
+                       RowShape(gist: true, chips: true, oneLine: true))
+        XCTAssertEqual(RowShape.of(row, head: false, rowWidth: 420).gistWidth, short)
+        let snippet = Fixture.row(2)
+        XCTAssertNil(RowShape.of(snippet, head: false, rowWidth: 420).gistWidth, "a snippet has one line anyway")
+    }
+
+    /// A summary that fits on one line of a row 420 wide, and needs two in a row 300 wide.
+    private nonisolated static let middle = "Asks which hike you'd like on Saturday morning."
+
+    func testARowDrawsItsSummaryInTheLinesItsHeightMadeRoomFor() throws {
+        let inks = RowInks.of(.day, light: .day, highContrast: false)
+        // The owner's row: a summary of a few words, then a next step's chip, under a day's head and not.
+        let row = Fixture.row(1, action: "Stub action", summary: "Stub summary.")
+        for density in [API.Density.comfortable, .cozy] {
+            for head in [nil, "Today"] {
+                let measure = RowMeasure(density)
+                let shape = RowShape.of(row, head: head != nil, rowWidth: 420).shape
+                XCTAssertTrue(shape.oneLine)
+                let stops = measure.stops(shape)
+                let chips = try XCTUnwrap(stops.chips)
+                let cell = MailRowCell()
+                cell.frame = NSRect(x: 0, y: 0, width: 420, height: stops.height)
+                cell.show(row, head: head, acts: [], look: RowLook(inks: inks, measure: measure, accounts: []))
+                // The chip's wash, by its left end, stands where the one line's height puts it.
+                let x = RowMeasure.listSide + RowMeasure.textX + 4
+                XCTAssertTrue(near(try colour(cell, x: x, y: chips + 11), inks.sunWash),
+                              "\(density) \(head ?? "no head"): the chip right under the summary's one line")
+                XCTAssertFalse(near(try colour(cell, x: x, y: chips - 4), inks.sunWash),
+                               "\(density) \(head ?? "no head"): nothing of the chip above it")
+            }
+        }
+    }
+
+    /// The colour `cell` draws at `x`, `y`, as the screen would show it.
+    private func colour(_ cell: NSView, x: CGFloat, y: CGFloat) throws -> NSColor {
+        let rep = try XCTUnwrap(cell.bitmapImageRepForCachingDisplay(in: cell.bounds))
+        cell.cacheDisplay(in: cell.bounds, to: rep)
+        let scale = CGFloat(rep.pixelsWide) / cell.bounds.width
+        let colour = try XCTUnwrap(rep.colorAt(x: Int(x * scale), y: Int(y * scale)))
+        return try XCTUnwrap(colour.usingColorSpace(.sRGB))
+    }
+
+    private func near(_ a: NSColor, _ b: NSColor) -> Bool {
+        guard let b = b.usingColorSpace(.sRGB) else { return false }
+        return abs(a.redComponent - b.redComponent) + abs(a.greenComponent - b.greenComponent)
+            + abs(a.blueComponent - b.blueComponent) < 0.06
     }
 
     // MARK: What a row says
@@ -161,10 +232,12 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(table.numberOfRows, list.total + 1)
         XCTAssertNil(controller.position(0))
         XCTAssertEqual(controller.position(1), 0)
-        XCTAssertEqual(table.rect(ofRow: 0).height, RowMeasure(.comfortable).height(.brief))
-        // The first mail row starts a day and needs you: a head, the summary and its chip.
+        // "Nothing needs you. The rest can wait." takes one line.
+        XCTAssertEqual(table.rect(ofRow: 0).height,
+                       RowMeasure(.comfortable).height(RowShape(gist: true, oneLine: true)))
+        // The first mail row starts a day and needs you: a head, the summary on one line and its chip.
         XCTAssertEqual(table.rect(ofRow: 1).height, RowMeasure(.comfortable).height(
-            RowShape(head: true, gist: true, chips: true)))
+            RowShape(head: true, gist: true, chips: true, oneLine: true)))
         // Choosing the brief's row alone opens the brief and chooses no mail; with mail, it is left out.
         XCTAssertEqual(controller.tableView(table, selectionIndexesForProposedSelection: IndexSet(integer: 0)), [])
         XCTAssertEqual(app.place, .desk(.brief))
@@ -338,6 +411,82 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(table.rect(ofRow: 4).height, days, "the row that starts the days before")
         XCTAssertEqual(table.numberOfRows, total + 1)
         withExtendedLifetime(app) {}
+    }
+
+    func testANewWidthMeasuresAgainOnlyTheRowsWhoseSummaryChangesLines() async throws {
+        let total = 100_000
+        // A short summary, then one that fits on one line 420 wide and needs two 300 wide, all the way down.
+        let list = MailListModel(load: { offset, limit in
+            MailListModel.Page(total: total, rows: (offset..<min(offset + limit, total)).map { position in
+                Fixture.row(position + 1, summary: position % 2 == 0 ? "Stub summary." : Self.middle)
+            })
+        })
+        list.start()
+        await until { list.copy(at: 0) != nil }
+        let app = MailApp()
+        let measure = RowMeasure(.comfortable)
+        let look = RowLook(inks: RowInks.of(.day, light: .day, highContrast: false), measure: measure,
+                           accounts: [Fixture.ada])
+        let controller = MailboxTableController(list: list, mailbox: app.mailbox, look: look, sections: false)
+        let window = shown(controller)
+        defer { window.close() }
+        let table = controller.table
+        let one = measure.height(RowShape(gist: true, oneLine: true)), two = measure.height(RowShape(gist: true))
+        XCTAssertEqual(table.rect(ofRow: 0).height, one)
+        XCTAssertEqual(table.rect(ofRow: 1).height, one)
+        let cell = try XCTUnwrap(table.view(atColumn: 0, row: 1, makeIfNecessary: false) as? MailRowCell)
+        cell.display()
+
+        // The splitter moves the list narrower: the longer summaries take two lines, and only theirs are measured.
+        let noted = await NotedHeights.during {
+            window.setContentSize(NSSize(width: 300, height: 800))
+            table.layoutSubtreeIfNeeded()
+        }
+        XCTAssertEqual(table.rect(ofRow: 0).height, one)
+        XCTAssertEqual(table.rect(ofRow: 1).height, two)
+        XCTAssertFalse(noted.isEmpty)
+        XCTAssertLessThan(noted.count, 2_000, "the rows worked out, not the folder's 100,000")
+        XCTAssertTrue(noted.allSatisfy { $0 % 2 == 1 }, "only the rows whose summary changed lines")
+        XCTAssertEqual(cell.layer?.needsDisplay(), true, "a row on screen draws again at its new width")
+
+        // A row not worked out yet comes at the new width.
+        table.scrollRowToVisible(5_001)
+        await until { list.copy(at: 5_001) != nil }
+        table.layoutSubtreeIfNeeded()
+        XCTAssertEqual(table.rect(ofRow: 5_001).height, two)
+        XCTAssertEqual(table.rect(ofRow: 5_000).height, one)
+
+        // And wider again, back to one line.
+        window.setContentSize(NSSize(width: 420, height: 800))
+        table.layoutSubtreeIfNeeded()
+        XCTAssertEqual(table.rect(ofRow: 1).height, one)
+        XCTAssertEqual(table.rect(ofRow: 5_001).height, one)
+        withExtendedLifetime(app) {}
+    }
+
+    func testTheBriefsRowTakesTheLinesWhoNeedsYouTakes() async throws {
+        let (_, _, controller) = try await table(brief: BriefLine(needs: [], waiting: 0, canWait: 0))
+        let window = shown(controller)
+        defer { window.close() }
+        let table = controller.table
+        let measure = RowMeasure(.comfortable)
+        XCTAssertEqual(table.rect(ofRow: 0).height, measure.height(RowShape(gist: true, oneLine: true)))
+        // Who needs you grows past one line: the row grows with it.
+        let names = ["Bartholomew-Maximilian", "Wilhelmina-Josephine", "Christabel-Evangeline"]
+        let needs = names.enumerated().map { index, name in
+            DeskFixture.item(200 + index, from: "p\(index)@example.test", name: "\(name) Example", subject: "Signs")
+        }
+        let line = BriefLine(needs: needs, waiting: 0, canWait: 0)
+        XCTAssertFalse(RowMeasure.fits(RowFaces.gistWidth(line.gist), in: 420), line.gist)
+        controller.setBrief(line, chosen: false)
+        XCTAssertEqual(table.rect(ofRow: 0).height, measure.height(RowShape(gist: true)))
+        let cell = try XCTUnwrap(table.view(atColumn: 0, row: 0, makeIfNecessary: false) as? BriefRowCell)
+        cell.display()
+        window.setContentSize(NSSize(width: 900, height: 800))
+        table.layoutSubtreeIfNeeded()
+        XCTAssertEqual(table.rect(ofRow: 0).height, measure.height(RowShape(gist: true, oneLine: true)),
+                       "wider, it takes one")
+        XCTAssertEqual(cell.layer?.needsDisplay(), true)
     }
 
     func testARowsDotTakesItsAccountsColourOnceTheAccountsAreRead() throws {
