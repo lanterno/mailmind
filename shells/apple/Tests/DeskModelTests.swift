@@ -318,6 +318,22 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(routes.sent("GET", "/api/briefing").count, 1, "a second open reads only the digest again")
     }
 
+    func testArrivingAtTheBriefWritesNoneAndOpeningItWritesTodays() async {
+        scriptTheBrief(briefing: Self.missing)
+        routes.answer("POST", "/api/briefing", DeskFixture.brief)
+        let model = briefModel()
+
+        model.glance()
+        await model.load()
+        XCTAssertTrue(routes.sent("POST", "/api/briefing").isEmpty, "the arrow keys passing over it write nothing")
+        XCTAssertTrue(model.missing, "it offers to write today's")
+
+        await model.load()
+        XCTAssertEqual(routes.sent("POST", "/api/briefing").count, 1, "opened on purpose, today's is written")
+        XCTAssertFalse(model.missing)
+        XCTAssertEqual(model.brief, DeskFixture.brief)
+    }
+
     func testMailChangingReadsOnlyTheTalliesUntilTheBriefIsOpenAndABurstReadsOnceMore() async {
         scriptTheBrief(briefing: .brief(DeskFixture.brief))
         let model = briefModel()

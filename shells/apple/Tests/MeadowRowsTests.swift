@@ -172,6 +172,53 @@ final class MeadowRowsTests: XCTestCase {
                        IndexSet([1, 2]))
     }
 
+    func testTheBriefBesideAnAccountsInboxKeepsItsList() async throws {
+        let app = MailApp()
+        app.mailbox.wire = Fixture.server().wire
+        await app.mailbox.refresh()
+        app.mailbox.tab = .all
+        let work = Place.folder(account: Fixture.work, folder: "INBOX")
+        app.place = work
+        await until { app.list?.copy(at: 0) != nil }
+        let list = try XCTUnwrap(app.list)
+        app.place = .desk(.brief)
+        XCTAssertEqual(app.listed, work)
+        XCTAssertTrue(app.list === list, "the list, and where it was scrolled, stay as they were")
+        app.mailbox.chose([try XCTUnwrap(list.copy(at: 2))])
+        XCTAssertEqual(app.place, work, "a row chosen beside the brief goes back to the Inbox it is in")
+        app.place = .folder(account: Fixture.work, folder: "[Gmail]/Sent Mail")
+        app.place = .desk(.brief)
+        XCTAssertEqual(app.listed, .allInboxes, "from any other list the brief stands beside every Inbox")
+    }
+
+    func testArrowingOntoTheBriefsRowShowsItAndOnlyAClickOrReturnOpensIt() async throws {
+        let brief = BriefLine(needs: [], waiting: 0, canWait: 0)
+        let (app, _, controller) = try await table(brief: brief)
+        let window = shown(controller)
+        defer { window.close() }
+        let table = controller.table
+        var opened: [Bool] = []
+        app.mailbox.opensBrief = { deliberately in
+            opened.append(deliberately)
+            app.place = .desk(.brief)
+            controller.setBrief(brief, chosen: true)
+        }
+        func key(_ characters: String, _ code: UInt16, _ flags: NSEvent.ModifierFlags = []) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                                           windowNumber: window.windowNumber, context: nil, characters: characters,
+                                           charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+        }
+        // A click proposes the brief's row alone, with no key pressed.
+        _ = controller.tableView(table, selectionIndexesForProposedSelection: IndexSet(integer: 0))
+        XCTAssertEqual(opened, [true])
+
+        table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        table.keyDown(with: try key("\u{F700}", 126, [.numericPad, .function]))
+        XCTAssertEqual(opened, [true, false], "↑ onto the brief's row only shows it")
+        table.keyDown(with: try key("\r", 36))
+        XCTAssertEqual(opened, [true, false, true], "Return opens it")
+    }
+
     func testChoosingARowTellsTheMailboxItsMail() async throws {
         let (app, list, controller) = try await table(brief: BriefLine(needs: [], waiting: 0, canWait: 0))
         controller.table.selectRowIndexes(IndexSet(integer: 2), byExtendingSelection: false)
