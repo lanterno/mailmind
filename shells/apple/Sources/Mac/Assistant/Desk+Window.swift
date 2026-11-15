@@ -471,8 +471,7 @@ struct DeskMessageItems: View {
     var body: some View {
         let copies = desk?.chosenCopies ?? []
         if let desk, !copies.isEmpty {
-            AttentionMenuItems(copies: copies, stack: desk.stack, model: desk.attention,
-                               askUntil: { desk.askWhen($0) }, shortcuts: true)
+            AttentionMenuItems(copies: copies, stack: desk.stack, model: desk.attention, shortcuts: true)
             if copies.count == 1, let copy = copies.first {
                 Divider()
                 Button("Summarize", systemImage: "sparkles") { Task { await desk.summaries.summarize(copy) } }

@@ -41,6 +41,9 @@ enum AttentionStack: String, Hashable, Sendable, CaseIterable {
 final class AttentionModel {
     /// The verb running, so a second press waits for the first.
     private(set) var acting = false
+    /// The messages a time of a person's own is being asked for, while the window's dialog asks it
+    /// (`SnoozeTimeDialog`).
+    var choosingTime: [MailCopy]?
     @ObservationIgnored let link: CoreLink
     @ObservationIgnored let notices: DeskNotices
     @ObservationIgnored var changed: () -> Void = {}

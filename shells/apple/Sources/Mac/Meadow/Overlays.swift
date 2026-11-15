@@ -665,9 +665,11 @@ enum MeadowPopoverKeys {
         modifiers.isDisjoint(with: [.command, .control, .option])
     }
 
-    /// Whether `responder` takes typed text: a field's editor while a field is edited, or a text view that can be.
+    /// Whether `responder` takes typed text: a field's editor while a field is edited, a text view that can be, or a
+    /// date and time typed in a field of their own (a snooze's time of one's own).
     static func typesText(_ responder: NSResponder?) -> Bool {
-        (responder as? NSTextView)?.isEditable ?? false
+        if let picker = responder as? NSDatePicker { return picker.datePickerStyle != .clockAndCalendar }
+        return (responder as? NSTextView)?.isEditable ?? false
     }
 }
 

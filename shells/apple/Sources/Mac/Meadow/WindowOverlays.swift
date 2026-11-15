@@ -3,11 +3,13 @@ import AppKit
 import SwiftUI
 
 /// What stands on the window's scrim, one at a time (the mockup's `openOverlay()`): the palette, with the words it
-/// opens on (`? ` to ask, `! ` and a command for a bulk action), Move To, Save View, or the keyboard's legend.
+/// opens on (`? ` to ask, `! ` and a command for a bulk action), Move To, Save View, a snooze's time of one's own, or
+/// the keyboard's legend.
 enum WindowDialog: Equatable {
     case palette(initial: String)
     case move(MoveAsk)
     case saveView(String)
+    case snoozeTime([MailCopy])
     case keys
 
     /// Which dialog it is, whatever it holds: a dialog drawn afresh only when this changes.
@@ -16,16 +18,18 @@ enum WindowDialog: Equatable {
         case .palette: "palette"
         case .move: "move"
         case .saveView: "save-view"
+        case .snoozeTime: "snooze-time"
         case .keys: "keys"
         }
     }
 
-    /// The one to show of all asked for: what a person was asked to answer (a move's folder, a view's name), then
-    /// what the desk opened (Ask, a bulk action), the palette, and the legend.
-    static func shown(moving: MoveAsk?, savingView: String?, sheet: Desk.Sheet?, planned: String?, palette: Bool,
-                      keys: Bool) -> WindowDialog? {
+    /// The one to show of all asked for: what a person was asked to answer (a move's folder, a view's name, a
+    /// snooze's time), then what the desk opened (Ask, a bulk action), the palette, and the legend.
+    static func shown(moving: MoveAsk?, savingView: String?, choosingTime: [MailCopy]? = nil, sheet: Desk.Sheet?,
+                      planned: String?, palette: Bool, keys: Bool) -> WindowDialog? {
         if let moving { return .move(moving) }
         if let savingView { return .saveView(savingView) }
+        if let choosingTime { return .snoozeTime(choosingTime) }
         switch sheet {
         case .ask?: return .palette(initial: "? ")
         case .plan?: return .palette(initial: "! " + (planned ?? ""))
@@ -48,7 +52,8 @@ struct WindowOverlays: ViewModifier {
     @State private var focus = DialogFocus()
 
     func body(content: Content) -> some View {
-        let dialog = WindowDialog.shown(moving: mailbox.moving, savingView: mailbox.savingView, sheet: desk?.sheet,
+        let dialog = WindowDialog.shown(moving: mailbox.moving, savingView: mailbox.savingView,
+                                        choosingTime: desk?.attention.choosingTime, sheet: desk?.sheet,
                                         planned: desk?.plan.command, palette: mailbox.paletteOpen,
                                         keys: status.showingKeys)
         content
@@ -74,6 +79,8 @@ struct WindowOverlays: ViewModifier {
             .onChange(of: dialog != nil) { _, up in
                 mailbox.typing = up
                 if up { focus.opened() } else { focus.closing() }
+                // The snooze chooser floats above the scrim: a dialog (⇧⌘H's time) takes its place.
+                if up, case .snoozeUntil? = desk?.sheet { desk?.sheet = nil }
             }
             .onChange(of: mailbox.typing) { _, now in if !now && dialog != nil { mailbox.typing = true } }
     }
@@ -91,6 +98,12 @@ struct WindowOverlays: ViewModifier {
         case .saveView(let query):
             MeadowDialog(place: .form, close: close) {
                 SaveViewSheet(mailbox: mailbox, query: query, close: close)
+            }
+        case .snoozeTime(let copies):
+            if let desk {
+                MeadowDialog(place: .form, close: close) {
+                    SnoozeTimeDialog(copies: copies, model: desk.attention, close: close)
+                }
             }
         case .keys:
             MeadowDialog(place: .keys, close: close) {
@@ -112,6 +125,7 @@ struct WindowOverlays: ViewModifier {
         mailbox.savingView = nil
         status.showingKeys = false
         guard let desk else { return }
+        desk.attention.choosingTime = nil
         switch desk.sheet {
         case .ask?, .plan?: desk.sheet = nil
         default: break
