@@ -187,4 +187,64 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(controller.table.numberOfRows, list.total)
         XCTAssertEqual(controller.position(0), 0)
     }
+
+    // MARK: A row's buttons
+
+    /// The table in a window that never shows, so its rows on screen have cells.
+    private func shown(_ controller: MailboxTableController) -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 800), styleMask: [.borderless],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = controller.scrollView
+        window.layoutIfNeeded()
+        controller.table.layoutSubtreeIfNeeded()
+        return window
+    }
+
+    /// The cell's drawing, as the screen would show it.
+    private func draw(_ view: NSView) {
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return XCTFail("no drawing") }
+        view.cacheDisplay(in: view.bounds, to: rep)
+    }
+
+    func testARowsButtonsActOnlyWhereDrawnAndWhenThePressEndsOnThem() async throws {
+        let (app, list, controller) = try await table(brief: nil)
+        var snoozed: [MailCopy] = []
+        app.mailbox.snoozes = { snoozed += $0.map(MailCopy.init) }
+        let window = shown(controller)
+        defer { window.close() }
+        let table = controller.table
+        let cell = try XCTUnwrap(table.view(atColumn: 0, row: 1, makeIfNecessary: false) as? MailRowCell)
+        let button = try XCTUnwrap(cell.frame(of: .snooze))
+        let on = table.convert(NSPoint(x: button.midX, y: button.midY), from: cell)
+        draw(cell)
+        XCTAssertFalse(table.beginPress(at: on), "no button is drawn there: the click chooses the row")
+        controller.hover(at: on)
+        XCTAssertTrue(cell.state.hovering)
+        XCTAssertFalse(table.beginPress(at: on), "the pointer is there, but the screen hasn't shown the buttons yet")
+        draw(cell)
+        XCTAssertTrue(table.beginPress(at: on))
+        table.endPress(at: NSPoint(x: on.x - 160, y: on.y))
+        XCTAssertEqual(snoozed, [], "a press dragged off the button does nothing")
+        XCTAssertTrue(table.beginPress(at: on))
+        table.endPress(at: on)
+        XCTAssertEqual(snoozed, [MailCopy(try XCTUnwrap(list.copy(at: 1)))])
+        XCTAssertTrue(app.mailbox.chosenRows.isEmpty, "a button chooses no row")
+    }
+
+    func testAPointerAlreadyOverARowShowsItsButtons() async throws {
+        let (_, _, controller) = try await table(brief: nil)
+        let window = shown(controller)
+        defer { window.close() }
+        let table = controller.table
+        let cell = try XCTUnwrap(table.view(atColumn: 0, row: 2, makeIfNecessary: false) as? MailRowCell)
+        let at = cell.convert(NSPoint(x: cell.bounds.midX, y: cell.bounds.maxY - 8), to: nil)
+        let entered = try XCTUnwrap(NSEvent.enterExitEvent(
+            with: .mouseEntered, location: at, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+            context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+        table.mouseEntered(with: entered)
+        XCTAssertTrue(cell.state.hovering, "the pointer came over the list without moving over a row")
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+        XCTAssertFalse(cell.state.hovering, "a window in the back shows no row's buttons")
+    }
 }
