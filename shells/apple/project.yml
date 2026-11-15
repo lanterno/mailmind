@@ -86,6 +86,8 @@ targets:
       - Sources/Mac/Status
       # The mailbox (its places, lists, verbs and views) with the window's state it hangs on
       - Sources/Mac/Mailbox
+      # What the areas share: Quick Look's copies
+      - Sources/Mac/Shared
       - Sources/Window/MailApp.swift
       - Sources/Window/Reader.swift
     dependencies:
