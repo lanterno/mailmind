@@ -8,6 +8,9 @@
   whoever could change the feed on its way (or on GitHub) can't change what it says either: the version, the minimum
   macOS, the links. generate_appcast signs it when it finds this key in the app it reads. Sparkle needs
   SUVerifyUpdateBeforeExtraction with it.
+
+  CFBundleURLTypes: mailto: links, so MailMind can be chosen as the Mac's mail app (Mail › Settings › Default email
+  reader) and a link opens its composer.
 -->
 <plist version="1.0">
 <dict>
@@ -21,6 +24,17 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 MailMind contributors. MIT License.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Email Address URL</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mailto</string>
+			</array>
+		</dict>
+	</array>
 	<key>MailMindChecksForUpdates</key>
 	<string>$(MAILMIND_CHECKS_FOR_UPDATES)</string>
 </dict>

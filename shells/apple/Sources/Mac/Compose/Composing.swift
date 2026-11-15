@@ -56,6 +56,8 @@ final class Composing: ComposeHost {
     @ObservationIgnored private var shownCopy: MailCopy?
     @ObservationIgnored private var dwell: Task<Void, Never>?
     @ObservationIgnored private var openingAhead: Int?
+    /// The last mailto: link that came before the window could write.
+    @ObservationIgnored private var waitingMail: Mailto?
     /// Bumped whenever the tray should read again.
     private(set) var outboxTurn = 0
 
@@ -94,7 +96,23 @@ final class Composing: ComposeHost {
     func readDigest() async {
         guard let core else { return }
         if let read = try? await core.get(API.Get.Digest.self, [:]) { digest = read }
+        if let waiting = waitingMail, canWrite {
+            waitingMail = nil
+            write(waiting)
+        }
     }
+
+    /// A mailto: link macOS handed the app: a composer now, or once the window has opened the core and read who you
+    /// are (a link can launch the app).
+    func write(_ mail: Mailto) {
+        guard canWrite else {
+            waitingMail = mail
+            return
+        }
+        open(mail.seed)
+    }
+
+    private var canWrite: Bool { core != nil && openWindow != nil && digest != nil }
 
     func readPreferences() async {
         guard let core else { return }

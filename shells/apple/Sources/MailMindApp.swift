@@ -3,6 +3,10 @@ import SwiftUI
 @main
 struct MailMindApp: App {
     @State private var demo = Demo()
+    #if os(macOS)
+    /// The mailto: links macOS hands the app (Mac/Compose/Mailto.swift).
+    @NSApplicationDelegateAdaptor(MailMindDelegate.self) private var delegate
+    #endif
 
     #if os(macOS)
     init() {
