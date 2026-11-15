@@ -77,8 +77,8 @@ final class InviteReplies {
     }
 }
 
-/// An invite's card above the mail: what it is, when and where, who asked and who's coming, the answer buttons, and
-/// Add to Calendar for the invite's own calendar file.
+/// An invite's card in the message, as Meadow's `.invite` draws it (#44): a calendar's leaf with the day, what it
+/// is, when and where, who asked and who's coming, the answers, and Add to calendar for the invite's own file.
 struct InviteCard: View {
     let copy: MailCopy
     let invite: API.Invite
@@ -87,74 +87,158 @@ struct InviteCard: View {
     let replies: InviteReplies
     let link: CoreLink
     let notices: DeskNotices
+    @Environment(\.meadow) private var meadow
+
+    private var answerable: Bool {
+        (invite.method == "REQUEST" || invite.method.isEmpty) && !(invite.organizer.email ?? "").isEmpty
+    }
 
     var body: some View {
-        DeskCard(tint: .orange) {
-            HStack(spacing: 6) {
-                Label(Self.kind(invite.method), systemImage: "calendar")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.orange)
-                if !invite.status.isEmpty && invite.status != "CONFIRMED" {
-                    Text(verbatim: "· \(invite.status.lowercased())").font(.callout).foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 16) {
+            leaf
+            VStack(alignment: .leading, spacing: 0) {
+                if invite.method != "REQUEST" && !invite.method.isEmpty
+                    || (!invite.status.isEmpty && invite.status != "CONFIRMED") {
+                    let status = invite.status.isEmpty || invite.status == "CONFIRMED"
+                        ? "" : invite.status.lowercased()
+                    Text(verbatim: [invite.method == "REQUEST" ? "" : Self.kind(invite.method), status]
+                        .filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.meadow(.ui, 11, .heavy))
+                        .tracking(0.88)
+                        .textCase(.uppercase)
+                        .foregroundStyle(meadow.rust)
+                        .padding(.bottom, 4)
                 }
-            }
-            Text(invite.summary).font(.title3.weight(.semibold)).textSelection(.enabled)
-            Label(invite.recurrence.isEmpty ? invite.when : "\(invite.when) · \(invite.recurrence)", systemImage: "clock")
-                .font(.callout)
-            if !invite.location.isEmpty {
-                Label(invite.location, systemImage: "mappin.and.ellipse").font(.callout).textSelection(.enabled)
-            }
-            if let organizer = Self.who(invite.organizer) {
-                Text("organizer: \(organizer)").font(.caption).foregroundStyle(.secondary)
-            }
-            if let attendees = Self.attendees(invite.attendees) {
-                Text(attendees).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-            }
-            HStack(spacing: 8) {
-                if (invite.method == "REQUEST" || invite.method.isEmpty), !(invite.organizer.email ?? "").isEmpty {
-                    answers
+                Text(invite.summary)
+                    .font(.meadow(.ui, 16.5, .bold))
+                    .foregroundStyle(meadow.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                line(invite.recurrence.isEmpty ? invite.when : "\(invite.when) · \(invite.recurrence)")
+                if !invite.location.isEmpty { line(invite.location) }
+                if let people = Self.people(organizer: invite.organizer, attendees: invite.attendees) {
+                    Text(people)
+                        .font(.meadow(.ui, 12.5))
+                        .foregroundStyle(meadow.ink3)
+                        .lineLimit(2)
+                        .padding(.top, 4)
                 }
-                Spacer(minLength: 0)
-                if let part {
-                    Button("Add to Calendar", systemImage: "calendar.badge.plus") { Task { await addToCalendar(part) } }
+                FlowLayout(spacing: 6) {
+                    if answerable { answers }
+                    if let part {
+                        Button { Task { await addToCalendar(part) } } label: {
+                            MeadowIconView(.cal, size: 14)
+                            Text("Add to calendar")
+                        }
+                        .meadowButton(.quiet, small: true)
                         .help("Opens the invite’s calendar file in your calendar app")
+                    }
                 }
+                .padding(.top, 12)
             }
-            .controlSize(.small)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(16)
+        .background(meadow.paperRaised, in: RoundedRectangle(cornerRadius: 16))
+        .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(meadow.line, lineWidth: 1) }
+        .padding(.top, 16)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(Self.kind(invite.method)): \(invite.summary)")
+    }
+
+    /// The calendar's leaf (`.cal`): the month in rust over the day.
+    @ViewBuilder private var leaf: some View {
+        let day = Self.calendarDay(invite.startIso)
+        VStack(spacing: 0) {
+            Text(verbatim: day?.month ?? "")
+                .font(.meadow(.ui, 11, .heavy))
+                .tracking(0.88)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 22, maxHeight: 22)
+                .background(meadow.rust)
+            Text(verbatim: day?.day ?? "")
+                .font(.meadow(.display, 27, .bold))
+                .foregroundStyle(meadow.ink)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: 62, height: 66)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(meadow.line2, lineWidth: 1) }
+        .accessibilityHidden(true)
+    }
+
+    private func line(_ text: String) -> some View {
+        Text(text)
+            .font(.meadow(.ui, 13.5))
+            .foregroundStyle(meadow.ink2)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+            .padding(.top, 4)
     }
 
     @ViewBuilder private var answers: some View {
         switch replies.said[copy] {
         case nil, .failed:
-            HStack(spacing: 6) {
-                Button { reply(.accept) } label: { Label("Accept", systemImage: "checkmark") }
-                    .tint(.green)
-                Button { reply(.tentative) } label: { Label("Maybe", systemImage: "questionmark") }
-                Button { reply(.decline) } label: { Label("Decline", systemImage: "xmark") }
-                    .tint(.red)
+            Button { reply(.accept) } label: {
+                MeadowIconView(.check, size: 14)
+                Text("Accept")
             }
-            .buttonStyle(.bordered)
+            .meadowButton(.primary, small: true)
+            Button("Maybe") { reply(.tentative) }
+                .meadowButton(small: true)
+            Button("Decline") { reply(.decline) }
+                .meadowButton(small: true)
             if case .failed(let why)? = replies.said[copy] {
-                Text(why).font(.caption).foregroundStyle(.red)
+                said(why, in: meadow.rust)
             }
         case .sending:
             ProgressView().controlSize(.small)
-            Text("Sending RSVP…").font(.callout).foregroundStyle(.secondary)
+            said(String(localized: "Sending RSVP…"), in: meadow.ink3)
         case .queued(let queued, _):
-            Text("\(InviteReplies.words(queued.decision)) — reply sent to \(queued.organizer.isEmpty ? String(localized: "organizer") : queued.organizer)")
-                .font(.callout)
-                .foregroundStyle(.green)
+            said(Self.sent(queued), in: meadow.moss)
             Button("Undo") { Task { await replies.undo(copy) } }
-                .buttonStyle(.link)
+                .buttonStyle(ReaderLinkStyle())
+                .focusEffectDisabled()
         case .sent(let queued):
-            Text("\(InviteReplies.words(queued.decision)) — reply sent to \(queued.organizer.isEmpty ? String(localized: "organizer") : queued.organizer)")
-                .font(.callout)
-                .foregroundStyle(.green)
+            said(Self.sent(queued), in: meadow.moss)
         case .taken:
-            Text("RSVP not sent").font(.callout).foregroundStyle(.secondary)
-            Button("Answer Again") { replies.again(copy) }.buttonStyle(.link)
+            said(String(localized: "RSVP not sent"), in: meadow.ink3)
+            Button("Answer again") { replies.again(copy) }
+                .buttonStyle(ReaderLinkStyle())
+                .focusEffectDisabled()
         }
+    }
+
+    private func said(_ text: String, in colour: Color) -> some View {
+        Text(text)
+            .font(.meadow(.ui, 13, .semibold))
+            .foregroundStyle(colour)
+            .frame(minHeight: 28)
+    }
+
+    private static func sent(_ queued: API.RsvpQueued) -> String {
+        let to = queued.organizer.isEmpty ? String(localized: "organizer") : queued.organizer
+        return String(localized: "\(InviteReplies.words(queued.decision)) — reply sent to \(to)")
+    }
+
+    /// The month, short and in capitals, and the day, of an event that starts at `iso`: the date as the invite
+    /// writes it, in the event's own time, so the leaf shows the day the invite names.
+    static func calendarDay(_ iso: String, locale: Locale = .current) -> (month: String, day: String)? {
+        let parts = iso.prefix(10).split(separator: "-")
+        guard parts.count == 3, let month = Int(parts[1]), let day = Int(parts[2]), (1...12).contains(month),
+              (1...31).contains(day) else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        let months = formatter.shortStandaloneMonthSymbols ?? formatter.shortMonthSymbols ?? []
+        guard months.count == 12 else { return nil }
+        return (months[month - 1].replacingOccurrences(of: ".", with: "").uppercased(with: locale), String(day))
+    }
+
+    /// Who asked and who's coming, on one line: "From Ada · 3 attendees: Ada, Grace, Alan".
+    static func people(organizer: API.Party, attendees: [API.Party]) -> String? {
+        let parts = [who(organizer).map { String(localized: "From \($0)") }, Self.attendees(attendees)]
+            .compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func reply(_ decision: API.RsvpDecision) {

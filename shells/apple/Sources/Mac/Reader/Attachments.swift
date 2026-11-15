@@ -19,53 +19,19 @@ struct AttachmentsRow: View {
     }
 
     var body: some View {
-        FlowLayout(spacing: 6) {
+        FlowLayout(spacing: 10) {
             ForEach(files, id: \.partId) { file in
-                chip(file)
+                AttachmentCard(file: file, busy: busy == file.partId) {
+                    Task { await look(file) }
+                } save: {
+                    Task { await save(file) }
+                }
             }
         }
         .quickLookPreview($looking)
         .onChange(of: looking) { old, new in
             if new == nil, let old { Self.forget(old) }
         }
-    }
-
-    private func chip(_ file: API.AttachmentPart) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "paperclip")
-                .foregroundStyle(.secondary)
-            Text(file.filename)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Text(FileSize.words(file.size))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-            if busy == file.partId {
-                ProgressView().controlSize(.mini)
-            }
-            Button {
-                Task { await save(file) }
-            } label: {
-                Image(systemName: "arrow.down.circle")
-            }
-            .buttonStyle(.borderless)
-            .help("Save \(file.filename)…")
-            .accessibilityLabel("Save \(file.filename)")
-        }
-        .font(.callout)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(.quaternary.opacity(0.6), in: Capsule())
-        .contentShape(Capsule())
-        .onTapGesture { Task { await look(file) } }
-        .contextMenu {
-            Button("Quick Look") { Task { await look(file) } }
-            Button("Save…") { Task { await save(file) } }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Shows it with Quick Look")
-        .help("Quick Look \(file.filename)")
     }
 
     /// Never trust a filename a message gave: no path, and no control character, quote or line break (the server's
@@ -135,6 +101,116 @@ struct AttachmentsRow: View {
         ]
         var marked = url
         try? marked.setResourceValues(values)
+    }
+}
+
+/// What kind of file an attachment is, as its card's badge says it (`.att .ft`): its extension, short, or what its
+/// type is when it has none.
+enum FileKind {
+    static func label(filename: String, contentType: String) -> String {
+        let name = filename.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
+        if let dot = name.lastIndex(of: "."), dot != name.startIndex {
+            let ext = name[name.index(after: dot)...].uppercased()
+            if (1...4).contains(ext.count), ext.allSatisfy({ $0.isLetter || $0.isNumber }) { return ext }
+        }
+        let type = contentType.lowercased()
+        if type.hasPrefix("image/") { return "IMG" }
+        if type.hasPrefix("text/") { return "TXT" }
+        if type == "application/pdf" { return "PDF" }
+        return "FILE"
+    }
+}
+
+/// One file of a message (`.att`): its kind's badge, its name, its size, and Open (Quick Look) and Download (a save
+/// panel). Clicking the card opens it too.
+private struct AttachmentCard: View {
+    let file: API.AttachmentPart
+    let busy: Bool
+    let open: () -> Void
+    let save: () -> Void
+    @Environment(\.meadow) private var meadow
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(FileKind.label(filename: file.filename, contentType: file.contentType))
+                .font(.meadow(.ui, 9.5, .heavy))
+                .tracking(0.57)
+                .foregroundStyle(.white)
+                .padding(.bottom, 5)
+                .frame(width: 32, height: 38, alignment: .bottom)
+                .background(LinearGradient(colors: [Color(meadow: 0xC8573C), Color(meadow: 0xA3412A)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            in: RoundedRectangle(cornerRadius: 6))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: file.filename)
+                    .font(.meadow(.ui, 13.5, .bold))
+                    .foregroundStyle(meadow.ink)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                HStack(spacing: 0) {
+                    Text(verbatim: FileSize.words(file.size) + " · ")
+                        .monospacedDigit()
+                    Button("Open", action: open)
+                        .buttonStyle(AttachmentWordStyle())
+                        .focusEffectDisabled()
+                        .help("Quick Look \(file.filename)")
+                    Text(verbatim: " · ")
+                    Button("Download", action: save)
+                        .buttonStyle(AttachmentWordStyle())
+                        .focusEffectDisabled()
+                        .help("Save \(file.filename)…")
+                        .accessibilityLabel("Save \(file.filename)")
+                    if busy {
+                        ProgressView().controlSize(.mini).padding(.leading, 6)
+                    }
+                }
+                .font(.meadow(.ui, 12))
+                .foregroundStyle(meadow.ink3)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(minWidth: 240, alignment: .leading)
+        .fixedSize()
+        .background(meadow.paperRaised, in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(hovering ? meadow.line2 : meadow.line, lineWidth: 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .onHover { hovering = $0 }
+        .onTapGesture(perform: open)
+        .contextMenu {
+            Button("Quick Look", action: open)
+            Button("Save…", action: save)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(file.filename), \(FileSize.words(file.size))")
+    }
+}
+
+/// Open and Download in a file's card: its small words, underlined while the pointer is on them.
+private struct AttachmentWordStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        AttachmentWord(label: configuration.label)
+    }
+}
+
+private struct AttachmentWord: View {
+    let label: ButtonStyleConfiguration.Label
+    @Environment(\.meadow) private var meadow
+    @Environment(\.isFocused) private var focused
+    @State private var hovering = false
+
+    var body: some View {
+        label
+            .underline(hovering)
+            .foregroundStyle(hovering ? meadow.ink : meadow.ink3)
+            .contentShape(Rectangle())
+            .onHover { hovering = $0 }
+            .meadowFocusRing(focused, radius: 4)
     }
 }
 #endif
