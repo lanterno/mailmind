@@ -109,6 +109,44 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertEqual(faces, "MailMind Read:loaded", "the reading face loaded from its data: URL")
     }
 
+    func testNightsPlainTextNeverSitsOnTheFramesWhite() async throws {
+        let night = ReaderPalette.of(MeadowPalette.night)
+        let look = ReaderPalette.look(html: false, prefs: .init(), palette: .night, dark: true)
+        XCTAssertFalse(look.sheet, "on the pane's paper")
+        let document = "<!doctype html><html><head></head><body><pre>Thursday, then.</pre></body></html>"
+        // The frame's own clear switch: on this macOS it is there, and it takes.
+        let frame = FrameWebView(frame: CGRect(x: 0, y: 0, width: 200, height: 100),
+                                 configuration: WKWebViewConfiguration())
+        XCTAssertTrue(frame.clearBackground(), "WebKit still has its private switch: the paper's grain shows")
+        if frame.responds(to: NSSelectorFromString("_drawsBackground")) {
+            XCTAssertEqual(frame.value(forKey: "_drawsBackground") as? Bool, false)
+        }
+        // Where it couldn't, the document paints the night's paper over the web view's white.
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        let view = WKWebView(frame: CGRect(x: 0, y: 0, width: 200, height: 100), configuration: configuration)
+        let background = { (dressed: String) async throws -> String? in
+            let loaded = FrameLoaded()
+            view.navigationDelegate = loaded
+            view.loadHTMLString(dressed, baseURL: nil)
+            await loaded.wait()
+            return try await view.callAsyncJavaScript(
+                "return getComputedStyle(document.documentElement).backgroundColor;",
+                contentWorld: .defaultClient) as? String
+        }
+        let clear = try await background(look.dress(document))
+        XCTAssertEqual(clear, "rgba(0, 0, 0, 0)", "a clear frame's document lets the pane's paper show")
+        let painted = try await background(look.dress(document, clear: false))
+        XCTAssertEqual(painted, Self.rgb(night.background), "the night's paper, never white")
+    }
+
+    /// "#RRGGBB" as a computed style says it.
+    private static func rgb(_ hex: String) -> String {
+        let value = Int(hex.dropFirst(), radix: 16) ?? 0
+        return "rgb(\(value >> 16 & 0xFF), \(value >> 8 & 0xFF), \(value & 0xFF))"
+    }
+
     // MARK: The reading settings
 
     private func key(_ code: UInt16) -> NSEvent {

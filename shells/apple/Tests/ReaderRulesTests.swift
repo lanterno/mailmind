@@ -140,6 +140,24 @@ final class MailLookTests: XCTestCase {
         XCTAssertTrue(look(html: false).dress(document).contains("<style>" + face))
     }
 
+    func testAFrameThatCantBeClearPaintsThePanesPaperItself() {
+        let document = "<html><head></head><body><pre>Hi</pre></body></html>"
+        let dusk = MailLook.Palette(ink: "#eee", background: "#223", link: "#9cf", quoteLine: "#555", quoteInk: "#aaa")
+        let plain = MailLook.of(html: false, prefs: .init(), darkAppearance: true, dark: night, light: dusk)
+        XCTAssertFalse(plain.sheet)
+        XCTAssertEqual(plain.paper, "#223", "the light's own paper, whichever palette the mail's ink comes from")
+        XCTAssertFalse(plain.dress(document).contains("html{background:#223}"), "a clear frame shows the paper")
+        XCTAssertTrue(plain.dress(document, clear: false).contains("html{background:#223}</style>"),
+                      "one that can't paints it, after the look's transparent so it wins")
+        let darkened = MailLook.of(html: true, prefs: .init(colors: .dark), darkAppearance: true, dark: night,
+                                   light: dusk)
+        XCTAssertTrue(darkened.dress(document, clear: false).contains("html{background:#223}</style>"))
+        XCTAssertTrue(look(html: false).dress(document, clear: false).contains("html{background:#FFFDF8}</style>"))
+        let sheet = look(html: true, colors: .original, dark: true)
+        XCTAssertNil(sheet.paper)
+        XCTAssertEqual(sheet.dress(document, clear: false), sheet.dress(document), "a sheet paints its own")
+    }
+
     func testTheFoldIsDrawnInEveryLook() {
         for each in [look(html: true), look(html: true, colors: .dark), look(html: false)] {
             XCTAssertTrue(each.css.contains("details.mm-quote"))
