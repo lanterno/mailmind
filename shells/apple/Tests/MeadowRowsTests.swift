@@ -242,7 +242,8 @@ final class MeadowRowsTests: XCTestCase {
         // The mailbox names the accounts, and the table holds it weakly: the window's app keeps it.
         defer { withExtendedLifetime(app) {} }
         func said(_ row: Int) throws -> String {
-            let cell = try XCTUnwrap(controller.table.view(atColumn: 0, row: row, makeIfNecessary: false) as? MailRowCell)
+            let view = controller.table.view(atColumn: 0, row: row, makeIfNecessary: false)
+            let cell = try XCTUnwrap(view as? MailRowCell)
             return try XCTUnwrap(cell.accessibilityLabel())
         }
         let first = try said(0), second = try said(1)
