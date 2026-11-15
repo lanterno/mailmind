@@ -116,11 +116,14 @@ struct StatusScenes: Scene {
             SettingsWindow(status: .shared)
                 .meadowLit()
         }
+        // Each window's head is Meadow's, the traffic lights on it, with no title bar of the system's over it.
+        .windowStyle(.hiddenTitleBar)
         .commands { StatusCommands() }
         SwiftUI.Window("MailMind Help", id: HelpWindow.id) {
             HelpWindow(status: .shared)
                 .meadowLit()
         }
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
     }
 }

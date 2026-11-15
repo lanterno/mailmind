@@ -28,6 +28,9 @@ struct MailMindApp: App {
             DeskCommands()
         }
         #if os(macOS)
+        // Meadow's top bar stands where the title bar was, the traffic lights on it (Mac/Meadow/WindowChrome.swift):
+        // with SwiftUI's own title bar, its title and its glass are drawn over the top bar.
+        .windowStyle(.hiddenTitleBar)
         // Three columns want room; step 0's list keeps the size its measurements were taken at.
         .defaultSize(width: Root.stepZero ? 560 : 1180, height: Root.stepZero ? 820 : 760)
         // The menu bar's writing, and each composer in a window of its own: Mac/Compose.
@@ -40,6 +43,7 @@ struct MailMindApp: App {
             ComposeWindow(id: id)
                 .meadowLit()
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 720, height: 640)
         .restorationBehavior(.disabled)
         .commandsRemoved()
