@@ -144,18 +144,35 @@ struct MessageHeader: View {
                     .textSelection(.enabled)
                     .accessibilityAddTraits(.isHeader)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(name).font(.headline)
-                if let address = opened.fromAddr, !address.isEmpty, address != name {
-                    Text(address).foregroundStyle(.secondary)
+            // Who and when on one line where they fit; in a narrow reader, when goes under who, each on one line.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    who
+                    Spacer(minLength: 12)
+                    when
                 }
-                Spacer(minLength: 12)
-                Text(opened.date).foregroundStyle(.secondary).font(.callout)
+                VStack(alignment: .leading, spacing: 2) {
+                    who
+                    when
+                }
             }
             .textSelection(.enabled)
             line("To", opened.to)
             if !opened.cc.isEmpty { line("Cc", opened.cc) }
         }
+    }
+
+    private var who: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(name).font(.headline).lineLimit(1)
+            if let address = opened.fromAddr, !address.isEmpty, address != name {
+                Text(address).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+        }
+    }
+
+    private var when: some View {
+        Text(opened.date).foregroundStyle(.secondary).font(.callout).lineLimit(1)
     }
 
     @ViewBuilder private func line(_ label: LocalizedStringKey, _ value: String) -> some View {
@@ -174,10 +191,12 @@ struct QuickReplies: View {
     let copy: MailCopy
 
     var body: some View {
-        HStack(spacing: 8) {
+        // The chips wrap onto more lines in a narrow reader, as the page's do.
+        FlowLayout(spacing: 8) {
             Label("Quick reply", systemImage: "arrowshape.turn.up.left")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .fixedSize()
             ForEach(QuickReply.all, id: \.key) { quick in
                 Button(quick.chip) { Task { await Composing.shared.quickReply(copy, quick) } }
                     .buttonStyle(.bordered)
