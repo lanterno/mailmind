@@ -83,6 +83,8 @@ final class Mailbox {
     @ObservationIgnored var keys: [Character: @MainActor () -> Void] = [:]
     /// The other areas' items in a row's context menu, for the rows it acts on.
     @ObservationIgnored var rowMenu: [@MainActor ([API.FolderRow]) -> [NSMenuItem]] = []
+    /// The desk's: ask when to bring these rows back, for a row's snooze button and the bulk bar's.
+    @ObservationIgnored var snoozes: (@MainActor ([API.FolderRow]) -> Void)?
     /// The assistant's: the search a sentence typed in the field means, or nil to leave it as typed; and a sentence
     /// to leave as typed from now on (the translated chip's ×).
     @ObservationIgnored var translates: (@MainActor (String) async -> String?)?

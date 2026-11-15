@@ -2,33 +2,42 @@
 import AppKit
 import SwiftUI
 
-/// The window's list of mail: a native table with one row height over the place's `MailListModel`, drawing every
-/// column and badge the page's row shows (features/mailbox/MessageList.tsx). Rows are chosen as a Mac list chooses them
-/// (click, ⇧-click, ⌘-click, ⌘A), and acted on from the toolbar, the menus, a row's context menu, a swipe, or the page's
-/// single keys while the list has the focus.
-struct MailboxTable: NSViewRepresentable {
+/// The rows of the window's list: a native table over the place's `MailListModel`, each row as tall as what it shows
+/// (the mockup's `.row`, drawn by `MailRowCell`), today's brief first in the Inbox. Rows are chosen as a Mac list
+/// chooses them (click, ⇧-click, ⌘-click, ⌘A, or a row's check box), and acted on from the toolbar, the menus, a
+/// row's context menu and quiet buttons, a swipe, or the page's single keys while the list has the focus.
+struct MailboxRowsTable: NSViewRepresentable {
     let list: MailListModel
     let mailbox: Mailbox
     /// The rows chosen as the mailbox holds them: the table follows a choice made elsewhere (a key, the palette, a verb
     /// moving on to the next row).
     let chosen: [MailCopy]
-    /// Whether each row says its account: everywhere but one account's own folder.
+    /// Whether each row says its account to VoiceOver: everywhere but one account's own folder.
     let showsAccount: Bool
+    let look: RowLook
+    /// Today's brief over the Inbox's rows, or nil.
+    let brief: BriefLine?
+    /// The brief is open in the pane, so its row is the chosen one.
+    let briefChosen: Bool
+    /// The list stands in days, with a head over each day's first row.
+    let sections: Bool
 
     func makeCoordinator() -> MailboxTableController {
-        MailboxTableController(list: list, mailbox: mailbox)
+        MailboxTableController(list: list, mailbox: mailbox, look: look, sections: sections)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        context.coordinator.scrollView
+        let controller = context.coordinator
+        controller.setBrief(brief, chosen: briefChosen)
+        return controller.scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let controller = context.coordinator
-        if controller.showsAccount != showsAccount {
-            controller.showsAccount = showsAccount
-            controller.redrawShown()
-        }
+        controller.showsAccount = showsAccount
+        controller.setSections(sections)
+        controller.setLook(look)
+        controller.setBrief(brief, chosen: briefChosen)
         controller.follow(chosen)
     }
 
@@ -38,7 +47,9 @@ struct MailboxTable: NSViewRepresentable {
 }
 
 /// The table's data source, delegate and context menu. It tells the list which rows the scroll position shows, once a
-/// frame at most, redraws only the shown rows a page changed, and keeps the rows chosen by their copies as rows move.
+/// frame at most, redraws only the shown rows a page changed, gives each row the height its shape needs and keeps
+/// the rows on screen where they were when rows above them change height, and keeps the rows chosen by their copies
+/// as rows move.
 @MainActor
 final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate, ListDisplay {
     let scrollView = NSScrollView()
@@ -46,21 +57,35 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private let list: MailListModel
     private weak var mailbox: Mailbox?
     var showsAccount = true
+    private(set) var sections: Bool
+    private(set) var look: RowLook
+    private var brief: BriefLine?
+    private var briefChosen = false
+    /// Each position's shape as last worked out (`RowShape.packed`), zero where it isn't yet.
+    private var shapes: [UInt8] = []
+    /// The day the heads were worked out on.
+    private var now = Date()
+    /// The row under the pointer, and which of its parts.
+    private var hovered: (row: Int, target: RowTarget?)?
     /// A choice the mailbox asked for is being shown: the table doesn't tell it back.
     private var following = false
     private lazy var report = OncePerFrame { [weak self] in self?.reportVisible() }
 
-    init(list: MailListModel, mailbox: Mailbox) {
+    init(list: MailListModel, mailbox: Mailbox, look: RowLook, sections: Bool) {
         self.list = list
         self.mailbox = mailbox
+        self.look = look
+        // Before the table asks for a height: a row's head is part of its shape.
+        self.sections = sections
         super.init()
-        table.style = .inset
+        table.style = .plain
         table.headerView = nil
         table.usesAutomaticRowHeights = false
         table.rowSizeStyle = .custom
-        table.rowHeight = MailRowCell.height
-        // Rows touch, so row n starts at n times the row height.
         table.intercellSpacing = .zero
+        table.backgroundColor = .clear
+        table.selectionHighlightStyle = .none
+        table.focusRingType = .none
         table.allowsMultipleSelection = true
         table.allowsEmptySelection = true
         table.allowsColumnReordering = false
@@ -72,15 +97,21 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         table.dataSource = self
         table.delegate = self
         table.mailbox = mailbox
+        table.controller = self
         table.setAccessibilityLabel(String(localized: "Messages"))
         let menu = NSMenu()
         menu.delegate = self
         table.menu = menu
 
         scrollView.documentView = table
+        scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsets(top: RowMeasure.listTop, left: 0, bottom: RowMeasure.listBottom,
+                                                right: 0)
         let clip = scrollView.contentView
+        clip.drawsBackground = false
         clip.postsBoundsChangedNotifications = true
         clip.postsFrameChangedNotifications = true
         NotificationCenter.default.addObserver(
@@ -95,101 +126,307 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         if list.display === self { list.display = nil }
     }
 
+    // MARK: Positions
+
+    /// The rows before the list's: the brief's, in the Inbox.
+    private var lead: Int { brief == nil ? 0 : 1 }
+
+    /// The list's position at a table row, or nil for the brief's.
+    func position(_ row: Int) -> Int? {
+        row >= lead ? row - lead : nil
+    }
+
+    private func row(at position: Int) -> Int {
+        position + lead
+    }
+
+    // MARK: The look, the brief
+
+    func setLook(_ look: RowLook) {
+        let measured = look.measure != self.look.measure
+        let painted = look.inks !== self.look.inks || look.accounts != self.look.accounts
+        self.look = look
+        if measured {
+            keepingPlace { table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows)) }
+        }
+        if measured || painted { redrawShown() }
+    }
+
+    /// Days' heads on or off: every row's shape is worked out again.
+    func setSections(_ on: Bool) {
+        guard on != sections else { return }
+        sections = on
+        shapes = Array(repeating: 0, count: list.total)
+        keepingPlace { table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows)) }
+        redrawShown()
+    }
+
+    func setBrief(_ line: BriefLine?, chosen: Bool) {
+        let had = brief != nil
+        let changed = line != brief || chosen != briefChosen
+        brief = line
+        briefChosen = chosen
+        if had != (line != nil) {
+            table.reloadData()
+            follow(mailbox?.marked ?? [], scroll: false)
+        } else if changed, line != nil {
+            redraw(rows: IndexSet(integer: 0))
+            refreshStates()
+        }
+    }
+
     // MARK: The scroll position, once a frame
 
     @objc private func moved(_ note: Notification) {
         report.request(framesPerSecond: scrollView.window?.screen?.maximumFramesPerSecond ?? 60)
+        // A row scrolled under a pointer that didn't move is under it all the same.
+        if let window = table.window, hovered != nil {
+            hover(at: table.convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        }
     }
 
     private func reportVisible() {
         let shown = table.rows(in: table.visibleRect)
-        list.setVisible(shown.location..<(shown.location + shown.length))
+        let first = max(shown.location - lead, 0), end = max(shown.location + shown.length - lead, 0)
+        list.setVisible(first..<max(first, end))
     }
 
     // MARK: Pages
 
     func rowsChanged(_ positions: IndexSet, totalChanged: Bool) {
+        now = Date()
         if totalChanged {
-            table.noteNumberOfRowsChanged()
+            // New mail above moves every row down: their shapes are worked out again as they show.
+            shapes = Array(repeating: 0, count: list.total)
+            keepingPlace {
+                table.noteNumberOfRowsChanged()
+                table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<table.numberOfRows))
+            }
             moved(Notification(name: NSView.boundsDidChangeNotification))
+        } else {
+            // A page come: its rows, and the row after it, whose head the page's last row decides.
+            var changed = IndexSet()
+            var touched = positions
+            if let last = positions.last, last + 1 < list.total { touched.insert(last + 1) }
+            for position in touched where position < shapes.count {
+                let was = shapes[position]
+                shapes[position] = 0
+                if shape(at: position).packed != was || was == 0 { changed.insert(row(at: position)) }
+            }
+            if !changed.isEmpty { keepingPlace { table.noteHeightOfRows(withIndexesChanged: changed) } }
         }
-        table.enumerateAvailableRowViews { rowView, row in
-            guard positions.contains(row), let cell = rowView.view(atColumn: 0) as? MailRowCell else { return }
-            cell.show(list.copy(at: row), account: namer)
-        }
+        redraw(rows: IndexSet(positions.map { row(at: $0) }))
         // New mail above the rows chosen moves them: keep the rows, not the positions.
         follow(mailbox?.marked ?? [], scroll: false)
     }
 
-    /// How a row names its account, where the list says each row's.
-    private var namer: ((String) -> String)? {
-        guard showsAccount, let mailbox else { return nil }
-        return { mailbox.name(of: $0) }
+    /// Run a change to the rows' heights, then put the rows on screen back where they stood, unless the list is at
+    /// its top, where new rows show.
+    private func keepingPlace(_ change: () -> Void) {
+        let clip = scrollView.contentView
+        let top = clip.bounds.minY
+        let atTop = top <= -scrollView.contentInsets.top + 0.5
+        let first = table.row(at: NSPoint(x: 1, y: max(top, 0)))
+        guard !atTop, first >= 0 else { return change() }
+        let offset = top - table.rect(ofRow: first).minY
+        change()
+        guard first < table.numberOfRows else { return }
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: table.rect(ofRow: first).minY + offset))
+        scrollView.reflectScrolledClipView(clip)
+    }
+
+    /// A position's shape: as worked out last, else from its row once its page is here.
+    private func shape(at position: Int) -> RowShape {
+        if shapes.count != list.total { shapes = Array(repeating: 0, count: list.total) }
+        if position < shapes.count, let known = RowShape(packed: shapes[position]) { return known }
+        guard let row = list.copy(at: position) else { return .waiting }
+        let shape = RowShape(row, head: head(at: position, row) != nil)
+        if position < shapes.count { shapes[position] = shape.packed }
+        return shape
+    }
+
+    private func head(at position: Int, _ row: API.FolderRow) -> String? {
+        guard sections else { return nil }
+        return DayGroup.head(row, after: position == 0 ? .none : .some(list.copy(at: position - 1)), now: now)
     }
 
     func redrawShown() {
+        table.enumerateAvailableRowViews { rowView, row in show(rowView.view(atColumn: 0), row: row) }
+        refreshStates()
+    }
+
+    private func redraw(rows: IndexSet) {
         table.enumerateAvailableRowViews { rowView, row in
-            (rowView.view(atColumn: 0) as? MailRowCell)?.show(list.copy(at: row), account: namer)
+            if rows.contains(row) { show(rowView.view(atColumn: 0), row: row) }
+        }
+    }
+
+    private func show(_ view: Any?, row: Int) {
+        if let cell = view as? MailRowCell, let position = position(row) {
+            let mail = list.copy(at: position)
+            let role = mail.flatMap { mail in
+                mailbox?.folders(of: mail.account).first { $0.name == mail.folder }?.role
+            }
+            cell.show(mail, head: mail.flatMap { head(at: position, $0) }, acts: RowAct.shown(role: role), look: look)
+        } else if let cell = view as? BriefRowCell, let brief {
+            cell.show(brief, look: look)
         }
     }
 
     /// Show `copies` chosen, where their rows are held, and scroll the first into view.
     func follow(_ copies: [MailCopy], scroll: Bool = true) {
-        var positions = IndexSet()
+        var rows = IndexSet()
         for copy in copies {
-            if let position = list.position(of: copy) { positions.insert(position) }
+            if let position = list.position(of: copy) { rows.insert(row(at: position)) }
         }
         let current = table.selectedRowIndexes
         // Rows chosen that aren't held stay chosen while the list hasn't moved.
-        let keep = current.filter { list.copy(at: $0) == nil && !(mailbox?.unheld.isEmpty ?? true) }
-        positions.formUnion(IndexSet(keep))
-        guard positions != current else { return }
+        let keep = current.filter { row in
+            position(row).map { list.copy(at: $0) == nil } ?? false && !(mailbox?.unheld.isEmpty ?? true)
+        }
+        rows.formUnion(IndexSet(keep))
+        guard rows != current else { return refreshStates() }
         following = true
-        table.selectRowIndexes(positions, byExtendingSelection: false)
+        table.selectRowIndexes(rows, byExtendingSelection: false)
         following = false
-        if scroll, let first = positions.first, copies.count == 1 { table.scrollRowToVisible(first) }
+        refreshStates()
+        if scroll, let first = rows.first, copies.count == 1 { table.scrollRowToVisible(first) }
+    }
+
+    // MARK: How each row stands
+
+    func refreshStates() {
+        let chosen = table.selectedRowIndexes
+        let selecting = chosen.count > 1
+        let keyed = table.keyed && table.window?.firstResponder === table
+        table.enumerateAvailableRowViews { rowView, row in
+            let hover = hovered?.row == row
+            if let cell = rowView.view(atColumn: 0) as? MailRowCell {
+                let isChosen = chosen.contains(row)
+                cell.state = RowState(chosen: isChosen && !selecting, checked: isChosen && selecting, hovering: hover,
+                                      target: hover ? hovered?.target : nil, selecting: selecting,
+                                      keyed: keyed && isChosen && !selecting)
+            } else if let cell = rowView.view(atColumn: 0) as? BriefRowCell {
+                cell.state = RowState(chosen: briefChosen, hovering: hover, keyed: keyed && briefChosen)
+            }
+        }
+    }
+
+    /// The pointer moved to `point` in the table, or left it.
+    func hover(at point: NSPoint?) {
+        var now: (row: Int, target: RowTarget?)?
+        if let point, table.visibleRect.contains(point) {
+            let row = table.row(at: point)
+            if row >= 0 {
+                let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false)
+                let mail = cell as? MailRowCell
+                if !(mail?.inHead(table.convert(point, to: mail)) ?? false) {
+                    now = (row, mail?.target(at: table.convert(point, to: mail)))
+                }
+            }
+        }
+        guard now?.row != hovered?.row || now?.target != hovered?.target else { return }
+        hovered = now
+        let tip = now?.target.flatMap { target -> String? in
+            if case .act(let act) = target { return act.title }
+            return String(localized: "Select (⌘-click)")
+        }
+        table.toolTip = tip
+        refreshStates()
+    }
+
+    /// A row's own button or its check box, pressed.
+    func press(_ target: RowTarget, row: Int) {
+        guard let mailbox, let position = position(row), let mail = list.copy(at: position) else { return }
+        switch target {
+        case .check:
+            if table.selectedRowIndexes.contains(row) {
+                table.deselectRow(row)
+            } else {
+                table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: true)
+            }
+        case .act(.file): mailbox.file(.archive, rows: [mail])
+        case .act(.delete): mailbox.file(.trash, rows: [mail])
+        case .act(.snooze): mailbox.snoozes?([mail])
+        case .act(.restore), .act(.toInbox): mailbox.restore([mail])
+        }
     }
 
     // MARK: NSTableViewDataSource, NSTableViewDelegate
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        list.total
+        list.total + lead
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        guard let position = position(row) else { return look.measure.height(.brief) }
+        return look.measure.height(shape(at: position))
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let cell = tableView.makeView(withIdentifier: MailRowCell.identifier, owner: nil) as? MailRowCell ?? MailRowCell()
-        cell.show(list.copy(at: row), account: namer)
-        return cell
+        let view: NSView
+        if position(row) == nil {
+            view = tableView.makeView(withIdentifier: BriefRowCell.identifier, owner: nil) as? BriefRowCell
+                ?? BriefRowCell()
+        } else {
+            view = tableView.makeView(withIdentifier: MailRowCell.identifier, owner: nil) as? MailRowCell
+                ?? MailRowCell()
+        }
+        show(view, row: row)
+        return view
+    }
+
+    func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
+        rowView.backgroundColor = .clear
+        refreshStates()
+    }
+
+    /// The brief's row is never chosen with mail: alone, it opens the brief in the pane.
+    func tableView(_ tableView: NSTableView,
+                   selectionIndexesForProposedSelection proposed: IndexSet) -> IndexSet {
+        guard lead > 0, proposed.contains(0) else { return proposed }
+        if proposed.count == 1 {
+            mailbox?.app?.place = .desk(.brief)
+            return IndexSet()
+        }
+        var rest = proposed
+        rest.remove(0)
+        return rest
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        refreshStates()
         guard !following, let mailbox else { return }
         var rows: [API.FolderRow] = []
         var unheld = IndexSet()
-        for position in table.selectedRowIndexes {
-            if let row = list.copy(at: position) { rows.append(row) } else { unheld.insert(position) }
+        for row in table.selectedRowIndexes {
+            guard let position = position(row) else { continue }
+            if let mail = list.copy(at: position) { rows.append(mail) } else { unheld.insert(position) }
         }
         mailbox.chose(rows, unheld: unheld)
     }
 
     /// A swipe's actions, as the page's row has them for the pointer: read or unread from the left; archive and
     /// delete from the right.
-    func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableView.RowActionEdge) -> [NSTableViewRowAction] {
-        guard let mailbox, let mail = list.copy(at: row) else { return [] }
+    func tableView(_ tableView: NSTableView, rowActionsForRow row: Int,
+                   edge: NSTableView.RowActionEdge) -> [NSTableViewRowAction] {
+        guard let mailbox, let position = position(row), let mail = list.copy(at: position) else { return [] }
         if edge == .leading {
-            let read = NSTableViewRowAction(style: .regular, title: mail.seen ? String(localized: "Unread") : String(localized: "Read")) { _, _ in
+            let title = mail.seen ? String(localized: "Unread") : String(localized: "Read")
+            let read = NSTableViewRowAction(style: .regular, title: title) { _, _ in
                 mailbox.setSeen(!mail.seen, rows: [mail])
             }
-            read.backgroundColor = .controlAccentColor
+            read.backgroundColor = look.inks.primary
             return [read]
         }
         let delete = NSTableViewRowAction(style: .destructive, title: String(localized: "Delete")) { _, _ in
             mailbox.file(.trash, rows: [mail])
         }
+        delete.backgroundColor = look.inks.rust
         let archive = NSTableViewRowAction(style: .regular, title: String(localized: "Archive")) { _, _ in
             mailbox.file(.archive, rows: [mail])
         }
-        archive.backgroundColor = .systemIndigo
+        archive.backgroundColor = look.inks.moss
         return [delete, archive]
     }
 
@@ -198,23 +435,91 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let clicked = table.clickedRow
-        guard clicked >= 0, let mailbox else { return }
+        guard clicked >= 0, let position = position(clicked), let mailbox else { return }
         // A row's menu acts on it: on the rows chosen when it is one of them, else on it alone, which it chooses.
         if !table.selectedRowIndexes.contains(clicked) {
             table.selectRowIndexes(IndexSet(integer: clicked), byExtendingSelection: false)
         }
-        for item in RowMenu.items(for: mailbox, clicked: list.copy(at: clicked)) { menu.addItem(item) }
+        for item in RowMenu.items(for: mailbox, clicked: list.copy(at: position)) { menu.addItem(item) }
+    }
+}
+
+extension Mailbox {
+    /// Put `rows` back in their account's Inbox: out of Trash, or out of Archive (`.row-acts`' restore).
+    func restore(_ rows: [API.FolderRow]) {
+        guard let first = rows.first else { return }
+        let inbox = folders(of: first.account).first { $0.role == "inbox" }
+        chose(rows)
+        Task { await moveNow(to: inbox?.name ?? "INBOX", label: inbox.map(Words.role) ?? String(localized: "Inbox")) }
     }
 }
 
 /// The table, taking the page's single keys while it has the focus (app/commands.ts): j and k, e, d, s, u, m, z, g
 /// then a letter, and the rest. Typing anywhere else never reaches them, and the setting that turns single keys off
-/// (`single_keys`) leaves only Delete, which deletes in every Mac list.
+/// (`single_keys`) leaves only Delete, which deletes in every Mac list. It tells its controller where the pointer is,
+/// and gives a row's own buttons and check box their clicks.
 final class MailboxTableView: NSTableView {
     weak var mailbox: Mailbox?
+    weak var controller: MailboxTableController?
+    /// The keyboard moved last, so the chosen row shows the focus ring (`:focus-visible`).
+    private(set) var keyed = false
     private var chordAt: Date?
+    private var tracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow,
+                                                         .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        controller?.hover(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        controller?.hover(at: nil)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        setKeyed(false)
+        let point = convert(event.locationInWindow, from: nil)
+        let row = row(at: point)
+        if row >= 0, let cell = view(atColumn: 0, row: row, makeIfNecessary: false) as? MailRowCell {
+            let inCell = convert(point, to: cell)
+            // The day's head over a row chooses nothing.
+            if cell.inHead(inCell) { return }
+            if let target = cell.target(at: inCell), event.modifierFlags.intersection([.command, .shift]).isEmpty {
+                window?.makeFirstResponder(self)
+                controller?.press(target, row: row)
+                return
+            }
+        }
+        super.mouseDown(with: event)
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        defer { controller?.refreshStates() }
+        return super.becomeFirstResponder()
+    }
+
+    override func resignFirstResponder() -> Bool {
+        defer { controller?.refreshStates() }
+        return super.resignFirstResponder()
+    }
+
+    private func setKeyed(_ on: Bool) {
+        guard keyed != on else { return }
+        keyed = on
+        controller?.refreshStates()
+    }
 
     override func keyDown(with event: NSEvent) {
+        setKeyed(true)
         guard let mailbox, event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
               let typed = event.charactersIgnoringModifiers, let key = typed.first else {
             return super.keyDown(with: event)
@@ -357,244 +662,78 @@ final class Item: NSMenuItem {
     }
 }
 
-/// One row, drawn into one layer with Core Text, as the step-0 list's are: the sender's monogram, who and when with the
-/// row's badges (a conversation's count, a star, a paperclip, a junk tag, the account), the subject, and the AI's
-/// summary or the snippet, after the next step the AI wrote when there is one. Grey bars stand where a row's page
-/// hasn't come.
-final class MailRowCell: NSTableCellView {
-    static let identifier = NSUserInterfaceItemIdentifier("mail")
-    static let height: CGFloat = 66
-
-    private static let senderFont = NSFont.preferredFont(forTextStyle: .body)
-    private static let senderBold = NSFont.systemFont(ofSize: senderFont.pointSize, weight: .semibold)
-    private static let subjectFont = NSFont.preferredFont(forTextStyle: .callout)
-    private static let gistFont = NSFont.preferredFont(forTextStyle: .subheadline)
-    private static let smallFont = NSFont.systemFont(ofSize: NSFont.preferredFont(forTextStyle: .caption1).pointSize, weight: .medium)
-    private static let initialsFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
-
-    private(set) var row: API.FolderRow?
-    private var account: String?
-    private var shown = false
-    private var lines: Lines?
-
-    /// Each line's text, set once when the row is shown.
-    private struct Lines {
-        var sender: TextLine
-        var when: TextLine
-        var subject: TextLine
-        var gist: TextLine
-        var step: TextLine?
-        var initials: TextLine
-        var count: TextLine?
-        var junk: TextLine?
-        var account: TextLine?
-    }
-
-    init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: 400, height: Self.height))
-        identifier = Self.identifier
-        wantsLayer = true
-        layerContentsRedrawPolicy = .onSetNeedsDisplay
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("not from a nib") }
-
-    override var isFlipped: Bool { true }
-
-    override var backgroundStyle: NSView.BackgroundStyle {
-        didSet { if backgroundStyle != oldValue { needsDisplay = true } }
-    }
-
-    /// Show `row`, naming its account with `name` where the list says each row's account.
-    func show(_ row: API.FolderRow?, account name: ((String) -> String)?) {
-        let account = row.flatMap { row in name.map { $0(row.account) } }
-        guard !shown || row != self.row || account != self.account else { return }
-        shown = true
-        self.row = row
-        self.account = account
-        lines = row.map { row in
-            let step = row.action.trimmingCharacters(in: .whitespaces)
-            return Lines(
-                sender: TextLine(row.sender, row.seen ? Self.senderFont : Self.senderBold),
-                when: TextLine(row.when, Self.gistFont),
-                subject: TextLine(row.subject.isEmpty ? String(localized: "(no subject)") : row.subject, Self.subjectFont),
-                gist: TextLine(row.gist, Self.gistFont),
-                step: step.isEmpty ? nil : TextLine(step, Self.smallFont),
-                initials: TextLine(Monogram.initials(name: row.fromName, address: row.fromAddr), Self.initialsFont),
-                count: row.conversationCount.map { TextLine(String($0), Self.smallFont) },
-                junk: row.junkTag.map { TextLine($0, Self.smallFont) },
-                account: account.map { TextLine($0, Self.smallFont) })
-        }
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let rtl = userInterfaceLayoutDirection == .rightToLeft
-        // Frames are worked out left to right, and mirrored for a right-to-left language.
-        func mirrored(_ rect: NSRect) -> NSRect {
-            rtl ? NSRect(x: bounds.width - rect.maxX, y: rect.minY, width: rect.width, height: rect.height) : rect
-        }
-        let selected = backgroundStyle == .emphasized
-        let primary: NSColor = selected ? .alternateSelectedControlTextColor : .labelColor
-        let secondary: NSColor = selected ? .alternateSelectedControlTextColor.withAlphaComponent(0.8) : .secondaryLabelColor
-        let pad: CGFloat = 8
-        let avatar: CGFloat = 32
-        let textX = pad + 12 + avatar + 10
-        let textWidth = max(0, bounds.width - textX - pad)
-        let heights = [Self.senderFont, Self.subjectFont, Self.gistFont].map(Self.lineHeight)
-        let top = ((Self.height - heights.reduce(0, +) - 6) / 2).rounded()
-
-        guard let row, let lines else {
-            NSColor.quaternaryLabelColor.setFill()
-            NSBezierPath(ovalIn: mirrored(NSRect(x: pad + 12, y: (Self.height - avatar) / 2, width: avatar, height: avatar))).fill()
-            var y = top + 3
-            for length in [140, 240, 320] as [CGFloat] {
-                NSBezierPath(roundedRect: mirrored(NSRect(x: textX, y: y, width: min(length, textWidth), height: 9)),
-                             xRadius: 3, yRadius: 3).fill()
-                y += heights[0] + 2
-            }
-            return
-        }
-
-        if !row.seen {
-            (selected ? NSColor.alternateSelectedControlTextColor : .controlAccentColor).setFill()
-            NSBezierPath(ovalIn: mirrored(NSRect(x: pad, y: top + (heights[0] - 8) / 2, width: 8, height: 8))).fill()
-        }
-        // The monogram, in the colour the sender's address always gets.
-        let hue = CGFloat(Monogram.hue(row.fromAddr ?? row.fromName)) / 360
-        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        NSColor(hue: hue, saturation: 0.38, brightness: dark ? 0.55 : 0.72, alpha: 1).setFill()
-        let disc = mirrored(NSRect(x: pad + 12, y: (Self.height - avatar) / 2, width: avatar, height: avatar))
-        NSBezierPath(ovalIn: disc).fill()
-
-        // Core Text draws upward from a baseline; the view is flipped, so the glyphs are flipped back.
-        context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
-        lines.initials.draw(in: context, x: disc.midX - lines.initials.width / 2,
-                            baseline: disc.midY + (Self.initialsFont.capHeight / 2), width: avatar, color: .white,
-                            mirrored: { $0 })
-
-        // The first line: the sender, then from the right when it came, the account, a junk tag, a paperclip, a star
-        // and a conversation's count.
-        let firstBaseline = top + Self.senderFont.ascender
-        var right = bounds.width - pad
-        right -= lines.when.width
-        lines.when.draw(in: context, x: right, baseline: firstBaseline, width: lines.when.width, color: secondary, mirrored: mirrored)
-        right -= 6
-        for (chip, tint) in [(lines.account, NSColor.secondaryLabelColor), (lines.junk, NSColor.systemRed)] {
-            guard let chip else { continue }
-            let width = min(chip.width, 110) + 10
-            right -= width
-            let box = NSRect(x: right, y: top + (heights[0] - 15) / 2, width: width, height: 15)
-            (selected ? NSColor.white.withAlphaComponent(0.2) : tint.withAlphaComponent(0.14)).setFill()
-            NSBezierPath(roundedRect: mirrored(box), xRadius: 4, yRadius: 4).fill()
-            chip.draw(in: context, x: right + 5, baseline: box.minY + 11, width: width - 10,
-                      color: selected ? primary : tint, mirrored: mirrored)
-            right -= 5
-        }
-        for (on, symbol) in [(row.hasAttach, Self.paperclip(selected)), (row.flagged, Self.star(selected))] where on {
-            symbol.draw(in: mirrored(NSRect(x: right - 13, y: top + (heights[0] - 13) / 2, width: 13, height: 13)))
-            right -= 13 + 5
-        }
-        if let count = lines.count {
-            let width = max(count.width + 8, 16)
-            right -= width
-            let box = NSRect(x: right, y: top + (heights[0] - 15) / 2, width: width, height: 15)
-            (selected ? NSColor.white.withAlphaComponent(0.25) : NSColor.quaternaryLabelColor).setFill()
-            NSBezierPath(roundedRect: mirrored(box), xRadius: 7.5, yRadius: 7.5).fill()
-            count.draw(in: context, x: right + (width - count.width) / 2, baseline: box.minY + 11, width: count.width,
-                       color: selected ? primary : .secondaryLabelColor, mirrored: mirrored)
-            right -= 5
-        }
-        lines.sender.draw(in: context, x: textX, baseline: firstBaseline, width: right - textX, color: primary, mirrored: mirrored)
-
-        let subjectBaseline = top + heights[0] + 3 + Self.subjectFont.ascender
-        lines.subject.draw(in: context, x: textX, baseline: subjectBaseline, width: textWidth, color: primary, mirrored: mirrored)
-
-        // The third line: the next step the AI wrote, as a chip, then the summary or the snippet.
-        let thirdTop = top + heights[0] + heights[1] + 6
-        var gistX = textX
-        if let step = lines.step {
-            let width = min(step.width + 10, textWidth * 0.6)
-            let box = NSRect(x: textX, y: thirdTop + (heights[2] - 15) / 2, width: width, height: 15)
-            (selected ? NSColor.white.withAlphaComponent(0.25) : NSColor.systemOrange.withAlphaComponent(0.18)).setFill()
-            NSBezierPath(roundedRect: mirrored(box), xRadius: 4, yRadius: 4).fill()
-            step.draw(in: context, x: textX + 5, baseline: box.minY + 11, width: width - 10,
-                      color: selected ? primary : .systemOrange, mirrored: mirrored)
-            gistX += width + 6
-        }
-        lines.gist.draw(in: context, x: gistX, baseline: thirdTop + Self.gistFont.ascender, width: textX + textWidth - gistX,
-                        color: secondary, mirrored: mirrored)
-    }
-
-    // The row is drawn, not made of text fields, so VoiceOver reads it as one piece of text in the page's order.
-    override func isAccessibilityElement() -> Bool { true }
-    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
-    override func accessibilityLabel() -> String? {
-        guard let row else { return String(localized: "Loading") }
-        var said: [String] = []
-        if !row.seen { said.append(String(localized: "Unread")) }
-        said.append(row.sender)
-        if let count = row.conversationCount { said.append("\(count) messages") }
-        said.append(row.subject)
-        said.append(row.when)
-        if row.flagged { said.append(String(localized: "Starred")) }
-        if row.hasAttach { said.append(String(localized: "Has attachments")) }
-        if let junk = row.junkTag { said.append(junk) }
-        if let account { said.append(account) }
-        if !row.summary.isEmpty { said.append("Summary: \(row.summary)") } else { said.append(row.snippet) }
-        if !row.action.isEmpty { said.append("Next step: \(row.action)") }
-        return said.filter { !$0.isEmpty }.joined(separator: ", ")
-    }
-
-    private static func lineHeight(_ font: NSFont) -> CGFloat {
-        ceil(font.ascender - font.descender + font.leading)
-    }
-
-    private static func star(_ selected: Bool) -> NSImage {
-        symbol("star.fill", selected ? .alternateSelectedControlTextColor : .systemYellow)
-    }
-
-    private static func paperclip(_ selected: Bool) -> NSImage {
-        symbol("paperclip", selected ? .alternateSelectedControlTextColor : .secondaryLabelColor)
-    }
-
-    private static func symbol(_ name: String, _ color: NSColor) -> NSImage {
-        let configuration = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration)
-            ?? NSImage()
-    }
-}
-
 /// One line of text, set once when its row is shown and cut short with an ellipsis when it is too wide. Its colour is
-/// taken from the context when it draws, so it follows light, dark and a chosen row.
+/// taken from the context when it draws, so one line serves every state of its row.
 @MainActor
 struct TextLine {
-    private static let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}"))
     let line: CTLine
     let width: CGFloat
 
-    init(_ text: String, _ font: NSFont) {
-        let attributes: [NSAttributedString.Key: Any] = [
+    init(_ text: String, _ font: NSFont, kern: CGFloat = 0) {
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
         ]
-        // One line: a subject or a snippet with a line break in it is drawn on one.
-        let flat = text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
-        line = CTLineCreateWithAttributedString(NSAttributedString(string: flat, attributes: attributes))
+        if kern != 0 { attributes[.kern] = kern }
+        line = CTLineCreateWithAttributedString(NSAttributedString(string: Self.flat(text), attributes: attributes))
         width = ceil(CTLineGetTypographicBounds(line, nil, nil, nil))
+    }
+
+    /// A line already set, as a summary's lines are.
+    init(_ line: CTLine) {
+        self.line = line
+        width = ceil(CTLineGetTypographicBounds(line, nil, nil, nil))
+    }
+
+    /// One line: a subject or a snippet with a line break in it is drawn on one.
+    static func flat(_ text: String) -> String {
+        text.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
+    }
+
+    /// `text` in at most `lines` lines `width` wide, the last ending in an ellipsis after its last whole word when
+    /// there is more (`-webkit-line-clamp`).
+    static func clamp(_ text: NSAttributedString, width: CGFloat, lines count: Int) -> [CTLine] {
+        let setter = CTTypesetterCreateWithAttributedString(text)
+        var lines: [CTLine] = []
+        var start = 0
+        while start < text.length, lines.count < count {
+            let fits = max(CTTypesetterSuggestLineBreak(setter, start, Double(width)), 1)
+            guard lines.count == count - 1, start + fits < text.length else {
+                lines.append(CTTypesetterCreateLine(setter, CFRange(location: start, length: fits)))
+                start += fits
+                continue
+            }
+            // The last line, with more after it: the words that fit beside an ellipsis, then the ellipsis.
+            let ellipsis = NSAttributedString(string: "\u{2026}",
+                                              attributes: text.attributes(at: start, effectiveRange: nil))
+            let room = width - CTLineGetTypographicBounds(CTLineCreateWithAttributedString(ellipsis), nil, nil, nil)
+            let words = max(CTTypesetterSuggestLineBreak(setter, start, Double(room)), 1)
+            let kept = NSMutableAttributedString(attributedString: text.attributedSubstring(
+                from: NSRange(location: start, length: words)))
+            while kept.string.last?.isWhitespace == true {
+                kept.deleteCharacters(in: NSRange(location: kept.length - 1, length: 1))
+            }
+            kept.append(ellipsis)
+            lines.append(cut(CTLineCreateWithAttributedString(kept), to: width))
+            start = text.length
+        }
+        return lines
+    }
+
+    /// `line` cut to `width` with an ellipsis, where it is wider.
+    static func cut(_ line: CTLine, to width: CGFloat) -> CTLine {
+        guard CTLineGetTypographicBounds(line, nil, nil, nil) > width else { return line }
+        // The ellipsis takes the line's own face, so it sits on the line as its letters do.
+        let runs = CTLineGetGlyphRuns(line) as? [CTRun] ?? []
+        let attributes = runs.first.map { CTRunGetAttributes($0) as? [NSAttributedString.Key: Any] ?? [:] } ?? [:]
+        let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}", attributes: attributes))
+        return CTLineCreateTruncatedLine(line, Double(width), .end, ellipsis) ?? line
     }
 
     func draw(in context: CGContext, x: CGFloat, baseline: CGFloat, width available: CGFloat, color: NSColor,
               mirrored: (NSRect) -> NSRect) {
         guard available > 0 else { return }
-        var shown = line
-        if width > available {
-            guard let cut = CTLineCreateTruncatedLine(line, available, .end, Self.ellipsis) else { return }
-            shown = cut
-        }
+        let shown = width > available ? Self.cut(line, to: available) : line
         let drawn = min(width, available)
         let origin = mirrored(NSRect(x: x, y: baseline, width: drawn, height: 0)).minX
         context.setFillColor(color.cgColor)

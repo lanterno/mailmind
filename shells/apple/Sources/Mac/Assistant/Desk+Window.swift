@@ -122,6 +122,8 @@ final class Desk {
                     MailCommand(id: $0.id, group: .commands, label: $0.label, run: $0.run)
                 }
             }
+            // A row's snooze button asks when, as the row's menu does.
+            mailbox.snoozes = { rows in self?.askWhen(rows.map(MailCopy.init)) }
             mailbox.rowMenu.append { rows in
                 guard let self else { return [] }
                 return self.commands(for: rows.map(MailCopy.init), stack: self.stack).map { command in
