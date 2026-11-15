@@ -1,5 +1,9 @@
 """What the settings page asks of Accounts: the list, masked, and a change to it. Each action names its path, so one that isn't
 an action is no route, and the app's `not found`, as it always answered."""
+from typing import Annotated
+
+from fastapi import Query
+
 from mailmind.http import route
 from mailmind.http.schemas.accounts import (
     AccountBody,
@@ -7,6 +11,8 @@ from mailmind.http.schemas.accounts import (
     Listed,
     LoggedIn,
     NamesAnAccount,
+    PresetArgs,
+    PresetFound,
     Removed,
     Saved,
     Standing,
@@ -37,6 +43,10 @@ def router(accounts, mailbox):
     @r.get("/api/account-health", responses=answers(Standing))
     def account_health():
         return accounts.health.answer()
+
+    @r.get("/api/accounts/preset", responses=answers(PresetFound))
+    def preset(args: Annotated[PresetArgs, Query()]):
+        return accounts.presets.preset(args.email)
 
     @r.post("/api/accounts/test", responses=answers(LoggedIn | CouldntLogIn))
     def test(body: TryBody):

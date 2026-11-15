@@ -10,7 +10,8 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from mailmind.http.schemas.common import Answer, Flag, RequestBody
+from mailmind.accounts.api import Preset
+from mailmind.http.schemas.common import Answer, Flag, QueryArgs, RequestBody
 
 
 class NamesAnAccount(RequestBody):
@@ -141,3 +142,17 @@ class Removed(Answer):
 class Trusted(Answer):
     ok: Literal[True]
     account: str
+
+
+class PresetArgs(QueryArgs):
+    email: str | None = None
+
+
+class PresetFound(Answer):
+    """`Presets.preset`: Gmail's preset for an address at one of Google's own domains, `sure`, which the form chooses; for
+    one whose domain's mail servers are Google's, offered (`sure` false); none for any other. `domain` is the address's,
+    in lower case, or None when it names none a lookup could ask about."""
+    ok: Literal[True]
+    domain: str | None
+    preset: Preset | None
+    sure: bool

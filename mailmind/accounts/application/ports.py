@@ -43,6 +43,14 @@ class ConnectionProbe(Protocol):
         ...
 
 
+class MailHosts(Protocol):
+    """A domain's mail servers, as its MX records name them, asked of this computer's resolvers."""
+    def of(self, domain: str) -> list[str]:
+        """The hosts `domain`'s MX records name: none when it has none, or when no answer came. It never raises for a
+        lookup that failed, since what it finds is only ever an offer."""
+        ...
+
+
 class SyncRecord(Protocol):
     """What the Mailbox recorded of each account's syncs, and how its sync stands now: the fields AccountHealth holds."""
     def __call__(self) -> Iterable[Mapping[str, Any]]: ...
