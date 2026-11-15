@@ -9,6 +9,8 @@ struct AccountsPane: View {
     @State private var form: Editing?
     @State private var removing: API.AccountRow?
     @State private var stats: [String: API.AccountStats] = [:]
+    /// The connection just saved, tested as soon as its card shows.
+    @State private var testNext: String?
     @Environment(\.meadow) private var meadow
 
     init(status: AppStatus, chosen: String? = nil) {
@@ -49,7 +51,8 @@ struct AccountsPane: View {
             }
             if let row = status.accounts.first(where: { $0.email == chosen }) {
                 AccountDetail(status: status, row: row, live: stats[row.email ?? ""],
-                              edit: { form = .editing(row.email ?? "") }, remove: { removing = row })
+                              edit: { form = .editing(row.email ?? "") }, remove: { removing = row },
+                              testNow: row.email == testNext, onTested: { testNext = nil })
             } else if !status.accounts.isEmpty {
                 SettingHelp(String(localized: "Choose an account to see how it stands."))
                     .padding(.horizontal, 4)
@@ -67,9 +70,12 @@ struct AccountsPane: View {
             }
         }
         .sheet(item: $form) { editing in
-            AccountForm(status: status, draft: AccountDraft(editing: editing.row(in: status.accounts))) { added in
+            AccountForm(status: status, draft: AccountDraft(editing: editing.row(in: status.accounts))) { saved in
                 form = nil
-                if let added { chosen = added }
+                if let saved {
+                    chosen = saved
+                    testNext = saved
+                }
             }
         }
         .confirmationDialog(removing.map { "Remove \($0.alias.flatMap { $0.isEmpty ? nil : $0 } ?? $0.email ?? "")?" } ?? "",
@@ -212,6 +218,9 @@ struct AccountDetail: View {
     let live: API.AccountStats?
     let edit: () -> Void
     let remove: () -> Void
+    /// Whether to test it as it shows, as one just saved is; `onTested` says it has been.
+    var testNow = false
+    var onTested: () -> Void = {}
     @State private var tested: Tested?
     @Environment(\.meadow) private var meadow
 
@@ -289,6 +298,11 @@ struct AccountDetail: View {
             }
         }
         .id(email)
+        .task(id: testNow) {
+            guard testNow else { return }
+            await test(email)
+            onTested()
+        }
     }
 
     private func test(_ email: String) async {
@@ -360,7 +374,7 @@ struct TestedWords: View {
             case .failed(let why):
                 HStack(spacing: 6) {
                     MeadowIconView(.alert, size: 15)
-                    Text(why).lineLimit(2)
+                    Text(why).lineLimit(4).fixedSize(horizontal: false, vertical: true)
                 }
                 .foregroundStyle(meadow.rust)
             }

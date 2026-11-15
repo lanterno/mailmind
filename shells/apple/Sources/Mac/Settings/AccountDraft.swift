@@ -3,7 +3,8 @@ import Foundation
 
 /// An account as its form holds it while a person adds or edits one (settings/Settings.tsx's `ConnectionForm`): what
 /// the server is sent, the page's checks before it is, and its words when one fails. The server fills in what a type's
-/// preset says (Gmail's host and port, the Bridge's on this computer) and refuses what it won't keep.
+/// preset says (Gmail's host and port, the Bridge's on this computer) and refuses what it won't keep, and says which
+/// preset a new address takes (`/api/accounts/preset`), which the form only offers.
 ///
 /// A password typed here is held only until it is sent, and never described: printing, dumping or logging a draft
 /// shows that one was typed and nothing of it.
@@ -53,6 +54,19 @@ struct AccountDraft: Equatable {
     var password = ""
     var opRef = ""
     var envVar = ""
+    /// What the server said of the address typed (`/api/accounts/preset`): nil until it has, or once the address
+    /// changes.
+    var found: API.PresetFound?
+
+    /// Where a Google Account makes an App Password, which Gmail's IMAP takes in place of the account's own password.
+    static let appPasswords = URL(string: "https://myaccount.google.com/apppasswords")!
+
+    /// How to make one, in the page's words (`AppPasswordSteps`).
+    static let appPasswordSteps = [
+        String(localized: "Turn on 2-Step Verification for your Google Account."),
+        String(localized: "Create an App Password, named MailMind."),
+        String(localized: "Paste it above as Google shows it, spaces and all."),
+    ]
 
     init(editing row: API.AccountRow? = nil) {
         editing = row?.email
@@ -82,6 +96,39 @@ struct AccountDraft: Equatable {
 
     /// The address the form is for: the one edited, or the one typed, trimmed.
     var address: String { editing ?? email.trimmed }
+
+    /// The address the server is asked which preset it takes: one typed with an @ in it, only while adding, since a
+    /// saved account's type is its own.
+    var presetQuery: String? {
+        guard editing == nil else { return nil }
+        let typed = email.trimmed
+        return typed.contains("@") ? typed : nil
+    }
+
+    /// What the form says of the preset the server found (the page's `PresetOffer`).
+    enum PresetWords: Equatable {
+        /// Gmail's settings, offered where another type is picked.
+        case offer(String)
+        /// Gmail's settings picked, said to fit a domain Google's servers take.
+        case fits(String)
+    }
+
+    /// Gmail's settings offered when the server found them and they aren't picked; with them picked, said to fit a
+    /// domain Google's servers take. Nothing for any other address, or an address at Google's own domains with
+    /// Gmail's settings picked already.
+    var presetWords: PresetWords? {
+        guard editing == nil, let found, found.preset == .gmail else { return nil }
+        let whose = found.sure ? String(localized: "A Google address")
+                               : String(localized: "Google takes \(found.domain ?? "")’s mail")
+        if kind == .gmail { return found.sure ? nil : .fits(String(localized: "\(whose): Gmail’s settings fit it.")) }
+        return .offer(String(localized: "\(whose): use Gmail’s settings?"))
+    }
+
+    /// What the password field shows before one is typed: an App Password's shape for Gmail.
+    var passwordPrompt: String {
+        if editing != nil { return String(localized: "unchanged — leave blank to keep") }
+        return kind == .gmail ? "abcd efgh ijkl mnop" : String(localized: "paste the password / app password")
+    }
 
     /// The credential to send: the Bridge's for Proton; else the typed password, 1Password reference or variable's
     /// name, or nil when none is given (an edit then keeps the one it has).

@@ -3,17 +3,21 @@ import SwiftUI
 
 /// Add an account or edit one, as a sheet drawn as Meadow's dialog (the page's `ConnectionForm`): its alias and
 /// signature, its address and type, an IMAP server's host and port, and where its password comes from. A password
-/// typed here goes straight to the route and the field is emptied, saved or not.
+/// typed here goes straight to the route and the field is emptied, saved or not. As a new address rests, the server
+/// is asked which preset it takes, and Gmail's is offered where it fits.
 struct AccountForm: View {
     let status: AppStatus
     @State var draft: AccountDraft
-    /// Done: the address added, or nil when an edit was saved or the form cancelled.
+    /// Done: the address saved, added or edited, or nil when the form was cancelled.
     let done: (String?) -> Void
 
     @State private var problem = ""
     @State private var saving = false
     @State private var tested: Tested?
     @Environment(\.meadow) private var meadow
+
+    /// How long the address rests before the server is asked which preset it takes.
+    static let askAfter: Duration = .milliseconds(400)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,8 +54,12 @@ struct AccountForm: View {
                         }
                     }
                     row("Type") {
-                        MeadowSegmentedChoice(label: String(localized: "Type"), selection: $draft.kind,
-                                              options: AccountDraft.Kind.allCases.map { ($0, $0.label) }, fills: false)
+                        VStack(alignment: .leading, spacing: 6) {
+                            MeadowSegmentedChoice(label: String(localized: "Type"), selection: $draft.kind,
+                                                  options: AccountDraft.Kind.allCases.map { ($0, $0.label) },
+                                                  fills: false)
+                            presetWords
+                        }
                     }
                     if draft.kind == .imap {
                         row("Host") {
@@ -82,6 +90,12 @@ struct AccountForm: View {
             }
             .scrollContentBackground(.hidden)
 
+            if let tested {
+                TestedWords(tested: tested)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 8)
+            }
             if !problem.isEmpty {
                 HStack(spacing: 8) {
                     MeadowIconView(.alert, size: 15)
@@ -101,7 +115,6 @@ struct AccountForm: View {
                 Button("Test Connection") { Task { await test() } }
                     .meadowButton(small: true)
                     .disabled(tested == .running)
-                if let tested { TestedWords(tested: tested) }
                 Spacer()
                 Button("Cancel") {
                     draft.forgetPassword()
@@ -120,6 +133,8 @@ struct AccountForm: View {
         }
         .frame(width: 560)
         .frame(minHeight: 540)
+        .onChange(of: draft.presetQuery) { draft.found = nil }
+        .task(id: draft.presetQuery) { await askPreset() }
         .background { ComposePaper() }
         .presentationBackground { ComposePaper() }
     }
@@ -149,14 +164,10 @@ struct AccountForm: View {
                               options: AccountDraft.Source.allCases.map { ($0, $0.label) }, fills: false)
         switch draft.source {
         case .keychain:
-            SecureField("Password", text: $draft.password,
-                        prompt: Text(draft.editing == nil ? "paste the password / app password"
-                                                          : "unchanged — leave blank to keep"))
+            SecureField("Password", text: $draft.password, prompt: Text(draft.passwordPrompt))
                 .meadowComposeField()
             SettingHelp(String(localized: "Kept in your login Keychain, never in a file."))
-            if draft.kind == .gmail {
-                SettingHelp(String(localized: "Gmail needs an App Password (2-Step Verification → App passwords), not your login password."))
-            }
+            if draft.kind == .gmail { AppPasswordSteps() }
         case .op:
             TextField("1Password reference", text: $draft.opRef, prompt: Text(verbatim: "op://Vault/Item/Field"))
                 .meadowComposeField()
@@ -165,6 +176,38 @@ struct AccountForm: View {
             TextField("Environment variable", text: $draft.envVar, prompt: Text(verbatim: "ENV_VAR_NAME"))
                 .meadowComposeField()
             SettingHelp(String(localized: "Read from an environment variable."))
+        }
+    }
+
+    /// What the form says of the preset the server found: Gmail's offered, with a button to take it, or said to fit.
+    @ViewBuilder private var presetWords: some View {
+        switch draft.presetWords {
+        case .offer(let words)?:
+            HStack(spacing: 8) {
+                Text(words)
+                    .font(.meadow(.ui, 13))
+                    .foregroundStyle(meadow.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Use Gmail") { draft.kind = .gmail }
+                    .meadowButton(small: true)
+            }
+        case .fits(let words)?:
+            SettingHelp(words)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    /// Ask the server which preset the address takes once it has rested. A new address has forgotten what the last one
+    /// was told (`onChange`).
+    private func askPreset() async {
+        guard let email = draft.presetQuery, let core = status.core else { return }
+        do {
+            try await Task.sleep(for: Self.askAfter)
+            let found = try await core.get(API.Get.AccountsPreset.self, ["email": email])
+            if !Task.isCancelled { draft.found = found }
+        } catch {
+            // Cancelled as the address changed, or no answer: nothing is offered.
         }
     }
 
@@ -210,9 +253,36 @@ struct AccountForm: View {
                           : String(localized: "Updated \(StatusWords.short(address))"))
         await status.readAccounts()
         await status.readDigest()
-        done(adding ? address : nil)
+        done(address)
         // A new connection has no mail yet: pull it now, not at the next sync.
         if adding { Task { await status.syncNow() } }
+    }
+}
+
+/// How to make the App Password Gmail asks for (the page's `AppPasswordSteps`), with Google's page for it a click away
+/// in the person's browser.
+struct AppPasswordSteps: View {
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SettingHelp(String(localized: "Gmail takes an App Password here, not your Google password:"))
+            ForEach(Array(AccountDraft.appPasswordSteps.enumerated()), id: \.offset) { index, step in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: "\(index + 1).").monospacedDigit().foregroundStyle(meadow.ink3)
+                    Text(step).foregroundStyle(meadow.ink2).fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.meadow(.ui, 13))
+            }
+            Button { NSWorkspace.shared.open(AccountDraft.appPasswords) } label: {
+                Text("Open Google’s App Passwords")
+                MeadowIconView(.external, size: 14)
+            }
+            .meadowButton(small: true)
+            .help(AccountDraft.appPasswords.absoluteString)
+            SettingHelp(String(localized:
+                "No App Passwords there? Advanced Protection, or your Workspace admin, has switched them off."))
+        }
     }
 }
 #endif
