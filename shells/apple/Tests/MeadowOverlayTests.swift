@@ -175,6 +175,113 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertFalse(Desk.Sheet.review.floats)
     }
 
+    // MARK: The keyboard around a dialog
+
+    /// A list's table, which takes the keyboard once it has a column.
+    private func table(in window: NSWindow) -> MailboxTableView {
+        let table = MailboxTableView(frame: NSRect(x: 0, y: 0, width: 300, height: 400))
+        table.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier("row")))
+        window.contentView?.addSubview(table)
+        return table
+    }
+
+    /// A window with the list's table in it, the table holding the keyboard, and the window's `DialogFocus`.
+    private func listWindow() -> (NSWindow, MailboxTableView, DialogFocus) {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let table = self.table(in: window)
+        XCTAssertTrue(window.makeFirstResponder(table))
+        XCTAssertTrue(window.firstResponder === table)
+        let focus = DialogFocus()
+        focus.window = window
+        return (window, table, focus)
+    }
+
+    /// A dialog's field, holding the keyboard as the palette's does.
+    private func field(in window: NSWindow) -> NSTextField {
+        let field = NSTextField(frame: NSRect(x: 320, y: 300, width: 200, height: 22))
+        window.contentView?.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        return field
+    }
+
+    func testADialogTakesTheListsKeyboardAndGivesItBackAsItGoes() {
+        let (window, table, focus) = listWindow()
+        focus.opened()
+        XCTAssertFalse(window.firstResponder === table, "the list's arrows wait behind the scrim")
+        let palette = field(in: window)
+        XCTAssertTrue(DialogFocus.owner(of: window.firstResponder) === palette, "a field stands for its editor")
+
+        focus.closing()
+        palette.removeFromSuperview()
+        focus.gone()
+        XCTAssertTrue(window.firstResponder === table, "j and e work again at once")
+    }
+
+    func testTheKeyboardGoesBackWhileTheDialogsFieldStillHasIt() {
+        let (window, table, focus) = listWindow()
+        focus.opened()
+        let palette = field(in: window)
+        focus.closing()
+        focus.gone()
+        XCTAssertTrue(window.firstResponder === table, "as the dialog fades, its field gives the keyboard up")
+        palette.removeFromSuperview()
+    }
+
+    func testANewListTakesTheKeyboardWhenTheOneThatHadItHasGone() {
+        let (window, table, focus) = listWindow()
+        focus.opened()
+        let palette = field(in: window)
+        focus.closing()
+        palette.removeFromSuperview()
+        // A command run from the palette went to another folder: its list is a table of its own.
+        table.removeFromSuperview()
+        let next = self.table(in: window)
+        focus.gone()
+        XCTAssertTrue(window.firstResponder === next)
+    }
+
+    func testWhatADialogOpenedKeepsTheKeyboard() {
+        let (window, table, focus) = listWindow()
+        focus.opened()
+        let palette = field(in: window)
+        focus.closing()
+        palette.removeFromSuperview()
+        // The palette's Search put the keyboard in the search field.
+        let search = field(in: window)
+        focus.gone()
+        XCTAssertTrue(DialogFocus.owner(of: window.firstResponder) === search)
+        XCTAssertFalse(window.firstResponder === table)
+    }
+
+    func testADialogGivingWayToAnotherKeepsTheKeyboardWithIt() {
+        let (window, table, focus) = listWindow()
+        focus.opened()
+        let palette = field(in: window)
+        // The palette gives way to Move To: one dialog follows another, and none has gone yet.
+        palette.removeFromSuperview()
+        let move = field(in: window)
+        focus.gone()
+        XCTAssertTrue(DialogFocus.owner(of: window.firstResponder) === move)
+        focus.closing()
+        move.removeFromSuperview()
+        focus.gone()
+        XCTAssertTrue(window.firstResponder === table)
+    }
+
+    func testTheKeyboardGoesBackToTheFieldThatHadIt() {
+        let (window, _, focus) = listWindow()
+        let search = field(in: window)
+        focus.opened()
+        XCTAssertTrue(DialogFocus.owner(of: window.firstResponder) === search, "only the list lets it go")
+        let palette = field(in: window)
+        focus.closing()
+        palette.removeFromSuperview()
+        focus.gone()
+        XCTAssertTrue(DialogFocus.owner(of: window.firstResponder) === search)
+    }
+
     // MARK: Toasts
 
     func testAToastsIconFollowsItsVerb() {
