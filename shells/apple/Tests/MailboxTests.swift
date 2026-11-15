@@ -457,6 +457,50 @@ final class MailboxGoingTests: XCTestCase {
         XCTAssertTrue(mailbox.commands().contains { $0.id == "snooze" }, "another area's command joins the palette")
     }
 
+    func testAnAreaHangsItsHooksOnce() async {
+        let (_, mailbox) = await mailbox()
+        var joins = 0
+        for _ in 0..<3 {
+            mailbox.join("desk") { mailbox in
+                joins += 1
+                mailbox.more.append { _ in [MailCommand(id: "brief", group: .commands, label: "Today’s brief") {}] }
+            }
+        }
+        mailbox.join("compose") { _ in joins += 1 }
+        XCTAssertEqual(joins, 2, "each area once, however often its view appears")
+        XCTAssertEqual(mailbox.commands().filter { $0.id == "brief" }.count, 1)
+    }
+
+    func testASentenceSearchedForGivesWayToTheSearchItMeans() async {
+        let (app, mailbox) = await mailbox()
+        let sentence = "mail from grace about the figures"
+        var asked: [String] = []
+        mailbox.translates = { typed in
+            asked.append(typed)
+            return typed == sentence ? "from:grace figures" : nil
+        }
+        app.place = .folder(account: Fixture.ada, folder: "INBOX")
+        mailbox.submit(sentence)
+        XCTAssertEqual(app.place, .search(Search(q: sentence, account: Fixture.ada)), "as typed, until the meaning comes")
+        await until { app.place?.search?.asked != nil }
+        XCTAssertEqual(app.place, .search(Search(q: "from:grace figures", account: Fixture.ada, asked: sentence)))
+
+        // A search held to one conversation stays as typed.
+        app.place = .search(Search(q: "x", account: Fixture.work, thread: "t2"))
+        mailbox.submit(sentence)
+        XCTAssertEqual(app.place, .search(Search(q: sentence, account: Fixture.work, thread: "t2")))
+        XCTAssertEqual(asked, [sentence])
+    }
+
+    func testTheDesksScreensStandInTheListsPlaceUnderTheirOwnTitles() async {
+        let (app, mailbox) = await mailbox()
+        app.place = .desk(.brief)
+        XCTAssertNil(app.list, "the desk's screens read what they show themselves")
+        XCTAssertEqual(mailbox.title, "Today’s Brief")
+        app.place = .desk(.screener(account: Fixture.ada))
+        XCTAssertEqual(mailbox.title, "Screener")
+    }
+
     func testTheSidebarReadsTheAccountsFoldersLabelsAndViews() async {
         let (_, mailbox) = await mailbox()
         XCTAssertEqual(mailbox.accounts, [Fixture.ada, Fixture.work])
