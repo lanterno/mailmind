@@ -431,6 +431,23 @@ fn a_value_a_vertical_tab_and_a_quote_start_is_the_tab_alone() {
 }
 
 #[test]
+fn a_name_a_vertical_tab_and_a_blank_start_is_no_parameter() {
+    // Python's token for the name was the tab alone, with no `=` after it: no name, and the part is its body.
+    for param in ["\x0b name=\"a.pdf\"", "\x0c\x1d\tname=a.pdf"] {
+        let raw = message(&format!("Content-Type: text/html; charset=x;{param}\r\n\r\n<b>x</b>\r\n"));
+        let parsed = parse(&raw);
+        assert_eq!(parsed.html.as_deref(), Some("<b>x</b>\r\n"), "{param:?}");
+        assert!(parsed.attachments.is_empty(), "{param:?}");
+    }
+    let body = "\r\n\r\n--b1\r\nContent-Type: text/plain\r\n\r\nfirst\r\n--b1--\r\n";
+    let unread = message(&format!("Content-Type: multipart/mixed; charset=x;\x0b boundary=\"b1\"{body}"));
+    assert_eq!(part(&unread, 1), None);
+    // After a blank, Python took the tab for white space too, and read the name.
+    let read = message(&format!("Content-Type: multipart/mixed; charset=x; \x0b boundary=\"b1\"{body}"));
+    assert_eq!(part(&read, 1), Some((b"first".to_vec(), "text/plain".to_owned())));
+}
+
+#[test]
 fn a_boundary_ends_at_its_last_byte_that_isnt_a_blank_inside_its_quotes_too() {
     // Python's get_boundary stripped the boundary on the right once its quotes were off.
     let body = "\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b--\r\n";
