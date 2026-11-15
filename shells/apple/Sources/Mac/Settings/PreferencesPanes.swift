@@ -34,42 +34,69 @@ struct PreferencesRead<Content: View>: View {
 
     var body: some View {
         if status.preferences == nil {
-            ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity, minHeight: 200)
         } else {
             content()
         }
     }
 }
 
-/// Sending, the keyboard, and the backup and export of the mail kept here.
+/// How MailMind looks, sending, the keyboard, and the backup and export of the mail kept here.
 struct GeneralPane: View {
     let status: AppStatus
 
     var body: some View {
-        PreferencesRead(status: status) {
-            Form {
-                Section("Sending") {
-                    LabeledContent("Undo Send window, in seconds") {
+        SettingsPage(tab: .general) {
+            PreferencesRead(status: status) {
+                DeskSideCard(title: String(localized: "Appearance"), icon: .sun) {
+                    SettingLine(String(localized: "Light"), help: String(localized: """
+                        The sky and the paper MailMind is drawn on. The top bar’s button goes round them too.
+                        """)) {
+                        MeadowSegmentedChoice(label: String(localized: "Light"), selection: light,
+                                              options: MeadowLight.allCases.map { ($0, $0.name) }, fills: false)
+                    }
+                    SettingLine(String(localized: "Rows")) {
+                        MeadowSegmentedChoice(label: String(localized: "Rows"), selection: density, options: [
+                            (API.Density.comfortable, String(localized: "Comfortable")),
+                            (.cozy, String(localized: "Cozy")), (.compact, String(localized: "Compact")),
+                        ], fills: false)
+                    }
+                    SettingSwitch(String(localized: "High contrast"),
+                                  help: String(localized: "Darker ink and firmer lines, in every light."),
+                                  isOn: status.preference(\.highContrast) { .init(highContrast: $0) })
+                }
+                DeskSideCard(title: String(localized: "Sending"), icon: .send) {
+                    SettingLine(String(localized: "Undo Send window, in seconds"), help: String(localized: """
+                        How long a message waits before it goes, so you can take it back.
+                        """)) {
                         HStack(spacing: 4) {
                             TextField("Undo Send window, in seconds", value: undoSend, format: .number)
                                 .labelsHidden()
                                 .multilineTextAlignment(.trailing)
-                                .frame(width: 56)
+                                .meadowComposeField()
+                                .frame(width: 64)
                             Stepper("Undo Send window, in seconds", value: undoSend, step: 1)
                                 .labelsHidden()
                         }
                     }
-                    SettingHelp(String(localized: "How long a message waits before it goes, so you can take it back."))
                 }
-                Section("Keyboard") {
-                    Toggle("Single-key shortcuts", isOn: status.preference(\.singleKeys) { .init(singleKeys: $0) })
-                    SettingHelp(String(localized: "Keys like e, r and j act on the mail without ⌘. Turn them off to use only ⌘ shortcuts."))
+                DeskSideCard(title: String(localized: "Keyboard"), icon: .keyboard) {
+                    SettingSwitch(String(localized: "Single-key shortcuts"), help: String(localized: """
+                        Keys like e, r and j act on the mail without ⌘. Turn them off to use only ⌘ shortcuts.
+                        """), isOn: status.preference(\.singleKeys) { .init(singleKeys: $0) })
                 }
                 BackupSection(status: status)
             }
-            .formStyle(.grouped)
         }
-        .frame(width: 560, height: 540)
+    }
+
+    /// The light the window is in, kept as the `theme` preference the top bar's button keeps.
+    private var light: Binding<MeadowLight> {
+        Binding(get: { status.light }, set: { status.setPreferences(API.ChangedPreferences(theme: $0.theme)) })
+    }
+
+    private var density: Binding<API.Density> {
+        Preference(status: status, read: \.density, change: { .init(density: $0) }, fallback: .comfortable).binding
     }
 
     /// No bounds of its own: the server holds the window to its limits and says them when it refuses one.
@@ -84,27 +111,27 @@ struct BackupSection: View {
     @State private var plan: API.ExportPlan?
     @State private var format = API.ArchiveFormat.eml
     @State private var working = false
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
-        Section("Backup & Export") {
+        DeskSideCard(title: String(localized: "Backup & Export"), icon: .archive) {
             Text(plan.map { "\($0.total.formatted()) messages · \($0.bodies.formatted()) with full bodies · \($0.groups.count) folders" }
                  ?? String(localized: "Counting…"))
-                .foregroundStyle(.secondary)
-            LabeledContent("Backup") {
+                .font(.meadow(.ui, 13))
+                .foregroundStyle(meadow.ink2)
+            SettingLine(String(localized: "Backup")) {
                 Button("Back Up…") { Task { await save(backup: true) } }
+                    .meadowButton(small: true)
                     .disabled(working)
                     .help("A full local snapshot of your synced mail, encrypted as the database is: it opens with the key in this Mac’s Keychain")
             }
-            LabeledContent("Export") {
-                HStack {
-                    Picker("Export format", selection: $format) {
-                        Text(".eml files").tag(API.ArchiveFormat.eml)
-                        Text("mbox").tag(API.ArchiveFormat.mbox)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .fixedSize()
+            SettingLine(String(localized: "Export")) {
+                HStack(spacing: 8) {
+                    MeadowSegmentedChoice(label: String(localized: "Export format"), selection: $format, options: [
+                        (API.ArchiveFormat.eml, String(localized: ".eml files")), (.mbox, String(localized: "mbox")),
+                    ], fills: false)
                     Button("Export…") { Task { await save(backup: false) } }
+                        .meadowButton(small: true)
                         .disabled(working)
                         .help("Your synced mail as a zip any mail program can read")
                 }
@@ -149,6 +176,7 @@ struct BackupSection: View {
 struct NotificationsPane: View {
     let status: AppStatus
     @State private var allowed: Bool??
+    @Environment(\.meadow) private var meadow
 
     init(status: AppStatus, allowed: Bool?? = nil) {
         self.status = status
@@ -156,31 +184,37 @@ struct NotificationsPane: View {
     }
 
     var body: some View {
-        PreferencesRead(status: status) {
-            Form {
-                Section {
-                    Toggle("New mail", isOn: status.preference(\.notifyNewMail) { .init(notifyNewMail: $0) })
-                    Toggle("A meeting about to start", isOn: status.preference(\.notifyMeetings) { .init(notifyMeetings: $0) })
-                    Toggle("Quiet hours", isOn: status.preference(\.quietHours) { .init(quietHours: $0) })
+        SettingsPage(tab: .notifications) {
+            PreferencesRead(status: status) {
+                DeskSideCard(title: String(localized: "Notifications"), icon: .bell) {
+                    SettingSwitch(String(localized: "New mail"),
+                                  isOn: status.preference(\.notifyNewMail) { .init(notifyNewMail: $0) })
+                    SettingSwitch(String(localized: "A meeting about to start"),
+                                  isOn: status.preference(\.notifyMeetings) { .init(notifyMeetings: $0) })
+                    SettingSwitch(String(localized: "Quiet hours"),
+                                  isOn: status.preference(\.quietHours) { .init(quietHours: $0) })
                     if status.preferences?.quietHours == true {
-                        DatePicker("Quiet from", selection: time(\.quietFrom) { .init(quietFrom: $0) },
-                                   displayedComponents: .hourAndMinute)
-                        DatePicker("Quiet until", selection: time(\.quietUntil) { .init(quietUntil: $0) },
-                                   displayedComponents: .hourAndMinute)
+                        SettingLine(String(localized: "Quiet from")) {
+                            DatePicker("Quiet from", selection: time(\.quietFrom) { .init(quietFrom: $0) },
+                                       displayedComponents: .hourAndMinute)
+                                .labelsHidden()
+                        }
+                        SettingLine(String(localized: "Quiet until")) {
+                            DatePicker("Quiet until", selection: time(\.quietUntil) { .init(quietUntil: $0) },
+                                       displayedComponents: .hourAndMinute)
+                                .labelsHidden()
+                        }
                     }
-                } footer: {
                     SettingHelp(String(localized: """
                         A notification goes only while MailMind is in the background, and the Dock icon counts the new \
                         mail that came in. In quiet hours, by this Mac’s clock, none goes.
                         """))
                 }
-                Section("This Mac") {
+                DeskSideCard(title: String(localized: "This Mac"), icon: .info) {
                     permission
                 }
             }
-            .formStyle(.grouped)
         }
-        .frame(width: 560, height: 400)
         .task { if status.core != nil { allowed = .some(await status.newMail.allowed()) } }
     }
 
@@ -189,9 +223,7 @@ struct NotificationsPane: View {
         case nil:
             ProgressView().controlSize(.small)
         case .some(nil):
-            HStack {
-                Text("MailMind hasn’t asked to notify you yet.")
-                Spacer()
+            SettingLine(String(localized: "MailMind hasn’t asked to notify you yet.")) {
                 Button("Turn On Notifications") {
                     Task {
                         let yes = await status.newMail.ask()
@@ -199,18 +231,23 @@ struct NotificationsPane: View {
                         status.say(yes ? String(localized: "Notifications on") : String(localized: "Notifications blocked"))
                     }
                 }
+                .meadowButton(.primary, small: true)
             }
         case .some(true?):
-            Label("This Mac lets MailMind notify you.", systemImage: "checkmark.circle")
+            HStack(spacing: 8) {
+                MeadowIconView(.checkCircle, size: 15).foregroundStyle(meadow.moss)
+                Text("This Mac lets MailMind notify you.")
+            }
+            .font(.meadow(.ui, 13.5, .semibold))
+            .foregroundStyle(meadow.ink2)
         case .some(false?):
-            HStack {
-                Label("Notifications are off for MailMind in System Settings.", systemImage: "bell.slash")
-                Spacer()
+            SettingLine(String(localized: "Notifications are off for MailMind in System Settings.")) {
                 Button("Open System Settings") {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
                         NSWorkspace.shared.open(url)
                     }
                 }
+                .meadowButton(small: true)
             }
         }
     }
@@ -249,40 +286,50 @@ struct AIPane: View {
     }
 
     var body: some View {
-        PreferencesRead(status: status) {
-            Form {
-                Section("Claude API key") {
+        SettingsPage(tab: .ai) {
+            PreferencesRead(status: status) {
+                DeskSideCard(title: String(localized: "Claude API key"), icon: .key) {
                     ClaudeKeyView(status: status, keySet: $keySet)
                 }
-                Section {
-                    LabeledContent("Daily limit, in US dollars") {
-                        TextField("Daily limit, in US dollars", value: limit, format: .number.precision(.fractionLength(0...2)))
+                DeskSideCard(title: String(localized: "Spending"), icon: .receipt) {
+                    SettingLine(String(localized: "Daily limit, in US dollars"), help: String(localized: """
+                        Once a day’s AI has cost this much, background work stops and MailMind asks before spending \
+                        more.
+                        """)) {
+                        TextField("Daily limit, in US dollars", value: limit,
+                                  format: .number.precision(.fractionLength(0...2)))
                             .labelsHidden()
                             .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
+                            .meadowComposeField()
+                            .frame(width: 88)
                     }
                     if let ai = status.digest?.ai, ai.engine != "none", let spent = ai.spentTodayMicros {
-                        LabeledContent("Today") {
+                        MeadowFact(String(localized: "Today"), last: true) {
                             Text("\(StatusWords.dollars(spent)) of \(StatusWords.dollars(ai.limitMicros))")
                         }
                     }
-                } footer: {
-                    SettingHelp(String(localized: "Once a day’s AI has cost this much, background work stops and MailMind asks before spending more."))
                 }
-                Section {
-                    Toggle("Have today’s brief ready each morning", isOn: status.preference(\.morningBrief) { .init(morningBrief: $0) })
-                    SettingHelp(String(localized: "Written before you open your Inbox, within the daily limit, and only if you’ve used MailMind in the last two days."))
-                    Toggle("Have last week’s review ready each Monday", isOn: status.preference(\.weeklyReview) { .init(weeklyReview: $0) })
-                    SettingHelp(String(localized: "Written on Monday morning, within the daily limit, and only if you’ve used MailMind in the last two days. Your week shows it until the next Monday, and ↻ there writes a new one."))
-                    Toggle("File low-priority mail by itself, once a day", isOn: status.preference(\.autoTidy) { .init(autoTidy: $0) })
-                    SettingHelp(String(localized: "Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back."))
-                } footer: {
-                    SettingHelp(StatusWords.aiPrivacy)
+                DeskSideCard(title: String(localized: "Written ahead"), icon: .wind) {
+                    SettingSwitch(String(localized: "Have today’s brief ready each morning"),
+                                  help: String(localized: """
+                        Written before you open your Inbox, within the daily limit, and only if you’ve used MailMind \
+                        in the last two days.
+                        """), isOn: status.preference(\.morningBrief) { .init(morningBrief: $0) })
+                    SettingSwitch(String(localized: "Have last week’s review ready each Monday"),
+                                  help: String(localized: """
+                        Written on Monday morning, within the daily limit, and only if you’ve used MailMind in the \
+                        last two days. Your week shows it until the next Monday, and ↻ there writes a new one.
+                        """), isOn: status.preference(\.weeklyReview) { .init(weeklyReview: $0) })
+                    SettingSwitch(String(localized: "File low-priority mail by itself, once a day"),
+                                  help: String(localized: """
+                        Only what today’s brief offers to tidy. The brief says what went, and one click takes it all \
+                        back.
+                        """), isOn: status.preference(\.autoTidy) { .init(autoTidy: $0) })
                 }
+                SettingHelp(StatusWords.aiPrivacy)
+                    .padding(.horizontal, 4)
             }
-            .formStyle(.grouped)
         }
-        .frame(width: 560, height: 560)
     }
 
     /// No bounds of its own: the server holds the limit to more than nothing and its most, and says them when it

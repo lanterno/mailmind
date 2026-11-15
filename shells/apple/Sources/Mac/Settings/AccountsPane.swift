@@ -1,14 +1,15 @@
 #if os(macOS)
 import SwiftUI
 
-/// Settings' Accounts: the email connections, each as the page's `ConnectionRow` shows it, beside the one chosen. Add
-/// one with +, take one out with −, as Mail's Accounts pane does.
+/// Settings' Accounts: the email connections, each as the page's `ConnectionRow` shows it, in a card as the mockup's
+/// accounts menu lists them, and under it the one chosen. Add one from the list's foot, take one out from its card.
 struct AccountsPane: View {
     let status: AppStatus
     @State private var chosen: String?
     @State private var form: Editing?
     @State private var removing: API.AccountRow?
     @State private var stats: [String: API.AccountStats] = [:]
+    @Environment(\.meadow) private var meadow
 
     init(status: AppStatus, chosen: String? = nil) {
         self.status = status
@@ -23,64 +24,37 @@ struct AccountsPane: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(spacing: 0) {
-                List(selection: $chosen) {
-                    ForEach(status.accounts, id: \.email) { row in
-                        AccountListRow(status: status, row: row)
-                            .tag(row.email)
-                    }
-                }
-                .listStyle(.bordered(alternatesRowBackgrounds: false))
-                .overlay {
+        SettingsPage(tab: .accounts) {
+            DeskSideCard(title: status.accounts.count == 1 ? String(localized: "1 connection")
+                         : String(localized: "\(status.accounts.count) connections"), icon: .mail) {
+                VStack(alignment: .leading, spacing: 2) {
                     if status.accountsRead, status.accounts.isEmpty {
                         Text("No email connections yet.")
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding()
+                            .font(.meadow(.ui, 13.5))
+                            .foregroundStyle(meadow.ink3)
+                            .padding(.vertical, 6)
                     }
-                }
-                HStack(spacing: 0) {
-                    Button { form = .adding } label: { Image(systemName: "plus").frame(width: 24, height: 20) }
-                        .help("Add a connection")
-                        .accessibilityLabel("Add a connection")
-                    Divider().frame(height: 16)
-                    Button { removing = status.accounts.first { $0.email == chosen } } label: {
-                        Image(systemName: "minus").frame(width: 24, height: 20)
+                    ForEach(Array(status.accounts.enumerated()), id: \.element.email) { index, row in
+                        AccountListRow(status: status, row: row, colour: meadow.account(index),
+                                       chosen: row.email == chosen) { chosen = row.email }
                     }
-                    .disabled(chosen == nil)
-                    .help("Remove the connection chosen")
-                    .accessibilityLabel("Remove the connection chosen")
-                    Spacer()
-                    Text(status.accounts.count == 1 ? "1 connection" : "\(status.accounts.count) connections")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.trailing, 6)
+                    MeadowPopRule()
+                    Button { form = .adding } label: {
+                        MeadowPaletteRow(String(localized: "Add an account"), icon: .plus, pop: true)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Add a connection")
                 }
-                .buttonStyle(.borderless)
-                .padding(.vertical, 2)
-                .background(.background.secondary)
-                .overlay(alignment: .top) { Divider() }
+                .padding(.horizontal, -8)
             }
-            .frame(width: 220)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
-
-            Group {
-                if let row = status.accounts.first(where: { $0.email == chosen }) {
-                    AccountDetail(status: status, row: row, live: stats[row.email ?? ""],
-                                  edit: { form = .editing(row.email ?? "") }, remove: { removing = row })
-                } else {
-                    ContentUnavailableView {
-                        Label("No account chosen", systemImage: "at")
-                    } description: {
-                        Text("Choose an account to see how it stands, or add one with +.")
-                    }
-                }
+            if let row = status.accounts.first(where: { $0.email == chosen }) {
+                AccountDetail(status: status, row: row, live: stats[row.email ?? ""],
+                              edit: { form = .editing(row.email ?? "") }, remove: { removing = row })
+            } else if !status.accounts.isEmpty {
+                SettingHelp(String(localized: "Choose an account to see how it stands."))
+                    .padding(.horizontal, 4)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: 720, height: 460)
         .onAppear {
             if chosen == nil { chosen = status.accounts.first?.email }
         }
@@ -133,60 +107,59 @@ extension AccountsPane.Editing {
     }
 }
 
-/// An account in the list: its initial in its colour, with a dot for how it stands, its name and address.
+/// An account in the list (`.gq`): its avatar with its colour's dot, its name and address, and how it stands; the
+/// one chosen in the indigo wash.
 struct AccountListRow: View {
     let status: AppStatus
     let row: API.AccountRow
+    var colour: Color = .clear
+    var chosen = false
+    var choose: () -> Void = {}
+    @Environment(\.meadow) private var meadow
+    @FocusState private var focused: Bool
+    @State private var hovering = false
 
     var body: some View {
         let email = row.email ?? ""
-        HStack(spacing: 8) {
-            AccountBadge(email: email, label: label, standing: StatusWords.standing(of: email, digest: status.digest,
-                                                                                     health: status.health))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label).lineLimit(1)
-                Text(email).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        let standing = StatusWords.standing(of: email, digest: status.digest, health: status.health)
+        Button(action: choose) {
+            HStack(spacing: 10) {
+                MeadowAvatar(name: label, account: colour, chosen: chosen)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label).font(.meadow(.ui, 13.5, .bold)).foregroundStyle(meadow.ink)
+                    Text(email).font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
+                }
+                .lineLimit(1)
+                Spacer(minLength: 8)
+                if row.disabled {
+                    MeadowChip(String(localized: "Disabled"), tone: .line)
+                } else if standing != .unknown {
+                    HStack(spacing: 6) {
+                        SettingDot(colour: standing.colour(meadow))
+                        Text(standing.words)
+                    }
+                    .font(.meadow(.ui, 12))
+                    .foregroundStyle(meadow.ink3)
+                }
             }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 10)
+                .fill(chosen ? meadow.primaryWash : hovering ? meadow.paper2 : .clear))
+            .contentShape(Rectangle())
         }
-        .opacity(row.disabled ? 0.5 : 1)
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
+        .focused($focused)
+        .focusEffectDisabled()
+        .meadowFocusRing(focused, radius: 10)
+        .onHover { hovering = $0 }
+        .opacity(row.disabled ? 0.6 : 1)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
     private var label: String {
         if let alias = row.alias, !alias.isEmpty { return alias }
         return StatusWords.short(row.email ?? "")
-    }
-}
-
-/// An account's initial on a circle of its own hue, as the page's chip draws it, with how it stands as a dot.
-struct AccountBadge: View {
-    let email: String
-    let label: String
-    let standing: StatusWords.Standing
-
-    var body: some View {
-        Text(String(label.first ?? "?").uppercased())
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 26, height: 26)
-            .background(Circle().fill(Color(hue: Double(Self.hue(email)) / 360, saturation: 0.45, brightness: 0.7)))
-            .overlay(alignment: .bottomTrailing) {
-                Circle().fill(standing.color)
-                    .frame(width: 9, height: 9)
-                    .overlay(Circle().strokeBorder(.background, lineWidth: 1.5))
-                    .opacity(standing == .unknown ? 0 : 1)
-            }
-            .accessibilityHidden(true)
-    }
-
-    /// The page's hue for an address (`avatarHue`), so an account keeps its colour on every screen.
-    static func hue(_ text: String) -> Int {
-        var hue = 0
-        for unit in text.utf16 {
-            hue = (hue * 31 + Int(unit)) % 360
-        }
-        return hue
     }
 }
 
@@ -197,6 +170,16 @@ extension StatusWords.Standing {
         case .connected: .green
         case .syncing: .orange
         case .cantConnect: .red
+        }
+    }
+
+    /// Its dot in Meadow's colours: moss when well, sunlight while busy, rust when it can't connect.
+    func colour(_ meadow: MeadowPalette) -> Color {
+        switch self {
+        case .unknown: meadow.ink3
+        case .connected: meadow.moss
+        case .syncing: meadow.sun
+        case .cantConnect: meadow.rust
         }
     }
 
@@ -221,7 +204,8 @@ extension StatusWords.Dot {
     }
 }
 
-/// The account chosen: how it is reached, how its syncs stand, its Inbox on the server, and what can be done with it.
+/// The account chosen: how it is reached, how its syncs stand, its Inbox on the server, and what can be done with it,
+/// each in a card of its own.
 struct AccountDetail: View {
     let status: AppStatus
     let row: API.AccountRow
@@ -229,55 +213,81 @@ struct AccountDetail: View {
     let edit: () -> Void
     let remove: () -> Void
     @State private var tested: Tested?
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let email = row.email ?? ""
-        Form {
-            Section {
-                LabeledContent("Name") {
-                    Text(row.alias.flatMap { $0.isEmpty ? nil : $0 } ?? String(localized: "\(StatusWords.short(email)) · no alias"))
-                        .foregroundStyle(row.alias?.isEmpty == false ? .primary : .secondary)
-                }
-                LabeledContent("Address") { Text(email).textSelection(.enabled) }
-                LabeledContent("Type") { Text(AccountDraft.Kind(rawValue: row.type)?.label ?? row.type) }
-                if row.type == "imap" {
-                    LabeledContent("Server") {
-                        Text("\(row.host ?? ""):\(String(row.port))\(row.starttls ? " · STARTTLS" : "")")
+        VStack(alignment: .leading, spacing: 14) {
+            DeskSideCard(title: String(localized: "Connection"), icon: .at) {
+                VStack(spacing: 0) {
+                    MeadowFact(String(localized: "Name")) {
+                        Text(row.alias.flatMap { $0.isEmpty ? nil : $0 }
+                             ?? String(localized: "\(StatusWords.short(email)) · no alias"))
+                            .foregroundStyle(row.alias?.isEmpty == false ? meadow.ink : meadow.ink3)
                     }
-                }
-                LabeledContent("Password") { CredentialWords(credential: row.credential) }
-                if row.disabled { LabeledContent("Status") { Text("Disabled") } }
-                if let live {
-                    LabeledContent("Inbox") {
-                        if let error = live.error, !error.isEmpty {
-                            Text(error).foregroundStyle(.red).lineLimit(1)
-                        } else {
-                            Text(live.inInbox.formatted())
+                    MeadowFact(String(localized: "Address")) { Text(email).textSelection(.enabled) }
+                    MeadowFact(String(localized: "Type")) {
+                        Text(AccountDraft.Kind(rawValue: row.type)?.label ?? row.type)
+                    }
+                    if row.type == "imap" {
+                        MeadowFact(String(localized: "Server")) {
+                            Text(verbatim: "\(row.host ?? ""):\(String(row.port))\(row.starttls ? " · STARTTLS" : "")")
+                        }
+                    }
+                    MeadowFact(String(localized: "Password"), last: !row.disabled && live == nil) {
+                        CredentialWords(credential: row.credential)
+                    }
+                    if row.disabled {
+                        MeadowFact(String(localized: "Status"), last: live == nil) { Text("Disabled") }
+                    }
+                    if let live {
+                        MeadowFact(String(localized: "Inbox"), last: true) {
+                            if let error = live.error, !error.isEmpty {
+                                Text(error).foregroundStyle(meadow.rust).lineLimit(1)
+                            } else {
+                                Text(live.inInbox.formatted()).monospacedDigit()
+                            }
                         }
                     }
                 }
+                HStack(spacing: 6) {
+                    Button { edit() } label: {
+                        MeadowIconView(.pen, size: 15)
+                        Text("Edit…")
+                    }
+                    .meadowButton(small: true)
+                    Button { remove() } label: {
+                        MeadowIconView(.trash, size: 15)
+                        Text("Remove…")
+                    }
+                    .meadowButton(del: true, small: true)
+                }
+                .padding(.top, 2)
             }
-            Section {
+            DeskSideCard(title: String(localized: "Sync"), icon: .refresh) {
                 HealthRow(status: status, email: email)
-                HStack {
+                HStack(spacing: 10) {
                     Button("Test Connection") { Task { await test(email) } }
+                        .meadowButton(small: true)
                         .disabled(tested == .running)
                     if let tested { TestedWords(tested: tested) }
-                    Spacer()
-                    Button("Edit…", action: edit)
-                    Button("Remove…", role: .destructive, action: remove)
+                    Spacer(minLength: 0)
                 }
             }
             if !row.signature.isEmpty {
-                Section("Signature") {
-                    Text(row.signature).font(.callout).textSelection(.enabled)
+                DeskSideCard(title: String(localized: "Signature"), icon: .pen) {
+                    Text(row.signature)
+                        .font(.meadow(.read, 14))
+                        .foregroundStyle(meadow.ink2)
+                        .textSelection(.enabled)
                 }
             }
             if row.type == "proton" {
-                Section("Proton Bridge password") { BridgePasswordView(status: status) }
+                DeskSideCard(title: String(localized: "Proton Bridge password"), icon: .key) {
+                    BridgePasswordView(status: status)
+                }
             }
         }
-        .formStyle(.grouped)
         .id(email)
     }
 
@@ -295,18 +305,26 @@ struct AccountDetail: View {
 /// How an account's password is kept, never the password (`Credentials`).
 struct CredentialWords: View {
     let credential: API.CredentialShown
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         if !credential.set {
-            Text("no password set").foregroundStyle(.secondary)
+            Text("no password set").foregroundStyle(meadow.ink3)
         } else {
             switch credential.style {
-            case "keychain": Label("In the Keychain", systemImage: "lock.fill")
-            case "op": Label(reference, systemImage: "key.fill").lineLimit(1).truncationMode(.middle)
-            case "env": Text("env $\(credential.var ?? "")")
+            case "keychain": labelled(.lock, String(localized: "In the Keychain"))
+            case "op": labelled(.key, reference).truncationMode(.middle)
+            case "env": Text(verbatim: "env $\(credential.var ?? "")")
             case "proton_bridge": Text("Proton Bridge")
-            default: Text("—")
+            default: Text(verbatim: "—")
             }
+        }
+    }
+
+    private func labelled(_ icon: MeadowIcon, _ words: String) -> some View {
+        HStack(spacing: 6) {
+            MeadowIconView(icon, size: 14).foregroundStyle(meadow.ink3)
+            Text(words).lineLimit(1)
         }
     }
 
@@ -322,20 +340,32 @@ struct CredentialWords: View {
 /// What a test came to, in the page's words.
 struct TestedWords: View {
     let tested: Tested
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
-        switch tested {
-        case .running:
-            HStack(spacing: 6) {
-                ProgressView().controlSize(.small)
-                Text("Testing… (approve Touch ID if asked)")
+        Group {
+            switch tested {
+            case .running:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Testing… (approve Touch ID if asked)")
+                }
+                .foregroundStyle(meadow.ink3)
+            case .connected:
+                HStack(spacing: 6) {
+                    MeadowIconView(.checkCircle, size: 15)
+                    Text("Connected")
+                }
+                .foregroundStyle(meadow.moss)
+            case .failed(let why):
+                HStack(spacing: 6) {
+                    MeadowIconView(.alert, size: 15)
+                    Text(why).lineLimit(2)
+                }
+                .foregroundStyle(meadow.rust)
             }
-            .foregroundStyle(.secondary)
-        case .connected:
-            Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-        case .failed(let why):
-            Label(why, systemImage: "xmark.circle.fill").foregroundStyle(.red).lineLimit(2)
         }
+        .font(.meadow(.ui, 13, .semibold))
     }
 }
 
@@ -345,38 +375,56 @@ struct HealthRow: View {
     let status: AppStatus
     let email: String
     @State private var busy = false
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let line = StatusWords.healthLine(status.health.first { $0.account == email }, now: status.now)
-        switch line {
-        case .none:
-            Text("Not synced yet").foregroundStyle(.secondary)
-        case .synced(let when, let count):
-            Label(count == 1 ? "Synced \(when) · 1 sync" : "Synced \(when) · \(count) syncs",
-                  systemImage: "checkmark.circle")
-                .foregroundStyle(.green)
-        case .certificateChanged(let when):
-            VStack(alignment: .leading, spacing: 6) {
-                Label(when.isEmpty ? "Certificate changed" : "Certificate changed · \(when)",
-                      systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                SettingHelp(String(localized: """
-                    The mail server on this computer showed a different certificate, so MailMind sent no password. If \
-                    you reinstalled or reset Proton Bridge, trust the new one.
-                    """))
-                Button(busy ? "Trusting…" : "Trust It") { act { await status.trust(email) } }
-                    .disabled(busy)
-            }
-        case .syncError(let kind, let when):
-            HStack {
-                Label(when.isEmpty ? "Sync error · \(kind)" : "Sync error · \(kind) · \(when)",
-                      systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                Spacer()
-                Button(busy ? "Syncing…" : "Retry") { act { await status.retry(email) } }
-                    .disabled(busy)
+        Group {
+            switch line {
+            case .none:
+                Text("Not synced yet").foregroundStyle(meadow.ink3)
+            case .synced(let when, let count):
+                HStack(spacing: 8) {
+                    SettingDot(colour: meadow.moss)
+                    Text(count == 1 ? "Synced \(when) · 1 sync" : "Synced \(when) · \(count) syncs")
+                }
+                .foregroundStyle(meadow.ink2)
+            case .certificateChanged(let when):
+                VStack(alignment: .leading, spacing: 8) {
+                    warning(when.isEmpty ? String(localized: "Certificate changed")
+                            : String(localized: "Certificate changed · \(when)"))
+                    SettingHelp(String(localized: """
+                        The mail server on this computer showed a different certificate, so MailMind sent no \
+                        password. If you reinstalled or reset Proton Bridge, trust the new one.
+                        """))
+                    Button(busy ? "Trusting…" : "Trust It") { act { await status.trust(email) } }
+                        .meadowButton(.danger, small: true)
+                        .disabled(busy)
+                }
+            case .syncError(let kind, let when):
+                HStack {
+                    warning(when.isEmpty ? String(localized: "Sync error · \(kind)")
+                            : String(localized: "Sync error · \(kind) · \(when)"))
+                    Spacer()
+                    Button(busy ? "Syncing…" : "Retry") { act { await status.retry(email) } }
+                        .meadowButton(small: true)
+                        .disabled(busy)
+                }
             }
         }
+        .font(.meadow(.ui, 13.5, .semibold))
+    }
+
+    /// A line on what went wrong, as the mockup's warning (`.trust.warn`): rust on its wash.
+    private func warning(_ words: String) -> some View {
+        HStack(spacing: 8) {
+            MeadowIconView(.alert, size: 15)
+            Text(words)
+        }
+        .foregroundStyle(meadow.rust)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(meadow.rustWash, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func act(_ run: @escaping @MainActor () async -> Void) {
