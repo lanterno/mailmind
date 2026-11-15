@@ -70,6 +70,54 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         XCTAssertFalse(model.key(key(0, "e")), "other keys go on to the window")
     }
 
+    private func window() -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        return window
+    }
+
+    /// A view that takes the keyboard, as the list's table does.
+    private final class Keyed: NSView {
+        override var acceptsFirstResponder: Bool { true }
+    }
+
+    func testAPopoverTakesKeysOnlyFromItsOwnWindowAndNoneFromAField() throws {
+        let parent = window(), other = window(), panel = window()
+        let list = Keyed(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        let body = NSTextView(frame: NSRect(x: 100, y: 0, width: 100, height: 100))
+        let said = NSTextView(frame: NSRect(x: 200, y: 0, width: 100, height: 100))
+        said.isEditable = false
+        let field = NSTextField(frame: NSRect(x: 300, y: 0, width: 100, height: 22))
+        for view in [list, body, said, field] { parent.contentView?.addSubview(view) }
+        func verdict(_ code: UInt16, in window: NSWindow?) -> MeadowPopoverKeys.Verdict {
+            MeadowPopoverKeys.verdict(keyCode: code, typedIn: window, hungIn: parent, panel: panel)
+        }
+
+        XCTAssertTrue(parent.makeFirstResponder(list))
+        XCTAssertEqual(verdict(53, in: parent), .close)
+        XCTAssertEqual(verdict(125, in: parent), .offer)
+        XCTAssertEqual(verdict(19, in: parent), .offer, "a snooze's digit, typed over the list")
+        XCTAssertEqual(verdict(125, in: panel), .offer)
+        XCTAssertEqual(verdict(36, in: other), .pass, "another window's Return is its own")
+        XCTAssertEqual(verdict(53, in: other), .pass)
+        XCTAssertEqual(verdict(36, in: nil), .pass)
+
+        XCTAssertTrue(parent.makeFirstResponder(body))
+        XCTAssertEqual(verdict(36, in: parent), .pass, "Return in a message's body is the body's")
+        XCTAssertEqual(verdict(19, in: parent), .pass)
+        XCTAssertEqual(verdict(124, in: parent), .pass)
+        XCTAssertEqual(verdict(53, in: parent), .close, "Esc still closes it")
+
+        XCTAssertTrue(parent.makeFirstResponder(field))
+        XCTAssertTrue(MeadowPopoverKeys.typesText(parent.firstResponder), "a field is edited in its editor")
+        XCTAssertEqual(verdict(19, in: parent), .pass, "a 2 typed in the search field is the field's")
+
+        XCTAssertTrue(parent.makeFirstResponder(said))
+        XCTAssertEqual(verdict(125, in: parent), .offer, "text only to read takes no keys")
+        XCTAssertFalse(MeadowPopoverKeys.typesText(nil))
+    }
+
     func testAMenusOwnKeysComeFirst() {
         let model = MeadowMenuModel()
         model.items = [MeadowMenuItem(id: "a", title: "A") {}]
