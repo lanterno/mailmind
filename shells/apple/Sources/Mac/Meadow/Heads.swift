@@ -318,8 +318,8 @@ struct PaneWriting: Equatable {
 }
 
 /// The reading pane's bar (`.pbar`, `paneBar()`): over a message, its triage and its writing with their keys (in
-/// Trash, Restore in their place), then reading settings and focus, and where it stands in the list with the next
-/// and previous; over anything else only the last three.
+/// Trash, Restore in their place; in Archive, Move to Inbox in File's), then reading settings and focus, and where it
+/// stands in the list with the next and previous; over anything else only the last three.
 struct MeadowPaneBar: View {
     let app: MailApp
     let mailbox: Mailbox
@@ -374,8 +374,15 @@ struct MeadowPaneBar: View {
 
     @ViewBuilder private func triage(_ fold: PaneBarFold) -> some View {
         let none = !mailbox.hasTarget
-        verb(.archive, "File", key: "E", help: "File to Archive · E", fold: fold) { mailbox.file(.archive) }
+        if filed {
+            verb(.inbox, "Move to Inbox", help: RowAct.toInbox.title, fold: fold) {
+                Task { mailbox.restore(await mailbox.targets()) }
+            }
             .disabled(none)
+        } else {
+            verb(.archive, "File", key: "E", help: "File to Archive · E", fold: fold) { mailbox.file(.archive) }
+                .disabled(none)
+        }
         verb(.trash, "Delete", key: "#", help: "Delete · # or Del", del: true, fold: fold) { mailbox.file(.trash) }
             .disabled(none)
         // What the desk's verbs act on, as its `chosenCopies` says: the rows marked, else the message open.
@@ -393,6 +400,14 @@ struct MeadowPaneBar: View {
                  help: done ? "Reply later — Done · L" : "Reply later · L", second: true, fold: fold) { later?.run() }
                 .disabled(later == nil)
         }
+    }
+
+    /// The message open is filed already (Archive, or Gmail's All Mail), where File gives way to taking it back to
+    /// the Inbox, as the mockup's Archive and a filed row's own button do.
+    private var filed: Bool {
+        guard let copy = app.selection.copy else { return false }
+        let role = mailbox.folders(of: copy.account).first { $0.name == copy.folder }?.role
+        return role == "archive" || role == "all"
     }
 
     // MARK: Trash
