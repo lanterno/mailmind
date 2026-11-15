@@ -99,6 +99,46 @@ final class AccountDraftTests: XCTestCase {
                        .failed("LOGIN refused"))
         XCTAssertEqual(Tested.of(URLError(.timedOut)), .failed("test failed"))
     }
+
+    func testOnlyANewAddressWithAnAtInItIsAskedWhichPresetItTakes() {
+        var draft = AccountDraft()
+        XCTAssertNil(draft.presetQuery)
+        draft.email = "ada"
+        XCTAssertNil(draft.presetQuery)
+        draft.email = "  ada@acme.example.test "
+        XCTAssertEqual(draft.presetQuery, "ada@acme.example.test")
+        XCTAssertNil(AccountDraft(editing: F.account("ada@example.test")).presetQuery, "a saved account's type is its own")
+    }
+
+    func testGmailsSettingsAreOfferedWhereTheServerFoundThemAndAnotherTypeIsPicked() {
+        var draft = AccountDraft()
+        draft.email = "ada@acme.example.test"
+        draft.found = API.PresetFound(domain: "acme.example.test", ok: true, preset: .gmail, sure: false)
+        XCTAssertEqual(draft.presetWords, .fits("Google takes acme.example.test’s mail: Gmail’s settings fit it."))
+        draft.kind = .imap
+        XCTAssertEqual(draft.presetWords, .offer("Google takes acme.example.test’s mail: use Gmail’s settings?"))
+
+        draft.found = API.PresetFound(domain: "gmail.com", ok: true, preset: .gmail, sure: true)
+        XCTAssertEqual(draft.presetWords, .offer("A Google address: use Gmail’s settings?"))
+        draft.kind = .gmail
+        XCTAssertNil(draft.presetWords, "Gmail's own address, with Gmail's settings picked: nothing to say")
+
+        draft.kind = .imap
+        draft.found = API.PresetFound(domain: "example.test", ok: true, preset: nil, sure: false)
+        XCTAssertNil(draft.presetWords)
+        draft.found = nil
+        XCTAssertNil(draft.presetWords)
+    }
+
+    func testGmailsPasswordFieldShowsAnAppPasswordsShapeAndTheStepsToOne() {
+        var draft = AccountDraft()
+        XCTAssertEqual(draft.passwordPrompt, "abcd efgh ijkl mnop")
+        draft.kind = .imap
+        XCTAssertEqual(draft.passwordPrompt, "paste the password / app password")
+        XCTAssertEqual(AccountDraft(editing: F.account("ada@example.test")).passwordPrompt, "unchanged — leave blank to keep")
+        XCTAssertEqual(AccountDraft.appPasswords.absoluteString, "https://myaccount.google.com/apppasswords")
+        XCTAssertEqual(AccountDraft.appPasswordSteps.count, 3)
+    }
 }
 
 /// What Settings says of the Claude API key and the Bridge's password: whether one is kept, and what wins over it.
@@ -263,6 +303,30 @@ final class SettingsCoreTests: XCTestCase {
         _ = try await core.post(API.Post.AccountsDelete.self, API.NamesAnAccount(email: "ada@example.test"))
         await status.readAccounts()
         XCTAssertTrue(status.firstRun)
+        await close(core, status)
+    }
+
+    @MainActor
+    func testAnAddressAtGooglesOwnDomainTakesGmailsPresetAndATestHomeAsksNoNameserver() async throws {
+        let (core, status) = try await opened()
+        let gmail = try await core.get(API.Get.AccountsPreset.self, ["email": "Ada@GMail.com"])
+        XCTAssertEqual(gmail, API.PresetFound(domain: "gmail.com", ok: true, preset: .gmail, sure: true))
+        let acme = try await core.get(API.Get.AccountsPreset.self, ["email": "ada@acme.example.test"])
+        XCTAssertEqual(acme, API.PresetFound(domain: "acme.example.test", ok: true, preset: nil, sure: false))
+        await close(core, status)
+    }
+
+    @MainActor
+    func testAGmailAppPasswordAsGoogleShowsItIsKeptWithoutItsSpaces() async throws {
+        let (core, status) = try await opened()
+        var draft = AccountDraft()
+        draft.email = "dee@example.test"
+        draft.password = "abcd efgh ijkl mnop"
+        _ = try await SecretPost.post(core, API.Post.AccountsAdd.self, draft.body)
+        let stood = try String(contentsOf: keychain, encoding: .utf8)
+        XCTAssertTrue(stood.contains("abcdefghijklmnop"))
+        XCTAssertFalse(stood.contains("abcd efgh"))
+        _ = try await core.post(API.Post.AccountsDelete.self, API.NamesAnAccount(email: "dee@example.test"))
         await close(core, status)
     }
 

@@ -201,6 +201,20 @@ final class MeadowDialogPictures: XCTestCase {
         }
     }
 
+    /// A Workspace address, which Gmail's settings fit, and the steps to its App Password.
+    func testAGmailAccountsFormWithTheStepsToAnAppPassword() throws {
+        var draft = AccountDraft()
+        draft.email = "ada@acme.example.test"
+        draft.found = API.PresetFound(domain: "acme.example.test", ok: true, preset: .gmail, sure: false)
+        try draw("settings-account-form-gmail", CGSize(width: 560, height: 760)) { _ in
+            AccountForm(status: status(), draft: draft, done: { _ in })
+        }
+        draft.kind = .imap
+        try draw("settings-account-form-offer", CGSize(width: 560, height: 640)) { _ in
+            AccountForm(status: status(), draft: draft, done: { _ in })
+        }
+    }
+
     func testTheFirstRunInTheBriefsManner() throws {
         try draw("first-run", CGSize(width: 1000, height: 760)) { _ in
             Welcome(status: status(firstRun: true), keySet: false, lights: false)
