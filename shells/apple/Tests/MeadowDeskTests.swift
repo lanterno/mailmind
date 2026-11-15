@@ -207,4 +207,44 @@ final class MeadowDeskTests: XCTestCase {
         XCTAssertEqual(Ledger.monthOnly("2026-10"), "October")
         XCTAssertEqual(Ledger.monthOnly(""), "Undated")
     }
+
+    // MARK: The gate
+
+    func testTheGatePutsASenderOffToTheBackAndRemembersWhatItDecided() async {
+        let routes = DeskRoutes()
+        routes.answer("GET", "/api/screener", DeskFixture.screener)
+        routes.answer("POST", "/api/rules", API.RuleChanged(ok: true, reclassified: 0, rules: DeskFixture.rules,
+                                                            token: "marie@example.test", trashed: false))
+        let model = ScreenerModel(account: "ada@example.test", link: CoreLink(routes), notices: DeskNotices())
+        await model.load()
+        XCTAssertEqual(model.visitor?.fromAddr, "hello@studio.example.test")
+
+        model.putOff("hello@studio.example.test")
+        XCTAssertEqual(model.rows.map(\.fromAddr),
+                       ["marie@example.test", "offers@deals.example.test", "hello@studio.example.test"])
+        XCTAssertEqual(model.visitor?.fromAddr, "marie@example.test")
+        model.chosen = "offers@deals.example.test"
+        XCTAssertEqual(model.visitor?.fromAddr, "offers@deals.example.test")
+
+        await model.decide("marie@example.test", .keep)
+        XCTAssertEqual(model.recent.map(\.sender.fromAddr), ["marie@example.test"])
+        XCTAssertEqual(model.recent.first?.verdict, .keep)
+    }
+
+    func testTheGateReadsAVisitorsLatestLetterOnceByASearchOfTheirAddress() async {
+        let routes = DeskRoutes()
+        routes.answer("GET", "/api/search", API.SearchAnswer.searchPage(API.SearchPage(
+            generated: "2026-11-15T09:00:00Z", hasMore: false, items: [Fixture.hit(9, subject: "Hello")], offset: 0,
+            ok: true, query: "", scope: "account")))
+        let model = ScreenerModel(account: "ada@example.test", link: CoreLink(routes), notices: DeskNotices())
+        await model.readLetter("hello@studio.example.test")
+        await model.readLetter("hello@studio.example.test")
+
+        let asked = routes.sent("GET", "/api/search")
+        XCTAssertEqual(asked.count, 1)
+        XCTAssertEqual(asked.first?.query, ["q": "from:\"hello@studio.example.test\"", "scope": "account",
+                                            "account": "ada@example.test", "limit": "1", "offset": "0"])
+        XCTAssertEqual(model.letters["hello@studio.example.test"]??.subject, "Hello")
+        XCTAssertEqual(ScreenerModel.quoted(#"a"b\c"#), #""a\"b\\c""#)
+    }
 }
