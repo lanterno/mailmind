@@ -22,6 +22,16 @@ struct MailMindApp: App {
         }
         #if os(macOS)
         .defaultSize(width: 560, height: 820)
+        // The menu bar's writing, and each composer in a window of its own: Mac/Compose.
+        .commands { ComposeCommands() }
+        #endif
+        #if os(macOS)
+        WindowGroup("New Message", id: ComposeWindow.scene, for: UUID.self) { $id in
+            ComposeWindow(id: id)
+        }
+        .defaultSize(width: 720, height: 640)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
         #endif
 
         #if os(macOS)

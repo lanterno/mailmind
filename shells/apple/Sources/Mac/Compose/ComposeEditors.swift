@@ -1,0 +1,282 @@
+#if os(macOS)
+import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// The message's text: plain text, Markdown as the server reads it. A paste whose links carry tracking goes in
+/// without it, through the text's own edit so Undo still takes it back; a picture pasted or dropped by itself goes
+/// into the text where the cursor is; other files dropped are attachments; Tab brings in a snippet and then goes
+/// through its placeholders.
+struct ComposeTextView: NSViewRepresentable {
+    let composer: Composer
+    /// What the composer holds, read where the window's body is drawn so a change reaches the text view.
+    let text: String
+    let selectionRequest: NSRange?
+    let focusBody: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(composer: composer)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        let text = BodyTextView(frame: .zero)
+        text.isVerticallyResizable = true
+        text.isHorizontallyResizable = false
+        text.autoresizingMask = [.width]
+        text.textContainer?.widthTracksTextView = true
+        text.minSize = .zero
+        text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        scroll.documentView = text
+        text.composer = composer
+        text.delegate = context.coordinator
+        text.isRichText = false
+        text.importsGraphics = false
+        text.allowsUndo = true
+        text.usesFindBar = true
+        text.isIncrementalSearchingEnabled = true
+        text.font = .systemFont(ofSize: NSFont.systemFontSize + 1)
+        text.textContainerInset = NSSize(width: 12, height: 10)
+        text.string = composer.body
+        text.setAccessibilityLabel("message body")
+        text.registerForDraggedTypes([.fileURL])
+        scroll.drawsBackground = false
+        context.coordinator.text = text
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let view = scroll.documentView as? BodyTextView else { return }
+        if view.string != text {
+            // A change the composer made (a snippet, a draft, a picture's mark): the text takes it whole.
+            view.string = text
+        }
+        if let wanted = selectionRequest {
+            let length = (view.string as NSString).length
+            let range = NSRange(location: min(wanted.location, length),
+                                length: max(0, min(NSMaxRange(wanted), length) - min(wanted.location, length)))
+            view.setSelectedRange(range)
+            view.scrollRangeToVisible(range)
+        }
+        let focus = focusBody
+        if focus {
+            if let window = view.window { window.makeFirstResponder(view) } else { view.focusOnWindow = true }
+        }
+        guard selectionRequest != nil || focus else { return }
+        // Taken: the requests are cleared after this update, never during it.
+        let composer = composer
+        DispatchQueue.main.async {
+            if selectionRequest != nil { composer.selectionRequest = nil }
+            if focus, composer.focusRequest == .body { composer.focusRequest = nil }
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        let composer: Composer
+        weak var text: BodyTextView?
+
+        init(composer: Composer) {
+            self.composer = composer
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let text else { return }
+            composer.setBody(text.string, selection: text.selectedRange())
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let text else { return }
+            composer.caretMoved(text.selectedRange())
+        }
+
+        func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            composer.caretMoved(textView.selectedRange())
+            switch selector {
+            case #selector(NSResponder.insertTab(_:)): return composer.tabInBody(back: false)
+            case #selector(NSResponder.insertBacktab(_:)): return composer.tabInBody(back: true)
+            default: return false
+            }
+        }
+    }
+}
+
+/// The text view under the composer's body, for what pasting and dropping do.
+final class BodyTextView: NSTextView {
+    weak var composer: Composer?
+    /// Asked for the keys before it was in a window: it takes them as it gets one.
+    var focusOnWindow = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard focusOnWindow, let window else { return }
+        focusOnWindow = false
+        window.makeFirstResponder(self)
+    }
+
+    override func paste(_ sender: Any?) {
+        let board = NSPasteboard.general
+        if let pasted = board.string(forType: .string) {
+            let clean = LinkClean.clean(pasted)
+            guard clean != pasted else { return super.paste(sender) }
+            insertText(clean, replacementRange: selectedRange())
+            return
+        }
+        let pictures = Self.pictures(on: board)
+        guard !pictures.isEmpty, let composer else { return super.paste(sender) }
+        composer.caretMoved(selectedRange())
+        composer.add(pictures, inText: true)
+    }
+
+    /// The pictures a pasteboard holds by themselves: files of a picture's type, or a picture's own bytes.
+    static func pictures(on board: NSPasteboard) -> [Composer.Source] {
+        if let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty
+        {
+            return urls.filter { Pictures.isPicture(UTType(filenameExtension: $0.pathExtension)?.preferredMIMEType ?? "") }
+                .map { .file($0) }
+        }
+        if let png = board.data(forType: .png) { return [.data(name: "image.png", type: "image/png", png)] }
+        if let tiff = board.data(forType: .tiff), let image = NSBitmapImageRep(data: tiff),
+           let png = image.representation(using: .png, properties: [:])
+        {
+            return [.data(name: "image.png", type: "image/png", png)]
+        }
+        return []
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let board = sender.draggingPasteboard
+        guard let composer,
+              let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+              !urls.isEmpty else { return super.performDragOperation(sender) }
+        // A picture goes where it was dropped; any other file is attached.
+        let at = characterIndexForInsertion(at: convert(sender.draggingLocation, from: nil))
+        composer.caretMoved(NSRange(location: at, length: 0))
+        let pictures = urls.filter { Pictures.isPicture(UTType(filenameExtension: $0.pathExtension)?.preferredMIMEType ?? "") }
+        let others = urls.filter { !pictures.contains($0) }
+        if !pictures.isEmpty { composer.add(pictures.map { .file($0) }, inText: true) }
+        if !others.isEmpty { composer.add(others.map { .file($0) }) }
+        return true
+    }
+}
+
+/// What is being typed into a recipient field: a native field, so the completion list takes the arrow keys and
+/// Return before the field does, and Backspace in an empty field takes the last chip back.
+struct RecipientInput: NSViewRepresentable {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    /// The completion's keys: up or down (-1, 1), and accepting the one chosen. Each says if it was taken.
+    let move: (Int) -> Bool
+    let accept: () -> Bool
+    let commit: () -> Void
+    let backspaceWhenEmpty: () -> Void
+    let escape: () -> Bool
+    let focused: Bool
+    let focusTaken: () -> Void
+    let lostFocus: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> RecipientField {
+        let field = RecipientField()
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.placeholderString = placeholder
+        field.setAccessibilityLabel(label)
+        field.delegate = context.coordinator
+        field.cell?.isScrollable = true
+        field.cell?.wraps = false
+        field.stringValue = text
+        return field
+    }
+
+    func updateNSView(_ field: RecipientField, context: Context) {
+        context.coordinator.input = self
+        if field.stringValue != text { field.stringValue = text }
+        guard focused else { return }
+        if let window = field.window {
+            if field.currentEditor() == nil { window.makeFirstResponder(field) }
+        } else {
+            field.focusOnWindow = true
+        }
+        let taken = focusTaken
+        DispatchQueue.main.async { taken() }   // after this update, never during it
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var input: RecipientInput
+
+        init(_ input: RecipientInput) {
+            self.input = input
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            let value = field.stringValue
+            // A comma or semicolon typed ends the chip.
+            if let last = value.last, last == "," || last == ";" {
+                input.text = value
+                input.commit()
+                return
+            }
+            input.text = value
+        }
+
+        func controlTextDidBeginEditing(_ notification: Notification) {
+            input.focusTaken()
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            input.lostFocus()
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            switch selector {
+            case #selector(NSResponder.moveDown(_:)): return input.move(1)
+            case #selector(NSResponder.moveUp(_:)): return input.move(-1)
+            case #selector(NSResponder.insertNewline(_:)):
+                if input.accept() { return true }
+                if !input.text.trimmingCharacters(in: .whitespaces).isEmpty {
+                    input.commit()
+                    return true
+                }
+                return false
+            case #selector(NSResponder.insertTab(_:)):
+                if input.accept() { return true }
+                if !input.text.trimmingCharacters(in: .whitespaces).isEmpty { input.commit() }
+                return false
+            case #selector(NSResponder.cancelOperation(_:)):
+                return input.escape()
+            case #selector(NSResponder.deleteBackward(_:)):
+                if input.text.isEmpty {
+                    input.backspaceWhenEmpty()
+                    return true
+                }
+                return false
+            default:
+                return false
+            }
+        }
+    }
+}
+
+/// A recipient field's text field, which takes the keys as it reaches a window when they were asked for before.
+final class RecipientField: NSTextField {
+    var focusOnWindow = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard focusOnWindow, let window else { return }
+        focusOnWindow = false
+        window.makeFirstResponder(self)
+    }
+}
+#endif
