@@ -448,6 +448,24 @@ fn a_name_a_vertical_tab_and_a_blank_start_is_no_parameter() {
 }
 
 #[test]
+fn a_disposition_after_a_vertical_tab_reads_as_python_read_it() {
+    // Python read Content-Disposition's parameters as it read Content-Type's.
+    for param in ["\x0bfilename=\"a.pdf\"", "filename\x1c=a.pdf", "charset=x;\x0cfilename=\"a.pdf\""] {
+        let raw = message(&format!(
+            "Content-Type: text/html\r\nContent-Disposition: attachment; {param}\r\n\r\n<b>x</b>\r\n"
+        ));
+        assert_eq!(parse(&raw).attachments, [file(1, "a.pdf", "text/html", 10)], "{param:?}");
+    }
+    for param in ["; filename=\x0b\"a.pdf\"", ";\x0b filename=\"a.pdf\""] {
+        let raw =
+            message(&format!("Content-Type: text/html\r\nContent-Disposition: inline{param}\r\n\r\n<b>x</b>\r\n"));
+        let parsed = parse(&raw);
+        assert_eq!(parsed.html.as_deref(), Some("<b>x</b>\r\n"), "{param:?}");
+        assert!(parsed.attachments.is_empty(), "{param:?}");
+    }
+}
+
+#[test]
 fn a_boundary_ends_at_its_last_byte_that_isnt_a_blank_inside_its_quotes_too() {
     // Python's get_boundary stripped the boundary on the right once its quotes were off.
     let body = "\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nhi\r\n--b--\r\n";
