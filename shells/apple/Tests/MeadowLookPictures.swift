@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 import XCTest
 
-/// Every icon at the mockup's two sizes, and the type specimen from its design notes, drawn in each light: each must
-/// draw, and with `TEST_RUNNER_MEADOW_PICTURES=<folder>` given to `xcodebuild test` each is written there, at twice
-/// the size, to be laid beside the mockup's pictures.
+/// Every icon at the mockup's two sizes, the type specimen from its design notes, and the side cards' facts and the
+/// segmented strips, drawn in each light: each must draw, and with `TEST_RUNNER_MEADOW_PICTURES=<folder>` given to
+/// `xcodebuild test` each is written there, at twice the size, to be laid beside the mockup's pictures.
 @MainActor
 final class MeadowLookPictures: XCTestCase {
     private static var folder: URL? {
@@ -34,11 +34,69 @@ final class MeadowLookPictures: XCTestCase {
         }
     }
 
+    func testTheFactsAndTheSegmentedStrips() throws {
+        // As the paper trail's and the reader's cards list them, to lay beside reference/1440-*-ledger.png.
+        for light in MeadowLight.allCases {
+            try draw("blocks-\(light.rawValue)", SharedBlocks().meadowLight(light))
+        }
+    }
+
+    func testAFactsNameThatGivesWayKeepsItsLineOneTall() {
+        let short = NSHostingView(rootView: MeadowFact("Amount", value: "$98.50").frame(width: 268))
+        let long = NSHostingView(rootView: MeadowFact(value: "1.2 MB") {
+            Text(verbatim: "Harbor-Library-agreement-v3-signed-and-countersigned-final.pdf")
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 190, alignment: .leading)
+        }.frame(width: 268))
+        XCTAssertEqual(long.fittingSize.height, short.fittingSize.height)
+    }
+
     func testTheRailBesideTheMockups() throws {
         // The rail's icons in the mockup's order, at its size and colour, to lay over reference/1440-*-brief.png.
         for light in MeadowLight.allCases {
             try draw("rail-\(light.rawValue)", Rail().meadowLight(light))
         }
+    }
+}
+
+/// The side cards' facts in each of their forms, and a segmented strip filling its room and fitting its words.
+private struct SharedBlocks: View {
+    @State private var showing = "sender"
+    @State private var part = "senders"
+    @Environment(\.meadow) private var palette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            DeskSideCard(title: "By account", icon: .user) {
+                VStack(spacing: 0) {
+                    MeadowFact(value: "$126.40") { MeadowChip("Windbell", tone: .account(palette.account(2))) }
+                    MeadowFact(value: "$101.00") { MeadowChip("Personal", tone: .account(palette.account(1))) }
+                    MeadowFact(value: "$45.00", last: true) { MeadowChip("Work", tone: .account(palette.account(0))) }
+                }
+            }
+            DeskSideCard(title: "Paper trail", icon: .receipt) {
+                VStack(spacing: 0) {
+                    MeadowFact("Amount", value: "$98.50")
+                    MeadowFact("From", value: "Northwind Rail")
+                    MeadowFact(value: "1.2 MB") {
+                        Text(verbatim: "Harbor-Library-agreement-v3-signed.pdf")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 190, alignment: .leading)
+                    }
+                    MeadowFact("Filed under", last: true) { Text(verbatim: "Receipts") }
+                }
+            }
+            MeadowSegmentedChoice(label: "Light", selection: $showing,
+                                  options: [("sender", "Day"), ("type", "Dusk"), ("newest", "Night")])
+            MeadowSegmentedChoice(label: "Part", selection: $part,
+                                  options: [("senders", "Senders"), ("inboxes", "Inboxes"), ("rules", "Rules")],
+                                  fills: false)
+        }
+        .padding(16)
+        .frame(width: 320)
+        .background(palette.paper)
     }
 }
 
