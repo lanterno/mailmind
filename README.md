@@ -673,9 +673,19 @@ real mail before it becomes the default. The command line stays on imaplib, remo
 back, and the startup line `[imap] …` says how many accounts asked.
 
 **Per-type notes**
-- **Gmail / Workspace** — you need an **App Password** (Google account → 2-Step
-  Verification → App passwords), *not* your login password. Defaults to
-  `imap.gmail.com:993`, trash `[Gmail]/Trash`.
+- **Gmail / Workspace** — you need an **App Password**, *not* your Google password: turn on
+  2-Step Verification for your Google Account, create an App Password at
+  [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), and paste it
+  as Google shows it, four groups of four letters: MailMind keeps it in your login Keychain
+  without the spaces. Settings (the page's and the Mac app's) has a button to that page and
+  the steps beside the password. It picks Gmail for a `gmail.com` or `googlemail.com` address,
+  and offers it for one whose domain's mail Google takes (its MX records name Google's
+  servers: as you type the address, MailMind asks this computer's nameservers for the
+  domain's MX records, and for nothing else). Saving a connection tests it at once, and a refusal says what to do: an App
+  Password where a Google password was typed, a sign-in Google wants on the web first, or
+  IMAP switched off. No App Passwords offered at all means Advanced Protection, or a
+  Workspace admin, has switched them off. Defaults to `imap.gmail.com:993`, trash
+  `[Gmail]/Trash`.
 - **Generic IMAP** — set `host`/`port`. Default is `:993` direct TLS; use
   `"port": 143, "starttls": true` for STARTTLS. Either way the server's certificate
   is verified, so a self-signed one won't connect. The **trash folder name matters** —
