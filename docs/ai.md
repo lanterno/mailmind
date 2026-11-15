@@ -89,7 +89,9 @@ The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
   `Deferred("limit")`. An interactive call raises `OverLimit`, which `shared.failure_answer`
   answers as a 402 with `over_limit: true`. `request` in `lib/api/client.ts` asks (the `askOverLimit` a call passes it), then sends
   the request again with `X-MailMind-AI-Over-Limit: allow` (`shared.AI_OVER_HEADER`), which
-  runs it inside `assistant.allowing_over()`.
+  runs it inside `assistant.allowing_over()`. The Mac app asks the same question with an alert
+  (`shells/apple/Sources/Mac/Shared/OverLimit.swift`) and sends again through the host's
+  `request_over_limit`, the one header a shell can add.
 - The breaker. A 401 or 403 stops every background and speculative call, and three permanent
   4xx in a row for one feature and model stop that pair. It stays open until the model in use
   changes, which a new key or base URL does. Interactive calls still go.
