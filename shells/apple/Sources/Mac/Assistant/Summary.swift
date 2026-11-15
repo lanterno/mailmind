@@ -40,7 +40,7 @@ final class SummaryCards {
         show(copy, .writing)
         let body = API.SummarizeBody(folder: copy.folder, force: force ? true : nil, key: copy.key, uid: copy.uid)
         do {
-            show(copy, .written(try await routes.post(API.Post.AiSummarize.self, body)))
+            show(copy, .written(try await routes.post(API.Post.AiSummarize.self, body, asking: link.asksOverLimit)))
         } catch {
             show(copy, .failed(DeskRefusal.isOverLimit(error)
                 ? String(localized: "today’s AI limit is reached")

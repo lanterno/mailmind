@@ -73,7 +73,8 @@ final class PlanModel {
         doing = .planning(command: command)
         let answer: API.AiDoPlanAnswer
         do {
-            answer = try await routes.post(API.Post.AiDoPlan.self, API.PlanBody(cmd: command))
+            answer = try await routes.post(API.Post.AiDoPlan.self, API.PlanBody(cmd: command),
+                                           asking: link.asksOverLimit)
         } catch {
             guard mine == seq else { return }
             let why = DeskRefusal.isAIOff(error) ? String(localized: "AI is off")

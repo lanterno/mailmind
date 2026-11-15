@@ -31,7 +31,7 @@ final class Desk {
         }
     }
 
-    @ObservationIgnored let link = CoreLink()
+    @ObservationIgnored let link = CoreLink(asking: { await OverLimitQuestion.onScreen.ask($0) })
     let notices = DeskNotices()
     let summaries: SummaryCards
     let suggestions: SuggestionCards

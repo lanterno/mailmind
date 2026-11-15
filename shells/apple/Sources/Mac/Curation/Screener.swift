@@ -46,7 +46,8 @@ final class ScreenerModel {
         suggesting = true
         defer { suggesting = false }
         do {
-            let answer = try await routes.post(API.Post.ScreenerSuggest.self, API.ScreenerSuggestBody(account: account))
+            let answer = try await routes.post(API.Post.ScreenerSuggest.self, API.ScreenerSuggestBody(account: account),
+                                               asking: link.asksOverLimit)
             suggestions = Dictionary(answer.suggestions.map { ($0.fromAddr, $0) }, uniquingKeysWith: { first, _ in first })
             if answer.suggestions.isEmpty { notices.say(String(localized: "The AI isn’t sure of any of these")) }
         } catch {

@@ -16,6 +16,8 @@ protocol ComposeHost: AnyObject {
     /// What one message's files may come to, when the app knows; the server refuses past it anyway.
     var attachLimit: Int? { get }
     var aiOn: Bool { get }
+    /// What asks whether an AI call a person started may go over today's limit: the window's alert in the app.
+    var asksOverLimit: AskOverLimit? { get }
     var snippets: [API.Snippet] { get }
     func signature(_ email: String) -> String
     func loadSnippets()
@@ -1002,7 +1004,8 @@ final class Composer: Identifiable {
         retireGuard()
     }
 
-    /// Draft the reply. `unless`: a quick reply's line, which wins once you've changed it.
+    /// Draft the reply. `unless`: a quick reply's line, which wins once you've changed it. `quiet`: no one pressed for
+    /// it, so it never asks at the daily limit.
     func draftReply(tone: API.DraftTone? = nil, instruction: String = "", unless: String? = nil, quiet: Bool = false) async {
         guard busy == .none, let routes = host.routes else { return }
         guard let origKey else { return say("Open a reply to draft one") }
@@ -1010,7 +1013,8 @@ final class Composer: Identifiable {
         defer { busy = .none }
         do {
             let drafted = try await routes.post(API.Post.AiDraftReply.self, API.DraftReplyBody(
-                account: from, instruction: instruction, key: origKey, tone: tone ?? host.tone))
+                account: from, instruction: instruction, key: origKey, tone: tone ?? host.tone),
+                asking: quiet ? nil : host.asksOverLimit)
             guard !closed else { return }   // closed while drafting: not this composer's text
             if let unless, body != unless { return }   // a quick reply you've started editing: yours wins
             let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1038,7 +1042,8 @@ final class Composer: Identifiable {
         defer { busy = .none }
         do {
             let rewritten = try await routes.post(API.Post.AiRewrite.self,
-                                                  API.RewriteBody(lang: language, op: op, text: text))
+                                                  API.RewriteBody(lang: language, op: op, text: text),
+                                                  asking: host.asksOverLimit)
             guard !closed else { return }
             undoRewrite = (full, range)   // one step back to what it was
             placeBody(hasSelection ? units.replacingCharacters(in: range, with: rewritten.text) : rewritten.text)

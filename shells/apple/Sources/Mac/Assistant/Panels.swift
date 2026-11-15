@@ -79,7 +79,8 @@ final class ReviewModel {
         do {
             switch try await routes.get(API.Get.Review.self, [:]) {
             case .review(let stored): stage = .written(stored)
-            case .reviewMissing: stage = .written(try await routes.post(API.Post.Review.self, API.NoBody()))
+            case .reviewMissing:   // none yet: you opened it, so write it, asking at the limit
+                stage = .written(try await routes.post(API.Post.Review.self, API.NoBody(), asking: link.asksOverLimit))
             }
         } catch {
             stage = Self.stage(error)
@@ -91,7 +92,8 @@ final class ReviewModel {
         guard let routes = link.routes else { return }
         stage = .reading
         do {
-            stage = .written(try await routes.post(API.Post.ReviewRefresh.self, API.NoBody()))
+            stage = .written(try await routes.post(API.Post.ReviewRefresh.self, API.NoBody(),
+                                                   asking: link.asksOverLimit))
         } catch {
             stage = Self.stage(error)
         }

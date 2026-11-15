@@ -30,6 +30,8 @@ final class Composing: ComposeHost {
     static let liveWait = Duration.seconds(10)
 
     @ObservationIgnored private(set) var core: (any Routes)?
+    /// The window's alert once the app's core is attached; a test's own answer, or none.
+    @ObservationIgnored private(set) var asksOverLimit: AskOverLimit?
     private(set) var digest: API.Digest?
     private(set) var preferences: API.Preferences?
     private(set) var snippets: [API.Snippet] = []
@@ -65,6 +67,7 @@ final class Composing: ComposeHost {
     func attach(_ core: Core) {
         guard self.core == nil else { return }
         self.core = core
+        asksOverLimit = { await OverLimitQuestion.onScreen.ask($0) }
         Task {
             await readDigest()
             await readPreferences()
@@ -87,8 +90,11 @@ final class Composing: ComposeHost {
     }
 
     /// Routes of a test's own, and who the digest says you are, with no event stream.
-    func use(_ routes: any Routes, digest: API.Digest?, preferences: API.Preferences? = nil) {
+    func use(_ routes: any Routes, digest: API.Digest?, preferences: API.Preferences? = nil,
+             asking: AskOverLimit? = nil)
+    {
         core = routes
+        asksOverLimit = asking
         self.digest = digest
         self.preferences = preferences
     }

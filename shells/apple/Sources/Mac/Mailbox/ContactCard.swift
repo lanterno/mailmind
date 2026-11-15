@@ -138,7 +138,8 @@ private struct SenderSummary: View {
         Task {
             defer { asking = false }
             do {
-                said = try await calls.post(API.Post.ContactSummary.self, API.SenderSummaryBody(addr: address))
+                said = try await calls.post(API.Post.ContactSummary.self, API.SenderSummaryBody(addr: address),
+                                            asking: calls.asksOverLimit)
             } catch let problem as Problem {
                 off = problem.more["ai_off"] == .bool(true)
                 refused = problem.isRefusal ? problem.detail ?? problem.title : String(localized: "Couldn’t summarize this sender.")

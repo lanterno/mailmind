@@ -2,26 +2,29 @@
 import Foundation
 
 /// What the assistant's, curation's, attention's and the calendar's models ask of the core: a route's GET or POST as
-/// its generated types, or a document's bytes. `Core` is one; a test's stand-in is another, so each turn a model takes
-/// can be held without a mail server or Claude.
-protocol RouteCaller: Sendable {
+/// its generated types (a POST a person started may go over today's AI limit with their leave), or a document's
+/// bytes. `Core` is one; a test's stand-in is another, so each turn a model takes can be held without a mail server or
+/// Claude.
+protocol RouteCaller: OverLimitRoutes {
     func get<R: GetRoute>(_ route: R.Type, _ query: KeyValuePairs<String, String?>) async throws -> R.Answer
         where R.Answer: Decodable
-    func post<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer where R.Answer: Decodable
     func document<R: GetRoute>(_ route: R.Type, _ query: KeyValuePairs<String, String?>) async throws -> NotJSON
         where R.Answer == NotJSON
 }
 
 extension Core: RouteCaller {}
 
-/// The core the window opened, once it has. The models are made with the window, before the core is open, and each
-/// asks this for it when a person acts.
+/// The core the window opened, once it has, and the window's question for an AI call a person started at today's
+/// limit. The models are made with the window, before the core is open, and each asks this for it when a person acts.
 @MainActor
 final class CoreLink {
     var routes: (any RouteCaller)?
+    /// The window's alert in the app, a test's own answer in a test. With none, a call at the limit only says so.
+    var asksOverLimit: AskOverLimit?
 
-    init(_ routes: (any RouteCaller)? = nil) {
+    init(_ routes: (any RouteCaller)? = nil, asking: AskOverLimit? = nil) {
         self.routes = routes
+        asksOverLimit = asking
     }
 }
 
@@ -32,8 +35,8 @@ enum DeskRefusal {
         (error as? Problem)?.more["ai_off"] == .bool(true)
     }
 
-    /// Today's AI spending has reached the daily limit (a 402 with `over_limit`). The page asks whether to go over it
-    /// and sends again with a header the core's in-process request can't carry yet, so here it only says so.
+    /// Today's AI spending has reached the daily limit (a 402 with `over_limit`). A call a person started has already
+    /// asked whether to go over it (`post(_:_:asking:)`), so this is a no, or a call the app made on its own.
     static func isOverLimit(_ error: any Error) -> Bool {
         (error as? Problem)?.more["over_limit"] == .bool(true)
     }

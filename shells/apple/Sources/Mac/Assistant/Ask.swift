@@ -35,7 +35,8 @@ final class AskModel {
         let mine = seq
         asking = .reading(question: question)
         do {
-            let answer = try await routes.post(API.Post.AiAsk.self, API.AskBody(account: account, question: question))
+            let answer = try await routes.post(API.Post.AiAsk.self, API.AskBody(account: account, question: question),
+                                               asking: link.asksOverLimit)
             guard mine == seq else { return }
             asking = .answered(question: question, answer)
             let count = answer.sources.count

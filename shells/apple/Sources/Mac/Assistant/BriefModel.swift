@@ -5,7 +5,7 @@ import Observation
 /// Today's brief, as the page's BriefPane reads it: the digest (what needs you, what can be filed, the AI's state),
 /// the brief Claude wrote of it, today and next, who you're waiting on, and what Tidy filed. A GET reads only what is
 /// stored; opening the brief writes the day's one if there is none and AI is on, and never asks at the daily limit:
-/// only a person's press writes it then.
+/// only a person's press asks to go over it.
 @MainActor
 @Observable
 final class BriefModel {
@@ -109,7 +109,7 @@ final class BriefModel {
                 brief = stored
             case .briefMissing:
                 brief = nil
-                if aiOn == true, !writing { await write(again: false) }
+                if aiOn == true, !writing { await write(again: false, asking: nil) }   // no one pressed: never asks
             }
         } catch {
             trouble = Self.trouble(error)
@@ -133,16 +133,21 @@ final class BriefModel {
         (waitingCount, replyLaterCount) = (waiting, later)
     }
 
-    /// Write the brief, or write it again from the mail as it is now (`again`). Both run the AI.
+    /// Write the brief, or write it again from the mail as it is now (`again`), on a person's press. Both run the AI,
+    /// and at today's limit ask first.
     func write(again: Bool) async {
+        await write(again: again, asking: link.asksOverLimit)
+    }
+
+    private func write(again: Bool, asking: AskOverLimit?) async {
         guard let routes = link.routes, !writing else { return }
         writing = true
         trouble = nil
         defer { writing = false }
         do {
             brief = again
-                ? try await routes.post(API.Post.BriefingRefresh.self, API.NoBody())
-                : try await routes.post(API.Post.Briefing.self, API.NoBody())
+                ? try await routes.post(API.Post.BriefingRefresh.self, API.NoBody(), asking: asking)
+                : try await routes.post(API.Post.Briefing.self, API.NoBody(), asking: asking)
             if again { await readSide(routes) }
         } catch {
             trouble = Self.trouble(error)

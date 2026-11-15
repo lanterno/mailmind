@@ -39,7 +39,7 @@ final class SuggestionCards {
         defer { asking.remove(copy) }
         shown = Shown(copy: copy, card: .reading)
         do {
-            let found = try await routes.post(API.Post.AiExtract.self, copy.namesAMessage)
+            let found = try await routes.post(API.Post.AiExtract.self, copy.namesAMessage, asking: link.asksOverLimit)
             shown = Shown(copy: copy, card: .found(found))
         } catch {
             let why = DeskRefusal.isAIOff(error)

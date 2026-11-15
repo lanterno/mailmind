@@ -1,11 +1,11 @@
 #if os(macOS)
 import Foundation
 
-/// The routes as compose and the reader ask them: `Core` answers them in the app, and a stand-in in the tests.
-protocol Routes: Sendable {
+/// The routes as compose and the reader ask them, an AI call a person started with their leave to go over today's
+/// limit among them: `Core` answers them in the app, and a stand-in in the tests.
+protocol Routes: OverLimitRoutes {
     func get<R: GetRoute>(_ route: R.Type, _ query: KeyValuePairs<String, String?>) async throws -> R.Answer
         where R.Answer: Decodable
-    func post<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer where R.Answer: Decodable
 }
 
 extension Core: Routes {}
