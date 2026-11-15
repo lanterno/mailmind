@@ -142,7 +142,7 @@ final class Desk {
     private func heard(_ event: CoreEvent) async {
         if MailApp.mailChanged.contains(event.name) {
             await readScreeners()
-            if brief.opened { await brief.refresh() }
+            if brief.tallied { await brief.refresh() }
         }
         if event.name == "tasks-changed" { await tasks.load() }
         if event.name == "new-mail", let said = event.decoded(SinceLooked.Arrived.self) {
@@ -201,7 +201,7 @@ final class Desk {
     func readAgain() {
         app?.mailbox.readAgain()
         Task { [weak self] in
-            if self?.brief.opened == true { await self?.brief.refresh() }
+            if self?.brief.tallied == true { await self?.brief.refresh() }
             await self?.readScreeners()
         }
     }
@@ -435,21 +435,14 @@ struct DeskScreen: View {
     }
 }
 
-/// The desk's rows in the sidebar: today's brief, and each account's Screener while senders wait in it.
-struct DeskSidebar: View {
-    @Environment(Desk.self) private var desk: Desk?
-
-    var body: some View {
-        if let desk {
-            Label("Today’s Brief", systemImage: "sun.max")
-                .tag(Place.desk(.brief))
-            ForEach(desk.accounts.filter { (desk.screeners[$0]?.waiting ?? 0) > 0 }, id: \.self) { account in
-                Label(desk.accounts.count > 1 ? "Screener · \(desk.nameOf(account))" : String(localized: "Screener"),
-                      systemImage: "person.badge.shield.checkmark")
-                    .badge(desk.screeners[account]?.waiting ?? 0)
-                    .tag(Place.desk(.screener(account: account)))
-            }
-        }
+extension Desk {
+    /// What the desk adds to the rail (Mac/Mailbox's `RailPlaces`): today's brief, how many it says need you, and each
+    /// account's Screener while senders wait in it.
+    var rail: DeskRail {
+        DeskRail(brief: true, needs: brief.needs.count, gates: accounts.compactMap { account in
+            let waiting = screeners[account]?.waiting ?? 0
+            return waiting > 0 ? DeskRail.Gate(account: account, waiting: waiting) : nil
+        })
     }
 }
 

@@ -1,0 +1,229 @@
+#if os(macOS)
+import Foundation
+
+// The rail's places in the order the mockup's `renderRail()` stands them (#44), filled with the real places the page's
+// rail offers (app/FolderRail.tsx): today's brief, every account's Inbox together, each Screener at the gate, the
+// places over every account, the lanes and the Document Hub, a person's views, then each account's folders, its own
+// places and its labels under its name. Folded to icons, the rail keeps the places over every account and offers its
+// folders behind one button that opens it.
+
+/// A place the rail offers.
+struct RailItem: Equatable {
+    /// What the rail says beside a place.
+    enum Count: Equatable {
+        case none
+        /// How many, in the quietest ink; folded away with the names.
+        case plain(Int)
+        /// How many need you: in sunlight with its dot, and a sun badge while the rail is folded.
+        case sun(Int)
+        /// A count that stays as a badge while the rail is folded: the senders at the gate.
+        case badge(Int)
+
+        init(_ n: Int, _ make: (Int) -> Count = Count.plain) {
+            self = n > 0 ? make(n) : .none
+        }
+    }
+
+    let place: Place
+    let icon: MeadowIcon
+    let title: String
+    var count: Count = .none
+    /// A person's own view, which the place's menu removes.
+    var removable: API.ListedView?
+}
+
+/// One line of the rail: a place, a section's head, an account's name over its folders, the labels' fold, the line
+/// between the folded rail's groups, or the folded rail's Folders button.
+struct RailEntry: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case item(RailItem)
+        case head(String)
+        case account(String)
+        case labels(account: String, open: Bool)
+        case separator
+        case folders
+    }
+
+    /// Whether the entry shows with the names, folded to icons, or both.
+    enum Shown: Equatable {
+        case always, open, folded
+    }
+
+    let id: String
+    let kind: Kind
+    var shown = Shown.always
+
+    func shows(open: Bool) -> Bool {
+        switch shown {
+        case .always: true
+        case .open: open
+        case .folded: !open
+        }
+    }
+
+    var item: RailItem? {
+        if case .item(let item) = kind { return item }
+        return nil
+    }
+}
+
+/// What the desk adds to the rail (Mac/Assistant's `Desk.rail`): today's brief, how many need you, and each account's
+/// Screener while senders wait in it.
+struct DeskRail: Equatable {
+    struct Gate: Equatable {
+        let account: String
+        let waiting: Int
+    }
+
+    var brief = false
+    /// The mail the brief says needs you, which the Inbox counts in sunlight.
+    var needs = 0
+    var gates: [Gate] = []
+}
+
+@MainActor
+enum RailPlaces {
+    /// Every line of the rail, open or folded (each says which it shows in), for the mailbox as it stands. `closed`
+    /// holds the accounts whose folders are folded away, and `labelsOpen` those whose labels are shown.
+    static func entries(_ mailbox: Mailbox, desk: DeskRail, closed: Set<String> = [],
+                        labelsOpen: Set<String> = []) -> [RailEntry] {
+        var out: [RailEntry] = []
+        func add(_ id: String, _ item: RailItem, _ shown: RailEntry.Shown = .always) {
+            out.append(RailEntry(id: id, kind: .item(item), shown: shown))
+        }
+
+        if desk.brief {
+            add("brief", RailItem(place: .desk(.brief), icon: .sun, title: String(localized: "Today’s brief")))
+        }
+        add("inbox", RailItem(place: .allInboxes, icon: .inbox, title: String(localized: "Inbox"),
+                              count: desk.needs > 0 ? .sun(desk.needs) : RailItem.Count(inboxesUnseen(mailbox))))
+        for gate in desk.gates {
+            let title = desk.gates.count > 1
+                ? String(localized: "At the gate · \(mailbox.name(of: gate.account))")
+                : String(localized: "At the gate")
+            add("gate:\(gate.account)", RailItem(place: .desk(.screener(account: gate.account)), icon: .gate,
+                                                 title: title,
+                                                 count: RailItem.Count(gate.waiting, RailItem.Count.badge)))
+        }
+        if let across = mailbox.across {
+            for item in virtual(of: nil, across.muted, across.replylater, across.snoozed, across.waiting) {
+                add("virtual:\(item.place)", item)
+            }
+        }
+
+        out.append(RailEntry(id: "sep", kind: .separator, shown: .folded))
+        out.append(RailEntry(id: "head:lanes", kind: .head(String(localized: "Lanes")), shown: .open))
+        let lanes = mailbox.views.filter { Lane(view: $0.id) != nil }
+        for view in lanes {
+            add("view:\(view.id)", viewItem(view, mailbox))
+        }
+        add("documents", RailItem(place: .documents, icon: .file, title: String(localized: "Documents")))
+        let views = mailbox.views.filter { Lane(view: $0.id) == nil }
+        if !views.isEmpty {
+            out.append(RailEntry(id: "head:views", kind: .head(String(localized: "Views")), shown: .open))
+            for view in views {
+                add("view:\(view.id)", viewItem(view, mailbox))
+            }
+        }
+
+        if !mailbox.accounts.isEmpty {
+            out.append(RailEntry(id: "folders", kind: .folders, shown: .folded))
+            out.append(RailEntry(id: "head:folders", kind: .head(String(localized: "Folders")), shown: .open))
+        }
+        for account in mailbox.accounts {
+            out.append(RailEntry(id: "account:\(account)", kind: .account(account), shown: .open))
+            guard !closed.contains(account) else { continue }
+            for folder in mailbox.folders(of: account) {
+                add("folder:\(account)\u{0}\(folder.name)",
+                    RailItem(place: .folder(account: account, folder: folder.name), icon: icon(folder.role),
+                             title: Words.role(folder), count: RailItem.Count(folder.unseen)), .open)
+            }
+            if let counts = mailbox.folders[account] {
+                for item in virtual(of: account, counts.muted, counts.replylater, counts.snoozed, counts.waiting) {
+                    add("virtual:\(item.place)", item, .open)
+                }
+            }
+            let labels = mailbox.labels[account] ?? []
+            guard !labels.isEmpty else { continue }
+            let shown = labelsOpen.contains(account)
+            out.append(RailEntry(id: "labels:\(account)", kind: .labels(account: account, open: shown), shown: .open))
+            guard shown else { continue }
+            for label in labels {
+                add("label:\(account)\u{0}\(label.name)",
+                    RailItem(place: .search(Search(q: labelQuery(label.name), account: account)), icon: .tag,
+                             title: label.name, count: RailItem.Count(label.count)), .open)
+            }
+        }
+        return out
+    }
+
+    /// The places a person moves through with the arrow keys, in the rail's order, as it shows now.
+    static func places(_ entries: [RailEntry], open: Bool) -> [Place] {
+        entries.filter { $0.shows(open: open) }.compactMap(\.item?.place)
+    }
+
+    /// The entry that stands for `place`: its own, or while the rail is folded the Folders button for a place folded
+    /// away with the names.
+    static func current(_ place: Place?, in entries: [RailEntry], open: Bool) -> String? {
+        guard let place, let own = entries.first(where: { $0.item?.place == place }) else { return nil }
+        if own.shows(open: open) { return own.id }
+        return open ? nil : entries.first { $0.kind == .folders }?.id
+    }
+
+    /// Every account's Inbox unread, as a Mac's All Inboxes counts it.
+    static func inboxesUnseen(_ mailbox: Mailbox) -> Int {
+        mailbox.accounts.reduce(0) { sum, account in
+            sum + (mailbox.folders(of: account).first { $0.role == "inbox" }?.unseen ?? 0)
+        }
+    }
+
+    /// The icon for a folder's part, which the server names (`FOLDER_ICON`).
+    static func icon(_ role: String) -> MeadowIcon {
+        switch role {
+        case "inbox": .inbox
+        case "sent": .send
+        case "drafts": .file
+        case "archive", "all": .archive
+        case "trash": .trash
+        case "junk", "spam": .ban
+        default: .folder
+        }
+    }
+
+    /// Waiting, Reply later, Snoozed and Muted, as the mockup orders them, each while it holds something but Snoozed,
+    /// which a person goes to look in.
+    private static func virtual(of account: String?, _ muted: Int, _ replylater: Int, _ snoozed: Int,
+                                _ waiting: Int) -> [RailItem] {
+        [VirtualFolder.waiting, .replyLater, .snoozed, .muted].compactMap { virtual in
+            let count = virtual.count(muted: muted, replylater: replylater, snoozed: snoozed, waiting: waiting)
+            guard virtual.shown(count: count) else { return nil }
+            return RailItem(place: .virtual(virtual, account: account), icon: virtual.icon, title: virtual.title,
+                            count: RailItem.Count(count))
+        }
+    }
+
+    /// A saved search, from the account the window is on, as the page's views search. A person's own can be removed.
+    private static func viewItem(_ view: API.ListedView, _ mailbox: Mailbox) -> RailItem {
+        let lane = Lane(view: view.id)
+        let icon: MeadowIcon = switch lane {
+        case .feed: .leaf
+        case .papertrail: .receipt
+        case nil: .search
+        }
+        return RailItem(place: .search(Search(q: viewQuery(view), account: mailbox.searchAccount, lane: lane)),
+                        icon: icon, title: view.name, removable: view.builtin ? nil : view)
+    }
+}
+
+extension VirtualFolder {
+    /// The mockup's icon for it.
+    var icon: MeadowIcon {
+        switch self {
+        case .replyLater: .bookmark
+        case .waiting: .hourglass
+        case .snoozed: .clock
+        case .muted: .bellOff
+        }
+    }
+}
+#endif

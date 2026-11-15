@@ -80,6 +80,8 @@ final class BriefModel {
 
     /// Whether the brief has been opened, so what changes reads it again.
     private(set) var opened = false
+    /// Its tallies have been read, for the rail's count and the Inbox's brief row, so mail changing reads them again.
+    @ObservationIgnored private(set) var tallied = false
 
     /// Open the brief: everything it shows, and with none written today and AI on, today's written.
     func load() async {
@@ -93,6 +95,7 @@ final class BriefModel {
     /// Read again what the digest and the side say, as the page does when mail changes. The brief itself stays.
     func refresh() async {
         guard let routes = link.routes else { return }
+        tallied = true
         if let read = try? await routes.get(API.Get.Digest.self, [:]) {
             digest = read
             filing.removeAll()
