@@ -4,10 +4,17 @@ import SwiftUI
 
 /// The first-contact gate for one account (`/api/screener`): senders this inbox hasn't decided on, a sender tray
 /// rather than a message list. The AI may suggest a verdict for the senders it is sure of, on a press, kept for the
-/// session so coming back spends nothing. Only a press on a row decides, and it writes a rule (`/api/rules`).
+/// session so coming back spends nothing. Only a press decides, and it writes a rule (`/api/rules`).
 @MainActor
 @Observable
 final class ScreenerModel {
+    /// A sender decided on in this session, for "Decided recently".
+    struct Decided: Equatable {
+        let sender: API.ScreenerItem
+        let verdict: API.Verdict
+        let at: Date
+    }
+
     let account: String
     private(set) var queue: API.ScreenerQueue?
     /// The AI's verdicts, by sender, once asked for.
@@ -15,6 +22,14 @@ final class ScreenerModel {
     private(set) var suggesting = false
     /// Senders decided on, gone from the tray before the server's answer comes.
     private(set) var decided: Set<String> = []
+    /// Senders put off with Decide later, at the back of the queue in the order they were put off.
+    private(set) var later: [String] = []
+    /// The sender at the gate, chosen from the queue; the first one otherwise.
+    var chosen: String?
+    /// What was decided here this session, the latest first.
+    private(set) var recent: [Decided] = []
+    /// Each sender's latest message, once read, for the visitor's card; none where the search found none.
+    private(set) var letters: [String: API.SearchHit?] = [:]
     @ObservationIgnored let link: CoreLink
     @ObservationIgnored let notices: DeskNotices
     @ObservationIgnored var changed: () -> Void = {}
@@ -25,8 +40,16 @@ final class ScreenerModel {
         self.notices = notices
     }
 
+    /// The senders waiting, those put off last.
     var rows: [API.ScreenerItem] {
-        (queue?.items ?? []).filter { !decided.contains($0.fromAddr) }
+        let waiting = (queue?.items ?? []).filter { !decided.contains($0.fromAddr) }
+        return waiting.filter { !later.contains($0.fromAddr) }
+            + later.compactMap { addr in waiting.first { $0.fromAddr == addr } }
+    }
+
+    /// The sender at the gate.
+    var visitor: API.ScreenerItem? {
+        rows.first { $0.fromAddr == chosen } ?? rows.first
     }
 
     /// How many senders wait for a decision.
@@ -38,6 +61,25 @@ final class ScreenerModel {
             queue = read
             decided.removeAll()
         }
+    }
+
+    /// Read a sender's latest message for their card: a local search, which spends nothing.
+    func readLetter(_ sender: String) async {
+        guard let routes = link.routes, letters[sender] == nil else { return }
+        let read = try? await routes.get(API.Get.Search.self, [
+            "q": "from:" + Self.quoted(sender), "scope": API.SearchScope.account.rawValue, "account": account,
+            "limit": "1", "offset": "0",
+        ])
+        switch read {
+        case .searchPage(let page)?: letters[sender] = .some(page.items.first)
+        case .nothingAsked(let none)?: letters[sender] = .some(none.items.first)
+        case nil: letters[sender] = .some(nil)
+        }
+    }
+
+    /// A value as the search grammar quotes one (`labelQuery`'s quoting).
+    static func quoted(_ value: String) -> String {
+        "\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 
     /// Ask the AI which senders it is sure of.
@@ -60,18 +102,28 @@ final class ScreenerModel {
     /// Allow a sender, or screen them out.
     func decide(_ sender: String, _ verdict: API.Verdict) async {
         guard let routes = link.routes else { return }
+        let item = rows.first { $0.fromAddr == sender }
         decided.insert(sender)
+        if chosen == sender { chosen = nil }
         do {
             let changed = try await routes.post(API.Post.Rules.self, API.RuleBody(token: sender, verdict: verdict == .keep ? .keep : .block))
             let short = sender.split(separator: "@").first.map(String.init) ?? sender
             notices.say(verdict == .keep ? String(localized: "Allowed \(short)")
                 : String(localized: "Screened out \(short)") + (changed.trashed ? " · trashed" : ""))
+            if let item { recent.insert(Decided(sender: item, verdict: verdict, at: Date()), at: 0) }
             self.changed()
             await load()
         } catch {
             decided.remove(sender)
             notices.say(String(localized: "Couldn’t apply"))
         }
+    }
+
+    /// Put a sender off: to the back of the queue, the next one at the gate.
+    func putOff(_ sender: String) {
+        later.removeAll { $0 == sender }
+        later.append(sender)
+        if chosen == sender { chosen = nil }
     }
 
     /// The page's word for each verdict, as a hint names it.
@@ -83,87 +135,522 @@ final class ScreenerModel {
     }
 }
 
-/// The Screener, in the list's place: each new sender with how much they've sent, the AI's hint where asked for,
-/// and Allow or Screen Out.
+/// The Screener as Meadow's gate (`renderGate()`), across the list's and the pane's room: the gate in the meadow with
+/// "At the gate" on its sky, what the gate is for, the sender at the gate on a stack of cards (who, their latest
+/// message, who the AI thinks they are, and Let in, Screen out or Decide later), and beside it who else waits, who was
+/// decided on, and how the gate works. In a narrow room, one column.
 struct ScreenerScreen: View {
     let model: ScreenerModel
+    /// The account's name, where there is more than one account.
+    var name: String?
+    /// The accounts in their order, for an account's colour.
+    var accounts: [String] = []
+    /// Opens a sender's message in the reader.
+    var open: (MailCopy) -> Void = { _ in }
+    @State private var width: CGFloat = 1000
+    @FocusState private var letIn: Bool
+    @Environment(\.meadow) private var meadow
+
+    private var narrow: Bool { width <= 760 }
+    private var wide: Bool { width >= 980 }
 
     var body: some View {
-        Group {
-            if model.queue == nil {
-                ProgressView("Loading…").frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if model.rows.isEmpty {
-                ContentUnavailableView("Screener clear", systemImage: "checkmark.shield",
-                                       description: Text("Every sender in this inbox has been allowed or screened out."))
-            } else {
-                List {
-                    Section {
-                        ForEach(model.rows, id: \.fromAddr) { sender in
-                            SenderRow(sender: sender, hint: model.suggestions?[sender.fromAddr], model: model)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("""
+                        People writing to you for the first time wait here. Let them in once and they go straight \
+                        to your inbox; screen them out and their mail stays out of it.
+                        """)
+                        .font(.meadow(.ui, 15))
+                        .foregroundStyle(meadow.ink2)
+                        .lineSpacing(MeadowFace.ui.lineSpacing(size: 15, lineHeight: 1.55))
+                        .frame(maxWidth: 620, alignment: .leading)
+                        .padding(.bottom, 20)
+                    if wide {
+                        HStack(alignment: .top, spacing: 28) {
+                            visitor.frame(maxWidth: .infinity, alignment: .leading)
+                            side.frame(width: 320)
                         }
-                    } header: {
-                        bar
+                    } else {
+                        VStack(alignment: .leading, spacing: 24) {
+                            visitor
+                            side
+                        }
                     }
                 }
-                .listStyle(.inset)
+                .padding(.horizontal, narrow ? 16 : 32)
+                .padding(.top, 24)
+                .padding(.bottom, 48)
+                .frame(maxWidth: 1360, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
         }
+        .scrollContentBackground(.hidden)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .task(id: model.account) { await model.load() }
+        .task(id: model.visitor?.fromAddr) {
+            if let sender = model.visitor?.fromAddr { await model.readLetter(sender) }
+        }
+        .onKeyPress(characters: CharacterSet(charactersIn: "yYnN"), phases: .down) { press in
+            guard press.modifiers.isEmpty || press.modifiers == .shift, let sender = model.visitor?.fromAddr else {
+                return .ignored
+            }
+            let verdict: API.Verdict = press.characters.lowercased() == "y" ? .keep : .block
+            Task { await model.decide(sender, verdict) }
+            return .handled
+        }
     }
 
-    private var bar: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(model.suggestions.map { "The AI suggests a verdict for \(countNoun($0.count, "sender", "senders")). You still decide." }
-                 ?? String(localized: "The AI can suggest a verdict for the senders it’s sure of. You still decide."))
-                .font(.callout)
-                .textCase(nil)
-            Spacer()
-            Button(model.suggesting ? "Reading…" : model.suggestions == nil ? "Suggest" : "Suggest Again",
-                   systemImage: "sparkles") { Task { await model.suggest() } }
-                .disabled(model.suggesting)
-                .controlSize(.small)
+    // MARK: The header
+
+    /// The gate in the meadow, 210 high, with "Screener" and "At the gate" on its sky (`.gate-art`).
+    private var header: some View {
+        ZStack(alignment: .topLeading) {
+            MeadowScene(seed: 5, gate: true, alignment: .bottom)
+            VStack(alignment: .leading, spacing: 0) {
+                Text((name.map { String(localized: "Screener · \($0)") } ?? String(localized: "Screener")).uppercased())
+                    .font(.meadow(.ui, 12, .heavy))
+                    .tracking(12 * 0.14)
+                    .foregroundStyle(meadow.ink2)
+                Text("At the gate")
+                    .font(.meadow(.display, narrow ? 30 : 40, .bold))
+                    .foregroundStyle(meadow.ink)
+                    .padding(.top, 8)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            .padding(.leading, narrow ? 20 : 40)
+            .padding(.top, narrow ? 22 : 32)
         }
-        .padding(.vertical, 4)
+        .frame(height: narrow ? 170 : 210)
+        .frame(maxWidth: .infinity)
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: narrow ? 0 : 16, topTrailingRadius: narrow ? 0 : 16))
+    }
+
+    // MARK: The visitor
+
+    @ViewBuilder private var visitor: some View {
+        if model.queue == nil {
+            Text("Loading…")
+                .font(.meadow(.ui, 14))
+                .foregroundStyle(meadow.ink3)
+                .padding(.vertical, 30)
+        } else if let sender = model.visitor {
+            GateVisitor(sender: sender, model: model, letter: model.letters[sender.fromAddr] ?? nil,
+                        account: meadow.account(of: model.account, among: accounts), accountName: name,
+                        letIn: $letIn, open: open)
+                .id(sender.fromAddr)
+                .onAppear { letIn = true }
+        } else {
+            VStack(spacing: 6) {
+                Text("No one at the gate.")
+                    .font(.meadow(.display, 18, .bold))
+                    .foregroundStyle(meadow.ink)
+                Text("New people who write to you will wait here until you decide.")
+                    .font(.meadow(.ui, 14))
+                    .foregroundStyle(meadow.ink2)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 18)
+            .padding(.top, 30)
+            .padding(.bottom, 28)
+        }
+    }
+
+    // MARK: Beside the visitor
+
+    private var side: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            let rows = model.rows
+            if !rows.isEmpty {
+                DeskSideCard(title: String(localized: "Waiting · \(rows.count)"), icon: .gate) {
+                    VStack(spacing: 2) {
+                        ForEach(rows, id: \.fromAddr) { sender in
+                            GateQueueRow(sender: sender, current: sender.fromAddr == model.visitor?.fromAddr,
+                                         hint: model.suggestions?[sender.fromAddr],
+                                         account: meadow.account(of: model.account, among: accounts)) {
+                                model.chosen = sender.fromAddr
+                                letIn = true
+                            }
+                        }
+                    }
+                }
+            }
+            if !model.recent.isEmpty {
+                DeskSideCard(title: String(localized: "Decided recently"), icon: .check) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(model.recent.prefix(5).enumerated()), id: \.offset) { _, done in
+                            GateDecided(done: done)
+                        }
+                    }
+                }
+            }
+            DeskSideCard(title: String(localized: "How the gate works"), icon: .shield) {
+                VStack(alignment: .leading, spacing: 6) {
+                    bullet("Each choice becomes a rule for that sender.")
+                    bullet("Let someone in and their mail goes to your inbox from then on.")
+                    bullet("""
+                        Screen someone out and their mail stays out of your inbox until you change the rule in \
+                        Curate › Rules.
+                        """)
+                }
+            }
+        }
+    }
+
+    private func bullet(_ words: LocalizedStringKey) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(verbatim: "•")
+            Text(words).fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.meadow(.ui, 13))
+        .foregroundStyle(meadow.ink2)
+        .lineSpacing(MeadowFace.ui.lineSpacing(size: 13, lineHeight: 1.5))
     }
 }
 
-private struct SenderRow: View {
+/// The sender at the gate, on its stack (`.stack`, `.visitor`): who, their latest message, and what to do.
+private struct GateVisitor: View {
     let sender: API.ScreenerItem
-    let hint: API.ScreenerSuggestion?
     let model: ScreenerModel
+    /// Their latest message, once read.
+    let letter: API.SearchHit?
+    let account: Color
+    let accountName: String?
+    var letIn: FocusState<Bool>.Binding
+    let open: (MailCopy) -> Void
+    @State private var width: CGFloat = 800
+    @Environment(\.meadow) private var meadow
+
+    private var who: String { sender.fromName.isEmpty ? sender.fromAddr : sender.fromName }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            SenderInitials(name: sender.fromName, address: sender.fromAddr, size: 30)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(sender.fromName.isEmpty ? sender.fromAddr : sender.fromName).fontWeight(.semibold)
-                Text(verbatim: "\(sender.fromAddr) · \(sender.count) msg · \(sender.when)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let hint {
-                    Label {
-                        Text("**\(ScreenerModel.word(hint.verdict))?** \(hint.why)")
-                    } icon: {
-                        Image(systemName: "sparkles")
+        let wide = width >= 720
+        ZStack(alignment: .bottom) {
+            // The cards under it, as the mockup's ::before and ::after.
+            under(inset: 48).opacity(0.7)
+            under(inset: 24).padding(.bottom, 10)
+            Group {
+                if wide {
+                    HStack(alignment: .top, spacing: 30) {
+                        message.frame(maxWidth: .infinity, alignment: .leading)
+                        Rectangle().fill(meadow.line).frame(width: 1)
+                        decision.frame(width: 280)
                     }
-                    .font(.caption)
-                    .foregroundStyle(hint.verdict == .keep ? .green : .orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(alignment: .leading, spacing: 22) {
+                        message
+                        decision
+                    }
                 }
             }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 4) {
-                Button("Allow", systemImage: "checkmark") { Task { await model.decide(sender.fromAddr, .keep) } }
-                    .buttonStyle(.bordered)
-                    .tint(hint?.verdict == .keep ? .green : nil)
-                Button("Screen Out", systemImage: "nosign") { Task { await model.decide(sender.fromAddr, .block) } }
-                    .buttonStyle(.bordered)
-                    .tint(hint?.verdict == .block ? .orange : nil)
-            }
-            .controlSize(.small)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .meadowPanel(radius: 18, raised: true)
+            .padding(.bottom, 22)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         }
-        .padding(.vertical, 4)
-        // The line between senders runs the row's width, whichever of its texts comes last.
-        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Visitor \(who)"))
+    }
+
+    private func under(inset: CGFloat) -> some View {
+        UnevenRoundedRectangle(bottomLeadingRadius: 18, bottomTrailingRadius: 18)
+            .fill(meadow.paperRaised)
+            .frame(height: 30)
+            .meadowShadow(meadow.shadow, radius: 18)
+            .padding(.horizontal, inset)
+    }
+
+    // MARK: Who and what
+
+    private var message: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 14) {
+                MeadowAvatar(name: who, size: .huge, account: account)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(who).font(.meadow(.ui, 17, .bold)).foregroundStyle(meadow.ink).lineLimit(1)
+                    Text(sender.fromAddr).font(.meadow(.ui, 13.5)).foregroundStyle(meadow.ink3).lineLimit(1)
+                    HStack(spacing: 6) {
+                        if let accountName { MeadowChip(accountName, tone: .account(account)) }
+                        MeadowChip(sender.count == 1 ? String(localized: "First message · \(sender.when)")
+                                   : String(localized: "\(sender.count) messages · latest \(sender.when)"))
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            if let letter {
+                Text(letter.subject.isEmpty ? String(localized: "(no subject)") : letter.subject)
+                    .font(.meadow(.display, 22, .semibold))
+                    .foregroundStyle(meadow.ink)
+                    .lineSpacing(MeadowFace.display.lineSpacing(size: 22, lineHeight: 1.3, weight: .semibold))
+                    .padding(.top, 18)
+                if !letter.snippet.isEmpty {
+                    Text(letter.snippet)
+                        .font(.meadow(.read, 17))
+                        .foregroundStyle(meadow.ink)
+                        .lineSpacing(MeadowFace.read.lineSpacing(size: 17, lineHeight: 1.68))
+                        .frame(maxWidth: 640, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .padding(.top, 12)
+                }
+            }
+            trust
+                .padding(.top, 14)
+        }
+    }
+
+    /// Where they write from, and the way to their whole message (`.trust`).
+    private var trust: some View {
+        HStack(spacing: 8) {
+            MeadowIconView(.shield, size: 15)
+            Group {
+                let domain = Text(sender.domain).font(.meadow(.ui, 12.5, .bold)).foregroundStyle(meadow.ink2)
+                if sender.count == 1 {
+                    Text("First message from \(domain)")
+                } else {
+                    Text("\(sender.count) messages from \(domain)")
+                }
+            }
+            .lineLimit(1)
+            Spacer(minLength: 8)
+            if let letter {
+                Button("Read it whole") {
+                    open(.named(key: letter.key, folder: letter.folder, uid: letter.uid, account: letter.account))
+                }
+                .deskLink()
+            }
+        }
+        .font(.meadow(.ui, 12.5))
+        .foregroundStyle(meadow.ink3)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 10).fill(meadow.paper2))
+    }
+
+    // MARK: The decision
+
+    private var decision: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            note
+            VStack(spacing: 8) {
+                Button { Task { await model.decide(sender.fromAddr, .keep) } } label: {
+                    decideLabel(.check, "Let in", key: "Y")
+                }
+                .buttonStyle(GateButtonStyle(kind: .primary))
+                .focusEffectDisabled()
+                .focused(letIn)
+                Button { Task { await model.decide(sender.fromAddr, .block) } } label: {
+                    decideLabel(.ban, "Screen out", key: "N")
+                }
+                .buttonStyle(GateButtonStyle(kind: .standard))
+                .focusEffectDisabled()
+                Button { model.putOff(sender.fromAddr) } label: {
+                    decideLabel(.clock, "Decide later", key: nil)
+                }
+                .buttonStyle(GateButtonStyle(kind: .quiet))
+                .focusEffectDisabled()
+            }
+            Text("Your choice becomes a rule for \(sender.fromAddr). Change it any time in Curate › Rules.")
+                .font(.meadow(.ui, 12.5))
+                .foregroundStyle(meadow.ink3)
+                .lineSpacing(MeadowFace.ui.lineSpacing(size: 12.5, lineHeight: 1.5))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func decideLabel(_ icon: MeadowIcon, _ words: LocalizedStringKey, key: String?) -> some View {
+        HStack(spacing: 7) {
+            MeadowIconView(icon)
+            Text(words)
+            Spacer(minLength: 0)
+            if let key { MeadowKey(key) }
+        }
+    }
+
+    /// Who the AI thinks this is (`.note`), once asked; before that, the way to ask.
+    @ViewBuilder private var note: some View {
+        let hint = model.suggestions?[sender.fromAddr]
+        VStack(alignment: .leading, spacing: 8) {
+            MeadowAIMark("Who is this?")
+            if let hint {
+                Text("\(Text(ScreenerModel.word(hint.verdict) + "?").font(.meadow(.ui, 15, .heavy))) \(hint.why)")
+                    .font(.meadow(.ui, 15, .semibold))
+                    .foregroundStyle(meadow.moss)
+                    .lineSpacing(MeadowFace.ui.lineSpacing(size: 15, lineHeight: 1.6, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if model.suggestions != nil {
+                Text("The AI isn’t sure about this one. Their message is the best guide.")
+                    .font(.meadow(.ui, 14, .semibold))
+                    .foregroundStyle(meadow.moss)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("The AI can suggest a verdict for the senders it’s sure of. You still decide.")
+                    .font(.meadow(.ui, 13.5))
+                    .foregroundStyle(meadow.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { Task { await model.suggest() } } label: {
+                    MeadowIconView(.wind, size: 15)
+                    Text(model.suggesting ? "Reading…" : "Suggest")
+                }
+                .meadowButton(.ai, small: true)
+                .disabled(model.suggesting)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                meadow.mossWash
+                MeadowGrain()
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+    }
+}
+
+/// The gate's three buttons (`.decide .btn`): 44 high, their words at the start and their key at the end.
+private struct GateButtonStyle: ButtonStyle {
+    let kind: MeadowButtonStyle.Kind
+
+    func makeBody(configuration: Configuration) -> some View {
+        GateButtonBody(kind: kind, label: configuration.label, pressed: configuration.isPressed)
+    }
+}
+
+private struct GateButtonBody: View {
+    let kind: MeadowButtonStyle.Kind
+    let label: ButtonStyleConfiguration.Label
+    let pressed: Bool
+    @Environment(\.meadow) private var meadow
+    @Environment(\.isFocused) private var focused
+    @State private var hovering = false
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10)
+        HStack(spacing: 7) { label }
+            .font(.meadow(.ui, 14.5, .bold))
+            .lineLimit(1)
+            .foregroundStyle(ink)
+            .environment(\.meadowOnPrimary, kind == .primary)
+            .padding(.horizontal, 17)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background {
+                shape.fill(fill)
+                    .overlay { shape.strokeBorder(border, lineWidth: 1) }
+                    .background {
+                        if kind == .primary {
+                            MeadowShadowsOutside(shadows: [.init(x: 0, y: 8, blur: 18, spread: -10,
+                                                                 color: meadow.primary, inset: false)], radius: 10)
+                        }
+                    }
+            }
+            .contentShape(shape)
+            .offset(y: pressed ? 1 : 0)
+            .meadowFocusRing(focused, radius: 10)
+            .onHover { hovering = $0 }
+    }
+
+    private var fill: Color {
+        switch kind {
+        case .primary: hovering ? meadow.primaryHi : meadow.primary
+        case .quiet: hovering ? meadow.paper3 : .clear
+        default: hovering ? meadow.paper3 : meadow.paperRaised
+        }
+    }
+
+    private var border: Color {
+        switch kind {
+        case .primary, .quiet: .clear
+        default: meadow.line2
+        }
+    }
+
+    private var ink: Color {
+        switch kind {
+        case .primary: meadow.onPrimary
+        case .quiet: hovering ? meadow.ink : meadow.ink2
+        default: meadow.ink
+        }
+    }
+}
+
+/// Someone else waiting (`.gq`): who, their address, and when they wrote; the one at the gate in the indigo wash.
+private struct GateQueueRow: View {
+    let sender: API.ScreenerItem
+    let current: Bool
+    let hint: API.ScreenerSuggestion?
+    let account: Color
+    let choose: () -> Void
+    @Environment(\.meadow) private var meadow
+    @FocusState private var focused: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: choose) {
+            HStack(spacing: 10) {
+                MeadowAvatar(name: sender.fromName.isEmpty ? sender.fromAddr : sender.fromName, account: account,
+                             chosen: current)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(sender.fromName.isEmpty ? sender.fromAddr : sender.fromName)
+                        .font(.meadow(.ui, 13.5, .bold))
+                        .foregroundStyle(meadow.ink)
+                    Text(hint.map { "\(ScreenerModel.word($0.verdict))? \($0.why)" } ?? sender.fromAddr)
+                        .font(.meadow(.ui, 12.5))
+                        .foregroundStyle(hint == nil ? meadow.ink3 : meadow.moss)
+                }
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(sender.when)
+                    .font(.meadow(.ui, 12))
+                    .foregroundStyle(meadow.ink3)
+                    .lineLimit(1)
+            }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 10)
+                .fill(current ? meadow.primaryWash : hovering ? meadow.paper2 : .clear))
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .focused($focused)
+        .focusEffectDisabled()
+        .meadowFocusRing(focused, radius: 10)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(current ? .isSelected : [])
+    }
+}
+
+/// Someone decided on this session (`.gdone`): who, what was decided and where they write from, and when.
+private struct GateDecided: View {
+    let done: ScreenerModel.Decided
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        let who = done.sender.fromName.isEmpty ? done.sender.fromAddr : done.sender.fromName
+        HStack(spacing: 10) {
+            MeadowAvatar(name: who, size: .small)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(who).font(.meadow(.ui, 13, .bold)).foregroundStyle(meadow.ink)
+                Text(verbatim: (done.verdict == .keep ? String(localized: "Let in") : String(localized: "Screened out"))
+                     + " · " + done.sender.domain)
+                    .font(.meadow(.ui, 12))
+                    .foregroundStyle(meadow.ink3)
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(EventWhen.clock(done.at))
+                .font(.meadow(.ui, 12))
+                .foregroundStyle(meadow.ink3)
+        }
+        .padding(.horizontal, 2)
+        .padding(.vertical, 6)
     }
 }
 #endif

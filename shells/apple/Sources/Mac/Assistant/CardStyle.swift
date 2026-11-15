@@ -327,37 +327,4 @@ extension View {
         modifier(DeskField(focused: focused))
     }
 }
-
-/// A sender's initials in a circle tinted by their address, as the page's avatars are.
-struct SenderInitials: View {
-    let name: String?
-    let address: String?
-    var size: CGFloat = 28
-
-    var body: some View {
-        Text(Self.initials(name: name, address: address))
-            .font(.system(size: size * 0.4, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(Circle().fill(Self.hue(of: address ?? name ?? "")))
-            .accessibilityHidden(true)
-    }
-
-    /// One or two letters: the first of the first and last words of a name, else of the address.
-    static func initials(name: String?, address: String?) -> String {
-        let words = (name ?? "").split(whereSeparator: { !$0.isLetter && !$0.isNumber }).filter { !$0.isEmpty }
-        if let first = words.first {
-            let last = words.count > 1 ? words.last?.first.map(String.init) ?? "" : ""
-            return (String(first.prefix(1)) + last).uppercased()
-        }
-        return String((address ?? "?").prefix(1)).uppercased()
-    }
-
-    /// A steady hue for an address: the same sender is always the same colour.
-    static func hue(of text: String) -> Color {
-        var sum: UInt32 = 0
-        for scalar in text.lowercased().unicodeScalars { sum = sum &* 31 &+ scalar.value }
-        return Color(hue: Double(sum % 360) / 360, saturation: 0.45, brightness: 0.68)
-    }
-}
 #endif

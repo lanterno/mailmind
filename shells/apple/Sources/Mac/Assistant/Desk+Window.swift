@@ -444,7 +444,9 @@ struct DeskScreen: View {
             case .ask:
                 AskScreen(model: desk.asking, reading: desk.chosen, open: desk.open) { desk.sheet = .ask }
             case .screener(let account):
-                ScreenerScreen(model: desk.screener(for: account))
+                ScreenerScreen(model: desk.screener(for: account),
+                               name: desk.accounts.count > 1 ? desk.nameOf(account) : nil, accounts: desk.accounts,
+                               open: desk.open)
             }
         }
     }
