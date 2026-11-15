@@ -2,11 +2,13 @@
 //! is the same problem document, events reach a subscriber, and close waits for the work a request set going.
 //!
 //! Every home is a temporary folder with fictional data, its database keyed by a key made for the test and its
-//! Keychain a file (`stand_in`): nothing here reads the login Keychain or reaches a host off this machine.
+//! Keychain a file (`stand_in`): nothing here reads the login Keychain or reaches a host off this machine, and the
+//! Claude API is a stand-in on loopback.
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -275,6 +277,103 @@ fn close_waits_for_the_work_a_request_set_going() {
     assert!(reached.elapsed() >= hold, "close returned before the sync it waits for: {:?}", reached.elapsed());
     let after = host.request("GET", "/api/accounts", &[]);
     assert_eq!(after.status, 503, "a request after close is refused");
+}
+
+/// A stand-in for the Claude API on loopback: every request read whole and answered with a rewrite that cost more
+/// than a cent, whatever the model, and counted.
+fn claude_stand_in() -> (String, Arc<AtomicUsize>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("a loopback port");
+    let url = format!("http://127.0.0.1:{}", listener.local_addr().expect("its address").port());
+    let heard = Arc::new(AtomicUsize::new(0));
+    let counted = heard.clone();
+    let reply = json!({"type": "message", "model": "claude-haiku-5-5", "stop_reason": "end_turn",
+                       "content": [{"type": "text", "text": json!({"text": "Shorter."}).to_string()}],
+                       "usage": {"input_tokens": 100_000, "output_tokens": 10_000}})
+    .to_string();
+    std::thread::spawn(move || {
+        while let Ok((mut stream, _)) = listener.accept() {
+            let mut read = Vec::new();
+            let mut chunk = [0u8; 16 * 1024];
+            let whole = loop {
+                let n = stream.read(&mut chunk).unwrap_or(0);
+                if n == 0 {
+                    break false;
+                }
+                read.extend_from_slice(&chunk[..n]);
+                let Some(end) = read.windows(4).position(|w| w == b"\r\n\r\n") else { continue };
+                let head = String::from_utf8_lossy(&read[..end]).to_lowercase();
+                let length = head
+                    .lines()
+                    .find_map(|l| l.strip_prefix("content-length:").and_then(|v| v.trim().parse::<usize>().ok()))
+                    .unwrap_or(0);
+                if read.len() >= end + 4 + length {
+                    break true;
+                }
+            };
+            if !whole {
+                continue;
+            }
+            counted.fetch_add(1, Ordering::SeqCst);
+            let answer = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+            let _ = stream.write_all(answer.as_bytes());
+        }
+    });
+    (url, heard)
+}
+
+#[test]
+fn an_ai_call_at_the_daily_limit_goes_only_with_the_persons_leave() {
+    let folder = tempfile::tempdir().expect("a home");
+    let (url, heard) = claude_stand_in();
+    // A cent a day, which one rewrite spends: the next is over the limit.
+    std::fs::write(folder.path().join("mailmind.config.json"), json!({"ai_daily_limit_usd": 0.01}).to_string())
+        .expect("a config");
+    let mut given = home(folder.path());
+    given.variables.push(("ANTHROPIC_API_KEY".into(), "sk-ant-test-fictional".into()));
+    given.variables.push(("ANTHROPIC_BASE_URL".into(), url));
+    let host = Host::open(given).expect("opened");
+    let rewrite = json!({"text": "A long and winding note.", "op": "shorten"}).to_string();
+
+    let first = host.request("POST", "/api/ai/rewrite", rewrite.as_bytes());
+    assert_eq!(first.status, 200, "{}", String::from_utf8_lossy(&first.body));
+    assert_eq!(json_of(&first)["text"], "Shorter.");
+    assert_eq!(heard.load(Ordering::SeqCst), 1);
+
+    let refused = host.request("POST", "/api/ai/rewrite", rewrite.as_bytes());
+    assert_eq!(refused.status, 402, "{}", String::from_utf8_lossy(&refused.body));
+    let problem = json_of(&refused);
+    assert_eq!(problem["over_limit"], true);
+    assert_eq!(problem["limit_micros"], 10_000);
+    assert!(problem["spent_micros"].as_i64().is_some_and(|spent| spent >= 10_000), "{problem}");
+    assert_eq!(heard.load(Ordering::SeqCst), 1, "a call over the limit is never sent");
+
+    let allowed = host.request_over_limit("POST", "/api/ai/rewrite", rewrite.as_bytes());
+    assert_eq!(allowed.status, 200, "{}", String::from_utf8_lossy(&allowed.body));
+    assert_eq!(json_of(&allowed)["text"], "Shorter.");
+    assert_eq!(heard.load(Ordering::SeqCst), 2, "the person's leave sends it");
+
+    let again = host.request("POST", "/api/ai/rewrite", rewrite.as_bytes());
+    assert_eq!(again.status, 402, "the leave was for that one call");
+    assert_eq!(heard.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn a_request_with_the_leave_is_otherwise_the_request() {
+    let folder = tempfile::tempdir().expect("a home");
+    let host = opened(folder.path());
+    for target in ["/api/accounts", "/api/health"] {
+        let plain = host.request("GET", target, &[]);
+        let with_leave = host.request_over_limit("GET", target, &[]);
+        assert_eq!((plain.status, &plain.content_type), (with_leave.status, &with_leave.content_type), "{target}");
+        assert_eq!(timeless(&plain.body), timeless(&with_leave.body), "{target}");
+    }
+    let refused = host.request_over_limit("POST", "/api/snooze", b"[1, 2]");
+    assert_eq!(refused.body, host.request("POST", "/api/snooze", b"[1, 2]").body, "the same bad request");
+    let bad = host.request_over_limit("GET", "api/accounts", &[]);
+    assert_eq!(bad.status, 400, "a target no request line could carry");
 }
 
 #[test]
