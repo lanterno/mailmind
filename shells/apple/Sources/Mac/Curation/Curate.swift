@@ -1,20 +1,20 @@
 #if os(macOS)
 import SwiftUI
 
-/// Curate: the page's drawer for looking after the mailbox, as a sheet with a page for each of its parts.
+/// Curate: the page's drawer for looking after the mailbox, as a sheet on paper with a page for each of its parts.
 struct CurateSheet: View {
     enum Part: String, CaseIterable, Identifiable {
         case senders, inboxes, rules, filters, activity
 
         var id: Self { self }
 
-        var title: LocalizedStringKey {
+        var title: String {
             switch self {
-            case .senders: "Senders"
-            case .inboxes: "Inboxes"
-            case .rules: "Rules"
-            case .filters: "Filters"
-            case .activity: "Activity"
+            case .senders: String(localized: "Senders")
+            case .inboxes: String(localized: "Inboxes")
+            case .rules: String(localized: "Rules")
+            case .filters: String(localized: "Filters")
+            case .activity: String(localized: "Activity")
             }
         }
     }
@@ -25,16 +25,15 @@ struct CurateSheet: View {
     let open: (String) -> Void
     @State var part: Part = .senders
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Part", selection: $part) {
-                ForEach(Part.allCases) { Text($0.title).tag($0) }
+            DeskSheetHead(title: String(localized: "Curate"), icon: .sliders) {
+                Spacer(minLength: 8)
+                HubSegments(options: Part.allCases.map { ($0, $0.title) }, selection: $part,
+                            label: String(localized: "Part"))
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(12)
-            Divider()
             Group {
                 switch part {
                 case .senders: FloodPage(model: model)
@@ -45,14 +44,10 @@ struct CurateSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            Divider()
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-            }
-            .padding(12)
+            DeskSheetFoot(words: "", done: { dismiss() })
         }
         .frame(width: 620, height: 600)
+        .background(meadow.paper)
         .task { await model.load() }
         .sheet(item: Binding(get: { model.cleaning.map(Asked.init) }, set: { if $0 == nil { model.cleaning = nil } })) { _ in
             CleanupSheet(model: model)
@@ -76,39 +71,61 @@ private struct Asked<T>: Identifiable {
     }
 }
 
+/// Measuring, while a page's numbers are read.
+private struct Measuring: View {
+    let words: LocalizedStringKey
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(words).font(.meadow(.ui, 13.5)).foregroundStyle(meadow.ink3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 // MARK: Senders flooding you
 
 private struct FloodPage: View {
     let model: CurateModel
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         if model.floodFailed {
-            ContentUnavailableView("Couldn’t load.", systemImage: "exclamationmark.triangle")
+            DeskEmpty(icon: .alert, title: String(localized: "Couldn’t load."))
         } else if let flood = model.flood {
             if flood.senders.isEmpty {
-                ContentUnavailableView("No sender is flooding you right now.", systemImage: "checkmark.circle")
+                DeskEmpty(icon: .checkCircle, title: String(localized: "No sender is flooding you right now."))
             } else {
                 VStack(spacing: 0) {
                     if !model.marked.isEmpty {
-                        HStack {
+                        HStack(spacing: 8) {
                             Text("\(model.marked.count) marked")
+                                .font(.meadow(.ui, 13.5, .bold))
+                                .foregroundStyle(meadow.ink)
                             Spacer()
-                            Button("Clear") { model.marked.removeAll() }
+                            Button("Clear") { model.marked.removeAll() }.meadowButton(.quiet, small: true)
                             Button("Clean Up \(model.marked.count)") { Task { await model.previewBatch() } }
-                                .buttonStyle(.borderedProminent)
+                                .meadowButton(.primary, small: true)
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(.bar)
+                        .background(meadow.paper2)
                     }
-                    List(flood.senders, id: \.fromAddr) { sender in
-                        FloodRow(sender: sender, model: model)
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(flood.senders, id: \.fromAddr) { sender in
+                                FloodRow(sender: sender, model: model)
+                            }
+                        }
+                        .padding(10)
                     }
-                    .listStyle(.inset)
+                    .scrollContentBackground(.hidden)
                 }
             }
         } else {
-            ProgressView("Measuring…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            Measuring(words: "Measuring…")
         }
     }
 }
@@ -116,44 +133,43 @@ private struct FloodPage: View {
 private struct FloodRow: View {
     let sender: API.NoisySender
     let model: CurateModel
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Toggle("Mark \(sender.fromAddr)", isOn: Binding(
-                get: { model.marked.contains(sender.fromAddr) },
-                set: { on in if on { model.marked.insert(sender.fromAddr) } else { model.marked.remove(sender.fromAddr) } }))
-                .labelsHidden()
-                .toggleStyle(.checkbox)
+        let marked = model.marked.contains(sender.fromAddr)
+        DeskSheetRow {
+            DeskCheckbox(on: marked, label: String(localized: "Mark \(sender.fromAddr)")) {
+                if marked { model.marked.remove(sender.fromAddr) } else { model.marked.insert(sender.fromAddr) }
+            }
             VStack(alignment: .leading, spacing: 3) {
-                Text(sender.fromName.isEmpty ? sender.fromAddr : sender.fromName).fontWeight(.semibold)
-                Text(sender.fromAddr).font(.caption).foregroundStyle(.secondary)
+                Text(sender.fromName.isEmpty ? sender.fromAddr : sender.fromName)
+                    .font(.meadow(.ui, 14, .bold))
+                    .foregroundStyle(meadow.ink)
+                Text(sender.fromAddr).font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
                 HStack(spacing: 4) {
-                    CardTag(LocalizedStringKey(countNoun(sender.count, "msg", "msgs")))
+                    MeadowChip(countNoun(sender.count, "msg", "msgs"))
                     if sender.unseen > 0 {
-                        Text("\(sender.unseen) unread")
-                            .font(.caption2.weight(.medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .background(sender.unseenRatio >= 0.7 ? AnyShapeStyle(Color.orange.opacity(0.3)) : AnyShapeStyle(.quaternary),
-                                        in: Capsule())
+                        MeadowChip(String(localized: "\(sender.unseen) unread"),
+                                   tone: sender.unseenRatio >= 0.7 ? .sun : .plain)
                     }
-                    if sender.accounts.count > 1 { CardTag("\(sender.accounts.count) inboxes") }
-                    if sender.luLikely { CardTag("1-click") }
-                    if !sender.lastSeen.isEmpty { CardTag(LocalizedStringKey(sender.lastSeen)) }
+                    if sender.accounts.count > 1 { MeadowChip(String(localized: "\(sender.accounts.count) inboxes")) }
+                    if sender.luLikely { MeadowChip(String(localized: "1-click")) }
+                    if !sender.lastSeen.isEmpty { MeadowChip(sender.lastSeen, tone: .line) }
                 }
+                .padding(.top, 3)
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 6) {
                 Text(sender.noiseScore, format: .number.precision(.fractionLength(0...1)))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(.meadow(.ui, 12))
+                    .monospacedDigit()
+                    .foregroundStyle(meadow.ink3)
                     .help("noise score")
                 Button("Clean Up") { Task { await model.previewCleanup(sender.fromAddr) } }
-                    .controlSize(.small)
+                    .meadowButton(small: true)
                     .accessibilityLabel("Clean up \(sender.fromAddr)")
             }
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -161,61 +177,67 @@ private struct FloodRow: View {
 /// where the mail says how. The block and the sweep undo; an unsubscribe can't.
 struct CleanupSheet: View {
     let model: CurateModel
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         if let asked = model.cleaning {
             let preview = asked.preview
             VStack(alignment: .leading, spacing: 10) {
-                Text("Clean up **\(preview.fromAddr)**?").font(.headline)
+                Text("Clean up **\(preview.fromAddr)**?")
+                    .font(.meadow(.display, 19, .bold))
+                    .foregroundStyle(meadow.ink)
                 Text("\(countNoun(preview.count, "message", "messages")) in your synced mail\(preview.accounts.count > 1 ? " · \(preview.accounts.count) inboxes" : "")")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Step(symbol: "checkmark", tag: "reversible") {
+                    .font(.meadow(.ui, 13.5))
+                    .foregroundStyle(meadow.ink3)
+                Step(icon: .check, tag: String(localized: "reversible")) {
                     Text("Block **\(asked.scope == .domain ? preview.domain : preview.fromAddr)** — future mail auto-filed")
                 }
-                Picker("Block", selection: Binding(get: { asked.scope }, set: { scope in
-                    model.cleaning?.scope = scope
-                    model.cleaning?.armed = false
-                })) {
-                    Text("this sender").tag(API.BlockScope.sender)
-                    Text("whole domain").tag(API.BlockScope.domain)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 240)
-                Step(symbol: "checkmark", tag: "reversible") {
+                HubSegments(options: [(API.BlockScope.sender, String(localized: "this sender")),
+                                      (API.BlockScope.domain, String(localized: "whole domain"))],
+                            selection: Binding(get: { asked.scope }, set: { scope in
+                                model.cleaning?.scope = scope
+                                model.cleaning?.armed = false
+                            }), label: String(localized: "Block"))
+                    .padding(.leading, 26)
+                Step(icon: .check, tag: String(localized: "reversible")) {
                     Text("Move **\(preview.sweepCount)** inbox \(preview.sweepCount == 1 ? "message" : "messages")\(asked.scope == .domain ? " from \(preview.fromAddr)" : "") to Trash")
                 }
                 if asked.method == "none" {
-                    Step(symbol: "minus", tag: nil) {
-                        Text("No List-Unsubscribe found — block + sweep only").foregroundStyle(.secondary)
+                    Step(icon: .minus, tag: nil) {
+                        Text("No List-Unsubscribe found — block + sweep only").foregroundStyle(meadow.ink3)
                     }
                 } else {
-                    Step(symbol: "exclamationmark.triangle", tag: "can’t undo") { Self.unsubscribeWords(preview) }
+                    Step(icon: .alert, tag: String(localized: "can’t undo")) { Self.unsubscribeWords(preview) }
                     Toggle(asked.method == "http-page" ? "open the unsubscribe page" : "also send the unsubscribe now",
                            isOn: Binding(get: { asked.unsubscribe }, set: { model.cleaning?.unsubscribe = $0 }))
                         .toggleStyle(.checkbox)
+                        .font(.meadow(.ui, 13.5))
+                        .padding(.leading, 26)
                 }
                 if preview.sweepCapped {
-                    Label("Sweeps the most recent \(preview.sweepCount) — run again for the rest.", systemImage: "exclamationmark.circle")
-                        .font(.callout)
+                    Step(icon: .info, tag: nil) {
+                        Text("Sweeps the most recent \(preview.sweepCount) — run again for the rest.")
+                    }
                 }
                 Text("Block + sweep undo with Undo.\(asked.method == "none" ? "" : " Unsubscribing can’t be undone.")")
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                HStack {
+                    .font(.meadow(.ui, 13, .semibold))
+                    .foregroundStyle(meadow.rust)
+                HStack(spacing: 8) {
                     Spacer()
-                    Button("Cancel", role: .cancel) { model.cleaning = nil }.keyboardShortcut(.cancelAction)
+                    Button("Cancel", role: .cancel) { model.cleaning = nil }
+                        .meadowButton(.quiet)
+                        .keyboardShortcut(.cancelAction)
                     Button(asked.armed ? "Click Again to Confirm" : "Clean Up", role: .destructive) {
                         Task { await model.pressCleanup() }
                     }
+                    .meadowButton(asked.armed ? .danger : .standard, del: !asked.armed)
                     .keyboardShortcut(.defaultAction)
-                    .tint(.red)
                 }
                 .padding(.top, 4)
             }
             .padding(20)
             .frame(width: 500)
+            .background(meadow.paper)
         }
     }
 
@@ -233,18 +255,23 @@ struct CleanupSheet: View {
 
 /// A line of what a cleanup does, and whether it can be undone.
 private struct Step<Words: View>: View {
-    let symbol: String
-    let tag: LocalizedStringKey?
+    let icon: MeadowIcon
+    let tag: String?
     @ViewBuilder let words: Words
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: symbol).frame(width: 16)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            MeadowIconView(icon, size: 16)
+                .foregroundStyle(meadow.ink2)
+                .frame(width: 16)
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 5 }
             words
             Spacer(minLength: 4)
-            if let tag { CardTag(tag) }
+            if let tag { MeadowChip(tag, tone: .line) }
         }
-        .font(.callout)
+        .font(.meadow(.ui, 13.5))
+        .foregroundStyle(meadow.ink)
     }
 }
 
@@ -252,26 +279,34 @@ private struct Step<Words: View>: View {
 /// unsubscribe: that goes one sender at a time.
 struct BatchSheet: View {
     let model: CurateModel
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         if let asked = model.batching {
             let preview = asked.preview
             VStack(alignment: .leading, spacing: 10) {
-                Text("Clean up **\(countNoun(preview.senders.count, "sender", "senders"))**?").font(.headline)
+                Text("Clean up **\(countNoun(preview.senders.count, "sender", "senders"))**?")
+                    .font(.meadow(.display, 19, .bold))
+                    .foregroundStyle(meadow.ink)
                 Text(asked.reasoning ? String(localized: "Writing why each one is here…")
                      : String(localized: "\(countNoun(preview.sweepCount, "inbox message", "inbox messages")) go to Trash"))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.meadow(.ui, 13.5))
+                    .foregroundStyle(meadow.ink3)
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         ForEach(preview.senders, id: \.fromAddr) { sender in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(sender.fromAddr).fontWeight(.semibold)
+                                Text(sender.fromAddr).font(.meadow(.ui, 14, .bold)).foregroundStyle(meadow.ink)
                                 Text("\(countNoun(sender.count, "message", "messages"))\(sender.unseen > 0 ? " · \(sender.unseen) unread" : "") · \(sender.sweepCount) to Trash")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(.meadow(.ui, 12.5))
+                                    .foregroundStyle(meadow.ink3)
                                 if let why = asked.reasons[sender.fromAddr] {
-                                    Label(why, systemImage: "sparkles").font(.caption).foregroundStyle(.tint)
+                                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                        MeadowIconView(.wind, size: 13)
+                                        Text(why)
+                                    }
+                                    .font(.meadow(.ui, 12.5, .medium))
+                                    .foregroundStyle(meadow.moss)
                                 }
                             }
                         }
@@ -280,24 +315,28 @@ struct BatchSheet: View {
                 }
                 .frame(maxHeight: 280)
                 if preview.sweepCapped {
-                    Label("Sweeps the most recent \(preview.sweepCount) — run again for the rest.", systemImage: "exclamationmark.circle")
-                        .font(.callout)
+                    Step(icon: .info, tag: nil) {
+                        Text("Sweeps the most recent \(preview.sweepCount) — run again for the rest.")
+                    }
                 }
                 Text("Each one is blocked and swept, and one Undo takes it all back. This doesn’t unsubscribe: do that one sender at a time.")
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                HStack {
+                    .font(.meadow(.ui, 13, .semibold))
+                    .foregroundStyle(meadow.rust)
+                HStack(spacing: 8) {
                     Spacer()
-                    Button("Cancel", role: .cancel) { model.batching = nil }.keyboardShortcut(.cancelAction)
+                    Button("Cancel", role: .cancel) { model.batching = nil }
+                        .meadowButton(.quiet)
+                        .keyboardShortcut(.cancelAction)
                     Button(asked.armed ? "Click Again to Confirm" : "Clean Up \(preview.senders.count)", role: .destructive) {
                         Task { await model.pressBatch() }
                     }
+                    .meadowButton(asked.armed ? .danger : .standard, del: !asked.armed)
                     .keyboardShortcut(.defaultAction)
-                    .tint(.red)
                 }
             }
             .padding(20)
             .frame(width: 520)
+            .background(meadow.paper)
         }
     }
 }
@@ -310,12 +349,17 @@ private struct InboxesPage: View {
 
     var body: some View {
         if let stats = model.stats {
-            List(stats.accounts, id: \.account) { account in
-                InboxRow(account: account, buckets: stats.buckets, model: model, nameOf: nameOf)
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    ForEach(stats.accounts, id: \.account) { account in
+                        InboxRow(account: account, buckets: stats.buckets, model: model, nameOf: nameOf)
+                    }
+                }
+                .padding(16)
             }
-            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
         } else {
-            ProgressView("Measuring live inboxes…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            Measuring(words: "Measuring live inboxes…")
         }
     }
 }
@@ -325,22 +369,26 @@ private struct InboxRow: View {
     let buckets: [API.Bucket]
     let model: CurateModel
     let nameOf: (String) -> String
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let total = account.inInbox
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Circle().fill(account.error == nil ? Color.green : Color.red).frame(width: 8, height: 8)
-                Text(nameOf(account.account)).fontWeight(.semibold)
+        DeskCard {
+            HStack(spacing: 8) {
+                Circle().fill(account.error == nil ? meadow.primary : meadow.rust).frame(width: 8, height: 8)
+                Text(nameOf(account.account)).font(.meadow(.ui, 14, .bold)).foregroundStyle(meadow.ink)
                 Spacer()
-                Text(account.error == nil ? "\(total)" : "—").monospacedDigit()
+                Text(account.error == nil ? "\(total)" : "—")
+                    .font(.meadow(.display, 18, .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(meadow.ink)
             }
             GeometryReader { space in
                 HStack(spacing: 0) {
                     ForEach(buckets, id: \.name) { bucket in
                         if let count = account.byBucket[bucket.name], count > 0, total > 0 {
                             Rectangle()
-                                .fill(Self.colour(bucket.name))
+                                .fill(Self.colour(bucket.name, meadow))
                                 .frame(width: space.size.width * CGFloat(count) / CGFloat(total))
                                 .help("\(bucket.name): \(count)")
                         }
@@ -348,48 +396,48 @@ private struct InboxRow: View {
                 }
             }
             .frame(height: 6)
-            .background(.quaternary)
+            .background(meadow.line)
             .clipShape(Capsule())
             HStack {
                 if let error = account.error {
-                    Text(String(error.prefix(40))).foregroundStyle(.red)
+                    Text(String(error.prefix(40))).foregroundStyle(meadow.rust)
                 } else {
-                    Text("\(account.junk) junk · \(account.keep) keep").foregroundStyle(.secondary)
+                    Text("\(account.junk) junk · \(account.keep) keep").foregroundStyle(meadow.ink3)
                 }
                 Spacer()
                 if account.junk > 0, model.sweepArmed?.account != account.account {
                     Button("Sweep \(account.junk)") { Task { await model.armSweep(account.account) } }
-                        .controlSize(.small)
+                        .meadowButton(small: true)
                 }
             }
-            .font(.callout)
+            .font(.meadow(.ui, 13))
             if let armed = model.sweepArmed, armed.account == account.account {
-                HStack {
+                HStack(spacing: 8) {
                     Text("Sweep **\(nameOf(account.account))** · **\(armed.planned)** msgs")
+                        .font(.meadow(.ui, 13.5))
+                        .foregroundStyle(meadow.sunInk)
                     Spacer()
-                    Button("Abort") { model.abortSweep() }
-                    Button("Confirm") { Task { await model.sweep() } }
-                        .buttonStyle(.borderedProminent)
+                    Button("Abort") { model.abortSweep() }.meadowButton(.quiet, small: true)
+                    Button("Confirm") { Task { await model.sweep() } }.meadowButton(.danger, small: true)
                 }
-                .controlSize(.small)
                 .padding(8)
-                .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+                .background(RoundedRectangle(cornerRadius: 10).fill(meadow.sunWash))
             }
         }
-        .padding(.vertical, 6)
     }
 
-    /// Each bucket's colour, as the page's microbar draws it.
-    static func colour(_ bucket: String) -> Color {
+    /// Each bucket's colour, as the page's microbar draws it, in Meadow's palette: rust for what is junk, sunlight
+    /// for what sells, indigo for people and their receipts, and the quiet ink for the machines. Moss stays the AI's.
+    static func colour(_ bucket: String, _ meadow: MeadowPalette) -> Color {
         switch bucket {
-        case "spam/scam": .red
-        case "blocked": .pink
-        case "newsletters/marketing": .purple
-        case "automated-notifications": .blue
-        case "receipts/transactional": .teal
-        case "personal/protected": .green
-        case "other/personal-ish": .yellow
-        default: .gray
+        case "spam/scam": meadow.rust
+        case "blocked": meadow.rust.opacity(0.55)
+        case "newsletters/marketing": meadow.sun
+        case "automated-notifications": meadow.ink3.opacity(0.7)
+        case "receipts/transactional": meadow.primary.opacity(0.55)
+        case "personal/protected": meadow.primary
+        case "other/personal-ish": meadow.sun.opacity(0.5)
+        default: meadow.ink3
         }
     }
 }
@@ -399,30 +447,35 @@ private struct InboxRow: View {
 private struct RulesPage: View {
     let model: CurateModel
     @State private var text = ""
+    @FocusState private var typing: Bool
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let rules = model.rules
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Always keep").font(.callout.weight(.semibold))
-                chips((rules?.keepDomains ?? []) + (rules?.keepSenders ?? []), tint: .green)
-                Text("Always trash").font(.callout.weight(.semibold))
-                chips((rules?.blockDomains ?? []) + (rules?.blockSenders ?? []), tint: .red)
-                Divider()
-                HStack {
+            VStack(alignment: .leading, spacing: 10) {
+                MeadowSectionLabel(String(localized: "Always keep"))
+                chips((rules?.keepDomains ?? []) + (rules?.keepSenders ?? []), keep: true)
+                MeadowSectionLabel(String(localized: "Always trash"))
+                    .padding(.top, 6)
+                chips((rules?.blockDomains ?? []) + (rules?.blockSenders ?? []), keep: false)
+                Rectangle().fill(meadow.line).frame(height: 1).padding(.vertical, 6)
+                HStack(spacing: 8) {
                     TextField("domain.com or name@host", text: $text)
-                        .textFieldStyle(.roundedBorder)
+                        .focused($typing)
+                        .deskField(focused: typing)
                         .onSubmit { add(.keep) }
-                    Button("Keep") { add(.keep) }
-                    Button("Block") { add(.block) }
+                    Button("Keep") { add(.keep) }.meadowButton()
+                    Button("Block") { add(.block) }.meadowButton(del: true)
                 }
                 .disabled(model.rules == nil)
                 Text("A sender or a whole domain: keep it in your inbox always, or send it to the trash always.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.meadow(.ui, 12.5))
+                    .foregroundStyle(meadow.ink3)
             }
             .padding(16)
         }
+        .scrollContentBackground(.hidden)
     }
 
     private func add(_ verdict: API.RuleChange) {
@@ -432,23 +485,25 @@ private struct RulesPage: View {
         Task { await model.rule(token, verdict) }
     }
 
-    @ViewBuilder private func chips(_ tokens: [String], tint: Color) -> some View {
+    @ViewBuilder private func chips(_ tokens: [String], keep: Bool) -> some View {
         if tokens.isEmpty {
-            Text("none").font(.caption).foregroundStyle(.tertiary)
+            Text("none").font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
         } else {
-            BriefFlow {
+            BriefFlow(spacing: 6) {
                 ForEach(tokens, id: \.self) { token in
                     Button {
                         Task { await model.rule(token, .remove) }
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
                             Text(token)
-                            Image(systemName: "xmark").font(.caption2)
+                            MeadowIconView(.x, size: 12)
                         }
-                        .font(.callout)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(tint.opacity(0.15), in: Capsule())
+                        .font(.meadow(.ui, 12.5, .bold))
+                        .foregroundStyle(keep ? meadow.primaryInk : meadow.rust)
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 26)
+                        .background(Capsule().fill(keep ? meadow.primaryWash : meadow.rustWash))
+                        .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .help("Remove this rule")
@@ -463,34 +518,47 @@ private struct RulesPage: View {
 
 private struct FiltersPage: View {
     let model: CurateModel
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let filters = model.rules?.filters ?? []
         VStack(alignment: .leading, spacing: 0) {
             if filters.isEmpty {
-                ContentUnavailableView("No filters", systemImage: "line.3.horizontal.decrease.circle",
-                                       description: Text("A filter stars or marks read the new mail that fits a search."))
+                DeskEmpty(icon: .filter, title: String(localized: "No filters"),
+                          words: String(localized: "A filter stars or marks read the new mail that fits a search."))
+                Spacer(minLength: 0)
             } else {
-                List(filters, id: \.id) { filter in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(filter.q).font(.body.monospaced())
-                            Text(CurateModel.does(filter)).font(.caption).foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(filters, id: \.id) { filter in
+                            DeskSheetRow {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(filter.q).font(.meadow(.mono, 13)).foregroundStyle(meadow.ink)
+                                    Text(CurateModel.does(filter)).font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
+                                }
+                                Spacer()
+                                Button("Edit") {
+                                    model.filterForm = .init(id: filter.id, query: filter.q, star: filter.star,
+                                                             read: filter.read)
+                                }
+                                .meadowButton(.quiet, small: true)
+                                .accessibilityLabel("Edit the filter \(filter.q)")
+                                Button("Remove") { Task { await model.removeFilter(filter) } }
+                                    .meadowButton(.quiet, del: true, small: true)
+                                    .accessibilityLabel("Remove the filter \(filter.q)")
+                            }
                         }
-                        Spacer()
-                        Button("Edit") {
-                            model.filterForm = .init(id: filter.id, query: filter.q, star: filter.star, read: filter.read)
-                        }
-                        .accessibilityLabel("Edit the filter \(filter.q)")
-                        Button("Remove") { Task { await model.removeFilter(filter) } }
-                            .accessibilityLabel("Remove the filter \(filter.q)")
                     }
-                    .controlSize(.small)
+                    .padding(10)
                 }
-                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
             HStack {
-                Button("New Filter…", systemImage: "plus") { model.filterForm = .new() }
+                Button { model.filterForm = .new() } label: {
+                    MeadowIconView(.plus, size: 15)
+                    Text("New Filter…")
+                }
+                .meadowButton(small: true)
                 Spacer()
             }
             .padding(12)
@@ -503,9 +571,11 @@ private struct FiltersPage: View {
 struct FilterSheet: View {
     let model: CurateModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.meadow) private var meadow
     @State private var form: CurateModel.FilterForm
     @State private var why = ""
     @State private var saving = false
+    @FocusState private var typing: Bool
 
     init(form: CurateModel.FilterForm, model: CurateModel) {
         self.model = model
@@ -514,34 +584,42 @@ struct FilterSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(form.id == nil ? "New Filter" : "Edit Filter").font(.headline)
-            Text("New mail that fits this search").font(.callout)
-            TextField("from:name@host subject:invoice", text: $form.query)
-                .textFieldStyle(.roundedBorder)
-                .font(.body.monospaced())
-                .autocorrectionDisabled()
-            Toggle("Star it", isOn: $form.star).toggleStyle(.checkbox)
-            Toggle("Mark it read", isOn: $form.read).toggleStyle(.checkbox)
-            Text("Applies to new mail arriving in your Inbox, not to what’s already here. Your mail server hears of it too. A filter never moves mail.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if !why.isEmpty {
-                Text(why).font(.callout).foregroundStyle(.red)
+            HStack(spacing: 8) {
+                MeadowIconView(.filter, size: 18).foregroundStyle(meadow.ink2)
+                Text(form.id == nil ? "New filter" : "Edit filter")
+                    .font(.meadow(.display, 19, .bold))
+                    .foregroundStyle(meadow.ink)
             }
-            HStack {
+            Text("New mail that fits this search").font(.meadow(.ui, 13.5)).foregroundStyle(meadow.ink2)
+            TextField("from:name@host subject:invoice", text: $form.query)
+                .focused($typing)
+                .deskField(focused: typing)
+                .autocorrectionDisabled()
+            Toggle("Star it", isOn: $form.star).toggleStyle(.checkbox).font(.meadow(.ui, 13.5))
+            Toggle("Mark it read", isOn: $form.read).toggleStyle(.checkbox).font(.meadow(.ui, 13.5))
+            Text("Applies to new mail arriving in your Inbox, not to what’s already here. Your mail server hears of it too. A filter never moves mail.")
+                .font(.meadow(.ui, 12.5))
+                .foregroundStyle(meadow.ink3)
+            if !why.isEmpty {
+                Text(why).font(.meadow(.ui, 13)).foregroundStyle(meadow.rust)
+            }
+            HStack(spacing: 8) {
                 Spacer()
                 Button("Cancel", role: .cancel) {
                     model.filterForm = nil
                     dismiss()
                 }
+                .meadowButton(.quiet)
                 .keyboardShortcut(.cancelAction)
                 Button(form.id == nil ? "Create Filter" : "Save") { Task { await save() } }
+                    .meadowButton(.primary)
                     .keyboardShortcut(.defaultAction)
                     .disabled(saving)
             }
         }
         .padding(20)
         .frame(width: 460)
+        .background(meadow.paper)
     }
 
     private func save() async {
@@ -563,29 +641,42 @@ private struct ActivityPage: View {
     let model: CurateModel
     let nameOf: (String) -> String
     let open: (String) -> Void
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         if model.audit.isEmpty {
-            ContentUnavailableView("No activity yet.", systemImage: "clock")
+            DeskEmpty(icon: .clock, title: String(localized: "No activity yet."))
         } else {
-            List(Array(model.audit.enumerated()), id: \.offset) { _, event in
-                Button {
-                    if let account = event.account { open(account) }
-                } label: {
-                    HStack(spacing: 10) {
-                        Text(event.kind)
-                            .font(.caption.monospaced().weight(.semibold))
-                            .frame(width: 80, alignment: .leading)
-                        Text(Self.when(event.ts)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                            .frame(width: 110, alignment: .leading)
-                        Text(Self.line(event, nameOf)).font(.caption).lineLimit(1)
-                        Spacer()
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(model.audit.enumerated()), id: \.offset) { _, event in
+                        Button {
+                            if let account = event.account { open(account) }
+                        } label: {
+                            DeskSheetRow {
+                                Text(event.kind)
+                                    .font(.meadow(.mono, 12, .bold))
+                                    .foregroundStyle(meadow.ink2)
+                                    .frame(width: 84, alignment: .leading)
+                                Text(Self.when(event.ts))
+                                    .font(.meadow(.ui, 12.5))
+                                    .monospacedDigit()
+                                    .foregroundStyle(meadow.ink3)
+                                    .frame(width: 110, alignment: .leading)
+                                Text(Self.line(event, nameOf))
+                                    .font(.meadow(.ui, 13))
+                                    .foregroundStyle(meadow.ink)
+                                    .lineLimit(1)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .padding(10)
             }
-            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
         }
     }
 
