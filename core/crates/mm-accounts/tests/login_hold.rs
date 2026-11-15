@@ -33,7 +33,9 @@ fn at(seconds: i64) -> Moment {
 
 #[test]
 fn a_server_saying_its_down_for_now_is_no_refusal_nor_is_a_login_lost_or_never_sent() {
-    assert!(refuses("LoginRefused"));
+    for class in ["LoginRefused", "LoginNeedsAppPassword", "LoginNeedsWebSignIn", "LoginImapOff"] {
+        assert!(refuses(class), "{class}");
+    }
     for class in ["LoginUnavailable", "Abort", "ConnectionReset", "Timeout", "Unsendable", "TLSPinMismatch"] {
         assert!(!refuses(class), "{class}");
     }
