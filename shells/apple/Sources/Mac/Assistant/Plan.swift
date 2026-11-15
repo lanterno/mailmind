@@ -123,6 +123,13 @@ final class PlanModel {
         Task { await confirm(preview) }
     }
 
+    /// Take back a destructive plan's first press, so the next press arms it again: what is typed changed, or what
+    /// showed it went.
+    func disarm() {
+        guard case .plan(let command, let preview, true) = doing else { return }
+        doing = .plan(command: command, preview, armed: false)
+    }
+
     /// The command being planned or shown; none before one is said.
     var command: String? {
         switch doing {
@@ -180,6 +187,14 @@ struct PlanCard: View {
     let close: @MainActor () -> Void
 
     var body: some View {
+        // A first press counts only for the words it was made on, while they are on screen: an edit, a mode
+        // left or the palette gone takes it back.
+        card
+            .onChange(of: words) { model.disarm() }
+            .onDisappear { model.disarm() }
+    }
+
+    @ViewBuilder private var card: some View {
         switch model.shown(for: words) {
         case .planning(let command)?:
             PlanCardBox {

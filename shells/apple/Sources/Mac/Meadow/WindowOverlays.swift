@@ -83,6 +83,11 @@ struct WindowOverlays: ViewModifier {
                 if up, case .snoozeUntil? = desk?.sheet { desk?.sheet = nil }
             }
             .onChange(of: mailbox.typing) { _, now in if !now && dialog != nil { mailbox.typing = true } }
+            // A plan the palette showed and didn't run stops as the palette goes, however it goes (Esc, Move To or a
+            // menu's sheet in its place), so a first press never waits armed for the palette to come back.
+            .onChange(of: dialog?.kind == "palette") { _, up in
+                if !up, let desk, desk.plan.doing != nil { desk.plan.stop() }
+            }
     }
 
     @ViewBuilder private func view(of dialog: WindowDialog) -> some View {
@@ -118,7 +123,7 @@ struct WindowOverlays: ViewModifier {
         return desk.paletteModes(undoKey: mailbox.singleKeys ? "Z" : "⌘Z")
     }
 
-    /// Close whatever dialog is up, and stop a plan it was showing that hasn't run.
+    /// Close whatever dialog is up.
     private func close() {
         mailbox.paletteOpen = false
         mailbox.moving = nil
@@ -130,7 +135,6 @@ struct WindowOverlays: ViewModifier {
         case .ask?, .plan?: desk.sheet = nil
         default: break
         }
-        if desk.plan.doing != nil { desk.plan.stop() }
     }
 
     /// The snooze chooser hangs from where the pane's Snooze stands, or near the middle of the window.
