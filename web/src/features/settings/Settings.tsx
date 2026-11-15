@@ -1,6 +1,7 @@
 // Email connections: who MailMind reads, and how it reaches each. A password goes to the server once, which keeps it in the
-// login Keychain, and never comes back; what the page shows of a stored one is only how it is kept.
-import { useEffect, useState } from "react";
+// login Keychain, and never comes back; what the page shows of a stored one is only how it is kept. Which preset an address
+// takes is the server's to say (`/api/accounts/preset`): the form only offers it. A connection is tested as soon as it is saved.
+import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, Modal, ModalOverlay, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
 import { EMPTY } from "../../lib/emptyWords";
@@ -25,6 +26,12 @@ type Credential = { set?: boolean; style?: string; ref?: string | string[]; var?
 type Kind = "gmail" | "imap" | "proton";
 type Cred = "keychain" | "op" | "env" | "proton_bridge";
 type Tested = { kind: "run" | "ok" | "err"; text: string } | null;
+type Found = GetAnswers["/api/accounts/preset"];
+
+// Where a Google Account makes an App Password, which Gmail's IMAP takes in place of the account's own password.
+const APP_PASSWORDS = "https://myaccount.google.com/apppasswords";
+// How long the address rests before the server is asked which preset it takes.
+const ASK_AFTER_MS = 400;
 
 const credentialOf = (c: Connection) => c.credential as unknown as Credential;
 const refOf = (c: Credential | null | undefined) => (Array.isArray(c?.ref) ? c.ref[0] : c?.ref) ?? "";
@@ -45,7 +52,36 @@ function TestResult({ t }: { t: Tested }) {
   return <span className={t ? `set-status ${t.kind}` : "set-status"} role="status">{t?.text}</span>;
 }
 
-function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connection | null; signatureDefault: string; done: (added: boolean) => void; cancel: () => void }) {
+// What the server found of an address's domain, when it is Gmail's and the type picked isn't: the preset offered. With
+// Gmail's picked, a domain Google's servers take is only said to fit.
+function PresetOffer({ found, type, use }: { found: Found | undefined; type: Kind; use: () => void }) {
+  if (found?.preset !== "gmail") return null;
+  const whose = found.sure ? "A Google address" : `Google takes ${found.domain}’s mail`;
+  if (type === "gmail") return found.sure ? null : <div className="set-help">{whose}: Gmail’s settings fit it.</div>;
+  return (
+    <div className="set-offer" role="status">
+      {whose}: use Gmail’s settings? <button type="button" className="set-mini" onClick={use}>Use Gmail</button>
+    </div>
+  );
+}
+
+// How to make the App Password Gmail asks for, with Google's page for it a click away.
+function AppPasswordSteps() {
+  return (
+    <div className="set-apppw">
+      <div className="set-help">Gmail takes an App Password here, not your Google password:</div>
+      <ol>
+        <li>Turn on 2-Step Verification for your Google Account.</li>
+        <li>Create an App Password, named MailMind.</li>
+        <li>Paste it above as Google shows it, spaces and all.</li>
+      </ol>
+      <a className="set-mini" href={APP_PASSWORDS} target="_blank" rel="noopener noreferrer">Open Google’s App Passwords <Icon name="external" /></a>
+      <div className="set-help">No App Passwords there? Advanced Protection, or your Workspace admin, has switched them off.</div>
+    </div>
+  );
+}
+
+function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connection | null; signatureDefault: string; done: (email: string) => void; cancel: () => void }) {
   const was = row ? credentialOf(row) : null;
   const inside = useFocusFirst<HTMLDivElement>("input");
   const [alias, setAlias] = useState(row?.alias ?? "");
@@ -63,6 +99,20 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [tested, setTested] = useState<Tested>(null);
+  // The address as it last rested, which the server is asked about; a saved connection's is fixed, and asks nothing.
+  const [asked, setAsked] = useState("");
+  useEffect(() => {
+    if (row) return;
+    const typed = email.trim();
+    const t = setTimeout(() => setAsked(typed.includes("@") ? typed : ""), ASK_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [row, email]);
+  const found = useQuery({
+    queryKey: ["preset", asked],
+    queryFn: () => get(`/api/accounts/preset?email=${encodeURIComponent(asked)}`),
+    enabled: asked !== "",
+    staleTime: Infinity,
+  });
 
   const credential = () => {
     if (type === "proton") return { style: "proton_bridge" };
@@ -87,7 +137,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
     try {
       await post(row ? "/api/accounts/edit" : "/api/accounts/add", { alias: alias.trim(), signature: signature.trim(), type, email: address, ...imapBits(), ...(c ? { credential: c } : {}) });
       toast(`${row ? "Updated" : "Added"} ${shortAddress(address)}`);
-      done(!row);
+      done(address ?? "");
     } catch (e) {
       const gone = refusalOf(e)?.status === 404;
       setError(gone ? refusalOf(e)?.detail || "Could not save." : "Save failed.");
@@ -105,6 +155,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
       {row && <div className="set-help">Identity is fixed — remove and re-add to change the address.</div>}
       <div className="lbl">Type</div>
       <Seg label="Type" value={type} options={[["gmail", "Gmail"], ["imap", "IMAP"], ["proton", "Proton"]]} onChange={setType} />
+      {!row && <PresetOffer found={asked ? found.data : undefined} type={type} use={() => setType("gmail")} />}
       {type === "imap" && (
         <div>
           <div className="twocol">
@@ -128,11 +179,11 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
             {style === "keychain" && (
               <>
                 <div className="pwwrap">
-                  <input type={showPassword ? "text" : "password"} aria-label="Password" value={password} autoComplete="new-password" placeholder={row ? "•••••••• unchanged — leave blank to keep" : "paste the password / app password"} onChange={(e) => setPassword(e.target.value)} />
+                  <input type={showPassword ? "text" : "password"} aria-label="Password" value={password} autoComplete="new-password" placeholder={row ? "•••••••• unchanged — leave blank to keep" : type === "gmail" ? "abcd efgh ijkl mnop" : "paste the password / app password"} onChange={(e) => setPassword(e.target.value)} />
                   <button type="button" className="eye" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(!showPassword)}><Icon name="eye" /></button>
                 </div>
                 <div className="set-help">Kept in your login Keychain, never in a file.</div>
-                {type === "gmail" && <div className="set-help">Gmail needs an App Password (2-Step Verification → App passwords), not your login password.</div>}
+                {type === "gmail" && <AppPasswordSteps />}
               </>
             )}
             {style === "op" && (
@@ -151,10 +202,11 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
         )}
       <div className="err" role="alert">{error}</div>
       <div className="formbar">
-        <button className="set-mini" onClick={test}>Test connection</button><TestResult t={tested} />
+        <button className="set-mini" onClick={test}>Test connection</button>
         <button className="abtn" style={{ marginLeft: "auto" }} onClick={cancel}>Cancel</button>
         <button className="abtn prim" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save connection"}</button>
       </div>
+      <div className="set-tested"><TestResult t={tested} /></div>
     </div>
   );
 }
@@ -205,9 +257,14 @@ function HealthLine({ h, email, again }: { h: Health | undefined; email: string;
 
 type Live = { in_inbox?: number | null; error?: string | null };   // the generated type only knows the answer of a world where nothing failed
 
-function ConnectionRow({ r, h, live, status, edit, again }: { r: Connection; h: Health | undefined; live: Live | undefined; status: string; edit: () => void; again: () => void }) {
+function ConnectionRow({ r, h, live, status, edit, again, testNow, testing }: { r: Connection; h: Health | undefined; live: Live | undefined; status: string; edit: () => void; again: () => void; testNow: boolean; testing: () => void }) {
   const qc = useQueryClient();
   const [tested, setTested] = useState<Tested>(null);
+  useEffect(() => {
+    if (!testNow) return;
+    testing();
+    void testConnection({ email: r.email }, setTested);
+  }, [testNow, testing, r.email]);
   const [arming, setArming] = useState(false);
   useEffect(() => {
     if (!arming) return;
@@ -251,12 +308,12 @@ function ConnectionRow({ r, h, live, status, edit, again }: { r: Connection; h: 
           {r.disabled && <span>· disabled</span>}
         </div>
         <HealthLine h={h} email={r.email ?? ""} again={again} />
+        <div className="set-tested"><TestResult t={tested} /></div>
       </div>
       <div className="acts">
         {live?.error
           ? <span className="set-count" style={{ color: "var(--err)" }}>{live.error.slice(0, 18)}</span>
           : live?.in_inbox != null && <span className="set-count" style={{ color: "var(--mute)" }}>{live.in_inbox}</span>}
-        <TestResult t={tested} />
         <button className="set-mini" onClick={edit}>Edit</button>
         <button className="set-mini" onClick={() => void testConnection({ email: r.email }, setTested)}>Test</button>
         <button className={arming ? "set-mini danger ok" : "set-mini danger"} onClick={() => void remove()}>{arming ? "Confirm?" : "Remove"}</button>
@@ -293,6 +350,8 @@ function Connections() {
   const stats = useQuery({ queryKey: ["stats"], queryFn: () => get("/api/stats") });
   const { data: digest } = useDigest();
   const [editing, setEditing] = useState<string | "new" | null>(null);
+  const [testNext, setTestNext] = useState<string | null>(null);   // the connection just saved, tested as its row shows
+  const tested = useCallback(() => setTestNext(null), []);
   useStepBack(() => {
     if (editing === null) return false;
     setEditing(null);
@@ -304,8 +363,10 @@ function Connections() {
     void qc.invalidateQueries({ queryKey: ["accountHealth"] });
     void qc.invalidateQueries({ queryKey: ["stats"] });
   };
-  const saved = (added: boolean) => {
+  const saved = (email: string) => {
+    const added = editing === "new";
     setEditing(null);
+    setTestNext(email);
     again();
     void qc.invalidateQueries({ queryKey: ["digest"] });
     void qc.invalidateQueries({ queryKey: ["folders"] });
@@ -324,7 +385,7 @@ function Connections() {
       <>
         <Backup />
         {!rows.length && <div className="nores" style={{ padding: 36 }}>{EMPTY.connections}<br />Add one to get started.</div>}
-        {rows.map((r) => <ConnectionRow key={r.email} r={r} h={healthOf(r.email ?? "")} live={liveOf(r.email ?? "")} status={statusOf(r.email ?? "")} edit={() => setEditing(r.email)} again={again} />)}
+        {rows.map((r) => <ConnectionRow key={r.email} r={r} h={healthOf(r.email ?? "")} live={liveOf(r.email ?? "")} status={statusOf(r.email ?? "")} edit={() => setEditing(r.email)} again={again} testNow={r.email === testNext} testing={tested} />)}
       </>
     );
   }
