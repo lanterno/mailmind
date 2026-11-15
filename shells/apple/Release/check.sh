@@ -107,12 +107,17 @@ acknowledged() {
     local text="$app/Contents/Resources/Acknowledgements.txt"
     grep -q "^MailMind, https://github.com/lanterno/mailmind$" "$text" &&
         grep -q "^bspatch.c and bsdiff.c, from bsdiff" "$text" &&
+        grep -q "^Nunito Sans, https://github.com/Fonthausen/NunitoSans" "$text" &&
+        grep -q "^Shippori Mincho, https://github.com/fontdasu/ShipporiMincho" "$text" &&
+        grep -q "^Klee One, https://github.com/fontworks-fonts/Klee" "$text" &&
+        grep -q "^SIL OPEN FONT LICENSE Version 1.1" "$text" &&
         grep -q "^sqlcipher-src .*(sqlcipher/LICENSE-sqlcipher)$" "$text" &&
         grep -q "^sqlcipher-src .*(sqlcipher/LICENSE-libtomcrypt)$" "$text" &&
         grep -q "^ring .*(third_party/fiat/LICENSE)$" "$text" &&
         grep -q "^uniffi .*(MPL-2.0), https://github.com/mozilla/uniffi-rs$" "$text"
 }
-check "it carries the licences: MailMind's, Sparkle's (bsdiff's), SQLCipher's, libtomcrypt's, ring's, UniFFI's" acknowledged
+check "it carries the licences: MailMind's, Sparkle's, the typefaces', SQLCipher's, libtomcrypt's, ring's, UniFFI's" \
+    acknowledged
 check "with the copyright About shows" equal "$(plist "$app" NSHumanReadableCopyright)" \
     "© 2026 MailMind contributors. MIT License."
 check "and takes mailto: links, so it can be the Mac's mail app" equal \
