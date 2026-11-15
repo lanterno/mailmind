@@ -8,7 +8,11 @@ import SwiftUI
 /// It is handed the core once the window has opened it, and hands it to `AppStatus`.
 struct StatusHooks: ViewModifier {
     let core: Core?
+    /// The window's mailbox, whose keys and palette reach help, Settings, a sync and a reconcile.
+    var mailbox: Mailbox?
     var status = AppStatus.shared
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     func body(content: Content) -> some View {
         @Bindable var status = status
@@ -35,12 +39,37 @@ struct StatusHooks: ViewModifier {
             .task(id: core.map(ObjectIdentifier.init)) {
                 if let core { await status.attach(core) }
             }
+            .onAppear { joinMailbox() }
             .onChange(of: offersGuide) { _, offers in
                 guard offers else { return }
                 // Offered, not finished: Skip or quitting halfway both count.
                 status.setPreferences(.init(guideOffered: true))
                 status.guiding = true
             }
+    }
+
+    private func joinMailbox() {
+        let status = status, openWindow = openWindow, openSettings = openSettings
+        mailbox?.join("status") { mailbox in
+            mailbox.keys["?"] = { openWindow(id: HelpWindow.id) }
+            mailbox.keys[","] = { openSettings() }
+            mailbox.more.append { _ in
+                [
+                    MailCommand(id: "help", group: .commands, label: String(localized: "Keyboard help"), hint: "?") {
+                        openWindow(id: HelpWindow.id)
+                    },
+                    MailCommand(id: "settings", group: .commands, label: String(localized: "Settings"), hint: ",") {
+                        openSettings()
+                    },
+                    MailCommand(id: "sync", group: .commands, label: String(localized: "Sync now")) {
+                        Task { await status.syncNow() }
+                    },
+                    MailCommand(id: "reconcile", group: .commands, label: String(localized: "Reconcile (prune ghosts)")) {
+                        Task { await status.reconcile() }
+                    },
+                ]
+            }
+        }
     }
 
     /// The guide is offered once the first account has mail, with nothing else in the way.
