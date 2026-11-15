@@ -457,7 +457,8 @@ extension Mailbox {
 /// The table, taking the page's single keys while it has the focus (app/commands.ts): j and k, e, d, s, u, m, z, g
 /// then a letter, and the rest. Typing anywhere else never reaches them, and the setting that turns single keys off
 /// (`single_keys`) leaves only Delete, which deletes in every Mac list. It tells its controller where the pointer is,
-/// and gives a row's own buttons and check box their clicks.
+/// and gives a row's own buttons and check box their clicks: as a button takes one, where it is drawn, acting when
+/// the press ends on it.
 final class MailboxTableView: NSTableView {
     weak var mailbox: Mailbox?
     weak var controller: MailboxTableController?
@@ -465,6 +466,8 @@ final class MailboxTableView: NSTableView {
     private(set) var keyed = false
     private var chordAt: Date?
     private var tracking: NSTrackingArea?
+    /// A row's button or check box held down, which acts if the press ends on it.
+    private var pressing: (row: Int, target: RowTarget)?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -473,6 +476,33 @@ final class MailboxTableView: NSTableView {
                                                          .inVisibleRect], owner: self)
         addTrackingArea(area)
         tracking = area
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        let center = NotificationCenter.default
+        center.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
+        center.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
+        guard let window else { return }
+        center.addObserver(self, selector: #selector(keyChanged), name: NSWindow.didBecomeKeyNotification,
+                           object: window)
+        center.addObserver(self, selector: #selector(keyChanged), name: NSWindow.didResignKeyNotification,
+                           object: window)
+    }
+
+    /// The window came to the front with the pointer already resting on a row, which moved no mouse: the row shows
+    /// its buttons at once, as the page's do under the pointer. A window in the back shows none.
+    @objc private func keyChanged(_ note: Notification) {
+        guard let window, window.isKeyWindow else {
+            controller?.hover(at: nil)
+            return
+        }
+        controller?.hover(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        controller?.hover(at: convert(event.locationInWindow, from: nil))
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -488,18 +518,53 @@ final class MailboxTableView: NSTableView {
     override func mouseDown(with event: NSEvent) {
         setKeyed(false)
         let point = convert(event.locationInWindow, from: nil)
-        let row = row(at: point)
-        if row >= 0, let cell = view(atColumn: 0, row: row, makeIfNecessary: false) as? MailRowCell {
-            let inCell = convert(point, to: cell)
-            // The day's head over a row chooses nothing.
-            if cell.inHead(inCell) { return }
-            if let target = cell.target(at: inCell), event.modifierFlags.intersection([.command, .shift]).isEmpty {
-                window?.makeFirstResponder(self)
-                controller?.press(target, row: row)
-                return
-            }
+        // The day's head over a row chooses nothing.
+        if let (_, cell) = mailCell(at: point), cell.inHead(convert(point, to: cell)) { return }
+        if event.modifierFlags.intersection([.command, .shift]).isEmpty, beginPress(at: point) {
+            window?.makeFirstResponder(self)
+            return
         }
         super.mouseDown(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard pressing != nil else { return super.mouseDragged(with: event) }
+        // The button pressed shows it while the pointer is on it, and not once it is dragged off.
+        controller?.hover(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard pressing != nil else { return super.mouseUp(with: event) }
+        endPress(at: convert(event.locationInWindow, from: nil))
+    }
+
+    /// A press at `point`, in the table: on a button or a check box the row has drawn, it is held until the press
+    /// ends. Whether it was one; anywhere else the table takes the click and chooses the row.
+    func beginPress(at point: NSPoint) -> Bool {
+        pressing = nil
+        guard let (row, cell) = mailCell(at: point), let target = cell.shownTarget(at: convert(point, to: cell)) else {
+            return false
+        }
+        pressing = (row, target)
+        return true
+    }
+
+    /// The press held ends at `point`: the button acts if the pointer is still on it. Dragged off, nothing happens.
+    func endPress(at point: NSPoint) {
+        guard let held = pressing else { return }
+        pressing = nil
+        guard let (row, cell) = mailCell(at: point), row == held.row,
+              cell.target(at: convert(point, to: cell)) == held.target else { return }
+        controller?.press(held.target, row: row)
+    }
+
+    /// The mail row at `point`, and its cell, where the table shows one.
+    private func mailCell(at point: NSPoint) -> (row: Int, cell: MailRowCell)? {
+        let row = row(at: point)
+        guard row >= 0, let cell = view(atColumn: 0, row: row, makeIfNecessary: false) as? MailRowCell else {
+            return nil
+        }
+        return (row, cell)
     }
 
     override func becomeFirstResponder() -> Bool {

@@ -195,6 +195,9 @@ final class MailRowCell: NSTableCellView {
 
     private var lines: Lines?
     private var gistCut: (width: CGFloat, lines: [CTLine])?
+    /// What the row's last drawing showed of its quiet buttons and its check box: a click acts only on what a person
+    /// could see, never on a button a hover state set a moment ago and the screen hasn't shown yet.
+    private var drew = (acts: false, check: false)
 
     /// Each line's text, set once when the row is shown.
     private struct Lines {
@@ -289,7 +292,7 @@ final class MailRowCell: NSTableCellView {
         NSRect(x: actsStrip.minX + 10 + CGFloat(index) * 29, y: actsStrip.minY + 2, width: 28, height: 28)
     }
 
-    /// What of the row is at `point`, in the cell's own coordinates.
+    /// What of the row is at `point`, in the cell's own coordinates, drawn or not: where the pointer is.
     func target(at point: NSPoint) -> RowTarget? {
         guard row != nil else { return nil }
         let point = mirrored(point)
@@ -298,6 +301,21 @@ final class MailRowCell: NSTableCellView {
         }
         if avatar.contains(point) { return .check }
         return nil
+    }
+
+    /// What a click at `point` presses: a quiet button or the check box only where the row last drew it. Anywhere
+    /// else, the click chooses the row.
+    func shownTarget(at point: NSPoint) -> RowTarget? {
+        switch target(at: point) {
+        case .act(let act)?: drew.acts ? .act(act) : nil
+        case .check?: drew.check ? .check : nil
+        case nil: nil
+        }
+    }
+
+    /// Where a quiet button stands in the cell, if the row has it.
+    func frame(of act: RowAct) -> NSRect? {
+        acts.firstIndex(of: act).map { mirrored(actFrame($0)) }
     }
 
     /// Whether `point` is in the day's head over the row, which chooses nothing.
@@ -326,6 +344,7 @@ final class MailRowCell: NSTableCellView {
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
 
         guard let row, let lines else {
+            drew = (false, false)
             drawWaiting(inks, measure: measure)
             return
         }
@@ -413,7 +432,8 @@ final class MailRowCell: NSTableCellView {
         if let top = stops.chips {
             drawChips(lines.chips, top: top, from: textX, to: right, inks: inks, context: context)
         }
-        if state.hovering, !acts.isEmpty {
+        drew.acts = state.hovering && !acts.isEmpty
+        if drew.acts {
             drawActs(inks, behind: fill ?? inks.paper2)
         }
     }
@@ -444,7 +464,8 @@ final class MailRowCell: NSTableCellView {
         NSBezierPath(ovalIn: dot.insetBy(dx: 2.5, dy: 2.5)).fill()
 
         // The check box over the avatar (`.ckface`), under the pointer, checked, or while rows are being checked.
-        guard state.hovering || state.checked || state.selecting else { return }
+        drew.check = state.hovering || state.checked || state.selecting
+        guard drew.check else { return }
         let face = disc.insetBy(dx: 5, dy: 5)
         let box = NSBezierPath(roundedRect: face.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6)
         box.lineWidth = 2
