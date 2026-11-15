@@ -60,6 +60,51 @@ final class MeadowDeskPictures: XCTestCase {
         }
     }
 
+    /// Today & next offers Accept and Open under an invite, and nothing under an event that asks for no answer.
+    func testTodayAndNextOffersAnAnswerOnlyUnderAnInvite() async throws {
+        let desk = try await desk()
+        let events = DeskPictures.upcoming.items
+        XCTAssertTrue(events[0].invite)
+        XCTAssertFalse(events[1].invite)
+        func height(_ event: API.UpcomingEvent, _ replies: InviteReplies?) -> CGFloat {
+            NSHostingView(rootView: UpcomingList(events: [event], now: DeskPictures.now(.day), open: { _ in },
+                                                 replies: replies).frame(width: 300)).fittingSize.height
+        }
+        XCTAssertGreaterThan(height(events[0], desk.invites), height(events[0], nil))
+        XCTAssertEqual(height(events[1], desk.invites), height(events[1], nil))
+    }
+
+    /// An invite accepted in Today & next answers the invite's own message through the window's replies, which the
+    /// message's card shows too; the brief then says only the answer, with Undo, drawn in each light.
+    func testTodayAndNextWithAnInviteAnswered() async throws {
+        let desk = try await desk()
+        let routes = try XCTUnwrap(desk.link.routes as? DeskRoutes)
+        routes.answer("POST", "/api/invite/rsvp", API.RsvpQueued(
+            decision: .accept, ok: true, organizer: "Grace Hopper", outboxId: 7, queued: true, summary: "Studio sync",
+            undoSeconds: 30))
+        let event = DeskPictures.upcoming.items[0]
+        let copy = MailCopy.named(key: event.key, folder: event.folder, uid: event.uid, account: event.account)
+
+        await desk.invites.reply(to: copy, .accept)
+
+        let sent = try XCTUnwrap(routes.sent("POST", "/api/invite/rsvp").first)
+        XCTAssertEqual(sent["key"], .number(301))
+        XCTAssertEqual(sent["uid"], .number(31))
+        XCTAssertEqual(sent["folder"], .string("INBOX"))
+        XCTAssertEqual(sent["decision"], .string("accept"))
+        guard case .queued? = desk.invites.said[copy] else { return XCTFail("not queued") }
+        for light in Self.folder == nil ? [.day] : MeadowLight.allCases {
+            let card = DeskSideCard(title: "Today & next", icon: .cal) {
+                UpcomingList(events: DeskPictures.upcoming.items, now: DeskPictures.now(light), open: { _ in },
+                             replies: desk.invites)
+            }
+            .padding(16)
+            .background(MeadowPalette.of(light).paper)
+            try await draw("today-\(light.rawValue)-answered", light: light, size: CGSize(width: 340, height: 360),
+                           card)
+        }
+    }
+
     /// The brief with a reply written ahead for the first message, as the mockup's first card has one.
     private func brief(_ desk: Desk, _ light: MeadowLight) -> some View {
         BriefScreen(model: desk.brief, attention: desk.attention,
