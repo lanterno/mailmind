@@ -420,7 +420,8 @@ struct ComposerForm: View {
                 }
             } else {
                 ComposeTextView(composer: composer, text: composer.body, selectionRequest: composer.selectionRequest,
-                                focusBody: composer.focusRequest == .body, look: ComposeTextLook(meadow, light: light))
+                                focusBody: composer.focusRequest == .body, look: ComposeTextLook(meadow, light: light),
+                                commandReturn: { send(held: $0) })
                     .overlay(alignment: .topLeading) {
                         if composer.body.isEmpty {
                             Text("Write your message…")
@@ -536,9 +537,14 @@ struct ComposerForm: View {
             : "Send (⌘Return)"
     }
 
-    /// Nothing goes without the person pressing Send: the button, or its key.
+    /// Nothing goes without the person pressing Send: the button, or its key. A press that only repeats one (⌘Return
+    /// held, which comes here as often as the key repeats) never sends.
     private func send() {
-        if composer.check != nil { composer.confirmGuard() } else { composer.send(after: composer.pendingAfter) }
+        send(held: NSEvent.repeatingAPress)
+    }
+
+    private func send(held: Bool) {
+        composer.pressSend(held: held)
     }
 
     /// The foot's quiet words: a snippet Tab would bring in, else how the draft stands.
@@ -910,9 +916,11 @@ struct GuardStrip: View {
                     .meadowButton(small: true)
                     .keyboardShortcut(.cancelAction)
                 if !check.hard {
-                    Button(later ? "Schedule Anyway" : "Send Anyway") { composer.confirmGuard() }
-                        .meadowButton(.primary, small: true)
-                        .disabled(!check.armed)
+                    Button(later ? "Schedule Anyway" : "Send Anyway") {
+                        composer.confirmGuard(repeated: NSEvent.repeatingAPress)
+                    }
+                    .meadowButton(.primary, small: true)
+                    .disabled(!check.armed)
                 }
             }
         }

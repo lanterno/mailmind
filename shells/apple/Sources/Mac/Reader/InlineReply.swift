@@ -257,7 +257,8 @@ private struct OpenReply: View {
     private var text: some View {
         let look = ComposeTextLook(meadow, light: light)
         return ComposeTextView(composer: composer, text: composer.body, selectionRequest: composer.selectionRequest,
-                               focusBody: composer.focusRequest == .body, look: look, commandReturn: send)
+                               focusBody: composer.focusRequest == .body, look: look,
+                               commandReturn: { send(held: $0) })
             .frame(height: max(190, ComposeTextLook.size * ComposeTextLook.lineHeight * 7 + 24))
             .overlay(alignment: .topLeading) {
                 if composer.body.isEmpty {
@@ -367,9 +368,14 @@ private struct OpenReply: View {
         .overlay(alignment: .top) { Rectangle().fill(meadow.line).frame(height: 1) }
     }
 
-    /// Send: through the send guard, as the window's Send; a check shown is passed only where it may be.
+    /// Send: through the send guard, as the window's Send; a check shown is passed only where it may be, and never by
+    /// a press that only repeats one (⌘Return held).
     private func send() {
-        if composer.check != nil { composer.confirmGuard() } else { composer.send(after: composer.pendingAfter) }
+        send(held: NSEvent.repeatingAPress)
+    }
+
+    private func send(held: Bool) {
+        composer.pressSend(held: held)
     }
 
     private func attach() {

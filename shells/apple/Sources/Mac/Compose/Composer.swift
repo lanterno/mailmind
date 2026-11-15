@@ -869,6 +869,15 @@ final class Composer: Identifiable {
         focusRequest = shown.sendAfter > 0 ? .schedule : .body
     }
 
+    /// Send, by its button or ⌘Return: through the send guard, or past a check it shows where it may be. `held`: a
+    /// press that only repeats one (a held key's auto-repeat, a double click's second), which never sends: ⌘Return
+    /// held from before a check showed would otherwise wave it through once its wait was over.
+    func pressSend(held: Bool = false) {
+        if check != nil { return confirmGuard(repeated: held) }
+        guard !held else { return }
+        send(after: pendingAfter)
+    }
+
     /// Send anyway. `repeated`: a double click or a held key, which never confirms.
     func confirmGuard(repeated: Bool = false) {
         guard let shown = check else { return }

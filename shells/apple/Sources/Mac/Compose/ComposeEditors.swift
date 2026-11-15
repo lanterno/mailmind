@@ -15,8 +15,9 @@ struct ComposeTextView: NSViewRepresentable {
     let focusBody: Bool
     /// The light's ink and face for the text (Meadow's `.cp-body`).
     var look: ComposeTextLook?
-    /// What ⌘Return does while the text has the keys, where something besides the menu's should answer it.
-    var commandReturn: (() -> Void)?
+    /// What ⌘Return does while the text has the keys, where something besides the menu's should answer it; it is
+    /// told whether the press only repeats one (the key held down).
+    var commandReturn: ((_ held: Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(composer: composer)
@@ -129,14 +130,15 @@ final class BodyTextView: NSTextView {
     /// Asked for the keys before it was in a window: it takes them as it gets one.
     var focusOnWindow = false
     /// ⌘Return while this text has the keys, ahead of the menu's: the reader's reply box sends with it, where the
-    /// main window's View menu would otherwise take it for focus reading.
-    var commandReturn: (() -> Void)?
+    /// main window's View menu would otherwise take it for focus reading. Every auto-repeat of a held key comes here
+    /// too, so it says which are.
+    var commandReturn: ((_ held: Bool) -> Void)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if let commandReturn, window?.firstResponder === self,
            event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
            event.charactersIgnoringModifiers == "\r" {
-            commandReturn()
+            commandReturn(event.repeatsAPress)
             return true
         }
         return super.performKeyEquivalent(with: event)
@@ -193,6 +195,25 @@ final class BodyTextView: NSTextView {
         if !pictures.isEmpty { composer.add(pictures.map { .file($0) }, inText: true) }
         if !others.isEmpty { composer.add(others.map { .file($0) }) }
         return true
+    }
+}
+
+extension NSEvent {
+    /// Whether this event only repeats a press: a held key's auto-repeat, or a double click's later clicks. A send
+    /// takes a fresh press, so such an event never sends. `isARepeat` and `clickCount` raise for events that have
+    /// neither, so each is asked only of its own kind.
+    var repeatsAPress: Bool {
+        switch type {
+        case .keyDown, .keyUp: isARepeat
+        case .leftMouseDown, .leftMouseUp: clickCount > 1
+        default: false
+        }
+    }
+
+    /// Whether the event the app is handling only repeats a press: what a button's action asks, which is given no
+    /// event of its own.
+    @MainActor static var repeatingAPress: Bool {
+        NSApp?.currentEvent?.repeatsAPress ?? false
     }
 }
 
