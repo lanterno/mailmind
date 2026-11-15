@@ -20,14 +20,14 @@ struct AttentionMenuItems: View {
                 if stack == .muted { await model.unmute(copies) } else { await model.mute(copies) }
             }
         }
-        .keyboardShortcut(shortcuts ? KeyboardShortcut("m", modifiers: [.shift, .command]) : nil)
+        .keyboardShortcut(shortcuts ? KeyboardShortcut("m", modifiers: [.control, .command]) : nil)
         Button(stack == .replyLater ? "Reply Later — Done" : "Reply Later",
                systemImage: stack == .replyLater ? "checkmark" : "bookmark") {
             run { model in
                 if stack == .replyLater { await model.replyLaterDone(copies) } else { await model.replyLater(copies) }
             }
         }
-        .keyboardShortcut(shortcuts ? KeyboardShortcut("l", modifiers: [.shift, .command]) : nil)
+        .keyboardShortcut(shortcuts ? KeyboardShortcut("l", modifiers: [.control, .command]) : nil)
         if stack == .waiting {
             Button("Dismiss Follow-Up", systemImage: "checkmark.circle") { run { await $0.dismissFollowup(copies) } }
         }
