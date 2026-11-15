@@ -36,6 +36,7 @@ struct MailMindApp: App {
         #if os(macOS)
         WindowGroup("New Message", id: ComposeWindow.scene, for: UUID.self) { $id in
             ComposeWindow(id: id)
+                .meadowLit()
         }
         .defaultSize(width: 720, height: 640)
         .restorationBehavior(.disabled)

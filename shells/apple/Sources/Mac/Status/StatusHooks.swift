@@ -122,10 +122,12 @@ struct StatusScenes: Scene {
     var body: some Scene {
         Settings {
             SettingsWindow(status: .shared)
+                .meadowLit()
         }
         .commands { StatusCommands() }
         SwiftUI.Window("MailMind Help", id: HelpWindow.id) {
             HelpWindow(status: .shared)
+                .meadowLit()
         }
         .windowResizability(.contentSize)
     }
