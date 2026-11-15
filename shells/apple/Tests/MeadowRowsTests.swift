@@ -295,6 +295,37 @@ final class MeadowRowsTests: XCTestCase {
         withExtendedLifetime(app) {}
     }
 
+    func testARowsDotTakesItsAccountsColourOnceTheAccountsAreRead() throws {
+        let inks = RowInks.of(.day, light: .day, highContrast: false)
+        let measure = RowMeasure(.comfortable)
+        let row = Fixture.row(2, account: Fixture.work)
+        let cell = MailRowCell()
+        cell.frame = NSRect(x: 0, y: 0, width: 400, height: measure.height(RowShape(row, head: false)))
+        // The dot's middle: at the avatar's foot, 4 in from its corner.
+        let left = RowMeasure.listSide + RowMeasure.side + RowMeasure.avatar - 4
+        let top = measure.padTop + RowMeasure.avatar - 4
+        func dot() throws -> NSColor {
+            let rep = try XCTUnwrap(cell.bitmapImageRepForCachingDisplay(in: cell.bounds))
+            cell.cacheDisplay(in: cell.bounds, to: rep)
+            let scale = CGFloat(rep.pixelsWide) / cell.bounds.width
+            let colour = try XCTUnwrap(rep.colorAt(x: Int(left * scale), y: Int(top * scale)))
+            return try XCTUnwrap(colour.usingColorSpace(.sRGB))
+        }
+        func near(_ a: NSColor, _ b: NSColor) -> Bool {
+            guard let b = b.usingColorSpace(.sRGB) else { return false }
+            return abs(a.redComponent - b.redComponent) + abs(a.greenComponent - b.greenComponent)
+                + abs(a.blueComponent - b.blueComponent) < 0.06
+        }
+        XCTAssertFalse(near(try XCTUnwrap(inks.account(0).usingColorSpace(.sRGB)), inks.account(1)))
+
+        // At launch the rows can come before the accounts' order: every dot takes the first colour.
+        cell.show(row, head: nil, acts: [], look: RowLook(inks: inks, measure: measure, accounts: []))
+        XCTAssertTrue(near(try dot(), inks.account(0)))
+        cell.show(row, head: nil, acts: [], look: RowLook(inks: inks, measure: measure,
+                                                         accounts: [Fixture.ada, Fixture.work]))
+        XCTAssertTrue(near(try dot(), inks.account(1)), "the second account's colour, once the order is read")
+    }
+
     // MARK: A row's buttons
 
     /// The table in a window that never shows, so its rows on screen have cells.
