@@ -474,11 +474,10 @@ struct DeskScreen: View {
 
 extension Desk {
     /// What the desk adds to the rail (Mac/Mailbox's `RailPlaces`): today's brief, how many it says need you, and each
-    /// account's Screener while senders wait in it.
+    /// account's Screener with the senders waiting in it, which the open rail shows while some wait.
     var rail: DeskRail {
-        DeskRail(brief: true, needs: brief.needs.count, gates: accounts.compactMap { account in
-            let waiting = screeners[account]?.waiting ?? 0
-            return waiting > 0 ? DeskRail.Gate(account: account, waiting: waiting) : nil
+        DeskRail(brief: true, needs: brief.needs.count, gates: accounts.map { account in
+            DeskRail.Gate(account: account, waiting: screeners[account]?.waiting ?? 0)
         })
     }
 }

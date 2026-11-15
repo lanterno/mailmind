@@ -4,7 +4,8 @@ import SwiftUI
 /// The rail (#44), as the mockup's `.rail` draws it and with the places the page's rail offers (app/FolderRail.tsx):
 /// the accounts' button, then every place `RailPlaces` lists, then Help and Settings at its foot. Open, each place has
 /// its icon, its name and its count; folded to icons (the frame's `meadowRailOpen`), the counts that need you stay as
-/// badges and the folders wait behind one button. The arrow keys go from place to place while the rail has the focus.
+/// badges, every account's gate is one, and the views and the folders wait behind a button each. The arrow keys go
+/// from place to place while the rail has the focus.
 struct MailboxSidebar: View {
     @Bindable var app: MailApp
     let mailbox: Mailbox
@@ -85,6 +86,9 @@ struct MailboxSidebar: View {
         case .separator:
             Rectangle().fill(meadow.line).frame(height: 1).padding(.vertical, 8).padding(.horizontal, 6)
                 .accessibilityHidden(true)
+        case .views:
+            RailPlace(item: RailItem(place: .allInboxes, icon: .search, title: String(localized: "Views")),
+                      open: false, current: current == entry.id, keyed: keyed && current == entry.id, action: unfold)
         case .folders:
             RailPlace(item: RailItem(place: .allInboxes, icon: .folder, title: String(localized: "Folders")),
                       open: false, current: current == entry.id, keyed: keyed && current == entry.id, action: unfold)
@@ -116,19 +120,18 @@ struct MailboxSidebar: View {
         .overlay(alignment: .top) { Rectangle().fill(meadow.line).frame(height: 1) }
     }
 
-    /// Show the rail's names: the folded rail's Folders button and its accounts' button open it.
+    /// Show the rail's names: the folded rail's Views and Folders buttons and its accounts' button open it.
     private func unfold() {
         shell?.railOpen = true
     }
 
     /// The next or the previous place the rail shows, chosen, as a Mac's sidebar goes by its arrow keys.
     private func step(_ by: Int, entries: [RailEntry], scroller: ScrollViewProxy) -> KeyPress.Result {
-        let places = RailPlaces.places(entries, open: open)
-        guard !places.isEmpty else { return .ignored }
-        let at = app.place.flatMap { places.firstIndex(of: $0) }
-        let next = at.map { min(max($0 + by, 0), places.count - 1) } ?? (by > 0 ? 0 : places.count - 1)
-        app.place = places[next]
-        if let id = RailPlaces.current(places[next], in: entries, open: open) { scroller.scrollTo(id) }
+        guard !RailPlaces.places(entries, open: open).isEmpty else { return .ignored }
+        if let next = RailPlaces.step(from: app.place, by: by, in: entries, open: open) {
+            app.place = next.place
+            scroller.scrollTo(next.id)
+        }
         return .handled
     }
 }

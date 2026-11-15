@@ -4,8 +4,9 @@ import Foundation
 // The rail's places in the order the mockup's `renderRail()` stands them (#44), filled with the real places the page's
 // rail offers (app/FolderRail.tsx): today's brief, every account's Inbox together, each Screener at the gate, the
 // places over every account, the lanes and the Document Hub, a person's views, then each account's folders, its own
-// places and its labels under its name. Folded to icons, the rail keeps the places over every account and offers its
-// folders behind one button that opens it.
+// places and its labels under its name. Folded to icons, as the mockup's folded rail stands, the rail keeps the places
+// over every account with one gate for every account's Screener, and offers its views and its folders behind a
+// button each that opens it.
 
 /// A place the rail offers.
 struct RailItem: Equatable {
@@ -33,7 +34,7 @@ struct RailItem: Equatable {
 }
 
 /// One line of the rail: a place, a section's head, an account's name over its folders, the labels' fold, the line
-/// between the folded rail's groups, or the folded rail's Folders button.
+/// between the folded rail's groups, or the folded rail's Views or Folders button.
 struct RailEntry: Identifiable, Equatable {
     enum Kind: Equatable {
         case item(RailItem)
@@ -41,6 +42,7 @@ struct RailEntry: Identifiable, Equatable {
         case account(String)
         case labels(account: String, open: Bool)
         case separator
+        case views
         case folders
     }
 
@@ -52,6 +54,9 @@ struct RailEntry: Identifiable, Equatable {
     let id: String
     let kind: Kind
     var shown = Shown.always
+    /// The entry that stands for this one while the rail is folded and this one is folded away: the one gate for an
+    /// account's, the Views button for a view, the Folders button for the rest.
+    var foldsInto = "folders"
 
     func shows(open: Bool) -> Bool {
         switch shown {
@@ -68,7 +73,7 @@ struct RailEntry: Identifiable, Equatable {
 }
 
 /// What the desk adds to the rail (Mac/Assistant's `Desk.rail`): today's brief, how many need you, and each account's
-/// Screener while senders wait in it.
+/// Screener with the senders waiting in it.
 struct DeskRail: Equatable {
     struct Gate: Equatable {
         let account: String
@@ -78,6 +83,7 @@ struct DeskRail: Equatable {
     var brief = false
     /// The mail the brief says needs you, which the Inbox counts in sunlight.
     var needs = 0
+    /// Every account's Screener, in the accounts' order.
     var gates: [Gate] = []
 }
 
@@ -88,8 +94,8 @@ enum RailPlaces {
     static func entries(_ mailbox: Mailbox, desk: DeskRail, closed: Set<String> = [],
                         labelsOpen: Set<String> = []) -> [RailEntry] {
         var out: [RailEntry] = []
-        func add(_ id: String, _ item: RailItem, _ shown: RailEntry.Shown = .always) {
-            out.append(RailEntry(id: id, kind: .item(item), shown: shown))
+        func add(_ id: String, _ item: RailItem, _ shown: RailEntry.Shown = .always, foldsInto: String = "folders") {
+            out.append(RailEntry(id: id, kind: .item(item), shown: shown, foldsInto: foldsInto))
         }
 
         if desk.brief {
@@ -97,13 +103,23 @@ enum RailPlaces {
         }
         add("inbox", RailItem(place: .allInboxes, icon: .inbox, title: String(localized: "Inbox"),
                               count: desk.needs > 0 ? .sun(desk.needs) : RailItem.Count(inboxesUnseen(mailbox))))
-        for gate in desk.gates {
+        // Open, each Screener senders wait in, named where there are several accounts. Folded, one gate for them all,
+        // counting everyone waiting, which opens the first that has someone waiting, else the first account's.
+        let waiting = desk.gates.filter { $0.waiting > 0 }
+        for gate in waiting {
             let title = desk.gates.count > 1
                 ? String(localized: "At the gate · \(mailbox.name(of: gate.account))")
                 : String(localized: "At the gate")
             add("gate:\(gate.account)", RailItem(place: .desk(.screener(account: gate.account)), icon: .gate,
                                                  title: title,
-                                                 count: RailItem.Count(gate.waiting, RailItem.Count.badge)))
+                                                 count: RailItem.Count(gate.waiting, RailItem.Count.badge)),
+                .open, foldsInto: "gate")
+        }
+        if let first = waiting.first ?? desk.gates.first {
+            add("gate", RailItem(place: .desk(.screener(account: first.account)), icon: .gate,
+                                 title: String(localized: "At the gate"),
+                                 count: RailItem.Count(waiting.reduce(0) { $0 + $1.waiting }, RailItem.Count.badge)),
+                .folded)
         }
         if let across = mailbox.across {
             for item in virtual(of: nil, across.muted, across.replylater, across.snoozed, across.waiting) {
@@ -118,12 +134,14 @@ enum RailPlaces {
             add("view:\(view.id)", viewItem(view, mailbox))
         }
         add("documents", RailItem(place: .documents, icon: .file, title: String(localized: "Documents")))
+        // A person's views, each its own place open and all behind one button folded.
         let views = mailbox.views.filter { Lane(view: $0.id) == nil }
         if !views.isEmpty {
             out.append(RailEntry(id: "head:views", kind: .head(String(localized: "Views")), shown: .open))
             for view in views {
-                add("view:\(view.id)", viewItem(view, mailbox))
+                add("view:\(view.id)", viewItem(view, mailbox), .open, foldsInto: "views")
             }
+            out.append(RailEntry(id: "views", kind: .views, shown: .folded))
         }
 
         if !mailbox.accounts.isEmpty {
@@ -162,12 +180,30 @@ enum RailPlaces {
         entries.filter { $0.shows(open: open) }.compactMap(\.item?.place)
     }
 
-    /// The entry that stands for `place`: its own, or while the rail is folded the Folders button for a place folded
-    /// away with the names.
+    /// The entry that stands for `place`: its own, or while the rail is folded the one that stands for a place folded
+    /// away with the names (the gate, the Views button or the Folders button).
     static func current(_ place: Place?, in entries: [RailEntry], open: Bool) -> String? {
-        guard let place, let own = entries.first(where: { $0.item?.place == place }) else { return nil }
-        if own.shows(open: open) { return own.id }
-        return open ? nil : entries.first { $0.kind == .folders }?.id
+        guard let place else { return nil }
+        let own = entries.filter { $0.item?.place == place }
+        if let shown = own.first(where: { $0.shows(open: open) }) { return shown.id }
+        guard !open, let folded = own.first else { return nil }
+        return entries.first { $0.id == folded.foldsInto && $0.shows(open: false) }?.id
+    }
+
+    /// Where the arrow keys go from `place`, one place down (`by` 1) or up (-1) the rail as it shows now: from a
+    /// place folded away, from the entry that stands for it. Nil past either end.
+    static func step(from place: Place?, by: Int, in entries: [RailEntry],
+                     open: Bool) -> (place: Place, id: String)? {
+        let shown = entries.filter { $0.shows(open: open) }
+        let stops = shown.indices.filter { shown[$0].item != nil }
+        let at = current(place, in: entries, open: open).flatMap { id in shown.firstIndex { $0.id == id } }
+        let next = if let at {
+            by > 0 ? stops.first { $0 > at } : stops.last { $0 < at }
+        } else {
+            by > 0 ? stops.first : stops.last
+        }
+        guard let next, let item = shown[next].item else { return nil }
+        return (item.place, shown[next].id)
     }
 
     /// Every account's Inbox unread, as a Mac's All Inboxes counts it.
