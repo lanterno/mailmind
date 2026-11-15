@@ -81,15 +81,14 @@ targets:
       - Sources/Window/MailList.swift
       # The acknowledgements a release carries
       - Sources/Acknowledgements.swift
-      # Settings, the first run and the status, their models and views
-      - Sources/Mac/Settings
-      - Sources/Mac/Status
-      # The mailbox (its places, lists, verbs and views) with the window's state it hangs on
-      - Sources/Mac/Mailbox
-      # What the areas share: Quick Look's copies
-      - Sources/Mac/Shared
+      # The window's state the areas hang on
       - Sources/Window/MailApp.swift
       - Sources/Window/Reader.swift
+      # Every area's models and views: Settings and the status, the mailbox, the reader and the composer, and what they
+      # share. The reader's pane needs the whole window, so it stays out.
+      - path: Sources/Mac
+        excludes:
+          - Reader/ReaderPane.swift
     dependencies:
       - framework: build/MailMindCore.xcframework
         embed: false
