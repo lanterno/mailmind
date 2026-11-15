@@ -168,7 +168,7 @@ struct ScreenerScreen: View {
     /// Opens a sender's message in the reader.
     var open: (MailCopy) -> Void = { _ in }
     @State private var width: CGFloat = 1000
-    @FocusState private var letIn: Bool
+    @FocusState private var focus: GateFocus?
     @Environment(\.meadow) private var meadow
 
     private var narrow: Bool { width <= 760 }
@@ -208,6 +208,10 @@ struct ScreenerScreen: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .focusable()
+        .focused($focus, equals: .screen)
+        .focusEffectDisabled()
+        .onAppear { holdKeys() }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .task(id: model.account) { await model.load() }
         .task(id: model.visitor?.fromAddr) {
@@ -221,6 +225,12 @@ struct ScreenerScreen: View {
             Task { await model.decide(sender, verdict) }
             return .handled
         }
+    }
+
+    /// Put the keyboard on Let in where a button can take it, else on the screen itself: with keyboard navigation off
+    /// in System Settings a button takes no focus, and Y and N reach the gate only through a view in it that has it.
+    private func holdKeys() {
+        focus = NSApp.isFullKeyboardAccessEnabled && model.visitor != nil ? .letIn : .screen
     }
 
     // MARK: The header
@@ -259,9 +269,9 @@ struct ScreenerScreen: View {
         } else if let sender = model.visitor {
             GateVisitor(sender: sender, model: model, letter: model.letters[sender.fromAddr] ?? nil,
                         account: meadow.account(of: model.account, among: accounts), accountName: name,
-                        letIn: $letIn, open: open)
+                        focus: $focus, open: open)
                 .id(sender.fromAddr)
-                .onAppear { letIn = true }
+                .onAppear { holdKeys() }
         } else {
             VStack(spacing: 6) {
                 Text("No one at the gate.")
@@ -292,7 +302,7 @@ struct ScreenerScreen: View {
                                          hint: model.suggestions?[sender.fromAddr],
                                          account: meadow.account(of: model.account, among: accounts)) {
                                 model.chosen = sender.fromAddr
-                                letIn = true
+                                holdKeys()
                             }
                         }
                     }
@@ -331,6 +341,12 @@ struct ScreenerScreen: View {
     }
 }
 
+/// Where the Screener holds the keyboard: its Let in button, or the screen around it.
+private enum GateFocus: Hashable {
+    case screen
+    case letIn
+}
+
 /// The sender at the gate, on its stack (`.stack`, `.visitor`): who, their latest message, and what to do.
 private struct GateVisitor: View {
     let sender: API.ScreenerItem
@@ -339,7 +355,7 @@ private struct GateVisitor: View {
     let letter: API.SearchHit?
     let account: Color
     let accountName: String?
-    var letIn: FocusState<Bool>.Binding
+    var focus: FocusState<GateFocus?>.Binding
     let open: (MailCopy) -> Void
     @State private var width: CGFloat = 800
     @Environment(\.meadow) private var meadow
@@ -464,7 +480,7 @@ private struct GateVisitor: View {
                 }
                 .buttonStyle(GateButtonStyle(kind: .primary))
                 .focusEffectDisabled()
-                .focused(letIn)
+                .focused(focus, equals: .letIn)
                 Button { Task { await model.decide(sender.fromAddr, .block) } } label: {
                     decideLabel(.ban, "Screen out", key: "N")
                 }
