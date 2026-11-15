@@ -358,6 +358,56 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertNil(composing.inline, "discarded, the box closes")
     }
 
+    func testTheSendGuardsFixesInTheBoxAreDoneWhereTheyCanBe() async throws {
+        let (composing, _) = try composing()
+        var windows: [UUID] = []
+        composing.openWindow = { windows.append($0) }
+        let copy = MailCopy(Fixture.row(7))
+        composing.inlineSlot = copy
+
+        let boxed = try await replied(composing, copy)
+        let attach = GuardFix(kind: "attach", label: "Attach a file")
+        composing.fixInBox(attach, field: nil)
+        XCTAssertTrue(composing.inline?.composer === boxed, "the box holds files: its own panel opens")
+        XCTAssertTrue(boxed.takeFilesRequest(), "the panel asked for")
+        XCTAssertFalse(boxed.takeFilesRequest(), "and taken once")
+        composing.fixInBox(attach, field: nil)
+        XCTAssertTrue(boxed.takeFilesRequest(), "so asking again opens it again")
+        composing.fixInBox(GuardFix(kind: "time", label: "Pick a new time"), field: nil)
+        XCTAssertTrue(boxed.laterOpen, "Send later is in the box")
+        XCTAssertTrue(windows.isEmpty, "nothing popped out for what the box holds")
+
+        composing.fixInBox(GuardFix(kind: "subject", label: "Add a subject"), field: nil)
+        XCTAssertNil(composing.inline, "no subject in the box: the reply goes to its window")
+        XCTAssertEqual(windows, [boxed.id])
+        XCTAssertFalse(boxed.closed, "the same reply, as it stood")
+        XCTAssertEqual(boxed.focusRequest, .subject, "where the window puts the keys")
+        boxed.close(force: true)
+
+        let second = try await replied(composing, copy)
+        second.commitChip(.cc, "cy@")
+        composing.fixInBox(GuardFix(kind: "bad", label: "Edit it"), field: .cc)
+        XCTAssertEqual(windows.last, second.id, "no recipients to edit in the box")
+        XCTAssertEqual(second.typed[.cc], "cy@", "back in its field to fix")
+        XCTAssertTrue(second.showCc)
+        XCTAssertEqual(second.focusRequest, .field(.cc))
+        second.close(force: true)
+
+        let third = try await replied(composing, copy)
+        composing.fixInBox(GuardFix(kind: "to", label: "Add one"), field: nil)
+        XCTAssertEqual(windows.last, third.id)
+        XCTAssertEqual(third.focusRequest, .field(.to))
+        third.close(force: true)
+
+        let fourth = try await replied(composing, copy)
+        composing.fixInBox(GuardFix(kind: "review", label: "Review recipients"), field: nil)
+        XCTAssertEqual(windows.last, fourth.id)
+        XCTAssertTrue(fourth.showCc)
+        XCTAssertEqual(fourth.focusRequest, .field(.cc))
+        fourth.close(force: true)
+        XCTAssertEqual(windows.count, 4)
+    }
+
     func testABoxDrawnAgainKeepsItsSlotAndOneGoneGivesItUp() async throws {
         let (composing, _) = try composing()
         let copy = MailCopy(Fixture.row(7))
