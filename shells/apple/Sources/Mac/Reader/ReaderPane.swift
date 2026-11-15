@@ -18,6 +18,36 @@ struct ReaderPane: View {
         return list.copy(at: at)
     }
 
+    /// Writing in the mailbox: a sender's card writes to them, the list's r, a, f and c reply, reply to all, forward
+    /// and write, and the palette lists them, as the page's commands do.
+    private func joinMailbox() {
+        let pane = self
+        app.mailbox.join("compose") { mailbox in
+            mailbox.composeTo = { [weak app] address in
+                Composing.shared.newMessage(to: [address], current: Self.current(in: app?.place))
+            }
+            let writing: [(id: String, label: String, key: Character, run: @MainActor (MailCopy) -> Void)] = [
+                ("reply", String(localized: "Reply"), "r", { to in Task { await Composing.shared.answer(to) } }),
+                ("reply-all", String(localized: "Reply all"), "a", { to in Task { await Composing.shared.reply(to, all: true) } }),
+                ("forward", String(localized: "Forward"), "f", { to in Task { await Composing.shared.forward(to) } }),
+            ]
+            for verb in writing {
+                mailbox.keys[verb.key] = { if let to = pane.replyTo { verb.run(to) } }
+            }
+            mailbox.keys["c"] = { Composing.shared.newMessage(current: pane.current) }
+            mailbox.more.append { _ in
+                var out = pane.replyTo.map { to in
+                    writing.map { verb in
+                        MailCommand(id: verb.id, group: .actions, label: verb.label, hint: String(verb.key)) { verb.run(to) }
+                    }
+                } ?? []
+                out.append(MailCommand(id: "compose", group: .commands, label: String(localized: "Compose new message"),
+                                       hint: "c") { Composing.shared.newMessage(current: pane.current) })
+                return out
+            }
+        }
+    }
+
     /// The account the window is in, which a new message goes from when it can.
     private var current: String? { Self.current(in: app.place) }
 
@@ -69,10 +99,7 @@ struct ReaderPane: View {
                     Task { await app?.mailbox.readCounts() }
                 }
                 if let core = app.core { composing.attach(core) }
-                // A sender's card writes to them from the account the window is in.
-                app.mailbox.composeTo = { [weak composing, weak app] address in
-                    composing?.newMessage(to: [address], current: Self.current(in: app?.place))
-                }
+                joinMailbox()
             }
             .task(id: thread) {
                 guard let thread, let core = app.core else {
