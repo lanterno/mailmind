@@ -121,6 +121,7 @@ struct SuggestionCard: View {
     let copy: MailCopy
     let cards: SuggestionCards
     let notices: DeskNotices
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         switch cards.card(for: copy) {
@@ -128,20 +129,20 @@ struct SuggestionCard: View {
             EmptyView()
         case .reading:
             DeskCard {
-                DeskCardHeading(title: "Found in This Message", symbol: "checklist")
+                DeskCardHeading(title: String(localized: "Found in this message"), icon: .todo, ai: true)
                 DeskWaitingBars(lines: 2, saying: "Reading for dates and tasks…")
             }
         case .failed(let why):
             DeskCard {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(why).foregroundStyle(.red)
-                    Button("Retry") { Task { await cards.find(in: copy) } }.buttonStyle(.link)
+                    Text(why).foregroundStyle(meadow.rust)
+                    Button("Retry") { Task { await cards.find(in: copy) } }.deskLink()
                 }
-                .font(.callout)
+                .font(.meadow(.ui, 13.5))
             }
         case .found(let found):
             DeskCard {
-                DeskCardHeading(title: "Found in This Message", symbol: "checklist")
+                DeskCardHeading(title: String(localized: "Found in this message"), icon: .todo, ai: true)
                 FoundLists(copy: copy, found: found, cards: cards, notices: notices)
                     .id(found)
                 DeskCardFoot { Text(verbatim: String(localized: "Nothing is added until you confirm it") + " · \(found.model)") }
@@ -165,7 +166,7 @@ private struct FoundLists: View {
         if events.isEmpty && tasks.isEmpty {
             Text(found.events.count + found.tasks.count > 0
                  ? "That’s everything it found." : "Nothing here proposes a meeting or a dated task.")
-                .font(.callout)
+                .font(.meadow(.ui, 13.5))
         }
         ForEach(events, id: \.0) { id, event in
             EventForm(copy: copy, event: event, cards: cards, notices: notices) { gone.insert(id) }
@@ -183,6 +184,7 @@ struct EventForm: View {
     let cards: SuggestionCards
     let notices: DeskNotices
     let drop: () -> Void
+    @Environment(\.meadow) private var meadow
     @State private var title: String
     @State private var start: Date
     @State private var end: Date?
@@ -204,7 +206,7 @@ struct EventForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Event", systemImage: "calendar").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            FormLabel(title: String(localized: "Event"), icon: .cal)
             Form {
                 TextField("Title", text: $title)
                 DatePicker("Starts", selection: $start, displayedComponents: components)
@@ -214,17 +216,17 @@ struct EventForm: View {
             }
             .formStyle(.columns)
             if !refused.isEmpty {
-                Text(refused).font(.callout).foregroundStyle(.red)
+                Text(refused).font(.meadow(.ui, 13)).foregroundStyle(meadow.rust)
             }
             HStack {
                 Button("Add to Calendar") { Task { await confirm() } }
-                    .buttonStyle(.borderedProminent)
-                Button("Dismiss", action: drop)
+                    .meadowButton(.primary, small: true)
+                Button("Dismiss", action: drop).meadowButton(.quiet, small: true)
             }
             .controlSize(.small)
         }
         .padding(10)
-        .background(.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .background(RoundedRectangle(cornerRadius: 10).fill(meadow.paper2))
     }
 
     private var components: DatePickerComponents {
@@ -253,6 +255,7 @@ struct TaskForm: View {
     let cards: SuggestionCards
     let notices: DeskNotices
     let drop: () -> Void
+    @Environment(\.meadow) private var meadow
     @State private var title: String
     @State private var due: Date?
     @State private var refused = ""
@@ -269,7 +272,7 @@ struct TaskForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Task", systemImage: "checkmark.circle").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            FormLabel(title: String(localized: "Task"), icon: .checkCircle)
             Form {
                 TextField("Title", text: $title)
                 LabeledContent("Due") {
@@ -285,17 +288,17 @@ struct TaskForm: View {
             }
             .formStyle(.columns)
             if !refused.isEmpty {
-                Text(refused).font(.callout).foregroundStyle(.red)
+                Text(refused).font(.meadow(.ui, 13)).foregroundStyle(meadow.rust)
             }
             HStack {
                 Button("Add to Tasks") { Task { await confirm() } }
-                    .buttonStyle(.borderedProminent)
-                Button("Dismiss", action: drop)
+                    .meadowButton(.primary, small: true)
+                Button("Dismiss", action: drop).meadowButton(.quiet, small: true)
             }
             .controlSize(.small)
         }
         .padding(10)
-        .background(.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .background(RoundedRectangle(cornerRadius: 10).fill(meadow.paper2))
     }
 
     private func confirm() async {
@@ -307,6 +310,20 @@ struct TaskForm: View {
             drop()
         } catch {
             refused = DeskRefusal.words(error, else: String(localized: "Couldn’t add that task."))
+        }
+    }
+}
+
+/// What a form makes, over it: a small icon and a label in small capitals.
+private struct FormLabel: View {
+    let title: String
+    let icon: MeadowIcon
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        HStack(spacing: 6) {
+            MeadowIconView(icon, size: 14).foregroundStyle(meadow.ink3)
+            MeadowSectionLabel(title)
         }
     }
 }
