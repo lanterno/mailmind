@@ -785,6 +785,15 @@ VERTICAL_TAB_BEFORE_A_QUOTED_NAME = (b"From: Ada Lin <ada@example.test>\r\nSubje
                                      b'------=_NextPart_0000\r\nContent-Type: text/html; charset="gbk"; '
                                      b'name=\x0b"a.pdf"\r\n\r\n\r\n------=_NextPart_0000\r\n'
                                      b"Content-Type: text/plain\r\n\r\n\r\n------=_NextPart_0000--\r\n")
+# And a message cut off after the `%` of an RFC 2231 name, `name*=utf-8''%`: Python kept a `%` that starts no escape
+# as written, and named the file `%`, as the core does now.
+PERCENT_CUT_OFF_IN_A_FILE_NAME = (b"From: Ada Lin <ada@example.test>\r\nSubject: Swatches\r\nMIME-Version: 1.0\r\n"
+                                  b"To: Ada Lin <ada@mail.example.test>,\r\n Team: Ada Lin <ada@mail.example.test>, "
+                                  b"O'Neil <ada@mail.example.test>;\r\nReply-To: Ada Lin <ada@example.test>,\r\n "
+                                  b'Ada Lin <ada@example.test>,\r\n "Lin, Bo" <bo.lin@studio.example.test>,\r\n '
+                                  b'Team: "Lin, Bo" <ada@studio.example.test>, =?utf-8?q?Caf=C3=A9?= '
+                                  b"<bo.lin@example.test>;\r\n"
+                                  b"Content-Type: text/html; charset=iso-8859-1; name*=utf-8''%")
 
 
 @settings(max_examples=500, deadline=None, suppress_health_check=[HealthCheck.too_slow])
@@ -801,6 +810,7 @@ VERTICAL_TAB_BEFORE_A_QUOTED_NAME = (b"From: Ada Lin <ada@example.test>\r\nSubje
 @example(BLANK_FOLD_BEFORE_A_NESTED_MULTIPART)
 @example(BLANK_FOLD_BEFORE_A_TYPE)
 @example(VERTICAL_TAB_BEFORE_A_QUOTED_NAME)
+@example(PERCENT_CUT_OFF_IN_A_FILE_NAME)
 def test_a_broken_message_loses_no_part_python_found(raw):
     """Broken mail is where the two parsers' guesses part, and where the differences at the end come from: a base64
     body cut mid-character decodes to other garbage, a line that holds a delimiter with junk on it delimits for the
