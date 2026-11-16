@@ -281,6 +281,15 @@ def test_an_unknown_model_on_this_mac_costs_nothing(choose):
     assert assistant.status.report()["spent_today_micros"] == 0
 
 
+def test_a_model_on_this_mac_is_waited_for_longer_than_one_elsewhere(choose):
+    from mailmind.bootstrap import assistant
+    gateway = assistant.gateway()
+    choose("local", key=None, ai_model="llama3.3")
+    assert gateway._model()._http._timeout == 300
+    choose("openai", ai_base_url="https://llm.example.test/v1")       # made, never asked
+    assert gateway._model()._http._timeout == 120
+
+
 def test_a_change_in_settings_takes_effect_at_once_and_the_model_is_made_once_for_each(choose):
     from mailmind.bootstrap import assistant
     gateway = assistant.gateway()

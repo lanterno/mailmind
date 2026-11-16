@@ -66,6 +66,14 @@ def test_a_service_on_this_mac_is_local_and_one_elsewhere_is_not():
     assert on_loopback("http://[::1]:11434/v1") and not on_loopback("https://llm.example.test") and not on_loopback("http://[")
 
 
+def test_a_call_on_this_mac_waits_five_minutes_as_its_model_may_be_loading_and_one_elsewhere_two():
+    assert engine("local", model="llama3.3").timeout == 300
+    assert engine("compatible", base_url="http://localhost:8080/v1", model="m").timeout == 300
+    assert engine("anthropic", base_url="http://127.0.0.1:9/").timeout == 300
+    assert engine("compatible", base_url="https://llm.example.test/v1", model="m").timeout == 120
+    assert engine("openai").timeout == engine("anthropic").timeout == 120
+
+
 def test_the_key_stays_out_of_an_engines_repr():
     assert KEY not in repr(engine("openai"))
 
