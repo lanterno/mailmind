@@ -179,3 +179,39 @@ def test_every_stream_names_the_build_being_served(app, world):
     # The build the page it served names, which a tab compares with what it loaded under.
     build = BUILD_META.search(app.get("/").body.decode("utf-8")).group(1)
     assert tab.hello == f'event: hello\ndata: {{"build": "{build}"}}'
+
+
+def test_new_mail_names_the_one_message_it_brought(app, world):
+    # One new message names its UID, so a notification can say whose it is and open it; more than one is a count.
+    s = Stream(app)
+    s.frame()
+    one = world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-05-receipt.eml", Message_ID="<one@example.test>"))
+    for n in (1, 2):
+        world.server.deliver(w.CY, "INBOX", w.variant("cy-inbox-03-unrelated.eml", Message_ID=f"<two-{n}@example.test>"))
+    app.post("/api/refresh", {})
+    heard = {}
+    while len(heard) < 2:
+        head, data = s.event().split("\n")[1:]
+        if head == "event: new-mail":
+            said = json.loads(data.removeprefix("data: "))
+            heard[said["account"]] = said
+    assert heard == {w.ADA: {"account": w.ADA, "folder": "INBOX", "count": 1, "uid": one},
+                     w.CY: {"account": w.CY, "folder": "INBOX", "count": 2}}
+    s.close()
+
+
+def test_new_mail_names_the_message_it_kept_not_a_newer_one_that_was_junk(app, world):
+    # Junk stays in the Inbox with a badge, and isn't new mail: one message kept and a newer junk one in the same round
+    # name the one kept.
+    s = Stream(app)
+    s.frame()
+    kept = world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-05-receipt.eml", Message_ID="<kept@example.test>"))
+    junk = world.server.deliver(w.ADA, "INBOX", w.variant("ada-inbox-12-scam.eml", Message_ID="<junk@prizes.example.test>"))
+    assert junk > kept
+    app.post("/api/refresh", {})
+    while True:
+        head, data = s.event().split("\n")[1:]
+        if head == "event: new-mail":
+            break
+    assert json.loads(data.removeprefix("data: ")) == {"account": w.ADA, "folder": "INBOX", "count": 1, "uid": kept}
+    s.close()
