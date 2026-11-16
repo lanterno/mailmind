@@ -225,6 +225,44 @@ def test_with_no_model_server_running_it_says_to_start_one_and_takes_a_url_and_a
     clean(page)
 
 
+def test_the_focus_stays_where_a_person_was_as_a_url_a_model_typed_or_a_key_removed_is_saved(page, app, world, openai_api, fake_keychain):
+    openai_api.key = None                                       # a compatible service that takes any key, or none
+    dialog = ai_open(page, app)
+    with page.pw.expect_response(lambda r: r.url.endswith("/api/preferences") and r.request.method == "POST"):
+        dialog.get_by_label("Provider", exact=True).select_option("compatible")
+    held = lambda: file_of(world).get("preferences", {})
+
+    url = dialog.get_by_label("The service’s URL", exact=True)
+    url.fill(openai_api.url)
+    url.press("Enter")
+    until(page, lambda: held().get("ai_base_url") == openai_api.url, "the file holds the URL")
+    expect(url).to_be_focused()
+    expect(url).to_have_value(openai_api.url)
+
+    dialog.get_by_role("button", name="Type a name").click()
+    typed = dialog.get_by_label("Model", exact=True)
+    expect(typed).to_be_focused()
+    typed.fill("gpt-6-luna")
+    typed.press("Enter")
+    until(page, lambda: held().get("ai_model") == "gpt-6-luna", "the file holds the model typed")
+    menu = dialog.get_by_label("Model", exact=True)
+    expect(menu.locator("option:checked")).to_have_text("gpt-6-luna")
+    expect(menu).to_be_focused()
+    dialog.get_by_role("button", name="Type a name").click()
+    dialog.get_by_role("button", name="Pick from the list").click()
+    expect(menu.locator("option:checked")).to_have_text("gpt-6-luna")
+    expect(menu).to_be_focused()
+
+    key = dialog.get_by_label("API key (optional)", exact=True)
+    key.fill(fo.KEY)
+    key.press("Enter")
+    expect(dialog.get_by_text("A key is kept in the Keychain")).to_be_visible()
+    dialog.get_by_role("button", name="Remove").click()
+    expect(dialog.get_by_text("A key is kept in the Keychain")).to_have_count(0)
+    expect(key).to_be_focused()
+    clean(page)
+
+
 def test_a_services_models_are_asked_for_once_the_url_given_is_saved(page, app, world, openai_api):
     openai_api.key = None
     dialog = ai_open(page, app)
