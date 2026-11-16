@@ -64,6 +64,7 @@ DEFAULTS: Mapping[str, Any] = {
     "morning_brief": False,
     "weekly_review": False,                 # the week's review written ahead on Monday morning, and read all week
     "auto_tidy": False,
+    "draft_ahead": False,                   # replies drafted ahead for important mail, in the background and on viewing it
     "ai_enabled": False,                    # AI mode, with no key anywhere: read() is given the default a key makes
     "ai_provider": DEFAULT_PROVIDER,
     "ai_model": "",                         # the provider's own

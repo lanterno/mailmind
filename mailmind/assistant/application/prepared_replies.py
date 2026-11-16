@@ -39,8 +39,9 @@ class PreparedReplies:
     DRAFT_RECENCY_WINDOW = 3 * 86400 # only mail from the last 72h; older mail drafts on demand
 
     def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, uow: UnitOfWork, mail: Mail,
-                 replies: ReplyDrafts, looks_human: Callable[[str], bool]):
+                 replies: ReplyDrafts, looks_human: Callable[[str], bool], wanted: Callable[[], bool] = lambda: True):
         self._calls = calls
+        self._wanted = wanted               # the person's switch: off, nothing is drafted ahead, on a round or a view
         self._gateway = gateway
         self._answers = answers
         self._uow = uow
@@ -127,12 +128,12 @@ class PreparedReplies:
         claude call, so it demands the CSRF token (a cross-site <img> flood must not be able
         to burn generations). Never generates synchronously, never sends; fingerprint + TTL +
         eligibility + thread-anchor are revalidated on EVERY serve so a stale draft is never
-        surfaced."""
+        surfaced. With drafting ahead turned off it never kicks either: a draft kept from before is still served."""
         asked = as_int((qs.get("pk") or ["0"])[0])
         if asked is None:
             raise Refused("bad request")
         pk = Pk(asked)
-        peek = (qs.get("peek") or ["0"])[0] == "1" or not kick_ok
+        peek = (qs.get("peek") or ["0"])[0] == "1" or not kick_ok or not self._wanted()
         if not pk:
             return {"ok": True, "status": "none"}
         with self._uow.read() as c:
@@ -206,14 +207,16 @@ class PreparedReplies:
 
     def rounds(self) -> Callable[[], None]:
         """A pre-drafter's round function, with its own failure count and circuit breaker. Each round
-        drafts at most one reply ahead, only when the cost governor would let it go (nobody is using
-        AI, someone was here lately, the day's limit isn't reached, the API isn't rejecting it), then
-        collects the expired drafts."""
+        drafts at most one reply ahead, only when the person turned drafting ahead on and the cost governor
+        would let it go (nobody is using AI, someone was here lately, the day's limit isn't reached, the API
+        isn't rejecting it), then collects the expired drafts."""
         breaker = prepared_reply.Breaker()
 
         def draft_ahead_round() -> None:
             if breaker.is_open(time.time()):
                 pass                                                 # circuit breaker open (an outage)
+            elif not self._wanted():
+                pass                                                 # turned off in Settings
             elif self._gateway().held_back("draft-ahead"):
                 pass                                                 # yielding, away, at the limit, rejected
             else:

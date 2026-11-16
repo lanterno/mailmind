@@ -42,6 +42,7 @@ class ChangedPreferences(RequestBody):
     morning_brief: Flag | None = None
     weekly_review: Flag | None = None
     auto_tidy: Flag | None = None
+    draft_ahead: Flag | None = None
     ai_enabled: Flag | None = None
     ai_provider: AiProvider | None = None
     ai_model: str | None = None
@@ -78,6 +79,7 @@ class Preferences(Answer):
     morning_brief: bool
     weekly_review: bool
     auto_tidy: bool
+    draft_ahead: bool
     ai_enabled: bool
     ai_provider: AiProvider
     ai_model: str               # "" for the provider's own

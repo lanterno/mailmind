@@ -307,7 +307,8 @@ def assemble():
     extractor = Extractor(calls, context, _uow, _mail)
     asker = Asker(calls, _mail)
     asking = Asking(threads, briefs, reviews, rewriter, asker, _uow, _mail)
-    drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, curation.looks_human)
+    drafting = PreparedReplies(calls, lambda: gateway(), answers, _uow, _mail, replies, curation.looks_human,
+                               lambda: _preferences()["draft_ahead"])
     bulk = BulkCommands(calls, _Search())
     screening = Screening(calls, _uow, _mail)
     rationales = Rationales(calls, _uow, _mail)

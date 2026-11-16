@@ -11,7 +11,7 @@ import json
 from typing import Any, TypedDict
 
 from mailmind.assistant.application.calls import Calls
-from mailmind.assistant.application.ports import Answers, Mail, NotSent, Result
+from mailmind.assistant.application.ports import Answers, Deferred, Mail, NotSent, Result
 from mailmind.assistant.domain import brief, fingerprint, prompts
 from mailmind.assistant.domain.brief import DELTA_TOP_N, Group
 from mailmind.kernel.errors import Unreachable
@@ -154,7 +154,9 @@ class Briefs:
             prompt = prompts.DELTA.fill(count=len(lines), items="\n".join(lines))
             try:
                 obj = self._calls.call_claude_json(prompt, DELTA_SCHEMA, feature="delta")
-            except NotSent:                     # AI off, or over the daily limit: the route answers it
+            except Deferred:                    # background work held back: asked for again later, nothing cached
+                raise Unreachable("delta unavailable", retry=True) from None
+            except NotSent:                     # AI off: the route answers it
                 raise
             except Exception as e:                  # transport: retryable, do NOT cache
                 log.warning("delta failed", exc_info=e)
