@@ -20,6 +20,7 @@ A password typed into Settings is `Typed` until it is saved: saving keeps it in 
 file the item's name (`keychain_credential`), and a draft's test tries it and keeps it nowhere. It isn't JSON, so no file
 can hold one.
 """
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Literal, Required, TypedDict, TypeIs
 
@@ -62,6 +63,19 @@ def api_key_who(provider: AiProvider) -> str:
 def api_key_item(provider: AiProvider) -> str:
     """The Keychain item MailMind keeps an AI provider's key in: `anthropic-api-key` and the like."""
     return f"{provider}-api-key"
+
+
+KEY_WITH_SPACES = "An API key can't hold spaces or line breaks."
+
+
+def api_key_text(typed: str) -> str:
+    """An AI provider's key as a person typed or pasted it, without the spaces and line breaks around it. Raises ValueError,
+    in words that hold no key, when a space, a line break or any other control character is left inside it: two keys pasted
+    together, or a sentence around one, is no key."""
+    key = typed.strip()
+    if any(ch.isspace() or unicodedata.category(ch) == "Cc" for ch in key):
+        raise ValueError(KEY_WITH_SPACES)
+    return key
 
 
 def _provider_of(who: str) -> AiProvider | None:

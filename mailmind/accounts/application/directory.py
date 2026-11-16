@@ -37,7 +37,8 @@ from mailmind.accounts.application.ports import AccountRepository, SecretStore
 from mailmind.accounts.domain import account, events, preferences
 from mailmind.accounts.domain.account import Entry, MaskedRow
 from mailmind.accounts.domain.credential import (BRIDGE_ITEM, CredentialRef, PlaintextSecret, Typed, account_item,
-                                                 api_key_item, api_key_who, credential_from, keychain_credential, plaintext)
+                                                 api_key_item, api_key_text, api_key_who, credential_from, keychain_credential,
+                                                 plaintext)
 from mailmind.kernel.ai_provider import AI_PROVIDERS, AiProvider
 from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.parsed import is_object
@@ -272,14 +273,15 @@ class Directory:
         return entry["credential"]["keychain"]
 
     def set_api_key(self, secret: str, provider: AiProvider = "anthropic") -> str:
-        """Keep `secret` as `provider`'s API key, in its Keychain item, and point the file's key for it (anthropic_api_key and
-        the like) at the item, whatever it said before. The answer is the item's name. Raises as set_password does."""
-        who, item = api_key_who(provider), api_key_item(provider)
+        """Keep `secret`, without the spaces and line breaks around it, as `provider`'s API key, in its Keychain item, and point
+        the file's key for it (anthropic_api_key and the like) at the item, whatever it said before. The answer is the item's
+        name. Raises as set_password does, and ValueError for a key with a space or a line break inside it."""
+        who, item, key = api_key_who(provider), api_key_item(provider), api_key_text(secret)
         with self._write_lock:
             raw = self._raw()
             raw.setdefault("accounts", [])
             old = raw.get(who)
-            raw[who] = self._kept(item, Typed(secret), old)
+            raw[who] = self._kept(item, Typed(key), old)
             self._secrets.evict(old)
             self.save(raw)
         return item
