@@ -71,6 +71,7 @@ PRICES = {
     "gpt-4.1": Price(2, 8, 0.50),
     "gpt-4.1-mini": Price(0.40, 1.60, 0.10),
     "gpt-4o": Price(2.50, 10, 1.25),
+    "gpt-4o-2024-05-13": Price(5, 15, 5),       # a dearer snapshot than gpt-4o's, which its name would be priced as
     "gpt-4o-mini": Price(0.15, 0.60, 0.075),
     "o3-pro": Price(20, 80, 20),
     "o3": Price(2, 8, 0.50),
