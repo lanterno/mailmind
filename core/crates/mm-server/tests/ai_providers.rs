@@ -470,16 +470,16 @@ fn a_call_goes_to_the_provider_chosen_and_with_ai_turned_off_nowhere() {
 
 #[test]
 fn a_providers_models_are_listed_with_its_key_at_the_url_chosen() {
-    let listed =
-        json!({"object": "list", "data": [{"id": "zeta-2"}, {"id": "alpha-1"}, {"id": "text-embedding-3-small"}]});
+    let listed = json!({"object": "list", "data": [{"id": "zeta-2"}, {"id": "alpha-1"}, {"id": "text-embedding-3-small"},
+                                                   {"id": "nomic-embed-text:latest"}, {"id": "alpha-1"}]});
     let (url, log) = provider(vec![(200, listed.clone()), (200, listed)]);
     let r =
         running(&json!({"preferences": {"ai_provider": "compatible", "ai_base_url": url, "ai_enabled": false}}), &[]);
     let models = r.get("/api/ai/models?provider=compatible");
     assert_eq!(
         (models.status, models.json()),
-        (200, json!({"ok": true, "models": ["alpha-1", "text-embedding-3-small", "zeta-2"], "default": null})),
-        "with AI turned off too"
+        (200, json!({"ok": true, "models": ["alpha-1", "zeta-2"], "default": null})),
+        "with AI turned off too, once each, and none that can't chat"
     );
     r.post("/api/ai/key", &json!({"provider": "openai", "key": "sk-fictional"}));
     r.post("/api/preferences", &json!({"ai_provider": "openai", "ai_base_url": url}));
