@@ -173,16 +173,30 @@ enum ReadOnlyRun {
 
     /// Quit, and open MailMind again once this run has ended, so two runs never hold its data at once.
     @MainActor static func relaunch() {
+        let run = ProcessInfo.processInfo.processIdentifier, app = Bundle.main.bundlePath
+        quitThenOpen(quit: { NSApp.terminate(nil) }, openAgain: { openOnceEnded(run, app) })
+    }
+
+    /// `quit`, with `openAgain` only as the app really ends (`willTerminate`), never before: a quit called off (a
+    /// question at quit answered no) leaves nothing waiting to open MailMind again when the person next quits.
+    /// `terminate` comes back only from a quit called off, since one that goes on ends the process inside it.
+    @MainActor static func quitThenOpen(center: NotificationCenter = .default, quit: () -> Void,
+                                        openAgain: @escaping @Sendable () -> Void)
+    {
+        let ending = center.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: nil) { _ in
+            openAgain()
+        }
+        quit()
+        center.removeObserver(ending)
+    }
+
+    /// A shell that waits for the run `pid` to end, then opens the app at `path`.
+    private static func openOnceEnded(_ pid: Int32, _ path: String) {
         let wait = Process()
         wait.executableURL = URL(filePath: "/bin/sh")
         wait.arguments = ["-c", "while /bin/kill -0 \"$0\" 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"$1\"",
-                          String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath]
-        do {
-            try wait.run()
-        } catch {
-            return
-        }
-        NSApp.terminate(nil)
+                          String(pid), path]
+        try? wait.run()
     }
 }
 
