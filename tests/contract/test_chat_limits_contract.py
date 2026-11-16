@@ -1,6 +1,7 @@
-"""The limits on an answer from a service that speaks OpenAI's Chat Completions (mailmind.assistant.adapters.openai_chat, #49),
-and from a model server on this Mac the finder asks: an attempt's time limit is a deadline for all of it, however the peer
-trickles its answer in, and an answer runs to MOST bytes at most. Peers on loopback send what no well-behaved server would."""
+"""The limits on an answer from a service that speaks OpenAI's Chat Completions (mailmind.assistant.adapters.openai_chat, each
+attempt an `exchange`, #49), and from a model server on this Mac the finder asks: an attempt's time limit is a deadline for all
+of it, however the peer trickles its answer in, and an answer runs to MOST bytes at most. Peers on loopback send what no
+well-behaved server would."""
 import socket
 import threading
 import time
@@ -8,7 +9,7 @@ import time
 import pytest
 
 from fakes import openai_api as fo
-from mailmind.assistant.adapters import local_servers, openai_chat
+from mailmind.assistant.adapters import exchange, local_servers
 from mailmind.assistant.adapters.openai_chat import Http
 from mailmind.assistant.application.ports import ModelError
 
@@ -121,7 +122,7 @@ def test_a_model_server_that_trickles_its_list_is_left_out_after_a_second(answer
 # ── how much is read ──────────────────────────────────────────────────────────
 
 def test_an_answer_that_says_it_is_longer_than_the_most_is_read_no_further():
-    with Peer(sending(HEAD + b"Content-Length: %d\r\n\r\n" % (openai_chat.MOST + 1))) as peer:
+    with Peer(sending(HEAD + b"Content-Length: %d\r\n\r\n" % (exchange.MOST + 1))) as peer:
         said, took = asked(peer)
     assert said == "compatible unreachable: ResponseTooLarge" and took < 0.9
 
@@ -133,14 +134,14 @@ def test_an_answer_that_says_it_is_longer_than_the_most_is_read_no_further():
     trickling(HEAD + b"\r\n", b"x" * 300),                                                # still coming
 ], ids=["to-the-end", "chunked", "still-coming"])
 def test_an_answer_that_runs_past_the_most_is_let_go_there(monkeypatch, answering):
-    monkeypatch.setattr(openai_chat, "MOST", 1000)
+    monkeypatch.setattr(exchange, "MOST", 1000)
     with Peer(answering) as peer:
         said, _ = asked(peer, timeout=5)
     assert said == "compatible unreachable: ResponseTooLarge"
 
 
 def test_an_answer_of_the_most_is_read_whole(monkeypatch):
-    monkeypatch.setattr(openai_chat, "MOST", 1000)
+    monkeypatch.setattr(exchange, "MOST", 1000)
     with Peer(sending(HEAD + b"Content-Length: 1000\r\n\r\n", b"x" * 1000)) as peer:
         assert len(Http("local", peer.url, "", 1).send("GET", "/models").body) == 1000
 

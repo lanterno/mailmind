@@ -1,11 +1,12 @@
-"""Where a service that speaks OpenAI's Chat Completions is (mailmind.assistant.adapters.openai_chat, #49): its base URL read
-as an endpoint, at the scheme's port where it names none, an IPv6 address among them; and nothing asked of one that names no
-API. Every address is fictional, and no connection is made."""
+"""Where a service that speaks OpenAI's Chat Completions is (mailmind.assistant.adapters.exchange, as openai_chat reads it, #49):
+its base URL read as an endpoint, at the scheme's port where it names none, an IPv6 address among them; and nothing asked of
+one that names no API. Every address is fictional, and no connection is made."""
 import socket
 
 import pytest
 
-from mailmind.assistant.adapters.openai_chat import Endpoint, Http, endpoint
+from mailmind.assistant.adapters.exchange import Endpoint, endpoint
+from mailmind.assistant.adapters.openai_chat import Http
 from mailmind.assistant.application.ports import ModelError
 
 
