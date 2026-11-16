@@ -513,6 +513,10 @@ struct AIPane: View {
             SettingSwitch(String(localized: "File low-priority mail by itself, once a day"), help: String(localized: """
                 Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.
                 """), isOn: status.preference(\.autoTidy) { .init(autoTidy: $0) })
+            SettingSwitch(String(localized: "Draft replies ahead for important mail"), help: String(localized: """
+                Written while you’re using MailMind, within the daily limit, so a reply is ready when you open the \
+                message. Off, a reply is drafted only when you ask for one.
+                """), isOn: status.preference(\.draftAhead) { .init(draftAhead: $0) })
         }
     }
 
