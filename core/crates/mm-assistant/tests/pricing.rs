@@ -72,15 +72,15 @@ fn geminis_pro_models_cost_more_past_two_hundred_thousand_prompt_tokens() {
 
 #[test]
 fn an_unknown_model_costs_the_dearest_of_its_family_off_this_machine() {
-    // gpt-5.5-pro and gpt-5.4-pro are the dearest of OpenAI's.
+    // gpt-5.5-pro, the first of the two dearest of OpenAI's.
     assert_eq!(per_million("gpt-7-future", false), (30_000_000, 180_000_000, 30_000_000));
     assert_eq!(per_million("o9", false), (30_000_000, 180_000_000, 30_000_000));
     assert_eq!(per_million("openai/gpt-7-future", false), (30_000_000, 180_000_000, 30_000_000));
-    // gemini-4-carbon and -argon for input and output, the 3.1 Pro's long prompts for a cache read.
-    assert_eq!(per_million("gemini-9-pro", false), (4_000_000, 20_000_000, 400_000));
-    assert_eq!(per_million("models/gemini-9-pro", false), (4_000_000, 20_000_000, 400_000));
-    // Fable and Mythos 5.
-    assert_eq!(per_million("claude-unknown", false), (10_000_000, 50_000_000, 1_000_000));
+    // gemini-4-carbon, the first of the two dearest of Google's: one entry, never its parts mixed with another's.
+    assert_eq!(per_million("gemini-9-pro", false), (4_000_000, 20_000_000, 200_000));
+    assert_eq!(per_million("models/gemini-9-pro", false), (4_000_000, 20_000_000, 200_000));
+    // Fable 5.1, the first of Claude's dearest, its cache reads cheaper than Fable 5's.
+    assert_eq!(per_million("claude-unknown", false), (10_000_000, 50_000_000, 250_000));
 }
 
 #[test]
@@ -103,6 +103,7 @@ fn an_unknown_model_on_this_machine_costs_nothing() {
 #[test]
 fn a_cache_write_costs_a_quarter_more_than_input_and_only_anthropic_reports_one() {
     assert_eq!(cost_micros("claude-opus-5-5", "", 0, 0, 1_000_000, 0), 5_000_000);
-    // A price no cache write is reported for rounds a quarter more up, and never fails.
-    assert_eq!(cost_micros("gpt-5-nano", "", 0, 0, 1_000_000, 0), 63_000);
+    // A quarter more that isn't whole rounds a half to even, as Python's `round` does.
+    assert_eq!(cost_micros("gpt-5-nano", "", 0, 0, 1_000_000, 0), 62_000);
+    assert_eq!(cost_micros("gpt-4o-mini", "", 0, 0, 1_000_000, 0), 188_000);
 }
