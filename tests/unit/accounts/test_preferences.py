@@ -207,7 +207,10 @@ def test_a_model_of_anything_else_is_refused_in_words(config, data_dir, model):
     ("http://127.0.0.1:11434/v1", "http://127.0.0.1:11434/v1"),
     ("http://localhost:8080/v1/", "http://localhost:8080/v1"),
     ("http://[::1]:11434/v1", "http://[::1]:11434/v1"),
+    ("http://[::1]/v1", "http://[::1]/v1"),
     ("https://llm.example.test", "https://llm.example.test"),
+    ("https://llm.example.test:1/v1", "https://llm.example.test:1/v1"),
+    ("https://llm.example.test:65535/v1", "https://llm.example.test:65535/v1"),
     ("", ""),
 ])
 def test_a_service_url_is_https_or_http_on_this_mac_kept_without_its_trailing_slash(config, data_dir, url, kept):
@@ -227,7 +230,13 @@ def test_a_service_url_is_https_or_http_on_this_mac_kept_without_its_trailing_sl
     "https://llm.example.test/v1?",
     "https://llm.example.test/v1#top",
     "https://llm.example.test:99999/v1",
+    "https://llm.example.test:65536/v1",
     "https://llm.example.test:port/v1",
+    "https://llm.example.test:/v1",                   # a port left empty
+    "http://127.0.0.1:/v1",
+    "http://[::1]:/v1",
+    "https://llm.example.test:0/v1",                  # a port none listens on
+    "http://localhost:00/v1",
     "https://llm.example.test/v 1",
     "https://llm.example.test/ü",
     "https://llm.example.test/" + "a" * 476,          # 501 characters
