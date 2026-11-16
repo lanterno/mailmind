@@ -9,16 +9,16 @@
 //! status is a `ModelError` saying it. The key never reaches a log line or an error.
 
 pub mod batches;
-pub mod http;
 pub mod wire;
 
-use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use mm_assistant::models::FALLBACK_BETA;
 use mm_assistant::ports::{BatchResult, LanguageModel, ModelError, Prompt, RETRIED, Reply};
 use mm_kernel::seams::{Outside, Secret};
+use mm_net::http::backoff;
+pub use mm_net::http::{self, Endpoint};
 use mm_net::{Lost, Stream};
 
 /// Where API calls go unless ANTHROPIC_BASE_URL names another.
@@ -29,71 +29,6 @@ pub const VERSION: &str = "2026-10-21";
 pub const TIMEOUT: Duration = Duration::from_secs(120);
 /// Attempts after the first.
 pub const RETRIES: u32 = 2;
-
-/// Where the API is: its scheme, host, port and the path its routes hang from.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Endpoint {
-    pub tls: bool,
-    pub host: String,
-    pub port: u16,
-    /// The path before `/v1/messages`, without a trailing `/`.
-    pub base: String,
-}
-
-impl Endpoint {
-    /// An `http://` or `https://` URL as an endpoint, or None for anything else: a URL with a blank or a control
-    /// character inside it among those, as one would carry a line of its own into the request.
-    pub fn parse(url: &str) -> Option<Endpoint> {
-        let url = url.trim();
-        if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
-            return None;
-        }
-        let (tls, rest) = match url.strip_prefix("https://") {
-            Some(rest) => (true, rest),
-            None => (false, url.strip_prefix("http://")?),
-        };
-        let (authority, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
-        if authority.is_empty() || authority.contains('@') {
-            return None;
-        }
-        let default_port = if tls { 443 } else { 80 };
-        let (host, port) = if let Some(bracketed) = authority.strip_prefix('[') {
-            let (host, after) = bracketed.split_once(']')?;
-            let port = match after.strip_prefix(':') {
-                Some(port) => port.parse().ok()?,
-                None if after.is_empty() => default_port,
-                None => return None,
-            };
-            (host.to_owned(), port)
-        } else {
-            match authority.rsplit_once(':') {
-                Some((host, port)) => (host.to_owned(), port.parse().ok()?),
-                None => (authority.to_owned(), default_port),
-            }
-        };
-        if host.is_empty() {
-            return None;
-        }
-        let path = path.split(['?', '#']).next().unwrap_or_default();
-        Some(Endpoint { tls, host, port, base: path.trim_end_matches('/').to_owned() })
-    }
-
-    /// Whether the host is this machine: `localhost`, or a loopback address.
-    pub fn loopback(&self) -> bool {
-        let host = self.host.to_ascii_lowercase();
-        host == "localhost"
-            || host.parse::<IpAddr>().is_ok_and(|ip| match ip {
-                IpAddr::V4(v4) => v4.is_loopback(),
-                IpAddr::V6(v6) => v6.is_loopback() || v6.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback()),
-            })
-    }
-
-    /// What the `Host` header says.
-    fn host_header(&self) -> String {
-        let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
-        if self.port == if self.tls { 443 } else { 80 } { host } else { format!("{host}:{}", self.port) }
-    }
-}
 
 /// The Claude API, reached with one key at one endpoint.
 pub struct ClaudeApi {
@@ -133,13 +68,7 @@ impl ClaudeApi {
 
     fn connect(&self, endpoint: &Endpoint) -> Result<Stream, Lost> {
         self.outside.reach(&endpoint.host).map_err(|_| Lost("Refused"))?;
-        let tcp = mm_net::connect(&endpoint.host, endpoint.port, self.timeout)?;
-        if !endpoint.tls {
-            return Ok(Stream::Plain(tcp));
-        }
-        // Verified on the system's roots, on this machine as off it: no pin stands in for the chain here.
-        let config = mm_net::tls::config(false)?;
-        mm_net::handshake(config, mm_net::server_name(&endpoint.host)?, tcp)
+        endpoint.open(self.timeout)
     }
 
     fn attempt(&self, endpoint: &Endpoint, request: &[u8]) -> Attempt {
@@ -153,19 +82,6 @@ impl ClaudeApi {
             Ok(response) => Attempt::Answered(response),
             Err(lost) => Attempt::Lost(lost),
         }
-    }
-}
-
-/// How long to wait before sending again, as the SDK waits: what `retry-after-ms` or `retry-after` says when it is
-/// up to a minute, else half a second, doubling each time, up to eight.
-fn backoff(response: Option<&http::Response>, retried: u32) -> Duration {
-    let said = response.and_then(|r| {
-        let ms = r.header("retry-after-ms").and_then(|v| v.trim().parse::<f64>().ok()).map(|ms| ms / 1000.0);
-        ms.or_else(|| r.header("retry-after").and_then(|v| v.trim().parse::<f64>().ok()))
-    });
-    match said {
-        Some(seconds) if (0.0..=60.0).contains(&seconds) => Duration::from_secs_f64(seconds),
-        _ => Duration::from_secs_f64((0.5 * f64::from(1u32 << retried.min(4))).min(8.0)),
     }
 }
 

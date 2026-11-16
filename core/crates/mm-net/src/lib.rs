@@ -1,11 +1,13 @@
 //! The network every mail protocol shares (`mm-imap`'s, and the protocols to come): a TCP connection with its time
 //! limits, TLS on it from the first byte or after the protocol's STARTTLS (`tls`: verified off this machine, pinned
-//! by the caller on it), and the stream a protocol reads and writes.
+//! by the caller on it), and the stream a protocol reads and writes; and one HTTP/1.1 exchange, as the AI providers'
+//! APIs are spoken (`http`).
 //!
 //! What goes wrong is named by its class alone (`Lost`), never by what a server said. Reaching a host is asked of
 //! `Outside` by the caller, before `connect`. A domain's mail servers are asked of a nameserver (`dns`).
 
 pub mod dns;
+pub mod http;
 pub mod tls;
 // A wait as long as a protocol says, and its end from another thread (IMAP's IDLE).
 mod waiting;
