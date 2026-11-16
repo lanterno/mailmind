@@ -12,8 +12,8 @@ push, snooze/mute/waiting, and a set of AI actions that never fire on their own.
 See [Features](#features) for what ships today and
 [ROADMAP.md](ROADMAP.md) for what doesn't yet.
 
-- **Little to install.** Python, [Node](https://nodejs.org) to build the app, and six packages
-  (FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and recurring-ical-events) that
+- **Little to install.** Python, [Node](https://nodejs.org) to build the app, and eight packages
+  (FastAPI, uvicorn, the Anthropic SDK and its httpx2, IMAPClient, icalendar, recurring-ical-events and sqlcipher3) that
   [uv](https://docs.astral.sh/uv/) fetches on first run.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail the AI works on, sent to
@@ -605,9 +605,9 @@ How a release is made is in [docs/releasing.md](docs/releasing.md).
 - **macOS**, whose login Keychain keeps the key the database is encrypted with, your account passwords and the Claude
   API key. Elsewhere, set `MAILMIND_DB_KEY` to 64 hex digits of your own (`openssl rand -hex 32`) and keep them safe:
   they are the only way into the database. Passwords can then come from 1Password or the environment.
-- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the six packages the
-  server and every command run on, FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and
-  recurring-ical-events, from `pyproject.toml` on first run. Every command is
+- **[uv](https://docs.astral.sh/uv/)** (`brew install uv`), which installs the eight packages the
+  server and every command run on, FastAPI, uvicorn, the Anthropic SDK and its httpx2, IMAPClient, icalendar,
+  recurring-ical-events and sqlcipher3, from `pyproject.toml` on first run. Every command is
   `uv run python -m mailmind ...`.
 - **[Rust](https://rustup.rs)** (`rustup`), which builds the leaves the app shares with the Rust core
   (`core/crates/mm-py`) when uv first installs the packages, and again when their Rust changes.

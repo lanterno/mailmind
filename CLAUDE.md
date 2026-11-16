@@ -45,8 +45,8 @@ test name; `just test -n0` runs them in one process.
 
 ## Constraints
 
-- **Runtime packages are declared and locked.** The app uses FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and
-  recurring-ical-events so far, each declared in `pyproject.toml` and locked with hashes in `uv.lock`, and
+- **Runtime packages are declared and locked.** The app uses FastAPI, uvicorn, the Anthropic SDK and httpx2 (its HTTP
+  library, whose client the Claude adapter hands it), IMAPClient, icalendar, recurring-ical-events and sqlcipher3 so far, each declared in `pyproject.toml` and locked with hashes in `uv.lock`, and
   `mailmind-leaves`, the Rust core's pure functions the app calls, built from `core/crates/mm-py` and its `Cargo.lock`. Each dependency change is its
   own commit, and the `uv.lock` change goes in the next. The sanitizer, the IMAP handling and the route tables are hand-rolled on the
   standard library, and most of the package still is.
