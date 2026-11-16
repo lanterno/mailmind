@@ -110,6 +110,7 @@ tests/api/test_http_cleanup.py::test_block_the_domain_without_unsubscribing
 tests/api/test_http_cleanup.py::test_cleanup_refusals
 tests/api/test_http_settings.py::test_sweep_moves_the_junk_buckets_out_of_the_inbox
 tests/api/test_http_settings.py::test_a_sweep_leaves_starred_and_unread_junk_in_the_inbox
+tests/api/test_http_settings.py::test_one_undo_takes_back_all_a_sweep_moved
 tests/api/test_http_get.py::test_upcoming_screener_and_contacts
 tests/api/test_http_cleanup.py::test_a_sender_whose_mail_is_in_the_inbox_is_still_unsubscribed
 tests/api/test_http_send.py::test_a_double_submitted_rsvp_queues_once

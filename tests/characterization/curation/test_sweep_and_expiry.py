@@ -120,6 +120,49 @@ def test_a_sweep_leaves_starred_and_unread_junk_in_the_inbox(world):
     assert [e["subject"] for e in audit(world)] == ["[quilt] Build #413 passed"]
 
 
+def test_one_undo_brings_back_all_a_sweep_moved_from_trash(world):
+    from mailmind.bootstrap import mailbox
+    read_junk(world)
+    done = curation.sweeps.run(w.ADA, False, "ug-sweep")
+    assert (done["undo_group"], done["results"][0]["moved"], done["results"][0]["no_undo"]) == ("ug-sweep", 3, 0)
+    [entry] = [e for e in mailbox.undo.entries() if e.get("group") == "ug-sweep"]
+    assert (entry["label"], len(entry["children"])) == ("Swept junk", 3)
+    assert {(c["kind"], c["src_folder"], c["dest_folder"]) for c in entry["children"]} == {("move", "INBOX", "Trash")}
+    undone = mailbox.undo.undo_group("ug-sweep")
+    assert (undone["reversed"], undone["failed"], undone["label"]) == (3, 0, "Swept junk")
+    for name in JUNK_INBOX:
+        assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), name
+        assert "\\Seen" in world.where(name)["server"][0][3], name           # back as read as it went
+
+
+def test_a_sweep_leaves_no_way_back_for_a_straggler_or_mail_with_no_message_id(world):
+    from mailmind.bootstrap import mailbox
+    read_junk(world)
+    world.deliver(w.ADA, "INBOX", b"From: News <news@loom.example.test>\r\nTo: ada@example.test\r\n"
+                                  b"Subject: No id\r\nList-Unsubscribe: <https://loom.example.test/u>\r\n"
+                                  b"Date: Mon, 02 Nov 2026 10:00:00 +0000\r\n\r\nHello\r\n", flags=("\\Seen",))
+    uid = str(world.uid("ada-inbox-04-ci.eml"))
+    world.server.fail("UID MOVE", "OK [scripted] moved, or so it says", times=None, user=w.ADA,
+                      when=lambda a: uid in str(a[0]).split(","))
+    plan = curation.sweeps.run(w.ADA, True)
+    assert (plan["results"][0]["planned"], plan["results"][0]["no_undo"], plan["undo_group"]) == (4, 1, None)
+    done = curation.sweeps.run(w.ADA, False)
+    [res] = done["results"]
+    assert (res["moved"], res["stragglers"], res["no_undo"]) == (3, [uid], 1)
+    [entry] = [e for e in mailbox.undo.entries() if e.get("group") == done["undo_group"]]
+    assert done["undo_group"].startswith("sweep:")
+    assert sorted(c["message_id"] for c in entry["children"]) == sorted(
+        w.message_id(name) for name in ("ada-inbox-03-newsletter.eml", "ada-inbox-12-scam.eml"))
+
+
+def test_a_sweep_that_moved_nothing_names_no_undo_group(world):
+    from mailmind.bootstrap import mailbox
+    world.server_flags("ada-inbox-04-ci.eml", "\\Seen", "\\Flagged")   # the rest of the junk is unread
+    done = curation.sweeps.run(w.ADA, False, "ug-none")
+    assert (done["results"][0]["held_back"], done["undo_group"]) == (3, None)
+    assert mailbox.undo.entries() == []
+
+
 FAR = 4_000_000_000                                              # a "now" long after every corpus date
 
 

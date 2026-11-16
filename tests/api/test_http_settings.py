@@ -107,7 +107,7 @@ def test_sweep_moves_the_junk_buckets_out_of_the_inbox(app, golden, world):
         world.server_flags(name, "\\Seen")
     post(app, golden, "sweep Ada, dry run", "/api/sweep", {"account": w.ADA, "dry_run": True})
     since = world.mark()
-    post(app, golden, "sweep Ada", "/api/sweep", {"account": w.ADA})
+    post(app, golden, "sweep Ada", "/api/sweep", {"account": w.ADA, "undo_group": "ug-sweep-ada"})
     golden.note("server writes", world.writes(since))
     golden.note("Ada's INBOX on the server", sorted(
         str(m.headers()["Message-ID"]) for m in world.server.messages(w.ADA, "INBOX").values()))
@@ -126,6 +126,21 @@ def test_a_sweep_leaves_starred_and_unread_junk_in_the_inbox(app, world):
     assert world.writes(since) == []
     for name in JUNK:
         assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
+
+
+def test_one_undo_takes_back_all_a_sweep_moved(app, world):
+    """The page names the sweep's undo group, and Undo puts each message back in the Inbox, read as it was."""
+    for name in JUNK:
+        world.server_flags(name, "\\Seen")
+    swept = app.post("/api/sweep", {"account": w.ADA, "undo_group": "ug-sweep-1"}).json
+    assert (swept["undo_group"], swept["results"][0]["moved"], swept["results"][0]["no_undo"]) == ("ug-sweep-1", 3, 0)
+    for name in JUNK:
+        assert [box for _, box, *_ in world.where(name)["server"]] == ["Trash"], name
+    undone = app.post("/api/undo", {}).json
+    assert (undone["ok"], undone["label"], undone["reversed"], undone["failed"]) == (True, "Swept junk", 3, 0)
+    for name in JUNK:
+        [(_, box, _, flags)] = world.where(name)["server"]
+        assert (box, "\\Seen" in flags) == ("INBOX", True), name
 
 
 def test_sync_retry_runs_a_sync_for_that_account(app, golden, world):

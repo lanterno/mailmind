@@ -17,11 +17,13 @@
      "error": null,
      "held_back": 0,
      "moved": 0,
+     "no_undo": 0,
      "planned": 3,
      "senders": 3,
      "stragglers": []
     }
-   ]
+   ],
+   "undo_group": null
   },
   "headers": {
    "cache-control": "no-store",
@@ -54,11 +56,13 @@
      "error": null,
      "held_back": 0,
      "moved": 3,
+     "no_undo": 0,
      "planned": 3,
      "senders": 3,
      "stragglers": []
     }
-   ]
+   ],
+   "undo_group": "ug-sweep-ada"
   },
   "headers": {
    "cache-control": "no-store",

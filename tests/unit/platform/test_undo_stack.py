@@ -31,6 +31,16 @@ def test_a_group_gathers_its_members_only_while_it_is_on_top(data_dir):
     assert mailbox.undo.entries()[0]["label"] == "Archived"
 
 
+def test_many_go_under_one_group_at_one_write_as_each_in_turn_would(data_dir):
+    mailbox.undo.push(move(0), "cleanup")
+    mailbox.undo.push_many([move(1), move(2), move(3)], "sweep")
+    mailbox.undo.push_many([move(4)], "sweep")                     # still on top: it joins the group
+    mailbox.undo.push_many([], "later")                            # nothing went: nothing on the stack
+    assert ids(mailbox.undo.entries()) == [["<m0@example.test>"], ["<m1@example.test>", "<m2@example.test>",
+                                                                   "<m3@example.test>", "<m4@example.test>"]]
+    assert [e["group"] for e in mailbox.undo.entries()] == ["cleanup", "sweep"]
+
+
 def test_the_stack_keeps_its_newest_entries(data_dir, monkeypatch):
     monkeypatch.setattr(mailbox.undo, "UNDO_MAX", 3)
     for n in range(5):

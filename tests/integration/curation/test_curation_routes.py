@@ -68,12 +68,13 @@ def test_a_sweep_left_to_say_nothing(app, monkeypatch, given, account, flag, dry
     """Naming no account is every account, and saying nothing of a dry run asks for the real thing, as it did."""
     asked = []
 
-    def run(acct, dry_run):
-        asked.append((acct, dry_run))
+    def run(acct, dry_run, undo_group):
+        asked.append((acct, dry_run, undo_group))
         return {"ok": True, "dry_run": dry_run, "results": [], "generated": "now"}
     monkeypatch.setattr(curation.sweeps, "run", run)
     assert app.post("/api/sweep", {**given, **flag}).status == 200
-    assert asked == [(account, dry)]
+    assert app.post("/api/sweep", {**given, **flag, "undo_group": "ug-1"}).status == 200
+    assert asked == [(account, dry, None), (account, dry, "ug-1")]
 
 
 def test_a_sweep_that_answers_an_account_by_account_failure_fits(app, world):
