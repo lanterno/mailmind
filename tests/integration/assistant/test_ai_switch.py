@@ -42,6 +42,22 @@ def test_turned_off_no_background_job_sends_anything(off, ai):
     assert (st["engine"], st["provider"], st["off"]) == ("none", "anthropic", "turned-off")
 
 
+def test_turned_off_no_key_is_looked_up_anywhere(off, ai, monkeypatch):
+    """Not the Keychain, nor 1Password: a locked one asks nothing of the person while AI is off."""
+    from mailmind.accounts.adapters import secrets
+    assert off.post("/api/ai/key", {"provider": "anthropic", "key": "sk-ant-kept-while-off"}).status == 200
+    looked, resolve = [], secrets.resolve
+    monkeypatch.setattr(secrets, "resolve", lambda cred, **kw: looked.append(kw["who"]) or resolve(cred, **kw))
+    assert off.get("/api/digest").json["ai"]["off"] == "turned-off"
+    assert assistant.calls.engine() == "none" and assistant.engine().key == ""
+    assistant.assessments.round()
+    background.tidy_round()
+    assert looked == []
+    assert off.post("/api/preferences", {"ai_enabled": True}).status == 200
+    assert off.get("/api/digest").json["ai"]["key_from"] == "mailmind.config.json"
+    assert looked and set(looked) == {"anthropic_api_key"}
+
+
 def test_turned_on_again_it_is_sent_at_once(off, world, ai):
     assert off.post("/api/preferences", {"ai_enabled": True}).status == 200
     assert off.post("/api/ai/summarize", world.copy(LUNCH)).status == 200
