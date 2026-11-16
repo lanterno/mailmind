@@ -137,3 +137,26 @@ private final class Recorder: ListDisplay {
         changes.append(positions)
     }
 }
+
+/// What reads the window's list again. An Inbox's first scan says no new-mail, so its mail shows by the end of the sync
+/// that stored its newest, and by each step of its older mail, never by waiting for new-mail.
+@MainActor
+final class MailAppRefreshTests: XCTestCase {
+    private func event(_ name: String, _ data: String = "{}") -> CoreEvent {
+        CoreEvent(id: "1", name: name, data: data)
+    }
+
+    func testAFirstScansEndAndEachStepOfItsOlderMailReadTheListAgain() {
+        XCTAssertTrue(MailApp.refreshesTheList(event("sync-done", #"{"account": "ada@example.test", "kept": 500, "junk": 0}"#)))
+        XCTAssertTrue(MailApp.refreshesTheList(event("folder-synced",
+                                                     #"{"account": "ada@example.test", "folder": "INBOX", "ok": true, "new": 500}"#)))
+        XCTAssertTrue(MailApp.refreshesTheList(event("new-mail")))
+    }
+
+    func testAFolderReadThatFailedOrAnEventAboutNoMailLeavesTheListAsItIs() {
+        XCTAssertFalse(MailApp.refreshesTheList(event("folder-synced", #"{"folder": "INBOX", "ok": false}"#)),
+                       "reading it again would read the folder again, for as long as its server says no")
+        XCTAssertFalse(MailApp.refreshesTheList(event("outbox")))
+        XCTAssertFalse(MailApp.refreshesTheList(event("hello")))
+    }
+}
