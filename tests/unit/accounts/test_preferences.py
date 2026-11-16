@@ -248,3 +248,38 @@ def test_an_ai_preference_edited_by_hand_that_cant_be_it_is_its_default(name, ju
 def test_a_url_edited_by_hand_with_a_trailing_slash_reads_without_it():
     assert preferences.read({"preferences": {"ai_base_url": "https://llm.example.test/v1/"}})["ai_base_url"] == \
         "https://llm.example.test/v1"
+
+
+LOCAL_ELSEWHERE = "^A model on this Mac must be at 127.0.0.1, ::1 or localhost.$"
+
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1:1234/v1", "https://localhost:8443/v1", "http://[::1]:8080/v1", ""])
+def test_a_model_on_this_mac_is_at_a_url_on_this_mac(config, url):
+    now = config.set_preferences({"ai_provider": "local", "ai_base_url": url})
+    assert (now["ai_provider"], now["ai_base_url"]) == ("local", url)
+
+
+def test_a_model_on_this_mac_at_a_url_elsewhere_is_refused_whichever_the_change_names(config, data_dir):
+    before = path_of(data_dir).read_bytes()
+    with pytest.raises(Refused, match=LOCAL_ELSEWHERE):
+        config.set_preferences({"ai_provider": "local", "ai_base_url": "https://gpu.example.test/v1"})
+    assert path_of(data_dir).read_bytes() == before
+    config.set_preferences({"ai_provider": "local"})
+    with pytest.raises(Refused, match=LOCAL_ELSEWHERE):
+        config.set_preferences({"ai_base_url": "https://gpu.example.test/v1"})
+    config.set_preferences({"ai_provider": "compatible", "ai_base_url": "https://gpu.example.test/v1"})
+    with pytest.raises(Refused, match=LOCAL_ELSEWHERE):
+        config.set_preferences({"ai_provider": "local", "ai_base_url": "https://gpu.example.test/v1"})
+    assert config.set_preferences({"ai_provider": "local"})["ai_base_url"] == ""        # the last provider's goes
+
+
+def test_a_url_that_cant_be_any_services_is_refused_in_its_own_words_first(config):
+    with pytest.raises(Refused, match="^the AI service's URL must be"):
+        config.set_preferences({"ai_provider": "local", "ai_base_url": "http://10.0.0.7:11434/v1"})
+
+
+def test_a_model_on_this_mac_edited_by_hand_to_a_url_elsewhere_reads_at_its_own():
+    raw = {"preferences": {"ai_provider": "local", "ai_base_url": "https://gpu.example.test/v1"}}
+    assert preferences.read(raw)["ai_base_url"] == ""
+    assert preferences.read({"preferences": {"ai_provider": "compatible", "ai_base_url": "https://gpu.example.test/v1"}})[
+        "ai_base_url"] == "https://gpu.example.test/v1"

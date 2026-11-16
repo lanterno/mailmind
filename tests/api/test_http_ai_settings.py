@@ -65,6 +65,15 @@ def test_a_model_or_url_none_can_be_is_refused_in_words_and_a_provider_or_switch
     assert prefs(app) == before
 
 
+def test_a_model_on_this_mac_at_a_url_elsewhere_is_refused_in_words(app):
+    before = prefs(app)
+    r = app.post("/api/preferences", {"ai_provider": "local", "ai_base_url": "https://gpu.example.test/v1"})
+    assert (r.status, r.json) == (400, problems.refused("A model on this Mac must be at 127.0.0.1, ::1 or localhost."))
+    assert prefs(app) == before
+    choose(app, ai_provider="local", ai_base_url="http://localhost:1234/v1")
+    assert prefs(app)["ai_base_url"] == "http://localhost:1234/v1"
+
+
 def test_a_url_is_kept_without_its_trailing_slash_and_another_provider_sets_model_and_url_back(app):
     choose(app, ai_provider="compatible", ai_model="mixtral-9x", ai_base_url="https://llm.example.test/v1/")
     assert prefs(app) == {"ai_enabled": True, "ai_provider": "compatible", "ai_model": "mixtral-9x",
