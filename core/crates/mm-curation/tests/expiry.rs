@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use mm_curation::cleanup_ports::{
-    Audited, LiveError, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
+    Audited, LiveError, LiveHeaders, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
 };
 use mm_curation::expiry::{
     AGE_FIELDS, Aged, Expired, Expiry, ExpiryParts, aged_from_headers, audited, expiry_hours, select_expired,
@@ -293,12 +293,14 @@ impl LiveSession for Session {
         }
         self.uids()
     }
-    fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
+    /// Expiry goes by age, whatever a message's flags: these say none.
+    fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<LiveHeaders>, LiveError> {
         assert_eq!(fields, AGE_FIELDS);
-        Ok(self.0.inbox(&self.1, |inbox| uids.iter().filter_map(|u| Some((*u, inbox.get(u)?.0.clone()))).collect()))
-    }
-    fn flags(&mut self, _: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError> {
-        unreachable!("expiry goes by age, whatever a message's flags")
+        let fetched = |inbox: &mut Inbox| {
+            let found = uids.iter().filter_map(|u| Some((*u, inbox.get(u)?.0.clone())));
+            found.map(|(uid, raw)| LiveHeaders { uid, raw, flags: Vec::new() }).collect()
+        };
+        Ok(self.0.inbox(&self.1, fetched))
     }
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
         Ok(self.0.inbox(&self.1, |inbox| uids.iter().filter_map(|u| Some((*u, inbox.get(u)?.1))).collect()))

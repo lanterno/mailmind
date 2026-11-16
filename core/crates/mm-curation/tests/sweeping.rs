@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use mm_curation::cleanup_ports::{
-    Audited, Ids, LiveError, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
+    Audited, Ids, LiveError, LiveHeaders, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
 };
 use mm_curation::ports::{Filing, RuleBook};
 use mm_curation::rulebook::Rules;
@@ -55,12 +55,16 @@ impl LiveSession for Inbox {
         unreachable!("a sweep reads the whole INBOX")
     }
 
-    fn headers(&mut self, uids: &[u32], _: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
-        Ok(uids.iter().map(|u| (*u, self.heads.get(u).cloned().unwrap_or_default())).collect())
-    }
-
-    fn flags(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError> {
-        Ok(uids.iter().filter_map(|u| Some((*u, self.flags.get(u)?.clone()))).collect())
+    /// Each message's fields with its flags, as one FETCH brings them.
+    fn headers(&mut self, uids: &[u32], _: &[&str]) -> Result<Vec<LiveHeaders>, LiveError> {
+        Ok(uids
+            .iter()
+            .map(|u| LiveHeaders {
+                uid: *u,
+                raw: self.heads.get(u).cloned().unwrap_or_default(),
+                flags: self.flags.get(u).cloned().unwrap_or_default(),
+            })
+            .collect())
     }
 
     fn arrivals(&mut self, _: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
@@ -241,11 +245,8 @@ impl LiveSession for Session {
     fn uids_from(&mut self, text: &str) -> Result<Vec<u32>, LiveError> {
         self.inbox().uids_from(text)
     }
-    fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
+    fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<LiveHeaders>, LiveError> {
         self.inbox().headers(uids, fields)
-    }
-    fn flags(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError> {
-        self.inbox().flags(uids)
     }
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
         self.inbox().arrivals(uids)
