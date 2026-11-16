@@ -11,21 +11,44 @@ final class AIChoicesTests: XCTestCase {
 
     func testWhatEachProviderAsksFor() {
         XCTAssertEqual(API.AiProvider.allCases.map(\.label),
-                       ["Claude (Anthropic)", "OpenAI", "Google Gemini", "Ollama, on this Mac",
+                       ["Claude (Anthropic)", "OpenAI", "Google Gemini", "A model on this Mac",
                         "Another OpenAI-compatible service"])
-        XCTAssertEqual(API.AiProvider.allCases.filter(\.takesKey), [.anthropic, .openai, .gemini, .compatible],
-                       "Ollama takes no key")
         XCTAssertEqual(API.AiProvider.allCases.filter(\.needsKey), [.anthropic, .openai, .gemini],
-                       "a compatible service's key is its own affair")
-        XCTAssertEqual(API.AiProvider.allCases.filter(\.asksForURL), [.ollama, .compatible])
-        XCTAssertEqual(API.AiProvider.allCases.filter(\.needsModel), [.ollama, .compatible])
+                       "a model on this Mac's key, and a compatible service's, is only if the server asks")
+        XCTAssertEqual(API.AiProvider.allCases.filter(\.asksForURL), [.local, .compatible])
+        XCTAssertEqual(API.AiProvider.allCases.filter(\.needsModel), [.local, .compatible])
         XCTAssertEqual(API.AiProvider.anthropic.keyPlace, "console.anthropic.com")
         XCTAssertEqual(API.AiProvider.openai.keyPlace, "platform.openai.com/api-keys")
         XCTAssertEqual(API.AiProvider.gemini.keyPlace, "aistudio.google.com/apikey")
-        XCTAssertNil(API.AiProvider.ollama.keyPage)
+        XCTAssertNil(API.AiProvider.local.keyPage)
         XCTAssertNil(API.AiProvider.compatible.keyPage)
         XCTAssertEqual(AIChoices.keyLabel(.openai), "OpenAI API key")
         XCTAssertEqual(AIChoices.keyLabel(.compatible), "API key")
+        XCTAssertEqual(AIChoices.keyLabel(.local), "API key")
+        XCTAssertEqual(AIChoices.keyPrompt(.local), "paste your server’s key")
+        XCTAssertEqual(SecretStanding.apiKey(.local, kept: false, ai: nil, sources: SecretSources()),
+                       SecretStanding(summary: "No key", note: "Only if your server asks for one.", kept: false))
+    }
+
+    /// A model on this Mac is said as one, never as the server it runs in; Ollama is named only as a server found.
+    func testAModelOnThisMacIsSaidAsOne() {
+        XCTAssertEqual(API.AiProvider.local.name, "your model server")
+        XCTAssertEqual(API.AiProvider.local.writer, "a model on this Mac")
+        XCTAssertEqual(API.AiProvider.local.title, "A model on this Mac")
+        XCTAssertEqual(API.AiProvider.openai.title, "OpenAI")
+        XCTAssertEqual(API.AiProvider.compatible.title, "Your AI service")
+        XCTAssertEqual(AIChoices.modelHelp(.local), """
+            Long threads need room: give the model a context of at least 16K tokens in your model server’s settings.
+            """)
+        XCTAssertEqual(AIChoices.urlHelp(.local),
+                       "Where your model server listens, on this Mac: 127.0.0.1, ::1 or localhost.")
+        for provider in API.AiProvider.allCases {
+            for words in [provider.label, provider.name, provider.writer, AIChoices.modelHelp(provider),
+                          AIChoices.urlHelp(provider), AIChoices.keyLabel(provider), AIChoices.keyPrompt(provider),
+                          AIChoices.removeWarning(provider), AIWords.privacy(provider)] {
+                XCTAssertFalse(words.contains("Ollama"), "\(provider): \(words)")
+            }
+        }
     }
 
     /// AI mode off, the pane is its switch alone; on, the connection by provider, how it stands, then spending and
@@ -38,8 +61,9 @@ final class AIChoicesTests: XCTestCase {
                        [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead])
         XCTAssertEqual(AIChoices.parts(aiMode: true, provider: .compatible),
                        [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead])
-        XCTAssertEqual(AIChoices.parts(aiMode: true, provider: .ollama),
-                       [.mode, .connection, .model, .standing, .spending, .writtenAhead], "Ollama takes no key")
+        XCTAssertEqual(AIChoices.parts(aiMode: true, provider: .local),
+                       [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead],
+                       "a model on this Mac takes a key too, if its server asks for one")
     }
 
     func testChoosingAProviderSendsItAlone() {
@@ -87,15 +111,15 @@ final class AIChoicesTests: XCTestCase {
         XCTAssertNil(AIChoices.defaultModel(.anthropic, listed: nil, preferences: F.preferences(), ai: off))
     }
 
-    /// Ollama and a compatible service have no default: a model must be chosen, and the menu says so.
-    func testOllamaAndACompatibleServiceHaveNoDefault() {
-        let list = listed(.ollama, default: nil, ["llama-fictional", "mistral-fictional"])
-        let model = AIChoices.defaultModel(.ollama, listed: list, preferences: F.preferences(provider: "ollama"),
+    /// A model on this Mac and a compatible service have no default: a model must be chosen, and the menu says so.
+    func testAModelOnThisMacAndACompatibleServiceHaveNoDefault() {
+        let list = listed(.local, default: nil, ["llama-fictional", "mistral-fictional"])
+        let model = AIChoices.defaultModel(.local, listed: list, preferences: F.preferences(provider: "local"),
                                            ai: nil)
         XCTAssertNil(model)
-        XCTAssertEqual(AIChoices.options(.ollama, chosen: "", defaultModel: model, listed: list).map(\.id),
+        XCTAssertEqual(AIChoices.options(.local, chosen: "", defaultModel: model, listed: list).map(\.id),
                        ["llama-fictional", "mistral-fictional"])
-        XCTAssertEqual(AIChoices.title(.ollama, chosen: "", defaultModel: nil), "Choose a model")
+        XCTAssertEqual(AIChoices.title(.local, chosen: "", defaultModel: nil), "Choose a model")
         XCTAssertEqual(AIChoices.title(.compatible, chosen: "", defaultModel: nil), "Choose a model")
         XCTAssertEqual(AIChoices.options(.compatible, chosen: "by-hand", defaultModel: nil, listed: nil).map(\.id),
                        ["by-hand"])
@@ -104,7 +128,7 @@ final class AIChoicesTests: XCTestCase {
     /// The models are asked for without a person pressing only where no refusal is foreseen.
     func testWhenTheModelsCanBeAskedFor() {
         let none = SecretSources()
-        XCTAssertTrue(AIChoices.canList(.ollama, kept: [], preferences: F.preferences(provider: "ollama"),
+        XCTAssertTrue(AIChoices.canList(.local, kept: [], preferences: F.preferences(provider: "local"),
                                         sources: none))
         XCTAssertFalse(AIChoices.canList(.compatible, kept: [], preferences: F.preferences(provider: "compatible"),
                                          sources: none), "no URL yet")
@@ -122,16 +146,17 @@ final class AIChoicesTests: XCTestCase {
         XCTAssertFalse(AIChoices.canList(.gemini, kept: nil, preferences: nil, sources: none), "not read yet")
     }
 
-    /// Ollama's URL is shown filled in; kept as typed, its own is "" so it goes on following the server's default.
+    /// A model on this Mac's URL is shown filled in, Ollama's; kept as typed, that one is "", so it goes on
+    /// following the provider's default.
     func testTheServicesURL() {
-        XCTAssertEqual(AIChoices.shownURL(.ollama, preferences: F.preferences(provider: "ollama")),
+        XCTAssertEqual(AIChoices.shownURL(.local, preferences: F.preferences(provider: "local")),
                        "http://127.0.0.1:11434/v1")
         XCTAssertEqual(AIChoices.shownURL(.compatible, preferences: F.preferences(provider: "compatible")), "")
-        XCTAssertEqual(AIChoices.shownURL(.ollama, preferences: F.preferences(provider: "ollama",
+        XCTAssertEqual(AIChoices.shownURL(.local, preferences: F.preferences(provider: "local",
                                                                               baseURL: "http://localhost:9999/v1")),
                        "http://localhost:9999/v1")
-        XCTAssertEqual(AIChoices.url(typed: " http://127.0.0.1:11434/v1 ", provider: .ollama), "")
-        XCTAssertEqual(AIChoices.url(typed: "http://localhost:9999/v1", provider: .ollama), "http://localhost:9999/v1")
+        XCTAssertEqual(AIChoices.url(typed: " http://127.0.0.1:11434/v1 ", provider: .local), "")
+        XCTAssertEqual(AIChoices.url(typed: "http://localhost:9999/v1", provider: .local), "http://localhost:9999/v1")
         XCTAssertEqual(AIChoices.url(typed: "https://ai.example.test/v1\n", provider: .compatible),
                        "https://ai.example.test/v1")
     }
@@ -147,9 +172,27 @@ final class AIWordsTests: XCTestCase {
         XCTAssertTrue(AIWords.privacy(.openai).contains("goes to OpenAI only"))
         XCTAssertTrue(AIWords.privacy(.gemini).contains("goes to Google only"))
         XCTAssertTrue(AIWords.privacy(.compatible).contains("goes to the service at the URL you gave only"))
-        XCTAssertTrue(AIWords.privacy(.ollama).hasPrefix("With Ollama, nothing leaves this Mac"))
+        XCTAssertEqual(AIWords.privacy(.local), """
+            The model runs on this Mac, so the text of a message never leaves it: it goes to your model server, \
+            here, only when it is summarized, briefed or drafted.
+            """)
+        XCTAssertTrue(AIWords.privacy(.compatible, url: "http://localhost:8080/v1").contains("never leaves it"),
+                      "a compatible service answering on this Mac keeps the text here too")
+        XCTAssertTrue(AIWords.privacy(.compatible, url: "https://ai.example.test/v1").contains("goes to the service"))
         for provider in API.AiProvider.allCases where provider != .anthropic {
             XCTAssertFalse(AIWords.privacy(provider).contains("Anthropic"), "\(provider)")
+        }
+    }
+
+    /// On this Mac is http or https at 127.0.0.1, ::1 or localhost, as the core holds a model on this Mac to.
+    func testWhatIsOnThisMac() {
+        for url in ["http://127.0.0.1:11434/v1", "https://localhost:1234/v1", "http://[::1]:8080/v1",
+                    " HTTP://LOCALHOST/v1 "] {
+            XCTAssertTrue(AIWords.onThisMac(url), url)
+        }
+        for url in ["", "https://ai.example.test/v1", "http://127.0.0.2:11434/v1", "ftp://localhost/v1",
+                    "http://localhost.example.test/v1", "127.0.0.1:11434"] {
+            XCTAssertFalse(AIWords.onThisMac(url), url)
         }
     }
 
@@ -166,7 +209,7 @@ final class AIWordsTests: XCTestCase {
                        "AI is off: there is no OpenAI API key.")
         XCTAssertEqual(AIWords.standing(F.digest(engine: "none", provider: "compatible", off: "no-url").ai).text,
                        "AI is off: the service has no URL.")
-        XCTAssertEqual(AIWords.standing(F.digest(engine: "none", provider: "ollama", off: "no-model").ai).text,
+        XCTAssertEqual(AIWords.standing(F.digest(engine: "none", provider: "local", off: "no-model").ai).text,
                        "AI is off: no model is chosen.")
     }
 
@@ -180,7 +223,7 @@ final class AIWordsTests: XCTestCase {
         XCTAssertEqual(key?.fix, "To turn it on, keep a Gemini API key in Settings › AI.")
         XCTAssertEqual(AIWords.offNote(F.digest(engine: "none", provider: "compatible", off: "no-url").ai)?.fix,
                        "To turn it on, give the service’s URL in Settings › AI.")
-        XCTAssertEqual(AIWords.offNote(F.digest(engine: "none", provider: "ollama", off: "no-model").ai)?.fix,
+        XCTAssertEqual(AIWords.offNote(F.digest(engine: "none", provider: "local", off: "no-model").ai)?.fix,
                        "To turn it on, choose a model in Settings › AI.")
     }
 

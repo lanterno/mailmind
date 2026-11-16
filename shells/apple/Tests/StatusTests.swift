@@ -73,14 +73,14 @@ final class StatusWordsTests: XCTestCase {
     func testTheLineOnAINamesTheProviderChosen() {
         XCTAssertEqual(StatusWords.ai(F.digest(spent: nil, provider: "openai", model: "gpt-fictional").ai).text,
                        "OpenAI · gpt-fictional")
-        XCTAssertEqual(StatusWords.ai(F.digest(spent: nil, provider: "ollama", model: "llama-fictional").ai).text,
-                       "Ollama · llama-fictional")
+        XCTAssertEqual(StatusWords.ai(F.digest(spent: nil, provider: "local", model: "llama-fictional").ai).text,
+                       "A model on this Mac · llama-fictional")
         XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "gemini").ai).text,
                        "AI is off · no Gemini API key")
         XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", off: "turned-off").ai).text, "AI mode is off")
         XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "compatible", off: "no-url").ai).text,
                        "AI is off · no URL for the service")
-        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "ollama", off: "no-model").ai).text,
+        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "local", off: "no-model").ai).text,
                        "AI is off · no model chosen")
     }
 

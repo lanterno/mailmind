@@ -277,28 +277,25 @@ final class SettingsCoreTests: XCTestCase {
         await close(core, status)
     }
 
-    /// Each provider's key is kept on its own, Ollama takes none, and the pane's choices reach the core as it keeps
-    /// them: another provider starts from its own model and URL.
+    /// Each provider's key is kept on its own, a model on this Mac's too, and the pane's choices reach the core as it
+    /// keeps them: another provider starts from its own model and URL.
     @MainActor
     func testEachProvidersKeyAndTheChoicesTheCoreKeeps() async throws {
         let (core, status) = try await opened()
         let openAI = "sk-openai-fictional-0002"
         let kept = try await SecretPost.post(core, API.Post.AiKey.self, API.KeyBody(key: openAI, provider: .openai))
         XCTAssertEqual(kept.kept, [.openai])
-        do {
-            _ = try await SecretPost.post(core, API.Post.AiKey.self, API.KeyBody(key: openAI, provider: .ollama))
-            XCTFail("Ollama takes no key")
-        } catch let problem as Problem {
-            XCTAssertEqual(problem.detail, "Ollama takes no key.")
-        }
-        await status.setPreferences(.init(aiModel: "gpt-fictional", aiProvider: .openai))?.value
+        let both = try await SecretPost.post(core, API.Post.AiKey.self,
+                                             API.KeyBody(key: "local-fictional-0003", provider: .local))
+        XCTAssertEqual(Set(both.kept), [.openai, .local], "a model server on this Mac may ask for a key")
+        await status.setPreferences(.init(aiEnabled: true, aiModel: "gpt-fictional", aiProvider: .openai))?.value
         XCTAssertEqual(status.preferences?.aiProvider, .openai)
         XCTAssertEqual(status.preferences?.aiModel, "gpt-fictional")
-        await status.setPreferences(AIChoices.choose(.ollama))?.value
-        XCTAssertEqual(status.preferences?.aiProvider, .ollama)
+        await status.setPreferences(AIChoices.choose(.local))?.value
+        XCTAssertEqual(status.preferences?.aiProvider, .local)
         XCTAssertEqual(status.preferences?.aiModel, "", "another provider starts from its own model")
-        XCTAssertEqual(status.digest?.ai.off, .noModel, "Ollama has no model of its own")
-        XCTAssertEqual(status.digest?.ai.provider, .ollama)
+        XCTAssertEqual(status.digest?.ai.off, .noModel, "a model on this Mac has no default")
+        XCTAssertEqual(status.digest?.ai.provider, .local)
         await status.setPreferences(.init(aiEnabled: false))?.value
         XCTAssertEqual(status.digest?.ai.off, .turnedOff)
         XCTAssertEqual(status.digest?.ai.engine, "none")

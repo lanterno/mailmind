@@ -194,7 +194,7 @@ final class MeadowDialogPictures: XCTestCase {
         }
     }
 
-    /// The AI pane (#49): on with Claude, OpenAI with its models listed, Ollama on this Mac waiting for a model, a
+    /// The AI pane (#49): on with Claude, OpenAI with its models listed, a model on this Mac waiting for a model, a
     /// compatible service with no URL, and turned off, where spending and writing ahead aren't shown.
     func testTheAIPaneOnAndOff() throws {
         func ai(_ preferences: API.Preferences, _ digest: API.Digest) -> AppStatus {
@@ -213,8 +213,8 @@ final class MeadowDialogPictures: XCTestCase {
         try draw("settings-ai-openai", size) { _ in
             OnPaper { AIPane(status: openAI, kept: [.openai], listed: listed) }
         }
-        let ollama = ai(F.preferences(provider: "ollama"), F.digest(engine: "none", provider: "ollama", off: "no-model"))
-        try draw("settings-ai-ollama", size) { _ in OnPaper { AIPane(status: ollama, kept: []) } }
+        let local = ai(F.preferences(provider: "local"), F.digest(engine: "none", provider: "local", off: "no-model"))
+        try draw("settings-ai-local", size) { _ in OnPaper { AIPane(status: local, kept: []) } }
         let compatible = ai(F.preferences(provider: "compatible"),
                             F.digest(engine: "none", provider: "compatible", off: "no-url"))
         try draw("settings-ai-compatible", size) { _ in OnPaper { AIPane(status: compatible, kept: []) } }
