@@ -9,7 +9,7 @@ import { post } from "../lib/api/client";
 import { toast } from "../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useScreener } from "../features/curation";
-import { settingsOpen } from "../lib/settingsOpen";
+import { openSettings } from "../lib/settingsOpen";
 import { useFolders, useFoldersAcross, useLabels, useViews } from "../features/mailbox/data";
 import { FOLDER_ICON, labelQuery, roleLabel, type FolderInfo } from "../features/mailbox/rows";
 
@@ -34,7 +34,7 @@ function AccountSwitch({ accounts, aliases, current, down }: { accounts: string[
   const button = useRef<HTMLButtonElement>(null);
   useEffect(() => button.current?.setAttribute("title", `${name} — switch account`), [name]);   // React Aria's Button drops a title
   const choose = (a: string) => {
-    if (a === MANAGE) settingsOpen.set(true);
+    if (a === MANAGE) openSettings();
     else go({ source: a === ALL ? { kind: "allInboxes" } : { kind: "folder", account: a, folder: "INBOX" }, opened: null });
   };
   return (

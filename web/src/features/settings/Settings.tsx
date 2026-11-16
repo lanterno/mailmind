@@ -14,7 +14,8 @@ import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
 import { useDigest } from "../mailbox";
 import { syncNow } from "../status";
-import { settingsOpen } from "../../lib/settingsOpen";
+import { settingsOpen, settingsSection, type SettingsSection } from "../../lib/settingsOpen";
+import { AiForm } from "./Ai";
 import { PreferencesForm } from "./Preferences";
 import { Seg } from "./Seg";
 import { useStepBack } from "./useStepBack";
@@ -400,13 +401,12 @@ function Connections() {
   );
 }
 
-type Section = "connections" | "preferences";
-const SECTION_TITLE: Record<Section, string> = { connections: "Email connections", preferences: "Preferences" };
+const SECTION_TITLE: Record<SettingsSection, string> = { connections: "Email connections", preferences: "Preferences", ai: "AI" };
 
 function Home() {
-  const [section, setSection] = useState<Section>("connections");
+  const section = settingsSection.useValue();
   return (
-    <Tabs className="set-home" selectedKey={section} onSelectionChange={(k) => setSection(k as Section)}>
+    <Tabs className="set-home" selectedKey={section} onSelectionChange={(k) => settingsSection.set(k as SettingsSection)}>
       <div className="set-head">
         <div>
           <h3 id="setTitle">{SECTION_TITLE[section]}</h3>
@@ -417,9 +417,11 @@ function Home() {
       <TabList className="set-tabs" aria-label="Settings">
         <Tab id="connections" className="set-tab">Connections</Tab>
         <Tab id="preferences" className="set-tab">Preferences</Tab>
+        <Tab id="ai" className="set-tab">AI</Tab>
       </TabList>
       <TabPanel id="connections" className="set-panel"><Connections /></TabPanel>
       <TabPanel id="preferences" className="set-panel"><PreferencesForm /></TabPanel>
+      <TabPanel id="ai" className="set-panel"><AiForm /></TabPanel>
     </Tabs>
   );
 }

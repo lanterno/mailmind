@@ -1,0 +1,51 @@
+// The AI tab's rules, with no DOM (#49): what each provider asks of a person, what choosing another provider changes, what the
+// model menu offers and in what order, what a URL typed saves as, and how a key typed leaves the page.
+import type { AiProvider, PostAnswers, PostBodies } from "../../lib/api/types";
+import type { Store } from "../../lib/store";
+
+type Changes = PostBodies["/api/preferences"];
+type Kept = PostAnswers["/api/ai/key"];
+
+// What each provider asks of a person: a key (needed, optional or none) and where one is made; the URL it is reached at, which
+// a person gives for Ollama (its own, filled in) and for a compatible service (none until given), and Claude's and the rest
+// never; and whether it has a model of its own, or one must be chosen.
+interface Needs { key: "needed" | "optional" | "none"; keysAt?: string; url: string | null; ownModel: boolean }
+export const NEEDS: Record<AiProvider, Needs> = {
+  anthropic: { key: "needed", keysAt: "https://console.anthropic.com", url: null, ownModel: true },
+  openai: { key: "needed", keysAt: "https://platform.openai.com/api-keys", url: null, ownModel: true },
+  gemini: { key: "needed", keysAt: "https://aistudio.google.com/apikey", url: null, ownModel: true },
+  ollama: { key: "none", url: "http://127.0.0.1:11434/v1", ownModel: false },
+  compatible: { key: "optional", url: "", ownModel: false },
+};
+
+// Another provider: its own model and URL until a person chooses others, as the server sets them back.
+export const providerChanges = (provider: AiProvider): Changes => ({ ai_provider: provider, ai_model: "", ai_base_url: "" });
+
+export interface ModelChoice { value: string; label: string }
+
+// The model menu: the provider's own first, as "Default (its name)" ("Default" before the provider has said), then the models
+// it lists, and the one chosen where the list doesn't name it. With no model of its own, a menu with none chosen asks for one.
+export function modelChoices(listed: readonly string[], own: string | null | undefined, chosen: string): ModelChoice[] {
+  const first = own === null
+    ? chosen ? [] : [{ value: "", label: "Choose a model" }]
+    : [{ value: "", label: own ? `Default (${own})` : "Default" }];
+  const names = listed.filter((name) => name !== own || name === chosen);
+  if (chosen && !names.includes(chosen)) names.unshift(chosen);
+  return [...first, ...names.map((name) => ({ value: name, label: name }))];
+}
+
+// What a URL typed saves as: "" for the provider's own, filled in and left as it was, and no slash at its end, as the server
+// keeps it.
+export function urlToSave(typed: string, prefill: string): string {
+  const url = typed.trim().replace(/\/+$/, "");
+  return url === prefill.replace(/\/+$/, "") ? "" : url;
+}
+
+// The key typed, sent to be kept: it leaves the field as it goes, before any answer, so nothing on the page holds it after the
+// POST whatever the server says. Nothing is sent for an empty field.
+export async function keepKey(field: Store<string>, provider: AiProvider, send: (body: PostBodies["/api/ai/key"]) => Promise<Kept>): Promise<Kept | null> {
+  const key = field.get().trim();
+  field.set("");
+  if (!key) return null;
+  return await send({ provider, key });
+}
