@@ -370,6 +370,15 @@ def test_a_service_that_isnt_running_is_unreachable_and_status_says_it_couldnt_r
     assert assistant.status.report()["last_error"] == "couldn't reach it"
 
 
+def test_a_model_on_this_mac_at_an_ipv6_address_is_asked_there():
+    with fo.FakeOpenAI(key=None, host="::1") as api:
+        assert api.url.startswith("http://[::1]:")
+        model = ChatModel("local", api.url, "", "llama3.3", retries=0)
+        assert model.complete(Prompt("Hi.", "llama3.3", 100)).text == fo.STUB_TEXT
+        assert list_models("local", api.url, "") == list(fo.MODELS)
+        assert [r.headers["host"] for r in api.requests] == [api.url.removeprefix("http://").removesuffix("/v1")] * 2
+
+
 def test_the_adapter_alone_tries_a_refused_connection_again_only_as_told():
     model = ChatModel("local", f"http://127.0.0.1:{free_port()}/v1", "", "llama3.3", retries=0)
     with pytest.raises(ModelError, match="connection refused"):

@@ -3,6 +3,7 @@ a model on this Mac and any other compatible service through (mailmind.assistant
 in /v1 as OpenAI's does.
 
 It keeps every request it receives (method, path, headers and JSON body), in order, so a test can check what the app sent.
+It listens on 127.0.0.1, or the loopback address `host` names (::1).
 
 What it answers:
 - 401 with OpenAI's words, which quote part of the key back, unless the request carries KEY as an `Authorization: Bearer`
@@ -14,6 +15,7 @@ What it answers:
   or STUB_TEXT for a call without one, under the model it asked; and for GET /models, `models`.
 """
 import json
+import socket
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -86,7 +88,7 @@ def gemini_error(status, message, reason=None, kind="INVALID_ARGUMENT"):
 class FakeOpenAI:
     KEY = KEY
 
-    def __init__(self, key=KEY):
+    def __init__(self, key=KEY, host="127.0.0.1"):
         self.key = key                 # None: any request goes, as a model on this Mac may take them
         self.requests = []
         self.models = list(MODELS)
@@ -122,9 +124,10 @@ class FakeOpenAI:
 
         class Server(ThreadingHTTPServer):
             daemon_threads = True
+            address_family = socket.AF_INET6 if ":" in host else socket.AF_INET
 
-        self.httpd = Server(("127.0.0.1", 0), Handler)
-        self.url = f"http://127.0.0.1:{self.httpd.server_port}/v1"
+        self.httpd = Server((host, 0), Handler)
+        self.url = f"http://{f'[{host}]' if ':' in host else host}:{self.httpd.server_port}/v1"
         self._thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.05},
                                         name="fake-openai", daemon=True)
 
