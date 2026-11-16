@@ -5,7 +5,8 @@ file with no block goes on exactly as before and reading one writes nothing. A c
 of the file as it stands. The AI's daily limit is one more setting, but the file keeps it at the top level, as it always did
 ("ai_daily_limit_usd"), where the Assistant reads it. Whether AI is on, its provider, model and service URL are preferences like
 the rest (#49): "" for a model or URL is the provider's own, and choosing another provider sets the last one's model and URL back
-to "", unless the same change names them, so one provider's are never sent to another.
+to "", unless the same change names them, so one provider's are never sent to another. A model on this Mac is reached on this Mac
+alone: a URL elsewhere is refused for it, and one a hand edit gave it reads as its own.
 
 Each closed set is a `type`, so a request's schema takes it by name and the page has it as a type and keeps no list of its own.
 """
@@ -86,6 +87,7 @@ _REFUSALS = {"undo_send_seconds": f"the Undo Send window must be {send_window.SH
              "ai_model": f"the AI model must be up to {AI_MODEL_MAX} letters, digits and . _ : / @ + -",
              "ai_base_url": f"the AI service's URL must be https, or http on this Mac, in at most {AI_BASE_URL_MAX} "
                             "characters, with no user, password, query or fragment"}
+LOCAL_ELSEWHERE = "A model on this Mac must be at 127.0.0.1, ::1 or localhost."
 
 
 def _service_url(value: str) -> bool:
@@ -101,6 +103,19 @@ def _service_url(value: str) -> bool:
     if "@" in parts.netloc or not parts.hostname:
         return False
     return parts.scheme == "https" or (parts.scheme == "http" and parts.hostname in LOOPBACK)
+
+
+def _on_this_mac(url: str) -> bool:
+    """Whether a URL that can be a service's names this Mac."""
+    try:
+        return urlsplit(url).hostname in LOOPBACK
+    except ValueError:
+        return False
+
+
+def _here_for_local(prefs: Mapping[str, Any]) -> bool:
+    """Whether the provider and URL go together: a model on this Mac only at a URL on this Mac, or at its own."""
+    return prefs["ai_provider"] != "local" or not prefs["ai_base_url"] or _on_this_mac(prefs["ai_base_url"])
 
 
 def _kept(name: str, value: Any) -> Any:
@@ -139,15 +154,18 @@ def said(raw: Mapping[str, Any], name: str) -> Any:
 def read(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Every preference as it stands: what the file says where that can be it, and else the default. It never raises."""
     there = _block_of(raw)
-    return {name: _kept(name, there[name]) if name in there and _takes(name, there[name]) else default
-            for name, default in DEFAULTS.items()}
+    prefs = {name: _kept(name, there[name]) if name in there and _takes(name, there[name]) else default
+             for name, default in DEFAULTS.items()}
+    if not _here_for_local(prefs):
+        prefs["ai_base_url"] = DEFAULTS["ai_base_url"]
+    return prefs
 
 
 def changes(asked: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Of what a person asked, what is a preference, or why not: one value no preference can be refuses the whole request, so a
     change is all or nothing. A name that is no preference is ignored, as a request's other unknown names are. Choosing a
     provider other than the one the file `raw` holds sets its model and URL back to the provider's own, where the change doesn't
-    name them."""
+    name them. A model on this Mac at a URL elsewhere is refused, whichever of the two the change names."""
     wanted: dict[str, Any] = {}
     for name, value in asked.items():
         if name != AI_DAILY_LIMIT and name not in DEFAULTS:
@@ -155,9 +173,12 @@ def changes(asked: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -> d
         if not _takes(name, value):
             raise Refused(_REFUSALS.get(name, f"{name} can't be that"))
         wanted[name] = _kept(name, value)
-    if "ai_provider" in wanted and wanted["ai_provider"] != read(raw or {})["ai_provider"]:
+    now = read(raw or {})
+    if "ai_provider" in wanted and wanted["ai_provider"] != now["ai_provider"]:
         for name in _FOLLOW_PROVIDER:
             wanted.setdefault(name, "")
+    if not _here_for_local({**now, **wanted}):
+        raise Refused(LOCAL_ELSEWHERE)
     return wanted
 
 
