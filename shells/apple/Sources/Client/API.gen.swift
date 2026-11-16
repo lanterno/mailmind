@@ -309,7 +309,23 @@ extension API {
         }
     }
 
-    /// `Status.report`: how AI stands, with no call made.
+    public enum AiOff: String, Codable, Hashable, Sendable, CaseIterable {
+        case turnedOff = "turned-off"
+        case noKey = "no-key"
+        case noModel = "no-model"
+        case noUrl = "no-url"
+    }
+
+    public enum AiProvider: String, Codable, Hashable, Sendable, CaseIterable {
+        case anthropic
+        case openai
+        case gemini
+        case ollama
+        case compatible
+    }
+
+    /// `Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
+    /// is on).
     public struct AiStatus: Codable, Hashable, Sendable {
         public var batchWaiting: Int?
         public var engine: String
@@ -319,9 +335,11 @@ extension API {
         public var lastTs: Int
         public var limitMicros: Int
         public var model: String
+        public var off: AiOff?
+        public var provider: AiProvider
         public var spentTodayMicros: Int?
 
-        public init(batchWaiting: Int? = nil, engine: String, keyFrom: String, lastError: String? = nil, lastOk: Bool? = nil, lastTs: Int, limitMicros: Int, model: String, spentTodayMicros: Int? = nil) {
+        public init(batchWaiting: Int? = nil, engine: String, keyFrom: String, lastError: String? = nil, lastOk: Bool? = nil, lastTs: Int, limitMicros: Int, model: String, off: AiOff? = nil, provider: AiProvider, spentTodayMicros: Int? = nil) {
             self.batchWaiting = batchWaiting
             self.engine = engine
             self.keyFrom = keyFrom
@@ -330,6 +348,8 @@ extension API {
             self.lastTs = lastTs
             self.limitMicros = limitMicros
             self.model = model
+            self.off = off
+            self.provider = provider
             self.spentTodayMicros = spentTodayMicros
         }
 
@@ -342,6 +362,8 @@ extension API {
             case lastTs = "last_ts"
             case limitMicros = "limit_micros"
             case model
+            case off
+            case provider
             case spentTodayMicros = "spent_today_micros"
         }
     }
@@ -789,7 +811,11 @@ extension API {
 
     /// What changes. What a request doesn't name keeps what it was, so two tabs can each change their own.
     public struct ChangedPreferences: Codable, Hashable, Sendable {
+        public var aiBaseUrl: String?
         public var aiDailyLimitUsd: Double?
+        public var aiEnabled: Bool?
+        public var aiModel: String?
+        public var aiProvider: AiProvider?
         public var autoTidy: Bool?
         public var conversations: Bool?
         public var density: Density?
@@ -812,8 +838,12 @@ extension API {
         public var undoSendSeconds: Int?
         public var weeklyReview: Bool?
 
-        public init(aiDailyLimitUsd: Double? = nil, autoTidy: Bool? = nil, conversations: Bool? = nil, density: Density? = nil, draftTone: DraftTone? = nil, guideOffered: Bool? = nil, highContrast: Bool? = nil, mailColors: MailColors? = nil, morningBrief: Bool? = nil, notifyMeetings: Bool? = nil, notifyNewMail: Bool? = nil, quietFrom: String? = nil, quietHours: Bool? = nil, quietUntil: String? = nil, readFont: ReadFont? = nil, readSize: ReadSize? = nil, readWidth: ReadWidth? = nil, searchScope: SearchScope? = nil, singleKeys: Bool? = nil, theme: Theme? = nil, undoSendSeconds: Int? = nil, weeklyReview: Bool? = nil) {
+        public init(aiBaseUrl: String? = nil, aiDailyLimitUsd: Double? = nil, aiEnabled: Bool? = nil, aiModel: String? = nil, aiProvider: AiProvider? = nil, autoTidy: Bool? = nil, conversations: Bool? = nil, density: Density? = nil, draftTone: DraftTone? = nil, guideOffered: Bool? = nil, highContrast: Bool? = nil, mailColors: MailColors? = nil, morningBrief: Bool? = nil, notifyMeetings: Bool? = nil, notifyNewMail: Bool? = nil, quietFrom: String? = nil, quietHours: Bool? = nil, quietUntil: String? = nil, readFont: ReadFont? = nil, readSize: ReadSize? = nil, readWidth: ReadWidth? = nil, searchScope: SearchScope? = nil, singleKeys: Bool? = nil, theme: Theme? = nil, undoSendSeconds: Int? = nil, weeklyReview: Bool? = nil) {
+            self.aiBaseUrl = aiBaseUrl
             self.aiDailyLimitUsd = aiDailyLimitUsd
+            self.aiEnabled = aiEnabled
+            self.aiModel = aiModel
+            self.aiProvider = aiProvider
             self.autoTidy = autoTidy
             self.conversations = conversations
             self.density = density
@@ -838,7 +868,11 @@ extension API {
         }
 
         enum CodingKeys: String, CodingKey {
+            case aiBaseUrl = "ai_base_url"
             case aiDailyLimitUsd = "ai_daily_limit_usd"
+            case aiEnabled = "ai_enabled"
+            case aiModel = "ai_model"
+            case aiProvider = "ai_provider"
             case autoTidy = "auto_tidy"
             case conversations
             case density
@@ -2495,12 +2529,25 @@ extension API {
         }
     }
 
-    /// The Claude API key, as typed or pasted.
+    /// An AI provider's API key, as typed or pasted.
     public struct KeyBody: Codable, Hashable, Sendable {
         public var key: String
+        public var provider: AiProvider
 
-        public init(key: String) {
+        public init(key: String, provider: AiProvider) {
             self.key = key
+            self.provider = provider
+        }
+    }
+
+    /// Each AI provider whose key the config names, in the providers' order: never a key, how long, or any part of it.
+    public struct KeysKept: Codable, Hashable, Sendable {
+        public var kept: [AiProvider]
+        public var ok: Bool
+
+        public init(kept: [AiProvider], ok: Bool) {
+            self.kept = kept
+            self.ok = ok
         }
     }
 
@@ -2757,6 +2804,20 @@ extension API {
         /// The keys it names, and those it requires, which a union's decoding goes by.
         static let named: Set<String> = ["account", "attachments", "blocked_css_urls", "blocked_images", "cc", "date", "draft_id", "draft_mode", "folder", "from_addr", "from_name", "has_html", "html", "in_reply_to", "invite", "invite_part", "is_draft", "key", "message_id", "ok", "references", "reply_to", "sender", "subject", "text", "thread_id", "to", "uid"]
         static let required: Set<String> = ["account", "attachments", "blocked_css_urls", "blocked_images", "cc", "date", "folder", "from_addr", "from_name", "has_html", "html", "in_reply_to", "invite", "invite_part", "key", "message_id", "ok", "references", "reply_to", "sender", "subject", "text", "thread_id", "to", "uid"]
+    }
+
+    /// The models a provider lists that a person may choose, sorted, and the one it asks unless they choose (None where they
+    /// must).
+    public struct ModelList: Codable, Hashable, Sendable {
+        public var `default`: String?
+        public var models: [String]
+        public var ok: Bool
+
+        public init(`default`: String? = nil, models: [String], ok: Bool) {
+            self.`default` = `default`
+            self.models = models
+            self.ok = ok
+        }
     }
 
     public struct MoveBody: Codable, Hashable, Sendable {
@@ -3542,7 +3603,11 @@ extension API {
 
     /// Every preference, as it stands: what the file says, or the default.
     public struct Preferences: Codable, Hashable, Sendable {
+        public var aiBaseUrl: String
         public var aiDailyLimitUsd: Double
+        public var aiEnabled: Bool
+        public var aiModel: String
+        public var aiProvider: AiProvider
         public var autoTidy: Bool
         public var conversations: Bool
         public var density: Density
@@ -3565,8 +3630,12 @@ extension API {
         public var undoSendSeconds: Int
         public var weeklyReview: Bool
 
-        public init(aiDailyLimitUsd: Double, autoTidy: Bool, conversations: Bool, density: Density, draftTone: DraftTone, guideOffered: Bool, highContrast: Bool, mailColors: MailColors, morningBrief: Bool, notifyMeetings: Bool, notifyNewMail: Bool, quietFrom: String, quietHours: Bool, quietUntil: String, readFont: ReadFont, readSize: ReadSize, readWidth: ReadWidth, searchScope: SearchScope, singleKeys: Bool, theme: Theme, undoSendSeconds: Int, weeklyReview: Bool) {
+        public init(aiBaseUrl: String, aiDailyLimitUsd: Double, aiEnabled: Bool, aiModel: String, aiProvider: AiProvider, autoTidy: Bool, conversations: Bool, density: Density, draftTone: DraftTone, guideOffered: Bool, highContrast: Bool, mailColors: MailColors, morningBrief: Bool, notifyMeetings: Bool, notifyNewMail: Bool, quietFrom: String, quietHours: Bool, quietUntil: String, readFont: ReadFont, readSize: ReadSize, readWidth: ReadWidth, searchScope: SearchScope, singleKeys: Bool, theme: Theme, undoSendSeconds: Int, weeklyReview: Bool) {
+            self.aiBaseUrl = aiBaseUrl
             self.aiDailyLimitUsd = aiDailyLimitUsd
+            self.aiEnabled = aiEnabled
+            self.aiModel = aiModel
+            self.aiProvider = aiProvider
             self.autoTidy = autoTidy
             self.conversations = conversations
             self.density = density
@@ -3591,7 +3660,11 @@ extension API {
         }
 
         enum CodingKeys: String, CodingKey {
+            case aiBaseUrl = "ai_base_url"
             case aiDailyLimitUsd = "ai_daily_limit_usd"
+            case aiEnabled = "ai_enabled"
+            case aiModel = "ai_model"
+            case aiProvider = "ai_provider"
             case autoTidy = "auto_tidy"
             case conversations
             case density
@@ -3696,6 +3769,15 @@ extension API {
         enum CodingKeys: String, CodingKey {
             case cid
             case contentType = "content_type"
+        }
+    }
+
+    /// An AI provider, whose key is taken out.
+    public struct ProviderBody: Codable, Hashable, Sendable {
+        public var provider: AiProvider
+
+        public init(provider: AiProvider) {
+            self.provider = provider
         }
     }
 
@@ -6588,6 +6670,8 @@ extension API {
         public enum AiDraftAhead {}
         /// GET /api/ai/key
         public enum AiKey {}
+        /// GET /api/ai/models
+        public enum AiModels {}
         /// GET /api/audit
         public enum Audit {}
         /// GET /api/briefing
@@ -6826,7 +6910,9 @@ extension API {
     /// The limits the page holds a person to, each the server's own (mailmind/http/page_limits.py): a request that
     /// would name more is sent as more requests, and a setting past one is refused before it is asked.
     public enum Limits {
+        public static let aiBaseUrlChars = 500
         public static let aiDailyLimitUsd = 1000
+        public static let aiModelChars = 200
         public static let attachBytes = 26214400
         public static let bulkRows = 500
         public static let instructionChars = 400
@@ -6865,7 +6951,12 @@ extension API.Get.AiDraftAhead: GetRoute {
 
 extension API.Get.AiKey: GetRoute {
     public static let path = "/api/ai/key"
-    public typealias Answer = API.Kept
+    public typealias Answer = API.KeysKept
+}
+
+extension API.Get.AiModels: GetRoute {
+    public static let path = "/api/ai/models"
+    public typealias Answer = API.ModelList
 }
 
 extension API.Get.Audit: GetRoute {
@@ -7152,14 +7243,14 @@ extension API.Post.AiExtract: PostRoute {
 
 extension API.Post.AiKey: PostRoute {
     public static let path = "/api/ai/key"
-    public typealias Answer = API.Kept
+    public typealias Answer = API.KeysKept
     public typealias Body = API.KeyBody
 }
 
 extension API.Post.AiKeyClear: PostRoute {
     public static let path = "/api/ai/key/clear"
-    public typealias Answer = API.Kept
-    public typealias Body = API.NoBody
+    public typealias Answer = API.KeysKept
+    public typealias Body = API.ProviderBody
 }
 
 extension API.Post.AiRewrite: PostRoute {
