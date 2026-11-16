@@ -33,7 +33,9 @@ def hello(build):
 TOPICS = frozenset({
     "sync-done",          # a sync finished for an account
     "new-mail",           # it brought new mail into INBOX
-    "reconcile",          # rows of mail gone from the server went, in `folder` if it names one
+    "reconcile",          # rows of mail gone from the server went, in `folder` if it names one; or an account was
+                          # removed (`removed`), and its mail left the lists (`pruned`: how many copies this Mac let
+                          # go of it)
     "flags-changed",      # a sync found mail read, starred or answered elsewhere, in `folder`
     "folder-synced",      # the first scan of a folder ended (ok: whether it read the folder)
     "snooze-wake",        # snoozed mail came back

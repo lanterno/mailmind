@@ -23,6 +23,7 @@ from mailmind.http.schemas.accounts import (
 from mailmind.http.schemas.common import answers
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
+from mailmind.platform import sse
 
 
 def router(accounts, mailbox):
@@ -67,6 +68,12 @@ def router(accounts, mailbox):
 
     @r.post("/api/accounts/delete", responses=answers(Removed))
     def delete(body: RemoveBody):
-        return change("delete", body.model_dump(exclude_unset=True))
+        """Its mail has left every list then, and with `delete_mail` this Mac: the open tabs hear so as mail gone from a
+        server is told (`reconcile`, how many copies went, and `removed`: the account is no more, so its own lists are
+        not read again), and the rail's badges are read again."""
+        removed = change("delete", body.model_dump(exclude_unset=True))
+        mailbox.folders.invalidate()
+        sse.publish("reconcile", {"account": removed["removed"], "pruned": removed.get("mail_deleted", 0), "removed": True})
+        return removed
 
     return r
