@@ -164,8 +164,15 @@ def test_a_value_it_doesnt_take_is_said_once(monkeypatch):
     assert len(said) == 2
 
 
-@pytest.mark.parametrize("value, want", [(None, None), ("", None), ("claude-haiku-5-5", "claude-haiku-5-5")])
+@pytest.mark.parametrize("value, want", [(None, None), ("", None), (" Mail Bridge ", " Mail Bridge ")])
 def test_text_is_as_set_and_empty_is_none(value, want):
+    env = {} if value is None else {"MAILMIND_PROTON_OP_ITEM": value}
+    assert environment.PROTON_OP_ITEM.value(env) == want
+
+
+@pytest.mark.parametrize("value, want", [(None, None), ("", None), ("   ", None), ("\t\n", None),
+                                         ("claude-haiku-5-5", "claude-haiku-5-5"), (" claude-haiku-5-5\n", "claude-haiku-5-5")])
+def test_the_model_is_read_without_the_spaces_around_it_and_a_blank_one_is_unset(value, want):
     env = {} if value is None else {"MAILMIND_MODEL": value}
     assert environment.MODEL.value(env) == want
 
