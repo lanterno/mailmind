@@ -4,7 +4,8 @@ import json
 
 import pytest
 
-from mailmind.assistant.domain.providers import PROVIDERS, chat_models, in_force, on_loopback, sendable, unkeyed
+from mailmind.assistant.domain.providers import (PROVIDERS, background_model, chat_models, in_force, on_loopback, sendable,
+                                                 unkeyed)
 from mailmind.kernel.ai_provider import AI_PROVIDERS
 
 KEY = "sk-test-not-a-real-key"
@@ -33,6 +34,28 @@ def test_a_provider_with_a_key_is_on_with_its_own_model_and_url_unless_another_i
                                                                KEY, "mailmind.config.json")
     chosen = engine(provider, model="my-model", base_url="https://proxy.example.test/v1")
     assert (chosen.off, chosen.model, chosen.base_url) == (None, "my-model", "https://proxy.example.test/v1")
+
+
+@pytest.mark.parametrize("provider, small", [("anthropic", "claude-haiku-5-5"), ("openai", "gpt-6-luna"),
+                                             ("gemini", "gemini-3.5-flash-lite")])
+def test_background_summaries_ask_the_providers_small_model_whatever_model_is_chosen(provider, small):
+    assert background_model(provider, "") == small
+    assert background_model(provider, "my-model") == small
+    assert (engine(provider).background_model, engine(provider, model="my-model").background_model) == (small, small)
+
+
+@pytest.mark.parametrize("provider", ["local", "compatible"])
+def test_a_model_on_this_mac_or_a_compatible_service_summarizes_with_the_model_chosen(provider):
+    assert background_model(provider, "llama-4") == "llama-4"
+    e = engine(provider, model="llama-4", base_url="http://127.0.0.1:11434/v1")
+    assert (e.model, e.background_model) == ("llama-4", "llama-4")
+
+
+def test_a_model_every_feature_asks_is_asked_for_background_summaries_too():
+    assert background_model("anthropic", "claude-sonnet-5-5", every="claude-opus-5") == "claude-opus-5"
+    e = in_force(enabled=True, provider="anthropic", model="claude-sonnet-5-5", base_url="", key=KEY, key_from="",
+                 every="claude-opus-5")
+    assert (e.model, e.background_model) == ("claude-opus-5", "claude-opus-5")
 
 
 def test_turned_off_wins_over_every_other_reason():

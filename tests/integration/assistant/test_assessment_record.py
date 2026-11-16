@@ -52,7 +52,7 @@ def test_triage_keeps_the_model_that_served_it_and_the_label_as_it_was(world, ai
     _, out = fa.answer({"summary": "Said once.", "importance": 9, "category": "info", "action": "Reply"})
     ai.queue((200, {**out, "model": OTHER}))
     assert assistant.assessments.summarize_pending(limit=1, workers=1) == 1
-    assert kept() == [Assessment("Said once.", 5, "info", "Reply", assistant.calls.model_label(), OTHER,
+    assert kept() == [Assessment("Said once.", 5, "info", "Reply", assistant.calls.background_label(), OTHER,
                                  prompts.TRIAGE.version, "assessed")]
 
 

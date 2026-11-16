@@ -7,6 +7,7 @@
     "cy@example.test"
    ],
    "ai": {
+    "background_model": "claude-haiku-5-5",
     "engine": "api",
     "key_from": "ANTHROPIC_API_KEY",
     "last_error": "",
@@ -67,6 +68,7 @@
  {
   "note": "ai after a good call",
   "value": {
+   "background_model": "claude-haiku-5-5",
    "engine": "api",
    "key_from": "ANTHROPIC_API_KEY",
    "last_error": "",
@@ -82,6 +84,7 @@
  {
   "note": "ai after a failed call",
   "value": {
+   "background_model": "claude-haiku-5-5",
    "engine": "api",
    "key_from": "ANTHROPIC_API_KEY",
    "last_error": "the API answered 400",

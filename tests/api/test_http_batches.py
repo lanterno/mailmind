@@ -166,7 +166,7 @@ def test_a_batch_takes_only_its_share_of_what_the_daily_limit_leaves(app, golden
     with app.stopped():
         with open(world.dir / "mailmind.config.json") as f:
             config = json.load(f)
-        config["ai_daily_limit_usd"] = 0.1
+        config["ai_daily_limit_usd"] = 0.0025          # what ten of the small model's requests are estimated at, twice over
         with open(world.dir / "mailmind.config.json", "w") as f:
             json.dump(config, f)
     ai.requests.clear()

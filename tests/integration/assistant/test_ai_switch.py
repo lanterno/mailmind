@@ -132,17 +132,37 @@ def test_another_provider_is_asked_in_claudes_place_by_the_jobs_too(app, openai,
 
 def test_the_claude_model_mailmind_model_names_is_asked_only_while_claude_is_the_provider(app, world, ai, openai_api,
                                                                                          fake_keychain, monkeypatch):
-    monkeypatch.setattr(assistant.calls, "MODEL", "claude-haiku-5-5")
+    monkeypatch.setattr(assistant.calls, "MODEL", "claude-sonnet-5")
     assert app.post("/api/preferences", {"ai_model": "claude-sonnet-5-5"}).status == 200
     assert assistant.assessments.summarize_pending(limit=1, workers=1) == 1
-    assert ai.requests[-1].body["model"] == "claude-haiku-5-5"
-    assert app.get("/api/digest").json["ai"]["model"] == "claude-haiku-5-5"
+    assert ai.requests[-1].body["model"] == "claude-sonnet-5"           # background summaries too
+    ai_said = app.get("/api/digest").json["ai"]
+    assert (ai_said["model"], ai_said["background_model"]) == ("claude-sonnet-5", "claude-sonnet-5")
     assert app.post("/api/preferences", {"ai_provider": "openai", "ai_base_url": openai_api.url}).status == 200
     assert app.post("/api/ai/key", {"provider": "openai", "key": fo.KEY}).status == 200
     assert assistant.assessments.summarize_pending(limit=1, workers=1) == 1
     assert app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"}).status == 200
-    assert [r.body["model"] for r in openai_api.chats] == ["gpt-6.1-sol"] * 2
-    assert app.get("/api/digest").json["ai"]["model"] == "gpt-6.1-sol"
+    assert [r.body["model"] for r in openai_api.chats] == ["gpt-6-luna", "gpt-6.1-sol"]
+    ai_said = app.get("/api/digest").json["ai"]
+    assert (ai_said["model"], ai_said["background_model"]) == ("gpt-6.1-sol", "gpt-6-luna")
+
+
+def test_background_summaries_ask_claudes_small_model_and_a_persons_asks_the_one_chosen(app, world, ai, monkeypatch):
+    monkeypatch.setattr(assistant.calls, "MODEL", None)
+    assert app.post("/api/preferences", {"ai_model": "claude-sonnet-5-5"}).status == 200
+    assert assistant.assessments.summarize_pending(limit=1, workers=1) == 1
+    assert ai.requests[-1].body["model"] == "claude-haiku-5-5"
+    assert app.post("/api/ai/summarize", world.copy(LUNCH)).status == 200
+    assert ai.requests[-1].body["model"] == "claude-sonnet-5-5"
+    ai_said = app.get("/api/digest").json["ai"]
+    assert (ai_said["model"], ai_said["background_model"]) == ("claude-sonnet-5-5", "claude-haiku-5-5")
+
+
+def test_a_backlog_goes_as_a_batch_to_the_small_model(app, world, ai, monkeypatch):
+    monkeypatch.setattr(assistant.calls, "MODEL", None)
+    assert assistant.assessments.batch_submit(at_least=1, keep=0) > 0
+    [batch] = ai.batches.values()
+    assert {r["params"]["model"] for r in batch["requests"]} == {"claude-haiku-5-5"}
 
 
 def test_a_backlog_never_goes_as_a_batch_to_another_provider(app, openai, ai, monkeypatch):

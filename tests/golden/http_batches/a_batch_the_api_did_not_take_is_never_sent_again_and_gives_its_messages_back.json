@@ -29,7 +29,7 @@
     "feature": "triage",
     "input_tokens": 0,
     "last_ts": 1793620800,
-    "model": "claude-opus-5-5",
+    "model": "claude-haiku-5-5",
     "outcome": "ok",
     "output_tokens": 0,
     "served": "claude-opus-5-5"
@@ -41,7 +41,7 @@
     "feature": "triage-batch",
     "input_tokens": 0,
     "last_ts": 1793620800,
-    "model": "claude-opus-5-5",
+    "model": "claude-haiku-5-5",
     "outcome": "failed",
     "output_tokens": 0,
     "served": ""

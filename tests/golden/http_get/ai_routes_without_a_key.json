@@ -169,6 +169,7 @@
     "cy@example.test"
    ],
    "ai": {
+    "background_model": "",
     "engine": "none",
     "key_from": "",
     "last_error": "",
