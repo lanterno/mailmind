@@ -2,7 +2,9 @@
 // and URL), what it may spend and what it writes ahead. Each choice saves on its own, as Preferences' do, and the digest is
 // read again so the page shows what is now in force. A key goes to the server once, which keeps it in the login Keychain, and
 // never comes back: the page says only whether one is kept. The provider is asked for its models only while this tab is open
-// with AI mode on, and again as a person acts here (chooses it, keeps a key, gives a URL, asks again), never on its own.
+// with AI mode on, and again as a person acts here (chooses it, keeps a key, gives a URL, asks again), never on its own. For a
+// model on this Mac, the servers running one here are looked for in its place, as it is picked and when asked to look again,
+// and picking one of their models sets the server's URL and the model together.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input, Label, NumberField } from "react-aria-components";
@@ -16,7 +18,7 @@ import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigest } from "../mailbox";
-import { aiParts, keepKey, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
+import { aiParts, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
 import { Check } from "./Check";
 import { useStepBack } from "./useStepBack";
 
@@ -73,7 +75,7 @@ function KeyField({ provider, kept, keptFrom, done }: { provider: AiProvider; ke
         <button type="button" className="set-mini" disabled={busy || !typed.trim()} onClick={() => void keep()}>{busy ? "Keeping…" : "Keep key"}</button>
       </div>
       <div className="set-help">
-        {needs.key === "optional" ? "Only if the service asks for one. " : ""}Kept in your login Keychain, never in a file.
+        {needs.key === "optional" ? `Only if your ${provider === "local" ? "server" : "service"} asks for one. ` : ""}Kept in your login Keychain, never in a file.
         {!kept && keptFrom ? ` MailMind is using the key in ${keptFrom} until you keep one here.` : ""}
       </div>
       {needs.keysAt && (
@@ -108,8 +110,8 @@ function ModelByHand({ chosen, use, back }: { chosen: string; use: (model: strin
   );
 }
 
-// The service's URL, filled in with the provider's own (Ollama's, for a model on this Mac): saved as a person leaves it, ""
-// where it is the provider's own.
+// The service's URL, filled in with the provider's own (for a model on this Mac, where Ollama answers): saved as a person
+// leaves it, "" where it is the provider's own.
 function UrlField({ saved, prefill, save }: { saved: string; prefill: string; save: (url: string) => void }) {
   const [typed, setTyped] = useState(saved || prefill);
   const commit = () => {
@@ -137,7 +139,7 @@ export function AiForm() {
   const qc = useQueryClient();
   const { data: digest } = useDigest();
   useStepBack();
-  const provider = p.ai_provider, needs = NEEDS[provider], name = PROVIDER_NAME[provider];
+  const provider = p.ai_provider, needs = NEEDS[provider], name = PROVIDER_NAME[provider], local = provider === "local";
   const [byHand, setByHand] = useState(false);
   // The provider and URL the server holds, which its models are asked by: a choice counts once it is saved.
   const [held, setHeld] = useState({ provider, url: p.ai_base_url });
@@ -150,8 +152,18 @@ export function AiForm() {
   const models = useQuery({
     queryKey: ["aiModels", held.provider, held.url, kept],
     queryFn: () => get(`/api/ai/models?provider=${held.provider}`),
-    enabled: current && keys.data !== undefined && wants === null && p.ai_enabled,
+    enabled: current && !local && keys.data !== undefined && wants === null && p.ai_enabled,
     staleTime: Infinity,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  // The model servers running on this Mac, looked for as a model on this Mac is picked or shown, and on Look again.
+  const found = useQuery({
+    queryKey: ["aiLocal"],
+    queryFn: () => get("/api/ai/local"),
+    enabled: local && p.ai_enabled,
+    staleTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -182,6 +194,20 @@ export function AiForm() {
   const askAgain = () => {
     void models.refetch();
   };
+  const chooseLocal = (value: string) => {
+    if (!value || value === CHOSEN_ELSEWHERE) return;
+    setByHand(false);
+    const changes = localPicked(value);
+    setPrefs(changes, () => {
+      setHeld({ provider, url: changes.ai_base_url ?? "" });
+      inForce();
+    });
+  };
+  const menu = localMenu(found.data?.servers ?? [], p.ai_base_url, p.ai_model);
+  let lookedFor = "";
+  if (found.isFetching) lookedFor = "Looking for model servers on this Mac…";
+  else if (found.isError) lookedFor = refusalOf(found.error)?.detail || "Couldn’t look for model servers on this Mac.";
+  else if (found.data) lookedFor = localFound(found.data.servers);
   const listedNow = current ? models.data : undefined;
   const own = listedNow ? listedNow.default : needs.ownModel ? undefined : null;
   const choices = modelChoices(listedNow?.models ?? [], own, p.ai_model);
@@ -204,25 +230,50 @@ export function AiForm() {
           <select id="aiProvider" value={provider} onChange={(e) => choose(e.target.value as AiProvider)}>
             {entries(PROVIDER_LABEL).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
-          {needs.key !== "none" && <KeyField key={provider} provider={provider} kept={kept} keptFrom={keptFrom} done={keysKept} />}
+          {!local && needs.key !== "none" && <KeyField key={provider} provider={provider} kept={kept} keptFrom={keptFrom} done={keysKept} />}
           <label className="lbl" htmlFor="aiModel">Model</label>
-          {byHand
-            ? <ModelByHand chosen={p.ai_model} use={chooseModel} back={() => setByHand(false)} />
-            : (
-              <div className="ai-row">
-                <select id="aiModel" value={p.ai_model} onChange={(e) => chooseModel(e.target.value)}>
-                  {choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
-                <button type="button" className="set-mini" aria-label="Ask the provider for its models again" title="Ask the provider for its models again" disabled={current && models.isFetching} onClick={askAgain}><Icon name="refresh" /></button>
-                <button type="button" className="set-mini" onClick={() => setByHand(true)}>Type a name</button>
-              </div>
-            )}
-          <div className="set-help" role="status">{listed}</div>
+          {byHand && <ModelByHand chosen={p.ai_model} use={chooseModel} back={() => setByHand(false)} />}
+          {!byHand && local && (
+            <div className="ai-row">
+              <select id="aiModel" value={menu.value} onChange={(e) => chooseLocal(e.target.value)}>
+                {menu.first && <option value={menu.first.value}>{menu.first.label}</option>}
+                {menu.groups.map((g) => (
+                  <optgroup key={g.url} label={g.name}>
+                    {g.models.length
+                      ? g.models.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)
+                      : <option value={`none ${g.url}`} disabled>No model to chat with yet</option>}
+                  </optgroup>
+                ))}
+              </select>
+              <button type="button" className="set-mini" disabled={found.isFetching} onClick={() => void found.refetch()}>Look again</button>
+              <button type="button" className="set-mini" onClick={() => setByHand(true)}>Type a name</button>
+            </div>
+          )}
+          {!byHand && !local && (
+            <div className="ai-row">
+              <select id="aiModel" value={p.ai_model} onChange={(e) => chooseModel(e.target.value)}>
+                {choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+              <button type="button" className="set-mini" aria-label="Ask the provider for its models again" title="Ask the provider for its models again" disabled={current && models.isFetching} onClick={askAgain}><Icon name="refresh" /></button>
+              <button type="button" className="set-mini" onClick={() => setByHand(true)}>Type a name</button>
+            </div>
+          )}
+          <div className="set-help" role="status">{local ? lookedFor : listed}</div>
           {needs.url !== null && (
             <>
-              <label className="lbl" htmlFor="aiUrl">The service’s URL</label>
+              <label className="lbl" htmlFor="aiUrl">{local ? "Your model server’s URL" : "The service’s URL"}</label>
               <UrlField key={`${provider}:${p.ai_base_url}`} saved={p.ai_base_url} prefill={needs.url} save={chooseUrl} />
-              <div className="set-help">{provider === "local" ? "Where your model server answers on this Mac: 127.0.0.1, ::1 or localhost." : "Where the service answers, up to /v1: https, or http on this Mac."}</div>
+              <div className="set-help">
+                {local
+                  ? "On this Mac only: 127.0.0.1, ::1 or localhost, up to /v1. Picking a model above fills it in."
+                  : "Where the service answers, up to /v1: https, or http on this Mac."}
+              </div>
+            </>
+          )}
+          {local && (
+            <>
+              <KeyField key={provider} provider={provider} kept={kept} keptFrom={keptFrom} done={keysKept} />
+              <div className="set-help">Long threads need room: give the model a context of at least 16K tokens in your model server’s settings.</div>
             </>
           )}
           <div className="set-help ai-standing" id="aiStanding" role="status">{aiStanding(ai)}</div>

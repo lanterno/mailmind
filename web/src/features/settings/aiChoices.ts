@@ -1,10 +1,12 @@
-// The AI tab's rules, with no DOM (#49): what it shows with AI mode off and on, what each provider asks of a person, what choosing another provider changes, what the
+// The AI tab's rules, with no DOM (#49): what it shows with AI mode off and on, what each provider asks of a person, the
+// models found on this Mac and what picking one changes, what choosing another provider changes, what the
 // model menu offers and in what order, what a URL typed saves as, and how a key typed leaves the page.
-import type { AiProvider, PostAnswers, PostBodies } from "../../lib/api/types";
+import type { AiProvider, GetAnswers, PostAnswers, PostBodies } from "../../lib/api/types";
 import type { Store } from "../../lib/store";
 
 type Changes = PostBodies["/api/preferences"];
 type Kept = PostAnswers["/api/ai/key"];
+export type LocalServer = GetAnswers["/api/ai/local"]["servers"][number];
 
 // What the AI tab shows: AI mode's switch, and only once it is on the connection (the provider, then as it needs a key, a
 // model and a URL, and how AI stands), then spending and what is written ahead.
@@ -44,6 +46,40 @@ export function modelChoices(listed: readonly string[], own: string | null | und
 export function urlToSave(typed: string, prefill: string): string {
   const url = typed.trim().replace(/\/+$/, "");
   return url === prefill.replace(/\/+$/, "") ? "" : url;
+}
+
+// A model on this Mac, picked from what a server found here offers: its URL and the model, saved as one change. The URL is ""
+// where it is a model on this Mac's own (Ollama's), as a URL typed saves.
+const pick = (url: string, model: string) => JSON.stringify([url, model]);
+export function localPicked(value: string): Changes {
+  const [url, model] = JSON.parse(value) as [string, string];
+  return { ai_base_url: urlToSave(url, NEEDS.local.url!), ai_model: model };
+}
+
+export interface LocalMenu {
+  value: string;                                                    // what the menu shows chosen
+  first: ModelChoice | null;                                        // "Choose a model", or the one chosen where no server found offers it
+  groups: { name: string; url: string; models: ModelChoice[] }[];  // each server found, by name, with the models it offers
+}
+export const CHOSEN_ELSEWHERE = "chosen";
+
+// The menu of models on this Mac: each server found, in the finder's order, with its models; the model chosen shown chosen
+// where the server at the URL saved offers it, else on its own line first; and "Choose a model" while none is.
+export function localMenu(servers: readonly LocalServer[], savedUrl: string, chosen: string): LocalMenu {
+  const at = chosen ? servers.find((s) => urlToSave(s.url, NEEDS.local.url!) === savedUrl && s.models.includes(chosen)) : undefined;
+  const groups = servers.map((s) => ({ name: s.name, url: s.url, models: s.models.map((m) => ({ value: pick(s.url, m), label: m })) }));
+  if (at) return { value: pick(at.url, chosen), first: null, groups };
+  if (chosen) return { value: CHOSEN_ELSEWHERE, first: { value: CHOSEN_ELSEWHERE, label: chosen }, groups };
+  return { value: "", first: { value: "", label: "Choose a model" }, groups };
+}
+
+// What the search for model servers on this Mac says it found.
+export function localFound(servers: readonly LocalServer[]): string {
+  if (!servers.length) return "No model server is running on this Mac. Start one, Ollama or LM Studio for example, and look again.";
+  const empty = servers.filter((s) => !s.models.length).map((s) => s.name);
+  const names = servers.map((s) => s.name);
+  const found = `Running on this Mac: ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}.`;
+  return empty.length ? `${found} ${empty.join(" and ")} ${empty.length > 1 ? "have" : "has"} no model to chat with yet.` : found;
 }
 
 // The key typed, sent to be kept: it leaves the field as it goes, before any answer, so nothing on the page holds it after the
