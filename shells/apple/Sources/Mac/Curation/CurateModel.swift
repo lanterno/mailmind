@@ -265,8 +265,8 @@ final class CurateModel {
         bucket.senders.map { $0.count > 1 ? "\($0.fromAddr) (\($0.count))" : $0.fromAddr }.joined(separator: ", ")
     }
 
-    /// What a sweep's plan says under what goes: what stays, what waits for the next sweep, what Undo can't bring
-    /// back, and that Undo brings back the rest.
+    /// What a sweep's plan says under what goes: what stays, what waits for the next sweep, and what Undo can't bring
+    /// back.
     static func sweepNotes(_ plan: API.AccountSwept) -> [String] {
         var notes: [String] = []
         if let held = plan.heldBack, held > 0 {
@@ -281,6 +281,12 @@ final class CurateModel {
             notes.append(String(localized: "\(lost) of them can’t be brought back with Undo."))
         }
         return notes
+    }
+
+    /// What Undo does for a planned sweep, said beside Confirm: puts it all back, or the rest when some of it has no
+    /// Message-ID to find it by in the Trash (the page's `undoBrings`).
+    static func undoLine(_ plan: API.AccountSwept) -> String {
+        (plan.noUndo ?? 0) > 0 ? String(localized: "Undo puts the rest back.") : String(localized: "Undo puts it all back.")
     }
 
     // MARK: Rules and filters

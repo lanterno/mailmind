@@ -425,7 +425,7 @@ private struct InboxRow: View {
                         Text(note).font(.meadow(.ui, 12.5, .semibold)).foregroundStyle(meadow.sunInk)
                     }
                     HStack(spacing: 8) {
-                        Text("Undo puts it all back.").font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
+                        Text(CurateModel.undoLine(armed)).font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
                         Spacer()
                         Button("Abort") { model.abortSweep() }.meadowButton(.quiet, small: true)
                         Button("Confirm") { Task { await model.sweep() } }.meadowButton(.danger, small: true)
