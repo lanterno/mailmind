@@ -25,6 +25,8 @@ enum AIChoices {
         case mode
         /// The provider.
         case connection
+        /// The model servers found on this Mac, and their models, for a model on this Mac.
+        case found
         /// The provider's key.
         case key
         /// The model, and the service's URL where the provider asks for one.
@@ -36,10 +38,59 @@ enum AIChoices {
     }
 
     /// What the pane shows: with AI mode off, only its switch, as nothing is sent then; on, the connection by provider
-    /// and how it stands, then what AI may spend and write ahead.
+    /// and how it stands, then what AI may spend and write ahead. A model on this Mac starts from what was found
+    /// here, and its key, which only some servers ask for, comes after its model.
     static func parts(aiMode: Bool, provider: API.AiProvider) -> [Part] {
         guard aiMode else { return [.mode] }
-        return [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead]
+        let connection: [Part] = provider == .local ? [.connection, .found, .model, .key] : [.connection, .key, .model]
+        return [.mode] + connection + [.standing, .spending, .writtenAhead]
+    }
+
+    /// What looking for model servers on this Mac came to.
+    enum Look: Equatable {
+        case looking
+        /// The servers that answered, in the core's order; none is an empty list.
+        case found([API.LocalServer])
+        /// The asking itself failed, in the words to show.
+        case failed(String)
+    }
+
+    /// What asking for the model servers on this Mac came to: what was found, or the words the asking failed in.
+    @MainActor static func look(_ ask: () async throws -> API.LocalServers) async -> Look {
+        do {
+            return .found(try await ask().servers)
+        } catch {
+            return .failed((error as? Problem)?.detail ?? String(localized: "Couldn’t look for model servers."))
+        }
+    }
+
+    /// What the finder's card says where it lists no server: while it looks, when none answered, or why it couldn't
+    /// look. Nil where it lists what it found.
+    static func lookLine(_ look: Look) -> String? {
+        switch look {
+        case .looking: String(localized: "Looking for model servers on this Mac…")
+        case .found(let servers) where servers.isEmpty: String(localized: """
+            No model server is running on this Mac. Start one, Ollama or LM Studio for example, and look again.
+            """)
+        case .found: nil
+        case .failed(let why): why
+        }
+    }
+
+    /// What choosing a model a server on this Mac listed sends, in one change: the server's URL ("" for Ollama's,
+    /// which is the provider's own) and the model.
+    static func choose(_ model: String, on server: API.LocalServer) -> API.ChangedPreferences {
+        API.ChangedPreferences(aiBaseUrl: url(typed: server.url, provider: .local), aiModel: model)
+    }
+
+    /// Whether a found model is the one chosen: a model on this Mac by that name, at its server's URL.
+    static func isChosen(_ model: String, on server: API.LocalServer, preferences: API.Preferences?) -> Bool {
+        guard let preferences, preferences.aiProvider == .local, preferences.aiModel == model else { return false }
+        func plain(_ url: String) -> String {
+            let shown = url.isEmpty ? API.AiProvider.localURL : url.trimmingCharacters(in: .whitespacesAndNewlines)
+            return shown.hasSuffix("/") ? String(shown.dropLast()) : shown
+        }
+        return plain(server.url) == plain(preferences.aiBaseUrl)
     }
 
     /// What choosing a provider sends: the provider alone, so its model and URL start again from its own.
@@ -151,24 +202,29 @@ enum AIChoices {
 
 /// The AI pane, as the page's AI settings (#49): AI mode's switch, and only while it is on, the connection (the
 /// provider and its key, the model and the service's URL, and how AI stands), then what AI may spend and write ahead.
-/// Each control saves on its own. The models a provider offers are asked of it only as a person acts here (turns AI
-/// mode on, picks a provider, keeps a key, gives a URL, opens the menu, presses refresh) or as the pane opens with AI
-/// mode on, never in the background.
+/// Each control saves on its own. The models a provider offers, and the model servers running on this Mac, are asked
+/// for only as a person acts here (turns AI mode on, picks a provider, keeps a key, gives a URL, opens the menu,
+/// presses refresh or Look Again) or as the pane opens with AI mode on, never in the background.
 struct AIPane: View {
     let status: AppStatus
     @State private var kept: Set<API.AiProvider>?
     @State private var listed: AIChoices.Listed?
     @State private var listing = false
+    /// What looking for model servers on this Mac came to, once asked.
+    @State private var look: AIChoices.Look?
     /// A model being typed by hand, while its field is open.
     @State private var typedModel: String?
     /// The URL as it is being typed, until it is kept.
     @State private var typedURL: String?
     @Environment(\.meadow) private var meadow
 
-    init(status: AppStatus, kept: Set<API.AiProvider>? = nil, listed: AIChoices.Listed? = nil) {
+    init(status: AppStatus, kept: Set<API.AiProvider>? = nil, listed: AIChoices.Listed? = nil,
+         look: AIChoices.Look? = nil)
+    {
         self.status = status
         _kept = State(initialValue: kept)
         _listed = State(initialValue: listed)
+        _look = State(initialValue: look)
     }
 
     private var preferences: API.Preferences? { status.preferences }
@@ -184,7 +240,7 @@ struct AIPane: View {
         }
         .task(id: preferences == nil) { await opened() }
         .onChange(of: enabled) { _, on in
-            if on { Task { await list(provider, unlessForeseen: true) } }
+            if on { Task { await ask(provider) } }
         }
     }
 
@@ -207,6 +263,10 @@ struct AIPane: View {
                         }
                     }
                 }
+            }
+        case .found:
+            DeskSideCard(title: String(localized: "On this Mac"), icon: .search) {
+                foundServers
             }
         case .key:
             DeskSideCard(title: AIChoices.keyLabel(provider), icon: .key) {
@@ -321,6 +381,68 @@ struct AIPane: View {
         }
     }
 
+    // MARK: What runs on this Mac
+
+    /// The model servers found on this Mac, each by name with the models it lists to choose from; while looking, or
+    /// with none found, a line saying so. Look Again asks again.
+    @ViewBuilder private var foundServers: some View {
+        let look = self.look ?? .looking
+        if case .found(let servers) = look, !servers.isEmpty {
+            ForEach(servers, id: \.url) { server in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(verbatim: server.name)
+                            .font(.meadow(.ui, 14, .semibold))
+                            .foregroundStyle(meadow.ink)
+                        Text(verbatim: server.url)
+                            .font(.meadow(.ui, 12.5))
+                            .foregroundStyle(meadow.ink3)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .padding(.bottom, 4)
+                    if server.models.isEmpty {
+                        SettingHelp(String(localized: "It lists no model that can write yet."))
+                    }
+                    if server.models.count > 8 {
+                        MeadowFitScroll(maxHeight: 300) { foundModels(server) }
+                    } else {
+                        foundModels(server)
+                    }
+                }
+            }
+        } else if let line = AIChoices.lookLine(look) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if look == .looking { ProgressView().controlSize(.small) }
+                Text(line)
+                    .font(.meadow(.ui, 13.5))
+                    .foregroundStyle(look == .looking ? meadow.ink3 : meadow.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        HStack {
+            Spacer(minLength: 0)
+            Button { Task { await lookOnThisMac() } } label: {
+                MeadowIconView(.refresh, size: 15)
+                Text("Look Again")
+            }
+            .meadowButton(.quiet, small: true)
+            .fixedSize()
+            .disabled(look == .looking)
+        }
+    }
+
+    /// A server's models, each chosen with a click, the one in use ticked.
+    private func foundModels(_ server: API.LocalServer) -> some View {
+        VStack(spacing: 0) {
+            ForEach(server.models, id: \.self) { model in
+                FoundModelRow(model: model, chosen: AIChoices.isChosen(model, on: server, preferences: preferences)) {
+                    chooseFound(model, on: server)
+                }
+            }
+        }
+    }
+
     // MARK: Spending, writing ahead and how AI stands
 
     private var spending: some View {
@@ -388,10 +510,20 @@ struct AIPane: View {
     private func opened() async {
         guard preferences != nil, let core = status.core else { return }
         if kept == nil, let read = try? await core.get(API.Get.AiKey.self) { kept = Set(read.kept) }
-        if enabled { await list(provider, unlessForeseen: true) }
+        if enabled { await ask(provider) }
     }
 
-    /// Choose another provider: it starts from its own model and URL, and its models are asked for where they can be.
+    /// Ask what `asked` offers, as AI mode turns on, the pane opens or the provider is chosen: what runs on this Mac
+    /// for a model there, else the provider's models where nothing would refuse.
+    private func ask(_ asked: API.AiProvider) async {
+        if asked == .local {
+            await lookOnThisMac()
+        } else {
+            await list(asked, unlessForeseen: true)
+        }
+    }
+
+    /// Choose another provider: it starts from its own model and URL, and what it offers is asked for.
     private func choose(_ chosen: API.AiProvider) {
         guard chosen != provider else { return }
         typedModel = nil
@@ -399,13 +531,31 @@ struct AIPane: View {
         let saved = status.setPreferences(AIChoices.choose(chosen))
         Task {
             await saved?.value
-            await list(chosen, unlessForeseen: true)
+            await ask(chosen)
         }
     }
 
     private func chooseModel(_ model: String) {
         typedModel = nil
         status.setPreferences(.init(aiModel: model))
+    }
+
+    /// A model a server on this Mac listed: its server's URL and the model, in one change.
+    private func chooseFound(_ model: String, on server: API.LocalServer) {
+        typedModel = nil
+        typedURL = nil
+        let changes = AIChoices.choose(model, on: server)
+        // Another server's list isn't this one's: the model menu asks again when it opens.
+        if changes.aiBaseUrl != preferences?.aiBaseUrl { listed = nil }
+        status.setPreferences(changes)
+    }
+
+    /// Ask the core which model servers run on this Mac, and what each lists. It asks each for a second at most,
+    /// sends no key, and finds none rather than fail.
+    private func lookOnThisMac() async {
+        guard let core = status.core, look != .looking else { return }
+        look = .looking
+        look = await AIChoices.look { try await core.get(API.Get.AiLocal.self) }
     }
 
     private func keepTypedModel() {
@@ -457,6 +607,21 @@ private struct ModelScroll: View {
                 }
             }
         }
+    }
+}
+
+/// A model a server on this Mac listed, to choose with a click: ticked while it is the one chosen.
+private struct FoundModelRow: View {
+    let model: String
+    let chosen: Bool
+    let choose: () -> Void
+
+    var body: some View {
+        Button(action: choose) {
+            MeadowPaletteRow(model, icon: nil, pop: true, check: chosen)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(chosen ? String(localized: "\(model), chosen") : model)
     }
 }
 
