@@ -240,7 +240,11 @@ and the AI provider you chose (Claude by default).
 - **Full-text search across every account by default**, with the scope persisted
   between sessions. A polite background worker backfills bodies for mail ingested
   before bodies were stored — yielding instantly to anything you're doing, and moving on past
-  any the server won't give — so search covers the whole mailbox, not just recent mail.
+  any the server won't give — so search covers the whole mailbox, not just recent mail. On the Rust
+  server and the Mac app a sync keeps the text of each message it reads, and the backfill asks for a
+  folder's dozen at a time over the account's kept connection, reaches back twelve months (older mail
+  is fetched as you open it), and keeps only the text of a message over 256 KB, whose attachments
+  come when you open it.
 - **A safe operator grammar:** `from:` `to:` `cc:` `subject:` `body:` `label:`,
   `is:unread|read|flagged|answered|junk|newsletter|receipt|notification|snoozed`,
   `bucket:` `category:`, `has:attachment`, `in:` `account:`,
@@ -503,9 +507,11 @@ ask, or for a switch you turned on in Settings › AI.
   per tick against the server, every folder MailMind has synced, yields instantly to anything
   you're doing, and pushes an event so open lists drop messages deleted in another client. It prunes only what it read
   before asking the server, so mail a sync stores while it runs is never taken for a ghost.
-- **Optional persistent per-account IMAP connections.** Set `MAILMIND_POOL=1` and repeated reads
-  get dramatically faster, with connection validation, age/use recycling and extra-conservative
-  handling for Proton Bridge's low connection cap. An account's `"pool": true` asks for it between runs. Off by default while it's being tried out.
+- **Each account keeps its IMAP connection.** On the Rust server and the Mac app, opening a message, filing,
+  undo, the outbox and the body backfill share one logged-in connection an account, never two jobs at once. It is
+  checked before each use, replaced after ten minutes or 200 uses (90 seconds or 40 for Proton Bridge, with its low
+  connection cap), dropped when the Mac wakes from sleep, and logged out when you quit or change or remove the
+  account. The Python app keeps them only with `MAILMIND_POOL=1` or an account's `"pool": true`.
 - **A hung server costs a click about twelve seconds, not two minutes,** and Undo is offered as soon as it answers;
   the worker keeps trying. Two processes changing your rules can't lose each other's change.
 - **A first read counts as it goes.** A folder read for the first time says how many messages have arrived so far.
@@ -566,7 +572,7 @@ ask, or for a switch you turned on in Settings › AI.
 - **One-click local backup** of your whole mailbox as a consistent `.db` snapshot, encrypted as the database is, from
   Settings, or a zip of lossless per-message `.eml` files or standard `mbox` archives, there
   or from the command line (`uv run python -m mailmind export --format eml --out DIR`). Read-only — it never
-  touches IMAP.
+  touches IMAP. Settings (General, in the Mac app) also says how much room the database takes on this Mac.
 - **Upgrades can't cost you mail.** Before a new version changes the database's layout, MailMind
   backs it up beside it (the newest three kept, encrypted and readable only by you), and each step of the change
   lands whole or not at all. `uv run python -m mailmind db check-upgrade` tries the next upgrade on a copy
@@ -770,8 +776,9 @@ provider's is (`ai key --provider openai`, and so on), each in any of those styl
 which there means no key: Claude's then doesn't turn to `ANTHROPIC_API_KEY` either. `"ai_daily_limit_usd"` is the
 most MailMind spends on it in a day, in US dollars: `15` unless you set another positive number.
 
-An account may say `"pool": true` to keep a connection open between reads, and `"warm_folders": true` to sync its
-Drafts, Archive and Sent beside the Inbox. A set `MAILMIND_POOL` or `MAILMIND_WARM_FOLDERS` decides over either.
+An account may say `"pool": true` to keep a connection open between reads on the Python app (the Rust server and the
+Mac app keep every account's), and `"warm_folders": true` to sync its Drafts, Archive and Sent beside the Inbox. A
+set `MAILMIND_POOL` or `MAILMIND_WARM_FOLDERS` decides over either.
 
 An account may also say `"imap_adapter": "imapclient"`. `uv run python -m mailmind serve` then reaches
 it through the IMAPClient library instead of Python's own imaplib: the new IMAP code, tried on
@@ -864,7 +871,7 @@ uv run python -m mailmind assess --batch         # the last 30 days' with no sum
 | `MAILMIND_LOG_LEVEL=DEBUG` | Show debug lines and each error's text and traceback on the terminal, for chasing a fault. They can hold addresses and subjects. `mailmind.log` never does. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5`, over the one chosen in Settings. Ignored while another AI provider is chosen. |
 | `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). It is held to the rules a URL chosen in Settings is: https, or plain http only to 127.0.0.1, ::1 or localhost; a port from 1 to 65535 where it names one, never an empty one (`https://proxy.example.test:/`); no user, password, query or fragment; and no IPvFuture or zone in brackets (`https://[fe80::1%25en0]/`). One that breaks them sends nothing: Claude is unreachable. |
-| `MAILMIND_POOL=1` | Reuse persistent per-account IMAP connections instead of connecting per op — **much** faster repeated reads. Off by default; set to `1` for all accounts, or a comma-separated list of emails. Proton Bridge is excluded from the `1` catch-all and must be listed explicitly. |
+| `MAILMIND_POOL=1` | On the Python app, reuse persistent per-account IMAP connections instead of connecting per op — **much** faster repeated reads. Off by default; set to `1` for all accounts, or a comma-separated list of emails. Proton Bridge is excluded from the `1` catch-all and must be listed explicitly. The Rust server and the Mac app keep every account's connection and don't read it. |
 | `MAILMIND_WARM_FOLDERS=1` | Also sync each account's Drafts / Archive / Sent alongside INBOX, so search and threading cover more than the inbox. Off by default; same `1`-or-list form. |
 | `MAILMIND_RECONCILE_SECS` | Target seconds for one full ghost-prune cycle across all accounts (default `1800`; `0` disables). |
 | `MAILMIND_EXPIRE_SECS` | Seconds between expiry-rule passes (default `3600`; `0` disables). Never runs read-only. |
@@ -885,7 +892,7 @@ if unset, but for `MAILMIND_PROFILE` (above). `mailmind/platform/environment.py`
 The server's port is the first argument to `serve` (default `8721`).
 
 `MAILMIND_POOL` and `MAILMIND_WARM_FOLDERS` are both **off by default**, so a plain
-run connects fresh for every operation and syncs INBOX only. `just run-fast` sets
+run of the Python app connects fresh for every operation and syncs INBOX only. `just run-fast` sets
 both for that run. To keep them on, give an account `"pool": true` or `"warm_folders": true`
 in `mailmind.config.json`; a variable that is set decides over the file.
 

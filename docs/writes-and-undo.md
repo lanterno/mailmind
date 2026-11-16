@@ -144,6 +144,14 @@
   dozen, so no account's backlog, outage or busy gate holds another's mail back. A busy gate ends only that account's
   turn. A lost connection sets its message aside, a minute doubling up to six hours, and rests only its account for a
   minute. A body the server didn't give waits six hours. That is kept in memory, so a restart tries everything again.
+  On the Rust server and in the Mac app (`mm_mailbox::backfill`, `body_backfill` and `fetching`) a round asks for about
+  four dozen, of the last twelve months only (`REACH`), a folder's up to twelve in one FETCH of their first 64 KiB with
+  each one's whole size, on the account's kept connection. An opening that holds the whole message is kept as its body;
+  one cut off is fetched whole, about 2 MiB a FETCH, where the message is at most 256 KiB (`WHOLE_MOST`); a larger one
+  keeps only its opening's text (`KeptBodies::keep_text`), which search indexes, and its attachments are fetched when it
+  is opened. A batch the connection was lost over sets each of its messages aside, and each goes alone from then on.
+  The sync keeps the text of each opening it reads (`Incoming::body_text`), so mail a sync stored is never asked for
+  again; only an invite's whole body is kept then, as its calendar needs it.
 - Undo is a LIFO stack in the database (`undo_entries`, migration 25; `mailmind.platform.undo`; `undo_group` reaches one group wherever it stands, for Tidy's review strip),
   so it outlives a restart (decision D3). It holds 50 groups
   (`Undo.UNDO_MAX`, an action alone counts as one) or 24 hours of them (`undo.KEEP_FOR`), whichever comes first, and an entry leaves it, committed, before
