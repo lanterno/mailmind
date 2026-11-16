@@ -38,20 +38,62 @@ struct Imap {
     answers: Arc<Mutex<VecDeque<&'static str>>>,
 }
 
+/// A loopback server's TLS: a certificate of its own for 127.0.0.1.
+fn tls() -> Arc<ServerConfig> {
+    let key = KeyPair::generate().unwrap();
+    let cert = CertificateParams::new(vec!["127.0.0.1".to_owned()]).unwrap().self_signed(&key).unwrap();
+    let config = ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(vec![cert.der().clone()], PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der())))
+        .unwrap();
+    Arc::new(config)
+}
+
+/// An SMTP server on loopback, over TLS from the first byte, that lets any login in: where a test of the account logs
+/// in once its IMAP server has.
+fn smtp() -> u16 {
+    let config = tls();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for tcp in listener.incoming() {
+            let Ok(tcp) = tcp else { return };
+            let tls = StreamOwned::new(ServerConnection::new(config.clone()).unwrap(), tcp);
+            std::thread::spawn(move || {
+                let _ = let_in(BufReader::new(tls));
+            });
+        }
+    });
+    port
+}
+
+fn let_in(mut stream: BufReader<StreamOwned<ServerConnection, std::net::TcpStream>>) -> std::io::Result<()> {
+    stream.get_mut().write_all(b"220 ready\r\n")?;
+    stream.get_mut().flush()?;
+    let mut line = String::new();
+    while stream.read_line(&mut line)? > 0 {
+        let command = line.split_whitespace().next().unwrap_or("").to_uppercase();
+        let said: &[u8] = match command.as_str() {
+            "EHLO" => b"250-fake\r\n250 AUTH PLAIN LOGIN\r\n",
+            "AUTH" => b"235 ok\r\n",
+            "QUIT" => b"221 bye\r\n",
+            _ => b"502 not here\r\n",
+        };
+        stream.get_mut().write_all(said)?;
+        stream.get_mut().flush()?;
+        if command == "QUIT" {
+            return Ok(());
+        }
+        line.clear();
+    }
+    Ok(())
+}
+
 impl Imap {
     fn start(otherwise: &'static str) -> Imap {
-        let key = KeyPair::generate().unwrap();
-        let cert = CertificateParams::new(vec!["127.0.0.1".to_owned()]).unwrap().self_signed(&key).unwrap();
-        let config = ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-            .with_safe_default_protocol_versions()
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(
-                vec![cert.der().clone()],
-                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der())),
-            )
-            .unwrap();
-        let config = Arc::new(config);
+        let config = tls();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let imap = Imap {
@@ -170,16 +212,19 @@ impl Keychain for Kept {
 struct World {
     app: App,
     imap: Imap,
+    smtp: u16,
     clock: Arc<Moving>,
     _home: tempfile::TempDir,
 }
 
-/// The app over a data directory whose one account, Ada's, is on an IMAP server that answers LOGIN with `otherwise`.
+/// The app over a data directory whose one account, Ada's, is on an IMAP server that answers LOGIN with `otherwise`,
+/// and sends through an SMTP server that lets it in.
 fn world(otherwise: &'static str) -> World {
-    let imap = Imap::start(otherwise);
+    let (imap, smtp) = (Imap::start(otherwise), smtp());
     let home = tempfile::tempdir().unwrap();
     let config = json!({"accounts": [{"email": ADA, "type": "imap", "host": "127.0.0.1", "port": imap.port,
-                                      "starttls": false, "credential": {"keychain": format!("account:{ADA}")}}]});
+                                      "starttls": false, "smtp_host": "127.0.0.1", "smtp_port": smtp,
+                                      "smtp_starttls": false, "credential": {"keychain": format!("account:{ADA}")}}]});
     std::fs::write(home.path().join("mailmind.config.json"), config.to_string()).unwrap();
     // At the version the server reads, as the Python app's migrations leave it.
     let key = mm_store::DbKey::from_bytes([0x5e; 32]);
@@ -199,7 +244,7 @@ fn world(otherwise: &'static str) -> World {
         local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
     };
     let app = App::assemble(&environment, &settings, home.path().join("dist"), 1, &seams).unwrap();
-    World { app, imap, clock, _home: home }
+    World { app, imap, smtp, clock, _home: home }
 }
 
 impl World {
@@ -283,6 +328,7 @@ fn a_draft_asks_nothing_of_a_hold_and_tells_it_nothing() {
     let w = world(REFUSED);
     let draft = |password: &str| {
         json!({"draft": {"email": ADA, "type": "imap", "host": "127.0.0.1", "port": w.imap.port, "starttls": false,
+                         "smtp_host": "127.0.0.1", "smtp_port": w.smtp, "smtp_starttls": false,
                          "credential": {"style": "keychain", "value": password}}})
     };
     assert_eq!(w.test(draft("wrong"))["connect"], json!(false));

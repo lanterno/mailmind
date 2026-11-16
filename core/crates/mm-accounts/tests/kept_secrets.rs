@@ -305,6 +305,14 @@ impl LoginProbe for Probe {
     fn draft(&self, _draft: &Draft, _timeout: Duration) -> Result<(), LoginTrouble> {
         Ok(())
     }
+
+    fn saved_outgoing(&self, _account: &Account, _timeout: Duration) -> Result<(), LoginTrouble> {
+        Ok(())
+    }
+
+    fn draft_outgoing(&self, _draft: &Draft, _timeout: Duration) -> Result<(), LoginTrouble> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default)]

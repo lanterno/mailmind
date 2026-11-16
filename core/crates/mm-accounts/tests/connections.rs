@@ -64,12 +64,16 @@ impl Clock for Ticking {
 enum Asked {
     Saved { email: String, host: Value, port: Value },
     Draft { email: Option<String>, host: Option<String>, port: u16, starttls: bool, password: String },
+    SavedOutgoing { email: String },
+    DraftOutgoing { host: Option<String>, port: u16, starttls: bool, password: String },
 }
 
 #[derive(Debug, Default)]
 struct Probe {
     asked: Mutex<Vec<(Asked, Duration)>>,
     trouble: Option<&'static str>,
+    /// What the outgoing server's login comes to.
+    outgoing: Option<&'static str>,
 }
 
 impl LoginProbe for Probe {
@@ -90,6 +94,22 @@ impl LoginProbe for Probe {
         };
         self.asked.lock().unwrap().push((asked, timeout));
         self.trouble.map_or(Ok(()), |class| Err(LoginTrouble(class)))
+    }
+
+    fn saved_outgoing(&self, account: &Account, timeout: Duration) -> Result<(), LoginTrouble> {
+        self.asked.lock().unwrap().push((Asked::SavedOutgoing { email: account.email.clone() }, timeout));
+        self.outgoing.map_or(Ok(()), |class| Err(LoginTrouble(class)))
+    }
+
+    fn draft_outgoing(&self, draft: &Draft, timeout: Duration) -> Result<(), LoginTrouble> {
+        let asked = Asked::DraftOutgoing {
+            host: draft.smtp_host.clone(),
+            port: draft.smtp_port,
+            starttls: draft.smtp_starttls,
+            password: draft.password.expose().to_owned(),
+        };
+        self.asked.lock().unwrap().push((asked, timeout));
+        self.outgoing.map_or(Ok(()), |class| Err(LoginTrouble(class)))
     }
 }
 
@@ -119,6 +139,11 @@ struct World {
 }
 
 fn world(trouble: Option<&'static str>) -> World {
+    world_sending(trouble, None)
+}
+
+/// The world, with the outgoing server's login coming to `outgoing`.
+fn world_sending(trouble: Option<&'static str>, outgoing: Option<&'static str>) -> World {
     let accounts = json!([
         {"email": ADA, "type": "imap", "host": "imap.example.test", "port": 993,
          "credential": {"op": "op://Private/Ada/password"}, "tls_pins": {"127.0.0.1:1143": "sha256:aa"}},
@@ -128,7 +153,7 @@ fn world(trouble: Option<&'static str>) -> World {
     let file = Arc::new(File(Mutex::new(object(json!({"accounts": accounts})))));
     let clock: Arc<dyn Clock> = Arc::new(Ticking::default());
     let directory = Arc::new(Directory::new(file.clone(), Arc::new(Kept), clock.clone()));
-    let probe = Arc::new(Probe { trouble, ..Probe::default() });
+    let probe = Arc::new(Probe { trouble, outgoing, ..Probe::default() });
     let heard = Arc::new(Heard::default());
     let connections = Connections::new(directory, probe.clone(), heard.clone(), clock);
     World { connections, probe, heard, file }
@@ -145,7 +170,10 @@ fn a_saved_account_goes_to_its_stored_endpoint_whatever_the_request_names() {
     let answer = w.connections.test(&asked).unwrap();
     assert_eq!(
         *w.probe.asked.lock().unwrap(),
-        [(Asked::Saved { email: ADA.into(), host: json!("imap.example.test"), port: json!(993) }, PROBE_TIMEOUT)]
+        [
+            (Asked::Saved { email: ADA.into(), host: json!("imap.example.test"), port: json!(993) }, PROBE_TIMEOUT),
+            (Asked::SavedOutgoing { email: ADA.into() }, PROBE_TIMEOUT),
+        ]
     );
     assert_eq!(answer, json!({"ok": true, "connect": true, "email": ADA, "detail": "login ok", "ms": 42}));
 }
@@ -163,7 +191,13 @@ fn a_draft_goes_as_a_draft_with_what_was_typed() {
         starttls: false,
         password: "typed".into(),
     };
-    assert_eq!(*w.probe.asked.lock().unwrap(), [(draft, PROBE_TIMEOUT)]);
+    let outgoing = Asked::DraftOutgoing {
+        host: Some("imap.example.test".into()),
+        port: 587,
+        starttls: true,
+        password: "typed".into(),
+    };
+    assert_eq!(*w.probe.asked.lock().unwrap(), [(draft, PROBE_TIMEOUT), (outgoing, PROBE_TIMEOUT)]);
     assert_eq!((answer["connect"].clone(), answer["email"].clone()), (json!(true), json!("dee@example.test")));
 }
 
@@ -339,4 +373,57 @@ fn a_generic_draft_needs_a_host_typed_and_hears_of_its_port_first() {
     let bad_port = draft(json!({"host": "", "port": 0.5, "credential": null}));
     assert_eq!(throwaway_account(&bad_port).unwrap_err(), NotTried::BadPort);
     assert_eq!(throwaway_account(&draft(json!({"host": 7}))).unwrap().host, None);
+}
+
+#[test]
+fn an_outgoing_server_that_wont_take_the_login_says_so_after_smtp() {
+    for (class, says) in [
+        ("LoginRefused", "SMTP AUTHENTICATIONFAILED"),
+        ("ConnectionRefused", "SMTP connection refused"),
+        ("Timeout", "SMTP timeout"),
+        ("CertificateNotVerified", "SMTP SSLCertVerificationError"),
+    ] {
+        let w = world_sending(None, Some(class));
+        let answer = w.connections.test(&object(json!({"email": ADA}))).unwrap();
+        assert_eq!(answer, json!({"ok": true, "connect": false, "email": ADA, "error": says}), "{class}");
+    }
+}
+
+#[test]
+fn no_outgoing_server_is_tried_once_the_imap_server_says_no() {
+    let w = world_sending(Some("ConnectionRefused"), Some("LoginRefused"));
+    assert_eq!(w.connections.test(&object(json!({"email": ADA}))).unwrap()["error"], "connection refused");
+    assert_eq!(w.probe.asked.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_draft_tries_the_outgoing_server_typed_with_it_or_its_types() {
+    let tried = throwaway_account(&draft(
+        json!({"smtp_host": "smtp.example.test", "smtp_port": "465", "smtp_starttls": false}),
+    ))
+    .unwrap();
+    assert_eq!(
+        (tried.smtp_host.as_deref(), tried.smtp_port, tried.smtp_starttls),
+        (Some("smtp.example.test"), 465, false)
+    );
+    let mut gmail = draft(json!({"type": "gmail"}));
+    gmail.remove("host");
+    let tried = throwaway_account(&gmail).unwrap();
+    assert_eq!((tried.smtp_host.as_deref(), tried.smtp_port, tried.smtp_starttls), (Some("smtp.gmail.com"), 587, true));
+    let tried = throwaway_account(&draft(json!({}))).unwrap();
+    assert_eq!(tried.smtp_host.as_deref(), Some("imap.example.test"));
+}
+
+#[test]
+fn a_draft_whose_outgoing_port_no_connection_could_reach_says_so() {
+    for port in [json!("nine"), json!(70000), json!(-1)] {
+        let w = world(None);
+        let draft =
+            json!({"email": "dee@example.test", "host": "h.example.test", "smtp_port": port, "credential": typed("t")});
+        let answer = w.connections.test(&object(json!({"draft": draft}))).unwrap();
+        let said =
+            json!({"ok": true, "connect": false, "email": "dee@example.test", "error": "SMTP port must be 1–65535"});
+        assert_eq!(answer, said, "{port}");
+        assert!(w.probe.asked.lock().unwrap().is_empty());
+    }
 }

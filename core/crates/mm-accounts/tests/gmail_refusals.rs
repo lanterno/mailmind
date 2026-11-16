@@ -101,6 +101,15 @@ impl LoginProbe for Refusing {
     fn draft(&self, _draft: &Draft, _timeout: Duration) -> Result<(), LoginTrouble> {
         Err(LoginTrouble(self.0))
     }
+
+    /// Never asked: the IMAP server refused first.
+    fn saved_outgoing(&self, _account: &Account, _timeout: Duration) -> Result<(), LoginTrouble> {
+        unreachable!("the outgoing server is tried only once the IMAP server has let the account in")
+    }
+
+    fn draft_outgoing(&self, _draft: &Draft, _timeout: Duration) -> Result<(), LoginTrouble> {
+        unreachable!("the outgoing server is tried only once the IMAP server has let the account in")
+    }
 }
 
 #[derive(Debug)]
