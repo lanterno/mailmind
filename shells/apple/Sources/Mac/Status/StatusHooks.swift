@@ -77,7 +77,8 @@ struct StatusHooks: ViewModifier {
 }
 
 /// The menu bar's part of the status: Get New Mail in the Mailbox's place in the File menu, and the Help menu: MailMind
-/// Help and the guide. Checking mail against the server is the status's own, in its menu (`StatusMenu`).
+/// Help, the guide, Copy Diagnostics and Report a Problem. Checking mail against the server is the status's own, in its
+/// menu (`StatusMenu`).
 struct StatusCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -109,6 +110,10 @@ private struct HelpMenuItems: View {
             .keyboardShortcut("?", modifiers: .command)
         Button("Show Me Around") { status.guiding = true }
             .disabled(status.core == nil || status.firstRun)
+        // What went wrong, for whoever gave you MailMind: with no addresses, subjects, names or passwords in it.
+        Divider()
+        Button("Copy Diagnostics") { Task { await Diagnostics.copy() } }
+        Button("Report a Problem…") { Task { await Diagnostics.report() } }
     }
 }
 

@@ -29,6 +29,8 @@ final class MailApp {
     typealias Opener = @Sendable (CoreHome) async throws -> Core
 
     private(set) var stage = Stage.opening
+    /// The data folder the core opens, once chosen: where its log is, and what Start Fresh moves the database out of.
+    private(set) var folder: URL?
     /// Where the window is. Choosing a place opens its list; the brief, in the pane beside the Inbox, keeps the
     /// Inbox's list and closes the message open, as the pane is the brief's.
     var place: Place? = .allInboxes {
@@ -76,7 +78,9 @@ final class MailApp {
         opening = true
         defer { opening = false }
         do {
-            let core = try await opener(try home())
+            let home = try home()
+            folder = URL(filePath: home.folder, directoryHint: .isDirectory)
+            let core = try await opener(home)
             self.core = core
             reader.core = core
             stage = .open
