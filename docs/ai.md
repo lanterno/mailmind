@@ -15,8 +15,9 @@ LM Studio or any other model server here, at Ollama's `http://127.0.0.1:11434/v1
 `compatible` (any other service that speaks OpenAI's Chat Completions, at a URL a person gives), all through one
 adapter on the standard library, `adapters.openai_chat`, whose wire format is `adapters.chat_wire`. Four preferences
 choose: `ai_enabled` (AI mode), `ai_provider` (`anthropic` by default), `ai_model` and `ai_base_url` (each `""` for the
-provider's own; a URL is https, or http on this Mac, and a model on this Mac's is at 127.0.0.1, ::1 or localhost, or
-refused in those words: a server on another machine is `compatible`, over https). Choosing another provider without
+provider's own; a URL is https, or http on this Mac, with a port from 1 to 65535 where it has one (an empty port, as in
+`http://127.0.0.1:/v1`, is malformed), and a model on this Mac's is at 127.0.0.1, ::1 or localhost, or refused in
+those words: a server on another machine is `compatible`, over https). Choosing another provider without
 naming a model or URL sets both back to `""`. `MAILMIND_MODEL` is the Claude model: it wins over the model chosen
 while Claude is the provider, and with any other it is ignored. `ANTHROPIC_BASE_URL` stands in for Claude's URL when
 none is chosen.
@@ -35,13 +36,25 @@ service with none chosen; neither needs a key, so neither is ever `no-key`). Off
 
 Only `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and `adapters.wire` holds what it sends and
 how it reads a reply. `ChatModel` posts to `{base}/chat/completions`: the system prompt as the first message, the
-schema as a `json_schema` response format (strict only where every object is closed and needs each property),
-`max_completion_tokens` for OpenAI and `max_tokens` for the rest, and no effort or fallback. A model on this Mac or a
-compatible service that answers a 400 naming `response_format` is asked once more without it. A `message.refusal` is a
-refusal; a reasoning model's thinking ahead of its reply (`<think>…</think>` or `<thinking>…</thinking>`) is dropped
-before the reply is read (`chat_wire.without_thinking`); cached prompt tokens are cache reads, and nothing writes a
-cache. An attempt waits up to 120 seconds, and 300 for a model on this Mac or any URL on this Mac, where a model loads
-on its first use (`Engine.timeout`).
+schema as a `json_schema` response format (strict only where every object is closed and needs each property), the
+16000-token ceiling only for OpenAI (`max_completion_tokens`) and Gemini (`max_tokens`), none for a model on this Mac or
+a compatible service, and no effort or fallback. A 400 naming what a service won't take has the call asked once more
+without it, each at most once a call: `response_format`, from a model on this Mac or a compatible service, the schema
+then asked for in words at the end of the last message, after a blank line ("Reply with only a JSON object that matches
+this JSON Schema: " and the schema as compact JSON); `max_tokens` or `max_completion_tokens`, from OpenAI or Gemini, the
+ceiling. A 400 saying the key isn't valid (a `details` entry whose reason is `API_KEY_INVALID`, or a message starting
+"API key not valid", as Gemini answers) is a refused key, as a 401 or 403 is: its error carries status 401, so its
+words, the breaker and the models' listing take it as one. A refused key's error is only
+`<provider> API <status>: the key was refused`, with none of what the service said. Any other error carries what the
+service said (its `error`, from the first element where the body is an array), the key taken out of the whole of it
+before it is cut to 200 characters. A
+`message.refusal` is a refusal; a reasoning model's thinking ahead of its reply (`<think>…</think>` or
+`<thinking>…</thinking>`) is dropped before the reply is read (`chat_wire.without_thinking`); cached prompt tokens are
+cache reads, nothing writes a cache, and the output is `completion_tokens`, or `total_tokens` less `prompt_tokens`
+where that is more (Gemini leaves a thinking model's thinking out of `completion_tokens`). An attempt waits up to 120
+seconds, and 300 for a model on this Mac or any URL on this Mac, where a model loads on its first use (`Engine.timeout`).
+On this wire, on both servers, that limit is a deadline for the whole attempt, connecting, sending and reading the
+whole answer, and an answer is read to 32 MiB at most.
 
 Each provider's key is `assistant.config_key(provider)`: the top-level `"<provider>_api_key"` in
 `mailmind.config.json`, any credential style but the Bridge password. `uv run python -m mailmind ai key
@@ -61,10 +74,10 @@ or a key the provider refuses is a 400 in words, and a provider that doesn't ans
 
 `GET /api/ai/local` finds the model servers on this Mac, for a person choosing a model on this Mac: it asks each that
 `providers.LOCAL_SERVERS` knows (Ollama on 11434, LM Studio on 1234, llama.cpp on 8080, vLLM on 8000, Jan on 1337 and
-GPT4All on 4891, each `http://127.0.0.1:<port>/v1`) for `GET {url}/models`, all at once and a second each at most, with
-no key, and answers `{ok, servers: [{name, url, models}]}` for those that answered a list, in that order, with the
-models that can chat. It reaches only this Mac, goes with AI mode off, and nothing answering is `servers: []`, never an
-error (`adapters.local_servers`, `Catalog.local_servers`).
+GPT4All on 4891, each `http://127.0.0.1:<port>/v1`) for `GET {url}/models`, all at once and each whole exchange a
+second at most, with no key, and answers `{ok, servers: [{name, url, models}]}` for those that answered a list, in that
+order, with the models that can chat. It reaches only this Mac, goes with AI mode off, and nothing answering is
+`servers: []`, never an error (`adapters.local_servers`, `Catalog.local_servers`).
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm. The three that do are opt-in and off by default: the morning's brief,
 written ahead of the first open, the week's review, written ahead on Monday morning and kept in the database, never sent as mail, and Tidy's
@@ -107,7 +120,10 @@ The `Gateway` counts every call it sends in the usage ledger, migration 21's `ai
 asked, model that served it and outcome: `ok`, `refused`, `rejected` (a permanent 4xx) or
 `failed`. Each row holds the calls, their tokens and `cost_micros`, whichever provider served them. `domain.pricing`
 computes the cost from each provider's list prices (one table: Claude, OpenAI and Gemini) in integers, rounded up, with
-cache writes at 1.25 times input for Claude only. A name is looked up after its last `/` (so `openai/gpt-6.1-sol` and
+cache writes at 1.25 times input for Claude only, and a cost never past 2^63-1 micro-dollars. On both servers token
+counts and costs are held at 2^63-1 wherever they are added: a call's counts, a batch's tallies, the ledger's upsert
+(`MIN(a + b, 9223372036854775807)` for the cost and each token column), the day's totals and the governor's room. A
+name is looked up after its last `/` (so `openai/gpt-6.1-sol` and
 Gemini's `models/...` find their rows). An unknown model is free on a model on this Mac or at any URL on this Mac, and otherwise the
 dearest of its family (`claude-`, `gpt-` or `o<digit>`, `gemini-`) or of the whole table; a server-side fallback costs
 the dearer of the two models. `Gateway.ask` requires a
