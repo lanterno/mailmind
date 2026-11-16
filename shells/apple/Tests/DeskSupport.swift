@@ -210,7 +210,8 @@ enum DeskFixture {
     static func digest(ai: String = "anthropic", off: API.AiOff = .noKey, items: [API.DigestItem]? = nil) -> API.Digest {
         API.Digest(
             accounts: ["ada@example.test"],
-            ai: API.AiStatus(engine: ai, keyFrom: ai == "none" ? "" : "keychain", lastTs: 0, limitMicros: 15_000_000,
+            ai: API.AiStatus(backgroundModel: ai == "none" ? "" : "claude-haiku-4-5", engine: ai,
+                             keyFrom: ai == "none" ? "" : "keychain", lastTs: 0, limitMicros: 15_000_000,
                              model: ai == "none" ? "" : "claude-haiku-4-5", off: ai == "none" ? off : nil,
                              provider: .anthropic),
             aliases: ["ada@example.test": "Work"], generated: "2026-11-15T09:00:00Z",

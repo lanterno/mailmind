@@ -126,7 +126,7 @@ enum Fixture {
     static func preferences(conversations: Bool = true, scope: API.SearchScope = .all, singleKeys: Bool = true) -> API.PreferencesAnswer {
         API.PreferencesAnswer(ok: true, preferences: API.Preferences(
             aiBaseUrl: "", aiDailyLimitUsd: 15, aiEnabled: true, aiModel: "", aiProvider: .anthropic, autoTidy: false,
-            conversations: conversations, density: .comfortable, draftTone: .balanced, guideOffered: true, highContrast: false, mailColors: .auto, morningBrief: false, notifyMeetings: false,
+            conversations: conversations, density: .comfortable, draftAhead: false, draftTone: .balanced, guideOffered: true, highContrast: false, mailColors: .auto, morningBrief: false, notifyMeetings: false,
             notifyNewMail: false, quietFrom: "22:00", quietHours: false, quietUntil: "07:00", readFont: .sans, readSize: .m,
             readWidth: .medium, searchScope: scope, singleKeys: singleKeys, theme: .day, undoSendSeconds: 10, weeklyReview: false))
     }
@@ -134,7 +134,8 @@ enum Fixture {
     static func digest(accounts: [String] = [ada, work], ai: Bool = true, off: API.AiOff = .noKey,
                        readOnly: Bool = false) -> API.Digest {
         API.Digest(accounts: accounts,
-                   ai: API.AiStatus(engine: ai ? "api" : "none", keyFrom: "test", lastTs: 0, limitMicros: 0,
+                   ai: API.AiStatus(backgroundModel: ai ? "test" : "", engine: ai ? "api" : "none", keyFrom: "test",
+                                    lastTs: 0, limitMicros: 0,
                                     model: ai ? "test" : "", off: ai ? nil : off, provider: .anthropic),
                    aliases: [ada: "Ada", work: nil], generated: "2026-11-15T09:00:00Z", items: [],
                    profile: readOnly ? "read-only" : "full", sendAccounts: accounts, signatureDefault: "", signatures: [:],

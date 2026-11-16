@@ -17,7 +17,8 @@ enum StatusFixtures {
                        profile: String = "full", engine: String = "api", keyFrom: String = "mailmind.config.json",
                        spent: Int? = 120_000, lastOk: Bool? = true, lastError: String? = nil,
                        total: Int = 120, provider: String = "anthropic", off: String? = nil,
-                       model: String = "Claude Haiku 4.5") -> API.Digest
+                       model: String = "Claude Haiku 4.5", backgroundModel: String? = nil,
+                       waiting: Int? = nil) -> API.Digest
     {
         let aliasJSON = aliases.map { "\"\($0.key)\": \"\($0.value)\"" }.joined(separator: ", ")
         let statusJSON = status.map { "\"\($0.key)\": {\"health\": \"\($0.value)\", \"msg\": \"\"}" }
@@ -29,12 +30,15 @@ enum StatusFixtures {
         let lastErrorJSON = lastError.map { "\"\($0)\"" } ?? "null"
         // Off with no reason named is off for want of a key, as a fresh home is.
         let offJSON = (off ?? (engine == "none" ? "no-key" : nil)).map { "\"\($0)\"" } ?? "null"
+        // Background summaries ask the model chosen unless another is named, as for a model on this Mac.
+        let background = engine == "none" ? "" : backgroundModel ?? model
+        let waitingJSON = waiting.map(String.init) ?? "null"
         return decode(API.Digest.self, """
             {"accounts": [\(accountsJSON)],
              "ai": {"engine": "\(engine)", "key_from": "\(keyFrom)", "last_ts": 0, "limit_micros": 15000000,
                     "model": "\(engine == "none" ? "" : model)", "spent_today_micros": \(spentJSON),
                     "last_ok": \(lastOkJSON), "last_error": \(lastErrorJSON), "provider": "\(provider)",
-                    "off": \(offJSON)},
+                    "off": \(offJSON), "background_model": "\(background)", "summaries_waiting": \(waitingJSON)},
              "aliases": {\(aliasJSON)}, "generated": "2026-11-14T09:00:00Z", "items": [], "profile": "\(profile)",
              "send_accounts": [\(accountsJSON)], "signature_default": "", "signatures": {},
              "stats": {"kept": 100, "needs": 3, "summarized": 42, "total": \(total), "verified": 0},
@@ -74,12 +78,13 @@ enum StatusFixtures {
     static func preferences(quiet: Bool = false, from: String = "22:00", until: String = "07:00",
                             newMail: Bool = true, meetings: Bool = true, guideOffered: Bool = false,
                             aiEnabled: Bool = true, provider: String = "anthropic", model: String = "",
-                            baseURL: String = "") -> API.Preferences
+                            baseURL: String = "", draftAhead: Bool = false) -> API.Preferences
     {
         decode(API.Preferences.self, """
             {"ai_base_url": "\(baseURL)", "ai_enabled": \(aiEnabled), "ai_model": "\(model)",
              "ai_provider": "\(provider)",
              "ai_daily_limit_usd": 15.0, "auto_tidy": false, "conversations": true, "density": "comfortable",
+             "draft_ahead": \(draftAhead),
              "draft_tone": "balanced", "guide_offered": \(guideOffered), "high_contrast": false, "mail_colors": "auto",
              "morning_brief": false, "notify_meetings": \(meetings), "notify_new_mail": \(newMail),
              "quiet_from": "\(from)", "quiet_hours": \(quiet), "quiet_until": "\(until)", "read_font": "sans",
