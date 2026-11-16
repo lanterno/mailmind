@@ -6,7 +6,8 @@
 //! gate, so a message opens meanwhile.
 //!
 //! A process that only reads reads the older mail too. A message whose opening the server won't send costs only its
-//! own text, and a connection lost part way stores nothing of its step.
+//! own text, one whose headers it won't send is left out of the older mail, and a connection lost part way stores
+//! nothing of its step.
 
 #![allow(clippy::unwrap_used)]
 
@@ -89,9 +90,10 @@ struct State {
     held: BTreeSet<String>,
     /// FETCHes after this many wait until let go too.
     held_after: Option<usize>,
-    /// Messages whose opening the server can't send: a FETCH of openings naming one says NO, sending the rest first
-    /// where `sends_the_rest` (as Gmail does) and nothing where not.
+    /// Messages whose opening the server can't send, and those whose headers it can't: a FETCH of either naming one
+    /// says NO, sending the rest first where `sends_the_rest` (as Gmail does) and nothing where not.
     unsendable: BTreeSet<u32>,
+    headless: BTreeSet<u32>,
     sends_the_rest: bool,
     /// A FETCH of openings naming this message ends the connection unanswered, once.
     cut_at: Option<u32>,
@@ -167,6 +169,11 @@ impl Imap {
         let mut state = self.held();
         state.unsendable.extend(uids);
         state.sends_the_rest = sends_the_rest;
+    }
+
+    /// The server can't send these messages' headers.
+    fn refuse_headers(&self, uids: impl IntoIterator<Item = u32>) {
+        self.held().headless.extend(uids);
     }
 
     /// The connection ends at the next FETCH of openings naming this message.
@@ -286,14 +293,16 @@ impl Connection {
                 }
                 let (set, items) = command["UID FETCH ".len()..].split_once(' ').unwrap();
                 let uids = named(set, &inbox);
-                let openings = items.contains("BODY.PEEK[]<0.");
+                let (openings, headers) = (items.contains("BODY.PEEK[]<0."), items.contains("HEADER.FIELDS"));
                 if openings && self.held().cut_at.is_some_and(|cut| uids.contains(&cut)) {
                     self.held().cut_at = None;
                     return Ok(false);
                 }
                 let (refused, sends_the_rest) = {
                     let state = self.held();
-                    let unsendable = |uid: &u32| openings && state.unsendable.contains(uid);
+                    let unsendable = |uid: &u32| {
+                        (openings && state.unsendable.contains(uid)) || (headers && state.headless.contains(uid))
+                    };
                     (uids.iter().copied().filter(unsendable).collect::<BTreeSet<u32>>(), state.sends_the_rest)
                 };
                 for uid in uids {
@@ -691,4 +700,38 @@ fn a_connection_lost_while_openings_are_read_stores_nothing_of_the_step_and_the_
     assert_eq!(w.said(ADA)["health"], "ok");
     assert_eq!(w.stored(ADA), [1, 2, 3]);
     assert_eq!(w.snippet(ADA, 2), "Note 2 says hello.");
+}
+
+#[test]
+fn a_read_of_older_mail_leaves_out_a_message_whose_headers_the_server_refuses_and_reaches_the_oldest() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 1200));
+    imap.refuse_headers([300]);
+    let w = world(imap, &[ADA]);
+    w.reads_older();
+    w.app.syncing.sync_once();
+    assert_eq!(w.stored(ADA), range(701, 1200));
+    assert!(!w.app.syncing.read_older().unwrap(), "the scan stopped short of the oldest");
+    let all_but: Vec<u32> = (1..=1200).filter(|uid| *uid != 300).collect();
+    assert_eq!(w.stored(ADA), all_but);
+    let said = w.said(ADA);
+    assert!(said.get("done").is_none() && said.get("total").is_none(), "{said}");
+    // The refused FETCH's messages were asked alone.
+    assert_eq!(w.imap.sent(ADA, "UID FETCH 300 ").len(), 1);
+    assert_eq!(w.imap.headers_from(ADA).iter().filter(|uid| (201..=500).contains(*uid)).count(), 301);
+}
+
+#[test]
+fn a_step_of_older_mail_none_of_which_the_server_sends_stores_nothing_and_the_scan_waits() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 1200));
+    imap.refuse_headers(1..=700);
+    let w = world(imap, &[ADA]);
+    w.reads_older();
+    w.app.syncing.sync_once();
+    assert!(!w.app.syncing.read_older().unwrap());
+    // The folder isn't taken as read whole: the next round asks again.
+    assert_eq!(w.stored(ADA), range(701, 1200));
+    let said = w.said(ADA);
+    assert_eq!((said["done"].clone(), said["total"].clone()), (json!(500), json!(1200)));
 }
