@@ -33,3 +33,16 @@ fn the_bridges_password_and_its_1password_item_are_read_as_set_and_empty_is_unse
     assert!(given.password.is_none() && given.op_item.is_none());
     assert!(Environment::default().bridge().op_reference().is_none());
 }
+
+#[test]
+fn mailmind_model_is_read_without_the_spaces_python_strips_and_blank_is_unset() {
+    let model = |value: &str| Environment::from_pairs([("MAILMIND_MODEL", value)]).model();
+    assert_eq!(model("claude-sonnet-5-5"), Some("claude-sonnet-5-5".to_owned()));
+    // A space, a line break, and the separators `str.strip` also takes off (U+001C to U+001F).
+    assert_eq!(model(" \tclaude-sonnet-5-5\n"), Some("claude-sonnet-5-5".to_owned()));
+    assert_eq!(model("\u{1c}claude-sonnet-5-5\u{1f}\u{a0}"), Some("claude-sonnet-5-5".to_owned()));
+    for blank in ["", " ", "\n\t", "\u{1d}\u{3000}"] {
+        assert_eq!(model(blank), None, "{blank:?}");
+    }
+    assert_eq!(Environment::default().model(), None);
+}
