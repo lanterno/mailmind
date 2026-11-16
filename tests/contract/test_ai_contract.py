@@ -8,7 +8,7 @@ import json
 import pytest
 
 from fakes import anthropic_api as fa
-from mailmind.assistant.application.ports import AIOff
+from mailmind.assistant.application.ports import AIOff, ModelError
 from mailmind.assistant.domain.prompts import SYSTEM, TRIAGE
 from mailmind.kernel.assessment import Assessment
 
@@ -209,6 +209,27 @@ def test_a_bad_key_raises_without_a_retry_and_without_the_key(api):
     assert "401" in str(e.value) and "invalid x-api-key" in str(e.value) and "sk-ant" not in str(e.value)
     assert e.value.status == 401 and e.value.permanent
     assert len(api.requests) == 1
+
+
+@pytest.mark.parametrize("at", [0, 150, 160, 170, 300])          # the key runs past the cut from 155 to 173
+def test_no_part_of_the_key_survives_what_the_api_said_cut_to_200_characters(api, at):
+    from mailmind.bootstrap import assistant
+    words = "x" * at + f"invalid header X-Api-Key: {fa.KEY}; try again " + "y" * 300
+    api.queue(fa.error(400, "invalid_request_error", words))
+    with pytest.raises(ModelError) as e:
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
+    said = str(e.value).removeprefix("Claude API 400: ")
+    assert said == words.replace(fa.KEY, "<key>")[:200] and len(said) == 200
+    assert not any(fa.KEY[:n] in said for n in range(6, len(fa.KEY) + 1))
+
+
+def test_what_the_api_said_that_isnt_words_is_kept_as_compact_json(api):
+    from mailmind.bootstrap import assistant
+    api.queue((400, {"type": "error", "error": {"type": "invalid_request_error", "message": {"code": 401, "why": "café"}}}))
+    with pytest.raises(ModelError) as e:
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
+    assert (str(e.value), e.value.status) == ('Claude API 400: {"code":401,"why":"café"}', 400)
+    assert assistant.status.report()["last_error"] == "the API answered 400"
 
 
 def test_a_failed_triage_is_left_for_the_next_run(api):

@@ -354,6 +354,21 @@ def test_no_part_of_the_key_survives_what_a_service_said_cut_to_200_characters(c
     assert not any(fo.KEY[:n] in said for n in range(6, len(fo.KEY) + 1))
 
 
+@pytest.mark.parametrize("error, said", [
+    ({"message": {"code": 401, "why": "café"}, "type": "invalid_request_error"}, '{"code":401,"why":"café"}'),
+    (["bad", 401], '["bad",401]'),
+    (True, "true"),
+], ids=["a-message-that-is-an-object", "an-error-that-is-a-list", "an-error-that-is-true"])
+def test_what_a_service_said_that_isnt_words_is_kept_as_compact_json(choose, error, said):
+    from mailmind.bootstrap import assistant
+    api = choose("compatible", ai_model="mixtral-9x")
+    api.queue((400, {"error": error}))
+    with pytest.raises(ModelError) as e:
+        ask()
+    assert (str(e.value), e.value.status) == (f"compatible API 400: {said}", 400)
+    assert assistant.status.report()["last_error"] == "the API answered 400"
+
+
 def test_a_list_asked_with_a_key_gemini_refuses_with_a_400_says_the_key_was_refused(openai_api):
     from mailmind.assistant.application.catalog import Catalog
     from mailmind.kernel.errors import Refused
