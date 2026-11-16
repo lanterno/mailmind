@@ -214,6 +214,20 @@ fn an_overload_that_stays_gives_up_after_two_retries() {
 }
 
 #[test]
+fn an_account_with_no_credit_left_is_named_and_not_a_bad_request() {
+    let words = "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or \
+                 purchase credits.";
+    let (url, log) = stand_in(vec![(400, vec![], error("invalid_request_error", words))]);
+    let failed =
+        api(&url, Arc::new(Open::default())).complete(&prompt("claude-opus-5-5", true)).expect_err("no credit");
+    assert_eq!(
+        (failed.status, failed.no_credit(), failed.permanent(), heard(&log).len()),
+        (Some(400), Some("Anthropic"), true, 1)
+    );
+    assert_eq!(failed.plain(), "the Anthropic account has no credit left");
+}
+
+#[test]
 fn a_bad_request_says_its_status() {
     let (url, _) = stand_in(vec![(400, vec![], error("invalid_request_error", "bad request"))]);
     let failed = api(&url, Arc::new(Open::default())).complete(&prompt("claude-opus-5-5", true)).expect_err("bad");

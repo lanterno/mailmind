@@ -201,6 +201,19 @@ fn background_work_yields_to_a_person_and_speculative_work_waits_for_one() {
 }
 
 #[test]
+fn an_account_with_no_credit_left_stops_every_background_call_and_the_status_names_it() {
+    let w = world(true, None);
+    let no_credit = ModelError::new("OpenAI API 429: no quota", Some(429)).with_no_credit("OpenAI");
+    assert!(no_credit.permanent());
+    w.model.replies.lock().expect("replies").push(Err(no_credit));
+    w.clock.shift(100);
+    assert!(matches!(w.calls.call_claude("Triage.", "triage"), Err(CallError::Model(_))));
+    assert_eq!(w.calls.call_claude("Ahead.", "brief-ahead"), Err(CallError::NotSent(NotSent::Deferred("breaker"))));
+    let report = w.status.report().expect("a report");
+    assert_eq!(report["last_error"], json!("the OpenAI account has no credit left"));
+}
+
+#[test]
 fn a_rejected_key_stops_background_work_and_is_noted_for_the_status() {
     let w = world(true, None);
     w.model.replies.lock().expect("replies").push(Err(ModelError::new("Claude API 401: invalid x-api-key", Some(401))));

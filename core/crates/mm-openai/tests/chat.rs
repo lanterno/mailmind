@@ -571,6 +571,43 @@ fn the_key_is_taken_out_of_all_a_service_said_before_it_is_cut_short() {
 }
 
 #[test]
+fn an_account_with_no_credit_left_is_asked_once_and_named() {
+    let no_quota = json!({"error": {"message": "You exceeded your current quota, please check your plan and billing details.",
+                                    "type": "insufficient_quota", "param": null, "code": "insufficient_quota"}});
+    let per_day = |quota: &str| {
+        json!([{"error": {"code": 429, "message": "You exceeded your current quota.", "status": "RESOURCE_EXHAUSTED",
+                          "details": [{"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                                       "violations": [{"quotaId": quota}]}]}}])
+        .to_string()
+    };
+    for (provider, status, body, account) in [
+        (OpenAi, 429, no_quota.to_string(), "OpenAI"),
+        (Gemini, 429, per_day("GenerateRequestsPerDayPerProjectPerModel-FreeTier"), "Gemini"),
+        (Compatible, 402, error("Insufficient credits"), "AI service"),
+    ] {
+        let (url, log) = stand_in(vec![(status, vec![("retry-after-ms", "1")], body.clone()); 3]);
+        let failed = api(provider, &url, Some(KEY), Arc::new(Open::default()))
+            .complete(&prompt("m", None))
+            .expect_err("no credit");
+        assert_eq!(
+            (failed.no_credit(), failed.permanent(), heard(&log).len()),
+            (Some(account), true, 1),
+            "{provider:?}"
+        );
+        assert_eq!(failed.plain(), format!("the {account} account has no credit left"));
+    }
+    // A quota by the minute is a rate limit, and waiting helps.
+    let (url, log) = stand_in(vec![
+        (429, vec![("retry-after-ms", "1")], per_day("GenerateRequestsPerMinutePerProjectPerModel-FreeTier")),
+        (200, vec![], answer("Second time.", "gemini-4-hydrogen")),
+    ]);
+    api(Gemini, &url, Some(KEY), Arc::new(Open::default()))
+        .complete(&prompt("gemini-4-hydrogen", None))
+        .expect("a reply");
+    assert_eq!(heard(&log).len(), 2);
+}
+
+#[test]
 fn a_rate_limit_is_sent_again_and_an_outage_that_stays_gives_up_after_two_retries() {
     let (url, log) = stand_in(vec![
         (429, vec![("retry-after-ms", "1")], error("slow down")),
