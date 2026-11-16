@@ -241,10 +241,13 @@ final class MeadowDialogPictures: XCTestCase {
     func testTheAccountFormAsADialog() throws {
         var draft = AccountDraft()
         draft.email = "ada@example.test"
-        draft.kind = .imap
+        draft.take(API.PresetFound(domain: "example.test", ok: true, supported: true, sure: false))
         draft.host = "imap.example.test"
-        try draw("settings-account-form", CGSize(width: 560, height: 640)) { _ in
+        try draw("settings-account-form", CGSize(width: 560, height: 760)) { _ in
             AccountForm(status: status(), draft: draft, done: { _ in })
+        }
+        try draw("settings-account-form-new", CGSize(width: 560, height: 560)) { _ in
+            AccountForm(status: status(), draft: AccountDraft(), done: { _ in })
         }
     }
 
@@ -252,13 +255,39 @@ final class MeadowDialogPictures: XCTestCase {
     func testAGmailAccountsFormWithTheStepsToAnAppPassword() throws {
         var draft = AccountDraft()
         draft.email = "ada@acme.example.test"
-        draft.found = API.PresetFound(domain: "acme.example.test", ok: true, preset: .gmail, sure: false)
-        try draw("settings-account-form-gmail", CGSize(width: 560, height: 760)) { _ in
+        draft.take(API.PresetFound(domain: "acme.example.test", name: "Gmail", ok: true, preset: .gmail,
+                                   settings: API.PresetSettings(type: "gmail"), supported: true, sure: false))
+        try draw("settings-account-form-offer", CGSize(width: 560, height: 760)) { _ in
             AccountForm(status: status(), draft: draft, done: { _ in })
         }
-        draft.kind = .imap
-        try draw("settings-account-form-offer", CGSize(width: 560, height: 640)) { _ in
+        draft.useFound()
+        try draw("settings-account-form-gmail", CGSize(width: 560, height: 820)) { _ in
             AccountForm(status: status(), draft: draft, done: { _ in })
+        }
+    }
+
+    /// An iCloud address, its servers filled in and its app-specific password's page beside the password; and a
+    /// Microsoft one, told it can't be added yet.
+    func testAProvidersFormAndOneMailMindCantLogInToYet() throws {
+        var icloud = AccountDraft()
+        icloud.email = "ada@icloud.com"
+        icloud.take(API.PresetFound(
+            domain: "icloud.com", link: API.Link(url: "https://account.apple.com", words: "Make an app-specific password"),
+            name: "iCloud", note: "iCloud Mail takes an app-specific password, not your Apple Account password: make one at account.apple.com, under Sign-In and Security, then paste it here.",
+            ok: true, preset: .icloud,
+            settings: API.PresetSettings(host: "imap.mail.me.com", port: 993, smtpHost: "smtp.mail.me.com", smtpPort: 587,
+                                         smtpStarttls: true, starttls: false, trash: "Deleted Messages", type: "imap"),
+            supported: true, sure: true))
+        try draw("settings-account-form-icloud", CGSize(width: 560, height: 860)) { _ in
+            AccountForm(status: status(), draft: icloud, done: { _ in })
+        }
+        var outlook = AccountDraft()
+        outlook.email = "ada@outlook.com"
+        outlook.take(API.PresetFound(domain: "outlook.com", name: "Microsoft",
+                                     note: "Outlook, Hotmail, Live and Microsoft 365 accounts need Microsoft's own sign-in, which MailMind doesn't support yet.",
+                                     ok: true, preset: .microsoft, supported: false, sure: true))
+        try draw("settings-account-form-microsoft", CGSize(width: 560, height: 540)) { _ in
+            AccountForm(status: status(), draft: outlook, done: { _ in })
         }
     }
 

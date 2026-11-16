@@ -104,7 +104,7 @@ final class StatusScreenTests: XCTestCase {
     func testTheAccountForm() throws {
         var draft = AccountDraft()
         draft.email = "ada@example.test"
-        draft.kind = .imap
+        draft.pick(.imap)
         draft.host = "imap.example.test"
         try render("settings-account-form", CGSize(width: 520, height: 640),
                    AccountForm(status: status(), draft: draft, done: { _ in }))

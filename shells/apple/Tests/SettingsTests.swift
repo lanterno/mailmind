@@ -3,62 +3,104 @@ import XCTest
 
 private typealias F = StatusFixtures
 
-/// The account form checks what the page checks, sends what the page sends, and never shows a typed password.
+/// The account form checks what it must before it sends, sends what the page sends, takes the server's presets, and
+/// never shows a typed password.
 final class AccountDraftTests: XCTestCase {
     /// A fictional password: it guards nothing.
     private let typed = "fixture-app-password-1234"
 
-    func testANewAccountNeedsAnAddressAHostForIMAPAndAPassword() {
+    /// iCloud's preset, as the server says it for an address at its own domain.
+    private let icloud = API.PresetFound(
+        domain: "icloud.com", link: API.Link(url: "https://account.apple.com", words: "Make an app-specific password"),
+        name: "iCloud", note: "iCloud Mail takes an app-specific password.", ok: true, preset: .icloud,
+        settings: API.PresetSettings(host: "imap.mail.me.com", port: 993, smtpHost: "smtp.mail.me.com", smtpPort: 587,
+                                     smtpStarttls: true, starttls: false, trash: "Deleted Messages", type: "imap"),
+        supported: true, sure: true)
+
+    /// Gmail's, for an address whose domain Google's servers take.
+    private let workspace = API.PresetFound(
+        domain: "acme.example.test", link: API.Link(url: "https://myaccount.google.com/apppasswords", words: "Make an App Password"),
+        name: "Gmail", note: nil, ok: true, preset: .gmail, settings: API.PresetSettings(type: "gmail"),
+        supported: true, sure: false)
+
+    /// Microsoft's, which MailMind can't log in to yet.
+    private let microsoft = API.PresetFound(
+        domain: "outlook.com", name: "Microsoft", note: "Microsoft's sign-in isn't supported yet.", ok: true,
+        preset: .microsoft, supported: false, sure: true)
+
+    private let unknown = API.PresetFound(domain: "example.test", ok: true, supported: true, sure: false)
+
+    func testANewAccountHasNoTypeUntilTheServerSaysAndThenNeedsAServerAndAPassword() {
         var draft = AccountDraft()
-        XCTAssertEqual(draft.problem, "A valid email is required.")
+        XCTAssertNil(draft.kind, "no type picked for a person")
+        XCTAssertEqual(draft.problem, "Type the account’s email address.")
         draft.email = "ada@example.test"
-        XCTAssertEqual(draft.problem, "Set a password (or 1Password ref / env var).")
-        draft.kind = .imap
-        XCTAssertEqual(draft.problem, "A host is required for a generic IMAP account.")
+        draft.take(unknown)
+        XCTAssertEqual(draft.kind, .imap, "an address no preset knows is Other IMAP")
+        XCTAssertEqual(AccountDraft.Kind.imap.label, "Other IMAP")
+        XCTAssertEqual(draft.problem, "Type the incoming server’s name.")
         draft.host = "imap.example.test"
+        XCTAssertEqual(draft.problem, "Type the account’s password.")
         draft.password = typed
         XCTAssertNil(draft.problem)
-        draft.kind = .proton
+        draft.pick(.proton)
         draft.password = ""
         XCTAssertNil(draft.problem, "a Proton account logs in with the Bridge's password")
     }
 
-    func testItSendsWhatThePageSends() throws {
+    func testItSendsTheServersAsTypedAndThePasswordOnlyToTheKeychain() throws {
         var draft = AccountDraft()
         draft.email = "  ada@example.test "
         draft.alias = " Ada "
         draft.password = " \(typed) "
+        draft.pick(.gmail)
         let gmail = draft.body
         XCTAssertEqual(gmail.email, "ada@example.test")
         XCTAssertEqual(gmail.alias, "Ada")
         XCTAssertEqual(gmail.type, .string("gmail"))
-        XCTAssertNil(gmail.host, "a preset's server is the server's to fill in")
+        XCTAssertNil(gmail.host, "a type's server is the server's to fill in")
+        XCTAssertNil(gmail.smtpHost)
         XCTAssertEqual(gmail.credential, .object(["style": .string("keychain"), "value": .string(typed)]))
 
-        draft.kind = .imap
+        draft.pick(.imap)
         draft.host = "imap.example.test"
         draft.port = "143"
         draft.security = .starttls
-        let imap = draft.body
-        XCTAssertEqual(imap.host, .string("imap.example.test"))
-        XCTAssertEqual(imap.port, .number(143))
-        XCTAssertEqual(imap.starttls, true)
+        let blank = draft.body
+        XCTAssertEqual(blank.host, .string("imap.example.test"))
+        XCTAssertEqual(blank.port, .number(143))
+        XCTAssertEqual(blank.starttls, true)
+        XCTAssertNil(blank.smtpHost, "an outgoing server left blank is the server's to fill in")
+        XCTAssertEqual(blank.smtpPort, .number(587))
+        XCTAssertEqual(blank.smtpStarttls, true)
 
-        draft.source = .op
-        draft.opRef = "op://Vault/Item/password"
-        XCTAssertEqual(draft.body.credential, .object(["style": .string("op"), "ref": .string("op://Vault/Item/password")]))
-        draft.source = .env
-        draft.envVar = "ADA_PASSWORD"
-        XCTAssertEqual(draft.body.credential, .object(["style": .string("env"), "var": .string("ADA_PASSWORD")]))
-        draft.kind = .proton
+        draft.smtpHost = " smtp.example.test "
+        draft.smtpPort = "465"
+        draft.smtpSecurity = .tls
+        let typedOut = draft.body
+        XCTAssertEqual(typedOut.smtpHost, .string("smtp.example.test"))
+        XCTAssertEqual(typedOut.smtpPort, .number(465))
+        XCTAssertEqual(typedOut.smtpStarttls, false)
+        let test = try XCTUnwrap(draft.test?.draft)
+        XCTAssertEqual(test.smtpHost, .string("smtp.example.test"), "a test logs in where the account will send from")
+        XCTAssertEqual(test.smtpPort, .number(465))
+        XCTAssertEqual(test.smtpStarttls, false)
+
+        draft.pick(.proton)
         XCTAssertEqual(draft.body.credential, .object(["style": .string("proton_bridge")]))
+        XCTAssertNil(draft.body.host)
     }
 
     func testAnEditKeepsTheAddressAndThePasswordItHasUnlessOneIsTyped() {
         var draft = AccountDraft(editing: F.account("ada@example.test", alias: "Ada", signature: "Ada"))
+        XCTAssertEqual(draft.kind, .imap)
+        XCTAssertEqual(draft.smtpHost, "smtp.example.test")
+        XCTAssertEqual(draft.smtpPort, "465")
+        XCTAssertEqual(draft.smtpSecurity, .tls)
         draft.email = "eve@example.test"
         XCTAssertEqual(draft.address, "ada@example.test", "identity is fixed")
         XCTAssertNil(draft.body.credential)
+        XCTAssertNil(draft.body.trash, "an edit leaves the Trash the server found")
         XCTAssertNil(draft.problem)
         XCTAssertEqual(draft.test, API.TryBody(email: "ada@example.test"), "a test without a password tests what is saved")
         draft.password = typed
@@ -66,13 +108,20 @@ final class AccountDraftTests: XCTestCase {
         XCTAssertNil(AccountDraft().test, "a new account with no password has nothing to test")
     }
 
-    func testAnEditStartsFromHowThePasswordIsKept() {
-        let op = AccountDraft(editing: F.account("ada@example.test", style: "op", ref: "op://Vault/Ada/password"))
-        XCTAssertEqual(op.source, .op)
-        XCTAssertEqual(op.opRef, "op://Vault/Ada/password")
+    func testAnAccountThatReadsItsPasswordFrom1PasswordOrTheEnvironmentShowsItAndKeepsIt() {
+        var op = AccountDraft(editing: F.account("ada@example.test", style: "op", ref: "op://Vault/Ada/password"))
+        XCTAssertEqual(op.keptElsewhere, "From 1Password: op://Vault/Ada/password")
+        XCTAssertFalse(op.typesPassword)
+        op.password = typed
+        XCTAssertNil(op.credential, "nothing typed replaces where it is read from")
+        XCTAssertEqual(op.test, API.TryBody(email: "ada@example.test"))
         let env = AccountDraft(editing: F.account("ada@example.test", style: "env", variable: "ADA_PASSWORD"))
-        XCTAssertEqual(env.source, .env)
-        XCTAssertEqual(env.envVar, "ADA_PASSWORD")
+        XCTAssertEqual(env.keptElsewhere, "From the environment variable ADA_PASSWORD")
+        XCTAssertNil(env.body.credential)
+        let kept = AccountDraft(editing: F.account("ada@example.test"))
+        XCTAssertNil(kept.keptElsewhere)
+        XCTAssertTrue(kept.typesPassword)
+        XCTAssertTrue(AccountDraft().typesPassword, "a new account's password goes to the Keychain")
         XCTAssertEqual(AccountDraft(editing: F.account("ada@example.test", type: "proton", style: "proton_bridge")).kind, .proton)
     }
 
@@ -92,12 +141,19 @@ final class AccountDraftTests: XCTestCase {
         XCTAssertEqual(draft.password, "")
     }
 
-    func testATestsAnswerInThePagesWords() {
+    func testATestsFailureSaysWhatToDoNextWithItsPageAndItsClassInSmallType() {
         XCTAssertEqual(Tested.of(.loggedIn(API.LoggedIn(connect: true, detail: "", email: "ada@example.test", ms: 12, ok: true))),
                        .connected)
-        XCTAssertEqual(Tested.of(.couldntLogIn(API.CouldntLogIn(connect: false, email: nil, error: "LOGIN refused", ok: true))),
-                       .failed("LOGIN refused"))
-        XCTAssertEqual(Tested.of(URLError(.timedOut)), .failed("test failed"))
+        let link = API.Link(url: "https://account.apple.com", words: "Make an app-specific password")
+        let refused = API.CouldntLogIn(connect: false, email: "ada@icloud.com", error: "AUTHENTICATIONFAILED", link: link,
+                                       ok: true, says: "iCloud didn't accept that password.")
+        XCTAssertEqual(Tested.of(.couldntLogIn(refused)),
+                       .failed("iCloud didn't accept that password.", link: link, detail: "AUTHENTICATIONFAILED"))
+        let same = API.CouldntLogIn(connect: false, email: nil, error: "Gmail needs an App Password here.", ok: true,
+                                    says: "Gmail needs an App Password here.")
+        XCTAssertEqual(Tested.of(.couldntLogIn(same)), .failed("Gmail needs an App Password here."),
+                       "a class that is the words already isn't said twice")
+        XCTAssertEqual(Tested.of(URLError(.timedOut)), .failed("The test didn’t finish. Try again."))
     }
 
     func testOnlyANewAddressWithAnAtInItIsAskedWhichPresetItTakes() {
@@ -110,31 +166,66 @@ final class AccountDraftTests: XCTestCase {
         XCTAssertNil(AccountDraft(editing: F.account("ada@example.test")).presetQuery, "a saved account's type is its own")
     }
 
-    func testGmailsSettingsAreOfferedWhereTheServerFoundThemAndAnotherTypeIsPicked() {
+    func testAProvidersOwnAddressTakesItsServersItsTrashAndItsPasswordsPage() {
+        var draft = AccountDraft()
+        draft.email = "ada@icloud.com"
+        draft.take(icloud)
+        XCTAssertEqual(draft.kind, .imap)
+        XCTAssertEqual([draft.host, draft.port, draft.smtpHost, draft.smtpPort], ["imap.mail.me.com", "993", "smtp.mail.me.com", "587"])
+        XCTAssertEqual(draft.security, .tls)
+        XCTAssertEqual(draft.smtpSecurity, .starttls)
+        XCTAssertEqual(draft.note, "iCloud Mail takes an app-specific password.")
+        XCTAssertEqual(draft.link?.url, "https://account.apple.com", "its page is where the password is typed")
+        XCTAssertEqual(draft.presetWords, .fits("iCloud address: iCloud’s settings are filled in."))
+        draft.password = typed
+        XCTAssertEqual(draft.body.trash, "Deleted Messages")
+
+        draft.take(unknown)                                  // another address: what the preset filled in goes
+        XCTAssertEqual(draft.kind, .imap)
+        XCTAssertEqual([draft.host, draft.smtpHost], ["", ""])
+        XCTAssertNil(draft.body.trash)
+        XCTAssertNil(draft.link)
+
+        draft.host = "imap.example.test"                     // what was typed stays
+        draft.take(unknown)
+        XCTAssertEqual(draft.host, "imap.example.test")
+    }
+
+    func testAProvidersSettingsAreOfferedWhereItsServersTakeTheDomainsMail() {
         var draft = AccountDraft()
         draft.email = "ada@acme.example.test"
-        draft.found = API.PresetFound(domain: "acme.example.test", ok: true, preset: .gmail, sure: false)
-        XCTAssertEqual(draft.presetWords, .fits("Google takes acme.example.test’s mail: Gmail’s settings fit it."))
-        draft.kind = .imap
-        XCTAssertEqual(draft.presetWords, .offer("Google takes acme.example.test’s mail: use Gmail’s settings?"))
+        draft.take(workspace)
+        XCTAssertEqual(draft.kind, .imap, "offered, not taken")
+        XCTAssertEqual(draft.presetWords, .offer("Gmail takes acme.example.test’s mail: use Gmail’s settings?", button: "Use Gmail"))
+        draft.useFound()
+        XCTAssertEqual(draft.kind, .gmail)
+        XCTAssertEqual(draft.presetWords, .fits("Gmail takes acme.example.test’s mail: Gmail’s settings fit it."))
+        draft.pick(.imap)
+        XCTAssertEqual(draft.presetWords, .offer("Gmail takes acme.example.test’s mail: use Gmail’s settings?", button: "Use Gmail"))
 
-        draft.found = API.PresetFound(domain: "gmail.com", ok: true, preset: .gmail, sure: true)
-        XCTAssertEqual(draft.presetWords, .offer("A Google address: use Gmail’s settings?"))
-        draft.kind = .gmail
-        XCTAssertNil(draft.presetWords, "Gmail's own address, with Gmail's settings picked: nothing to say")
-
-        draft.kind = .imap
-        draft.found = API.PresetFound(domain: "example.test", ok: true, preset: nil, sure: false)
+        draft.take(unknown)
         XCTAssertNil(draft.presetWords)
         draft.found = nil
         XCTAssertNil(draft.presetWords)
     }
 
+    func testAMicrosoftAddressIsToldItCantBeAddedYetAndNothingIsAsked() {
+        var draft = AccountDraft()
+        draft.email = "ada@outlook.com"
+        draft.take(microsoft)
+        XCTAssertTrue(draft.unsupported)
+        XCTAssertEqual(draft.note, "Microsoft's sign-in isn't supported yet.")
+        XCTAssertEqual(draft.problem, "Microsoft's sign-in isn't supported yet.")
+        XCTAssertNil(draft.presetWords)
+        XCTAssertFalse(AccountDraft(editing: F.account("ada@example.test")).unsupported)
+    }
+
     func testGmailsPasswordFieldShowsAnAppPasswordsShapeAndTheStepsToOne() {
         var draft = AccountDraft()
+        draft.pick(.gmail)
         XCTAssertEqual(draft.passwordPrompt, "abcd efgh ijkl mnop")
-        draft.kind = .imap
-        XCTAssertEqual(draft.passwordPrompt, "paste the password / app password")
+        draft.pick(.imap)
+        XCTAssertEqual(draft.passwordPrompt, "paste the password or app password")
         XCTAssertEqual(AccountDraft(editing: F.account("ada@example.test")).passwordPrompt, "unchanged — leave blank to keep")
         XCTAssertEqual(AccountDraft.appPasswords.absoluteString, "https://myaccount.google.com/apppasswords")
         XCTAssertEqual(AccountDraft.appPasswordSteps.count, 3)
@@ -372,7 +463,7 @@ final class SettingsCoreTests: XCTestCase {
         draft.email = "ada@example.test"
         draft.alias = "Ada"
         draft.signature = "Ada, at the example"
-        draft.kind = .imap
+        draft.pick(.imap)
         draft.host = "127.0.0.1"
         draft.port = "9"
         draft.password = Self.password
@@ -395,13 +486,15 @@ final class SettingsCoreTests: XCTestCase {
         XCTAssertEqual(status.accounts.first?.alias, "Ada Lovelace")
         XCTAssertTrue(status.accounts.first?.credential.set == true, "an edit with no password typed keeps the one kept")
 
-        // Nothing listens on the discard port: the test says it couldn't log in, in the server's words.
+        // Nothing listens on the discard port: the test says it couldn't log in, and what to do next.
         let answer = try await core.post(API.Post.AccountsTest.self, API.TryBody(email: "ada@example.test"))
         let tested = Tested.of(answer)
-        guard case .failed(let why) = tested else { return XCTFail("a closed port logged in") }
+        guard case .failed(let why, _, let detail) = tested else { return XCTFail("a closed port logged in") }
+        XCTAssertEqual(why, "The server didn't answer. Check the server's name and port, and that this Mac is online.")
+        XCTAssertEqual(detail, "connection refused", "the class, in small type")
         XCTAssertFalse(why.contains(Self.password))
 
-        _ = try await core.post(API.Post.AccountsDelete.self, API.NamesAnAccount(email: "ada@example.test"))
+        _ = try await core.post(API.Post.AccountsDelete.self, API.RemoveBody(email: "ada@example.test"))
         await status.readAccounts()
         XCTAssertTrue(status.firstRun)
         await close(core, status)
@@ -411,9 +504,16 @@ final class SettingsCoreTests: XCTestCase {
     func testAnAddressAtGooglesOwnDomainTakesGmailsPresetAndATestHomeAsksNoNameserver() async throws {
         let (core, status) = try await opened()
         let gmail = try await core.get(API.Get.AccountsPreset.self, ["email": "Ada@GMail.com"])
-        XCTAssertEqual(gmail, API.PresetFound(domain: "gmail.com", ok: true, preset: .gmail, sure: true))
+        XCTAssertEqual([gmail.domain, gmail.preset?.rawValue, gmail.settings?.type], ["gmail.com", "gmail", "gmail"])
+        XCTAssertTrue(gmail.sure)
         let acme = try await core.get(API.Get.AccountsPreset.self, ["email": "ada@acme.example.test"])
-        XCTAssertEqual(acme, API.PresetFound(domain: "acme.example.test", ok: true, preset: nil, sure: false))
+        XCTAssertEqual(acme, API.PresetFound(domain: "acme.example.test", ok: true, supported: true, sure: false))
+        let icloud = try await core.get(API.Get.AccountsPreset.self, ["email": "ada@icloud.com"])
+        XCTAssertEqual(icloud.settings?.host, "imap.mail.me.com")
+        XCTAssertEqual(icloud.settings?.trash, "Deleted Messages")
+        let outlook = try await core.get(API.Get.AccountsPreset.self, ["email": "ada@outlook.com"])
+        XCTAssertFalse(outlook.supported)
+        XCTAssertNil(outlook.settings)
         await close(core, status)
     }
 
@@ -422,12 +522,13 @@ final class SettingsCoreTests: XCTestCase {
         let (core, status) = try await opened()
         var draft = AccountDraft()
         draft.email = "dee@example.test"
+        draft.pick(.gmail)
         draft.password = "abcd efgh ijkl mnop"
         _ = try await SecretPost.post(core, API.Post.AccountsAdd.self, draft.body)
         let stood = try String(contentsOf: keychain, encoding: .utf8)
         XCTAssertTrue(stood.contains("abcdefghijklmnop"))
         XCTAssertFalse(stood.contains("abcd efgh"))
-        _ = try await core.post(API.Post.AccountsDelete.self, API.NamesAnAccount(email: "dee@example.test"))
+        _ = try await core.post(API.Post.AccountsDelete.self, API.RemoveBody(email: "dee@example.test"))
         await close(core, status)
     }
 
