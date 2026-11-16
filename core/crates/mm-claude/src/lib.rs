@@ -6,8 +6,10 @@
 //! machine, and never to any endpoint but the one it was given for. The host is asked of `Outside` before a connection
 //! is made. A call is sent again, twice, after a status worth sending again (`RETRIED`) or a lost connection, waiting
 //! what `retry-after` says or else a little longer each time, except a batch's sending, which never is; any other
-//! status is a `ModelError` saying it. The key never reaches a log line or an error. It also lists the models the key
-//! may ask, for a person choosing one (#49).
+//! status is a `ModelError` saying it. The key never reaches a log line or an error, and one that isn't printable
+//! ASCII without a space (one with a space or a line break in it, or any character outside ASCII) is refused as a
+//! 401 is, never sent. It also lists the models the key may ask, for a person choosing one
+//! (#49).
 
 pub mod batches;
 pub mod wire;
@@ -123,8 +125,9 @@ impl ClaudeApi {
         if let Some(beta) = call.beta {
             headers.push(("Anthropic-Beta", beta));
         }
-        if self.key.expose().contains(['\r', '\n']) {
-            return Err(ModelError::new("Claude API failed: the key can't be sent", None));
+        // Every key is printable ASCII without a space, so any other is refused as a 401 is, and never sent.
+        if !mm_kernel::ai_provider::sendable(self.key.expose()) {
+            return Err(ModelError::new("Claude API 401: the key was refused", Some(401)));
         }
         let path = format!("{}{}", endpoint.base, call.path);
         let request = http::request(call.method, &path, &endpoint.host_header(), &headers, call.body);

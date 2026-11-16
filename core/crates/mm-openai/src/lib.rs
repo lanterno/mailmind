@@ -13,8 +13,9 @@
 //! prompt instead, and the reply read as free-form JSON. Neither is sent an output ceiling; OpenAI and Gemini are,
 //! and a 400 whose words name it is asked once more without it. A rejected key (a 401 or a 403, or Gemini's 400
 //! saying the key isn't valid, read as a 401) is never asked again without either, and has an error that holds none
-//! of what the service said, which can quote part of the key back, and no error ever holds the key. It takes no
-//! batch: only Claude's API does.
+//! of what the service said, which can quote part of the key back; no error ever holds the key, and a key that isn't
+//! printable ASCII without a space (one with a space or a line break in it, or any character outside ASCII) is
+//! refused so too, never sent. It takes no batch: only Claude's API does.
 
 pub mod wire;
 
@@ -22,7 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mm_assistant::ports::{LanguageModel, ModelError, Prompt, RETRIED, Reply};
-use mm_kernel::ai_provider::AiProvider;
+use mm_kernel::ai_provider::{self, AiProvider};
 use mm_kernel::seams::{Outside, Secret};
 use mm_net::http::{self, Endpoint, backoff};
 use mm_net::{Lost, Stream};
@@ -122,10 +123,11 @@ impl ChatApi {
         if !endpoint.tls && !endpoint.loopback() {
             return Err(self.unreachable("plain HTTP is only for this machine"));
         }
-        let bearer = self.key.as_ref().map(|k| format!("Bearer {}", k.expose()));
-        if bearer.as_ref().is_some_and(|b| b.contains(['\r', '\n'])) {
-            return Err(ModelError::new(format!("{} failed: the key can't be sent", self.provider.id()), None));
+        // Every provider's key is printable ASCII without a space, so any other is refused as a 401 is, and never sent.
+        if self.key.as_ref().is_some_and(|k| !ai_provider::sendable(k.expose())) {
+            return Err(ModelError::new(format!("{} API 401: the key was refused", self.provider.id()), Some(401)));
         }
+        let bearer = self.key.as_ref().map(|k| format!("Bearer {}", k.expose()));
         let mut headers = vec![("Accept", "application/json"), ("User-Agent", "MailMind")];
         if body.is_some() {
             headers.push(("Content-Type", "application/json"));

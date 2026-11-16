@@ -64,9 +64,17 @@ impl AiProvider {
 pub const KEY_SPACED: &str = "An API key can't hold spaces or line breaks.";
 
 /// Whether a key holds what no provider's key does, and no request header can carry: a space (any `str.isspace`
-/// one) or a control character. Such a key is no key to send.
+/// one) or a control character. A key typed or pasted so is refused in `KEY_SPACED`'s words; what may be sent is
+/// `sendable`'s to say.
 pub fn key_spaced(key: &str) -> bool {
     key.chars().any(|c| crate::text::is_space(c) || c.is_control())
+}
+
+/// Whether a key may be sent (`providers.sendable`): every character printable ASCII without a space, `!` to `~`, as
+/// every provider's keys are. Any other key, from anywhere, is a refused key, never sent: one with a space or a line
+/// break was pasted or read wrong, and no request header carries one outside ASCII.
+pub fn sendable(key: &str) -> bool {
+    key.chars().all(|c| ('!'..='~').contains(&c))
 }
 
 /// The longest base URL a person may give, in characters.
