@@ -62,8 +62,9 @@ fn document(status: u16, kind: &str, title: &str, detail: &str, more: &[(&str, V
     Value::Object(doc)
 }
 
-/// What a call never sent answers: the 402 the page asks the person about before it goes over, the 409 of AI off,
-/// and for anything else the fixed 500.
+/// What a call never sent answers: the 402 the page asks the person about before it goes over, the 409 of AI off
+/// (whatever the reason: the Python app's words, which the page shows as "AI is off"), a batch of a provider that takes
+/// none refused in words, and for anything else the fixed 500.
 fn not_sent(not: NotSent, method: &Method, uri: &Uri) -> Response<Body> {
     match not {
         NotSent::OverLimit { spent, limit } => answer::problem_document(
@@ -76,7 +77,7 @@ fn not_sent(not: NotSent, method: &Method, uri: &Uri) -> Response<Body> {
                 &[("over_limit", json!(true)), ("spent_micros", json!(spent)), ("limit_micros", json!(limit))],
             ),
         ),
-        NotSent::AiOff => answer::problem_document(
+        NotSent::AiOff(_) => answer::problem_document(
             409,
             &document(
                 409,
@@ -86,6 +87,7 @@ fn not_sent(not: NotSent, method: &Method, uri: &Uri) -> Response<Body> {
                 &[("ai_off", json!(true))],
             ),
         ),
+        NotSent::NoBatches => answer::problem(&Problem::refused(mm_assistant::providers::NO_BATCHES)),
         NotSent::Deferred(_) => answer::failure(&Failure::Fault(Fault::new("Deferred")), method.as_str(), uri.path()),
     }
 }

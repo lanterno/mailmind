@@ -1,6 +1,7 @@
 //! The gateway every AI call goes through (`application.gateway`): it builds the request for the model in use, asks
-//! the cost governor whether it may go now, sends it through the language model for the key in force, and adds each
-//! call to the usage ledger: what it cost, under the feature that made it.
+//! the cost governor whether it may go now, sends it through the language model in force (the provider chosen, with
+//! its key), and adds each call to the usage ledger: what it cost, under the feature that made it. A model on this
+//! machine that the price table doesn't know costs nothing.
 
 use std::fmt;
 use std::sync::Arc;
@@ -46,16 +47,11 @@ fn prompt(text: &str, name: &str, schema: Option<&Value>, effort: Option<&str>, 
     }
 }
 
-/// What `usage` cost, at the dearer of the model asked and the one that served the reply.
-fn cost(asked: &str, served: &str, usage: Usage) -> i64 {
-    pricing::cost_micros(
-        asked,
-        served,
-        usage.input_tokens,
-        usage.output_tokens,
-        usage.cache_write_tokens,
-        usage.cache_read_tokens,
-    )
+/// What `usage` cost, at the dearer of the model asked and the one that served the reply; on this machine (`local`)
+/// a model the price table doesn't know costs nothing.
+fn cost(local: bool, asked: &str, served: &str, usage: Usage) -> i64 {
+    let tokens = (usage.input_tokens, usage.output_tokens, usage.cache_write_tokens, usage.cache_read_tokens);
+    pricing::cost_micros_on(local, asked, served, tokens)
 }
 
 /// What calls of one model and outcome came to, as the ledger adds them up.
@@ -107,21 +103,31 @@ impl Gateway {
         Gateway { engine, budget, governor }
     }
 
-    /// The language model for the key in force, or that AI is off.
+    /// The AI in force: its provider, its model, and its language model or why AI is off.
     pub fn in_force(&self) -> InForce {
         self.engine.in_force()
     }
 
-    /// False when AI is off: there is no key, and every call is `AiOff`, unsent.
+    /// False when AI is off (turned off, or no key, URL or model), and every call is `AiOff`, unsent.
     pub fn on(&self) -> bool {
-        matches!(self.in_force(), InForce::On { .. })
+        self.in_force().on()
+    }
+
+    /// The model asked unless a call names another: "" where AI is off for want of one.
+    pub fn model(&self) -> String {
+        self.in_force().model
+    }
+
+    /// Whether the provider in force takes a batch: only Claude does.
+    pub fn takes_batches(&self) -> bool {
+        self.in_force().takes_batches()
     }
 
     pub fn governor(&self) -> &Arc<CostGovernor> {
         &self.governor
     }
 
-    /// `text` as one user turn under the system prompt to `model` (the default one unless named), with structured
+    /// `text` as one user turn under the system prompt to `model` (the one in force unless named), with structured
     /// output when `schema` is given, at `effort` (medium unless named) where the model takes one, and the refusal
     /// fallback where it takes that. The call is counted under `feature` whatever its outcome, if it was made.
     pub fn ask(
@@ -132,23 +138,22 @@ impl Gateway {
         model: Option<&str>,
         effort: Option<&str>,
     ) -> Result<Reply, CallError> {
-        let name = model.filter(|m| !m.is_empty()).unwrap_or(models::DEFAULT);
+        let force = self.in_force();
+        let lm = force.lm.clone().map_err(NotSent::AiOff)?;
+        let name = model.filter(|m| !m.is_empty()).unwrap_or(&force.model);
         let prompt = prompt(text, name, schema, effort, models::takes_fallback(name));
-        let InForce::On { model: lm, .. } = self.in_force() else {
-            return Err(NotSent::AiOff.into());
-        };
         let made = self.governor.call(features::kind(feature), feature, name, &lm, || lm.complete(&prompt))?;
         match made {
             Ok(reply) => {
                 self.heard(feature, name, &lm, None);
                 let outcome = if reply.refused() { "refused" } else { "ok" };
-                self.count(feature, name, &reply.model, outcome, reply.usage);
+                self.count(force.local, feature, name, &reply.model, outcome, reply.usage);
                 Ok(reply)
             }
             Err(error) => {
                 self.heard(feature, name, &lm, Some(&error));
                 let outcome = if error.permanent() { "rejected" } else { "failed" };
-                self.count(feature, name, "", outcome, Usage::default());
+                self.count(force.local, feature, name, "", outcome, Usage::default());
                 Err(CallError::Model(error))
             }
         }
@@ -157,24 +162,28 @@ impl Gateway {
     /// Why a call for `feature` would be held back now ("yielding", "away", "limit", "breaker"), or None when it
     /// would go. Background work asks before it starts.
     pub fn held_back(&self, feature: &str, model: Option<&str>) -> Option<&'static str> {
-        let name = model.filter(|m| !m.is_empty()).unwrap_or(models::DEFAULT);
-        match self.in_force() {
-            InForce::On { model: lm, .. } => self.governor.held_back(features::kind(feature), feature, name, &lm),
-            InForce::Off { .. } => None,
+        let force = self.in_force();
+        let name = model.filter(|m| !m.is_empty()).unwrap_or(&force.model);
+        match &force.lm {
+            Ok(lm) => self.governor.held_back(features::kind(feature), feature, name, lm),
+            Err(_) => None,
         }
     }
 
-    /// The language model for the key in force, or `AiOff` with none: nothing is sent.
-    fn model(&self) -> Result<Arc<dyn LanguageModel>, CallError> {
-        match self.in_force() {
-            InForce::On { model, .. } => Ok(model),
-            InForce::Off { .. } => Err(NotSent::AiOff.into()),
+    /// The AI in force and its language model, for a batch: `AiOff` with AI off, and `NoBatches` for a provider that
+    /// takes none. Nothing is sent.
+    fn batching(&self) -> Result<(InForce, Arc<dyn LanguageModel>), CallError> {
+        let force = self.in_force();
+        let lm = force.lm.clone().map_err(NotSent::AiOff)?;
+        if !force.takes_batches() {
+            return Err(NotSent::NoBatches.into());
         }
+        Ok((force, lm))
     }
 
-    /// Each (custom id, text) as one request of one batch to `model` (the default one unless named), and the batch's
+    /// Each (custom id, text) as one request of one batch to `model` (the one in force unless named), and the batch's
     /// id. Never with the refusal fallback, which batches reject, and never sent again. Its cost is counted when its
-    /// answers are in; a failure to send it is counted as a call that failed.
+    /// answers are in; a failure to send it is counted as a call that failed. Only Claude takes one.
     pub fn submit_batch(
         &self,
         requests: &[(String, String)],
@@ -183,10 +192,10 @@ impl Gateway {
         model: Option<&str>,
         effort: Option<&str>,
     ) -> Result<String, CallError> {
-        let name = model.filter(|m| !m.is_empty()).unwrap_or(models::DEFAULT);
+        let (force, lm) = self.batching()?;
+        let name = model.filter(|m| !m.is_empty()).unwrap_or(&force.model);
         let prompts: Vec<(String, Prompt)> =
             requests.iter().map(|(id, text)| (id.clone(), prompt(text, name, schema, effort, false))).collect();
-        let lm = self.model()?;
         match lm.submit_batch(&prompts) {
             Ok(batch_id) => {
                 self.heard(feature, name, &lm, None);
@@ -195,7 +204,7 @@ impl Gateway {
             Err(error) => {
                 self.heard(feature, name, &lm, Some(&error));
                 let outcome = if error.permanent() { "rejected" } else { "failed" };
-                self.count(feature, name, "", outcome, Usage::default());
+                self.count(force.local, feature, name, "", outcome, Usage::default());
                 Err(CallError::Model(error))
             }
         }
@@ -203,7 +212,7 @@ impl Gateway {
 
     /// Whether a batch has ended.
     pub fn batch_ended(&self, batch_id: &str) -> Result<bool, CallError> {
-        self.model()?.batch_ended(batch_id).map_err(CallError::Model)
+        self.batching()?.1.batch_ended(batch_id).map_err(CallError::Model)
     }
 
     /// What a batch that has ended said, each answer counted under `feature` at half price, those of one model and
@@ -214,8 +223,8 @@ impl Gateway {
         feature: &str,
         model: Option<&str>,
     ) -> Result<Vec<BatchResult>, CallError> {
-        let name = model.filter(|m| !m.is_empty()).unwrap_or(models::DEFAULT);
-        let lm = self.model()?;
+        let (force, lm) = self.batching()?;
+        let name = model.filter(|m| !m.is_empty()).unwrap_or(&force.model);
         let results = lm.batch_results(batch_id, name).map_err(CallError::Model)?;
         // Each (served, outcome) and what its calls came to, in the order each first came.
         let mut tally: Vec<(String, &'static str, Counted)> = Vec::new();
@@ -231,7 +240,7 @@ impl Gateway {
                     (reply.model.clone(), if reply.refused() { "refused" } else { "ok" }, reply.usage)
                 }
             };
-            let spent = pricing::batch_micros(cost(name, &served, usage));
+            let spent = pricing::batch_micros(cost(force.local, name, &served, usage));
             let at = match tally.iter().position(|t| t.0 == served && t.1 == outcome) {
                 Some(at) => at,
                 None => {
@@ -255,7 +264,7 @@ impl Gateway {
 
     /// Remove what the API keeps of a batch.
     pub fn discard_batch(&self, batch_id: &str) -> Result<(), CallError> {
-        self.model()?.discard_batch(batch_id).map_err(CallError::Model)
+        self.batching()?.1.discard_batch(batch_id).map_err(CallError::Model)
     }
 
     /// What today's limit leaves for background work, in micro-dollars.
@@ -267,14 +276,9 @@ impl Gateway {
         self.governor.heard(feature, name, lm, error);
     }
 
-    fn count(&self, feature: &str, asked: &str, served: &str, outcome: &'static str, usage: Usage) {
-        self.record(
-            feature,
-            asked,
-            served,
-            outcome,
-            Counted { calls: 1, usage, cost_micros: cost(asked, served, usage) },
-        );
+    fn count(&self, local: bool, feature: &str, asked: &str, served: &str, outcome: &'static str, usage: Usage) {
+        let cost_micros = cost(local, asked, served, usage);
+        self.record(feature, asked, served, outcome, Counted { calls: 1, usage, cost_micros });
     }
 
     fn record(&self, feature: &str, asked: &str, served: &str, outcome: &'static str, counted: Counted) {

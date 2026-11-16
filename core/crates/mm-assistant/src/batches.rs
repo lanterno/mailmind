@@ -94,13 +94,16 @@ impl Batching {
     }
 
     /// When a backlog of `at_least` is waiting and no batch is out, send it as one, leaving the `keep` newest to go
-    /// now, and say how many it took: what fits in its share of today's limit, by estimate. With AI off, or while
-    /// the cost governor holds a batch back, nothing goes. A batch that wasn't sent gives its messages back, and the
-    /// next round tries again.
+    /// now, and say how many it took: what fits in its share of today's limit, by estimate. With AI off, with a
+    /// provider other than Claude (only Claude takes a batch), or while the cost governor holds a batch back, nothing
+    /// goes. A batch that wasn't sent gives its messages back, and the next round tries again.
     pub fn submit(&self, at_least: usize, keep: usize) -> Result<usize, Fault> {
         let label = self.calls.model_label();
         let gateway = self.calls.gateway();
-        if self.calls.engine() == "none" || gateway.held_back(FEATURE, Some(&label)).is_some() {
+        if self.calls.engine() == "none"
+            || !gateway.takes_batches()
+            || gateway.held_back(FEATURE, Some(&label)).is_some()
+        {
             return Ok(0);
         }
         if self.book.open()?.is_some() {
@@ -170,9 +173,10 @@ impl Batching {
     /// stored. Nothing here sends a message, so neither the limit nor someone using AI holds it back: these answers
     /// are paid for. A batch cut off while it was being sent gives its messages back, as one the API no longer has
     /// does; one that couldn't be read is asked about again later. A batch whose answers are in is removed from the
-    /// API, tried again each round until it goes.
+    /// API, tried again each round until it goes. One out waits while AI is off, or for Claude to be the provider
+    /// again.
     pub fn collect(&self) -> Result<usize, Fault> {
-        if self.calls.engine() == "none" {
+        if self.calls.engine() == "none" || !self.calls.gateway().takes_batches() {
             return Ok(0);
         }
         let gateway = self.calls.gateway();

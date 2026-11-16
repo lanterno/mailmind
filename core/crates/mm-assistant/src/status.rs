@@ -1,6 +1,6 @@
 //! How AI stands, with no call made (`application.status`): what the page says of it, and how the most recent call
-//! went. With no API key the engine is "none", which is no failure. A call that was never made (AI off, or held back
-//! by the cost governor) isn't one either.
+//! went. With AI off (turned off in Settings, or no key, URL or model) the engine is "none", which is no failure, and
+//! `off` says why. A call that was never made (AI off, or held back by the cost governor) isn't one either.
 
 use std::sync::{Arc, Mutex};
 
@@ -10,7 +10,6 @@ use mm_kernel::seams::Clock;
 use serde_json::{Map, Value, json};
 
 use crate::gateway::Gateway;
-use crate::ports::InForce;
 use crate::refusals::CallError;
 
 /// How the most recent call went: `ok` None until one has run.
@@ -25,13 +24,12 @@ struct Last {
 pub struct Status {
     gateway: Arc<Gateway>,
     clock: Arc<dyn Clock>,
-    model_label: String,
     last: Mutex<Last>,
 }
 
 impl Status {
-    pub fn new(gateway: Arc<Gateway>, clock: Arc<dyn Clock>, model_label: String) -> Status {
-        Status { gateway, clock, model_label, last: Mutex::new(Last::default()) }
+    pub fn new(gateway: Arc<Gateway>, clock: Arc<dyn Clock>) -> Status {
+        Status { gateway, clock, last: Mutex::new(Last::default()) }
     }
 
     fn note(&self, ok: bool, error: String) {
@@ -51,15 +49,14 @@ impl Status {
         made
     }
 
-    /// What the page says of AI, with no call made: the engine ("api", or "none" with no key), its model, where the
-    /// key came from, how the most recent call went, what today's calls cost so far in micro-dollars (null when the
-    /// ledger can't be read) beside the daily limit, and how many messages a batch out holds, when one does.
+    /// What the page says of AI, with no call made: the engine ("api", or "none" while AI is off), the provider
+    /// chosen and why AI is off (null while it is on), the model in force, where the key came from, how the most
+    /// recent call went, what today's calls cost so far in micro-dollars (null when the ledger can't be read) beside
+    /// the daily limit, and how many messages a batch out holds, when one does.
     pub fn report(&self) -> Result<Value, Fault> {
         let in_force = self.gateway.in_force();
-        let (on, key_from) = match &in_force {
-            InForce::On { key_from, .. } => (true, *key_from),
-            InForce::Off { .. } => (false, ""),
-        };
+        let on = in_force.on();
+        let off = in_force.lm.as_ref().err().map(|why| why.id());
         let last = self.last.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
         let spent = match self.gateway.spent_today() {
             Ok(spent) => json!(spent),
@@ -70,8 +67,10 @@ impl Status {
         };
         let mut report = Map::new();
         report.insert("engine".into(), json!(if on { "api" } else { "none" }));
-        report.insert("model".into(), json!(if on { self.model_label.as_str() } else { "" }));
-        report.insert("key_from".into(), json!(key_from));
+        report.insert("provider".into(), json!(in_force.provider.id()));
+        report.insert("off".into(), json!(off));
+        report.insert("model".into(), json!(if on { in_force.model.as_str() } else { "" }));
+        report.insert("key_from".into(), json!(if on { in_force.key_from } else { "" }));
         report.insert("last_ok".into(), json!(last.ok));
         report.insert("last_ts".into(), json!(last.ts));
         report.insert("last_error".into(), json!(last.error));

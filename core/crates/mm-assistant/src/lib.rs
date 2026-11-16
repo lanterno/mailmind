@@ -1,8 +1,9 @@
-//! Everything asked of Claude (`mailmind.assistant`): the gateway every call goes through, the cost governor that
-//! decides whether it may go now, the ledger of what each cost, and how AI stands with no call made.
+//! Everything asked of the AI (`mailmind.assistant`): Claude by default, or the provider a person chose (#49). The
+//! gateway every call goes through, the cost governor that decides whether it may go now, the ledger of what each
+//! cost, and how AI stands with no call made.
 //!
-//! What it needs of the world is in `ports`, which the store, the Claude API's crate (`mm-claude`) and the program
-//! implement; nothing here reads the disk, the network or the clock.
+//! What it needs of the world is in `ports`, which the store, the providers' crates (`mm-claude`, `mm-openai`) and the
+//! program implement; nothing here reads the disk, the network or the clock.
 
 pub mod action_plan;
 pub mod ask;
@@ -26,6 +27,7 @@ pub mod prepared_replies;
 pub mod prepared_reply;
 pub mod pricing;
 pub mod prompts;
+pub mod providers;
 pub mod rationale;
 pub mod refusals;
 pub mod reply_draft;

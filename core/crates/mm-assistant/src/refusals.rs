@@ -1,19 +1,23 @@
 //! How a call can fail to be an answer (`application.ports`' `NotSent`, `ModelError`), and what an AI request can
 //! answer instead of one (`AiFailure`).
 //!
-//! A call that was never sent is `NotSent`: AI is off, or the cost governor held it back. It isn't a failure, the ledger
-//! counts nothing for it, and every caller lets it through ahead of its own handling, so the route can say why: an
-//! over-limit call as a 402 the page asks about, AI off as a 409 the page shows as "AI is off".
+//! A call that was never sent is `NotSent`: AI is off, the provider in force takes no batch, or the cost governor held
+//! it back. It isn't a failure, the ledger counts nothing for it, and every caller lets it through ahead of its own
+//! handling, so the route can say why: an over-limit call as a 402 the page asks about, AI off as a 409 the page shows
+//! as "AI is off".
 
 use mm_kernel::errors::{Failure, Fault, Problem};
 
 use crate::ports::ModelError;
+use crate::providers::Off;
 
 /// Nothing was sent, so no call was made.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotSent {
-    /// There is no API key.
-    AiOff,
+    /// AI is off: turned off, or with no key, URL or model to ask.
+    AiOff(Off),
+    /// A batch, of a provider that takes none: only Claude's Message Batches API does (`providers::NO_BATCHES`).
+    NoBatches,
     /// An interactive call at the daily limit, which the person hasn't said may go over: what today's calls cost, and
     /// the limit, in micro-dollars.
     OverLimit { spent: i64, limit: i64 },

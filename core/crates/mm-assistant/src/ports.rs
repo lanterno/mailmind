@@ -1,5 +1,5 @@
 //! What the Assistant's use cases need of the world (`mailmind.assistant.application.ports`): a language model for the
-//! key in force, the settings that turn AI on and bound what it spends, and the ledger of what calls cost.
+//! provider and key in force, the settings that bound what it spends, and the ledger of what calls cost.
 //!
 //! A `LanguageModel` sends a `Prompt` as one user turn and gives back the `Reply`. When no reply comes it fails with a
 //! `ModelError`: the API rejected the call (`status` says how), or nothing answered (`status` is None).
@@ -7,8 +7,11 @@
 use std::fmt;
 use std::sync::Arc;
 
+use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::errors::Fault;
 use serde_json::Value;
+
+use crate::providers::{Off, speaks_anthropic};
 
 /// The statuses worth sending again: a timeout, a conflict, a rate limit, an overload, a server error. Any other 4xx
 /// says the request itself won't do.
@@ -93,6 +96,9 @@ impl ModelError {
         if lower.contains("timed out") {
             return "it timed out".to_owned();
         }
+        if lower.contains("unreachable") {
+            return "couldn't reach it".to_owned();
+        }
         match self.status {
             Some(status) => format!("the API answered {status}"),
             None => "ModelError".to_owned(),
@@ -139,16 +145,57 @@ pub trait LanguageModel: Send + Sync + fmt::Debug {
     }
 }
 
-/// The language model for the key in force now, or that AI is off; and where the key came from, or where it was
-/// looked for.
+/// The AI in force now (#49): the provider chosen, the model asked unless a call names another, where its key came
+/// from or was looked for, whether it runs on this machine, and its language model, or why AI is off.
 #[derive(Clone, Debug)]
-pub enum InForce {
-    On { model: Arc<dyn LanguageModel>, key_from: &'static str },
-    Off { key_from: &'static str },
+pub struct InForce {
+    pub provider: AiProvider,
+    /// MAILMIND_MODEL's, else the one a person chose, else the provider's own: "" where there is none.
+    pub model: String,
+    /// "" where no key was looked for: a provider that takes none.
+    pub key_from: &'static str,
+    /// Ollama, or a provider at a loopback address: a model the price table doesn't know costs nothing.
+    pub local: bool,
+    pub lm: Result<Arc<dyn LanguageModel>, Off>,
 }
 
-/// Where the key and the API are: read at each call, so a new key takes effect at once, and the model made again
-/// only when the key or the API's address changes. A key that can't be had is no key.
+impl InForce {
+    /// Claude, asked with its default model through `lm`, its key from `key_from`.
+    pub fn claude(lm: Arc<dyn LanguageModel>, key_from: &'static str) -> InForce {
+        InForce {
+            provider: AiProvider::Anthropic,
+            model: crate::models::DEFAULT.to_owned(),
+            key_from,
+            local: false,
+            lm: Ok(lm),
+        }
+    }
+
+    /// AI off for `why`, with Claude chosen and its key looked for at `key_from`.
+    pub fn off(why: Off, key_from: &'static str) -> InForce {
+        InForce {
+            provider: AiProvider::Anthropic,
+            model: crate::models::DEFAULT.to_owned(),
+            key_from,
+            local: false,
+            lm: Err(why),
+        }
+    }
+
+    /// Whether AI is on: there is a language model to ask.
+    pub fn on(&self) -> bool {
+        self.lm.is_ok()
+    }
+
+    /// Whether it takes a batch: only Claude's Message Batches API does.
+    pub fn takes_batches(&self) -> bool {
+        self.on() && speaks_anthropic(self.provider)
+    }
+}
+
+/// What AI is: whether it is on, the provider, model and URL chosen, and the key kept for it, read at each call, so a
+/// change takes effect at once, and the model made again only when what it was made for changes. A key that can't
+/// be had is no key.
 pub trait Engine: Send + Sync + fmt::Debug {
     fn in_force(&self) -> InForce;
 }

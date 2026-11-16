@@ -109,13 +109,19 @@ impl Engine for ApiEngine {
     fn in_force(&self) -> InForce {
         let (key, key_from) = self.key();
         if key.expose().is_empty() {
-            return InForce::Off { key_from };
+            return InForce::off(mm_assistant::providers::Off::NoKey, key_from);
         }
+        let named = |mut force: InForce| {
+            if let Some(model) = self.environment.model() {
+                force.model = model;
+            }
+            force
+        };
         let mut made = self.made.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some((for_key, model)) = made.as_ref()
             && for_key.expose() == key.expose()
         {
-            return InForce::On { model: model.clone(), key_from };
+            return named(InForce::claude(model.clone(), key_from));
         }
         let base_url = self.environment.anthropic_base_url();
         let model: Arc<dyn LanguageModel> = Arc::new(mm_claude::ClaudeApi::new(
@@ -124,7 +130,7 @@ impl Engine for ApiEngine {
             self.outside.clone(),
         ));
         *made = Some((key, model.clone()));
-        InForce::On { model, key_from }
+        named(InForce::claude(model, key_from))
     }
 }
 
@@ -202,8 +208,7 @@ impl Assistant {
         let usage = Arc::new(mm_assistant::usage::UsageReport::new(database.clone(), clock.clone(), zone.clone()));
         let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
         let gateway = Arc::new(Gateway::new(engine, budget, governor.clone()));
-        let label = environment.model().unwrap_or_else(|| mm_assistant::models::DEFAULT.to_owned());
-        let status = Arc::new(Status::new(gateway.clone(), clock.clone(), label));
+        let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
         let fetch = Arc::new(Fetching::new(FetchingParts {
             stored: database.clone(),

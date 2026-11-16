@@ -1,13 +1,13 @@
 //! Every AI call in the app goes through `call_claude_json` or `call_claude` here (`application.calls`), which ask
-//! the Claude API through the gateway, each call's outcome noted for the status. With no API key AI is off: those
-//! calls are `AiOff` before anything is sent. The cost governor may hold a call back instead.
+//! the AI in force (Claude, or the provider a person chose) through the gateway, each call's outcome noted for the
+//! status. With AI off (turned off, or no key, URL or model) those calls are `AiOff` before anything is sent. The cost
+//! governor may hold a call back instead.
 
 use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
 use crate::gateway::Gateway;
-use crate::models;
 use crate::ports::Reply;
 use crate::refusals::CallError;
 use crate::schema::object_in;
@@ -32,14 +32,14 @@ impl Calls {
         &self.gateway
     }
 
-    /// "api" when an API key resolves, else "none": AI is off.
+    /// "api" while AI is on, else "none": turned off, or with no key, URL or model.
     pub fn engine(&self) -> &'static str {
         if self.gateway.on() { "api" } else { "none" }
     }
 
-    /// The model name stored beside each AI result and shown under it.
+    /// The model name stored beside each AI result and shown under it: MAILMIND_MODEL's, else the one in force.
     pub fn model_label(&self) -> String {
-        self.model.clone().unwrap_or_else(|| models::DEFAULT.to_owned())
+        self.model.clone().unwrap_or_else(|| self.gateway.model())
     }
 
     /// Plain text (a thread's digest). `feature` names the call in the usage ledger.
