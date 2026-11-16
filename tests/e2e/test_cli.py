@@ -327,16 +327,16 @@ def test_ai_off_and_on_turn_the_switch_and_say_what_is_in_force(data_dir, capsys
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-in-the-environment")
     (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [], "theme": "dark"}))
     assert _exit(["ai", "off"]) == 0
-    assert capsys.readouterr().out == "AI is off: nothing is sent to any AI provider until it is turned on again.\n"
+    assert capsys.readouterr().out == "AI mode is off: nothing is sent to any AI provider until it is turned on again.\n"
     assert json.loads((data_dir / "mailmind.config.json").read_text()) == {
         "accounts": [], "theme": "dark", "preferences": {"ai_enabled": False}}
     assert assistant.engine().off == "turned-off"
     assert _exit(["ai", "on"]) == 0
-    assert capsys.readouterr().out == "AI is on.\n"
+    assert capsys.readouterr().out == "AI mode is on.\n"
     assert assistant.engine().off is None
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     assert _exit(["ai", "on"]) == 0
-    assert capsys.readouterr().out == "AI is on, but nothing is sent yet: there is no API key.\n"
+    assert capsys.readouterr().out == "AI mode is on, but nothing is sent yet: there is no API key.\n"
 
 
 def _plaintext_config(data_dir):

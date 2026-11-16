@@ -285,7 +285,7 @@ def test_with_no_key_anywhere_ai_mode_starts_off(plain, data_dir, monkeypatch):
 
 
 @pytest.mark.parametrize("preferences, line", [
-    ({"ai_enabled": False}, "Claude (Anthropic) · claude-opus-5-5 · AI is turned off: turn it on in Settings, or with "
+    ({"ai_enabled": False}, "Claude (Anthropic) · claude-opus-5-5 · AI mode is off: turn it on in Settings, or with "
                             "`uv run python -m mailmind ai on`"),
     ({"ai_provider": "openai"}, "OpenAI · gpt-6.1-sol · no key, so AI is off: keep one in Settings, or with "
                                 "`uv run python -m mailmind ai key --provider openai`"),
