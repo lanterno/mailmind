@@ -353,7 +353,7 @@ fn a_round_triages_whats_new_at_low_effort_and_keeps_what_each_reply_came_to() {
     assert_eq!(
         outcomes,
         HashMap::from([
-            (1, (Some(Outcome::Assessed), "claude-opus-5-5", "2026-11-02T12:00:00+00:00")),
+            (1, (Some(Outcome::Assessed), "claude-haiku-5-5", "2026-11-02T12:00:00+00:00")),
             (2, (Some(Outcome::Unusable), "parse-error", "2026-11-02T12:00:00+00:00")),
             (3, (Some(Outcome::Refused), "parse-error", "2026-11-02T12:00:00+00:00")),
         ])
@@ -363,8 +363,8 @@ fn a_round_triages_whats_new_at_low_effort_and_keeps_what_each_reply_came_to() {
     assert_eq!(sent.len(), 4);
     for prompt in &sent {
         assert_eq!(
-            (prompt.effort.as_deref(), prompt.schema.as_ref()),
-            (Some("low"), Some(&structured(&triage_schema())))
+            (prompt.effort.as_deref(), prompt.schema.as_ref(), prompt.model.as_str()),
+            (Some("low"), Some(&structured(&triage_schema())), "claude-haiku-5-5")
         );
     }
     assert!(w.features().iter().all(|f| f == "triage"));

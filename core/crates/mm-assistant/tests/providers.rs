@@ -14,7 +14,7 @@ use mm_assistant::ports::{
     AiSettings, Engine, InForce, LanguageModel, LocalServer, LocalServers, ModelError, ModelLists, Prompt, Reply,
     Spend, Usage, UsageLedger,
 };
-use mm_assistant::providers::{self, Off, chat_models, default_base_url, default_model};
+use mm_assistant::providers::{self, Off, background_model, chat_models, default_base_url, default_model, small_model};
 use mm_assistant::refusals::{CallError, NotSent};
 use mm_assistant::status::Status;
 use mm_kernel::ai_provider::AiProvider::{self, Anthropic, Compatible, Gemini, Local, OpenAi};
@@ -217,6 +217,21 @@ impl LanguageModel for Model {
     }
 }
 
+#[test]
+fn background_summaries_ask_the_providers_small_model_whatever_model_is_chosen() {
+    let small: Vec<&str> = AiProvider::ALL.iter().map(|p| small_model(*p)).collect();
+    assert_eq!(small, ["claude-haiku-5-5", "gpt-6-luna", "gemini-3.5-flash-lite", "", ""]);
+    for provider in [Anthropic, OpenAi, Gemini] {
+        assert_eq!(background_model(provider, "", None), small_model(provider));
+        assert_eq!(background_model(provider, "my-model", None), small_model(provider));
+    }
+    // A model on this Mac and a compatible service summarize with the model chosen.
+    assert_eq!(background_model(Local, "llama-4", None), "llama-4");
+    assert_eq!(background_model(Compatible, "llama-4", None), "llama-4");
+    // A model every feature asks is asked for background summaries too.
+    assert_eq!(background_model(Anthropic, "claude-sonnet-5-5", Some("claude-opus-5")), "claude-opus-5");
+}
+
 /// The AI in force, as a test sets it.
 #[derive(Debug)]
 struct Chosen(Mutex<InForce>);
@@ -355,17 +370,23 @@ fn the_status_names_the_provider_why_ai_is_off_and_the_model_in_force() {
             report["key_from"].clone(),
         )
     };
+    let background = |w: &World| w.status.report().expect("a report")["background_model"].clone();
     assert_eq!(
         said(&w),
         (json!("api"), json!("anthropic"), json!(null), json!("claude-opus-5-5"), json!("ANTHROPIC_API_KEY"))
     );
+    assert_eq!(background(&w), json!("claude-haiku-5-5"));
     w.on(Gemini, "gemini-4-hydrogen", "mailmind.config.json", false);
     assert_eq!(
         said(&w),
         (json!("api"), json!("gemini"), json!(null), json!("gemini-4-hydrogen"), json!("mailmind.config.json"))
     );
+    assert_eq!(background(&w), json!("gemini-3.5-flash-lite"));
+    w.on(Local, "llama-4", "", true);
+    assert_eq!(background(&w), json!("llama-4"));
     w.off(OpenAi, "gpt-6.1-sol", Off::TurnedOff);
     assert_eq!(said(&w), (json!("none"), json!("openai"), json!("turned-off"), json!(""), json!("")));
+    assert_eq!(background(&w), json!(""));
     w.off(Local, "", Off::NoModel);
     assert_eq!(said(&w), (json!("none"), json!("local"), json!("no-model"), json!(""), json!("")));
     w.off(Compatible, "", Off::NoUrl);

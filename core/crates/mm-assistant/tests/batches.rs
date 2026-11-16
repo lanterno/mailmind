@@ -12,7 +12,7 @@ use mm_assistant::batches::{self, Batching};
 use mm_assistant::calls::Calls;
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
-use mm_assistant::models::DEFAULT;
+use mm_assistant::models::{DEFAULT, SMALL};
 use mm_assistant::ports::{
     AiSettings, BatchResult, Engine, InForce, LanguageModel, ModelError, Prompt, Reply, Spend, Usage, UsageLedger,
 };
@@ -153,7 +153,8 @@ impl LanguageModel for Model {
 /// Claude with its key, or AI off with none; a test may choose another provider (#49) or another model, or turn AI
 /// off and on.
 #[derive(Debug)]
-struct Keyed(Mutex<Option<Arc<dyn LanguageModel>>>, Mutex<AiProvider>, Arc<Mutex<String>>);
+/// The language model, the provider, the model chosen and the one background summaries ask.
+struct Keyed(Mutex<Option<Arc<dyn LanguageModel>>>, Mutex<AiProvider>, Arc<Mutex<String>>, Arc<Mutex<String>>);
 
 impl Engine for Keyed {
     fn in_force(&self) -> InForce {
@@ -162,6 +163,10 @@ impl Engine for Keyed {
             Some(lm) => InForce { provider, model: lock(&self.2).clone(), ..InForce::claude(lm, "ANTHROPIC_API_KEY") },
             None => InForce { provider, ..InForce::off(mm_assistant::providers::Off::NoKey, "ANTHROPIC_API_KEY") },
         }
+    }
+
+    fn background_model(&self) -> String {
+        lock(&self.3).clone()
     }
 }
 
@@ -386,8 +391,8 @@ fn world(messages: i64, on: bool, limit_micros: Option<i64>) -> World {
     });
     let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
     let lm: Arc<dyn LanguageModel> = model.clone();
-    let chosen = Arc::new(Mutex::new(DEFAULT.to_owned()));
-    let engine = Arc::new(Keyed(Mutex::new(on.then_some(lm)), Mutex::new(AiProvider::Anthropic), chosen));
+    let (chosen, background) = (Arc::new(Mutex::new(DEFAULT.to_owned())), Arc::new(Mutex::new(SMALL.to_owned())));
+    let engine = Arc::new(Keyed(Mutex::new(on.then_some(lm)), Mutex::new(AiProvider::Anthropic), chosen, background));
     let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
     let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
     let calls = Arc::new(Calls::new(gateway, status.clone(), false));
@@ -428,7 +433,7 @@ impl World {
         rows.iter()
             .map(|r| {
                 let chars = SYSTEM.chars().count() + triage_prompt(r).chars().count();
-                batch_estimate(DEFAULT, i64::try_from(chars).expect("a count"))
+                batch_estimate(SMALL, i64::try_from(chars).expect("a count"))
             })
             .collect()
     }
@@ -530,9 +535,13 @@ fn a_backlog_goes_as_a_batch_and_the_newest_stay() {
     assert_eq!(w.waiting(), before[..20]);
     let [out] = w.book.in_state("running").expect("out").try_into().expect("one");
     assert_eq!((out.remote_id.as_deref(), out.cutoff_ts, out.polled_at), (Some("msgbatch_1"), SINCE + 100 * 100, NOW));
-    assert_eq!((out.feature.as_str(), out.model.as_str(), out.prompt_version), ("triage-batch", DEFAULT, Some(2)));
+    // The small model, whatever model is chosen.
+    assert_eq!((out.feature.as_str(), out.model.as_str(), out.prompt_version), ("triage-batch", SMALL, Some(2)));
     let [prompt] = lock(&w.model.batches).values().next().map(|h| [h.requests[0].1.clone()]).expect("a request");
-    assert_eq!((prompt.text, prompt.effort.as_deref()), (triage_prompt(&message(100)), Some("low")));
+    assert_eq!(
+        (prompt.text, prompt.effort.as_deref(), prompt.model.as_str()),
+        (triage_prompt(&message(100)), Some("low"), SMALL)
+    );
     assert!(prompt.schema.is_some() && !prompt.fallback);
 }
 
@@ -612,7 +621,7 @@ fn an_answer_for_nothing_of_ours_is_ignored_and_nothing_comes_in_before_the_batc
     assert_eq!(w.collect(), ours);
     let said = lock(&w.book.said).get(&100).cloned().expect("an answer");
     assert_eq!((said.summary.as_str(), said.importance, said.outcome), ("Batched.", 5, Some(Outcome::Assessed)));
-    assert_eq!((said.model.as_str(), said.prompt_version), (DEFAULT, Some(2)));
+    assert_eq!((said.model.as_str(), said.prompt_version), (SMALL, Some(2)));
 }
 
 #[test]
@@ -832,11 +841,11 @@ fn with_another_provider_one_being_sent_is_let_go_too_and_so_with_ai_off() {
 fn a_batchs_answers_carry_the_model_it_asked_not_the_one_in_force() {
     let w = world(120, true, None);
     assert_eq!(w.submit(), 100);
-    // Sent while another model was chosen: the one in force now is the default.
+    // Sent while the background asked another model: the one it asks now is the small one.
     let asked = "claude-opus-4-8";
     let id = w.book.open().expect("out").expect("a batch").id;
     w.book.batch_mut(id, |b| b.model = asked.into());
-    assert_eq!(w.calls.model_label(), DEFAULT);
+    assert_eq!(w.calls.background_label(), SMALL);
     w.model.end_batch();
     w.clock.shift(batches::POLL);
     assert_eq!(w.collect(), 100);
@@ -848,16 +857,16 @@ fn a_batchs_answers_carry_the_model_it_asked_not_the_one_in_force() {
 #[test]
 fn a_batch_asks_the_model_its_row_names_when_another_is_chosen_as_it_goes() {
     let w = world(120, true, None);
-    // Another model chosen once the batch's row is committed, before it is sent.
-    *lock(&w.book.choose_on_begin) = Some((w.engine.2.clone(), "claude-opus-4-8".into()));
+    // The background's model changed once the batch's row is committed, before it is sent.
+    *lock(&w.book.choose_on_begin) = Some((w.engine.3.clone(), "claude-opus-4-8".into()));
     assert_eq!(w.submit(), 100);
-    assert_eq!(w.calls.model_label(), "claude-opus-4-8");
+    assert_eq!(w.calls.background_label(), "claude-opus-4-8");
     let out = w.book.open().expect("out").expect("a batch");
-    assert_eq!(out.model, DEFAULT);
+    assert_eq!(out.model, SMALL);
     let asked: Vec<String> =
         lock(&w.model.batches).values().flat_map(|h| h.requests.iter().map(|(_, p)| p.model.clone())).collect();
     assert_eq!(asked.len(), 100);
-    assert!(asked.iter().all(|m| m == DEFAULT), "every request asks the model the row is booked under");
+    assert!(asked.iter().all(|m| m == SMALL), "every request asks the model the row is booked under");
 }
 
 #[test]
