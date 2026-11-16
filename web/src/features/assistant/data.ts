@@ -17,10 +17,12 @@ export function whatWentWrong(e: unknown): string | null {
   return e instanceof Error && e.message ? e.message : "couldn’t reach the server";
 }
 
+// `ai`: whether AI answers, once the digest says. The brief is read apart for each, so AI turning on writes the one that AI
+// off left unwritten.
 export function useBrief(ai: boolean | undefined) {
   const qc = useQueryClient();
   const read = useQuery({
-    queryKey: ["brief"],
+    queryKey: ["brief", ai],
     enabled: ai !== undefined,
     staleTime: Infinity,
     retry: false,
@@ -31,7 +33,7 @@ export function useBrief(ai: boolean | undefined) {
   });
   const write = useMutation({
     mutationFn: async (again: boolean) => await post(again ? "/api/briefing/refresh" : "/api/briefing", {}, { askOverLimit }) as Brief,
-    onSuccess: (d) => qc.setQueryData(["brief"], d),
+    onSuccess: (d) => qc.setQueryData(["brief", ai], d),
     onSettled: (_d, _e, again) => {
       if (again) void qc.invalidateQueries({ queryKey: ["briefSide"] });
     },
