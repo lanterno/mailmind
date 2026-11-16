@@ -3,11 +3,14 @@
 an address whose domain Google's servers take, shows how to make an App Password with Google's page a link away, fills in
 iCloud's servers with its app-specific password's page beside the password, says plainly that Microsoft's accounts can't be
 added yet, and makes any other address Other IMAP, with its incoming and outgoing servers. A connection is tested as soon as
-it is saved, saying plainly what refused it and what to do next."""
+it is saved, saying plainly what refused it and what to do next. A Proton account logs in with the Bridge's password, so it
+is tested once it is added, as it is saved."""
 import re
 
 import pytest
 from playwright.sync_api import expect
+
+from fixtures import world as w
 
 pytestmark = pytest.mark.browser
 
@@ -85,6 +88,25 @@ def test_a_microsoft_address_is_told_it_cant_be_added_yet_before_any_password_is
                                                      "sign-in, which MailMind doesn't support yet.")
     expect(dialog.get_by_label("Password", exact=True)).to_have_count(0)
     expect(dialog.get_by_role("button", name="Save connection")).to_be_disabled()
+    clean(page)
+
+
+def test_a_proton_account_is_tested_once_it_is_added_and_then_as_it_is_saved(page):
+    dialog = settings(page)
+    page.get_by_role("button", name="+ Add a connection").click()
+    dialog.get_by_label("Email", exact=True).fill(DEE)
+    expect(dialog.get_by_role("button", name="Other IMAP", exact=True)).to_have_attribute("aria-pressed", "true")
+    expect(dialog.get_by_role("button", name="Test connection")).to_be_enabled()
+    dialog.get_by_role("button", name="Proton", exact=True).click()
+    expect(dialog.get_by_text("Add the account, then test it.")).to_be_visible()
+    expect(dialog.get_by_role("button", name="Test connection")).to_be_disabled()
+    dialog.get_by_role("button", name="Cancel").click()
+
+    dialog.locator(f'.set-row[data-email="{w.BEA}"]').get_by_role("button", name="Edit").click()
+    expect(dialog.get_by_role("button", name="Proton", exact=True)).to_have_attribute("aria-pressed", "true")
+    expect(dialog.get_by_text("Add the account, then test it.")).to_have_count(0)
+    dialog.get_by_role("button", name="Test connection").click()
+    expect(dialog.locator(".formbar ~ .set-tested .set-status")).to_have_text("✓ Connected")
     clean(page)
 
 
