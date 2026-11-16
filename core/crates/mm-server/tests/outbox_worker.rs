@@ -145,6 +145,7 @@ fn a_process_that_only_reads_starts_neither() {
     let home = tempfile::tempdir().unwrap();
     let app = app(home.path(), "read-only");
     let workers = Workers::start(&app, true, 0, 0);
-    assert_eq!(app.jobs.names(), ["snooze"]);
+    // Only the minute's round, and the reading of a first scan's older mail, which changes nothing on a server.
+    assert_eq!(app.jobs.names(), ["snooze", "older-mail"]);
     workers.stop();
 }

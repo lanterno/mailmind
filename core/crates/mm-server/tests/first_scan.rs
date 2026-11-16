@@ -4,6 +4,8 @@
 //! its first 64 KiB, only an invite cut off fetched whole; how far the scan has got in the sync's status; none of it
 //! new mail; each account syncing on its own; and an Inbox opened while its first sync runs joining it, holding no
 //! gate, so a message opens meanwhile.
+//!
+//! A process that only reads reads the older mail too.
 
 #![allow(clippy::unwrap_used)]
 
@@ -22,7 +24,7 @@ use mm_mailbox::gates::{Priority, Wait, on_gate};
 use mm_mailbox::lists::Paging;
 use mm_server::environment::{Environment, Settings};
 use mm_server::events::TabStream;
-use mm_server::workers::OLDER_MAIL;
+use mm_server::workers::{OLDER_MAIL, Workers};
 use mm_server::{App, Seams};
 use rcgen::{CertificateParams, KeyPair};
 use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -84,6 +86,8 @@ struct State {
     sent: Vec<(String, String)>,
     /// The accounts whose FETCHes wait until they are let go.
     held: BTreeSet<String>,
+    /// FETCHes after this many wait until let go too.
+    held_after: Option<usize>,
 }
 
 /// An IMAP server on loopback, over TLS from the first byte, with an INBOX for each account. It answers what a sync
@@ -140,7 +144,14 @@ impl Imap {
     }
 
     fn let_go(&self, email: &str) {
-        self.held().held.remove(email);
+        let mut state = self.held();
+        state.held.remove(email);
+        state.held_after = None;
+    }
+
+    /// FETCHes after the first `fetches` wait until let go.
+    fn hold_after(&self, fetches: usize) {
+        self.held().held_after = Some(fetches);
     }
 
     /// What `user` was sent that starts with `start`, in order.
@@ -220,7 +231,12 @@ impl Connection {
             return Ok(true);
         }
         let user = self.user.clone();
-        self.held().sent.push((user.clone(), command.to_owned()));
+        // Which of the account's FETCHes this is, if it is one.
+        let ordinal = {
+            let mut state = self.held();
+            state.sent.push((user.clone(), command.to_owned()));
+            state.sent.iter().filter(|(who, c)| *who == user && c.starts_with("UID FETCH")).count()
+        };
         let inbox = self.held().inbox.get(&user).cloned().unwrap_or_default();
         match verb.as_str() {
             "CAPABILITY" => self.say(format!("* CAPABILITY IMAP4rev1\r\n{tag} OK\r\n").as_bytes())?,
@@ -242,7 +258,10 @@ impl Connection {
                 self.say(format!("* SEARCH {}\r\n{tag} OK\r\n", found.join(" ")).as_bytes())?;
             }
             "UID" if command.to_uppercase().starts_with("UID FETCH") => {
-                while self.held().held.contains(&user) {
+                while {
+                    let state = self.held();
+                    state.held.contains(&user) || state.held_after.is_some_and(|after| ordinal > after)
+                } {
                     std::thread::sleep(Duration::from_millis(5));
                 }
                 let (set, items) = command["UID FETCH ".len()..].split_once(' ').unwrap();
@@ -330,6 +349,11 @@ struct World {
 
 /// The app over a data directory of a database at the newest schema, its accounts on one IMAP server on loopback.
 fn world(imap: Imap, emails: &[&str]) -> World {
+    world_as(imap, emails, "full")
+}
+
+/// The same, run with the profile named (`full` or `read-only`).
+fn world_as(imap: Imap, emails: &[&str], profile: &str) -> World {
     let keychain = Arc::new(Kept::default());
     for email in emails {
         keychain.put(&format!("account:{email}"), &Secret::new(PASSWORD.to_owned())).unwrap();
@@ -344,7 +368,7 @@ fn world(imap: Imap, emails: &[&str]) -> World {
         .collect();
     std::fs::write(home.path().join("mailmind.config.json"), json!({"accounts": accounts}).to_string()).unwrap();
     database(home.path()).ready(&Frozen).unwrap();
-    let app = assemble(home.path(), &keychain);
+    let app = assemble(home.path(), &keychain, profile);
     World { app, imap, home, keychain }
 }
 
@@ -353,9 +377,9 @@ fn database(home: &Path) -> mm_store::Database {
 }
 
 /// The app over `home`, as a start assembles it.
-fn assemble(home: &Path, keychain: &Arc<Kept>) -> Arc<App> {
+fn assemble(home: &Path, keychain: &Arc<Kept>, profile: &str) -> Arc<App> {
     let hex = "5e".repeat(32);
-    let environment = Environment::from_pairs([("MAILMIND_DB_KEY", hex.as_str()), ("MAILMIND_PROFILE", "full")]);
+    let environment = Environment::from_pairs([("MAILMIND_DB_KEY", hex.as_str()), ("MAILMIND_PROFILE", profile)]);
     let settings = Settings { home: home.to_path_buf() };
     let seams = Seams {
         clock: Arc::new(Frozen),
@@ -464,7 +488,7 @@ fn a_first_scan_stopped_part_way_goes_on_where_its_last_step_left_it() {
     // MailMind quits, and starts again.
     let World { app, imap, home, keychain } = w;
     drop(app);
-    let w = World { app: assemble(home.path(), &keychain), imap, home, keychain };
+    let w = World { app: assemble(home.path(), &keychain, "full"), imap, home, keychain };
     assert!(!w.app.syncing.read_older().unwrap());
     assert_eq!(w.stored(ADA), range(1, 3000));
     assert_eq!(w.imap.sent(ADA, "UID SEARCH").last().unwrap(), "UID SEARCH UID 1:500");
@@ -563,4 +587,26 @@ fn an_inbox_opened_during_its_first_sync_joins_it_and_a_message_opens_meanwhile(
         assert_eq!(listed["items"].as_array().unwrap().len(), 3);
         assert!(listed.get("syncing").is_none(), "{listed}");
     });
+}
+
+#[test]
+fn a_process_that_only_reads_reads_a_first_scans_older_mail_too_and_says_how_far_it_got() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 1200));
+    // The first sync's FETCHes go, two of headers and ten of openings; what comes after waits.
+    imap.hold_after(12);
+    let w = world_as(imap, &[ADA], "read-only");
+    let workers = Workers::start(&w.app, true, 0, 0);
+    // Nothing syncs in the background: opening the Inbox reads it first.
+    let page = Paging { offset: 0, limit: 50, grouped: false };
+    w.app.reading.lists.messages_in(Some(ADA), "INBOX", page).unwrap();
+    until(|| w.said(ADA)["health"] == "ok");
+    assert_eq!(w.stored(ADA), range(701, 1200));
+    let said = w.said(ADA);
+    assert_eq!((said["done"].clone(), said["total"].clone()), (json!(500), json!(1200)));
+    w.imap.let_go(ADA);
+    until(|| w.stored(ADA) == range(1, 1200) && w.said(ADA).get("done").is_none());
+    workers.stop();
+    assert_eq!(w.imap.sent(ADA, "UID SEARCH"), ["UID SEARCH ALL", "UID SEARCH UID 1:700"]);
+    assert_eq!(w.snippet(ADA, 3), "Note 3 says hello.");
 }
