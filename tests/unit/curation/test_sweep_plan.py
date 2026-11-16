@@ -2,7 +2,7 @@
 import pytest
 
 from mailmind.curation.domain import classifier, rulebook, sweep_plan
-from mailmind.curation.domain.classifier import BLOCKED, JUNK_BUCKETS, MKT, PERSONAL, PROTECTED
+from mailmind.curation.domain.classifier import BLOCKED, JUNK_BUCKETS, MKT, NOTIF, PERSONAL, PROTECTED, SPAM
 from mailmind.curation.domain.live import READ_FIELDS, held, read_from_headers
 
 NO_RULES = rulebook.as_sets(rulebook.empty())
@@ -57,6 +57,25 @@ def test_a_message_is_read_from_its_headers():
     assert read_from_headers(7, raw, {"\\Seen"}) == {"uid": "7", "from": "ada@example.test", "name": "Ada",
                                                       "subject": "Hello", "mid": "<m@example.test>", "bulk": False,
                                                       "starred": False, "unread": False}
+
+
+def test_a_plan_names_the_senders_with_the_most_and_the_newest_subjects_of_each_bucket_that_goes():
+    def junk(uid, who, subject, bucket=MKT):
+        return {**read(f"{who}@loom.example.test", subject=subject, uid=str(uid)), "bucket": bucket, "conf": "high",
+                "reason": "list"}
+    rows = [junk(3, "no-reply", "alert", NOTIF), junk(10, "a", "spring"), junk(11, "c", "spring"), junk(12, "b", "sale"),
+            junk(13, "d", "summer"), junk(14, "e", "autumn"), junk(15, "b", "weekly"), junk(16, "f", "weekly"),
+            junk(17, "news", "issue 2"), junk(2, "news", "issue"), junk(4, "prize", "You won", SPAM)]
+
+    def sender(who, n):
+        return {"from_addr": f"{who}@loom.example.test", "count": n}
+    assert sweep_plan.going(rows) == [
+        {"bucket": SPAM, "count": 1, "senders": [sender("prize", 1)], "subjects": ["You won"]},
+        {"bucket": MKT, "count": 9,
+         "senders": [sender("b", 2), sender("news", 2), sender("a", 1), sender("c", 1), sender("d", 1)],
+         "subjects": ["issue 2", "weekly", "autumn", "summer", "sale"]},
+        {"bucket": NOTIF, "count": 1, "senders": [sender("no-reply", 1)], "subjects": ["alert"]}]
+    assert sweep_plan.going([]) == []
 
 
 def test_a_sweep_takes_the_newest_of_its_junk_up_to_its_cap_in_inbox_order():

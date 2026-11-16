@@ -16,6 +16,47 @@
      },
      "capped": false,
      "error": null,
+     "going": [
+      {
+       "bucket": "spam/scam",
+       "count": 1,
+       "senders": [
+        {
+         "count": 1,
+         "from_addr": "winner@prizes.example.test"
+        }
+       ],
+       "subjects": [
+        "CONGRATULATIONS you have WON $1,000,000 - claim your prize now"
+       ]
+      },
+      {
+       "bucket": "newsletters/marketing",
+       "count": 1,
+       "senders": [
+        {
+         "count": 1,
+         "from_addr": "news@loom.example.test"
+        }
+       ],
+       "subjects": [
+        "This week: five new patterns"
+       ]
+      },
+      {
+       "bucket": "automated-notifications",
+       "count": 1,
+       "senders": [
+        {
+         "count": 1,
+         "from_addr": "noreply@ci.example.test"
+        }
+       ],
+       "subjects": [
+        "[quilt] Build #412 passed"
+       ]
+      }
+     ],
      "held_back": 0,
      "moved": 0,
      "no_undo": 0,
@@ -56,6 +97,47 @@
      },
      "capped": false,
      "error": null,
+     "going": [
+      {
+       "bucket": "spam/scam",
+       "count": 1,
+       "senders": [
+        {
+         "count": 1,
+         "from_addr": "winner@prizes.example.test"
+        }
+       ],
+       "subjects": [
+        "CONGRATULATIONS you have WON $1,000,000 - claim your prize now"
+       ]
+      },
+      {
+       "bucket": "newsletters/marketing",
+       "count": 1,
+       "senders": [
+        {
+         "count": 1,
+         "from_addr": "news@loom.example.test"
+        }
+       ],
+       "subjects": [
+        "This week: five new patterns"
+       ]
+      },
+      {
+       "bucket": "automated-notifications",
+       "count": 1,
+       "senders": [
+        {
+         "count": 1,
+         "from_addr": "noreply@ci.example.test"
+        }
+       ],
+       "subjects": [
+        "[quilt] Build #412 passed"
+       ]
+      }
+     ],
      "held_back": 0,
      "moved": 3,
      "no_undo": 0,
