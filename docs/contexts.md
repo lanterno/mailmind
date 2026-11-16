@@ -48,9 +48,11 @@ See [Architecture](architecture.md) for the layers around them.
   note and the page where its app password is made) for its own domains, and offered for a domain whose MX records name
   its servers, which `adapters.mail_hosts` asks of the nameservers `/etc/resolv.conf` lists, through the `MailHosts` port
   (one question over UDP; the Rust server's is `mm_net::dns`). Microsoft's has no settings: MailMind can't sign in to it
-  yet. A test of a login (`application.connections`) logs in at the outgoing (SMTP) server too, once the incoming one let
-  it in, and a failure says in `domain.login_words`' words what went wrong and what to do next, with the page that
-  helps, by the class `conn_error.quiet` named, which stays in the answer's `error` (the Rust core's
+  yet. Nor has iCloud's for an iCloud+ custom domain (`Provider.custom_domain`): iCloud lets other mail apps sign in
+  only with the @icloud.com address, and an account logs in with the address typed, so the form says to add that one
+  instead. A test of a login (`application.connections`) logs in at the outgoing (SMTP) server too, once the incoming
+  one let it in, and a failure says in `domain.login_words`' words what went wrong and what to do next, with the page
+  that helps, by the class `conn_error.quiet` named, which stays in the answer's `error` (the Rust core's
   `mm_accounts::login_words` says the same). A Proton account logs in with the Bridge's password, which only a saved
   account is tested with (`domain.draft`), so the forms test a new one once it is added. Removing an account with
   `delete_mail` lets go of what this Mac keeps of its mail too: `mailmind.bootstrap.mailbox.forget_account` runs each
