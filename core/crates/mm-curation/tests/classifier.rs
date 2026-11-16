@@ -227,7 +227,7 @@ fn rules_come_first_in_their_order() {
     );
     assert_eq!(
         said("lin@studio.example.test", "Re: lunch", "", true, &PRECEDENCE),
-        ["newsletters/marketing", "high", "List-Unsubscribe header"]
+        ["other/personal-ish", "med", "a person's reply in a list thread"]
     );
     assert_eq!(
         said("lin@sendgrid.example.test", "Re: lunch", "", false, &PRECEDENCE),
@@ -669,6 +669,44 @@ fn whitespace_is_what_python_called_whitespace() {
     assert_eq!(
         said("lin@gmail.com", "risk-free\u{d}returns", "", false, &NONE),
         ["spam/scam", "high", "fraud/MLM pattern"]
+    );
+}
+
+#[test]
+fn a_persons_reply_in_a_list_thread_is_no_mailing() {
+    // A reply or a forward from a person, in a group's thread that carries the list's headers.
+    for subject in ["Re: Saturday's ride", "Fwd: the minutes", "AW: Termin", "  re : quilt show"] {
+        assert_eq!(
+            said("lin.mori@studio.example.test", subject, "Lin Mori", true, &NONE),
+            ["other/personal-ish", "med", "a person's reply in a list thread"],
+            "{subject}"
+        );
+    }
+    // The list's own mail, a role's reply, a reply's look on a mailing and fraud stay what they were.
+    assert_eq!(
+        said("lin.mori@studio.example.test", "Saturday's ride", "", true, &NONE),
+        ["newsletters/marketing", "high", "List-Unsubscribe header"]
+    );
+    assert_eq!(
+        said("news@loom.example.test", "Re: your cart", "", true, &NONE),
+        ["newsletters/marketing", "high", "List-Unsubscribe header"]
+    );
+    assert_eq!(
+        said("no-reply@loom.example.test", "Re: your order", "", true, &NONE),
+        ["newsletters/marketing", "high", "List-Unsubscribe header"]
+    );
+    assert_eq!(
+        said("0123456789abcdef@loom.example.test", "Re: hi", "", true, &NONE),
+        ["newsletters/marketing", "high", "List-Unsubscribe header"]
+    );
+    assert_eq!(
+        said("lin.mori@gmail.com", "Re: you have won the lottery", "", true, &NONE),
+        ["spam/scam", "high", "fraud/MLM pattern"]
+    );
+    // With no list header, a reply reads as it always did.
+    assert_eq!(
+        said("lin.mori@studio.example.test", "Re: lunch", "", false, &NONE),
+        ["other/personal-ish", "high", "reply/forward in an active thread"]
     );
 }
 
