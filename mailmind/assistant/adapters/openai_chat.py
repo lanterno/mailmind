@@ -5,8 +5,9 @@ URL, its key (or none) and its model. What goes on the wire and how a reply read
 It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when there is a key, and no proxy: the request
 goes to the host the URL names. It tries the statuses a retry can help (408, 409, 429 and 5xx), and a connection that
 failed, twice more, honouring retry-after, as the Anthropic SDK does. A model on this Mac and a compatible service may not take
-structured output: a 400 that names `response_format` is asked once more without it, and the reply read as free-form JSON.
-A rejected key's error holds none of what the service said, which can quote part of the key back. It takes no batch.
+structured output: a 400 that names `response_format` is asked once more without it, the schema stated in the prompt instead,
+and the reply read as free-form JSON. A rejected key's error holds none of what the service said, which can quote part of the
+key back. It takes no batch.
 """
 import http.client
 import json

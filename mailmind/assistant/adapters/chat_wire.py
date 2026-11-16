@@ -3,10 +3,12 @@ and the Reply in a response.
 
 The system prompt goes as a `system` message ahead of the user's. Structured output is `response_format`'s `json_schema`,
 strict only where the schema keeps strict mode's rules (every object closed, and every property in it required), since a
-strict schema that breaks them is refused. OpenAI takes `max_completion_tokens`, and the others `max_tokens`. No effort and
-no server-side fallback go out: neither is theirs. A reasoning model may put its thinking ahead of its reply, as
-`<think>…</think>` or `<thinking>…</thinking>`: that block is dropped before the reply is read.
+strict schema that breaks them is refused. Asked without it, as a service that refused it is, the prompt states the schema
+instead. OpenAI takes `max_completion_tokens`, and the others `max_tokens`. No effort and no server-side fallback go out:
+neither is theirs. A reasoning model may put its thinking ahead of its reply, as `<think>…</think>` or
+`<thinking>…</thinking>`: that block is dropped before the reply is read.
 """
+import json
 import re
 from typing import Any, cast
 
@@ -14,6 +16,7 @@ from mailmind.assistant.application.ports import Prompt, Reply, Usage
 from mailmind.kernel.ai_provider import AiProvider
 
 SCHEMA_NAME = "answer"
+SCHEMA_WORDS = "Reply with only a JSON object that matches this JSON Schema: "     # ahead of the schema, without its format
 _THINKING = re.compile(r"\A\s*<(think|thinking)>.*?</\1>", re.DOTALL)
 
 
@@ -40,9 +43,12 @@ def strict(schema: Any) -> bool:
 
 def body(prompt: Prompt, provider: AiProvider, with_format: bool = True) -> dict[str, Any]:
     """The body of a POST {base}/chat/completions for `prompt`, with its schema as `response_format` unless `with_format` is
-    False (a service that refused it)."""
+    False (a service that refused it): then the user's message asks for it after a blank line, the schema as compact JSON."""
+    text = prompt.text
+    if prompt.schema is not None and not with_format:
+        text += "\n\n" + SCHEMA_WORDS + json.dumps(prompt.schema, separators=(",", ":"), ensure_ascii=False)
     messages = [{"role": "system", "content": prompt.system}] if prompt.system else []
-    messages.append({"role": "user", "content": prompt.text})
+    messages.append({"role": "user", "content": text})
     out: dict[str, Any] = {"model": prompt.model, "messages": messages,
                            "max_completion_tokens" if provider == "openai" else "max_tokens": prompt.max_tokens}
     if prompt.schema is not None and with_format:
