@@ -14,6 +14,7 @@ use axum::http::{HeaderMap, Method, Response, Uri};
 use axum::routing::{get, post};
 use mm_accounts::connections::Trusted;
 use mm_kernel::errors::Problem;
+use mm_kernel::events::{Events as _, Topic};
 use serde_json::{Map, Value, json};
 
 use crate::app::App;
@@ -105,6 +106,8 @@ async fn edit(State(app): State<Arc<App>>, method: Method, uri: Uri, headers: He
 }
 
 /// Remove an account, and its own Keychain item, and with `delete_mail` what this Mac keeps of its mail (`RemoveBody`).
+/// Its mail has left every list then, and with `delete_mail` this Mac: the open tabs hear so as mail gone from a server
+/// is told (`reconcile`, how many copies went), and the counts and the rail's badges are read again.
 async fn delete(
     State(app): State<Arc<App>>,
     method: Method,
@@ -116,7 +119,18 @@ async fn delete(
         Ok(body) => remove_body(&body),
         Err(refused) => return *refused,
     };
-    super::run(&app, &method, &uri, move |app| app.connections.delete(&asked?)).await
+    super::run(&app, &method, &uri, move |app| {
+        let removed = app.connections.delete(&asked?)?;
+        app.stats.invalidate();
+        if let Err(fault) = app.folders.invalidate(None) {
+            mm_kernel::log::warning("accounts", "the rail's counts kept couldn't go", &[], Some(fault.class));
+        }
+        let pruned = removed.get("mail_deleted").cloned().unwrap_or_else(|| json!(0));
+        let heard = json!({"account": removed["removed"], "pruned": pruned, "removed": true});
+        app.events.publish(Topic::Reconcile, heard);
+        Ok(removed)
+    })
+    .await
 }
 
 /// `Any`: the value as it came, for the use case to judge in its own words.

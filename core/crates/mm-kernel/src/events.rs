@@ -16,7 +16,8 @@ pub enum Topic {
     SyncDone,
     /// It brought new mail into INBOX.
     NewMail,
-    /// Rows of mail gone from the server went, in `folder` if it names one.
+    /// Rows of mail gone from the server went, in `folder` if it names one; or an account was removed (`removed`), and
+    /// its mail left the lists (`pruned`: how many copies this Mac let go of it).
     Reconcile,
     /// A sync found mail read, starred or answered elsewhere, in `folder`.
     FlagsChanged,
