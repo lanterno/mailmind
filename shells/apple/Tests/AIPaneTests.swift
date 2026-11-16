@@ -353,6 +353,20 @@ final class AITurnedOffTests: XCTestCase {
         XCTAssertEqual(mailbox.submitted("!archive"), .search(Search(q: "!archive", account: Fixture.ada)))
     }
 
+    /// A quick reply asks the AI for its line or two only while AI is on; off, the line stays and nothing is asked.
+    func testAQuickReplyAsksTheAIOnlyWhileItIsOn() async throws {
+        let quick = try XCTUnwrap(QuickReply.all.first)
+        for (digest, asks) in [(Fixture.digest(), 1), (Fixture.digest(ai: false, off: .turnedOff), 0),
+                               (Fixture.digest(ai: false, off: .noKey), 0)] {
+            let (composing, routes) = try replying(digest)
+            await composing.quickReply(MailCopy(Fixture.row(7)), quick)
+            XCTAssertEqual(routes.calls(to: API.Post.AiDraftReply.path).count, asks, "\(digest.ai)")
+            let composer = try XCTUnwrap(composing.composers.values.first)
+            XCTAssertTrue(composer.body.hasPrefix(quick.line), "the line stays")
+            composer.close(force: true)
+        }
+    }
+
     func testOffForWantOfAKeyTheQuestionIsStillAQuestion() async {
         let app = MailApp()
         let server = Fixture.server()
