@@ -106,6 +106,10 @@ struct Watching {
     lines: Mutex<Vec<Arc<Line>>>,
     /// How many connects fail.
     refuse_connect: Mutex<usize>,
+    /// How many connects panic.
+    panic_connect: AtomicUsize,
+    /// How many connections panic as they serve.
+    panic_serve: AtomicUsize,
     /// Keys whose connections will never do.
     never_ready: Mutex<BTreeSet<String>>,
     unreadable: AtomicBool,
@@ -189,6 +193,11 @@ impl Watched for Watching {
     }
 
     fn connect(&self, spec: &(String, String)) -> Result<(Arc<Line>, Arc<dyn Interrupt>), &'static str> {
+        let panicking = self.panic_connect.load(Ordering::SeqCst);
+        if panicking > 0 {
+            self.panic_connect.store(panicking - 1, Ordering::SeqCst);
+            panic!("a connect that panics");
+        }
         let mut refusing = self.refuse_connect.lock().unwrap();
         if *refusing > 0 {
             *refusing -= 1;
@@ -214,6 +223,11 @@ impl Watched for Watching {
     }
 
     fn serve(&self, watch: &Watch<(String, String)>, line: &mut Arc<Line>) -> Result<(), &'static str> {
+        let panicking = self.panic_serve.load(Ordering::SeqCst);
+        if panicking > 0 {
+            self.panic_serve.store(panicking - 1, Ordering::SeqCst);
+            panic!("a wait that panics");
+        }
         while !watch.leaving() {
             line.wait()?;
             if self.serve_once.load(Ordering::SeqCst) || !self.wanted(&watch.spec) {
@@ -490,6 +504,20 @@ fn a_worker_interrupted_as_it_leaves_says_nothing_failed() {
     running(&b, 0);
     assert!(line.shut());
     assert!(b.w.said().is_empty());
+}
+
+#[test]
+fn a_worker_whose_connect_or_wait_panics_says_so_rests_and_connects_again() {
+    let b = build(&["a"]);
+    b.w.panic_connect.store(1, Ordering::SeqCst);
+    b.w.panic_serve.store(1, Ordering::SeqCst);
+    started(&b, Rests { first: TICK, longest: TICK });
+    until(|| b.w.serving("a"));
+    assert_eq!(b.w.said(), ["failed a Panic", "failed a Panic"]);
+    // The connection whose wait panicked was closed by its worker, and the worker serves a new one.
+    assert_eq!(b.w.count("a"), 2);
+    assert_eq!(b.w.line_of("a", 0).closed_by(), ["watch:a"]);
+    assert_eq!(b.sup.watching(), watching(&[("a", true)]));
 }
 
 /// One left to rest is still resting when the test gives up on it.

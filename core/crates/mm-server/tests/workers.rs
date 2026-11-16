@@ -97,6 +97,37 @@ fn a_lane_runs_its_first_round_after_its_delay_then_whenever_kicked_until_stoppe
 }
 
 #[test]
+fn a_round_that_panics_is_counted_as_failed_and_its_lane_goes_on() {
+    let jobs = Arc::new(Jobs::new(Arc::new(Frozen)));
+    let job = jobs.add("sync", 300, 0);
+    // Run here: a panic fails the round as `Panic`, at the job's interval, and nothing is left running.
+    assert_eq!(jobs.run(&job, &|| -> RoundOutcome { panic!("a malformed message") }), 300);
+    let said = &jobs.snapshot()[0];
+    assert_eq!((&said["failures"], &said["last_error"], &said["running"]), (&json!(1), &json!("Panic"), &json!(false)));
+    // On its lane: the first round panics, and a kick still brings the next.
+    let rounds = Arc::new(AtomicUsize::new(0));
+    let stop = Arc::new(Stop::default());
+    let lane = {
+        let (jobs, job, rounds, stop) = (jobs.clone(), job.clone(), rounds.clone(), stop.clone());
+        std::thread::spawn(move || {
+            let round = move || -> RoundOutcome {
+                assert!(rounds.fetch_add(1, Ordering::SeqCst) > 0, "the first round panics");
+                Ok(None)
+            };
+            jobs.lane(&job, &round, &stop);
+        })
+    };
+    until(|| rounds.load(Ordering::SeqCst) == 1);
+    until(|| jobs.snapshot()[0]["runs"] == json!(2));
+    assert_eq!(jobs.snapshot()[0]["failures"], json!(2));
+    jobs.kick("sync");
+    until(|| rounds.load(Ordering::SeqCst) == 2);
+    until(|| jobs.snapshot()[0]["last_error"] == json!(null));
+    stop.stop();
+    lane.join().unwrap();
+}
+
+#[test]
 fn reconcile_runs_at_most_twice_a_minute_and_first_within_two_minutes_or_not_at_all() {
     assert_eq!(reconcile_timing(1800), Some((1800, 120)));
     assert_eq!(reconcile_timing(10), Some((30, 10)));

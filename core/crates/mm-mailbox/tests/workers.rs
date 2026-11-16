@@ -52,6 +52,8 @@ struct Counted {
     drained: AtomicUsize,
     /// What the next drain says went wrong, once.
     failing: AtomicUsize,
+    /// The next drain panics, once.
+    panicking: AtomicUsize,
 }
 
 impl Queue for Counted {
@@ -78,6 +80,7 @@ impl Queue for Counted {
 
     fn drain(&self) -> Result<(), Fault> {
         self.drained.fetch_add(1, Ordering::SeqCst);
+        assert!(self.panicking.swap(0, Ordering::SeqCst) == 0, "a drain that panics");
         if self.failing.swap(0, Ordering::SeqCst) > 0 { Err(Fault::new("Failed")) } else { Ok(()) }
     }
 }
@@ -106,6 +109,26 @@ fn the_worker_puts_back_what_a_crash_left_then_drains_each_time_it_is_kicked_unt
     assert!(began.elapsed() < LONG);
     assert_eq!(queue.drained.load(Ordering::SeqCst), 2);
     assert_eq!(queue.recovered.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_pass_that_panics_is_logged_and_the_worker_goes_on() {
+    let queue = Arc::new(Counted::default());
+    let stop = Arc::new(Stop::default());
+    let worker = {
+        let (queue, stop) = (queue.clone(), stop.clone());
+        std::thread::spawn(move || run_forever(&*queue, &stop))
+    };
+    until(|| queue.recovered.load(Ordering::SeqCst) == 1);
+    queue.panicking.store(1, Ordering::SeqCst);
+    queue.kicked.kick();
+    until(|| queue.drained.load(Ordering::SeqCst) == 1);
+    // The worker's thread is still there, and the next kick still brings a pass.
+    queue.kicked.kick();
+    until(|| queue.drained.load(Ordering::SeqCst) == 2);
+    assert!(!worker.is_finished());
+    stop.stop();
+    worker.join().unwrap();
 }
 
 #[test]
