@@ -6,6 +6,6 @@ from mailmind.assistant.application.ports import AIOff, NotSent, OverLimit
 from mailmind.assistant.domain.action_plan import PlanVerb
 from mailmind.assistant.domain.limits import DEFAULT_DAILY_LIMIT_USD
 from mailmind.assistant.domain.prompts import INSTRUCTION_MAX, DraftTone, RewriteOp
-from mailmind.assistant.domain.providers import AiOff
+from mailmind.assistant.domain.providers import OFF_WORDS, AiOff
 
-__all__ = ["AIOff", "AiOff", "DEFAULT_DAILY_LIMIT_USD", "DraftTone", "INSTRUCTION_MAX", "NotSent", "OverLimit", "PlanVerb", "RewriteOp", "allowing_over"]
+__all__ = ["AIOff", "AiOff", "DEFAULT_DAILY_LIMIT_USD", "DraftTone", "INSTRUCTION_MAX", "NotSent", "OFF_WORDS", "OverLimit", "PlanVerb", "RewriteOp", "allowing_over"]

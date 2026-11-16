@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, Protocol, TypedDict
 
-from mailmind.assistant.domain.providers import Wire
+from mailmind.assistant.domain.providers import AiOff, Wire
 from mailmind.content.mime import Parsed
 from mailmind.kernel.ai_provider import AiProvider
 from mailmind.kernel.assessment import Assessment, Outcome
@@ -92,7 +92,11 @@ class NotSent(ModelError):
 
 class AIOff(NotSent):
     """AI is off: turned off, or with no key, URL or model to ask, so nothing was sent. Its words say which, and never hold a
-    secret."""
+    secret; `off` is which, from the closed set (None when whoever raised it didn't say)."""
+
+    def __init__(self, message: str, off: AiOff | None = None):
+        super().__init__(message)
+        self.off: AiOff | None = off
 
 
 class NoBatches(NotSent):

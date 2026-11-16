@@ -2,12 +2,7 @@
 every call raises AIOff, whose words say why and never hold a secret."""
 from mailmind.assistant.application.ports import AIOff, BatchResult, Prompt, Reply
 from mailmind.assistant.domain import models
-from mailmind.assistant.domain.providers import AiOff
-
-WHY: dict[AiOff, str] = {"turned-off": "AI is off: it is turned off in Settings",
-                         "no-key": "AI is off: there is no API key",
-                         "no-url": "AI is off: the service has no URL",
-                         "no-model": "AI is off: no model is chosen"}
+from mailmind.assistant.domain.providers import OFF_WORDS as WHY, AiOff
 
 
 class DisabledModel:
@@ -20,7 +15,7 @@ class DisabledModel:
         self.model = model                   # what would be asked: the startup line names it
 
     def _refuse(self):
-        return AIOff(WHY[self.off])
+        return AIOff(WHY[self.off], off=self.off)
 
     def complete(self, prompt: Prompt) -> Reply:
         raise self._refuse()

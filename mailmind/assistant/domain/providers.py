@@ -17,6 +17,12 @@ type Wire = Literal["anthropic", "openai"]
 type KeyNeed = Literal["needed", "none", "optional"]
 type AiOff = Literal["turned-off", "no-key", "no-model", "no-url"]
 
+# Why AI is off, in words a person reads: an answer, the CLI and the startup line say them. None holds a secret.
+OFF_WORDS: dict[AiOff, str] = {"turned-off": "AI is off: it is turned off in Settings",
+                               "no-key": "AI is off: there is no API key",
+                               "no-url": "AI is off: the service has no URL",
+                               "no-model": "AI is off: no model is chosen"}
+
 CONFIG = "mailmind.config.json"           # where a key came from, for every provider but Claude's from the environment
 
 

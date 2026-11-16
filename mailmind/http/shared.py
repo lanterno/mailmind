@@ -4,7 +4,7 @@ body may run. It imports nothing of FastAPI.
 import json
 from http import HTTPStatus
 
-from mailmind.assistant.api import AIOff, OverLimit
+from mailmind.assistant.api import OFF_WORDS, AIOff, OverLimit
 from mailmind.compose.api import MAX_SEND_POST
 from mailmind.kernel.errors import Busy, Conflict, Locked, NotFound, Refused, Unreachable, Unreadable
 from mailmind.platform import profile
@@ -74,9 +74,10 @@ def _over_limit_answer(e):
                    spent_micros=e.spent_micros, limit_micros=e.limit_micros)
 
 
-def _ai_off_answer():
-    """The 409 an AI request gets with AI off. Nothing was sent, and asking again won't help."""
-    return problem(409, "AI is off: MailMind has no Claude API key", "ai-off", ai_off=True)
+def _ai_off_answer(e: AIOff):
+    """The 409 an AI request gets with AI off. Nothing was sent, and asking again won't help. It says why from the closed
+    set, never the exception's own text."""
+    return problem(409, OFF_WORDS[e.off] if e.off else "AI is off", "ai-off", ai_off=True)
 
 
 def failure_answer(e, method, path):
@@ -92,8 +93,8 @@ def failure_answer(e, method, path):
             return problem(409, "MailMind is running read-only", "read-only", read_only=True)
     if isinstance(e, OverLimit):                       # the page asks before it goes over
         return _over_limit_answer(e)
-    if isinstance(e, AIOff):                           # no key: nothing was sent, and nothing will be until one is set
-        return _ai_off_answer()
+    if isinstance(e, AIOff):                           # nothing was sent, and nothing will be until AI is set up or on
+        return _ai_off_answer(e)
     log.error("%(method)s %(path)s failed", {"method": method, "path": path}, exc_info=e)
     return problem(500, "request failed")
 
