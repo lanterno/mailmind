@@ -59,12 +59,17 @@ struct Mailto: Equatable {
 
 /// The app's delegate, for the mailto: links macOS hands MailMind (when it is the mail app, or a link names it): each
 /// opens the composer, once the window can write. Handling them here keeps SwiftUI from opening a window for each.
+/// And for quitting, which waits for mail in its Undo window to go (Mac/Shared/Quitting.swift).
 @MainActor
 final class MailMindDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             if let mail = Mailto.parse(url.absoluteString) { Composing.shared.write(mail) }
         }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Quitting.shouldTerminate(sender)
     }
 }
 #endif
