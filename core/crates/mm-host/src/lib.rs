@@ -28,7 +28,7 @@ use axum::body::Body;
 use axum::http::{HeaderValue, Method, Request, Response, header};
 use futures_core::Stream;
 use mm_server::environment::{Environment, Settings};
-use mm_server::real::{Sanitizing, StandardError, SystemClock};
+use mm_server::real::{Sanitizing, SystemClock};
 use mm_server::workers::Workers;
 use mm_server::{App, Seams};
 use tokio::runtime::Runtime;
@@ -49,7 +49,7 @@ const EVENTS: &str = "/api/events";
 /// Where the app runs and what it is given.
 #[derive(Clone)]
 pub struct Home {
-    /// The data folder, which must exist: the database, `mailmind.config.json` and the log go in it.
+    /// The data folder, which must exist: the database, `mailmind.config.json` and the log (`mailmind.log`) go in it.
     pub folder: PathBuf,
     /// The environment the app reads (`mm_server::environment`), as the shell gives it: `MAILMIND_PROFILE`, say, or
     /// a demo's `MAILMIND_DB_KEY`. `MAILMIND_HOME` is `folder`, whatever this says.
@@ -128,12 +128,15 @@ impl Host {
     /// but the minute's round left out when the profile only reads, as `Workers::start` leaves them). It fails saying
     /// why in words a person can act on, naming no secret.
     pub fn open(home: Home) -> Result<Host, String> {
-        mm_kernel::log::install(Box::new(StandardError));
-        if !home.folder.is_dir() {
-            return Err("MailMind's data folder isn't there".into());
-        }
         let pairs = home.variables.iter().filter(|(name, _)| name != mm_server::environment::HOME);
         let environment = Environment::from_pairs(pairs.map(|(name, value)| (name.as_str(), value.as_str())));
+        if !home.folder.is_dir() {
+            mm_server::logging::to_terminal(environment.log_debug());
+            return Err("MailMind's data folder isn't there".into());
+        }
+        // The log goes to mailmind.log in the data folder too, which a Mac app opened from the Finder keeps when
+        // standard error goes nowhere.
+        mm_server::logging::keep_in(&home.folder, environment.log_debug());
         let settings = Settings { home: home.folder.clone() };
         let seams = match &home.stand_in {
             Some(file) => stand_in_seams(file.clone()),

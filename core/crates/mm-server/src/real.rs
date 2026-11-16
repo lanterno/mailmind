@@ -1,6 +1,6 @@
 //! The seams as `mailmind-server` runs: the system's clock, nothing between the app and its files, hosts and
 //! programs, the sanitizer itself, the system's nameservers, and the model servers MailMind knows of. Its Keychain is
-//! the login Keychain (`login_keychain`). Lines of the log go to standard error.
+//! the login Keychain (`login_keychain`). Where the log goes is `logging`'s.
 
 use std::io::Write;
 use std::path::Path;
@@ -67,18 +67,13 @@ impl Sanitizer for Sanitizing {
 }
 
 /// Each line on standard error, as `LEVEL [tag] message`, its fields put in where the message names them and the
-/// class of what went wrong after it. A value that looks like an address is withheld.
+/// class of what went wrong after it (`logging::terminal`). A value that looks like an address is withheld. The test
+/// launcher's log; `mailmind-server` and the Mac app's host install `logging`'s, which keeps a file too.
 #[derive(Debug, Default)]
 pub struct StandardError;
 
 impl Sink for StandardError {
     fn write(&self, line: &Line<'_>) {
-        let mut message = line.message.to_owned();
-        for (field, value) in line.fields {
-            let shown = if value.contains('@') { "<withheld>" } else { value };
-            message = message.replace(&format!("%({})s", field.name()), shown);
-        }
-        let error = line.error.map(|class| format!(": {class}")).unwrap_or_default();
-        let _ = writeln!(std::io::stderr().lock(), "{} [{}] {message}{error}", line.level.name(), line.tag);
+        let _ = writeln!(std::io::stderr().lock(), "{}", crate::logging::terminal(line));
     }
 }

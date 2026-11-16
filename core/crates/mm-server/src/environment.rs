@@ -184,6 +184,12 @@ impl Environment {
         !(profile.is_empty() || profile == "full")
     }
 
+    /// MAILMIND_LOG_LEVEL `debug`, in any case, with spaces around: debug lines at the terminal, never in the file.
+    /// Unset, `info` or any other value, info.
+    pub fn log_debug(&self) -> bool {
+        self.raw("MAILMIND_LOG_LEVEL").unwrap_or_default().trim().eq_ignore_ascii_case("debug")
+    }
+
     /// MAILMIND_RECONCILE_SECS: about how long reconcile takes to go round every account, in seconds, 0 for never.
     /// Unset, empty or not a whole number, 1800.
     pub fn reconcile_secs(&self) -> i64 {

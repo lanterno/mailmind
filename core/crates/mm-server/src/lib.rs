@@ -23,6 +23,8 @@ pub mod environment;
 pub mod events;
 pub mod gates;
 pub mod json;
+// Where the log goes: standard error, and mailmind.log in the data folder.
+pub mod logging;
 pub mod page;
 pub mod perimeter;
 pub mod problem;

@@ -7,14 +7,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mm_server::environment::{self, Environment};
-use mm_server::real::{self, StandardError};
+use mm_server::logging;
+use mm_server::real;
 use mm_server::workers::Workers;
 use mm_server::{App, Server};
 
 const DEFAULT_PORT: u16 = 8721;
 
 fn main() -> ExitCode {
-    mm_kernel::log::install(Box::new(StandardError));
+    logging::to_terminal(Environment::of_process().log_debug());
     // `mailmind-server db check-upgrade [--db PATH]`: what the next start's migrations would do, tried on a copy.
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some((db, rest)) = args.split_first()
@@ -49,6 +50,8 @@ fn main() -> ExitCode {
 async fn serve(port: u16) -> Result<(), String> {
     let environment = Environment::of_process();
     let settings = environment.settings()?;
+    // From here on the log goes to mailmind.log in the data folder too.
+    logging::keep_in(&settings.home, environment.log_debug());
     let seams = real::seams();
     let server = Server::bind(port).await.map_err(|_| format!("can't listen on 127.0.0.1:{port}"))?;
     let port = server.port().map_err(|_| "can't tell which port it listens on")?;
