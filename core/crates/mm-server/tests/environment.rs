@@ -46,3 +46,15 @@ fn mailmind_model_is_read_without_the_spaces_python_strips_and_blank_is_unset() 
     }
     assert_eq!(Environment::default().model(), None);
 }
+
+#[test]
+fn each_account_has_a_gate_of_its_own_unless_mailmind_workers_says_one() {
+    let per_account = |value: &str| Environment::from_pairs([("MAILMIND_WORKERS", value)]).gate_per_account();
+    assert!(Environment::default().gate_per_account(), "unset, a gate for each account");
+    for each in ["account", "", "acount"] {
+        assert!(per_account(each), "{each:?}");
+    }
+    for one in ["one", " One ", "global", "GLOBAL"] {
+        assert!(!per_account(one), "{one:?}");
+    }
+}
