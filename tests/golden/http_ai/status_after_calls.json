@@ -14,6 +14,8 @@
     "last_ts": 0,
     "limit_micros": 15000000,
     "model": "claude-opus-5-5",
+    "off": null,
+    "provider": "anthropic",
     "spent_today_micros": 0
    },
    "aliases": {
@@ -72,6 +74,8 @@
    "last_ts": 1793620800,
    "limit_micros": 15000000,
    "model": "claude-opus-5-5",
+   "off": null,
+   "provider": "anthropic",
    "spent_today_micros": 0
   }
  },
@@ -85,6 +89,8 @@
    "last_ts": 1793620800,
    "limit_micros": 15000000,
    "model": "claude-opus-5-5",
+   "off": null,
+   "provider": "anthropic",
    "spent_today_micros": 0
   }
  }

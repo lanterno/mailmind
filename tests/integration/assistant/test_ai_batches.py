@@ -212,6 +212,27 @@ def test_the_command_with_ai_off_sends_nothing(world, anthropic_api, capsys):
     assert "AI is off" in capsys.readouterr().out and anthropic_api.requests == []
 
 
+def test_the_command_with_ai_turned_off_sends_nothing_and_says_why(backlog, ai, capsys):
+    import json
+    written = json.loads((backlog.dir / "mailmind.config.json").read_text())
+    (backlog.dir / "mailmind.config.json").write_text(json.dumps({**written, "preferences": {"ai_enabled": False}}))
+    assert wiring.assess_batch() == 1
+    assert capsys.readouterr().out == "AI is off: it is turned off in Settings, so nothing was sent.\n" and not ai.requests
+
+
+def test_the_command_with_another_provider_says_batches_need_claude(backlog, ai, capsys, openai_api, fake_keychain):
+    import json
+    from fakes import openai_api as fo
+    fake_keychain.add("openai-api-key", fo.KEY, replace=True)
+    written = json.loads((backlog.dir / "mailmind.config.json").read_text())
+    (backlog.dir / "mailmind.config.json").write_text(json.dumps({
+        **written, "openai_api_key": {"keychain": "openai-api-key", "version": 1},
+        "preferences": {"ai_provider": "openai", "ai_base_url": openai_api.url}}))
+    assert wiring.assess_batch() == 1
+    assert capsys.readouterr().out == "Batches need Claude as the AI provider.\n"
+    assert not ai.requests and not openai_api.requests
+
+
 def test_the_command_in_the_read_only_profile_sends_nothing(backlog, ai, capsys, monkeypatch):
     from mailmind.platform import profile
     monkeypatch.setattr(profile, "writes_allowed", lambda: False)

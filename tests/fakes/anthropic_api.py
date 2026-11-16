@@ -13,6 +13,8 @@ What it answers:
   call without one. The same request always gets the same answer, so AI routes can be golden-tested
   without scripting each reply.
 
+It lists models at GET /v1/models, `models` in one page, as the Models API does.
+
 It holds the Message Batches API too. A batch stays in progress until the test calls `end_batch`, whose
 results default to the same answers; `succeeded`, `errored`, `EXPIRED` and `CANCELED` make others. A batch
 that has ended can be deleted (`deleted` lists them), and the id of one that is gone answers 404.
@@ -108,11 +110,15 @@ def instance(schema, name="value"):
     return None
 
 
+MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")
+
+
 class FakeAnthropic:
     KEY = KEY
 
     def __init__(self):
         self.requests = []
+        self.models = list(MODELS)    # what GET /v1/models lists
         self._queued = []
         self.responder = None         # optional: Request -> reply, or None for the default
         self.batches = {}             # id -> {"requests", "status", "results"}
@@ -161,13 +167,15 @@ class FakeAnthropic:
     def _reply(self, path, req):
         with self._lock:
             self.requests.append(req)
-            if path != "/v1/messages" and not path.startswith(BATCHES):
+            if path not in ("/v1/messages", "/v1/models") and not path.startswith(BATCHES):
                 return error(404, "not_found_error", "Not found")
             if req.key != KEY:
                 return error(401, "authentication_error", "invalid x-api-key")
             if self._queued:
                 reply = self._queued.pop(0)
                 return reply(req) if callable(reply) else reply
+            if path == "/v1/models":
+                return 200, self._listing()
             if path.startswith(BATCHES):
                 return self._batch(req.method, path[len(BATCHES):].strip("/"), req)
             responder = self.responder
@@ -177,6 +185,11 @@ class FakeAnthropic:
         if req.schema is None:
             return answer(STUB_TEXT)
         return answer(instance(req.schema))
+
+    def _listing(self):
+        data = [{"type": "model", "id": m, "display_name": m, "created_at": "2026-11-01T00:00:00Z"} for m in self.models]
+        return {"data": data, "has_more": False, "first_id": self.models[0] if self.models else None,
+                "last_id": self.models[-1] if self.models else None}
 
     def _batch(self, method, rest, req):
         batch_id, _, tail = rest.partition("/")
@@ -233,6 +246,7 @@ class FakeAnthropic:
             self.requests.clear()
             self._queued.clear()
             self.responder = None
+            self.models = list(MODELS)
             self.batches.clear()
             self.deleted.clear()
 

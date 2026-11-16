@@ -254,7 +254,7 @@ def test_a_key_the_config_file_names_wins_over_the_environment(api, data_dir, mo
     with pytest.raises(RuntimeError, match="401"):              # the fake knows only its own key
         assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
     assert api.requests[0].key == "sk-ant-config-key"
-    assert assistant.status.describe_engine() == "Claude API · claude-opus-5-5 · key from mailmind.config.json"
+    assert assistant.status.describe_engine() == "Claude (Anthropic) · claude-opus-5-5 · key from mailmind.config.json"
     monkeypatch.setenv("MAILMIND_TEST_KEY", "sk-ant-env-ref-key")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_KEY"})
     assert assistant.key() == ("sk-ant-env-ref-key", "mailmind.config.json")
@@ -267,11 +267,28 @@ def test_a_key_the_config_file_names_wins_over_the_environment(api, data_dir, mo
 def test_the_startup_line_says_when_there_is_no_key(plain, data_dir, monkeypatch):
     from mailmind.bootstrap import assistant
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    assert assistant.status.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: "
+    assert assistant.status.describe_engine() == ("Claude (Anthropic) · claude-opus-5-5 · no key, so AI is off: "
                                                   "keep one with `uv run python -m mailmind ai key`, or set ANTHROPIC_API_KEY")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
-    assert assistant.status.describe_engine() == ("Claude API · claude-opus-5-5 · no key, so AI is off: "
+    assert assistant.status.describe_engine() == ("Claude (Anthropic) · claude-opus-5-5 · no key, so AI is off: "
                                                   "the anthropic_api_key in mailmind.config.json can't be read")
+
+
+@pytest.mark.parametrize("preferences, line", [
+    ({"ai_enabled": False}, "Claude (Anthropic) · claude-opus-5-5 · AI is turned off: turn it on in Settings, or with "
+                            "`uv run python -m mailmind ai on`"),
+    ({"ai_provider": "openai"}, "OpenAI · gpt-6.1-sol · no key, so AI is off: keep one in Settings, or with "
+                                "`uv run python -m mailmind ai key --provider openai`"),
+    ({"ai_provider": "compatible"}, "Another OpenAI-compatible service · no model · no URL, so AI is off: give the service's "
+                                    "in Settings"),
+    ({"ai_provider": "ollama"}, "Ollama, on this Mac · no model · no model, so AI is off: choose one in Settings"),
+    ({"ai_provider": "ollama", "ai_model": "llama3.3"}, "Ollama, on this Mac · llama3.3 · no key"),
+])
+def test_the_startup_line_names_the_provider_and_why_ai_is_off_never_its_url(plain, data_dir, preferences, line):
+    from mailmind.bootstrap import assistant
+    config(data_dir, preferences={**preferences, "ai_base_url": "http://127.0.0.1:11500/private-path"}
+           if preferences.get("ai_provider") == "ollama" else preferences)
+    assert assistant.status.describe_engine() == line
 
 
 def test_a_config_key_that_cannot_be_read_is_no_key(api, data_dir):
@@ -313,6 +330,40 @@ def test_without_a_key_nothing_is_sent_and_nothing_counts_as_failed(plain, anthr
     assert (after["last_ok"], after["last_ts"], after["last_error"]) == \
         (before["last_ok"], before["last_ts"], before["last_error"])
     assert assistant.assessments.summarize_one(ROW) == (7, None)            # left for when AI is on, not stored
+
+
+def test_turned_off_nothing_is_sent_whatever_key_there_is(api, data_dir):
+    from mailmind.bootstrap import assistant
+    config(data_dir, preferences={"ai_enabled": False})
+    with pytest.raises(AIOff, match="^AI is off: it is turned off in Settings$"):
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
+    assert assistant.assessments.summarize_one(ROW) == (7, None)
+    assert api.requests == []
+    st = assistant.status.report()
+    assert (st["engine"], st["provider"], st["off"], st["model"], st["key_from"]) == ("none", "anthropic", "turned-off", "", "")
+
+
+def test_the_status_says_why_ai_is_off_and_which_provider_was_chosen(plain, data_dir, monkeypatch):
+    from mailmind.bootstrap import assistant
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    assert (assistant.status.report()["provider"], assistant.status.report()["off"]) == ("anthropic", "no-key")
+    for preferences, said in [({"ai_provider": "gemini"}, ("gemini", "no-key")), ({"ai_provider": "compatible"}, ("compatible", "no-url")),
+                              ({"ai_provider": "ollama"}, ("ollama", "no-model"))]:
+        config(data_dir, preferences=preferences)
+        st = assistant.status.report()
+        assert (st["provider"], st["off"], st["engine"]) == (*said, "none")
+
+
+# ── the models it lists ───────────────────────────────────────────────────────
+
+def test_the_models_are_listed_with_the_key_through_the_sdk(api):
+    from mailmind.assistant.adapters.anthropic_sdk import list_models
+    import os
+    api.models = ["claude-sonnet-5-5", "claude-opus-5-5"]
+    assert list_models(fa.KEY, os.environ["ANTHROPIC_BASE_URL"]) == ["claude-sonnet-5-5", "claude-opus-5-5"]
+    [req] = api.requests
+    assert (req.method, req.path.split("?")[0], req.key) == ("GET", "/v1/models", fa.KEY)
+    assert req.headers["anthropic-version"] == "2026-10-21"
 
 
 # ── what the app talks through ────────────────────────────────────────────────

@@ -17,8 +17,9 @@ from mailmind.calendar.domain import rsvp
 from mailmind.compose.domain import attachments, limits, resume, snippets
 from mailmind.curation.domain import cleanup_plan, filters, rulebook
 from mailmind.discovery.domain import documents, views
+from mailmind.assistant.domain import providers
 from mailmind.http.page_limits import PAGE_LIMITS, PAGE_PREFERENCE_DEFAULTS
-from mailmind.kernel import send_window, snoozed
+from mailmind.kernel import ai_provider, send_window, snoozed
 from mailmind.mailbox.application.filing import Filing
 from mailmind.mailbox.domain import filing
 from mailmind.platform.db import export, places
@@ -30,7 +31,8 @@ SETS = {"SnoozePreset": snoozed.SnoozePreset, "DraftTone": prompts.DraftTone, "R
         "ComposeMode": resume.ComposeMode, "ViewVerb": views.ViewVerb, "DocumentKind": documents.DocumentKind,
         "Density": preferences.Density, "Theme": preferences.Theme, "ReadWidth": preferences.ReadWidth, "ReadSize": preferences.ReadSize,
         "ReadFont": preferences.ReadFont, "MailColors": preferences.MailColors, "SearchScope": preferences.SearchScope,
-        "ArchiveFormat": export.ArchiveFormat, "PictureType": attachments.PictureType, "SnippetVerb": snippets.SnippetVerb, "DocumentGrouping": documents.DocumentGrouping}
+        "ArchiveFormat": export.ArchiveFormat, "PictureType": attachments.PictureType, "SnippetVerb": snippets.SnippetVerb, "DocumentGrouping": documents.DocumentGrouping,
+        "AiProvider": ai_provider.AiProvider, "AiOff": providers.AiOff}
 
 
 def members(alias):
@@ -56,6 +58,11 @@ def test_a_rule_change_is_a_verdict_or_a_removal(schemas):
                                           (export._WRITERS, export.ArchiveFormat)])
 def test_a_table_a_use_case_reads_holds_every_member_of_its_set(table, alias):
     assert list(table) == members(alias)
+
+
+def test_each_ai_provider_is_known_to_the_assistant_and_the_preferences_and_ollama_alone_takes_no_key():
+    assert list(providers.PROVIDERS) == members(ai_provider.AiProvider) == list(preferences.CHOICES["ai_provider"])
+    assert ai_provider.KEYLESS == {p for p, it in providers.PROVIDERS.items() if it.key == "none"} == {"ollama"}
 
 
 def test_the_tuples_a_use_case_checks_against_are_their_sets():
@@ -94,7 +101,8 @@ def test_a_plan_that_names_no_preset_there_is_waits_until_tomorrow_as_its_previe
 
 
 def test_each_limit_the_page_has_is_the_one_its_use_case_holds_to():
-    assert PAGE_LIMITS == {"ai_daily_limit_usd": preferences.AI_DAILY_LIMIT_MAX,
+    assert PAGE_LIMITS == {"ai_daily_limit_usd": preferences.AI_DAILY_LIMIT_MAX, "ai_model_chars": preferences.AI_MODEL_MAX,
+                           "ai_base_url_chars": preferences.AI_BASE_URL_MAX,
                            "attach_bytes": limits.MAX_ATTACH_BYTES, "bulk_rows": Filing.BULK_MAX,
                            "instruction_chars": prompts.INSTRUCTION_MAX, "place_bytes": places.MOST_BYTES,
                            "places_at_once": places.MOST_AT_ONCE, "snooze_copies": snooze.BULK_CAP,

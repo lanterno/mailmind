@@ -176,6 +176,8 @@
     "last_ts": 0,
     "limit_micros": 15000000,
     "model": "",
+    "off": "no-key",
+    "provider": "anthropic",
     "spent_today_micros": 0
    },
    "aliases": {

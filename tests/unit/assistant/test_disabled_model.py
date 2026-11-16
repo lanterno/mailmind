@@ -1,6 +1,6 @@
-"""The model with no API key (mailmind.assistant.adapters.disabled): AI is off, so every call, a batch's steps among them,
-raises AIOff unsent. A key removed between a batch round's check and its call lands here, and AIOff is a NotSent, which
-every caller lets through: nothing is counted as a call that failed."""
+"""The model while AI is off (mailmind.assistant.adapters.disabled): turned off, or with no key, URL or model, every call, a
+batch's steps among them, raises AIOff unsent, in words that say why. A key removed between a batch round's check and its call
+lands here, and AIOff is a NotSent, which every caller lets through: nothing is counted as a call that failed."""
 import pytest
 
 from mailmind.assistant.adapters.disabled import DisabledModel
@@ -37,6 +37,17 @@ THROUGH_THE_GATEWAY = {
 
 def test_it_says_ai_is_off():
     assert DisabledModel().enabled is False
+    assert DisabledModel().takes_batches is False and DisabledModel().model == "claude-opus-5-5"
+
+
+@pytest.mark.parametrize("off, said", [("turned-off", "AI is off: it is turned off in Settings"),
+                                       ("no-key", "AI is off: there is no API key"),
+                                       ("no-url", "AI is off: the service has no URL"),
+                                       ("no-model", "AI is off: no model is chosen")])
+def test_its_words_say_why(off, said):
+    with pytest.raises(AIOff) as e:
+        DisabledModel(off, "").complete(PROMPT)
+    assert str(e.value) == said
 
 
 @pytest.mark.parametrize("step", STEPS.values(), ids=STEPS.keys())

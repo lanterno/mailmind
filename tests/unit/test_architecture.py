@@ -75,10 +75,13 @@ def test_only_the_tls_context_may_turn_a_certificates_checks_off():
     assert {rel(p) for p in modules() if skips.search(p.read_text(encoding="utf-8"))} == {"accounts/adapters/imap_connection.py"}
 
 
-def test_only_safe_http_makes_a_request_by_hand():
-    """The Claude API's go through the Anthropic SDK, which import-linter holds to its adapter."""
+def test_only_safe_http_and_the_ai_services_adapter_make_a_request_by_hand():
+    """The Claude API's go through the Anthropic SDK, which import-linter holds to its adapter. Every other AI provider's go
+    through the one adapter that speaks OpenAI's Chat Completions, to the URL a person chose, which preferences hold to https,
+    or http on this Mac, and with TLS verified."""
     calls = re.compile(r"\b(urlopen|HTTPSConnection|HTTPConnection)\(")
-    assert {rel(p) for p in modules() if calls.search(p.read_text(encoding="utf-8"))} == {"curation/adapters/safe_http.py"}
+    assert {rel(p) for p in modules() if calls.search(p.read_text(encoding="utf-8"))} == {
+        "curation/adapters/safe_http.py", "assistant/adapters/openai_chat.py"}
 
 
 def test_the_assistants_ports_only_read():

@@ -392,7 +392,7 @@ def test_each_start_says_its_startup_lines_in_the_file(tmp_path, monkeypatch, ca
     assert "[imap] mail through imaplib\n" in out
     by_logger = {line["logger"]: line for line in written(tmp_path)}
     assert by_logger["imap"]["msg"] == "mail through imaplib"
-    assert by_logger["ai"]["msg"] in out and "Claude API" in by_logger["ai"]["msg"]
+    assert by_logger["ai"]["msg"] in out and "Claude (Anthropic)" in by_logger["ai"]["msg"]
 
 
 # -- how the package uses it -----------------------------------------------------------------

@@ -14,6 +14,7 @@ from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import AIOff, BatchResult, ModelError, Reply, Usage
 from mailmind.assistant.application.status import Status
+from mailmind.assistant.domain.providers import in_force
 from mailmind.kernel.assessment import Assessment
 
 
@@ -32,6 +33,10 @@ class Model:
     empty object. A batch is answered once a test ends it, each request as `end_batch` says or else with an empty object.
     An exception in `failing`, by the method's name, is raised by that method until it is taken out. With `enabled` False
     it is the stand-in for AI off, which raises AIOff for anything asked of it, and notes what that was."""
+
+    model = "claude-opus-5-5"      # what a call asks unless it names another
+    local = False
+    takes_batches = True
 
     def __init__(self, *replies, enabled=True):
         self.enabled = enabled
@@ -321,8 +326,9 @@ def gateway_on(model, ledger=None, governor=None, clock=time.time):
 
 def calls_over(gateway):
     """The Calls a use case asks through, over `gateway`."""
-    status = Status(lambda: gateway, lambda: ("", ""), lambda: None, lambda: {"waiting": 0, "state": None, "estimate_micros": 0},
-                    lambda: "")
+    status = Status(lambda: gateway, lambda: in_force(enabled=True, provider="anthropic", model="", base_url="", key="",
+                                                      key_from=""),
+                    lambda: None, lambda: {"waiting": 0, "state": None, "estimate_micros": 0})
     return Calls(lambda: gateway, status)
 
 
