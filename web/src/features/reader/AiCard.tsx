@@ -4,10 +4,11 @@ import type { PostAnswers } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
 import { askOverLimit } from "../../lib/overLimit";
 import { Icon } from "../../lib/ui/Icon";
+import { SetUpAi } from "../../lib/ui/SetUpAi";
 import type { OneTarget, Row } from "../mailbox";
 
 type Summary = PostAnswers["/api/ai/summarize"];
-type Card = { kind: "loading" } | { kind: "error"; error: string } | { kind: "done"; d: Summary };
+type Card = { kind: "loading" } | { kind: "error"; error: string; off?: boolean } | { kind: "done"; d: Summary };
 
 const cards = createStore<{ key: string; card: Card } | null>(null);
 const inFlight = new Set<string>();
@@ -16,7 +17,7 @@ const keyOf = (t: OneTarget) => JSON.stringify(t);
 
 export async function summarize(target: OneTarget, force = false) {
   const key = keyOf(target);
-  if (inFlight.has(key)) return;   // a second i asks nothing more of Claude
+  if (inFlight.has(key)) return;   // a second i asks nothing more of the AI
   inFlight.add(key);
   const show = (card: Card) => {
     if (inFlight.has(key)) cards.set({ key, card });
@@ -26,7 +27,7 @@ export async function summarize(target: OneTarget, force = false) {
     const d = await post("/api/ai/summarize", force ? { ...target, force: true } : target, { askOverLimit });
     show({ kind: "done", d });
   } catch (e) {
-    show({ kind: "error", error: e instanceof ApiError ? e.message : String(e) });
+    show({ kind: "error", error: e instanceof ApiError ? e.message : String(e), off: e instanceof ApiError && e.aiOff });
   } finally {
     inFlight.delete(key);
   }
@@ -60,7 +61,7 @@ export function AiCard({ target, row }: { target: OneTarget | null; row: Row | u
       </div>
     );
   }
-  if (shown.kind === "error") return <div className="ai-card" id="aiCard"><div className="ai-err">Couldn’t summarize{shown.error ? ` — ${shown.error}` : ""}. <button className="btn-retry" onClick={() => rerun(false)}>Retry</button></div></div>;
+  if (shown.kind === "error") return <div className="ai-card" id="aiCard"><div className="ai-err">Couldn’t summarize{shown.error ? ` — ${shown.error}` : ""}. {shown.off ? <SetUpAi /> : <button className="btn-retry" onClick={() => rerun(false)}>Retry</button>}</div></div>;
   const { d } = shown;
   return (
     <div className="ai-card" id="aiCard">

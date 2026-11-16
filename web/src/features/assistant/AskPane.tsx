@@ -1,7 +1,9 @@
 // The answer to a question, in the list's place, with the mail it cites. Opening a source leaves it on screen.
+import { offLine } from "../../lib/ai";
 import { copyId, copyOf } from "../../lib/copy";
 import { shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
+import { SetUpAi } from "../../lib/ui/SetUpAi";
 import type { Mailbox } from "../mailbox";
 import { ask, type Asking } from "./ask";
 
@@ -21,7 +23,11 @@ export function AskPane({ at, m }: { at: Asking; m: Mailbox }) {
   if (at.state === "error") {
     return (
       <div id="rows">
-        <div className="ask-wrap"><div className="ai-card"><div className="ask-err">Couldn’t answer: {at.error} <button className="btn-retry" onClick={() => void ask(at.question)}>Retry</button></div></div></div>
+        <div className="ask-wrap"><div className="ai-card">
+          {at.off
+            ? <div className="ask-err">{offLine(m.digest?.ai)}, so nothing can answer this. <SetUpAi /></div>
+            : <div className="ask-err">Couldn’t answer: {at.error} <button className="btn-retry" onClick={() => void ask(at.question)}>Retry</button></div>}
+        </div></div>
       </div>
     );
   }
@@ -32,7 +38,7 @@ export function AskPane({ at, m }: { at: Asking; m: Mailbox }) {
         <div className="ai-card">
           <div className="ai-hd"><span className="ai-mark"><Icon name="wind" />Answer</span><span className="ask-q">{d.question || at.question}</span></div>
           <div className="ask-answer">{d.answer}</div>
-          <div className="ai-foot">{d.model || "claude"} · grounded in your mail · <button className="btn-retry" onClick={() => void ask(at.question)}>↻ Ask again</button></div>
+          <div className="ai-foot">{d.model ? `${d.model} · ` : ""}grounded in your mail · <button className="btn-retry" onClick={() => void ask(at.question)}>↻ Ask again</button></div>
         </div>
         {sources.length > 0
           ? (

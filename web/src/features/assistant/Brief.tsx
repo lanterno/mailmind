@@ -1,12 +1,14 @@
-// Today's brief: what the Inbox opens on when nothing is open. The narrative is Claude's; the cards, tallies and side
+// Today's brief: what the Inbox opens on when nothing is open. The narrative is the AI's; the cards, tallies and side
 // column come from the digest, so they stand with AI off.
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { go, type DigestList, type ListSource } from "../../app/route";
-import { aiOffered } from "../../lib/ai";
+import { aiOffered, aiPrivacy, offLine } from "../../lib/ai";
 import { get, post } from "../../lib/api/client";
+import type { AiStatus } from "../../lib/api/types";
 import { EMPTY } from "../../lib/emptyWords";
 import { minute } from "../../lib/clock";
+import { prefs } from "../../lib/prefs";
 import { copyFromId, copyId, copyOf } from "../../lib/copy";
 import { askConfirm } from "../../lib/confirm";
 import { store, stored } from "../../lib/store";
@@ -14,6 +16,7 @@ import { avatarHue, initialsOf, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { Scene } from "../../lib/ui/Scene";
+import { SetUpAi } from "../../lib/ui/SetUpAi";
 import { answer, peekCards, useDraftChip } from "../compose";
 import { filing, bulk, fromDigest, needsYou, safeToFile, topicItems, type DigestItem } from "../mailbox";
 import { snoozeAsk } from "../attention";
@@ -24,7 +27,6 @@ import { panel } from "./Panels";
 import { useTasks } from "./tasks";
 
 const narrow = () => matchMedia("(max-width:820px)").matches;
-export const AI_PRIVACY = "With AI on, the text of a message goes to Anthropic only when it is summarized, briefed or drafted; nothing else leaves this machine.";
 
 // Where a list from the digest goes back to.
 let cameFrom: ListSource | null = null;
@@ -36,12 +38,14 @@ export function openDigestList(from: ListSource | null, list: DigestList, items:
   go({ source: { kind: "digest", ...list }, opened: !narrow() && items[0] ? { kind: "message", ...copyOf(items[0]) } : null });
 }
 
-function AiOff() {
+// AI off for want of a key, a model or a URL: why, for the provider chosen, and where to set it up. Turned off, it isn't shown.
+function AiOff({ ai }: { ai: AiStatus }) {
+  const baseUrl = prefs.useValue().ai_base_url;
   return (
     <div className="bf-aioff">
-      <p><b>AI is off.</b> Summaries, this brief and reply drafts come from Claude, and MailMind has no Anthropic API key. Your mail works the same without it.</p>
-      <p className="m">To turn it on, keep your key in the login Keychain with <code>uv run python -m mailmind ai key</code>, or set <code>ANTHROPIC_API_KEY</code>, then restart MailMind.</p>
-      <p className="m pv"><Icon name="lock" /><span>{AI_PRIVACY}</span></p>
+      <p><b>{offLine(ai)}.</b> Summaries, this brief and reply drafts need it. Your mail works the same without it.</p>
+      <p className="m"><SetUpAi /></p>
+      <p className="m pv"><Icon name="lock" /><span>{aiPrivacy(ai.provider, baseUrl)}</span></p>
     </div>
   );
 }
@@ -184,7 +188,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
   const failing = ai && ai.engine !== "none" && ai.last_ok === false && ai.last_error;
   let narrative: React.ReactNode;
   if (!offered) narrative = null;
-  else if (aiOn === false && !brief?.narrative) narrative = <AiOff />;
+  else if (ai && aiOn === false && !brief?.narrative) narrative = <AiOff ai={ai} />;
   else if (writing) narrative = <p className="bf-wait"><span className="spin"><Icon name="wind" /></span> Reading your inbox…</p>;
   else if (brief?.narrative) narrative = <p className="ai-tldr bf-narr">{brief.narrative}</p>;
   else if (error === LIMIT) narrative = <p className="bf-wait">Today’s AI limit is reached, so the brief isn’t written yet. <button className="btn-retry" onClick={() => write(false)}>Write it</button></p>;

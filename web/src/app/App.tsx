@@ -402,7 +402,7 @@ export function App() {
       />
       <Panels m={m} />
       <DoPanel account={source?.kind === "folder" || source?.kind === "search" ? source.account : ""} />
-      <Help legend={() => legendOf(m, ui)} onGuide={showGuide} />
+      <Help legend={() => legendOf(m, ui)} ai={m.digest?.ai} onGuide={showGuide} />
       <Guide m={m} />
       <Settings />
       <Curate />

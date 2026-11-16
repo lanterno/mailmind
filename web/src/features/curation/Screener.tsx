@@ -2,9 +2,9 @@
 // on a click, for the senders it is sure of. Only a click on a row decides.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { aiOffered } from "../../lib/ai";
+import { aiOffered, offLine } from "../../lib/ai";
 import { ApiError, get, post } from "../../lib/api/client";
-import type { Verdict } from "../../lib/api/types";
+import type { AiStatus, Verdict } from "../../lib/api/types";
 import { askOverLimit } from "../../lib/overLimit";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
@@ -17,7 +17,7 @@ export const useScreener = (account: string | undefined) =>
   useQuery({ queryKey: ["screener", account], queryFn: () => get(`/api/screener?account=${encodeURIComponent(account!)}`), enabled: Boolean(account) });
 
 // Asked for on a click and kept for the session, so coming back to the Screener spends nothing.
-function useSuggestions(account: string | undefined) {
+function useSuggestions(account: string | undefined, said: AiStatus | null | undefined) {
   const { data, isFetching, refetch } = useQuery({
     queryKey: ["screenerSuggestions", account],
     queryFn: () => post("/api/screener/suggest", { account: account! }, { askOverLimit }),
@@ -28,7 +28,7 @@ function useSuggestions(account: string | undefined) {
   });
   const ask = async () => {
     const { data: answer, error } = await refetch();
-    if (error) toast(error instanceof ApiError && error.aiOff ? "AI is off" : error instanceof ApiError && error.overLimit ? "Today’s AI limit is reached" : "Couldn’t get suggestions");
+    if (error) toast(error instanceof ApiError && error.aiOff ? `${offLine(said)}. Set it up in Settings, under AI.` : error instanceof ApiError && error.overLimit ? "Today’s AI limit is reached" : "Couldn’t get suggestions");
     else if (answer && !answer.suggestions.length) toast("The AI isn’t sure of any of these");
   };
   return { asked: data !== undefined, asking: isFetching, ask, by: new Map((data?.suggestions ?? []).map((s) => [s.from_addr, s])) };
@@ -37,8 +37,9 @@ function useSuggestions(account: string | undefined) {
 export function ScreenerPane({ account }: { account: string | undefined }) {
   const qc = useQueryClient();
   const { data } = useScreener(account);
-  const suggested = useSuggestions(account);
-  const ai = aiOffered(useDigest().data?.ai);     // AI turned off: no verdict is suggested, and nothing offers one
+  const said = useDigest().data?.ai;
+  const suggested = useSuggestions(account, said);
+  const ai = aiOffered(said);     // AI turned off: no verdict is suggested, and nothing offers one
   const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
   const rows = (data?.items ?? []).filter((s) => !decided.has(s.from_addr));
   const decide = async (addr: string, verdict: Verdict) => {

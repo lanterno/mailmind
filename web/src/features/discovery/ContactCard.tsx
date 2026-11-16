@@ -2,13 +2,15 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
-import { aiOffered } from "../../lib/ai";
+import { aiOffered, offLine } from "../../lib/ai";
 import { ApiError, get, post } from "../../lib/api/client";
+import type { AiStatus } from "../../lib/api/types";
 import { go } from "../../app/route";
 import { copyId, copyOf } from "../../lib/copy";
 import { askOverLimit } from "../../lib/overLimit";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { Icon } from "../../lib/ui/Icon";
+import { SetUpAi } from "../../lib/ui/SetUpAi";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
 import { composing } from "../compose";
 import type { Mailbox } from "../mailbox";
@@ -20,7 +22,7 @@ function Monogram({ name, addr, className }: { name: string; addr: string; class
 }
 
 // What the AI can say of a sender's recent threads, on a click, and nothing without one.
-function Summarize({ addr }: { addr: string }) {
+function Summarize({ addr, ai, close }: { addr: string; ai: AiStatus | null | undefined; close: () => void }) {
   const ask = useMutation({ mutationFn: () => post("/api/contact/summary", { addr }, { askOverLimit }) });
   if (ask.isPending) return <div className="cc-sum" role="status"><span className="spin"><Icon name="wind" /></span> Reading their recent threads…</div>;
   if (ask.data) {
@@ -36,7 +38,8 @@ function Summarize({ addr }: { addr: string }) {
   const off = ask.error instanceof ApiError && ask.error.aiOff;
   return (
     <div className="cc-sum">
-      {ask.error ? <span className="cc-sumnote">{off ? "AI is off." : "Couldn’t summarize this sender."}</span> : null}
+      {ask.error ? <span className="cc-sumnote">{off ? `${offLine(ai)}.` : "Couldn’t summarize this sender."}</span> : null}
+      {off && <SetUpAi first={close} className="cc-sumgo" />}
       {!off && <button className="cc-sumgo" onClick={() => ask.mutate()}><Icon name="wind" /> {ask.error ? "Try again" : "Summarize this sender"}</button>}
     </div>
   );
@@ -66,7 +69,7 @@ function Card({ addr, m, close }: { addr: string; m: Mailbox; close: () => void 
           ))}
         </div>
       )}
-      {aiOffered(m.digest?.ai) && <Summarize addr={d.addr} />}
+      {aiOffered(m.digest?.ai) && <Summarize addr={d.addr} ai={m.digest?.ai} close={close} />}
       <div className="cc-actions">
         <button onClick={() => { close(); void composing.open({ mode: "new", to: [d.addr] }); }}><Icon name="pen" /> Compose</button>
         <button onClick={() => { close(); go({ source: { kind: "search", q: `from:${d.addr}`, account: "" }, opened: null }); }}><Icon name="search" /> From this sender</button>

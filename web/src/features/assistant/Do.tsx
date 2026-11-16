@@ -4,6 +4,7 @@ import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { go } from "../../app/route";
 import { clearCommandFromBox, clearSearchBox } from "../../app/TopBar";
 import { Icon } from "../../lib/ui/Icon";
+import { SetUpAi } from "../../lib/ui/SetUpAi";
 import { confirmPlan, doing, runDo, stopDoing, VERB_LABEL, type Doing } from "./ask";
 import { useLayer } from "../../lib/backTrap";
 
@@ -22,7 +23,9 @@ function Body({ at, account }: { at: Doing; account: string }) {
       <>
         {hd}<div className="do-err">Couldn’t plan that: {at.error}</div>
         <div className="do-foot">
-          <button className="btn-retry strong" onClick={() => void runDo(at.cmd, search(account))}>Retry</button>
+          {at.off
+            ? <SetUpAi first={dismiss} className="btn-retry strong" />
+            : <button className="btn-retry strong" onClick={() => void runDo(at.cmd, search(account))}>Retry</button>}
           <button className="do-cancel" onClick={dismiss}>Close</button>
         </div>
       </>

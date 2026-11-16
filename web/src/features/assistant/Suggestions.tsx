@@ -1,4 +1,4 @@
-// What the open message proposes, found by Claude on a click. Each is a suggestion: its fields can be changed, and nothing is
+// What the open message proposes, found by the AI on a click. Each is a suggestion: its fields can be changed, and nothing is
 // made until someone confirms it. An event becomes a file for their calendar and invites no one; a task joins their list.
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,12 +9,13 @@ import { askOverLimit } from "../../lib/overLimit";
 import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
+import { SetUpAi } from "../../lib/ui/SetUpAi";
 import { fromField, toField } from "./fields";
 
 type Found = PostAnswers["/api/ai/extract"];
 type Suggested = Found["events"][number];
 type SuggestedTask = Found["tasks"][number];
-type Card = { kind: "loading" } | { kind: "error"; error: string } | { kind: "done"; found: Found };
+type Card = { kind: "loading" } | { kind: "error"; error: string; off?: boolean } | { kind: "done"; found: Found };
 
 const cards = createStore<{ id: string; card: Card } | null>(null);
 const inFlight = new Set<string>();
@@ -30,7 +31,7 @@ export async function findSuggestions(copy: Copy) {
     show({ kind: "done", found: await post("/api/ai/extract", copyOf(copy), { askOverLimit }) });
   } catch (e) {
     const off = e instanceof ApiError && e.aiOff;
-    show({ kind: "error", error: off ? "AI is off, so nothing can read this for dates." : refusalOf(e)?.detail || "Couldn’t read this message for dates." });
+    show({ kind: "error", error: off ? "AI is off, so nothing can read this for dates." : refusalOf(e)?.detail || "Couldn’t read this message for dates.", off });
   } finally {
     inFlight.delete(id);
   }
@@ -151,7 +152,7 @@ export function SuggestionCard({ copy }: { copy: Copy | null }) {
     );
   }
   if (shown.kind === "error") {
-    return <div className="ai-card" id="sgCard"><div className="ai-err">{shown.error} <button className="btn-retry" onClick={() => void findSuggestions(copy)}>Retry</button></div></div>;
+    return <div className="ai-card" id="sgCard"><div className="ai-err">{shown.error} {shown.off ? <SetUpAi /> : <button className="btn-retry" onClick={() => void findSuggestions(copy)}>Retry</button>}</div></div>;
   }
   return (
     <div className="ai-card" id="sgCard">

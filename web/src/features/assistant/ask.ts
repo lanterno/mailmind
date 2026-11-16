@@ -13,7 +13,7 @@ export type Plan = PostAnswers["/api/ai/do-plan"];
 
 export type Asking =
   | { question: string; state: "loading" }
-  | { question: string; state: "error"; error: string }
+  | { question: string; state: "error"; error: string; off?: boolean }
   | { question: string; state: "answer"; answer: Answer };
 
 export const asking = createStore<Asking | null>(null);
@@ -29,7 +29,8 @@ export async function ask(question: string, account = "all") {
     const n = d.sources?.length ?? 0;
     announce(`Answer ready — ${n} cited source${n === 1 ? "" : "s"}`);
   } catch (e) {
-    if (seq === askSeq) asking.set({ question, state: "error", error: e instanceof ApiError && e.aiOff ? "AI is off" : "ask failed" });
+    const off = e instanceof ApiError && e.aiOff;
+    if (seq === askSeq) asking.set({ question, state: "error", error: off ? "AI is off" : "ask failed", off });
   }
 }
 
@@ -44,7 +45,7 @@ const VERB_DONE: Partial<Record<PlanVerb, string>> = { archive: "Archived", tras
 export type Doing =
   | { state: "intro" }
   | { state: "loading"; cmd: string }
-  | { state: "error"; cmd: string; error: string }
+  | { state: "error"; cmd: string; error: string; off?: boolean }
   | { state: "nofilter"; cmd: string }
   | { state: "plan"; cmd: string; plan: Extract<Plan, { intent: "act" }>; armed: boolean };
 
@@ -59,7 +60,8 @@ export async function runDo(cmd: string, search: (q: string) => void) {
   try {
     d = await post("/api/ai/do-plan", { cmd }, { askOverLimit });
   } catch (e) {
-    if (seq === doSeq) doing.set({ state: "error", cmd, error: e instanceof ApiError && e.aiOff ? "AI is off" : "planner failed" });
+    const off = e instanceof ApiError && e.aiOff;
+    if (seq === doSeq) doing.set({ state: "error", cmd, error: off ? "AI is off" : "planner failed", off });
     return;
   }
   if (seq !== doSeq) return;

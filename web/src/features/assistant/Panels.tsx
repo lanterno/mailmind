@@ -1,11 +1,13 @@
 // Two looks over the same mail, each its own overlay: the AI's to-dos as one checkable agenda, and the week behind you.
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
+import { offLine } from "../../lib/ai";
 import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, refusalOf } from "../../lib/api/client";
 import { copyId, copyOf } from "../../lib/copy";
 import { minute } from "../../lib/clock";
 import { createStore } from "../../lib/store";
 import { Icon } from "../../lib/ui/Icon";
+import { SetUpAi } from "../../lib/ui/SetUpAi";
 import { filing } from "../mailbox";
 import type { Mailbox } from "../mailbox";
 import { useReview, type Review } from "./data";
@@ -151,8 +153,7 @@ function ReviewBody({ d, m, again }: { d: Review; m: Mailbox; again: () => void 
         </button>
       ))}
       <div className="rv-foot">
-        {d.model === "fallback" ? "summary from your data" : d.model || "claude"}
-        {d.generated ? ` · ${d.generated.slice(0, 10)}` : ""}{d.cached ? " · cached" : ""}
+        {[d.model === "fallback" ? "summary from your data" : d.model, d.generated?.slice(0, 10), d.cached && "cached"].filter(Boolean).join(" · ")}
         {d.stale && <> · <span className="ai-stale">mail changed — <button className="btn-retry" onClick={again}>refresh</button></span></>}
       </div>
     </>
@@ -164,7 +165,7 @@ function YourWeek({ m }: { m: Mailbox }) {
   const now = new Date(minute.useValue());
   let body: React.ReactNode = null;
   if (loading) body = <div className="rv-load"><span className="spin">↻</span> Looking back over your week…</div>;
-  else if (error instanceof ApiError && error.aiOff) body = <div className="rv-err">AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.</div>;
+  else if (error instanceof ApiError && error.aiOff) body = <div className="rv-err">{offLine(m.digest?.ai)}, so there is no review. <SetUpAi first={() => panel.set(null)} /></div>;
   else if (error instanceof ApiError && error.overLimit) body = <div className="rv-err">Today’s AI limit is reached, so your review isn’t written. <button className="btn-retry" onClick={again}>Write it</button></div>;
   else if (error) body = <div className="rv-err">{refusalOf(error)?.detail || "Couldn’t build your review."} <button className="btn-retry" onClick={again}>Retry</button></div>;
   else if (review) body = <ReviewBody d={review} m={m} again={again} />;

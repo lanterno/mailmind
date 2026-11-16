@@ -3,17 +3,18 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
-import { aiOffered } from "../../lib/ai";
+import { aiOffered, aiPrivacy, offLine, PROVIDER_LABEL } from "../../lib/ai";
 import { get, post } from "../../lib/api/client";
 import { minute } from "../../lib/clock";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
-import { mayNotify } from "../../lib/prefs";
+import { mayNotify, prefs } from "../../lib/prefs";
 import { createStore } from "../../lib/store";
 import { usd } from "../../lib/text";
 import { announce, toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
-import { AI_PRIVACY, eventWhen } from "../assistant";
+import { SetUpAi } from "../../lib/ui/SetUpAi";
+import { eventWhen } from "../assistant";
 import { readAgain, useDigest } from "../mailbox";
 import type { Mailbox } from "../mailbox";
 import { badAccounts, healthOf, nameOf, pillLabel, syncOf, type Digest } from "./model";
@@ -64,17 +65,18 @@ export async function reconcile(qc: QueryClient) {
   reconciling.set(false);
 }
 
-function AiLine({ digest }: { digest: Digest }) {
+function AiLine({ digest, close }: { digest: Digest; close: () => void }) {
   const a = digest.ai;
+  const baseUrl = prefs.useValue().ai_base_url;
   if (!a || !aiOffered(a)) return null;     // turned off: nothing to say of it here
-  if (a.engine === "none") return <div className="sm-sub sm-ai"><Icon name="wind" /><span>AI is off · no API key</span></div>;
+  if (a.engine === "none") return <div className="sm-sub sm-ai"><Icon name="wind" /><span>{offLine(a)}. <SetUpAi first={close} /></span></div>;
   const failing = a.last_ok === false && a.last_error;
   const spent = a.spent_today_micros, limit = a.limit_micros, batch = (a as { batch_waiting?: number }).batch_waiting;
-  const what = `Claude API · ${a.model}${spent !== null && spent > 0 ? ` · ${usd(spent)}${limit ? ` of ${usd(limit)}` : ""} today` : ""}${batch ? ` · ${batch} out in a batch` : ""}`;
+  const what = `${PROVIDER_LABEL[a.provider]} · ${a.model}${spent !== null && spent > 0 ? ` · ${usd(spent)}${limit ? ` of ${usd(limit)}` : ""} today` : ""}${batch ? ` · ${batch} out in a batch` : ""}`;
   return (
     <>
       <div className={failing ? "sm-sub sm-ai err" : "sm-sub sm-ai"}><Icon name="wind" /><span>{what}{failing ? ` · last call failed: ${a.last_error}` : ""}</span></div>
-      <div className="sm-sub sm-ai m"><Icon name="lock" /><span>{AI_PRIVACY}</span></div>
+      <div className="sm-sub sm-ai m"><Icon name="lock" /><span>{aiPrivacy(a.provider, baseUrl)}</span></div>
     </>
   );
 }
@@ -99,7 +101,7 @@ function StatusMenu({ digest, label, close, m }: { digest: Digest; label: { cls:
         {digest.profile === "read-only" && <div className="sm-sub">MailMind is running read-only: it writes nothing to your mail servers and syncs only when asked. What you file, star or send waits for a full run.</div>}
         {sy.last && sy.result && <div className="sm-sub">Last sync: {sy.result}</div>}
         <div className="sm-sub">{inboxes !== undefined ? <><b>{inboxes.toLocaleString()}</b> in your inboxes</> : "counting your inboxes…"}{aiOffered(digest.ai) && <> · <b>{(s?.summarized ?? 0).toLocaleString()}</b> summarized</>}</div>
-        <AiLine digest={digest} />
+        <AiLine digest={digest} close={close} />
         {(accounts.length > 1 || bad.length > 0) && (
           <div className="sm-accts">
             {accounts.map((a) => {
