@@ -1,13 +1,17 @@
 #if os(macOS)
 import SwiftUI
 
-/// Add an account or edit one, as a sheet drawn as Meadow's dialog (the page's `ConnectionForm`): its alias and
-/// signature, its address and type, an IMAP server's host and port, and where its password comes from. A password
-/// typed here goes straight to the route and the field is emptied, saved or not. As a new address rests, the server
-/// is asked which preset it takes, and Gmail's is offered where it fits.
+/// Add an account or edit one, as a sheet drawn as Meadow's dialog (the page's `ConnectionForm`): its address first,
+/// then its type and an Other IMAP account's incoming and outgoing servers, its password, and its alias and signature
+/// after. A password typed here goes straight to the route and the field is emptied once it is saved. As a new address
+/// rests, the server is asked which preset it takes, and its settings go in the form, or are offered where they fit.
+/// From the first run, the login is tested before the account is saved, and the sheet stays open with what to do when
+/// the test fails.
 struct AccountForm: View {
     let status: AppStatus
     @State var draft: AccountDraft
+    /// Test the login before saving a new account, and save it only once the test says it works (the first run).
+    var testsFirst = false
     /// Done: the address saved, added or edited, or nil when the form was cancelled.
     let done: (String?) -> Void
 
@@ -30,17 +34,6 @@ struct AccountForm: View {
                 .accessibilityAddTraits(.isHeader)
             ScrollView {
                 VStack(spacing: 0) {
-                    row("Alias") {
-                        TextField("Alias", text: $draft.alias,
-                                  prompt: Text("Optional: the name shown in the sidebar and on rows"))
-                            .meadowComposeField()
-                    }
-                    row("Signature") {
-                        TextField("Signature", text: $draft.signature, prompt: Text(signaturePrompt), axis: .vertical)
-                            .lineLimit(3...6)
-                            .padding(.vertical, 7)
-                            .meadowComposeField()
-                    }
                     row("Email") {
                         VStack(alignment: .leading, spacing: 4) {
                             TextField("Email", text: $draft.email, prompt: Text(verbatim: "you@example.com"))
@@ -51,40 +44,43 @@ struct AccountForm: View {
                                 SettingHelp(String(localized:
                                     "Identity is fixed — remove and re-add to change the address."))
                             }
+                            presetWords
+                            if let note = draft.note { NoteWords(text: note) }
                         }
                     }
-                    row("Type") {
-                        VStack(alignment: .leading, spacing: 6) {
-                            MeadowSegmentedChoice(label: String(localized: "Type"), selection: $draft.kind,
+                    if draft.kind != nil, !draft.unsupported {
+                        row("Type") {
+                            MeadowSegmentedChoice(label: String(localized: "Type"),
+                                                  selection: Binding(get: { draft.type }, set: { draft.pick($0) }),
                                                   options: AccountDraft.Kind.allCases.map { ($0, $0.label) },
                                                   fills: false)
-                            presetWords
                         }
+                        if draft.type == .imap { servers }
                     }
-                    if draft.kind == .imap {
-                        row("Host") {
-                            TextField("Host", text: $draft.host, prompt: Text(verbatim: "mail.yourhost.com"))
-                                .meadowComposeField()
-                        }
-                        row("Port") {
-                            TextField("Port", text: $draft.port).meadowComposeField().frame(width: 88)
-                        }
-                        row("Security") {
-                            MeadowSegmentedChoice(label: String(localized: "Security"), selection: $draft.security,
-                                                  options: AccountDraft.Security.allCases.map { ($0, $0.label) },
-                                                  fills: false)
-                        }
-                    }
-                    row("Password") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if draft.kind == .proton {
-                                SettingHelp(String(localized:
-                                    "Proton accounts log in through Proton Bridge, with the Bridge’s password."))
-                                BridgePasswordView(status: status)
-                            } else {
-                                credential
+                    if !draft.unsupported {
+                        row("Password") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                if draft.type == .proton {
+                                    SettingHelp(String(localized:
+                                        "Proton accounts log in through Proton Bridge, with the Bridge’s password."))
+                                    BridgePasswordView(status: status)
+                                    if let link = draft.link { LinkButton(link: link) }
+                                } else {
+                                    credential
+                                }
                             }
                         }
+                    }
+                    row("Alias") {
+                        TextField("Alias", text: $draft.alias,
+                                  prompt: Text("Optional: the name shown in the sidebar and on rows"))
+                            .meadowComposeField()
+                    }
+                    row("Signature") {
+                        TextField("Signature", text: $draft.signature, prompt: Text(signaturePrompt), axis: .vertical)
+                            .lineLimit(3...6)
+                            .padding(.vertical, 7)
+                            .meadowComposeField()
                     }
                 }
             }
@@ -114,7 +110,7 @@ struct AccountForm: View {
             HStack(spacing: 8) {
                 Button("Test Connection") { Task { await test() } }
                     .meadowButton(small: true)
-                    .disabled(tested == .running)
+                    .disabled(tested == .running || draft.unsupported)
                 Spacer()
                 Button("Cancel") {
                     draft.forgetPassword()
@@ -122,10 +118,12 @@ struct AccountForm: View {
                 }
                 .meadowButton()
                 .keyboardShortcut(.cancelAction)
-                Button(saving ? "Saving…" : (draft.editing == nil ? "Add Account" : "Save")) { Task { await save() } }
-                    .meadowButton(.primary)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(saving)
+                Button(saving ? (testsFirst ? "Testing…" : "Saving…") : (draft.editing == nil ? "Add Account" : "Save")) {
+                    Task { await save() }
+                }
+                .meadowButton(.primary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(saving || draft.unsupported)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -153,42 +151,79 @@ struct AccountForm: View {
         .overlay(alignment: .top) { ComposeHairline() }
     }
 
+    /// An Other IMAP account's servers: where its mail is read, and where it is sent from.
+    @ViewBuilder private var servers: some View {
+        row("Incoming") {
+            server(host: $draft.host, port: $draft.port, security: $draft.security, hostName: "Incoming server",
+                   portName: "Incoming port", prompt: "imap.yourhost.com")
+        }
+        row("Outgoing") {
+            VStack(alignment: .leading, spacing: 4) {
+                server(host: $draft.smtpHost, port: $draft.smtpPort, security: $draft.smtpSecurity,
+                       hostName: "Outgoing server", portName: "Outgoing port",
+                       prompt: draft.host.isEmpty ? "smtp.yourhost.com" : draft.host)
+                SettingHelp(String(localized: "Where your mail is sent from. Left blank, it is the incoming server."))
+            }
+        }
+    }
+
+    private func server(host: Binding<String>, port: Binding<String>, security: Binding<AccountDraft.Security>,
+                        hostName: LocalizedStringKey, portName: LocalizedStringKey, prompt: String) -> some View
+    {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                TextField(hostName, text: host, prompt: Text(verbatim: prompt)).meadowComposeField()
+                TextField(portName, text: port).meadowComposeField().frame(width: 72)
+            }
+            MeadowSegmentedChoice(label: String(localized: "Security"), selection: security,
+                                  options: AccountDraft.Security.allCases.map { ($0, $0.label) }, fills: false)
+        }
+    }
+
     private var signaturePrompt: String {
         status.signatureDefault.isEmpty
             ? String(localized: "Optional: added to new mail and above quoted replies")
             : String(localized: "Optional: added to new mail and above quoted replies — blank uses the global default")
     }
 
+    /// The password: typed and kept in the Keychain; or, for an account that reads it from 1Password or the
+    /// environment, where that is, unchanged here.
     @ViewBuilder private var credential: some View {
-        MeadowSegmentedChoice(label: String(localized: "Credential"), selection: $draft.source,
-                              options: AccountDraft.Source.allCases.map { ($0, $0.label) }, fills: false)
-        switch draft.source {
-        case .keychain:
+        if let elsewhere = draft.keptElsewhere {
+            HStack(spacing: 6) {
+                MeadowIconView(.key, size: 14).foregroundStyle(meadow.ink3)
+                Text(elsewhere).lineLimit(1).truncationMode(.middle)
+            }
+            .font(.meadow(.ui, 13))
+            .foregroundStyle(meadow.ink2)
+            .padding(.top, 7)
+            SettingHelp(String(localized: """
+                MailMind reads it from there. To keep its password in your Keychain instead, remove the account and \
+                add it again.
+                """))
+        } else {
             SecureField("Password", text: $draft.password, prompt: Text(draft.passwordPrompt))
                 .meadowComposeField()
             SettingHelp(String(localized: "Kept in your login Keychain, never in a file."))
-            if draft.kind == .gmail { AppPasswordSteps() }
-        case .op:
-            TextField("1Password reference", text: $draft.opRef, prompt: Text(verbatim: "op://Vault/Item/Field"))
-                .meadowComposeField()
-            SettingHelp(String(localized: "Read from the 1Password CLI at runtime."))
-        case .env:
-            TextField("Environment variable", text: $draft.envVar, prompt: Text(verbatim: "ENV_VAR_NAME"))
-                .meadowComposeField()
-            SettingHelp(String(localized: "Read from an environment variable."))
+            if draft.type == .gmail {
+                AppPasswordSteps()
+            } else if let link = draft.link {
+                LinkButton(link: link)
+            }
         }
     }
 
-    /// What the form says of the preset the server found: Gmail's offered, with a button to take it, or said to fit.
+    /// What the form says of the preset the server found: its settings offered, with a button to take them, or said
+    /// to fit.
     @ViewBuilder private var presetWords: some View {
         switch draft.presetWords {
-        case .offer(let words)?:
+        case .offer(let words, let button)?:
             HStack(spacing: 8) {
                 Text(words)
                     .font(.meadow(.ui, 13))
                     .foregroundStyle(meadow.ink2)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Use Gmail") { draft.kind = .gmail }
+                Button(button) { draft.useFound() }
                     .meadowButton(small: true)
             }
         case .fits(let words)?:
@@ -205,7 +240,7 @@ struct AccountForm: View {
         do {
             try await Task.sleep(for: Self.askAfter)
             let found = try await core.get(API.Get.AccountsPreset.self, ["email": email])
-            if !Task.isCancelled { draft.found = found }
+            if !Task.isCancelled { draft.take(found) }
         } catch {
             // Cancelled as the address changed, or no answer: nothing is offered.
         }
@@ -214,7 +249,7 @@ struct AccountForm: View {
     private func test() async {
         guard let core = status.core else { return }
         guard let body = draft.test else {
-            tested = .failed(String(localized: "enter a password to test"))
+            tested = .failed(String(localized: "Type the password, then test."))
             return
         }
         tested = .running
@@ -236,6 +271,20 @@ struct AccountForm: View {
         let adding = draft.editing == nil
         let address = draft.address
         let body = draft.body
+        // Tested first: a login that doesn't work keeps the sheet open, with the password still typed, to fix. A Proton
+        // account logs in with the Bridge's password, which only a saved account may be tested with.
+        if adding, testsFirst, draft.type != .proton, let trial = draft.test {
+            tested = .running
+            do {
+                tested = .of(try await SecretPost.post(core, API.Post.AccountsTest.self, trial))
+            } catch {
+                tested = .of(error)
+            }
+            guard tested == .connected else {
+                saving = false
+                return
+            }
+        }
         draft.forgetPassword()
         do {
             if adding {
@@ -256,6 +305,40 @@ struct AccountForm: View {
         done(address)
         // A new connection has no mail yet: pull it now, not at the next sync.
         if adding { Task { await status.syncNow() } }
+    }
+}
+
+/// A provider's words on its account before the password: what kind of password it takes, or that MailMind can't log
+/// in to it yet.
+struct NoteWords: View {
+    let text: String
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            MeadowIconView(.info, size: 14).foregroundStyle(meadow.ink3)
+            Text(text)
+                .font(.meadow(.ui, 13))
+                .foregroundStyle(meadow.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 2)
+    }
+}
+
+/// A page that helps (where a provider's app password is made, Proton Bridge), opened in the person's browser.
+struct LinkButton: View {
+    let link: API.Link
+
+    var body: some View {
+        Button {
+            if let url = URL(string: link.url) { NSWorkspace.shared.open(url) }
+        } label: {
+            Text(link.words)
+            MeadowIconView(.external, size: 14)
+        }
+        .meadowButton(small: true)
+        .help(link.url)
     }
 }
 

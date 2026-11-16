@@ -2,37 +2,35 @@
 import Foundation
 
 /// An account as its form holds it while a person adds or edits one (settings/Settings.tsx's `ConnectionForm`): what
-/// the server is sent, the page's checks before it is, and its words when one fails. The server fills in what a type's
-/// preset says (Gmail's host and port, the Bridge's on this computer) and refuses what it won't keep, and says which
-/// preset a new address takes (`/api/accounts/preset`), which the form only offers.
+/// the server is sent, the form's checks before it is, and its words when one fails. A new account starts at its
+/// address, and the server says which preset it takes (`/api/accounts/preset`): a provider's own address takes its
+/// settings, one whose mail a provider's servers take is offered them, and any other is Other IMAP, with its incoming
+/// and outgoing servers typed. The server fills in what a type gives (Gmail's host and port, the Bridge's on this
+/// computer) and refuses what it won't keep.
+///
+/// A new account's password goes to the login Keychain, and nowhere else; an account that already reads it from
+/// 1Password or the environment keeps that, shown and not changed here.
 ///
 /// A password typed here is held only until it is sent, and never described: printing, dumping or logging a draft
 /// shows that one was typed and nothing of it.
 struct AccountDraft: Equatable {
-    /// The page's presets: Gmail, any IMAP server, and Proton through its Bridge.
+    /// The types an account is saved as: Gmail, Proton through its Bridge, and any other IMAP server.
     enum Kind: String, CaseIterable, Identifiable, Sendable {
         case gmail, imap, proton
         var id: String { rawValue }
         var label: String {
             switch self {
             case .gmail: "Gmail"
-            case .imap: "IMAP"
+            case .imap: String(localized: "Other IMAP")
             case .proton: "Proton"
             }
         }
     }
 
-    /// Where an account's password comes from, but Proton's, which is the Bridge's.
-    enum Source: String, CaseIterable, Identifiable, Sendable {
+    /// Where a saved account's password comes from, but Proton's, which is the Bridge's. Only the Keychain is offered;
+    /// the others are an existing account's own.
+    enum Source: String, Sendable {
         case keychain, op, env
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .keychain: String(localized: "Password")
-            case .op: "1Password"
-            case .env: String(localized: "Env var")
-            }
-        }
     }
 
     enum Security: String, CaseIterable, Identifiable, Sendable {
@@ -46,10 +44,16 @@ struct AccountDraft: Equatable {
     var alias = ""
     var signature = ""
     var email = ""
-    var kind = Kind.gmail
+    /// The type, which a new account has none of until the server has said which its address takes.
+    var kind: Kind?
     var host = ""
     var port = "993"
     var security = Security.tls
+    var smtpHost = ""
+    var smtpPort = "587"
+    var smtpSecurity = Security.starttls
+    /// The Trash a preset names (iCloud's "Deleted Messages"); nil leaves it to the server to find.
+    var trash: String?
     var source = Source.keychain
     var password = ""
     var opRef = ""
@@ -57,6 +61,8 @@ struct AccountDraft: Equatable {
     /// What the server said of the address typed (`/api/accounts/preset`): nil until it has, or once the address
     /// changes.
     var found: API.PresetFound?
+    /// The preset whose settings are in the form, taken or offered and used.
+    var applied: API.Preset?
 
     /// Where a Google Account makes an App Password, which Gmail's IMAP takes in place of the account's own password.
     static let appPasswords = URL(string: "https://myaccount.google.com/apppasswords")!
@@ -78,6 +84,9 @@ struct AccountDraft: Equatable {
         host = row.host ?? ""
         port = String(row.port)
         security = row.starttls ? .starttls : .tls
+        smtpHost = row.smtpHost ?? ""
+        smtpPort = String(row.smtpPort)
+        smtpSecurity = row.smtpStarttls ? .starttls : .tls
         switch row.credential.style {
         case "op":
             source = .op
@@ -94,6 +103,9 @@ struct AccountDraft: Equatable {
         }
     }
 
+    /// The type the account is sent as: Other IMAP until the server has said otherwise.
+    var type: Kind { kind ?? .imap }
+
     /// The address the form is for: the one edited, or the one typed, trimmed.
     var address: String { editing ?? email.trimmed }
 
@@ -105,75 +117,154 @@ struct AccountDraft: Equatable {
         return typed.contains("@") ? typed : nil
     }
 
+    /// The server's answer for the address typed: a provider's own address takes its settings, and any other is Other
+    /// IMAP, with what a preset filled in before taken out again (what was typed stays).
+    mutating func take(_ answer: API.PresetFound) {
+        found = answer
+        if answer.sure, let settings = answer.settings, let preset = answer.preset {
+            use(settings, preset)
+            return
+        }
+        if applied != nil {
+            host = ""; port = "993"; security = .tls
+            smtpHost = ""; smtpPort = "587"; smtpSecurity = .starttls
+            kind = .imap
+        }
+        if kind == nil { kind = .imap }
+        applied = nil
+        trash = nil
+    }
+
+    /// Put the preset the server found in the form, as its offer's button does.
+    mutating func useFound() {
+        guard let found, let settings = found.settings, let preset = found.preset else { return }
+        use(settings, preset)
+    }
+
+    private mutating func use(_ settings: API.PresetSettings, _ preset: API.Preset) {
+        kind = Kind(rawValue: settings.type) ?? .imap
+        if kind == .imap {
+            host = settings.host ?? ""
+            port = String(settings.port ?? 993)
+            security = settings.starttls == true ? .starttls : .tls
+            smtpHost = settings.smtpHost ?? ""
+            smtpPort = String(settings.smtpPort ?? 587)
+            smtpSecurity = settings.smtpStarttls == false ? .tls : .starttls
+        }
+        trash = settings.trash
+        applied = preset
+    }
+
+    /// A type picked by hand: what a preset filled in is no longer its.
+    mutating func pick(_ picked: Kind) {
+        kind = picked
+        applied = nil
+        trash = nil
+    }
+
+    /// Whether the address is at a provider MailMind can't log in to yet (Microsoft's): nothing is asked of it.
+    var unsupported: Bool { editing == nil && found?.supported == false }
+
+    /// What the form says of the address's provider before the password: its own words (an app password, the Bridge,
+    /// a sign-in MailMind can't do yet).
+    var note: String? { editing == nil ? found?.note : nil }
+
+    /// The page where the provider's password is made, shown where it is typed, once its settings are in the form.
+    var link: API.Link? {
+        guard editing == nil, let found, found.preset != nil, found.preset == applied else { return nil }
+        return found.link
+    }
+
     /// What the form says of the preset the server found (the page's `PresetOffer`).
     enum PresetWords: Equatable {
-        /// Gmail's settings, offered where another type is picked.
-        case offer(String)
-        /// Gmail's settings picked, said to fit a domain Google's servers take.
+        /// A provider's settings, offered where they aren't in the form: its words and the button's.
+        case offer(String, button: String)
+        /// The provider's settings in the form, said to fit (a domain whose mail its servers take) or filled in (its
+        /// own address).
         case fits(String)
     }
 
-    /// Gmail's settings offered when the server found them and they aren't picked; with them picked, said to fit a
-    /// domain Google's servers take. Nothing for any other address, or an address at Google's own domains with
-    /// Gmail's settings picked already.
     var presetWords: PresetWords? {
-        guard editing == nil, let found, found.preset == .gmail else { return nil }
-        let whose = found.sure ? String(localized: "A Google address")
-                               : String(localized: "Google takes \(found.domain ?? "")’s mail")
-        if kind == .gmail { return found.sure ? nil : .fits(String(localized: "\(whose): Gmail’s settings fit it.")) }
-        return .offer(String(localized: "\(whose): use Gmail’s settings?"))
+        guard editing == nil, let found, let name = found.name, found.settings != nil, !unsupported else { return nil }
+        let using = found.preset != nil && applied == found.preset
+        if found.sure {
+            return using ? .fits(String(localized: "\(name) address: \(name)’s settings are filled in.")) : nil
+        }
+        let whose = String(localized: "\(name) takes \(found.domain ?? "")’s mail")
+        if using { return .fits(String(localized: "\(whose): \(name)’s settings fit it.")) }
+        return .offer(String(localized: "\(whose): use \(name)’s settings?"), button: String(localized: "Use \(name)"))
     }
 
     /// What the password field shows before one is typed: an App Password's shape for Gmail.
     var passwordPrompt: String {
         if editing != nil { return String(localized: "unchanged — leave blank to keep") }
-        return kind == .gmail ? "abcd efgh ijkl mnop" : String(localized: "paste the password / app password")
+        return type == .gmail ? "abcd efgh ijkl mnop" : String(localized: "paste the password or app password")
     }
 
-    /// The credential to send: the Bridge's for Proton; else the typed password, 1Password reference or variable's
-    /// name, or nil when none is given (an edit then keeps the one it has).
-    var credential: JSONValue? {
-        if kind == .proton { return .object(["style": .string("proton_bridge")]) }
+    /// Whether a password can be typed: always for a new account, and for one whose password is in the Keychain.
+    var typesPassword: Bool { type != .proton && source == .keychain }
+
+    /// Where an existing account reads its password from, when it isn't the Keychain: shown, not changed here.
+    var keptElsewhere: String? {
+        guard type != .proton else { return nil }
         switch source {
-        case .keychain:
-            let typed = password.trimmed
-            return typed.isEmpty ? nil : .object(["style": .string("keychain"), "value": .string(typed)])
-        case .op:
-            return opRef.trimmed.isEmpty ? nil : .object(["style": .string("op"), "ref": .string(opRef.trimmed)])
-        case .env:
-            return envVar.trimmed.isEmpty ? nil : .object(["style": .string("env"), "var": .string(envVar.trimmed)])
+        case .keychain: return nil
+        case .op: return String(localized: "From 1Password: \(opRef)")
+        case .env: return String(localized: "From the environment variable \(envVar)")
         }
     }
 
-    /// What the page checks before it sends, in its words: nil when the form may be saved.
+    /// The credential to send: the Bridge's for Proton; else the password typed, kept in the Keychain; nil when none
+    /// is typed (an edit then keeps the one it has).
+    var credential: JSONValue? {
+        if type == .proton { return .object(["style": .string("proton_bridge")]) }
+        guard source == .keychain else { return nil }
+        let typed = password.trimmed
+        return typed.isEmpty ? nil : .object(["style": .string("keychain"), "value": .string(typed)])
+    }
+
+    /// What the form checks before it sends: nil when it may be saved.
     var problem: String? {
-        if editing == nil, !address.contains("@") { return String(localized: "A valid email is required.") }
-        if kind == .imap, host.trimmed.isEmpty { return String(localized: "A host is required for a generic IMAP account.") }
-        if editing == nil, credential == nil { return String(localized: "Set a password (or 1Password ref / env var).") }
+        if editing == nil, !address.contains("@") { return String(localized: "Type the account’s email address.") }
+        if unsupported { return note ?? String(localized: "MailMind can’t log in to this account yet.") }
+        if type == .imap, host.trimmed.isEmpty { return String(localized: "Type the incoming server’s name.") }
+        if editing == nil, credential == nil { return String(localized: "Type the account’s password.") }
         return nil
     }
 
     private var port993: Int { Int(port.trimmed) ?? 993 }
+    private var port587: Int { Int(smtpPort.trimmed) ?? 587 }
 
-    /// The body `/api/accounts/add` or `/api/accounts/edit` takes: an IMAP account's server with it, and the
-    /// credential only when one is given.
+    /// An Other IMAP account's servers, as `AccountBody` and `AccountDraft` name them: nil for every other type, whose
+    /// servers its type gives. An outgoing server left blank is the server's to fill in from the incoming one.
+    private var servers: (host: JSONValue?, port: JSONValue?, starttls: Bool?, smtpHost: JSONValue?, smtpPort: JSONValue?,
+                          smtpStarttls: Bool?)
+    {
+        guard type == .imap else { return (nil, nil, nil, nil, nil, nil) }
+        return (.string(host.trimmed), .number(Double(port993)), security == .starttls,
+                smtpHost.trimmed.isEmpty ? nil : .string(smtpHost.trimmed), .number(Double(port587)),
+                smtpSecurity == .starttls)
+    }
+
+    /// The body `/api/accounts/add` or `/api/accounts/edit` takes: an Other IMAP account's servers with it, a preset's
+    /// Trash when one names it, and the credential only when one is given.
     var body: API.AccountBody {
-        API.AccountBody(alias: alias.trimmed, credential: credential, email: address,
-                        host: kind == .imap ? .string(host.trimmed) : nil,
-                        port: kind == .imap ? .number(Double(port993)) : nil,
-                        signature: signature.trimmed, starttls: kind == .imap ? security == .starttls : nil,
-                        type: .string(kind.rawValue))
+        let s = servers
+        return API.AccountBody(alias: alias.trimmed, credential: credential, email: address, host: s.host, port: s.port,
+                               signature: signature.trimmed, smtpHost: s.smtpHost, smtpPort: s.smtpPort,
+                               smtpStarttls: s.smtpStarttls, starttls: s.starttls,
+                               trash: editing == nil ? trash : nil, type: .string(type.rawValue))
     }
 
     /// What `/api/accounts/test` is asked: the form as it stands when it gives a credential; the account as it is
     /// saved when editing without one; nil, with nothing to test, when adding without one.
     var test: API.TryBody? {
         if let credential {
-            return API.TryBody(draft: API.AccountDraft(credential: credential, email: address,
-                                                       host: kind == .imap ? .string(host.trimmed) : nil,
-                                                       port: kind == .imap ? .number(Double(port993)) : nil,
-                                                       starttls: kind == .imap ? security == .starttls : nil,
-                                                       type: .string(kind.rawValue)))
+            let s = servers
+            return API.TryBody(draft: API.AccountDraft(credential: credential, email: address, host: s.host, port: s.port,
+                                                       smtpHost: s.smtpHost, smtpPort: s.smtpPort,
+                                                       smtpStarttls: s.smtpStarttls, starttls: s.starttls,
+                                                       type: .string(type.rawValue)))
         }
         return editing.map { API.TryBody(email: $0) }
     }
@@ -186,7 +277,7 @@ struct AccountDraft: Equatable {
 
 extension AccountDraft: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     var description: String {
-        "AccountDraft(\(address), \(kind.rawValue), password: \(password.isEmpty ? "none" : "typed"))"
+        "AccountDraft(\(address), \(type.rawValue), password: \(password.isEmpty ? "none" : "typed"))"
     }
 
     var debugDescription: String { description }
@@ -194,37 +285,44 @@ extension AccountDraft: CustomStringConvertible, CustomDebugStringConvertible, C
     /// What `dump` and a debugger show: every field but the password, which shows only whether one was typed.
     var customMirror: Mirror {
         Mirror(self, children: [
-            "editing": editing as Any, "alias": alias, "signature": signature, "email": email, "kind": kind,
-            "host": host, "port": port, "security": security, "source": source,
+            "editing": editing as Any, "alias": alias, "signature": signature, "email": email, "kind": kind as Any,
+            "host": host, "port": port, "security": security, "smtpHost": smtpHost, "smtpPort": smtpPort,
+            "smtpSecurity": smtpSecurity, "trash": trash as Any, "source": source,
             "password": password.isEmpty ? "none" : "typed", "opRef": opRef, "envVar": envVar,
         ], displayStyle: .struct)
     }
 }
 
-/// What a test of an account came to, in the page's words (`testConnection`).
+/// What a test of an account came to (`testConnection`): connected, or what went wrong in plain words with what to do
+/// next, the page that helps, and the class of the trouble in small type, for the owner.
 enum Tested: Equatable, Sendable {
     case running
     case connected
-    case failed(String)
+    case failed(String, link: API.Link? = nil, detail: String? = nil)
 
     var text: String {
         switch self {
         case .running: String(localized: "Testing…")
         case .connected: String(localized: "Connected")
-        case .failed(let why): why
+        case .failed(let why, _, _): why
         }
     }
 
     static func of(_ answer: API.AccountsTestAnswer) -> Tested {
         switch answer {
-        case .loggedIn(let answer): answer.connect ? .connected : .failed(String(localized: "failed"))
-        case .couldntLogIn(let out): .failed(out.error.isEmpty ? String(localized: "failed") : out.error)
+        case .loggedIn(let answer):
+            return answer.connect ? .connected : .failed(String(localized: "MailMind couldn’t log in."))
+        case .couldntLogIn(let out):
+            let says = out.says.isEmpty ? String(localized: "MailMind couldn’t log in.") : out.says
+            return .failed(says, link: out.link, detail: out.error.isEmpty || out.error == says ? nil : out.error)
         }
     }
 
     static func of(_ error: any Error) -> Tested {
-        if let problem = error as? Problem, problem.isRefusal { return .failed(problem.detail ?? String(localized: "failed")) }
-        return .failed(String(localized: "test failed"))
+        if let problem = error as? Problem, problem.isRefusal {
+            return .failed(problem.detail ?? String(localized: "MailMind couldn’t log in."))
+        }
+        return .failed(String(localized: "The test didn’t finish. Try again."))
     }
 }
 

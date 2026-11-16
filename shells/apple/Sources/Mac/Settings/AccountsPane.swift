@@ -92,7 +92,7 @@ struct AccountsPane: View {
     private func remove(_ row: API.AccountRow) async {
         guard let core = status.core, let email = row.email else { return }
         do {
-            _ = try await core.post(API.Post.AccountsDelete.self, API.NamesAnAccount(email: email))
+            _ = try await core.post(API.Post.AccountsDelete.self, API.RemoveBody(email: email))
             status.say(String(localized: "Removed \(StatusWords.short(email))"))
             if chosen == email { chosen = nil }
         } catch let problem as Problem where problem.status == 404 {
@@ -351,7 +351,7 @@ struct CredentialWords: View {
     }
 }
 
-/// What a test came to, in the page's words.
+/// What a test came to: connected, or what to do next, with the page that helps and the trouble's class in small type.
 struct TestedWords: View {
     let tested: Tested
     @Environment(\.meadow) private var meadow
@@ -371,12 +371,22 @@ struct TestedWords: View {
                     Text("Connected")
                 }
                 .foregroundStyle(meadow.moss)
-            case .failed(let why):
-                HStack(spacing: 6) {
-                    MeadowIconView(.alert, size: 15)
-                    Text(why).lineLimit(4).fixedSize(horizontal: false, vertical: true)
+            case .failed(let why, let link, let detail):
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        MeadowIconView(.alert, size: 15)
+                        Text(why).lineLimit(4).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(meadow.rust)
+                    if let link { LinkButton(link: link) }
+                    // The class of what went wrong, for whoever looks after MailMind.
+                    if let detail {
+                        Text(verbatim: detail)
+                            .font(.meadow(.ui, 11))
+                            .foregroundStyle(meadow.ink3)
+                            .textSelection(.enabled)
+                    }
                 }
-                .foregroundStyle(meadow.rust)
             }
         }
         .font(.meadow(.ui, 13, .semibold))

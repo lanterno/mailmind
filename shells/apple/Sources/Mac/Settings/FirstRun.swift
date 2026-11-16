@@ -84,13 +84,13 @@ struct Welcome: View {
             .ignoresSafeArea()
         }
         .sheet(isPresented: $adding) {
-            AccountForm(status: status, draft: AccountDraft()) { _ in adding = false }
+            AccountForm(status: status, draft: AccountDraft(), testsFirst: true) { _ in adding = false }
         }
     }
 
     private static let connecting = String(localized: """
-        Gmail, Proton through Proton Bridge, or any IMAP server. Its password is kept in your login Keychain, never \
-        in a file.
+        Gmail, iCloud, Yahoo, AOL, Fastmail, Proton through Proton Bridge, or any other IMAP server. Type its address \
+        and MailMind fills in the rest it knows. Its password is kept in your login Keychain, never in a file.
         """)
 
     private static let aiOff = String(localized: """
