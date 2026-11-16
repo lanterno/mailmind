@@ -320,7 +320,7 @@ extension API {
         case anthropic
         case openai
         case gemini
-        case ollama
+        case local
         case compatible
     }
 
@@ -2645,6 +2645,31 @@ extension API {
             self.id = id
             self.name = name
             self.q = q
+        }
+    }
+
+    /// A model server on this Mac that answered: its name, the base URL a model on this Mac is reached at there, and the
+    /// models it lists that a person may choose, sorted.
+    public struct LocalServer: Codable, Hashable, Sendable {
+        public var models: [String]
+        public var name: String
+        public var url: String
+
+        public init(models: [String], name: String, url: String) {
+            self.models = models
+            self.name = name
+            self.url = url
+        }
+    }
+
+    /// The model servers on this Mac that answered, in the order they are known; none is an empty list.
+    public struct LocalServers: Codable, Hashable, Sendable {
+        public var ok: Bool
+        public var servers: [LocalServer]
+
+        public init(ok: Bool, servers: [LocalServer]) {
+            self.ok = ok
+            self.servers = servers
         }
     }
 
@@ -6670,6 +6695,8 @@ extension API {
         public enum AiDraftAhead {}
         /// GET /api/ai/key
         public enum AiKey {}
+        /// GET /api/ai/local
+        public enum AiLocal {}
         /// GET /api/ai/models
         public enum AiModels {}
         /// GET /api/audit
@@ -6952,6 +6979,11 @@ extension API.Get.AiDraftAhead: GetRoute {
 extension API.Get.AiKey: GetRoute {
     public static let path = "/api/ai/key"
     public typealias Answer = API.KeysKept
+}
+
+extension API.Get.AiLocal: GetRoute {
+    public static let path = "/api/ai/local"
+    public typealias Answer = API.LocalServers
 }
 
 extension API.Get.AiModels: GetRoute {
