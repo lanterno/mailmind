@@ -59,6 +59,7 @@ def test_what_an_error_says_counts_for_nothing():
     (LoginUnreachable("NO [UNAVAILABLE] busy"), True),
     (LoginUnreachable("NO [AUTHENTICATIONFAILED] no", refused=True), False),
     (tls_pin.TLSPinMismatch(), False),
+    (ssl.SSLCertVerificationError(), False),
     (ImapTrouble(), False),
     (ValueError(), False),
 ], ids=lambda v: v if isinstance(v, bool) else type(v).__qualname__)
