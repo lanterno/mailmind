@@ -8,7 +8,8 @@
 //! A process that only reads reads the older mail too. A message whose opening the server won't send costs only its
 //! own text, one whose headers it won't send is left out of the older mail, and a connection lost part way stores
 //! nothing of its step. A sync that fails while older mail is still being read keeps saying how far it got, and an
-//! Inbox opened during a sync that fails says so, though the failure may pass.
+//! Inbox opened during a sync that fails says so, though the failure may pass. A read of older mail that met trouble
+//! that may pass goes on as soon as the account's next sync works, not at its next round.
 
 #![allow(clippy::unwrap_used)]
 
@@ -499,6 +500,13 @@ impl World {
     fn reads_older(&self) {
         self.app.jobs.add(OLDER_MAIL, 600, 600);
     }
+
+    /// How many rounds of reading older mail have ended.
+    fn older_rounds(&self) -> u64 {
+        let jobs = self.app.jobs.snapshot();
+        let older = jobs.as_array().unwrap().iter().find(|job| job["name"] == OLDER_MAIL).cloned();
+        older.map_or(0, |job| job["runs"].as_u64().unwrap())
+    }
 }
 
 fn notes(from: u32, to: u32) -> Vec<(u32, Vec<u8>)> {
@@ -749,6 +757,26 @@ fn a_step_of_older_mail_none_of_which_the_server_sends_stores_nothing_and_the_sc
     assert_eq!(w.stored(ADA), range(701, 1200));
     let said = w.said(ADA);
     assert_eq!((said["done"].clone(), said["total"].clone()), (json!(500), json!(1200)));
+}
+
+#[test]
+fn a_read_of_older_mail_that_met_trouble_that_may_pass_goes_on_as_soon_as_the_next_sync_works() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 1200));
+    let w = world(imap, &[ADA]);
+    w.app.syncing.sync_once();
+    assert_eq!(w.stored(ADA), range(701, 1200));
+    // The background's first round of older mail finds the server can't take a login for now.
+    w.imap.unavailable(ADA, true);
+    let workers = Workers::start(&w.app, true, 0, 0);
+    w.app.jobs.kick(OLDER_MAIL);
+    until(|| w.older_rounds() == 1);
+    assert_eq!(w.stored(ADA), range(701, 1200));
+    // It takes one again, and the next sync works: the rest is read now, not at the round's next turn ten minutes on.
+    w.imap.unavailable(ADA, false);
+    w.app.syncing.sync_once();
+    until(|| w.stored(ADA) == range(1, 1200));
+    workers.stop();
 }
 
 #[test]
