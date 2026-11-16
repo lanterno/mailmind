@@ -52,6 +52,9 @@ struct AccountDraft: Equatable {
     var smtpHost = ""
     var smtpPort = "587"
     var smtpSecurity = Security.starttls
+    /// An edited Other IMAP account's outgoing port and security as the form first showed them, where the file holds
+    /// none and they are the type's: sent only once changed, so the account goes on taking them from its type.
+    private var outgoingUnsaved = OutgoingUnsaved()
     /// The Trash a preset names (iCloud's "Deleted Messages"); nil leaves it to the server to find.
     var trash: String?
     var source = Source.keychain
@@ -84,9 +87,16 @@ struct AccountDraft: Equatable {
         host = row.host ?? ""
         port = String(row.port)
         security = row.starttls ? .starttls : .tls
-        smtpHost = row.smtpHost ?? ""
+        // No outgoing host saved is the incoming one, which the field's prompt shows: an edit that leaves it blank
+        // keeps it following the incoming host rather than writing that host into the file.
+        let given = row.defaultsApplied
+        smtpHost = given.smtpHost ? "" : row.smtpHost ?? ""
         smtpPort = String(row.smtpPort)
         smtpSecurity = row.smtpStarttls ? .starttls : .tls
+        if kind == .imap {
+            outgoingUnsaved = OutgoingUnsaved(port: given.smtpPort ? smtpPort : nil,
+                                              security: given.smtpStarttls ? smtpSecurity : nil)
+        }
         switch row.credential.style {
         case "op":
             source = .op
@@ -236,14 +246,16 @@ struct AccountDraft: Equatable {
     private var port587: Int { Int(smtpPort.trimmed) ?? 587 }
 
     /// An Other IMAP account's servers, as `AccountBody` and `AccountDraft` name them: nil for every other type, whose
-    /// servers its type gives. An outgoing server left blank is the server's to fill in from the incoming one.
+    /// servers its type gives. An outgoing server left blank is the server's to fill in from the incoming one, and an
+    /// edited account's outgoing port and security the file doesn't hold are sent only once changed.
     private var servers: (host: JSONValue?, port: JSONValue?, starttls: Bool?, smtpHost: JSONValue?, smtpPort: JSONValue?,
                           smtpStarttls: Bool?)
     {
         guard type == .imap else { return (nil, nil, nil, nil, nil, nil) }
         return (.string(host.trimmed), .number(Double(port993)), security == .starttls,
-                smtpHost.trimmed.isEmpty ? nil : .string(smtpHost.trimmed), .number(Double(port587)),
-                smtpSecurity == .starttls)
+                smtpHost.trimmed.isEmpty ? nil : .string(smtpHost.trimmed),
+                smtpPort == outgoingUnsaved.port ? nil : .number(Double(port587)),
+                smtpSecurity == outgoingUnsaved.security ? nil : smtpSecurity == .starttls)
     }
 
     /// The body `/api/accounts/add` or `/api/accounts/edit` takes: an Other IMAP account's servers with it, a preset's
@@ -281,6 +293,12 @@ struct AccountDraft: Equatable {
     mutating func forgetPassword() {
         password = ""
     }
+}
+
+/// An edited account's outgoing port and security where its file holds none: as the form first showed them.
+struct OutgoingUnsaved: Equatable {
+    var port: String?
+    var security: AccountDraft.Security?
 }
 
 extension AccountDraft: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
