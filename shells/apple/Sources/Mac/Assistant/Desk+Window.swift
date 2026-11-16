@@ -527,36 +527,51 @@ struct DeskMessageItems: View {
 /// The menu bar's Assistant menu: the assistant's and curation's panels; Ask, a bulk action and your week only while
 /// AI isn't turned off.
 struct DeskCommands: Commands {
-    @FocusedValue(\.mailDesk) private var desk: Desk?
-
     var body: some Commands {
         CommandMenu("Assistant") {
-            let ai = desk?.aiTurnedOff != true
-            Button("Today’s Brief", systemImage: "sun.max") { desk?.go(.desk(.brief)) }
-                .keyboardShortcut("b", modifiers: [.option, .command])
+            AssistantMenuItems(status: .shared)
+        }
+    }
+
+    /// Whether the menu offers what only AI serves. The menu stays in the menu bar whichever window is key, and
+    /// Settings, a composer or Help focuses no desk, so the app's word counts as much as the mail window's: neither
+    /// may say AI is turned off.
+    static func offersAI(_ desk: Desk?, _ ai: API.AiStatus?) -> Bool {
+        desk?.aiTurnedOff != true && ai?.isTurnedOff != true
+    }
+}
+
+/// The Assistant menu's items: a view, so they follow how AI stands as it changes, whatever window is in front.
+private struct AssistantMenuItems: View {
+    let status: AppStatus
+    @FocusedValue(\.mailDesk) private var desk: Desk?
+
+    var body: some View {
+        let ai = DeskCommands.offersAI(desk, status.digest?.ai)
+        Button("Today’s Brief", systemImage: "sun.max") { desk?.go(.desk(.brief)) }
+            .keyboardShortcut("b", modifiers: [.option, .command])
+            .disabled(desk == nil)
+        if ai {
+            Button("Ask Your Mail…", systemImage: "sparkles") { desk?.sheet = .ask }
+                .keyboardShortcut("a", modifiers: [.option, .command])
                 .disabled(desk == nil)
-            if ai {
-                Button("Ask Your Mail…", systemImage: "sparkles") { desk?.sheet = .ask }
-                    .keyboardShortcut("a", modifiers: [.option, .command])
-                    .disabled(desk == nil)
-                // ⌥⌘D hides the Dock everywhere, so Bulk Action takes ⌥⌘K, beside the palette's ⌘K.
-                Button("Bulk Action…", systemImage: "wand.and.stars") { desk?.startPlan() }
-                    .keyboardShortcut("k", modifiers: [.option, .command])
-                    .disabled(desk == nil)
-            }
-            Divider()
-            Button("Commitments and Tasks", systemImage: "checklist") { desk?.sheet = .commitments }
-                .disabled(desk == nil)
-            if ai {
-                Button("Your Week", systemImage: "calendar") { desk?.sheet = .review }
-                    .disabled(desk == nil)
-            }
-            Divider()
-            Button("Curate — Rules and Senders…", systemImage: "slider.horizontal.3") { desk?.sheet = .curate }
-                .disabled(desk == nil)
-            Button("New Filter…", systemImage: "line.3.horizontal.decrease.circle") { desk?.newFilter() }
+            // ⌥⌘D hides the Dock everywhere, so Bulk Action takes ⌥⌘K, beside the palette's ⌘K.
+            Button("Bulk Action…", systemImage: "wand.and.stars") { desk?.startPlan() }
+                .keyboardShortcut("k", modifiers: [.option, .command])
                 .disabled(desk == nil)
         }
+        Divider()
+        Button("Commitments and Tasks", systemImage: "checklist") { desk?.sheet = .commitments }
+            .disabled(desk == nil)
+        if ai {
+            Button("Your Week", systemImage: "calendar") { desk?.sheet = .review }
+                .disabled(desk == nil)
+        }
+        Divider()
+        Button("Curate — Rules and Senders…", systemImage: "slider.horizontal.3") { desk?.sheet = .curate }
+            .disabled(desk == nil)
+        Button("New Filter…", systemImage: "line.3.horizontal.decrease.circle") { desk?.newFilter() }
+            .disabled(desk == nil)
     }
 }
 #else
