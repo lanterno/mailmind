@@ -56,9 +56,9 @@ MailMind module loads:
   Keychain. A test opens a database file with `database.keyed(path)` and takes SQLite's names from `platform.db.driver`:
   the standard library's `sqlite3` reads no encrypted file, and is for a test that writes a plaintext one on purpose.
 - It installs the tripwire in `tests/support/guard.py`. The tripwire refuses the real data files (at the
-  repo root, and in the directory `MAILMIND_HOME` named), any non-loopback host, and the
-  `claude`, `op` and `security` programs. A test that trips it fails. It also wraps SQLCipher's `connect`, which raises no
-  audit event as the standard library's does.
+  repo root, and in the directory `MAILMIND_HOME` named), any non-loopback host, the ports on loopback the model servers
+  on this Mac listen on (11434, 1234, 8080, 8000, 1337 and 4891), and the `claude`, `op` and `security` programs. A test
+  that trips it fails. It also wraps SQLCipher's `connect`, which raises no audit event as the standard library's does.
 - The tripwire puts a stand-in in the login Keychain's place (`tests/support/fake_keychain.py`), handing it to
   `mailmind.platform.keychain.use`, in every test process and every program a test starts with the tripwire installed. The
   autouse fixture `fake_keychain` empties it around each test, and a test takes it to see what was kept. A program shares its
@@ -94,7 +94,7 @@ The fixtures, from the bottom up:
   LM Studio, with llama.cpp between them at a port nothing listens on: the only ones `GET /api/ai/local` asks, by the app
   in the test's process and by a served one, which `MAILMIND_TEST_LOCAL_AI` names them to (`name=url` pairs between `;`;
   `mm-served` hands it to the Rust server through its seams). Without it an autouse fixture sets that variable empty and
-  no test asks a model server, so none running on the machine is ever reached.
+  no test asks a model server, so none running on the machine is ever reached. `just demo` finds none either.
 - `openai_api` is a fake OpenAI-compatible API (`tests/fakes/openai_api.py`) on loopback, for every other provider: a test
   chooses the provider with `ai_base_url` at its `.url` and keeps its `KEY` (`.key = None` takes any, as a model on this
   Mac may). A test that chooses a model on this Mac gives it that URL first, so nothing reaches one running on the
@@ -128,9 +128,10 @@ server do something: the server is another process, which that never reaches. A 
 Python app's insides stays in-process, in `tests/characterization/`. Each test starts a server, which takes about a second.
 
 The Rust server (`core/crates/mm-server`) is held to the same suites through `core/crates/mm-served`, its launcher for them: the
-frozen clock, a tripwire equal to `guard.py`, `fake_keychain`'s file and a sanitizer `unsanitized on` takes away, each handed to
-the server through its seams. `mailmind-server`'s seams (`real::seams`) have the sanitizer itself, and nothing in it can take it
-away. What the Rust server answers yet is on the ledger, `tests/support/rust_ledger.txt`, one test id a line. `just test-rust`
+frozen clock, a tripwire equal to `guard.py` but for the model servers' ports (`Outside` is told a host, never a port),
+`fake_keychain`'s file and a sanitizer `unsanitized on` takes away, each handed to the server through its seams.
+`mailmind-server`'s seams (`real::seams`) have the sanitizer itself, and nothing in it can take it away. What the Rust
+server answers yet is on the ledger, `tests/support/rust_ledger.txt`, one test id a line. `just test-rust`
 builds the launcher and runs the ledger's tests against it; `just verify` runs it. When `MAILMIND_TEST_LEDGER` names the ledger,
 every served test (`tests/api` and `tests/e2e/browser`) not on it is `xfail(strict=True, reason="not on the Rust server yet")`, so
 `just test-rust-all` runs them all against the Rust server and one that passes errors with `XPASS(strict)`: put it on the

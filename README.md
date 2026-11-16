@@ -624,7 +624,8 @@ How a release is made is in [docs/releasing.md](docs/releasing.md).
 git clone https://github.com/<you>/mailmind.git && cd mailmind
 
 # To look around first: the whole app on fictional mail, fake servers and a temp data directory.
-# Nothing of yours is read or changed, and Ctrl-C ends it. (Needs uv, just and Node.)
+# Nothing of yours is read or changed, it finds no model server on this Mac, and Ctrl-C ends it.
+# (Needs uv, just and Node.)
 just demo                         # http://127.0.0.1:8721   (custom port: just demo 9000)
 
 # 1. Configure ONE account to start (delete the others in the example), and keep its password in the Keychain

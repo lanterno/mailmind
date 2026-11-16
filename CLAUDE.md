@@ -115,7 +115,9 @@ The docs below say why. These are the ones a change can break without noticing:
   changes, and commit the diff on its own. Never disable `react-hooks/exhaustive-deps` or `rules-of-hooks`. Only
   `features/mailbox/MailFrame.tsx` writes HTML into the DOM.
 - **Tests.** Every test sees only fictional data (`example.test`) in a temp directory, and a tripwire fails any that reaches real data, a
-  non-loopback host or the `claude`, `op` and `security` programs. A known bug is an `xfail(strict=True)` test stating the right behaviour.
+  non-loopback host, a loopback port a real model server listens on (Ollama's 11434 and the like; Python's tripwire only, the Rust
+  server's sees no port) or the `claude`, `op` and `security` programs. A test that chooses a model on this Mac gives it a fake's URL
+  first. A known bug is an `xfail(strict=True)` test stating the right behaviour.
 
 ## Read before you change
 
