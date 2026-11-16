@@ -70,13 +70,14 @@ class Assessments:
         return prompts.TRIAGE.fill(frm=frm, subject=row["subject"] or "(no subject)",
                                    date=row["date_iso"] or "", body=(row["snippet"] or "")[:1800])
 
-    def _assessment(self, row: Row, reply: Reply, prompt_version: int | None) -> Assessment:
-        """What to store for a message from what triage answered. A reply with no usable summary stores a
-        fallback, so a message doesn't go round for ever."""
+    def _assessment(self, row: Row, reply: Reply, prompt_version: int | None, asked: str | None = None) -> Assessment:
+        """What to store for a message from what triage answered, under the model it `asked` (the one in force unless
+        named: a batch's answers name the model the batch asked). A reply with no usable summary stores a fallback, so a
+        message doesn't go round for ever."""
         obj = object_in(reply.text)
         if obj.get("summary"):
             return Assessment(str(obj["summary"])[:600], obj.get("importance", 2), str(obj.get("category", "other"))[:32],
-                              str(obj.get("action", ""))[:200], self._calls.model_label(),
+                              str(obj.get("action", ""))[:200], asked or self._calls.model_label(),
                               reply.model, prompt_version, ASSESSED)
         return Assessment(row["subject"] or "(no subject)", 2, "other", "", "parse-error",
                           reply.model, prompt_version, REFUSED if reply.refused else UNUSABLE)
@@ -170,14 +171,15 @@ class Assessments:
         return len(requests)
 
     def _store_answers(self, c: Connection, batch: Row, results: Iterable[BatchResult]) -> int:
-        """Each answer a batch brought, for each copy of its message and under its key. How many."""
+        """Each answer a batch brought, for each copy of its message and under its key, labelled with the model the batch
+        asked, whatever is in force now. How many."""
         keys, stored, when = self._answers.batch_keys(c, batch["id"]), 0, datetime.now(timezone.utc).isoformat()
         for r in results:
             key = MessageKey(int(r.custom_id)) if r.custom_id.isdigit() else None
             if key is None or key not in keys or r.reply is None:
                 continue                            # no answer: it is waiting again once the batch is closed
             row = self._mail.any_copy(c, key)
-            said = self._assessment(row or {"subject": ""}, r.reply, batch["prompt_version"])
+            said = self._assessment(row or {"subject": ""}, r.reply, batch["prompt_version"], batch["model"])
             if row is not None:
                 self._save(c, row["pk"], said, when)
             elif said.outcome == ASSESSED:          # every copy has gone: it may come back
