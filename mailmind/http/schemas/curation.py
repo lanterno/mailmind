@@ -229,6 +229,7 @@ class AccountSwept(Answer):
     error: str | None
     by_bucket: dict[str, int] | None = None
     senders: int | None = None
+    held_back: int | None = None            # junk left where it is: starred, or not read yet
     moved: int | None = None
     stragglers: list[str] | None = None
 

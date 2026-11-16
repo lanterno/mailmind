@@ -240,11 +240,13 @@ def _plan(accts, do_sweep=False, dry=False):
             if n:
                 tag = " TRASH" if k in curation.JUNK_BUCKETS else " keep"
                 print(f"   {k:<24} {n:>5}{tag}   {', '.join(p['top_senders'].get(k, []))}")
-        print(f"   -> would trash {p['junk']} / keep {p['keep']}")
-        grand += p["junk"]
-        if do_sweep and not dry and p["junk"]:
+        going = p["junk"] - p["held_back"]
+        print(f"   -> would trash {going} / keep {p['keep']}"
+              + (f" / leave {p['held_back']} starred or unread" if p["held_back"] else ""))
+        grand += going
+        if do_sweep and not dry and going:
             r = curation.sweeps.sweep(a, dry=False)
-            msg = f"   swept: moved {r['moved']}/{p['junk']} to Trash (recorded in the audit trail)"
+            msg = f"   swept: moved {r['moved']}/{r['planned']} to Trash (recorded in the audit trail)"
             if r["stragglers"]:
                 msg += f"  ! {len(r['stragglers'])} could not be verified-moved"
             print(msg)

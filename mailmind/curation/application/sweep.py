@@ -1,11 +1,12 @@
 """Sweeping an inbox: classify it, then move its junk to Trash, verified and audited. Mail is read live before
-anything moves, so a stored row can't send the wrong message anywhere."""
+anything moves, so a stored row can't send the wrong message anywhere. Starred and unread mail stays where it is, whatever
+it is."""
 from collections.abc import Callable
 from typing import Any
 
 from mailmind.curation.application.ports import FilingCommands, LiveSession, Mailboxes, RuleBookRepository, SenderMail, SweepTrail
 from mailmind.curation.domain import sweep_plan
-from mailmind.curation.domain.live import READ_FIELDS, Classified, Read, read_from_headers
+from mailmind.curation.domain.live import READ_FIELDS, Classified, Read, held, read_from_headers
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
@@ -16,9 +17,9 @@ log = get_logger("sweep")
 
 
 def fetch_headers(s: LiveSession) -> list[Read]:
-    """Return list of {uid, from, name, subject, bulk} for the INBOX, which `s` selects."""
+    """Return list of {uid, from, name, subject, mid, bulk, starred, unread} for the INBOX, which `s` selects."""
     s.select("INBOX")
-    return [read_from_headers(h.uid, h.raw) for h in s.headers(s.uids("ALL"), READ_FIELDS)]
+    return [read_from_headers(h.uid, h.raw, h.flags) for h in s.headers(s.uids("ALL"), READ_FIELDS)]
 
 
 class Sweeps:
@@ -39,6 +40,7 @@ class Sweeps:
             res["error"] = type(e).__name__      # what a server said stays out of the answer
             return res
         res.update(sweep_plan.tally((r["bucket"], r["from"]) for r in rows))
+        res["held_back"] = sum(1 for r in sweep_plan.junk(rows) if held(r))
         res["_rows"] = rows  # internal: used by the plan command and sweep, dropped before serialization
         return res
 
@@ -61,10 +63,11 @@ class Sweeps:
         p = self.plan(acct)
         if p["error"]:
             return {"account": acct["email"], "error": p["error"], "planned": 0}
-        junk_rows: list[Classified] = sweep_plan.junk(p["_rows"])
+        # Starred or unread junk stays: a person's mark, or mail no one has seen yet, is never swept away.
+        junk_rows: list[Classified] = [r for r in sweep_plan.junk(p["_rows"]) if not held(r)]
         out: dict[str, Any] = {"account": acct["email"], "planned": len(junk_rows), "by_bucket": p["by_bucket"],
-                               "senders": len(set(r["from"] for r in junk_rows)), "moved": 0,
-                               "stragglers": [], "error": None}
+                               "senders": len(set(r["from"] for r in junk_rows)), "held_back": p["held_back"],
+                               "moved": 0, "stragglers": [], "error": None}
         if dry or not junk_rows:
             return out
         self._audit.swept(acct["email"], junk_rows)  # log BEFORE moving so a crash still records intent
