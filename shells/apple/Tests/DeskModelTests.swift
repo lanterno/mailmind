@@ -693,8 +693,57 @@ final class DeskModelTests: XCTestCase {
         await model.armSweep("ada@example.test")
         await model.sweep()
 
-        XCTAssertEqual(said, "Sweep: abort")
+        XCTAssertEqual(said, "Couldn’t reach the mail server, so nothing was swept. Try again in a moment. (abort)")
         XCTAssertFalse(undoable, "nothing went, so there is nothing to undo")
+    }
+
+    /// A sweep the server stopped part way says how many went, that Undo brings them back, and to sweep again for
+    /// the rest; its class only after the words.
+    func testASweepStoppedPartWaySaysUndoBringsBackWhatWent() async {
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", planned: 30)]))
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: false, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", error: "ConnectionLost", moved: 12, planned: 30)],
+            undoGroup: "ug-sweep"))
+        let model = CurateModel(link: link, notices: notices)
+
+        await model.armSweep("ada@example.test")
+        await model.sweep()
+
+        XCTAssertEqual(said, """
+            Couldn’t reach the mail server, so the sweep stopped after 12. Undo brings them back; sweep again for the \
+            rest. (ConnectionLost)
+            """)
+        XCTAssertTrue(undoable)
+        XCTAssertEqual(CurateModel.sweepStopped("ConnectionLost", moved: 1), """
+            Couldn’t reach the mail server, so the sweep stopped after 1. Undo brings it back; sweep again for the rest. \
+            (ConnectionLost)
+            """)
+    }
+
+    /// A plan the server couldn't make says so in words, and one that got no answer says what to do, or the server's
+    /// own words when it refused.
+    func testASweepsPlanThatFailedSaysWhatToDo() async {
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", error: "TimeoutError", planned: 0)]))
+        let model = CurateModel(link: link, notices: notices)
+        await model.armSweep("ada@example.test")
+        XCTAssertNil(model.sweepArmed)
+        XCTAssertEqual(said, "Couldn’t reach the mail server, so nothing was swept. Try again in a moment. (TimeoutError)")
+
+        let none = DeskRoutes()
+        none.answer("POST", "/api/sweep", status: 503, json: "{}")
+        let unanswered = CurateModel(link: CoreLink(none), notices: notices)
+        await unanswered.armSweep("ada@example.test")
+        XCTAssertEqual(said, "Couldn’t look at this Inbox. Try again in a moment.")
+
+        let refusing = DeskRoutes()
+        refusing.refuse("POST", "/api/sweep", status: 409, detail: "MailMind is read-only.")
+        await CurateModel(link: CoreLink(refusing), notices: notices).armSweep("ada@example.test")
+        XCTAssertEqual(said, "MailMind is read-only.")
+        XCTAssertEqual(CurateModel.sweepFailed(Problem(CoreAnswer(status: 502, contentType: "", headers: [], body: Data())),
+                                               planning: false),
+                       "The sweep didn’t finish. Try again in a moment.")
     }
 
     func testACardOffersToSweepOnlyWhatASweepWouldMove() {
