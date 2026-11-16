@@ -94,6 +94,21 @@ describe("what the stream says changed", () => {
     await send("new-mail");
     expect(reads().at(-1)).toEqual(["tidy", "active"]);
   });
+  it("mail gone from a server reads the lists again as new mail does", async () => {
+    await open();
+    await send("reconcile", { account: "a@example.test", pruned: 2 });
+    expect(readKeys()).toEqual(["messages", "folders", "screener", "tidy"]);
+  });
+  it("an account removed reads its own lists no more, and the digest at once to take it off the rail", async () => {
+    await open();
+    await send("reconcile", { account: "bo@example.test", pruned: 3, removed: true });
+    expect(readKeys()).toEqual(["messages", "folders", "screener", "tidy", "digest"]);
+    const folders = vi.mocked(qc.invalidateQueries).mock.calls[1]![0]!;
+    const reads = (key: string[]) => folders.predicate!({ queryKey: key } as never);
+    expect(reads(["folders", "bo@example.test"])).toBe(false);
+    expect(reads(["folders", "a@example.test"])).toBe(true);
+    expect(reads(["folders", "__across__"])).toBe(true);
+  });
   it("a finished sync reads the counts, the documents and the labels again", async () => {
     await open();
     await send("sync-done");
