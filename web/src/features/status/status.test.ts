@@ -23,8 +23,11 @@ describe("what the pill says", () => {
     const n = (k: number) => k.toLocaleString();
     const one = digest({ status: { "a@example.test": { health: "ok", done: 2300, total: 41000 }, "b@example.test": { health: "ok" } } });
     expect(pillLabel(one, true, true, now)).toEqual({ cls: "busy", text: `Reading your inbox: ${n(2300)} of ${n(41000)}` });
-    const two = digest({ status: { "a@example.test": { health: "ok", done: 2300, total: 41000 }, "b@example.test": { health: "ok", done: 500, total: 900 } } });
+    const two = digest({ accounts: ["a@example.test", "b@example.test"], status: { "a@example.test": { health: "ok", done: 2300, total: 41000 }, "b@example.test": { health: "ok", done: 500, total: 900 } } });
     expect(pillLabel(two, false, false, now).text).toBe(`Reading your inboxes: ${n(2800)} of ${n(41900)}`);
+    const removed = digest({ status: { "a@example.test": { health: "ok", done: 2300, total: 41000 }, "gone@example.test": { health: "ok", done: 500, total: 900 } } });
+    expect(pillLabel(removed, false, false, now).text).toBe(`Reading your inbox: ${n(2300)} of ${n(41000)}`);   // only the accounts listed count
+    expect(pillLabel(digest({ accounts: [], status: { "gone@example.test": { health: "ok", done: 500, total: 900 } } }), false, false, now).text).toBe("Not synced yet");
     const failing = digest({ status: { "a@example.test": { health: "ok", done: 2300, total: 41000 }, "b@example.test": { health: "error" } } });
     expect(pillLabel(failing, false, false, now).text).toBe("b can’t connect");
   });
