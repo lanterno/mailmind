@@ -130,9 +130,11 @@ fn note(provider: AiProvider, off: Option<Off>, key_from: &str, keyed: bool) -> 
     }
 }
 
-/// What a model's id holds when it can't chat: OpenAI's and Gemini's lists name these beside the ones that can.
-const NOT_CHAT: [&str; 11] = [
+/// What a model's id holds when it can't chat: a provider's list names these beside the ones that can, and a model
+/// server on this Mac its embedding models (`nomic-embed-text`).
+const NOT_CHAT: [&str; 12] = [
     "embedding",
+    "embed",
     "tts",
     "whisper",
     "dall-e",
@@ -146,14 +148,13 @@ const NOT_CHAT: [&str; 11] = [
 ];
 
 /// The models a provider's list names, as a person picks from them: sorted, once each, without Gemini's `models/`,
-/// and for OpenAI and Gemini only the ones that can chat.
-pub fn chat_models(provider: AiProvider, ids: impl IntoIterator<Item = String>) -> Vec<String> {
-    let filtered = matches!(provider, AiProvider::OpenAi | AiProvider::Gemini);
+/// and only the ones that can chat, whichever provider lists them.
+pub fn chat_models(ids: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut names: Vec<String> = ids
         .into_iter()
         .map(|id| id.strip_prefix("models/").map(str::to_owned).unwrap_or(id))
         .filter(|name| !name.is_empty())
-        .filter(|name| !filtered || !NOT_CHAT.iter().any(|word| name.contains(word)))
+        .filter(|name| !NOT_CHAT.iter().any(|word| name.contains(word)))
         .collect();
     names.sort();
     names.dedup();
