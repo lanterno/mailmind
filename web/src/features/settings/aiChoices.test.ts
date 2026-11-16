@@ -54,7 +54,7 @@ const options = (m: ReturnType<typeof localMenu>) => [...(m.first ? [m.first.lab
 describe("a model on this Mac", () => {
   it("is set up in steps for a person with none: Ollama, one model suggested in plain words, and its context", () => {
     expect(GET_OLLAMA).toBe("https://ollama.com");
-    expect(SUGGESTED_MODEL).toBe("In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.");
+    expect(SUGGESTED_MODEL).toBe("In Ollama, download a model. A good first one is qwen3:8b, as Ollama lists it: it runs well on a Mac with 16 GB of memory.");
     expect(CONTEXT_STEP).toBe("In Ollama’s settings, set Context length to 16K or more.");
   });
   it("offers each server found by name, in the finder's order, with its models", () => {
