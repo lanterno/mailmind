@@ -762,20 +762,20 @@ fn a_step_of_older_mail_none_of_which_the_server_sends_stores_nothing_and_the_sc
 #[test]
 fn a_read_of_older_mail_that_met_trouble_that_may_pass_goes_on_as_soon_as_the_next_sync_works() {
     let imap = Imap::start();
-    imap.add(ADA, notes(1, 1200));
+    imap.add(ADA, notes(1, 600));
     let w = world(imap, &[ADA]);
     w.app.syncing.sync_once();
-    assert_eq!(w.stored(ADA), range(701, 1200));
+    assert_eq!(w.stored(ADA), range(101, 600));
     // The background's first round of older mail finds the server can't take a login for now.
     w.imap.unavailable(ADA, true);
     let workers = Workers::start(&w.app, true, 0, 0);
     w.app.jobs.kick(OLDER_MAIL);
     until(|| w.older_rounds() == 1);
-    assert_eq!(w.stored(ADA), range(701, 1200));
+    assert_eq!(w.stored(ADA), range(101, 600));
     // It takes one again, and the next sync works: the rest is read now, not at the round's next turn ten minutes on.
     w.imap.unavailable(ADA, false);
     w.app.syncing.sync_once();
-    until(|| w.stored(ADA) == range(1, 1200));
+    until(|| w.stored(ADA) == range(1, 600));
     workers.stop();
 }
 
