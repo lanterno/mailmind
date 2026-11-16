@@ -24,6 +24,7 @@ The types:
   An entry that is no address reads as no account, so a typo turns nothing on.
 - `Seconds`: a whole number of seconds, where 0 or less turns its job off. Any other value reads as unset.
 - `Text` and `Secret`: as set. Nothing here logs a variable's value, and a secret's least of all.
+- `Name`: a name, MAILMIND_MODEL's model, without the spaces around it, so a blank one is unset.
 - `Directory`: a path, which `settings` resolves.
 
 This module uses the standard library alone, not the pydantic-settings the refactor proposal named.
@@ -157,6 +158,13 @@ class Text(Variable):
         return self.raw(environ) or None
 
 
+class Name(Variable):
+    """A name, such as a model's: without the spaces around it, None when unset or blank."""
+
+    def value(self, environ: Environ | None = None) -> str | None:
+        return self.given(environ) or None
+
+
 class Secret(Text):
     """A password or a key: as set, and never logged."""
 
@@ -201,7 +209,8 @@ NO_BATCHES = Switch("MAILMIND_NO_BATCHES", "Triage a backlog one message at a ti
                                            "as a batch.", typo=False)
 NO_SCHEMA = Switch("MAILMIND_NO_SCHEMA", "Ask the model for free-form JSON rather than structured output.",
                    typo=False)
-MODEL = Text("MAILMIND_MODEL", "The Claude model every feature asks. Unset, models.DEFAULT.")
+MODEL = Name("MAILMIND_MODEL", "The Claude model every feature asks, without the spaces around it. Unset or blank, "
+                               "models.DEFAULT.")
 PROTON_BRIDGE_PASS = Secret("MAILMIND_PROTON_BRIDGE_PASS", "The Proton Bridge password, before any other source.")
 PROTON_OP_ITEM = Text("MAILMIND_PROTON_OP_ITEM", "The 1Password item holding the Proton Bridge password.")
 ANTHROPIC_API_KEY = Secret("ANTHROPIC_API_KEY", "The Claude API key, when mailmind.config.json names none "
