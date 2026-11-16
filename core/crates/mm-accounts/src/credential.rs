@@ -10,6 +10,7 @@
 //! An entry naming two gets the first of keychain, env, proton_bridge, op; one naming plain, or a bare string, reads
 //! as the style "plain" only so it can be refused. No credential may name the item the database's key is kept in.
 
+use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::errors::Problem;
 use mm_kernel::seams::Secret;
 use mm_kernel::{parsed, text};
@@ -23,6 +24,28 @@ pub const DATABASE_KEY_ITEM: &str = "database-key";
 pub const API_KEY_ITEM: &str = "anthropic-api-key";
 /// The file's key for where the Claude API key is.
 pub const API_KEY_WHO: &str = "anthropic_api_key";
+
+/// The Keychain item MailMind keeps an AI provider's API key in (#49), None for one that takes no key (Ollama).
+pub fn api_key_item(provider: AiProvider) -> Option<&'static str> {
+    match provider {
+        AiProvider::Anthropic => Some(API_KEY_ITEM),
+        AiProvider::OpenAi => Some("openai-api-key"),
+        AiProvider::Gemini => Some("gemini-api-key"),
+        AiProvider::Compatible => Some("compatible-api-key"),
+        AiProvider::Ollama => None,
+    }
+}
+
+/// The file's top-level key for where an AI provider's API key is, None for one that takes no key (Ollama).
+pub fn api_key_who(provider: AiProvider) -> Option<&'static str> {
+    match provider {
+        AiProvider::Anthropic => Some(API_KEY_WHO),
+        AiProvider::OpenAi => Some("openai_api_key"),
+        AiProvider::Gemini => Some("gemini_api_key"),
+        AiProvider::Compatible => Some("compatible_api_key"),
+        AiProvider::Ollama => None,
+    }
+}
 
 /// The Keychain item MailMind keeps `email`'s password in.
 pub fn account_item(email: &str) -> String {
