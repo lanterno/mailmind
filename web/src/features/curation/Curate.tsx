@@ -16,7 +16,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { offerUndo, readAgain, undoGroup, useDigest } from "../mailbox";
 import { FilterDialog, Filters } from "./Filters";
 import { curateOpen } from "./open";
-import { undoBrings } from "./sweepWords";
+import { sweepFailed, sweepStopped, undoBrings } from "./sweepWords";
 
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };
 // What a sweep's plan calls each junk bucket; one it doesn't know goes by the name the server gives it.
@@ -275,11 +275,11 @@ function Inboxes() {
   const arm = async (account: string) => {
     try {
       const r = (await post("/api/sweep", { account, dry_run: true })).results[0]!;
-      if (r.error) toast(`Sweep: ${r.error}`);
+      if (r.error) toast(sweepStopped(r.error));
       else if (!r.planned) toast(r.held_back ? `Nothing to sweep: ${r.held_back} starred or unread stay` : "Nothing to sweep");
       else setArmed(r);
-    } catch {
-      toast("Plan failed");
+    } catch (e) {
+      toast(sweepFailed(refusalOf(e)?.detail, true));
     }
   };
   const sweep = async ({ account, planned }: SweepPlan) => {
@@ -288,11 +288,11 @@ function Inboxes() {
     try {
       const d = await post("/api/sweep", { account, dry_run: false, undo_group: undoGroup() });
       const r = d.results[0]!;
-      toast(r.error ? `Sweep: ${r.error}` : `Swept ${r.moved}/${r.planned}${r.stragglers?.length ? ` · ${r.stragglers.length} unverified` : ""}`);
+      toast(r.error ? sweepStopped(r.error, r.moved ?? 0) : `Swept ${r.moved}/${r.planned}${r.stragglers?.length ? ` · ${r.stragglers.length} unverified` : ""}`);
       // Undo is offered for what went, and only when some did: a sweep the server stopped before anything moved has none.
       if (d.undo_group && r.moved) offerUndo(`Swept ${r.moved} to Trash`);
-    } catch {
-      toast("Sweep failed");
+    } catch (e) {
+      toast(sweepFailed(refusalOf(e)?.detail, false));
     }
     again(qc);
   };
