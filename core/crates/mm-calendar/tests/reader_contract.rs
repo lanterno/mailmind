@@ -14,8 +14,10 @@ use mm_calendar::rsvp;
 use mm_calendar::time::{Dt, Tz};
 use mm_kernel::zone::Utc;
 
-/// Far above either budget, and far below what any bomb here costs without one; a debug build is slower.
-const BOUND: Duration = Duration::from_secs(1);
+/// Far above either budget, and far below what any bomb here costs without one (minutes, or never done). It is the wall
+/// clock, as safe Rust reads no thread's processor time, so it stays well past what a debug build takes on a machine
+/// busy with other builds (2.3 s at most, seen with three test suites at once).
+const BOUND: Duration = Duration::from_secs(10);
 
 fn now_utc() -> Dt {
     Dt::from_parts(2026, 11, 1, 12, 0, 0, Tz::Fixed(0)).unwrap()
