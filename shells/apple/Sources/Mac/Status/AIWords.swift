@@ -64,8 +64,9 @@ extension API.AiProvider {
     }
 
     /// How a key is paid for, in plain words on its card (the page's `BILLING`): per use, by the provider, apart from
-    /// any chat subscription, and where credit is added; for Gemini, the project a key belongs to is billed. Nil for a
-    /// model on this Mac, which costs nothing, and a compatible service, which says its own.
+    /// any chat subscription, and where credit is added; for Gemini, the project a key belongs to is billed, since
+    /// Google's terms let it use what its free tier is sent. Nil for a model on this Mac, which costs nothing, and a
+    /// compatible service, which says its own.
     var billing: String? {
         switch self {
         case .anthropic: String(localized: """
@@ -77,8 +78,9 @@ extension API.AiProvider {
             platform, under Billing.
             """)
         case .gemini: String(localized: """
-            Billed per use by Google, separately from any ChatGPT or Claude subscription. Use a key on a billed \
-            project: on the free tier, a key stops each day at its quota.
+            Billed per use by Google, separately from any ChatGPT or Claude subscription. Use a key on a project with \
+            billing set up: on the free tier, Google may use what is sent, your mail included, to improve its \
+            products, and a key stops each day at its quota.
             """)
         case .local, .compatible: nil
         }
