@@ -857,6 +857,9 @@ def test_a_first_read_that_fails_after_saying_its_reading_says_so_and_only_a_per
 
 
 def test_an_inbox_whose_first_read_fails_stops_all_inboxes_saying_its_reading_and_isnt_read_again(page, app, world):
+    """All inboxes answers from what is stored while an Inbox's first read goes on. Whether that read waits for the
+    account's gate (the Python app) or joins its sync, which holds none (the Rust server), the Inbox's own server is slow
+    to answer it here, so it is still reading when the list comes; then it fails."""
     from mailmind.bootstrap.mailbox import store
     with app.stopped():                                         # an inbox never read yet
         c = store.conn()
@@ -866,9 +869,13 @@ def test_an_inbox_whose_first_read_fails_stops_all_inboxes_saying_its_reading_an
         finally:
             c.close()
     world.server.fail("UID SEARCH", user=w.ADA, times=None)
-    with held_elsewhere(app, world):
+    world.server.hold("EXAMINE", user=w.ADA, when=lambda args: bool(args) and str(args[0]) == "INBOX")
+    try:
         page.goto("/all")
         expect(page.locator("#list")).to_contain_text("reading the rest")
+        assert world.server.held(), "the Inbox's first read never reached its server"
+    finally:
+        world.server.let_go()
     expect(page.locator("#list")).not_to_contain_text("reading the rest")
     page.wait_for_timeout(500)      # this watches for a loop: one that went round would have logged in many times by now
     assert len([s for s in world.server.commands_for(w.ADA, "UID SEARCH") if s["mailbox"] == "INBOX"]) == 1
