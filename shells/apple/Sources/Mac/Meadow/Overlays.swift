@@ -423,6 +423,9 @@ struct MeadowMenu: View {
         case title(String)
         case rule
         case item(MeadowMenuItem)
+        /// Items that may be many, scrolling past `maxHeight`: the keys go over them as over the rest, the scroll
+        /// following the one they are on, and a click runs one and closes the menu as any item does.
+        case scroll([MeadowMenuItem], maxHeight: CGFloat)
         case view(AnyView)
     }
 
@@ -432,9 +435,16 @@ struct MeadowMenu: View {
     let close: @MainActor () -> Void
     var label = ""
 
-    /// The items the keys move over, in order.
+    /// The items the keys move over, in order, those in a scroll among them.
     static func items(_ parts: [Part]) -> [MeadowMenuItem] {
-        parts.compactMap { if case .item(let item) = $0, !item.disabled { item } else { nil } }
+        parts.flatMap { part -> [MeadowMenuItem] in
+            switch part {
+            case .item(let item): [item]
+            case .scroll(let items, _): items
+            case .title, .rule, .view: []
+            }
+        }
+        .filter { !$0.disabled }
     }
 
     var body: some View {
@@ -446,13 +456,18 @@ struct MeadowMenu: View {
                 case .title(let title): MeadowPaletteSection(title, pop: true)
                 case .rule: MeadowPopRule()
                 case .view(let view): view
-                case .item(let item):
-                    MeadowPaletteRow(title: item.title, detail: item.detail, keys: item.keys, picked: item.id == at,
-                                     pop: true, check: item.check) {
-                        if let leading = item.leading { leading } else if let icon = item.icon { MeadowIconView(icon) }
+                case .item(let item): row(item, at: at)
+                case .scroll(let scrolled, let maxHeight):
+                    ScrollViewReader { scroll in
+                        MeadowFitScroll(maxHeight: maxHeight) {
+                            VStack(spacing: 0) {
+                                ForEach(scrolled) { item in row(item, at: at).id(item.id) }
+                            }
+                        }
+                        .onChange(of: at) { _, now in
+                            if let now, scrolled.contains(where: { $0.id == now }) { scroll.scrollTo(now) }
+                        }
                     }
-                    .disabled(item.disabled)
-                    .onTapGesture { model.run(item) }
                 }
             }
         }
@@ -461,6 +476,17 @@ struct MeadowMenu: View {
         .onChange(of: items.map { "\($0.id)\u{0}\($0.disabled)" }) { offer(items) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(label)
+    }
+
+    /// An item's row: ringed while the keys are on it, run by a click or by a screen reader's press.
+    private func row(_ item: MeadowMenuItem, at: String?) -> some View {
+        MeadowPaletteRow(title: item.title, detail: item.detail, keys: item.keys, picked: item.id == at,
+                         pop: true, check: item.check) {
+            if let leading = item.leading { leading } else if let icon = item.icon { MeadowIconView(icon) }
+        }
+        .disabled(item.disabled)
+        .onTapGesture { model.run(item) }
+        .accessibilityAction { model.run(item) }
     }
 
     private func offer(_ items: [MeadowMenuItem]) {

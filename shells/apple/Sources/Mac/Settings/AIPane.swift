@@ -127,6 +127,31 @@ enum AIChoices {
         return options + others.map { Option(id: $0, title: $0) }
     }
 
+    /// The model menu: the default and a model chosen by hand as lines of their own, then what the provider listed,
+    /// scrolling where it lists many, the keys going over every one and a pick closing the menu; that the provider is
+    /// being asked, while it is (`asking`); then typing one by hand.
+    @MainActor static func modelMenu(_ provider: API.AiProvider, chosen: String, defaultModel: String?, listed: Listed?,
+                                     asking: Bool, choose: @escaping @MainActor (String) -> Void,
+                                     type: @escaping @MainActor () -> Void) -> [MeadowMenu.Part]
+    {
+        let options = Self.options(provider, chosen: chosen, defaultModel: defaultModel, listed: listed)
+        let listedModels = Set((listed?.provider == provider ? listed?.list?.models : nil) ?? [])
+        let many = options.count <= 10 ? [] : options.filter { !$0.id.isEmpty && listedModels.contains($0.id) }
+        func item(_ option: Option) -> MeadowMenuItem {
+            MeadowMenuItem(id: "model-\(option.id)", title: option.title, check: option.id == chosen) { choose(option.id) }
+        }
+        var parts: [MeadowMenu.Part] = [.title(String(localized: "Model"))]
+        parts += options.filter { !many.contains($0) }.map { MeadowMenu.Part.item(item($0)) }
+        if !many.isEmpty { parts.append(.scroll(many.map(item), maxHeight: 280)) }
+        if asking {
+            parts.append(.item(MeadowMenuItem(id: "listing", title: String(localized: "Asking \(provider.name)…"),
+                                              disabled: true) {}))
+        }
+        parts.append(.rule)
+        parts.append(.item(MeadowMenuItem(id: "type", title: String(localized: "Type a Model…"), icon: .pen, run: type)))
+        return parts
+    }
+
     /// What the model menu's button says: the model chosen, else the default, else that one is wanted.
     static func title(_ provider: API.AiProvider, chosen: String, defaultModel: String?) -> String {
         if !chosen.isEmpty { return chosen }
@@ -305,7 +330,8 @@ struct AIPane: View {
                 SettingChoice(label: String(localized: "Model"),
                               title: AIChoices.title(provider, chosen: chosen, defaultModel: defaultModel), width: 320,
                               opened: { if listed?.provider != provider { Task { await list(provider) } } }) {
-                    modelMenu(chosen: chosen)
+                    AIChoices.modelMenu(provider, chosen: chosen, defaultModel: defaultModel, listed: listed,
+                                        asking: listing, choose: { chooseModel($0) }, type: { typedModel = chosen })
                 }
                 Button { Task { await list(provider) } } label: { MeadowIconView(.refresh, size: 15) }
                     .meadowButton(.quiet, small: true, icon: true)
@@ -331,32 +357,6 @@ struct AIPane: View {
         if let problem = listed.flatMap({ $0.provider == provider ? $0.problem : nil }) {
             Text(problem).font(.meadow(.ui, 12.5, .semibold)).foregroundStyle(meadow.rust)
         }
-    }
-
-    /// The default and a model typed by hand as the menu's own lines, the keys going over them; what the provider
-    /// lists under them, scrolling where it lists many; then typing one by hand.
-    private func modelMenu(chosen: String) -> [MeadowMenu.Part] {
-        let options = AIChoices.options(provider, chosen: chosen, defaultModel: defaultModel, listed: listed)
-        let listedModels = Set((listed?.provider == provider ? listed?.list?.models : nil) ?? [])
-        let few = options.count <= 10
-        var parts: [MeadowMenu.Part] = [.title(String(localized: "Model"))]
-        for option in options where few || option.id.isEmpty || !listedModels.contains(option.id) {
-            parts.append(.item(MeadowMenuItem(id: "model-\(option.id)", title: option.title,
-                                              check: option.id == chosen) { chooseModel(option.id) }))
-        }
-        let many = options.filter { !few && !$0.id.isEmpty && listedModels.contains($0.id) }
-        if !many.isEmpty {
-            parts.append(.view(AnyView(ModelScroll(options: many, chosen: chosen) { chooseModel($0) })))
-        }
-        if listing {
-            parts.append(.item(MeadowMenuItem(id: "listing", title: String(localized: "Asking \(provider.name)…"),
-                                              disabled: true) {}))
-        }
-        parts.append(.rule)
-        parts.append(.item(MeadowMenuItem(id: "type", title: String(localized: "Type a Model…"), icon: .pen) {
-            typedModel = chosen
-        }))
-        return parts
     }
 
     @ViewBuilder private var urlLine: some View {
@@ -588,24 +588,6 @@ struct AIPane: View {
         } catch {
             listed = AIChoices.Listed(provider: asked, problem: (error as? Problem)?.detail
                                       ?? String(localized: "Couldn’t ask for the models."))
-        }
-    }
-}
-
-/// The models a provider lists, where it lists many: in the model menu, scrolling past a height.
-private struct ModelScroll: View {
-    let options: [AIChoices.Option]
-    let chosen: String
-    let choose: (String) -> Void
-
-    var body: some View {
-        MeadowFitScroll(maxHeight: 280) {
-            VStack(spacing: 0) {
-                ForEach(options, id: \.id) { option in
-                    MeadowPaletteRow(option.title, icon: nil, pop: true, check: option.id == chosen)
-                        .onTapGesture { choose(option.id) }
-                }
-            }
         }
     }
 }
