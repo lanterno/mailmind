@@ -231,11 +231,13 @@ final class CurateModel {
                 account: armed.account, dryRun: false, undoGroup: newUndoGroup()))
             if let result = swept.results.first {
                 let unverified = (result.stragglers ?? []).count
-                let words = result.error.map { Self.sweepStopped($0, moved: result.moved ?? 0) }
-                    ?? String(localized: "Swept \(result.moved ?? 0)/\(result.planned)")
-                        + (unverified > 0 ? String(localized: " · \(unverified) unverified") : "")
-                // Whatever went, one Undo brings it back from the Trash; a sweep that moved nothing offers none.
-                notices.say(words, undoable: swept.undoGroup != nil && (result.moved ?? 0) > 0)
+                let words = result.error.map {
+                    Self.sweepStopped($0, moved: result.moved ?? 0, undoable: swept.undoGroup != nil)
+                } ?? String(localized: "Swept \(result.moved ?? 0)/\(result.planned)")
+                    + (unverified > 0 ? String(localized: " · \(unverified) unverified") : "")
+                // Whatever went, or may have, one Undo brings it back from the Trash: a sweep stopped where the server
+                // couldn't be asked again keeps a way back for all of it. One that moved nothing offers none.
+                notices.say(words, undoable: swept.undoGroup != nil && ((result.moved ?? 0) > 0 || result.error != nil))
             }
         } catch {
             notices.say(Self.sweepFailed(error, planning: false))
@@ -291,9 +293,14 @@ final class CurateModel {
 
     /// A sweep the server stopped, at its plan or as it moved mail, after `moved` went: plain words with what to do
     /// next, and the server's class of the trouble after them in brackets, for whoever looks into it, never alone (the
-    /// page's `sweepStopped`).
-    static func sweepStopped(_ error: String, moved: Int = 0) -> String {
+    /// page's `sweepStopped`). `undoable` when the server kept a way back though none was counted: it couldn't be
+    /// asked again how much went, so some may be in the Trash already.
+    static func sweepStopped(_ error: String, moved: Int = 0, undoable: Bool = false) -> String {
         let why = switch moved {
+        case ...0 where undoable: String(localized: """
+            Couldn’t reach the mail server, so the sweep stopped part way and MailMind couldn’t check how much went. \
+            Undo puts back whatever did; sweep again for the rest.
+            """)
         case ...0: String(localized: "Couldn’t reach the mail server, so nothing was swept. Try again in a moment.")
         case 1: String(localized: """
             Couldn’t reach the mail server, so the sweep stopped after 1. Undo brings it back; sweep again for the rest.
