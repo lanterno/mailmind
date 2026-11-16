@@ -162,17 +162,18 @@ fn a_person_picks_from_the_models_that_can_chat_sorted_once_each() {
         "gpt-6-luna",
         "gpt-6.1-sol",
     ]);
-    assert_eq!(chat_models(openai), ["gpt-6-luna", "gpt-6.1-sol"]);
+    assert_eq!(chat_models(OpenAi, openai), ["gpt-6-luna", "gpt-6.1-sol"]);
     let gemini =
         listed(&["models/gemini-4-hydrogen", "models/gemini-embedding-001", "models/gemini-live-2.5", "models/"]);
-    assert_eq!(chat_models(gemini), ["gemini-4-hydrogen"]);
+    assert_eq!(chat_models(Gemini, gemini), ["gemini-4-hydrogen"]);
     // A model on this Mac and a compatible service list their embedding and speech models too.
     let local = listed(&["qwen3:8b", "nomic-embed-text:latest", "llama3.2:3b", "mxbai-embed-large", "qwen3:8b"]);
-    assert_eq!(chat_models(local), ["llama3.2:3b", "qwen3:8b"]);
+    assert_eq!(chat_models(Local, local), ["llama3.2:3b", "qwen3:8b"]);
     let compatible = listed(&["mixtral-8x7b", "text-embedding-ada-002", "whisper-large-v3", "bge-m3-embed"]);
-    assert_eq!(chat_models(compatible), ["mixtral-8x7b"]);
-    let claude = listed(&["claude-sonnet-5-5", "claude-opus-5-5"]);
-    assert_eq!(chat_models(claude), ["claude-opus-5-5", "claude-sonnet-5-5"]);
+    assert_eq!(chat_models(Compatible, compatible), ["mixtral-8x7b"]);
+    // Claude's list names no other kind, and is kept whole.
+    let claude = listed(&["claude-sonnet-5-5", "claude-opus-5-5", "claude-live-fictional", "claude-sonnet-5-5"]);
+    assert_eq!(chat_models(Anthropic, claude), ["claude-live-fictional", "claude-opus-5-5", "claude-sonnet-5-5"]);
 }
 
 // -- the gateway and the status, with a provider other than Claude ---------------------------------------------
