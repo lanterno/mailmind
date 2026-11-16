@@ -208,6 +208,7 @@ def test_a_model_of_anything_else_is_refused_in_words(config, data_dir, model):
     ("http://localhost:8080/v1/", "http://localhost:8080/v1"),
     ("http://[::1]:11434/v1", "http://[::1]:11434/v1"),
     ("http://[::1]/v1", "http://[::1]/v1"),
+    ("https://[fe80::1]/v1", "https://[fe80::1]/v1"),
     ("https://llm.example.test", "https://llm.example.test"),
     ("https://llm.example.test:1/v1", "https://llm.example.test:1/v1"),
     ("https://llm.example.test:65535/v1", "https://llm.example.test:65535/v1"),
@@ -237,6 +238,11 @@ def test_a_service_url_is_https_or_http_on_this_mac_kept_without_its_trailing_sl
     "http://[::1]:/v1",
     "https://llm.example.test:0/v1",                  # a port none listens on
     "http://localhost:00/v1",
+    "https://[v1.ab]/v1",                             # IPvFuture, which no client here reaches
+    "https://[V1.ab]/v1",
+    "https://[fe80::1%25en0]/v1",                     # an IPv6 address with a zone
+    "http://[::1%25lo0]:11434/v1",
+    "https://[1.2.3.4]/v1",
     "https://llm.example.test/v 1",
     "https://llm.example.test/ü",
     "https://llm.example.test/" + "a" * 476,          # 501 characters
@@ -284,7 +290,8 @@ def test_the_same_provider_again_keeps_its_model_and_url(config):
 
 
 @pytest.mark.parametrize("name, junk", [("ai_provider", "mistral"), ("ai_enabled", "no"), ("ai_model", "has space"),
-                                        ("ai_base_url", "http://llm.example.test/v1"), ("ai_base_url", 7)])
+                                        ("ai_base_url", "http://llm.example.test/v1"), ("ai_base_url", 7),
+                                        ("ai_base_url", "https://[fe80::1%25en0]/v1"), ("ai_base_url", "https://[v1.ab]/v1")])
 def test_an_ai_preference_edited_by_hand_that_cant_be_it_is_its_default(name, junk):
     assert preferences.read({"preferences": {name: junk}})[name] == preferences.DEFAULTS[name]
 

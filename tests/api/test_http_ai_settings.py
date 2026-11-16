@@ -78,6 +78,8 @@ def test_a_model_or_url_none_can_be_is_refused_in_words_and_a_provider_or_switch
                         ({"ai_base_url": "http://[::1]:/v1"}, problems.refused(URL_REFUSED)),
                         ({"ai_base_url": "https://llm.example.test:0/v1"}, problems.refused(URL_REFUSED)),
                         ({"ai_base_url": "https://llm.example.test:65536/v1"}, problems.refused(URL_REFUSED)),
+                        ({"ai_base_url": "https://[v1.ab]/v1"}, problems.refused(URL_REFUSED)),
+                        ({"ai_base_url": "https://[fe80::1%25en0]/v1"}, problems.refused(URL_REFUSED)),
                         ({"ai_provider": "mistral"}, problems.BAD_REQUEST), ({"ai_enabled": "yes"}, problems.BAD_REQUEST)]:
         r = app.post("/api/preferences", asked)
         assert (r.status, r.json) == (400, said), asked
