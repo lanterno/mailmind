@@ -252,6 +252,17 @@ def test_what_the_api_said_is_read_from_its_answer_alone_never_the_sdks_words_fo
     assert len(api.requests) == 1
 
 
+def test_a_key_the_api_quotes_in_what_isnt_words_is_taken_out_as_json_writes_it(api, monkeypatch):
+    from mailmind.bootstrap import assistant
+    key = 'sk-ant-test-"quoted"\\key'
+    monkeypatch.setattr(fa, "KEY", key)                     # the fake takes this one
+    monkeypatch.setenv("ANTHROPIC_API_KEY", key)
+    api.queue((400, {"type": "error", "error": {"type": "invalid_request_error", "message": {"got": key, "why": "bad"}}}))
+    with pytest.raises(ModelError) as e:
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
+    assert (str(e.value), e.value.status) == ('Claude API 400: {"got":"<key>","why":"bad"}', 400)
+
+
 def test_a_failed_triage_is_left_for_the_next_run(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.error(400, "invalid_request_error", "bad"))

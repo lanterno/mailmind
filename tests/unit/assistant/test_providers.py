@@ -1,8 +1,10 @@
 """The AI providers (#49): what each is, which is in force and why AI is off, in the order a person can do something about it,
 and the models a provider's list offers a person to choose."""
+import json
+
 import pytest
 
-from mailmind.assistant.domain.providers import PROVIDERS, chat_models, in_force, on_loopback, sendable
+from mailmind.assistant.domain.providers import PROVIDERS, chat_models, in_force, on_loopback, sendable, unkeyed
 from mailmind.kernel.ai_provider import AI_PROVIDERS
 
 KEY = "sk-test-not-a-real-key"
@@ -119,3 +121,13 @@ def test_a_key_of_printable_ascii_with_no_blank_can_be_sent(key):
                                  "sk-\x7ftest", "sk-\x1btest", "sk- test", "sk- test", "sk-tést", "sk-test​"])
 def test_a_key_with_a_blank_a_line_break_or_another_control_character_in_it_cant(key):
     assert not sendable(key)
+
+
+@pytest.mark.parametrize("key", ['sk-test"one', "sk-test\\one", 'sk-"\\"-test', "sk-test-plain"])
+def test_a_key_is_taken_out_as_it_is_and_as_json_writes_it_in_a_string(key):
+    said = json.dumps({"got": key, "again": key}, separators=(",", ":")) + " and " + key
+    assert unkeyed(said, key) == '{"got":"<key>","again":"<key>"} and <key>'
+
+
+def test_no_key_takes_nothing_out():
+    assert unkeyed('sk-test "quoted"', "") == 'sk-test "quoted"'

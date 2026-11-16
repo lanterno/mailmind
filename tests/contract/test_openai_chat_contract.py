@@ -369,6 +369,16 @@ def test_what_a_service_said_that_isnt_words_is_kept_as_compact_json(choose, err
     assert assistant.status.report()["last_error"] == "the API answered 400"
 
 
+def test_a_key_a_service_quotes_in_what_isnt_words_is_taken_out_as_json_writes_it(choose):
+    key = 'sk-test-"quoted"\\key-0123456789'
+    api = choose("compatible", key=key, ai_model="mixtral-9x")
+    api.key = None                                          # the fake takes any key
+    api.queue((400, {"error": {"message": {"got": key, "why": "bad"}}}))
+    with pytest.raises(ModelError) as e:
+        ask()
+    assert (str(e.value), e.value.status) == ('compatible API 400: {"got":"<key>","why":"bad"}', 400)
+
+
 def test_a_list_asked_with_a_key_gemini_refuses_with_a_400_says_the_key_was_refused(openai_api):
     from mailmind.assistant.application.catalog import Catalog
     from mailmind.kernel.errors import Refused
