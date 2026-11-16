@@ -107,14 +107,14 @@ fn an_ai_setting_a_hand_edit_left_that_cant_be_one_is_its_default() {
     );
     assert_eq!(provider(&raw), AiProvider::Anthropic);
 
-    let raw = object(json!({"preferences": {"ai_enabled": false, "ai_provider": "ollama",
+    let raw = object(json!({"preferences": {"ai_enabled": false, "ai_provider": "local",
                                             "ai_model": "llama3.2:3b", "ai_base_url": "http://localhost:11434/v1/"}}));
     let read = read(&raw);
     assert_eq!(
         (&read["ai_enabled"], &read["ai_provider"], &read["ai_model"], &read["ai_base_url"]),
-        (&json!(false), &json!("ollama"), &json!("llama3.2:3b"), &json!("http://localhost:11434/v1"))
+        (&json!(false), &json!("local"), &json!("llama3.2:3b"), &json!("http://localhost:11434/v1"))
     );
-    assert_eq!(provider(&raw), AiProvider::Ollama);
+    assert_eq!(provider(&raw), AiProvider::Local);
 }
 
 #[test]
@@ -171,8 +171,8 @@ fn a_change_to_another_provider_clears_the_model_and_the_address_it_doesnt_name(
         json!({"ai_provider": "openai", "ai_model": "", "ai_base_url": ""})
     );
     assert_eq!(
-        to(json!({"ai_provider": "ollama", "ai_model": "llama3.2"}), &none),
-        json!({"ai_provider": "ollama", "ai_model": "llama3.2", "ai_base_url": ""})
+        to(json!({"ai_provider": "local", "ai_model": "llama3.2"}), &none),
+        json!({"ai_provider": "local", "ai_model": "llama3.2", "ai_base_url": ""})
     );
     assert_eq!(
         to(json!({"ai_provider": "compatible", "ai_base_url": "https://llm.example.test/v1"}), &none),

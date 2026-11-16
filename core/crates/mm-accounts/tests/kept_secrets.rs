@@ -1,7 +1,7 @@
 //! The secrets a person keeps in the login Keychain from Settings beside each account's own password, as
 //! tests/unit/accounts/test_kept_secrets.py holds the Python app's: the Claude API key and each other AI provider's
-//! (#49), kept in its item and named in the file one version on, and taken out of both, and none for Ollama, which
-//! takes none; the Proton Bridge's password, kept in its item, the one a login
+//! (#49), a model on this Mac's too, kept in its item and named in the file one version on, and taken out of both;
+//! the Proton Bridge's password, kept in its item, the one a login
 //! found let go, and each account that logs in with it told it changed. A secret the Keychain can't hold is refused in
 //! its words, a Keychain that won't is `Unreachable`, and either leaves the file as it was.
 
@@ -245,16 +245,17 @@ fn a_key_named_in_any_style_counts_as_kept() {
 }
 
 #[test]
-fn ollama_takes_no_key_so_none_is_kept_for_it_and_there_is_none_to_take_out() {
+fn a_model_on_this_mac_may_keep_a_key_too_in_its_own_item() {
     let file = File::holding(json!({"accounts": []}));
     let keychain = Arc::new(Kept::default());
     let directory = directory(&file, &keychain);
-    let refused = directory.set_api_key(AiProvider::Ollama, Secret::new("sk-ollama-fictional".to_owned()));
-    assert_eq!(refused, Err(Problem::refused("Ollama takes no key.").into()));
-    assert!(!format!("{refused:?}").contains("sk-ollama"));
+    directory.set_api_key(AiProvider::Local, Secret::new("sk-local-fictional".to_owned())).unwrap();
+    assert_eq!(keychain.holds(), HashMap::from([("local-api-key".to_owned(), "sk-local-fictional".to_owned())]));
+    assert_eq!(file.raw(), json!({"accounts": [], "local_api_key": {"keychain": "local-api-key", "version": 1}}));
+    assert_eq!(directory.api_keys_kept().unwrap(), [AiProvider::Local]);
+    directory.clear_api_key(AiProvider::Local).unwrap();
     assert!(keychain.holds().is_empty());
     assert_eq!(file.raw(), json!({"accounts": []}));
-    directory.clear_api_key(AiProvider::Ollama).unwrap();
     assert_eq!(directory.api_keys_kept().unwrap(), []);
 }
 

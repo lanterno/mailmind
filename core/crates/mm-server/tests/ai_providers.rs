@@ -268,9 +268,14 @@ fn each_providers_key_is_kept_and_named_and_never_said() {
     assert_eq!(kept.json()["kept"], json!(["anthropic", "openai", "gemini", "compatible"]));
     assert!(!kept.text().contains("fictional"));
 
-    let ollama = keep("ollama");
-    assert_eq!((ollama.status, ollama.json()), (400, refused("Ollama takes no key.")));
-    for wrong in [json!({"provider": "claude", "key": "k"}), json!({"key": "k"}), json!({"provider": "openai"})] {
+    let kept = keep("local");
+    assert_eq!(kept.json()["kept"], json!(["anthropic", "openai", "gemini", "local", "compatible"]));
+    for wrong in [
+        json!({"provider": "claude", "key": "k"}),
+        json!({"provider": "ollama", "key": "k"}),
+        json!({"key": "k"}),
+        json!({"provider": "openai"}),
+    ] {
         let refused = r.post("/api/ai/key", &wrong);
         assert_eq!((refused.status, refused.json()["detail"].clone()), (400, json!("bad request")), "{wrong}");
     }
@@ -278,16 +283,16 @@ fn each_providers_key_is_kept_and_named_and_never_said() {
     let cleared = r.post("/api/ai/key/clear", &json!({"provider": "openai"}));
     assert_eq!(
         (cleared.status, cleared.json()),
-        (200, json!({"ok": true, "kept": ["anthropic", "gemini", "compatible"]}))
+        (200, json!({"ok": true, "kept": ["anthropic", "gemini", "local", "compatible"]}))
     );
     let cleared = r.post("/api/ai/key/clear", &json!({"provider": "ollama"}));
-    assert_eq!(cleared.json()["kept"], json!(["anthropic", "gemini", "compatible"]));
-    assert_eq!(r.get("/api/ai/key").json()["kept"], json!(["anthropic", "gemini", "compatible"]));
+    assert_eq!((cleared.status, cleared.json()["detail"].clone()), (400, json!("bad request")));
+    assert_eq!(r.get("/api/ai/key").json()["kept"], json!(["anthropic", "gemini", "local", "compatible"]));
 
     let items = r.keychain.items.lock().unwrap().clone();
     let mut names: Vec<&str> = items.keys().map(String::as_str).collect();
     names.sort_unstable();
-    assert_eq!(names, ["anthropic-api-key", "compatible-api-key", "gemini-api-key"]);
+    assert_eq!(names, ["anthropic-api-key", "compatible-api-key", "gemini-api-key", "local-api-key"]);
     let config = std::fs::read_to_string(r.config()).unwrap();
     assert!(!config.contains("fictional"), "the file names where the key is, never the key");
     assert!(config.contains("gemini-api-key"));
@@ -307,8 +312,8 @@ fn the_ai_preferences_change_through_the_route_and_another_provider_clears_its_m
         json!({"ai_provider": "compatible", "ai_model": "mixtral-8x7b", "ai_base_url": "https://llm.example.test/v1/"});
     assert_eq!(r.post("/api/preferences", &asked).status, 200);
     assert_eq!(ai(&r), json!([true, "compatible", "mixtral-8x7b", "https://llm.example.test/v1"]));
-    assert_eq!(r.post("/api/preferences", &json!({"ai_provider": "ollama", "ai_enabled": false})).status, 200);
-    assert_eq!(ai(&r), json!([false, "ollama", "", ""]));
+    assert_eq!(r.post("/api/preferences", &json!({"ai_provider": "local", "ai_enabled": false})).status, 200);
+    assert_eq!(ai(&r), json!([false, "local", "", ""]));
 
     let model = r.post("/api/preferences", &json!({"ai_model": "gpt 6"}));
     let words = "the AI model must be up to 200 letters, digits and . _ : / @ + -";
@@ -317,7 +322,7 @@ fn the_ai_preferences_change_through_the_route_and_another_provider_clears_its_m
     assert_eq!(url.status, 400);
     assert!(url.json()["detail"].as_str().unwrap().starts_with("the AI service's URL must be https"));
     assert_eq!(r.post("/api/preferences", &json!({"ai_provider": "claude"})).status, 400);
-    assert_eq!(ai(&r), json!([false, "ollama", "", ""]), "a refusal changes nothing");
+    assert_eq!(ai(&r), json!([false, "local", "", ""]), "a refusal changes nothing");
 }
 
 // -- what the status says ------------------------------------------------------------------
@@ -328,14 +333,14 @@ fn the_status_names_the_provider_why_ai_is_off_and_the_model_in_force() {
     assert_eq!(r.ai(), json!(["none", "anthropic", "no-key", "", ""]));
     r.write_config(&json!({"preferences": {"ai_enabled": false}}));
     assert_eq!(r.ai(), json!(["none", "anthropic", "turned-off", "", ""]));
-    r.write_config(&json!({"preferences": {"ai_provider": "ollama"}}));
-    assert_eq!(r.ai(), json!(["none", "ollama", "no-model", "", ""]));
+    r.write_config(&json!({"preferences": {"ai_provider": "local"}}));
+    assert_eq!(r.ai(), json!(["none", "local", "no-model", "", ""]));
     r.write_config(&json!({"preferences": {"ai_provider": "compatible", "ai_model": "mixtral"}}));
     assert_eq!(r.ai(), json!(["none", "compatible", "no-url", "", ""]));
     r.write_config(&json!({"preferences": {"ai_provider": "gemini"}}));
     assert_eq!(r.ai(), json!(["none", "gemini", "no-key", "", ""]));
-    r.write_config(&json!({"preferences": {"ai_provider": "ollama", "ai_model": "llama3.2:3b"}}));
-    assert_eq!(r.ai(), json!(["api", "ollama", null, "llama3.2:3b", ""]));
+    r.write_config(&json!({"preferences": {"ai_provider": "local", "ai_model": "llama3.2:3b"}}));
+    assert_eq!(r.ai(), json!(["api", "local", null, "llama3.2:3b", ""]));
 
     r.post("/api/ai/key", &json!({"provider": "openai", "key": "sk-fictional"}));
     let mut config: Value = serde_json::from_slice(&std::fs::read(r.config()).unwrap()).unwrap();
@@ -350,12 +355,8 @@ fn the_status_names_the_provider_why_ai_is_off_and_the_model_in_force() {
 
     let r = running(&json!({}), &[("ANTHROPIC_API_KEY", "sk-ant-fictional"), ("MAILMIND_MODEL", "claude-sonnet-5-5")]);
     assert_eq!(r.ai(), json!(["api", "anthropic", null, "claude-sonnet-5-5", "ANTHROPIC_API_KEY"]));
-    r.write_config(&json!({"preferences": {"ai_provider": "ollama"}}));
-    assert_eq!(
-        r.ai(),
-        json!(["api", "ollama", null, "claude-sonnet-5-5", ""]),
-        "MAILMIND_MODEL wins over every choice"
-    );
+    r.write_config(&json!({"preferences": {"ai_provider": "local"}}));
+    assert_eq!(r.ai(), json!(["api", "local", null, "claude-sonnet-5-5", ""]), "MAILMIND_MODEL wins over every choice");
     assert!(!r.get("/api/digest").text().contains("fictional"));
 }
 
@@ -383,13 +384,13 @@ fn the_startup_line_says_the_ai_in_force_and_never_its_url_or_key() {
 fn a_call_goes_to_the_provider_chosen_and_with_ai_turned_off_nowhere() {
     let (url, log) = provider(vec![(200, completion(&json!({"text": "Hi."})))]);
     let r =
-        running(&json!({"preferences": {"ai_provider": "ollama", "ai_model": "llama3.2:3b", "ai_base_url": url}}), &[]);
+        running(&json!({"preferences": {"ai_provider": "local", "ai_model": "llama3.2:3b", "ai_base_url": url}}), &[]);
     let rewrite = json!({"text": "Hello there, how are you?", "op": "shorten"});
     let answered = r.post("/api/ai/rewrite", &rewrite);
     assert_eq!((answered.status, answered.json()), (200, json!({"ok": true, "text": "Hi.", "op": "shorten"})));
     let [asked] = heard(&log).try_into().unwrap();
     assert_eq!(asked.line, "POST /v1/chat/completions HTTP/1.1");
-    assert_eq!(asked.header("authorization"), None, "Ollama takes no key");
+    assert_eq!(asked.header("authorization"), None, "no key is kept for it");
     assert_eq!((asked.body["model"].clone(), asked.body["max_tokens"].clone()), (json!("llama3.2:3b"), json!(16000)));
     assert_eq!(asked.body["response_format"]["json_schema"]["strict"], true);
     let today = r.get("/api/debug/ai?days=1").json()["days"][0].clone();
@@ -413,7 +414,7 @@ fn a_call_goes_to_the_provider_chosen_and_with_ai_turned_off_nowhere() {
     for (chosen, words) in [
         (json!({"ai_enabled": true, "ai_provider": "openai"}), "AI is off: there is no API key"),
         (json!({"ai_provider": "compatible", "ai_model": "mixtral"}), "AI is off: the service has no URL"),
-        (json!({"ai_provider": "ollama"}), "AI is off: no model is chosen"),
+        (json!({"ai_provider": "local"}), "AI is off: no model is chosen"),
     ] {
         r.post("/api/preferences", &chosen);
         let off = r.post("/api/ai/rewrite", &rewrite);
@@ -489,7 +490,7 @@ fn what_cant_be_listed_is_refused_in_words_and_a_provider_that_didnt_answer_is_u
 fn with_ai_turned_off_the_background_reaches_nothing() {
     let (url, log) = provider(vec![(200, completion(&json!({"summary": "A note.", "importance": 3})))]);
     let chosen = |enabled: bool| {
-        json!({"preferences": {"ai_enabled": enabled, "ai_provider": "ollama", "ai_model": "llama3.2:3b",
+        json!({"preferences": {"ai_enabled": enabled, "ai_provider": "local", "ai_model": "llama3.2:3b",
                                "ai_base_url": url, "morning_brief": true, "weekly_review": true, "auto_tidy": true}})
     };
     let r = running(&chosen(false), &[("MAILMIND_PROFILE", "full")]);

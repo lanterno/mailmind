@@ -6,22 +6,24 @@ use mm_kernel::ai_provider::{AiProvider, BASE_URL_MOST, base_url, on_this_machin
 fn the_set_is_named_in_its_order_and_claude_is_the_default() {
     let ids: Vec<&str> = AiProvider::ALL.iter().map(|p| p.id()).collect();
     assert_eq!(ids, AiProvider::IDS);
-    assert_eq!(ids, ["anthropic", "openai", "gemini", "ollama", "compatible"]);
+    assert_eq!(ids, ["anthropic", "openai", "gemini", "local", "compatible"]);
     assert_eq!(AiProvider::DEFAULT, AiProvider::Anthropic);
     for provider in AiProvider::ALL {
         assert_eq!(AiProvider::parse(provider.id()), Some(provider));
     }
-    for none in ["", "Anthropic", "claude", "open-ai", " openai"] {
+    for none in ["", "Anthropic", "claude", "open-ai", " openai", "ollama"] {
         assert_eq!(AiProvider::parse(none), None, "{none:?}");
     }
-    assert_eq!(AiProvider::Ollama.label(), "Ollama, on this Mac");
+    let labels: Vec<&str> = AiProvider::ALL.iter().map(|p| p.label()).collect();
+    assert_eq!(
+        labels,
+        ["Claude (Anthropic)", "OpenAI", "Google Gemini", "A model on this Mac", "Another OpenAI-compatible service"]
+    );
 }
 
 #[test]
-fn ollama_takes_no_key_and_a_compatible_service_does_without_one() {
-    let takes: Vec<bool> = AiProvider::ALL.iter().map(|p| p.takes_key()).collect();
+fn a_model_on_this_mac_and_a_compatible_service_do_without_a_key() {
     let needs: Vec<bool> = AiProvider::ALL.iter().map(|p| p.needs_key()).collect();
-    assert_eq!(takes, [true, true, true, false, true]);
     assert_eq!(needs, [true, true, true, false, false]);
 }
 

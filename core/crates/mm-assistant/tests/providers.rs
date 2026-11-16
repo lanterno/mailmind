@@ -15,7 +15,7 @@ use mm_assistant::ports::{
 use mm_assistant::providers::{self, Off, chat_models, default_base_url, default_model};
 use mm_assistant::refusals::{CallError, NotSent};
 use mm_assistant::status::Status;
-use mm_kernel::ai_provider::AiProvider::{self, Anthropic, Compatible, Gemini, Ollama, OpenAi};
+use mm_kernel::ai_provider::AiProvider::{self, Anthropic, Compatible, Gemini, Local, OpenAi};
 use mm_kernel::errors::{Fault, Kind, Problem};
 use mm_kernel::seams::{Clock, Moment, Secret};
 use mm_kernel::zone::Utc;
@@ -39,8 +39,12 @@ fn ai_is_off_turned_off_first_then_for_a_key_a_url_and_a_model() {
     assert_eq!(off(true, Compatible, false, "", ""), Some(Off::NoUrl), "a compatible service's key is optional");
     assert_eq!(off(true, Compatible, false, "https://llm.example.test/v1", ""), Some(Off::NoModel));
     assert_eq!(off(true, Compatible, false, "https://llm.example.test/v1", "mixtral"), None);
-    assert_eq!(off(true, Ollama, false, default_base_url(Ollama), ""), Some(Off::NoModel), "Ollama takes no key");
-    assert_eq!(off(true, Ollama, false, default_base_url(Ollama), "llama3.2:3b"), None);
+    assert_eq!(
+        off(true, Local, false, default_base_url(Local), ""),
+        Some(Off::NoModel),
+        "a model on this Mac needs no key"
+    );
+    assert_eq!(off(true, Local, false, default_base_url(Local), "llama3.2:3b"), None);
 }
 
 #[test]
@@ -71,7 +75,7 @@ fn each_provider_has_its_own_model_and_url_where_it_has_one() {
             ("", ""),
         ]
     );
-    assert!(providers::local(Ollama, ""));
+    assert!(providers::local(Local, ""));
     assert!(providers::local(Compatible, "http://localhost:1234/v1"));
     assert!(providers::local(Anthropic, "http://127.0.0.1:8080"));
     assert!(!providers::local(Compatible, "https://llm.example.test/v1"));
@@ -87,7 +91,7 @@ fn the_startup_line_names_the_provider_the_model_and_the_key_or_why_ai_is_off_an
         "Claude (Anthropic) · claude-opus-5-5 · key from ANTHROPIC_API_KEY"
     );
     assert_eq!(line(OpenAi, "gpt-6.1-sol", None, config, true), "OpenAI · gpt-6.1-sol · key from mailmind.config.json");
-    assert_eq!(line(Ollama, "llama3.2:3b", None, "", false), "Ollama, on this Mac · llama3.2:3b · no key");
+    assert_eq!(line(Local, "llama3.2:3b", None, "", false), "A model on this Mac · llama3.2:3b · no key");
     assert_eq!(
         line(Compatible, "mixtral", None, config, false),
         "Another OpenAI-compatible service · mixtral · no key",
@@ -117,8 +121,8 @@ fn the_startup_line_names_the_provider_the_model_and_the_key_or_why_ai_is_off_an
         "Another OpenAI-compatible service · mixtral · no URL, so AI is off: give the service's in Settings"
     );
     assert_eq!(
-        line(Ollama, "", Some(Off::NoModel), "", false),
-        "Ollama, on this Mac · no model · no model, so AI is off: choose one in Settings"
+        line(Local, "", Some(Off::NoModel), "", false),
+        "A model on this Mac · no model · no model, so AI is off: choose one in Settings"
     );
 }
 
@@ -144,8 +148,8 @@ fn a_person_picks_from_the_models_that_can_chat_sorted_once_each() {
     let gemini =
         listed(&["models/gemini-4-hydrogen", "models/gemini-embedding-001", "models/gemini-live-2.5", "models/"]);
     assert_eq!(chat_models(Gemini, gemini), ["gemini-4-hydrogen"]);
-    let ollama = listed(&["qwen3:8b", "nomic-embed-text:latest", "llama3.2:3b"]);
-    assert_eq!(chat_models(Ollama, ollama), ["llama3.2:3b", "nomic-embed-text:latest", "qwen3:8b"]);
+    let local = listed(&["qwen3:8b", "nomic-embed-text:latest", "llama3.2:3b"]);
+    assert_eq!(chat_models(Local, local), ["llama3.2:3b", "nomic-embed-text:latest", "qwen3:8b"]);
     let claude = listed(&["claude-sonnet-5-5", "claude-opus-5-5"]);
     assert_eq!(chat_models(Anthropic, claude), ["claude-opus-5-5", "claude-sonnet-5-5"]);
 }
@@ -283,7 +287,7 @@ fn a_call_asks_the_model_in_force_and_is_priced_as_it() {
 #[test]
 fn a_model_on_this_machine_the_table_doesnt_know_costs_nothing_and_off_it_the_dearest() {
     let w = world();
-    w.on(Ollama, "llama3.2:3b", "", true);
+    w.on(Local, "llama3.2:3b", "", true);
     w.calls.call_claude("Say hello.", "thread").expect("an answer");
     w.on(Compatible, "llama3.2:3b", "mailmind.config.json", false);
     w.calls.call_claude("Say hello.", "thread").expect("an answer");
@@ -329,8 +333,8 @@ fn the_status_names_the_provider_why_ai_is_off_and_the_model_in_force() {
     );
     w.off(OpenAi, "gpt-6.1-sol", Off::TurnedOff);
     assert_eq!(said(&w), (json!("none"), json!("openai"), json!("turned-off"), json!(""), json!("")));
-    w.off(Ollama, "", Off::NoModel);
-    assert_eq!(said(&w), (json!("none"), json!("ollama"), json!("no-model"), json!(""), json!("")));
+    w.off(Local, "", Off::NoModel);
+    assert_eq!(said(&w), (json!("none"), json!("local"), json!("no-model"), json!(""), json!("")));
     w.off(Compatible, "", Off::NoUrl);
     assert_eq!(said(&w).2, json!("no-url"));
     w.off(Anthropic, "claude-opus-5-5", Off::NoKey);
@@ -344,7 +348,7 @@ fn a_failure_that_reached_nothing_reads_couldnt_reach_it() {
     assert_eq!(plain("Claude API unreachable: Connection error.", None), "couldn't reach it");
     assert_eq!(plain("gemini unreachable: timed out", None), "it timed out");
     assert_eq!(plain("openai API 401: the key was refused", Some(401)), "the API key was rejected");
-    assert_eq!(plain("ollama API 500: model not found", Some(500)), "the API answered 500");
+    assert_eq!(plain("local API 500: model not found", Some(500)), "the API answered 500");
 }
 
 // -- the models a provider lists ------------------------------------------------------------------
@@ -385,14 +389,14 @@ fn a_providers_models_are_asked_with_its_key_at_its_url_and_its_own_model_is_the
         catalog.models(OpenAi),
         Ok(json!({"ok": true, "models": ["a-model", "b-model"], "default": "gpt-6.1-sol"}))
     );
-    assert_eq!(catalog.models(Ollama), Ok(json!({"ok": true, "models": ["a-model", "b-model"], "default": null})));
+    assert_eq!(catalog.models(Local), Ok(json!({"ok": true, "models": ["a-model", "b-model"], "default": null})));
     *lock(&lists.base_url) = "https://llm.example.test/v1".into();
     assert_eq!(catalog.models(Compatible).map(|a| a["default"].clone()), Ok(Value::Null));
     assert_eq!(
         lock(&lists.asked).clone(),
         [
             (OpenAi, "https://api.openai.com/v1".into(), Some("sk-openai-fictional".into())),
-            (Ollama, "http://127.0.0.1:11434/v1".into(), None),
+            (Local, "http://127.0.0.1:11434/v1".into(), None),
             (Compatible, "https://llm.example.test/v1".into(), None),
         ]
     );

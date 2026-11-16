@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mm_assistant::ports::{LanguageModel, Prompt};
-use mm_kernel::ai_provider::AiProvider::{self, Compatible, Gemini, Ollama, OpenAi};
+use mm_kernel::ai_provider::AiProvider::{self, Compatible, Gemini, Local, OpenAi};
 use mm_kernel::seams::{Outside, Secret, Tripped};
 use mm_openai::ChatApi;
 use mm_openai::wire::strict;
@@ -213,10 +213,11 @@ fn a_schema_is_strict_only_with_every_object_closed_and_every_property_required(
 }
 
 #[test]
-fn every_provider_but_openai_takes_max_tokens_and_ollama_never_takes_a_key() {
+fn every_provider_but_openai_takes_max_tokens_and_any_with_a_key_sends_it() {
     for (provider, key, bearer) in [
         (Gemini, Some(KEY), Some("Bearer sk-proj-test-fake-key")),
-        (Ollama, Some(KEY), None),
+        (Local, Some(KEY), Some("Bearer sk-proj-test-fake-key")),
+        (Local, None, None),
         (Compatible, None, None),
         (Compatible, Some(""), None),
         (Compatible, Some(KEY), Some("Bearer sk-proj-test-fake-key")),
@@ -258,7 +259,7 @@ fn a_refusal_reads_as_an_empty_reply_and_cached_tokens_as_cache_reads() {
 
 #[test]
 fn a_service_that_refuses_structured_output_is_asked_once_more_without_it() {
-    for provider in [Ollama, Compatible] {
+    for provider in [Local, Compatible] {
         let refusal = error("unknown field: response_format");
         let (url, log) = stand_in(vec![(400, vec![], refusal), (200, vec![], answer("{\"text\": \"hi\"}", "m"))]);
         let reply = api(provider, &url, None, Arc::new(Open::default()))
@@ -270,7 +271,7 @@ fn a_service_that_refuses_structured_output_is_asked_once_more_without_it() {
         assert!(asked[0].body.get("response_format").is_some() && asked[1].body.get("response_format").is_none());
     }
     // OpenAI's own 400 is the request's fault, and another 400 is no refusal of structured output.
-    for (provider, said) in [(OpenAi, "unknown field: response_format"), (Ollama, "model is required")] {
+    for (provider, said) in [(OpenAi, "unknown field: response_format"), (Local, "model is required")] {
         let (url, log) = stand_in(vec![(400, vec![], error(said)), (200, vec![], answer("never", "m"))]);
         let failed = api(provider, &url, Some(KEY), Arc::new(Open::default()))
             .complete(&prompt("m", Some(closed())))
@@ -326,7 +327,7 @@ fn the_key_goes_in_the_clear_only_to_this_machine_and_a_refused_host_is_never_re
     assert!(outside.reached.lock().expect("hosts").is_empty(), "nothing was reached");
 
     let (url, log) = stand_in(vec![(200, vec![], answer("never", "m"))]);
-    let failed = api(Ollama, &url, None, Arc::new(Closed)).complete(&prompt("m", None)).expect_err("refused");
+    let failed = api(Local, &url, None, Arc::new(Closed)).complete(&prompt("m", None)).expect_err("refused");
     assert_eq!((failed.status, failed.plain().as_str()), (None, "couldn't reach it"));
     assert!(heard(&log).is_empty());
 }
@@ -351,7 +352,7 @@ fn a_services_models_are_listed_once_with_its_key() {
     assert_eq!(req.header("authorization"), Some("Bearer sk-proj-test-fake-key"));
 
     let (url, log) = stand_in(vec![(503, vec![("retry-after-ms", "1")], error("busy"))]);
-    let failed = api(Ollama, &url, None, Arc::new(Open::default())).list_models().expect_err("busy");
+    let failed = api(Local, &url, None, Arc::new(Open::default())).list_models().expect_err("busy");
     assert_eq!((failed.status, heard(&log).len()), (Some(503), 1), "a person is waiting: asked once");
     let (url, _) = stand_in(vec![(401, vec![], error("no"))]);
     let failed = api(Gemini, &url, Some(KEY), Arc::new(Open::default())).list_models().expect_err("refused");
