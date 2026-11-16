@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use mm_curation::cleanup_ports::{
-    Audited, LiveError, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
+    Audited, Ids, LiveError, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
 };
 use mm_curation::ports::{Filing, RuleBook};
 use mm_curation::rulebook::Rules;
@@ -305,6 +305,11 @@ impl Filing for Shared {
         Ok(Value::Null)
     }
     fn undo_push(&self, _: &Value, _: &str) -> Result<(), Fault> {
+        unreachable!("a sweep puts its ways back on the stack at one write")
+    }
+    fn undo_push_many(&self, entries: &[Value], group: &str) -> Result<(), Fault> {
+        let ids: Vec<&str> = entries.iter().map(|e| e["message_id"].as_str().unwrap_or_default()).collect();
+        self.0.note(format!("undo {group} {ids:?}"));
         Ok(())
     }
     fn stats_changed(&self) {
@@ -312,6 +317,12 @@ impl Filing for Shared {
     }
     fn folders_changed(&self, _: &str, _: usize) -> Result<(), Fault> {
         unreachable!("a sweep says the counts moved")
+    }
+}
+
+impl Ids for Shared {
+    fn hex(&self, n: usize) -> String {
+        "a".repeat(2 * n)
     }
 }
 
@@ -356,6 +367,7 @@ fn sweeps(world: &Shared, writes_allowed: bool) -> Sweeps {
         audit: Arc::new(world.clone()),
         rows: Arc::new(world.clone()),
         filing: Arc::new(world.clone()),
+        ids: Arc::new(world.clone()),
         clock: Arc::new(world.clone()),
         writes_allowed,
     })
@@ -364,13 +376,13 @@ fn sweeps(world: &Shared, writes_allowed: bool) -> Sweeps {
 #[test]
 fn a_dry_run_plans_and_moves_nothing() {
     let world = world();
-    let done = sweeps(&world, true).run(Some("all"), true).expect("swept");
+    let done = sweeps(&world, true).run(Some("all"), true, None).expect("swept");
     assert_eq!(
         done,
-        json!({"ok": true, "dry_run": true, "generated": "2026-11-02T12:00:00+00:00", "results": [{
+        json!({"ok": true, "dry_run": true, "generated": "2026-11-02T12:00:00+00:00", "undo_group": null, "results": [{
             "account": "ada@example.test", "planned": 2,
             "by_bucket": {"other/personal-ish": 1, "newsletters/marketing": 1, "automated-notifications": 1},
-            "senders": 2, "held_back": 0, "moved": 0, "stragglers": [], "error": null}]})
+            "senders": 2, "held_back": 0, "no_undo": 0, "moved": 0, "stragglers": [], "error": null}]})
     );
     let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
     assert_eq!((inbox.moves.len(), inbox.closed), (0, Some(false)));
@@ -380,7 +392,7 @@ fn a_dry_run_plans_and_moves_nothing() {
 #[test]
 fn a_sweep_records_what_it_will_trash_moves_it_and_forgets_its_rows() {
     let world = world();
-    let done = sweeps(&world, true).run(None, false).expect("swept");
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
     assert_eq!((done["results"][0]["moved"].clone(), done["results"][0]["planned"].clone()), (json!(2), json!(2)));
     let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
     assert_eq!(inbox.moves, [(vec![2, 3], "Trash".to_owned())]);
@@ -390,10 +402,76 @@ fn a_sweep_records_what_it_will_trash_moves_it_and_forgets_its_rows() {
             "gate ada@example.test",
             "audit ada@example.test 2 newsletters/marketing List-Unsubscribe header",
             "audit ada@example.test 3 automated-notifications no-reply / notification address",
+            "undo sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa [\"<issue@example.test>\", \"<alert@example.test>\"]",
             "forget ada@example.test [(\"2\", \"<issue@example.test>\"), (\"3\", \"<alert@example.test>\")] []",
             "stats",
         ]
     );
+    assert_eq!(done["undo_group"], json!("sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+}
+
+#[test]
+fn each_message_that_went_has_its_way_back_under_the_group_the_request_named() {
+    let world = world();
+    let done = sweeps(&world, true).run(None, false, Some("ug-1")).expect("swept");
+    assert_eq!(done["undo_group"], json!("ug-1"));
+    let undo: Vec<String> = world.0.said().into_iter().filter(|s| s.starts_with("undo")).collect();
+    assert_eq!(undo, ["undo ug-1 [\"<issue@example.test>\", \"<alert@example.test>\"]"]);
+    // A group a request leaves empty is none.
+    let world = self::world();
+    let done = sweeps(&world, true).run(None, false, Some("")).expect("swept");
+    assert_eq!(done["undo_group"], json!("sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+}
+
+#[test]
+fn a_straggler_or_a_message_with_no_message_id_has_no_way_back() {
+    let world = world();
+    more(
+        &world,
+        &[(4, b"From: deals@loom.example.test\r\nSubject: sale\r\nList-Id: <loom>\r\n\r\n".to_vec(), &["\\Seen"])],
+    );
+    world.0.inbox.lock().expect("lock").as_mut().expect("closed").ignored.insert(3, 2);
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
+    assert_eq!((plan["results"][0]["planned"].clone(), plan["results"][0]["no_undo"].clone()), (json!(3), json!(1)));
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
+    assert_eq!(
+        (
+            done["results"][0]["moved"].clone(),
+            done["results"][0]["stragglers"].clone(),
+            done["results"][0]["no_undo"].clone()
+        ),
+        (json!(2), json!(["3"]), json!(1))
+    );
+    let undo: Vec<String> = world.0.said().into_iter().filter(|s| s.starts_with("undo")).collect();
+    assert_eq!(undo, ["undo sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa [\"<issue@example.test>\"]"]);
+}
+
+#[test]
+fn nothing_that_went_leaves_the_stack_alone_and_the_answer_names_no_group() {
+    let world = world();
+    for uid in 1..=3 {
+        world.0.inbox.lock().expect("lock").as_mut().expect("closed").flags.insert(uid, vec![]);
+    }
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
+    assert_eq!((done["results"][0]["moved"].clone(), done["undo_group"].clone()), (json!(0), Value::Null));
+    assert!(!world.0.said().iter().any(|s| s.starts_with("undo")));
+}
+
+#[test]
+fn a_connection_lost_on_the_way_leaves_a_way_back_for_all_it_meant_to_move() {
+    let world = world();
+    world.0.inbox.lock().expect("lock").as_mut().expect("closed").lost = Some(2);
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
+    assert_eq!(
+        (done["results"][0]["error"].clone(), done["undo_group"].clone()),
+        (json!("ConnectionLost"), json!("sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+    );
+    let undo: Vec<String> = world.0.said().into_iter().filter(|s| s.starts_with("undo")).collect();
+    assert_eq!(
+        undo,
+        ["undo sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa [\"<issue@example.test>\", \"<alert@example.test>\"]"]
+    );
+    assert!(!world.0.said().iter().any(|s| s.starts_with("forget")));
 }
 
 #[test]
@@ -408,10 +486,10 @@ fn starred_and_unread_junk_stays_where_it_is() {
             (5, heads("no-reply@alerts.example.test", "sign-in", false), &["\\Seen"]),
         ],
     );
-    let plan = sweeps(&world, true).run(None, true).expect("planned");
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
     let said = |done: &Value, field: &str| done["results"][0][field].clone();
     assert_eq!((said(&plan, "planned"), said(&plan, "held_back")), (json!(1), json!(3)));
-    let done = sweeps(&world, true).run(None, false).expect("swept");
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
     assert_eq!((said(&done, "moved"), said(&done, "held_back")), (json!(1), json!(3)));
     let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
     assert_eq!(inbox.moves, [(vec![5], "Trash".to_owned())]);
@@ -423,19 +501,20 @@ fn starred_and_unread_junk_stays_where_it_is() {
 #[test]
 fn a_read_only_process_only_plans() {
     let world = world();
-    assert_eq!(sweeps(&world, false).run(None, false), Err(Failure::Fault(READ_ONLY)));
-    assert!(sweeps(&world, false).run(None, true).is_ok());
+    assert_eq!(sweeps(&world, false).run(None, false, None), Err(Failure::Fault(READ_ONLY)));
+    assert!(sweeps(&world, false).run(None, true, None).is_ok());
 }
 
 #[test]
 fn an_account_that_isnt_one_is_refused() {
-    let refused = sweeps(&world(), true).run(Some("bea@example.test"), true);
+    let refused = sweeps(&world(), true).run(Some("bea@example.test"), true, None);
     assert!(matches!(refused, Err(Failure::Problem(p)) if p.kind == Kind::Refused && p.said == "unknown account"));
 }
 
 #[test]
 fn a_server_that_cant_be_reached_says_its_class_alone() {
     let world = Shared(Arc::new(World { refuse_open: true, ..World::default() }));
-    let done = sweeps(&world, true).run(Some("ada@example.test"), false).expect("swept");
+    let done = sweeps(&world, true).run(Some("ada@example.test"), false, None).expect("swept");
     assert_eq!(done["results"], json!([{"account": "ada@example.test", "error": "ConnectionRefused", "planned": 0}]));
+    assert_eq!(done["undo_group"], Value::Null);
 }

@@ -223,6 +223,37 @@ fn a_blocks_reversal_gathers_under_its_group() {
 }
 
 #[test]
+fn a_sweeps_reversals_go_under_its_group_at_one_write_after_what_was_there() {
+    let (_dir, store, database) = store();
+    store.push_undo(&json!({"kind": "unblock", "token": LOOM, "label": "Cleaned up"}), "cleanup:1").unwrap();
+    let back =
+        |n: u32| json!({"kind": "move", "message_id": format!("<{n}@loom.example.test>"), "label": "Swept junk"});
+    store.push_undo_many(&[back(1), back(2), back(3)], "sweep:1").unwrap();
+    store.push_undo_many(&[back(4)], "sweep:1").unwrap();
+    store.push_undo_many(&[], "sweep:2").unwrap();
+    let entries: Vec<(Option<String>, String)> = database
+        .read(|c| {
+            c.prepare("SELECT grp, entry FROM undo_entries ORDER BY id")?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect()
+        })
+        .unwrap();
+    let groups: Vec<Option<&str>> = entries.iter().map(|(g, _)| g.as_deref()).collect();
+    assert_eq!(groups, [Some("cleanup:1"), Some("sweep:1")]);
+    let swept: Value = serde_json::from_str(&entries[1].1).unwrap();
+    let ids: Vec<&str> =
+        swept["children"].as_array().unwrap().iter().map(|c| c["message_id"].as_str().unwrap()).collect();
+    assert_eq!(
+        (swept["kind"].clone(), swept["group"].clone(), swept["label"].clone()),
+        (json!("bulk"), json!("sweep:1"), json!("Swept junk"))
+    );
+    assert_eq!(
+        ids,
+        ["<1@loom.example.test>", "<2@loom.example.test>", "<3@loom.example.test>", "<4@loom.example.test>"]
+    );
+}
+
+#[test]
 fn what_a_sweep_moved_is_forgotten_by_message_id_else_by_uid_and_a_straggler_stays() {
     let (_dir, store, database) = store();
     let moved = [
