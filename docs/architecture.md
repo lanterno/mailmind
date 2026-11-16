@@ -5,12 +5,12 @@ Pipeline, roughly in data-flow order:
 ```
 mailmind.config.json → mailmind.accounts → the Mailbox's Ingest → curation's classifier → mailmind.mailbox's store (SQLite)
                                                                 ↓
-                                              mailmind.assistant (Claude API) → mailmind.http + web/
+                                              mailmind.assistant (the AI chosen) → mailmind.http + web/
 ```
 
 Around that spine: `mailmind.mailbox` (IMAP writes, IDLE), `mailmind.compose`
 (send), `mailmind.discovery` (FTS + operator grammar), `mailmind.calendar` (invites), and `mailmind.assistant`
-(everything asked of Claude).
+(everything asked of the AI: Claude, or the provider a person chose).
 
 `discovery.build` reads a date with no zone at this machine's midnight. `discovery.visible` leaves snoozed mail out of
 a search and of what a command acts on, unless the query says `is:snoozed`. `discovery.BM25` is the one table of

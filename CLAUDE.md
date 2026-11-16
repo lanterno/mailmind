@@ -35,7 +35,7 @@ uv run python -m mailmind db compact         # owner only, MailMind stopped: giv
 uv run python -m mailmind accounts password WHO   # keep an account's password in the login Keychain (prompt, or stdin)
 uv run python -m mailmind ai key                  # keep the Claude API key there; `--provider openai|gemini|local|compatible` another's
 uv run python -m mailmind ai on|off               # AI mode, as Settings has it: off, nothing goes to any provider
-uv run python -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
+uv run python -m mailmind ai usage --days 7  # what AI cost each day, by feature, whichever provider; reads only
 uv run python -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```
 
@@ -74,7 +74,7 @@ other: `bootstrap/` binds them, and a context says what it needs in its `applica
 | `attention` | What asks for you later: snooze, mute, reply later, follow-ups |
 | `calendar` | Invites, recurring series, Today & next, RSVP |
 | `compose` | Drafts, building a message, the outbox and delivery |
-| `assistant` | Everything asked of Claude |
+| `assistant` | Everything asked of the AI: Claude, or the provider a person chose |
 
 The page is `web/src`: `app/` composes the features, `features/<x>/` each hold one area and offer what others use through an `index.ts`,
 and `lib/` is what they share. The features stand in one order (`ORDER` in `web/lint/slices.js`) and a feature imports only those before it.
@@ -130,7 +130,7 @@ The docs below say why. These are the ones a change can break without noticing:
 | IMAP gates, workers, IDLE, the pool | [docs/concurrency.md](docs/concurrency.md) |
 | Moves, flags, Undo, the outbox, drafts, offline | [docs/writes-and-undo.md](docs/writes-and-undo.md) |
 | The perimeter, TLS, the mail frame | [docs/security.md](docs/security.md) |
-| Claude calls, the cost governor, batches | [docs/ai.md](docs/ai.md) |
+| AI calls and providers, the cost governor, batches | [docs/ai.md](docs/ai.md) |
 | The classifier, rules, unsubscribe | [docs/classification.md](docs/classification.md) |
 | The Rust core, the shells, budgets.toml | [docs/clients.md](docs/clients.md) |
 | The Mac app's packaging, its updates, a release | [docs/releasing.md](docs/releasing.md) |

@@ -40,7 +40,7 @@ mailmind.config.json          (your accounts + how to read their passwords)
         │                      notifications / receipts / personal / protected)
    mailmind/mailbox/ store  →  SQLite (mailmind.db)
         │
-   mailmind/assistant/         summarize + score importance 1–5 with Claude
+   mailmind/assistant/         summarize + score importance 1–5 with the AI chosen
         │
    mailmind/http/  +  web/ (the React app)   the app on http://127.0.0.1:8721, served by
                                        `uv run python -m mailmind serve` (FastAPI on uvicorn)
@@ -50,7 +50,7 @@ Around that spine sit the client modules: `mailmind/mailbox/` (IMAP writes, IMAP
 `mailmind/compose/` (send), `mailmind/discovery/` (FTS + operator
 grammar), `mailmind/attention/` (snooze, mute, reply later, follow-ups),
 `mailmind/content/` (reading a message, and the reader's whitelist sanitizer),
-`mailmind/calendar/` (invites), and `mailmind/assistant/` (everything asked of Claude).
+`mailmind/calendar/` (invites), and `mailmind/assistant/` (everything asked of the AI).
 
 The app is one view: a real folder-and-account client whose Inbox opens on
 today's AI brief. Curation tools (sweep junk, keep/block rules, audit) live in a
@@ -60,7 +60,7 @@ slide-in drawer, and the sync menu opens it and runs a reconcile.
 
 MailMind started as a summarizer with a reading pane. It is now a full local-first
 mail client — everything below ships today and runs against your local SQLite store
-and the Claude API.
+and the AI provider you chose (Claude by default).
 
 ### Reading
 
@@ -241,9 +241,9 @@ and the Claude API.
 
 ### AI intelligence
 
-Everything here runs through Claude and returns **schema-validated** structured
-output, so malformed-response errors don't reach the UI. Nothing is ever sent
-automatically.
+Everything here runs through the AI provider you chose (Claude by default) and returns
+**schema-validated** structured output, so malformed-response errors don't reach the UI.
+Nothing is ever sent automatically.
 
 - **The Claude API.** With an API key set, the server and every command call the Messages API
   through the official Anthropic SDK (`claude-opus-5-5` unless `MAILMIND_MODEL` names another;
@@ -269,8 +269,9 @@ automatically.
   The sync menu names the model, and in red the reason ("the API key was rejected",
   "rate-limited for now") when the last call failed. With AI mode on and no key, the brief says
   AI is off calmly and the composer drops Draft and Rewrite. The brief's card, and the sync
-  menu with AI on, say that message text goes to Anthropic only when it is summarized, briefed or
-  drafted.
+  menu with AI on, say where message text goes: to the provider chosen (Anthropic, OpenAI, Google or
+  the service named) only when it is summarized, briefed, drafted or asked about, and nowhere off this
+  Mac with a model on this Mac or a service at a URL on it.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
   …) at the provider's list prices. The sync menu shows what today cost so far against the
   daily limit, and `uv run python -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
@@ -829,7 +830,7 @@ uv run pytest tests/security/test_mail_frame.py             # a mail body's own 
 
 These need [uv](https://docs.astral.sh/uv/). With [`just`](https://just.systems) installed too, `just test` runs all of them
 together with the rest of the pytest suite in `tests/`. That suite drives the app against fake IMAP,
-SMTP and Claude servers and a made-up mailbox, and compares the answers with recorded ones in
+SMTP, Claude and OpenAI-compatible servers and a made-up mailbox, and compares the answers with recorded ones in
 `tests/golden/`. `just verify` adds lint (ruff, the import rules between the package's layers, and pyright), byte-compile, the
 frontend checks (the page's API types and limits against the server's, which `just gen-api` writes from the routes' OpenAPI
 document and the server's limits, then the TypeScript's types, lint and tests, which need Node) and a look for known
