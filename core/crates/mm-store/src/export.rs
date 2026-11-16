@@ -92,7 +92,7 @@ impl Exports {
     }
 
     /// What an export would hold, as a dry run: for each account and folder, how many messages and how many of
-    /// them have their whole message stored.
+    /// them have their whole message stored; and how much room the database takes on this disk (`database_bytes`).
     pub fn plan(&self) -> Result<Value, Fault> {
         let groups: Vec<(Value, Value, i64, Option<i64>)> = self.database.read(|c| {
             c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
@@ -112,7 +112,19 @@ impl Exports {
             .into_iter()
             .map(|(account, folder, n, b)| json!({"account": account, "folder": folder, "messages": n, "bodies": b.unwrap_or(0)}))
             .collect();
-        Ok(json!({"ok": true, "total": total, "bodies": bodies, "groups": groups}))
+        let database_bytes = self.database_bytes()?;
+        Ok(json!({"ok": true, "total": total, "bodies": bodies, "groups": groups, "database_bytes": database_bytes}))
+    }
+
+    /// The bytes the database takes on this disk: its file, and the log of what it hasn't taken in yet.
+    fn database_bytes(&self) -> Result<u64, Fault> {
+        let path = self.database.path();
+        let mut bytes = 0;
+        for each in [path.to_path_buf(), crate::migrate::beside(path, "-wal")] {
+            self.outside.open(&each).map_err(|_| TRIPPED)?;
+            bytes += fs::metadata(&each).map_or(0, |file| file.len());
+        }
+        Ok(bytes)
     }
 
     /// Takes away the archive folders a process stopped mid-download left in the data directory: they hold mail, and
