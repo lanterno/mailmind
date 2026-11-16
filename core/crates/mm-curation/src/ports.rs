@@ -130,6 +130,10 @@ pub struct Stored {
     pub subject: Option<String>,
     pub bucket: Option<String>,
     pub list_unsub_raw: Option<String>,
+    /// \Seen, as last stored: someone has read it.
+    pub seen: bool,
+    /// \Flagged, as last stored: a person starred it.
+    pub flagged: bool,
 }
 
 /// The mail stored in each account's inbox.

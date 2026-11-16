@@ -109,8 +109,9 @@ impl StoredPlans {
     }
 
     /// What a sweep of each (account, kind)'s inbox would find, from its stored mail classified again with the rules
-    /// as they stand: `account`, `kind`, the tally and no `error`, in the order the accounts are named. The rules are
-    /// read once for them all.
+    /// as they stand: `account`, `kind`, the tally, `sweepable` and no `error`, in the order the accounts are named.
+    /// `sweepable` is the junk a sweep would move now, as stored: what someone has read and no one starred. The rules
+    /// are read once for them all.
     pub fn plans_stored(&self, accounts: &[(&str, &str)]) -> Result<Vec<Map<String, Value>>, Fault> {
         let named: Vec<&str> = accounts.iter().map(|(account, _)| *account).collect();
         let inboxes = self.inbox.stored_inboxes(&named)?;
@@ -122,7 +123,12 @@ impl StoredPlans {
             let mut plan = Map::new();
             plan.insert("account".into(), json!(account));
             plan.insert("kind".into(), json!(kind));
-            plan.extend(tally(rows.iter().map(|row| stored_bucket(row, &sets))));
+            let judged: Vec<(Bucket, String)> = rows.iter().map(|row| stored_bucket(row, &sets)).collect();
+            let sweepable =
+                rows.iter().zip(&judged).filter(|(row, (bucket, _))| bucket.is_junk() && row.seen && !row.flagged);
+            let sweepable = sweepable.count();
+            plan.extend(tally(judged));
+            plan.insert("sweepable".into(), json!(sweepable));
             plan.insert("error".into(), Value::Null);
             plan
         };

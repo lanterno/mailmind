@@ -12,7 +12,7 @@ impl StoredInbox for Database {
     fn stored_inboxes(&self, accounts: &[&str]) -> Result<Vec<Vec<Stored>>, Fault> {
         self.read(|c| {
             let mut inbox = c.prepare_cached(
-                "SELECT from_addr, from_name, subject, bucket, list_unsub_raw FROM messages \
+                "SELECT from_addr, from_name, subject, bucket, list_unsub_raw, seen, flagged FROM messages \
                  WHERE account=? AND folder='INBOX' AND deleted=0 AND pending_removal IS NULL",
             )?;
             accounts
@@ -26,6 +26,8 @@ impl StoredInbox for Database {
                                 subject: r.get(2)?,
                                 bucket: r.get(3)?,
                                 list_unsub_raw: r.get(4)?,
+                                seen: r.get::<_, Option<i64>>(5)?.is_some_and(|f| f != 0),
+                                flagged: r.get::<_, Option<i64>>(6)?.is_some_and(|f| f != 0),
                             })
                         })?
                         .collect()
