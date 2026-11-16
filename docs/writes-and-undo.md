@@ -72,6 +72,25 @@
   and keep the local row. `set_flags` does the same for a star or a read mark. Never send a bulk
   `EXPUNGE`: `MailSession.expunge(uids)` removes the UIDs named and no others, and
   `move_by_copy` flags each original only after its COPY succeeded.
+- A folder a person makes, renames or deletes (`/api/folders/create`, `rename` and `delete`; the Rust server's
+  `FolderChanges` in `mm-mailbox`) takes the same path, `MailCommands.change_folder`, as a job on the account's gate that a
+  read-only process refuses before anything is sent. Nothing queues and nothing is undone: a person waits to see the
+  folder, and a change tried later could meet a folder changed since. Its name goes as the server's LIST gives it, through
+  `mailbox_arg`: a new folder where the account keeps a person's own (under Proton Bridge's `Folders/`, the one place
+  Bridge makes one, or under `INBOX.` on a server that keeps every folder there), and a rename keeps the folder under its
+  parent. A rename to the name a folder has, as a person reads it (`own_name`: LIST's modified UTF-7 and escapes read),
+  sends nothing. The folders that play a part (the Inbox, Sent, Drafts, Archive, All Mail, Junk and Trash), one at the
+  top named as one of them and the account's own Trash are never renamed or deleted, nor is a folder the server keeps:
+  one with any SPECIAL-USE attribute (Gmail's Starred, `\Flagged`, and Important among them) or one in Gmail's
+  `[Gmail]` tree. Nor is one with folders inside it deleted (`domain.folder_change`). `/api/folders` says of each folder
+  whether a person may change it (`changeable`) and its `own_name`, so the Mac app's rail offers its menu only there. A
+  folder that holds mail answers a 409 with how many (`messages`) and whether they go to Trash (`to_trash`) until the
+  person confirms (`confirm`); then its mail moves to Trash by UID first, and the folder is deleted only if none is
+  left. On Gmail a folder is a label, so nothing moves: the DELETE goes alone and the mail stays in All Mail, as Gmail's
+  own delete does, since a move to Gmail's Trash would take each message out of the Inbox and every other label. A
+  delete that stops once mail has gone says so: the server keeping the folder is a 409 saying how many went
+  (`trashed`), a lost connection says some may be in Trash already, and either way the folder's rows go so it is read
+  again. A rename's rows follow it in the database, and a deleted folder's go.
 - The queue's idempotency key carries the request's `mutation_id`, or a random one when the
   client sends none, so only a resubmit of the same request dedupes.
 - `ingest.ingest_message` (undo's one-message re-ingest) never moves the sync watermark or
