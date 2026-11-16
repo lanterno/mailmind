@@ -286,6 +286,7 @@ def test_hwf_expiry_ages_mail_by_when_it_arrived_not_its_date_header(world):
 
 
 def test_hwf_a_sweep_of_stored_junk_finds_its_targets_in_the_live_inbox_by_message_id(world):
+    read_junk(world)
     gone(world, "ada-inbox-01-lunch.eml")
     world.server.renumber(w.ADA, "INBOX")                       # every stored UID is now one off
     res = curation.sweeps.sweep_stored(acct())
@@ -294,3 +295,33 @@ def test_hwf_a_sweep_of_stored_junk_finds_its_targets_in_the_live_inbox_by_messa
         assert boxes(world, name) == ([(w.ADA, "Trash")], []), name
     for name in (RECEIPT, "ada-inbox-06-outlook-invite.eml"):
         assert boxes(world, name)[0] == [(w.ADA, "INBOX")], name
+
+
+def test_a_sweep_of_stored_junk_leaves_starred_and_unread_mail_and_one_undo_brings_back_what_went(world):
+    """As the account's sweep does: Ada read Loom's issue, read and starred the CI mail, and hasn't read the scam, so
+    only the issue goes, and one Undo puts it back."""
+    from mailmind.bootstrap import mailbox
+    world.server_flags("ada-inbox-03-newsletter.eml", "\\Seen")
+    world.server_flags("ada-inbox-04-ci.eml", "\\Seen", "\\Flagged")
+    world.server_flags("ada-inbox-12-scam.eml")
+    plan = curation.sweeps.sweep_stored(acct(), dry=True)
+    assert (plan["planned"], plan["held_back"], plan["moved"], plan["capped"]) == (1, 2, 0, False)
+    res = curation.sweeps.sweep_stored(acct(), group="ug-stored")
+    assert (res["planned"], res["held_back"], res["moved"], res["stragglers"]) == (1, 2, 1, [])
+    assert boxes(world, "ada-inbox-03-newsletter.eml") == ([(w.ADA, "Trash")], [])
+    for name in ("ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml"):
+        assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), name
+    undone = mailbox.undo.undo_group("ug-stored")
+    assert (undone["reversed"], undone["failed"], undone["label"]) == (1, 0, "Swept junk")
+    assert boxes(world, "ada-inbox-03-newsletter.eml") == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")])
+
+
+def test_a_sweep_of_stored_junk_takes_the_newest_of_more_than_one_sweep_moves(world, monkeypatch):
+    from mailmind.curation.domain import sweep_plan
+    read_junk(world)
+    monkeypatch.setattr(sweep_plan, "SWEEP_MAX", 2)
+    res = curation.sweeps.sweep_stored(acct())
+    assert (res["planned"], res["moved"], res["capped"]) == (2, 2, True)
+    newest = sorted(JUNK_INBOX, key=world.uid)[1:]
+    for name in JUNK_INBOX:
+        assert boxes(world, name)[0] == [(w.ADA, "Trash" if name in newest else "INBOX")], name
