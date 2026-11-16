@@ -82,11 +82,12 @@ enum AIChoices {
     static let contextStep = String(localized: "In Ollama’s settings, set Context length to 16K or more.")
 
     /// For a person with no model server yet, in steps (the page's): get Ollama, the one model suggested to start
-    /// with, in plain words, its context, and look again.
+    /// with, by the name Ollama lists it under, its context, and look again.
     static let firstSteps = [
         String(localized: "Get Ollama and open it."),
         String(localized: """
-            In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.
+            In Ollama, download a model. A good first one is qwen3:8b, as Ollama lists it: it runs well on a Mac with \
+            16 GB of memory.
             """),
         contextStep,
         String(localized: "Then look again."),
