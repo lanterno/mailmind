@@ -73,7 +73,11 @@ def test_accounts_rules_views_and_audit(app, golden):
     fetch(app, golden, "/api/audit")
     fetch(app, golden, "/api/audit?limit=5")
     fetch(app, golden, "/api/outbox")
-    fetch(app, golden, "/api/debug/pool")
+    # Whether connections are kept is each server's: the Rust server keeps every account's, and the Python one as
+    # MAILMIND_POOL says, which the suite passes under either way. What a fresh app's pool says else is pinned.
+    pool = app.get("/api/debug/pool")
+    assert pool.body.pop("enabled") == bool(pool.body.pop("target"))
+    golden.record("GET /api/debug/pool", pool)
 
 
 def test_account_health_and_stats(app, golden):

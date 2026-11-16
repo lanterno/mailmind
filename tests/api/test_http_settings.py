@@ -167,16 +167,16 @@ def test_one_undo_takes_back_all_a_sweep_moved(app, world):
         assert (box, "\\Seen" in flags) == ("INBOX", True), name
 
 
-def test_one_undo_of_a_sweep_logs_in_twice_however_much_went(app, world):
+def test_one_undo_of_a_sweep_logs_in_at_most_twice_however_much_went(app, world):
     """Undo puts an account's swept mail back from Trash on one session and reads it all in on one more, not two
-    logins a message."""
+    logins a message; a server that keeps the account's connection for its jobs needs neither."""
     for name in JUNK:
         world.server_flags(name, "\\Seen")
     app.post("/api/sweep", {"account": w.ADA, "undo_group": "ug-sweep-2"})
     since = len(world.server.commands_for(w.ADA, "LOGIN"))
     undone = app.post("/api/undo", {}).json
     assert (undone["reversed"], undone["failed"]) == (3, 0)
-    assert len(world.server.commands_for(w.ADA, "LOGIN")) - since == 2
+    assert len(world.server.commands_for(w.ADA, "LOGIN")) - since <= 2
     for name in JUNK:
         assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
 

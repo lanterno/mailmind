@@ -265,10 +265,8 @@
     "reused": 0,
     "validate_fail": 0
    },
-   "enabled": false,
    "ok": true,
-   "slots": [],
-   "target": ""
+   "slots": []
   },
   "headers": {
    "cache-control": "no-store",
