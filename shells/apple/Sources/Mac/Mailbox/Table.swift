@@ -109,6 +109,9 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.dataSource = self
         table.delegate = self
+        // A double-click opens the row's message in a window of its own, as a Mac's mail list does.
+        table.target = self
+        table.doubleAction = #selector(openedTwice)
         table.mailbox = mailbox
         table.controller = self
         table.setAccessibilityLabel(String(localized: "Messages"))
@@ -507,6 +510,16 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         return [delete, archive]
     }
 
+    /// A row double-clicked: its message in a window of its own. The brief's row and a row not yet held open nothing.
+    @objc func openedTwice() {
+        openWindow(row: table.clickedRow)
+    }
+
+    func openWindow(row: Int) {
+        guard row >= 0, let position = position(row), let mail = list.copy(at: position) else { return }
+        mailbox?.opensWindow?(MailCopy(mail))
+    }
+
     // MARK: The context menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -747,7 +760,11 @@ enum RowMenu {
     static func items(for mailbox: Mailbox, clicked: API.FolderRow?) -> [NSMenuItem] {
         let rows = mailbox.chosenRows.isEmpty ? clicked.map { [$0] } ?? [] : mailbox.chosenRows
         guard let first = rows.first else { return [] }
-        var items: [NSMenuItem] = [
+        var items: [NSMenuItem] = []
+        if rows.count == 1, let open = mailbox.opensWindow {
+            items += [Item(String(localized: "Open in New Window"), "macwindow") { open(MailCopy(first)) }, .separator()]
+        }
+        items += [
             Item(String(localized: "Archive"), "archivebox") { mailbox.file(.archive, rows: rows) },
             Item(String(localized: "Delete"), "trash") { mailbox.file(.trash, rows: rows) },
             Item(String(localized: "Mark as Junk"), "xmark.bin") { mailbox.file(.junk, rows: rows) },

@@ -21,7 +21,7 @@ enum Place: Hashable, Sendable {
 
 /// A copy of a message, as the page names one: its key, the folder it is in and its uid there. A row's number is no
 /// name: a move, an Undo or a renumber gives the copy a new one.
-struct MailCopy: Hashable, Sendable {
+struct MailCopy: Hashable, Codable, Sendable {
     let key: Int
     let folder: String
     let uid: Int

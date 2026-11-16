@@ -86,6 +86,8 @@ final class Mailbox {
     @ObservationIgnored var more: [@MainActor (Mailbox) -> [MailCommand]] = []
     /// The other areas' single keys (r to reply, h to snooze, ? for help), which the list runs while it has the focus.
     @ObservationIgnored var keys: [Character: @MainActor () -> Void] = [:]
+    /// The reader's: a message in a window of its own, which a double-click on its row opens.
+    @ObservationIgnored var opensWindow: ((MailCopy) -> Void)?
     /// The other areas' items in a row's context menu, for the rows it acts on.
     @ObservationIgnored var rowMenu: [@MainActor ([API.FolderRow]) -> [NSMenuItem]] = []
     /// The desk's: today's brief in the pane, opened on purpose (a click, Return) or only arrived at (the arrow

@@ -23,7 +23,10 @@ struct ReaderPane: View {
     /// and write, and the palette lists them, as the page's commands do. They read this pane as it is on screen (its
     /// state is the window's own), and the window lets them go as it closes (`Mailbox.leave`).
     private func joinMailbox() {
-        let pane = self
+        let pane = self, openWindow = openWindow
+        app.mailbox.join("reader") { mailbox in
+            mailbox.opensWindow = { copy in openWindow(id: MessageWindow.scene, value: copy) }
+        }
         app.mailbox.join("compose") { mailbox in
             mailbox.composeTo = { [weak app] address in
                 Composing.shared.newMessage(to: [address], current: Self.current(in: app?.place))

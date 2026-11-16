@@ -48,6 +48,15 @@ struct MailMindApp: App {
         .defaultSize(width: 720, height: 640)
         .restorationBehavior(.disabled)
         .commandsRemoved()
+        // A message in a window of its own, as a double-click on its row opens it: Mac/Reader/MessageWindow.swift.
+        WindowGroup("Message", id: MessageWindow.scene, for: MailCopy.self) { $copy in
+            MessageWindow(copy: copy)
+                .meadowLit()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 820, height: 760)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
         #endif
 
         #if os(macOS)
