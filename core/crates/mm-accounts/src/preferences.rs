@@ -68,7 +68,8 @@ const DEFAULTS: [(&str, Kind); 26] = [
     ("undo_send_seconds", Kind::Seconds(SEND_WINDOW.0)),
     ("density", Kind::Choice("comfortable", &["comfortable", "cozy", "compact"])),
     ("high_contrast", Kind::Flag(false)),
-    ("theme", Kind::Choice("day", &["day", "dusk", "night"])),
+    // auto: Night while the system is dark, else by the clock; a fresh install's, and a choice the file holds stands
+    ("theme", Kind::Choice("auto", &["auto", "day", "dusk", "night"])),
     ("read_width", Kind::Choice("medium", &["narrow", "medium", "wide"])),
     ("read_size", Kind::Choice("m", &["s", "m", "l", "xl"])),
     ("read_font", Kind::Choice("sans", &["sans", "serif", "mono"])),
