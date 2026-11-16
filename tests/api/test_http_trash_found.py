@@ -5,6 +5,7 @@ from fixtures import world as w
 from world_helpers import server_boxes
 
 LUNCH = "ada-inbox-01-lunch.eml"
+JUNK = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
 
 
 def rename(world, who, old, new, special=None):
@@ -49,3 +50,17 @@ def test_a_sweep_moves_the_junk_to_the_trash_the_server_lists(app, world):
     assert ada["moved"] > 0 and ada["error"] is None
     assert len(world.server.messages(w.ADA, "Deleted Messages")) == before + ada["moved"]
     assert "Trash" not in world.server.accounts[w.ADA].mailboxes
+
+
+def test_a_sweeps_undo_brings_its_mail_back_from_the_trash_the_server_lists(app, world):
+    rename(world, w.ADA, "Trash", "Deleted Messages")
+    for name in JUNK:
+        world.server_flags(name, "\\Seen")
+    swept = app.post("/api/sweep", {"account": w.ADA, "undo_group": "ug-sweep-found"}).json
+    assert (swept["undo_group"], swept["results"][0]["moved"]) == ("ug-sweep-found", 3)
+    for name in JUNK:
+        assert [box for _, box, *_ in world.where(name)["server"]] == ["Deleted Messages"], name
+    undone = app.post("/api/undo", {}).json
+    assert (undone["ok"], undone["reversed"], undone["failed"]) == (True, 3, 0)
+    for name in JUNK:
+        assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
