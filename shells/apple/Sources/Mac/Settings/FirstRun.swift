@@ -51,8 +51,8 @@ struct Welcome: View {
                         WelcomeStep(number: 2, title: String(localized: "AI, if you want it"),
                                     text: aiMode ? Self.aiOn : Self.aiOff) {
                             VStack(alignment: .leading, spacing: 10) {
-                                // AI mode on already, as it stays for whoever kept a key: that key, here.
-                                if aiMode, provider.takesKey {
+                                // AI mode on already, as for whoever kept a key: that key, where AI needs one.
+                                if aiMode, provider.needsKey {
                                     AIKeyView(status: status, provider: provider, kept: $kept)
                                 }
                                 Button {
@@ -63,7 +63,9 @@ struct Welcome: View {
                                     Text(aiMode ? "Open AI Settings…" : "Turn On AI Mode in Settings…")
                                 }
                                 .meadowButton(aiMode ? .quiet : .ai)
-                                if aiMode { SettingHelp(AIWords.privacy(provider)) }
+                                if aiMode {
+                                    SettingHelp(AIWords.privacy(provider, url: status.preferences?.aiBaseUrl ?? ""))
+                                }
                             }
                         }
                     }

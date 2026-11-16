@@ -11,38 +11,42 @@ extension API.AiProvider {
         case .anthropic: String(localized: "Claude (Anthropic)")
         case .openai: String(localized: "OpenAI")
         case .gemini: String(localized: "Google Gemini")
-        case .ollama: String(localized: "Ollama, on this Mac")
+        case .local: String(localized: "A model on this Mac")
         case .compatible: String(localized: "Another OpenAI-compatible service")
         }
     }
 
-    /// Its name in a sentence: "a key for OpenAI", "written by Gemini".
+    /// Its name in a sentence: "a key for OpenAI", "written by Gemini", "asking your model server".
     var name: String {
         switch self {
         case .anthropic: String(localized: "Claude")
         case .openai: String(localized: "OpenAI")
         case .gemini: String(localized: "Gemini")
-        case .ollama: String(localized: "Ollama")
+        case .local: String(localized: "your model server")
         case .compatible: String(localized: "your AI service")
         }
     }
 
-    /// Who the text of a message goes to while it is the provider: nil for Ollama, where it never leaves this Mac.
+    /// What writes, where the provider in force is said: "AI is on: Claude, …", "come from a model on this Mac".
+    var writer: String { self == .local ? String(localized: "a model on this Mac") : name }
+
+    /// The same at the head of a line: "Claude · …", "A model on this Mac · …".
+    var title: String { writer.prefix(1).uppercased() + writer.dropFirst() }
+
+    /// Who the text of a message goes to while it is the provider: nil for a model on this Mac, where it never leaves.
     var recipient: String? {
         switch self {
         case .anthropic: String(localized: "Anthropic")
         case .openai: String(localized: "OpenAI")
         case .gemini: String(localized: "Google")
-        case .ollama: nil
+        case .local: nil
         case .compatible: String(localized: "the service at the URL you gave")
         }
     }
 
-    /// Whether it takes a key at all: Ollama refuses one.
-    var takesKey: Bool { self != .ollama }
-
-    /// Whether AI stays off without a key: an OpenAI-compatible service may need none.
-    var needsKey: Bool { takesKey && self != .compatible }
+    /// Whether AI stays off without a key: a model on this Mac and an OpenAI-compatible service may need none, and
+    /// are asked with one only if one is kept.
+    var needsKey: Bool { self != .local && self != .compatible }
 
     /// Where a person makes a key, for the providers that have one place for it.
     var keyPage: URL? {
@@ -50,7 +54,7 @@ extension API.AiProvider {
         case .anthropic: URL(string: "https://console.anthropic.com")
         case .openai: URL(string: "https://platform.openai.com/api-keys")
         case .gemini: URL(string: "https://aistudio.google.com/apikey")
-        case .ollama, .compatible: nil
+        case .local, .compatible: nil
         }
     }
 
@@ -59,17 +63,19 @@ extension API.AiProvider {
         keyPage.map { ($0.host() ?? "") + ($0.path() == "/" ? "" : $0.path()) }
     }
 
-    /// Whether Settings asks for the service's URL: Ollama's, prefilled, and a compatible service's, which has none.
-    var asksForURL: Bool { self == .ollama || self == .compatible }
+    /// Whether Settings asks for the service's URL: a model server's on this Mac, prefilled, and a compatible
+    /// service's, which has none.
+    var asksForURL: Bool { self == .local || self == .compatible }
 
     /// Whether a model must be chosen: these have no default of their own.
-    var needsModel: Bool { self == .ollama || self == .compatible }
+    var needsModel: Bool { self == .local || self == .compatible }
 
-    /// The URL Settings shows for Ollama when none is chosen: where the server reaches it by default ("" means this).
-    static let ollamaURL = "http://127.0.0.1:11434/v1"
+    /// The URL Settings shows for a model on this Mac when none is chosen: Ollama's, where the server reaches one by
+    /// default ("" means this).
+    static let localURL = "http://127.0.0.1:11434/v1"
 
     /// What the URL field holds when none is chosen.
-    var urlPrefill: String { self == .ollama ? Self.ollamaURL : "" }
+    var urlPrefill: String { self == .local ? Self.localURL : "" }
 }
 
 extension API.AiStatus {
@@ -83,12 +89,22 @@ extension API.AiStatus {
 /// What the app says of AI, from what the digest says of it: in Settings, in the brief and wherever an AI card would
 /// be. Plain functions, so the tests hold the words.
 enum AIWords {
-    /// What is sent and to whom, as Settings and the first run say it under the AI's settings.
-    static func privacy(_ provider: API.AiProvider) -> String {
-        guard let recipient = provider.recipient else {
+    /// Whether a service's URL is on this Mac: http or https at 127.0.0.1, ::1 or localhost, as the core holds a
+    /// model on this Mac to.
+    static func onThisMac(_ url: String) -> Bool {
+        guard let parts = URLComponents(string: url.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = parts.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = parts.host?.lowercased() else { return false }
+        return ["127.0.0.1", "::1", "[::1]", "localhost"].contains(host)
+    }
+
+    /// What is sent and to whom, as Settings and the first run say it under the AI's settings. `url` is the service's
+    /// URL as chosen: a compatible service answering on this Mac keeps the text here too.
+    static func privacy(_ provider: API.AiProvider, url: String = "") -> String {
+        guard let recipient = provider.recipient, !(provider == .compatible && onThisMac(url)) else {
             return String(localized: """
-                With Ollama, nothing leaves this Mac: the text of a message goes to Ollama, here, only when it is \
-                summarized, briefed or drafted.
+                The model runs on this Mac, so the text of a message never leaves it: it goes to \(provider.name), \
+                here, only when it is summarized, briefed or drafted.
                 """)
         }
         return String(localized: """
@@ -117,7 +133,7 @@ enum AIWords {
             }
             return (String(localized: "AI is off: \(why(ai) ?? "")."), false)
         }
-        let on = String(localized: "AI is on: \(ai.provider.name), \(ai.model).")
+        let on = String(localized: "AI is on: \(ai.provider.writer), \(ai.model).")
         if ai.lastOk == false, let error = ai.lastError, !error.isEmpty {
             return (on + " " + String(localized: "The last call failed: \(error)"), true)
         }

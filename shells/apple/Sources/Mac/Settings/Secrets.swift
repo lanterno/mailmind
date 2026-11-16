@@ -92,7 +92,9 @@ struct SecretStanding: Equatable, Sendable {
         }
         if !provider.needsKey {
             return SecretStanding(summary: String(localized: "No key"),
-                                  note: String(localized: "The service is asked with none. Keep one if it asks for one."),
+                                  note: provider == .local
+                                      ? String(localized: "Only if your server asks for one.")
+                                      : String(localized: "The service is asked with none. Keep one if it asks for one."),
                                   kept: false)
         }
         return SecretStanding(summary: String(localized: "No key: AI is off"),

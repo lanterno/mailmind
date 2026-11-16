@@ -410,7 +410,7 @@ struct AIOffNote: View {
     var body: some View {
         if let ai, let note = AIWords.offNote(ai) {
             VStack(alignment: .leading, spacing: 7) {
-                Text("\(Text(note.why).bold()) Summaries, this brief and reply drafts come from \(ai.provider.name). Your mail works the same without them.")
+                Text("\(Text(note.why).bold()) Summaries, this brief and reply drafts come from \(ai.provider.writer). Your mail works the same without them.")
                     .font(.meadow(.ui, 14.5))
                     .foregroundStyle(meadow.ink2)
                     .lineSpacing(MeadowFace.ui.lineSpacing(size: 14.5, lineHeight: 1.55))

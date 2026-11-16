@@ -25,7 +25,7 @@ enum AIChoices {
         case mode
         /// The provider.
         case connection
-        /// The provider's key, for those that take one.
+        /// The provider's key.
         case key
         /// The model, and the service's URL where the provider asks for one.
         case model
@@ -39,7 +39,7 @@ enum AIChoices {
     /// and how it stands, then what AI may spend and write ahead.
     static func parts(aiMode: Bool, provider: API.AiProvider) -> [Part] {
         guard aiMode else { return [.mode] }
-        return [.mode, .connection] + (provider.takesKey ? [.key] : []) + [.model, .standing, .spending, .writtenAhead]
+        return [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead]
     }
 
     /// What choosing a provider sends: the provider alone, so its model and URL start again from its own.
@@ -82,46 +82,58 @@ enum AIChoices {
         return provider.needsModel ? String(localized: "Choose a model") : defaultTitle(defaultModel)
     }
 
-    /// What the model line says under it.
+    /// What the model line says under it. A model on this Mac is told what a long thread needs, which only its
+    /// server's settings give it.
     static func modelHelp(_ provider: API.AiProvider) -> String {
         switch provider {
-        case .ollama: String(localized: "Ollama has no model of its own: choose one it has, or type its name.")
+        case .local: String(localized: """
+            Long threads need room: give the model a context of at least 16K tokens in your model server’s settings.
+            """)
         case .compatible: String(localized: "The service has no model of its own: choose one it lists, or type its name.")
         default: String(localized: "The provider’s own, unless you choose another.")
         }
     }
 
-    /// Whether the provider's models can be asked for with no refusal foreseen: Ollama's always, a compatible
-    /// service's once it has a URL, Claude's with a key kept or the environment's, any other's with its key kept.
+    /// Whether the provider's models can be asked for with no refusal foreseen: a model server's on this Mac always,
+    /// a compatible service's once it has a URL, Claude's with a key kept or the environment's, any other's with its
+    /// key kept.
     static func canList(_ provider: API.AiProvider, kept: Set<API.AiProvider>?, preferences: API.Preferences?,
                         sources: SecretSources) -> Bool
     {
         switch provider {
-        case .ollama: true
+        case .local: true
         case .compatible: !(preferences?.aiBaseUrl ?? "").isEmpty
         case .anthropic: kept?.contains(.anthropic) == true || sources.apiKeyVariable
         case .openai, .gemini: kept?.contains(provider) == true
         }
     }
 
-    /// The URL the field shows: the one chosen, else Ollama's own.
+    /// The URL the field shows: the one chosen, else the provider's own (Ollama's, for a model on this Mac).
     static func shownURL(_ provider: API.AiProvider, preferences: API.Preferences?) -> String {
         let chosen = preferences?.aiBaseUrl ?? ""
         return chosen.isEmpty ? provider.urlPrefill : chosen
     }
 
-    /// The URL kept for what was typed: "" for Ollama's own, so it goes on following the provider's default.
+    /// The URL kept for what was typed: "" for the provider's own, so it goes on following the provider's default.
     static func url(typed: String, provider: API.AiProvider) -> String {
         let url = typed.trimmingCharacters(in: .whitespacesAndNewlines)
         return url == provider.urlPrefill ? "" : url
     }
 
+    /// What the URL line says under it.
+    static func urlHelp(_ provider: API.AiProvider) -> String {
+        provider == .local
+            ? String(localized: "Where your model server listens, on this Mac: 127.0.0.1, ::1 or localhost.")
+            : String(localized: "https, or http on this Mac: the address the service’s API answers at.")
+    }
+
     /// The key's name, as its card and its field say it.
     static func keyLabel(_ provider: API.AiProvider) -> String {
-        provider == .compatible ? String(localized: "API key") : String(localized: "\(provider.name) API key")
+        provider.needsKey ? String(localized: "\(provider.name) API key") : String(localized: "API key")
     }
 
     static func keyPrompt(_ provider: API.AiProvider) -> String {
+        if provider == .local { return String(localized: "paste your server’s key") }
         guard let place = provider.keyPlace else { return String(localized: "paste the service’s key, if it takes one") }
         return String(localized: "paste a key from \(place)")
     }
@@ -130,6 +142,7 @@ enum AIChoices {
     static func removeWarning(_ provider: API.AiProvider) -> String {
         switch provider {
         case .anthropic: String(localized: "AI is off unless the environment gives a key.")
+        case .local: String(localized: "Your model server is asked with no key from then on.")
         case .compatible: String(localized: "The service is asked with no key from then on.")
         default: String(localized: "AI is off until another key is kept.")
         }
@@ -202,15 +215,16 @@ struct AIPane: View {
                 }
             }
         case .model:
-            DeskSideCard(title: provider.asksForURL ? String(localized: "Model and service")
-                                                    : String(localized: "Model"), icon: .sliders) {
+            DeskSideCard(title: provider == .local ? String(localized: "Model and server")
+                                : provider.asksForURL ? String(localized: "Model and service")
+                                : String(localized: "Model"), icon: .sliders) {
                 modelLine
                 if provider.asksForURL { urlLine }
             }
         case .standing:
             VStack(alignment: .leading, spacing: 10) {
                 standing
-                SettingHelp(AIWords.privacy(provider))
+                SettingHelp(AIWords.privacy(provider, url: preferences?.aiBaseUrl ?? ""))
                     .padding(.horizontal, 4)
             }
         case .spending: spending
@@ -288,13 +302,13 @@ struct AIPane: View {
     @ViewBuilder private var urlLine: some View {
         let shown = AIChoices.shownURL(provider, preferences: preferences)
         let typed = typedURL ?? shown
-        SettingLine(String(localized: "Service URL"), help: String(localized: """
-            https, or http on this Mac. For Ollama, where it listens; for another service, the address its API \
-            answers at.
-            """)) {
+        SettingLine(provider == .local ? String(localized: "Server URL") : String(localized: "Service URL"),
+                    help: AIChoices.urlHelp(provider)) {
             HStack(spacing: 6) {
-                TextField("Service URL", text: Binding(get: { typed }, set: { typedURL = $0 }),
-                          prompt: Text(verbatim: "https://ai.example.test/v1"))
+                TextField(provider == .local ? "Server URL" : "Service URL",
+                          text: Binding(get: { typed }, set: { typedURL = $0 }),
+                          prompt: Text(verbatim: provider == .local ? API.AiProvider.localURL
+                                                                    : "https://ai.example.test/v1"))
                     .labelsHidden()
                     .meadowComposeField()
                     .frame(width: 260)
@@ -447,7 +461,7 @@ private struct ModelScroll: View {
 }
 
 /// A provider's API key: how it stands and where the one in use comes from, a field to keep one, a way to take it out,
-/// and where its keys are made. Ollama takes none, so has no such card.
+/// and where its keys are made. A model on this Mac and a compatible service need none, and take one only if asked.
 struct AIKeyView: View {
     let status: AppStatus
     let provider: API.AiProvider

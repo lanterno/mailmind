@@ -113,7 +113,7 @@ enum StatusWords {
             }
             return (off, false)
         }
-        var text = "\(ai.provider.name) · \(ai.model)"
+        var text = "\(ai.provider.title) · \(ai.model)"
         if let spent = ai.spentTodayMicros, spent > 0 {
             text += " · \(dollars(spent))"
             if ai.limitMicros > 0 { text += String(localized: " of \(dollars(ai.limitMicros))") }

@@ -151,11 +151,11 @@ struct HelpWindow: View {
 
     static let howAI = String(localized: """
         Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox are written by the AI service \
-        you choose in Settings › AI: Claude, OpenAI or Gemini with an API key of yours, or a model on this Mac through \
-        Ollama. Turned off there, or without what it needs, AI is off and nothing is sent. Only the text of the mail \
-        being summarized, drafted or asked about goes to that service, and with Ollama it never leaves this Mac; your \
-        mailbox itself stays in a database on this Mac. Email bodies show inside a locked sandbox that can't run code \
-        or phone home.
+        you choose in Settings › AI: Claude, OpenAI or Gemini with an API key of yours, or a model on this Mac, in a \
+        model server such as Ollama or LM Studio. With AI mode off, or without what it needs, AI is off and nothing \
+        is sent. Only the text of the mail being summarized, drafted or asked about goes to that service, and with a \
+        model on this Mac it never leaves this Mac; your mailbox itself stays in a database on this Mac. Email bodies \
+        show inside a locked sandbox that can't run code or phone home.
         """)
 }
 
