@@ -247,6 +247,18 @@ def test_any_other_refusal_is_no_refused_key_and_says_what_the_service_said_from
     assert (str(e.value), e.value.status) == (f"gemini API {status}: {said}", status)
 
 
+@pytest.mark.parametrize("at", [0, 140, 150, 160, 300])          # the key runs past the cut from 130 to 162
+def test_no_part_of_the_key_survives_what_a_service_said_cut_to_200_characters(choose, at):
+    api = choose("compatible", ai_model="mixtral-9x")
+    words = "x" * at + f"invalid header Authorization: Bearer {fo.KEY}; try again " + "y" * 300
+    api.queue(fo.error(400, words))
+    with pytest.raises(ModelError) as e:
+        ask()
+    said = str(e.value).removeprefix("compatible API 400: ")
+    assert said == words.replace(fo.KEY, "<key>")[:200] and len(said) == 200
+    assert not any(fo.KEY[:n] in said for n in range(6, len(fo.KEY) + 1))
+
+
 def test_a_list_asked_with_a_key_gemini_refuses_with_a_400_says_the_key_was_refused(openai_api):
     from mailmind.assistant.application.catalog import Catalog
     from mailmind.kernel.errors import Refused
