@@ -41,7 +41,11 @@ PASSING = frozenset({"NETWORK", "TIMEOUT"})   # the kinds of trouble that may pa
 def may_pass(e: BaseException) -> bool:
     """Whether a failure is trouble that may pass, as a sleep or a change of network leaves for a moment: a connection
     lost, refused or too slow, a name not found, or a login its server couldn't take for now or lost on the way. A
-    login its server refused never is, nor one held back after it was (mailbox.domain.sync_health)."""
+    login its server refused never is, nor one held back after it was (mailbox.domain.sync_health), nor a certificate
+    no trusted root vouches for, though its kind is NETWORK: the password was never sent, and the next connection only
+    meets the same certificate, so it shows at once, as on the Rust server."""
+    if isinstance(e, ssl.SSLCertVerificationError):
+        return False
     if isinstance(e, LoginUnreachable):
         return not e.refused
     return error_kind(e) in PASSING
