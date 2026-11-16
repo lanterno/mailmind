@@ -317,6 +317,8 @@ impl Workers {
                 &[],
             );
         }
+        // The AI in force, as the Python app says it once its jobs start: never the service's URL, nor a key.
+        log::info("ai", "%(engine)s", &[(Field::Engine, &app.assistant.describe_engine())]);
         Workers { stop, threads }
     }
 

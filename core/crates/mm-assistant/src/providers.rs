@@ -95,6 +95,40 @@ pub fn off(enabled: bool, provider: AiProvider, has_key: bool, base_url: &str, m
     }
 }
 
+/// The startup log's line for the AI in force (`describe_engine`): the provider, the model and where its key came
+/// from (`keyed` when one was found), or why AI is off. Never the service's URL, which is the person's.
+pub fn startup_line(provider: AiProvider, model: &str, off: Option<Off>, key_from: &str, keyed: bool) -> String {
+    let model = if model.is_empty() { "no model" } else { model };
+    format!("{} · {model} · {}", provider.label(), note(provider, off, key_from, keyed))
+}
+
+/// Where the key came from, or why AI is off, and how to turn it on.
+fn note(provider: AiProvider, off: Option<Off>, key_from: &str, keyed: bool) -> String {
+    let flag = match provider {
+        AiProvider::Anthropic => String::new(),
+        other => format!(" --provider {}", other.id()),
+    };
+    match off {
+        Some(Off::TurnedOff) => {
+            "AI is turned off: turn it on in Settings, or with `uv run python -m mailmind ai on`".to_owned()
+        }
+        Some(Off::NoKey) if key_from == CONFIG => {
+            format!("no key, so AI is off: the {}_api_key in mailmind.config.json can't be read", provider.id())
+        }
+        Some(Off::NoKey) if provider == AiProvider::Anthropic => {
+            "no key, so AI is off: keep one with `uv run python -m mailmind ai key`, or set ANTHROPIC_API_KEY"
+                .to_owned()
+        }
+        Some(Off::NoKey) => {
+            format!("no key, so AI is off: keep one in Settings, or with `uv run python -m mailmind ai key{flag}`")
+        }
+        Some(Off::NoUrl) => "no URL, so AI is off: give the service's in Settings".to_owned(),
+        Some(Off::NoModel) => "no model, so AI is off: choose one in Settings".to_owned(),
+        None if keyed => format!("key from {key_from}"),
+        None => "no key".to_owned(),
+    }
+}
+
 /// What a model's id holds when it can't chat: OpenAI's and Gemini's lists name these beside the ones that can.
 const NOT_CHAT: [&str; 11] = [
     "embedding",

@@ -173,6 +173,13 @@ impl ApiEngine {
 
 impl Engine for ApiEngine {
     fn in_force(&self) -> InForce {
+        self.chosen().0
+    }
+}
+
+impl ApiEngine {
+    /// The AI in force now, and whether a key was found for it.
+    fn chosen(&self) -> (InForce, bool) {
         let (chosen, provider) = self.preferences();
         let said = |name: &str| chosen.get(name).and_then(Value::as_str).unwrap_or_default().to_owned();
         let enabled = chosen.get(mm_accounts::preferences::AI_ENABLED).and_then(Value::as_bool).unwrap_or(true);
@@ -183,12 +190,19 @@ impl Engine for ApiEngine {
         // Turned off, nothing is looked up: not even the Keychain.
         let (key, key_from) = if enabled { self.key(provider) } else { (Secret::new(String::new()), "") };
         let local = providers::local(provider, &base_url);
-        let off = providers::off(enabled, provider, !key.expose().is_empty(), &base_url, &model);
+        let keyed = !key.expose().is_empty();
+        let off = providers::off(enabled, provider, keyed, &base_url, &model);
         let lm = match off {
             Some(why) => Err(why),
             None => Ok(self.model_for(MadeFor { provider, base_url, key })),
         };
-        InForce { provider, model, key_from, local, lm }
+        (InForce { provider, model, key_from, local, lm }, keyed)
+    }
+
+    /// The startup log's line for the AI in force: never its URL, nor its key.
+    fn describe(&self) -> String {
+        let (force, keyed) = self.chosen();
+        providers::startup_line(force.provider, &force.model, force.lm.err(), force.key_from, keyed)
     }
 }
 
@@ -258,6 +272,8 @@ pub struct Assistant {
     pub usage: Arc<mm_assistant::usage::UsageReport>,
     /// The models a provider offers, for a person choosing one in Settings.
     pub catalog: Arc<Catalog>,
+    /// The AI in force, for the startup log's line.
+    engine: Arc<ApiEngine>,
 }
 
 /// The API routes a hidden tab fetches on its own, which say nothing of someone being here (`shared.UI_QUIET`).
@@ -274,6 +290,12 @@ const UI_QUIET: [&str; 9] = [
 ];
 
 impl Assistant {
+    /// The startup log's line for the AI in force (`describe_engine`): the provider, the model and where its key came
+    /// from, or why AI is off.
+    pub fn describe_engine(&self) -> String {
+        self.engine.describe()
+    }
+
     pub(crate) fn assemble(parts: Parts, environment: &Environment) -> Assistant {
         let Parts { database, accounts, servers, gates, config, keychain, op, outside, clock, zone } = parts;
         let around = Arc::new(Surroundings::over(&database, config.clone(), &outside, &clock, &zone));
@@ -290,7 +312,7 @@ impl Assistant {
         let usage = Arc::new(mm_assistant::usage::UsageReport::new(database.clone(), clock.clone(), zone.clone()));
         let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
         let catalog = Arc::new(Catalog::new(engine.clone()));
-        let gateway = Arc::new(Gateway::new(engine, budget, governor.clone()));
+        let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
         let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
         let fetch = Arc::new(Fetching::new(FetchingParts {
@@ -342,6 +364,7 @@ impl Assistant {
             sender_digest,
             usage,
             catalog,
+            engine,
         }
     }
 
