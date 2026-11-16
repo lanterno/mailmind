@@ -492,3 +492,26 @@ fn removing_an_account_alone_keeps_its_mail() {
     assert_eq!(not_found.unwrap_err(), Problem::not_found("not found").into());
     assert!(kept.0.lock().unwrap().is_empty());
 }
+
+/// What this Mac keeps of each account's mail, which notes, as it lets go, what was heard of the account so far.
+#[derive(Debug)]
+struct HeardFirst {
+    heard: Arc<Heard>,
+    saw: Mutex<Vec<AccountChange>>,
+}
+
+impl AccountMail for HeardFirst {
+    fn forget(&self, _email: &str) -> Result<usize, Fault> {
+        *self.saw.lock().unwrap() = self.heard.0.lock().unwrap().clone();
+        Ok(0)
+    }
+}
+
+#[test]
+fn a_removal_is_heard_before_its_mail_goes() {
+    let mut w = world(None);
+    let kept = Arc::new(HeardFirst { heard: w.heard.clone(), saw: Mutex::default() });
+    w.connections = w.connections.keeping_mail(kept.clone());
+    w.connections.delete(&object(json!({"email": ADA, "delete_mail": true}))).unwrap();
+    assert_eq!(*kept.saw.lock().unwrap(), [AccountChange::Removed(ADA.into())]);
+}
