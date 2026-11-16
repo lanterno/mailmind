@@ -88,11 +88,9 @@ targets:
       # The window's state the areas hang on
       - Sources/Window/MailApp.swift
       - Sources/Window/Reader.swift
-      # Every area's models and views: Settings and the status, the mailbox, the reader and the composer, and what they
-      # share. The reader's pane needs the whole window, so it stays out.
-      - path: Sources/Mac
-        excludes:
-          - Reader/ReaderPane.swift
+      # Every area's models and views: Settings and the status, the mailbox, the reader and its pane, the composer,
+      # and what they share.
+      - Sources/Mac
       # Meadow's typefaces, which the tests register as the app does
       - path: Fonts
         includes: ["*.ttf"]

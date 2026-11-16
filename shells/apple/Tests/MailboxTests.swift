@@ -555,6 +555,47 @@ final class MailboxGoingTests: XCTestCase {
         XCTAssertEqual(mailbox.commands().filter { $0.id == "brief" }.count, 1)
     }
 
+    func testAWindowThatClosesLetsGoOfItsHooksAndTheNextJoinsAfresh() async {
+        let (_, mailbox) = await mailbox()
+        var heard: [String] = []
+        func hang(_ window: String) {
+            for area in ["desk", "compose", "status", "meadow"] {
+                mailbox.join(area) { mailbox in
+                    mailbox.keys[Character(String(area.first!))] = { heard.append(window) }
+                    mailbox.more.append { _ in [MailCommand(id: area, group: .commands, label: area) {}] }
+                    mailbox.rowMenu.append { _ in [] }
+                    mailbox.asks = { _ in heard.append(window) }
+                    mailbox.plans = { _ in }
+                    mailbox.composeTo = { _ in }
+                    mailbox.snoozes = { _ in }
+                    mailbox.opensBrief = { _ in }
+                    mailbox.translates = { _ in nil }
+                    mailbox.keepsLiteral = { _ in }
+                    mailbox.translating = { nil }
+                    mailbox.stopsTranslating = {}
+                }
+            }
+        }
+        hang("first")
+        let round = mailbox.joinRound
+        mailbox.leave()
+        XCTAssertEqual(mailbox.joinRound, round + 1, "a window still open hears it, and joins again")
+        XCTAssertTrue(mailbox.keys.isEmpty && mailbox.more.isEmpty && mailbox.rowMenu.isEmpty)
+        XCTAssertTrue(mailbox.asks == nil && mailbox.plans == nil && mailbox.composeTo == nil && mailbox.snoozes == nil)
+        XCTAssertTrue(mailbox.opensBrief == nil && mailbox.translates == nil && mailbox.keepsLiteral == nil)
+        XCTAssertTrue(mailbox.translating == nil && mailbox.stopsTranslating == nil)
+        XCTAssertFalse(mailbox.commands().contains { $0.id == "desk" }, "the closed window's commands are gone")
+
+        // The window opened again from the Dock: its areas join, each once, and theirs are the hooks.
+        hang("second")
+        hang("second")
+        mailbox.keys["d"]?()
+        mailbox.asks?("when is the dentist")
+        XCTAssertEqual(heard, ["second", "second"])
+        XCTAssertEqual(mailbox.commands().filter { $0.id == "desk" }.count, 1)
+        XCTAssertEqual(mailbox.rowMenu.count, 4)
+    }
+
     func testASentenceSearchedForGivesWayToTheSearchItMeans() async {
         let (app, mailbox) = await mailbox()
         let sentence = "mail from grace about the figures"
