@@ -104,6 +104,13 @@ fn held<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
     lock.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// From now on a panic in this process is logged by its thread's name and where it happened, never by what it said,
+/// which can quote mail (`mm_server::logging::log_panics`). A shell's process calls it before it opens a home; a
+/// test's doesn't, so a failing test still says why.
+pub fn log_panics() {
+    mm_server::logging::log_panics();
+}
+
 /// The app, running.
 pub struct Host {
     app: Arc<App>,

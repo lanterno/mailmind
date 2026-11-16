@@ -8,16 +8,19 @@
 //! ones to `.2` and `.3`, and the oldest goes, as the Python app's `_OwnFile` keeps it. A line that can't be written
 //! is lost, and that stops nothing.
 //!
-//! `MAILMIND_LOG_LEVEL=debug` (`Environment::log_debug`) shows debug lines at the terminal; the file never holds one.
+//! `MAILMIND_LOG_LEVEL=debug` (`Environment::log_debug`) shows debug lines at the terminal, and a panic's own words
+//! there (`log_panics`); the file never holds either.
+//!
+//! A panic is logged by the thread it happened on and where in the code, never by its message, which can quote mail.
 
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard, Once, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use mm_kernel::log::{self, Level, Line, Sink};
+use mm_kernel::log::{self, Field, Level, Line, Sink};
 use serde_json::{Map, Value};
 
 /// The log file's name in the data folder.
@@ -203,4 +206,42 @@ pub fn keep_in(folder: &Path, debug: bool) {
     if file.as_ref().is_none_or(|kept| kept.path() != path) {
         *file = Some(LogFile::at(path));
     }
+}
+/// Where a panic happened, as its line names it: a path in the core as it is, and one in a dependency from its
+/// crate's folder on, so no line names the folders of the machine that built the app.
+pub fn place(file: &str, line: u32) -> String {
+    let short = match file.find("/registry/src/") {
+        Some(at) => {
+            let rest = &file[at + "/registry/src/".len()..];
+            rest.split_once('/').map_or(rest, |(_, crate_on)| crate_on)
+        }
+        None if file.starts_with('/') && !file.starts_with("/rustc/") => file.rsplit('/').next().unwrap_or(file),
+        None => file,
+    };
+    format!("{short}:{line}")
+}
+
+static HOOKED: Once = Once::new();
+
+/// From now on a panic is logged by its thread's name and where it happened, as an error of the class `Panic`,
+/// never by its message. Under `MAILMIND_LOG_LEVEL=debug` the panic's own words follow at the terminal as Rust
+/// writes them. Installed once a process; asked again it changes nothing.
+pub fn log_panics() {
+    HOOKED.call_once(|| {
+        let earlier = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let current = std::thread::current();
+            let thread = current.name().unwrap_or("unnamed");
+            let at = info.location().map(|l| place(l.file(), l.line())).unwrap_or_default();
+            log::error(
+                "panic",
+                "a thread panicked: %(what)s at %(path)s",
+                &[(Field::What, thread), (Field::Path, &at)],
+                Some("Panic"),
+            );
+            if LOGGING.debug.load(Ordering::Relaxed) {
+                earlier(info);
+            }
+        }));
+    });
 }

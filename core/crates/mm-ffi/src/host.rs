@@ -104,6 +104,8 @@ impl CoreHost {
     /// the disk and may wait on the Keychain: never call it on the main thread.
     #[uniffi::constructor]
     pub fn open(mut home: CoreHome) -> Result<Arc<CoreHost>, HostProblem> {
+        // A panic in the app's process is logged by its thread and where, never by what it said, which can quote mail.
+        mm_host::log_panics();
         let opened = mm_host::Host::open(mm_host::Home {
             folder: home.folder.clone().into(),
             variables: home.variables.iter().map(|(name, value)| (name.clone(), value.clone())).collect(),

@@ -16,6 +16,7 @@ const DEFAULT_PORT: u16 = 8721;
 
 fn main() -> ExitCode {
     logging::to_terminal(Environment::of_process().log_debug());
+    logging::log_panics();
     // `mailmind-server db check-upgrade [--db PATH]`: what the next start's migrations would do, tried on a copy.
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some((db, rest)) = args.split_first()
