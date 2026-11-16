@@ -5,7 +5,8 @@
 //! new mail; each account syncing on its own; and an Inbox opened while its first sync runs joining it, holding no
 //! gate, so a message opens meanwhile.
 //!
-//! A process that only reads reads the older mail too.
+//! A process that only reads reads the older mail too. A message whose opening the server won't send costs only its
+//! own text, and a connection lost part way stores nothing of its step.
 
 #![allow(clippy::unwrap_used)]
 
@@ -88,11 +89,18 @@ struct State {
     held: BTreeSet<String>,
     /// FETCHes after this many wait until let go too.
     held_after: Option<usize>,
+    /// Messages whose opening the server can't send: a FETCH of openings naming one says NO, sending the rest first
+    /// where `sends_the_rest` (as Gmail does) and nothing where not.
+    unsendable: BTreeSet<u32>,
+    sends_the_rest: bool,
+    /// A FETCH of openings naming this message ends the connection unanswered, once.
+    cut_at: Option<u32>,
 }
 
 /// An IMAP server on loopback, over TLS from the first byte, with an INBOX for each account. It answers what a sync
 /// asks: a SEARCH of every UID or of a range, and a FETCH of the header fields, the first bytes of each message, a
-/// whole message or the flags.
+/// whole message or the flags. It can refuse a FETCH that names a message it can't send, and end the connection at
+/// one.
 #[derive(Clone, Debug)]
 struct Imap {
     port: u16,
@@ -152,6 +160,18 @@ impl Imap {
     /// FETCHes after the first `fetches` wait until let go.
     fn hold_after(&self, fetches: usize) {
         self.held().held_after = Some(fetches);
+    }
+
+    /// The server can't send these messages' openings.
+    fn refuse_openings(&self, uids: &[u32], sends_the_rest: bool) {
+        let mut state = self.held();
+        state.unsendable.extend(uids);
+        state.sends_the_rest = sends_the_rest;
+    }
+
+    /// The connection ends at the next FETCH of openings naming this message.
+    fn cut_at(&self, uid: u32) {
+        self.held().cut_at = Some(uid);
     }
 
     /// What `user` was sent that starts with `start`, in order.
@@ -265,7 +285,21 @@ impl Connection {
                     std::thread::sleep(Duration::from_millis(5));
                 }
                 let (set, items) = command["UID FETCH ".len()..].split_once(' ').unwrap();
-                for uid in named(set, &inbox) {
+                let uids = named(set, &inbox);
+                let openings = items.contains("BODY.PEEK[]<0.");
+                if openings && self.held().cut_at.is_some_and(|cut| uids.contains(&cut)) {
+                    self.held().cut_at = None;
+                    return Ok(false);
+                }
+                let (refused, sends_the_rest) = {
+                    let state = self.held();
+                    let unsendable = |uid: &u32| openings && state.unsendable.contains(uid);
+                    (uids.iter().copied().filter(unsendable).collect::<BTreeSet<u32>>(), state.sends_the_rest)
+                };
+                for uid in uids {
+                    if !refused.is_empty() && (refused.contains(&uid) || !sends_the_rest) {
+                        continue;
+                    }
                     let raw = &inbox[&uid];
                     let seq = inbox.keys().position(|u| *u == uid).unwrap() + 1;
                     let (name, data) = if let Some(at) = items.find("BODY.PEEK[HEADER.FIELDS") {
@@ -287,7 +321,11 @@ impl Connection {
                     said.extend(b")\r\n");
                     self.say(&said)?;
                 }
-                self.say(format!("{tag} OK done\r\n").as_bytes())?;
+                if refused.is_empty() {
+                    self.say(format!("{tag} OK done\r\n").as_bytes())?;
+                } else {
+                    self.say(format!("{tag} NO Some messages could not be FETCHed (Failure)\r\n").as_bytes())?;
+                }
             }
             _ => self.say(format!("{tag} OK\r\n").as_bytes())?,
         }
@@ -609,4 +647,48 @@ fn a_process_that_only_reads_reads_a_first_scans_older_mail_too_and_says_how_far
     workers.stop();
     assert_eq!(w.imap.sent(ADA, "UID SEARCH"), ["UID SEARCH ALL", "UID SEARCH UID 1:700"]);
     assert_eq!(w.snippet(ADA, 3), "Note 3 says hello.");
+}
+
+#[test]
+fn a_message_whose_opening_the_server_refuses_costs_only_its_own_text() {
+    for sends_the_rest in [true, false] {
+        let imap = Imap::start();
+        imap.add(ADA, notes(1, 120));
+        imap.refuse_openings(&[60], sends_the_rest);
+        let w = world(imap, &[ADA]);
+        w.app.syncing.sync_once();
+        assert_eq!(w.said(ADA)["health"], "ok");
+        assert_eq!(w.stored(ADA), range(1, 120));
+        assert_eq!(w.snippet(ADA, 60), "");
+        for uid in (1..=120).filter(|uid| *uid != 60) {
+            assert_eq!(w.snippet(ADA, uid), format!("Note {uid} says hello."), "{uid}");
+        }
+        // Of the FETCH the server refused, only what it didn't send was asked again, each alone.
+        let alone: Vec<String> = w
+            .imap
+            .sent(ADA, "UID FETCH ")
+            .into_iter()
+            .filter(|c| c.contains("<0.") && !c.split(' ').nth(2).unwrap().contains(','))
+            .collect();
+        let again: Vec<u32> = if sends_the_rest { vec![60] } else { range(51, 100) };
+        let asked: Vec<String> =
+            again.iter().map(|uid| format!("UID FETCH {uid} (UID BODY.PEEK[]<0.65536>)")).collect();
+        assert_eq!(alone, asked);
+    }
+}
+
+#[test]
+fn a_connection_lost_while_openings_are_read_stores_nothing_of_the_step_and_the_next_sync_reads_it() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 3));
+    imap.cut_at(2);
+    let w = world(imap, &[ADA]);
+    w.app.syncing.sync_once();
+    // A connection lost may pass: the account shows as it did, nothing yet, unless the next sync fails too.
+    assert_eq!(w.said(ADA), Value::Null);
+    assert!(w.stored(ADA).is_empty(), "mail was stored with no text");
+    w.app.syncing.sync_once();
+    assert_eq!(w.said(ADA)["health"], "ok");
+    assert_eq!(w.stored(ADA), [1, 2, 3]);
+    assert_eq!(w.snippet(ADA, 2), "Note 2 says hello.");
 }
