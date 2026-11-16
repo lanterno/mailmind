@@ -22,7 +22,7 @@ struct StatusHooks: ViewModifier {
                 if status.firstRun { Welcome(status: status) }
             }
             .sheet(isPresented: $status.guiding) {
-                GuideSheet(steps: Guide.steps(ai: status.digest?.ai.engine != "none",
+                GuideSheet(steps: Guide.steps(ai: status.digest?.ai.isOn == true,
                                               singleKeys: status.preferences?.singleKeys ?? true)) {
                     status.guiding = false
                 }
@@ -31,6 +31,10 @@ struct StatusHooks: ViewModifier {
                 if let core { await status.attach(core) }
             }
             .onAppear { joinMailbox() }
+            // AI turned on or off in Settings: the mailbox reads how it stands again, for what it offers of it.
+            .onReceive(NotificationCenter.default.publisher(for: .mailmindAIChanged)) { _ in
+                Task { await mailbox?.readDigest() }
+            }
             .onChange(of: offersGuide) { _, offers in
                 guard offers else { return }
                 // Offered, not finished: Skip or quitting halfway both count.

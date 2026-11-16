@@ -121,6 +121,10 @@ struct MeadowSearchBox: View {
     @Environment(\.meadow) private var meadow
 
     static let prompt = String(localized: "Search mail, jump anywhere, or ask…")
+    /// With AI turned off nothing is asked.
+    static let promptWithoutAI = String(localized: "Search mail, jump anywhere…")
+
+    private var prompt: String { mailbox.aiTurnedOff ? Self.promptWithoutAI : Self.prompt }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -173,14 +177,14 @@ struct MeadowSearchBox: View {
         // The prompt is drawn here in the light's ink: a field's own placeholder takes AppKit's grey.
         ZStack(alignment: .leading) {
             if text.isEmpty {
-                Text(Self.prompt)
+                Text(prompt)
                     .foregroundStyle(meadow.ink3)
                     .lineLimit(1)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
             TextField("", text: $text)
-                .accessibilityLabel(Self.prompt)
+                .accessibilityLabel(prompt)
                 .textFieldStyle(.plain)
                 .foregroundStyle(meadow.ink)
                 .focused($focused)

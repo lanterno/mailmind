@@ -99,7 +99,7 @@ extension Mailbox {
     // MARK: Searching
 
     /// What the search field's Return does (TopBar.tsx): `?words` asks your inbox, `!words` plans a bulk action, and
-    /// anything else searches, from the account the window is on.
+    /// anything else searches, from the account the window is on. With AI turned off, everything searches.
     enum Submitted: Equatable {
         case search(Search)
         case question(String)
@@ -112,8 +112,8 @@ extension Mailbox {
     func submitted(_ text: String) -> Submitted {
         let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let words = String(q.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
-        if q.hasPrefix("?") { return words.isEmpty ? .leave : .question(words) }
-        if q.hasPrefix("!") { return .command(words) }
+        if !aiTurnedOff, q.hasPrefix("?") { return words.isEmpty ? .leave : .question(words) }
+        if !aiTurnedOff, q.hasPrefix("!") { return .command(words) }
         if q.isEmpty { return .leave }
         if let held = app?.place?.search, let thread = held.thread {
             return .search(Search(q: q, account: held.account, thread: thread))

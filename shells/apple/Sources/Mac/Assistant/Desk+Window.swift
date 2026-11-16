@@ -194,6 +194,9 @@ final class Desk {
 
     var accounts: [String] { app?.mailbox.accounts ?? [] }
 
+    /// AI was turned off in Settings: the desk offers nothing only AI can do, and asks no one to turn it on.
+    var aiTurnedOff: Bool { app?.mailbox.aiTurnedOff ?? false }
+
     /// An account's name as the sidebar shows it.
     func nameOf(_ account: String) -> String {
         app?.mailbox.name(of: account) ?? account
@@ -271,8 +274,16 @@ final class Desk {
 
     // MARK: Commands
 
+    /// The commands only AI can serve, by id: none is offered while AI is turned off.
+    static let aiCommands: Set<String> = ["summarize", "extract", "ask", "do", "week"]
+
+    /// `commands` as offered: without the AI's while AI is turned off.
+    static func offered(_ commands: [DeskCommand], aiTurnedOff: Bool) -> [DeskCommand] {
+        aiTurnedOff ? commands.filter { !aiCommands.contains($0.id) } : commands
+    }
+
     /// The commands on the messages chosen, for the mailbox's single keys, its palette and a row's menu: attention's
-    /// verbs in the list `stack` is, and on one message, Claude's summary (i) and its events and tasks.
+    /// verbs in the list `stack` is, and on one message, the AI's summary (i) and its events and tasks.
     func commands(for copies: [MailCopy], stack: AttentionStack?) -> [DeskCommand] {
         var all = AttentionCommands.list(copies: copies, stack: stack, model: attention) { [weak self] in
             self?.sheet = .snoozeUntil($0, canUnsnooze: stack == .snoozed)
@@ -286,11 +297,15 @@ final class Desk {
                 [weak self] in Task { await self?.suggestions.find(in: copy) }
             })
         }
-        return all
+        return Self.offered(all, aiTurnedOff: aiTurnedOff)
     }
 
     /// The desk's commands that act on no message, for the palette, in the page's words.
     var paletteCommands: [DeskCommand] {
+        Self.offered(allPaletteCommands, aiTurnedOff: aiTurnedOff)
+    }
+
+    private var allPaletteCommands: [DeskCommand] {
         [
             DeskCommand(id: "brief", label: String(localized: "Today’s brief"), key: nil, symbol: "sun.max") {
                 [weak self] in self?.go(.desk(.brief))
@@ -382,6 +397,8 @@ struct DeskSurfaces: ViewModifier {
                 desk.since.lookedAt(app.place, accounts: desk.accounts)
                 desk.since.cameBack()
             }
+            // AI turned on or off in Settings: the brief reads how it stands again.
+            .onReceive(NotificationCenter.default.publisher(for: .mailmindAIChanged)) { _ in desk.brief.reread() }
     }
 }
 
@@ -409,13 +426,14 @@ private struct DeskSheetView: View {
 }
 
 /// The cards under a message's or a conversation's subject (the reader's `.top` slot): its summary and what it
-/// proposes. The verbs on the message are the pane's bar's (Mac/Meadow) and the Message menu's.
+/// proposes, both the AI's, so neither while AI is turned off. The verbs on the message are the pane's bar's
+/// (Mac/Meadow) and the Message menu's.
 struct DeskTopCards: View {
     let context: ReaderContext
     @Environment(Desk.self) private var desk: Desk?
 
     var body: some View {
-        if let desk {
+        if let desk, !desk.aiTurnedOff {
             let copy = context.copy
             // The summary ingest stored on the message's row, when the row is this message's.
             let stored = context.row.flatMap { MailCopy($0) == copy ? (summary: $0.summary, action: $0.action) : nil }
@@ -466,7 +484,7 @@ struct DeskScreen: View {
             case .screener(let account):
                 ScreenerScreen(model: desk.screener(for: account),
                                name: desk.accounts.count > 1 ? desk.nameOf(account) : nil, accounts: desk.accounts,
-                               open: desk.open)
+                               suggests: !desk.aiTurnedOff, open: desk.open)
             }
         }
     }
@@ -490,7 +508,7 @@ struct DeskMessageItems: View {
         let copies = desk?.chosenCopies ?? []
         if let desk, !copies.isEmpty {
             AttentionMenuItems(copies: copies, stack: desk.stack, model: desk.attention, shortcuts: true)
-            if copies.count == 1, let copy = copies.first {
+            if copies.count == 1, let copy = copies.first, !desk.aiTurnedOff {
                 Divider()
                 Button("Summarize", systemImage: "sparkles") { Task { await desk.summaries.summarize(copy) } }
                     .keyboardShortcut("i", modifiers: [.shift, .command])
@@ -506,27 +524,33 @@ struct DeskMessageItems: View {
     }
 }
 
-/// The menu bar's Assistant menu: the assistant's and curation's panels.
+/// The menu bar's Assistant menu: the assistant's and curation's panels; Ask, a bulk action and your week only while
+/// AI isn't turned off.
 struct DeskCommands: Commands {
     @FocusedValue(\.mailDesk) private var desk: Desk?
 
     var body: some Commands {
         CommandMenu("Assistant") {
+            let ai = desk?.aiTurnedOff != true
             Button("Today’s Brief", systemImage: "sun.max") { desk?.go(.desk(.brief)) }
                 .keyboardShortcut("b", modifiers: [.option, .command])
                 .disabled(desk == nil)
-            Button("Ask Your Mail…", systemImage: "sparkles") { desk?.sheet = .ask }
-                .keyboardShortcut("a", modifiers: [.option, .command])
-                .disabled(desk == nil)
-            // ⌥⌘D hides the Dock everywhere, so Bulk Action takes ⌥⌘K, beside the palette's ⌘K.
-            Button("Bulk Action…", systemImage: "wand.and.stars") { desk?.startPlan() }
-                .keyboardShortcut("k", modifiers: [.option, .command])
-                .disabled(desk == nil)
+            if ai {
+                Button("Ask Your Mail…", systemImage: "sparkles") { desk?.sheet = .ask }
+                    .keyboardShortcut("a", modifiers: [.option, .command])
+                    .disabled(desk == nil)
+                // ⌥⌘D hides the Dock everywhere, so Bulk Action takes ⌥⌘K, beside the palette's ⌘K.
+                Button("Bulk Action…", systemImage: "wand.and.stars") { desk?.startPlan() }
+                    .keyboardShortcut("k", modifiers: [.option, .command])
+                    .disabled(desk == nil)
+            }
             Divider()
             Button("Commitments and Tasks", systemImage: "checklist") { desk?.sheet = .commitments }
                 .disabled(desk == nil)
-            Button("Your Week", systemImage: "calendar") { desk?.sheet = .review }
-                .disabled(desk == nil)
+            if ai {
+                Button("Your Week", systemImage: "calendar") { desk?.sheet = .review }
+                    .disabled(desk == nil)
+            }
             Divider()
             Button("Curate — Rules and Senders…", systemImage: "slider.horizontal.3") { desk?.sheet = .curate }
                 .disabled(desk == nil)

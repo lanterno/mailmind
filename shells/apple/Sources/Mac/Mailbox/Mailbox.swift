@@ -26,6 +26,11 @@ final class Mailbox {
     private(set) var readOnly = false
     /// Whether the AI is on, which the contact card's summary needs.
     private(set) var aiOn = false
+    /// How AI stands, as the digest last said: what is off and why, so what only AI serves can go once it is turned
+    /// off.
+    private(set) var ai: API.AiStatus?
+    /// AI was turned off in Settings: what only AI serves isn't offered, and nothing asks to turn it on.
+    var aiTurnedOff: Bool { ai?.isTurnedOff == true }
 
     // The preferences the list reads (/api/preferences), as the server holds them.
     private(set) var grouped = true
@@ -152,7 +157,8 @@ final class Mailbox {
         accounts = digest.accounts
         aliases = digest.aliases.compactMapValues { $0 }
         readOnly = digest.profile == "read-only"
-        aiOn = digest.ai.engine != "none"
+        aiOn = digest.ai.isOn
+        ai = digest.ai
     }
 
     /// Each account's folders and its virtual folders' counts, and those over every account.

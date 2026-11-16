@@ -36,7 +36,8 @@ struct ContactCard: View {
                 facts(card)
                 if card.accounts.count > 1 { accounts(card) }
                 if !card.recent.isEmpty { recent(card) }
-                SenderSummary(mailbox: mailbox, address: card.addr)
+                // Turned off, AI has nothing to offer here, and nothing asks to turn it on.
+                if !mailbox.aiTurnedOff { SenderSummary(mailbox: mailbox, address: card.addr) }
                 acts(card)
             } else if failed {
                 Text("Couldn’t load this sender.")

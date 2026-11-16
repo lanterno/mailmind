@@ -160,9 +160,9 @@ enum BriefWords {
 
     /// The pills under the brief, as the page's and the mockup's: what needs you in sunlight, then who you're
     /// waiting on, what you'll reply to later, what is worth a read and what can wait, your commitments, and your
-    /// week. A count of none isn't shown.
+    /// week, which the AI writes, so not while AI is turned off (`week`). A count of none isn't shown.
     static func tallies(needs: Int, waiting: Int, replyLater: Int, worthARead: Int, canWait: Int,
-                        commitments: Int) -> [Tally] {
+                        commitments: Int, week: Bool = true) -> [Tally] {
         var all: [Tally] = []
         if needs > 0 {
             all.append(Tally(count: needs, words: needs == 1 ? String(localized: "needs you")
@@ -182,7 +182,7 @@ enum BriefWords {
             all.append(Tally(count: commitments, words: commitments == 1 ? String(localized: "commitment")
                 : String(localized: "commitments"), goes: .commitments))
         }
-        all.append(Tally(words: String(localized: "Your week"), goes: .week))
+        if week { all.append(Tally(words: String(localized: "Your week"), goes: .week)) }
         return all
     }
 

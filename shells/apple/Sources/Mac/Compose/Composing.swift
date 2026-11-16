@@ -48,6 +48,7 @@ final class Composing: ComposeHost {
 
     @ObservationIgnored private var knownCache: [String: Person] = [:]
     @ObservationIgnored private var listening: Task<Void, Never>?
+    @ObservationIgnored private var hearingAI: Task<Void, Never>?
     @ObservationIgnored private var undoTimer: Task<Void, Never>?
     @ObservationIgnored private var floatTimer: Task<Void, Never>?
     @ObservationIgnored private var noticeTimer: Task<Void, Never>?
@@ -94,6 +95,12 @@ final class Composing: ComposeHost {
             await readDigest()
             await readPreferences()
         }
+        // AI turned on or off in Settings: the composers' AI rows follow at once.
+        hearingAI = Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .mailmindAIChanged) {
+                await self?.readDigest()
+            }
+        }
         listening = Task { [weak self] in
             guard let events = try? await core.events() else { return }
             for await event in events {
@@ -124,6 +131,8 @@ final class Composing: ComposeHost {
     func readDigest() async {
         guard let core else { return }
         if let read = try? await core.get(API.Get.Digest.self, [:]) { digest = read }
+        // Turned off, no reply written ahead is offered: Reply is a plain reply again.
+        if aiTurnedOff { chips.removeAll() }
         if let waiting = waitingMail, canWrite {
             waitingMail = nil
             write(waiting)
@@ -185,7 +194,9 @@ final class Composing: ComposeHost {
     var tone: API.DraftTone { preferences?.draftTone ?? .balanced }
     /// The limit isn't among the generated types yet: the server refuses a message whose files come to more.
     var attachLimit: Int? { nil }
-    var aiOn: Bool { digest.map { $0.ai.engine != "none" } ?? false }
+    var aiOn: Bool { digest?.ai.isOn ?? false }
+    /// AI was turned off in Settings: a reply written ahead isn't offered either.
+    var aiTurnedOff: Bool { digest?.ai.isTurnedOff ?? false }
 
     func signature(_ email: String) -> String {
         let own = digest?.signatures[email] ?? ""
@@ -497,7 +508,7 @@ final class Composing: ComposeHost {
     func viewing(_ copy: MailCopy?, wanted: Bool, skip: Bool) {
         dwell?.cancel()
         shownCopy = nil
-        guard let copy, !skip else { return }
+        guard let copy, !skip, !aiTurnedOff else { return }
         shownCopy = copy
         guard chips[copy.key] != .ready else { return }
         Task { await peek(copy) }

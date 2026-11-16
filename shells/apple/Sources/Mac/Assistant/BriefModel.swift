@@ -51,7 +51,10 @@ final class BriefModel {
     }
 
     /// Whether AI is on, once the digest says.
-    var aiOn: Bool? { digest.map { $0.ai.engine != "none" } }
+    var aiOn: Bool? { digest.map { $0.ai.isOn } }
+
+    /// AI was turned off in Settings: the brief shows only what the digest holds, with no word of the AI.
+    var aiTurnedOff: Bool { digest?.ai.isTurnedOff ?? false }
 
     /// The digest's rows still here.
     var items: [API.DigestItem] {
@@ -69,7 +72,7 @@ final class BriefModel {
 
     /// What the AI failed with last, as the digest says, for "isn't available right now (…)".
     var failing: String? {
-        guard let ai = digest?.ai, ai.engine != "none", ai.lastOk == false else { return nil }
+        guard let ai = digest?.ai, ai.isOn, ai.lastOk == false else { return nil }
         return ai.lastError.flatMap { $0.isEmpty ? nil : $0 }
     }
 

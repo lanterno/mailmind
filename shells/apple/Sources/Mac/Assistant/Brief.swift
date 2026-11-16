@@ -109,29 +109,36 @@ struct BriefScreen: View {
         .clipped()
     }
 
-    /// The brief on a raised card over the hills (`.brief-card`).
+    /// The brief on a raised card over the hills (`.brief-card`). With AI turned off it holds only the tallies, under
+    /// a plain heading: no brief is written, and nothing asks for one.
     private func briefCard(_ scroll: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                MeadowAIMark("Your brief")
-                if let written = BriefWords.written(model.brief) {
-                    Text(written)
-                        .font(.meadow(.ui, 12.5))
-                        .foregroundStyle(meadow.ink3)
-                        .lineLimit(1)
+                if model.aiTurnedOff {
+                    MeadowIconView(.sun, size: 15).foregroundStyle(meadow.ink3)
+                    MeadowSectionLabel(String(localized: "Your day"))
+                    Spacer(minLength: 0)
+                } else {
+                    MeadowAIMark("Your brief")
+                    if let written = BriefWords.written(model.brief) {
+                        Text(written)
+                            .font(.meadow(.ui, 12.5))
+                            .foregroundStyle(meadow.ink3)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Button { Task { await model.write(again: true) } } label: {
+                        MeadowIconView(.refresh, size: 15)
+                        Text("Refresh")
+                    }
+                    .meadowButton(.quiet, small: true)
+                    .help("Write the brief again from your mail as it is now (runs the AI)")
+                    .disabled(model.writing)
                 }
-                Spacer(minLength: 0)
-                Button { Task { await model.write(again: true) } } label: {
-                    MeadowIconView(.refresh, size: 15)
-                    Text("Refresh")
-                }
-                .meadowButton(.quiet, small: true)
-                .help("Write the brief again from your mail as it is now (runs the AI)")
-                .disabled(model.writing)
             }
-            .padding(.bottom, 10)
-            narrative
-            if !model.topics.isEmpty {
+            .padding(.bottom, model.aiTurnedOff ? 0 : 10)
+            if !model.aiTurnedOff { narrative }
+            if !model.aiTurnedOff, !model.topics.isEmpty {
                 BriefFlow(spacing: 6) {
                     ForEach(model.topics, id: \.label) { group in
                         BriefTopic(label: group.label, count: group.items.count, on: topic == group.label) {
@@ -164,7 +171,7 @@ struct BriefScreen: View {
         let commitments = BriefWords.commitments(model.items).count + (tasks?.open ?? 0)
         return BriefWords.tallies(needs: model.needs.count, waiting: model.waitingCount,
                                   replyLater: model.replyLaterCount, worthARead: model.worthARead.count,
-                                  canWait: model.tidy.count, commitments: commitments)
+                                  canWait: model.tidy.count, commitments: commitments, week: !model.aiTurnedOff)
     }
 
     private func go(_ goes: BriefWords.Tally.Goes, _ scroll: ScrollViewProxy) {

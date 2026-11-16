@@ -165,6 +165,8 @@ struct ScreenerScreen: View {
     var name: String?
     /// The accounts in their order, for an account's colour.
     var accounts: [String] = []
+    /// Whether the AI's suggestions are offered: not once AI is turned off.
+    var suggests = true
     /// Opens a sender's message in the reader.
     var open: (MailCopy) -> Void = { _ in }
     @State private var width: CGFloat = 1000
@@ -269,7 +271,7 @@ struct ScreenerScreen: View {
         } else if let sender = model.visitor {
             GateVisitor(sender: sender, model: model, letter: model.letters[sender.fromAddr] ?? nil,
                         account: meadow.account(of: model.account, among: accounts), accountName: name,
-                        focus: $focus, open: open)
+                        suggests: suggests, focus: $focus, open: open)
                 .id(sender.fromAddr)
                 .onAppear { holdKeys() }
         } else {
@@ -299,7 +301,7 @@ struct ScreenerScreen: View {
                     VStack(spacing: 2) {
                         ForEach(rows, id: \.fromAddr) { sender in
                             GateQueueRow(sender: sender, current: sender.fromAddr == model.visitor?.fromAddr,
-                                         hint: model.suggestions?[sender.fromAddr],
+                                         hint: suggests ? model.suggestions?[sender.fromAddr] : nil,
                                          account: meadow.account(of: model.account, among: accounts)) {
                                 model.chosen = sender.fromAddr
                                 holdKeys()
@@ -355,6 +357,8 @@ private struct GateVisitor: View {
     let letter: API.SearchHit?
     let account: Color
     let accountName: String?
+    /// Whether who the AI thinks this is, and the way to ask it, are offered.
+    let suggests: Bool
     var focus: FocusState<GateFocus?>.Binding
     let open: (MailCopy) -> Void
     @State private var width: CGFloat = 800
@@ -473,7 +477,7 @@ private struct GateVisitor: View {
 
     private var decision: some View {
         VStack(alignment: .leading, spacing: 14) {
-            note
+            if suggests { note }
             VStack(spacing: 8) {
                 Button { Task { await model.decide(sender.fromAddr, .keep) } } label: {
                     decideLabel(.check, "Let in", key: "Y")
