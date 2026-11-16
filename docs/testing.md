@@ -85,7 +85,8 @@ The fixtures, from the bottom up:
   no node. `tests/e2e/test_front_door.py` runs the app as a program instead.
 - `ai` gives the fake Claude API (`tests/fakes/anthropic_api.py`) a key it accepts. It answers
   each call from the call's own schema unless the test sets `ai.queue(...)` or `ai.responder`.
-  Without `ai` there is no key, and AI calls get a 401.
+  Without `ai` there is no key, so AI mode starts off (`turned-off`) and every AI call raises `AIOff` with nothing sent,
+  which a route answers as a 409 with `ai_off`. A test turns AI mode on (`ai_enabled`) to see `no-key`.
 - `dns` starts a nameserver on loopback (`tests/fakes/dns_server.py`) whose MX records a test sets (`dns.mx(domain, hosts)`),
   the one a domain's mail servers are asked of: by the app in the test's process, and by a served one, which
   `MAILMIND_TEST_DNS` names it to (`mm-served` hands it to the Rust server through its seams). Without it no test asks any
