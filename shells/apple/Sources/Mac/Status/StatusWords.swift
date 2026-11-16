@@ -151,6 +151,47 @@ enum StatusWords {
         case synced(when: String, count: Int)
     }
 
+    /// What a failed sync's kind (`last_error_kind`) means, in a sentence that says what to do next. A kind this
+    /// build doesn't know reads as something that went wrong.
+    static func syncProblem(_ kind: String) -> String {
+        switch kind {
+        case "AUTH":
+            String(localized: """
+                The server turned down the password. Choose Edit and type it again; if your provider uses app \
+                passwords, make a new one and use that.
+                """)
+        case "TIMEOUT":
+            String(localized: """
+                The server didn’t answer in time. MailMind tries again on its own; if this keeps happening, check \
+                your internet connection.
+                """)
+        case "NETWORK":
+            String(localized: """
+                MailMind couldn’t reach the server. Check your internet connection, then the server’s name and port \
+                under Edit.
+                """)
+        case "UIDVALIDITY":
+            String(localized: """
+                The server renumbered this mailbox, so MailMind reads it again from the start. Nothing needs doing.
+                """)
+        case "TLS_PIN":
+            String(localized: """
+                The server showed a different certificate, so MailMind sent no password. Trust it only if you know \
+                why it changed.
+                """)
+        case "IMAP":
+            String(localized: """
+                The server said no to what MailMind asked. Choose Retry; if this keeps happening, choose Help › Copy \
+                Diagnostics and send them to whoever gave you MailMind.
+                """)
+        default:
+            String(localized: """
+                Something went wrong while syncing. Choose Retry; if this keeps happening, choose Help › Copy \
+                Diagnostics and send them to whoever gave you MailMind.
+                """)
+        }
+    }
+
     static func healthLine(_ record: API.AccountStanding?, now: Date) -> HealthLine {
         guard let record else { return .none }
         let when = record.lastErrorTs.map { ago($0, now: now) } ?? ""

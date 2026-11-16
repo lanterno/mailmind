@@ -446,7 +446,8 @@ struct HealthRow: View {
     @Environment(\.meadow) private var meadow
 
     var body: some View {
-        let line = StatusWords.healthLine(status.health.first { $0.account == email }, now: status.now)
+        let record = status.health.first { $0.account == email }
+        let line = StatusWords.healthLine(record, now: status.now)
         Group {
             switch line {
             case .none:
@@ -470,13 +471,21 @@ struct HealthRow: View {
                         .disabled(busy)
                 }
             case .syncError(let kind, let when):
-                HStack {
-                    warning(when.isEmpty ? String(localized: "Sync error · \(kind)")
-                            : String(localized: "Sync error · \(kind) · \(when)"))
-                    Spacer()
-                    Button(busy ? "Syncing…" : "Retry") { act { await status.retry(email) } }
-                        .meadowButton(small: true)
-                        .disabled(busy)
+                // What went wrong in a sentence with what to do, and the kind and class in small type for the owner.
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        warning(when.isEmpty ? String(localized: "Couldn’t sync")
+                                : String(localized: "Couldn’t sync · \(when)"))
+                        Spacer()
+                        Button(busy ? "Syncing…" : "Retry") { act { await status.retry(email) } }
+                            .meadowButton(small: true)
+                            .disabled(busy)
+                    }
+                    SettingHelp(StatusWords.syncProblem(kind))
+                    Text(verbatim: [kind, record?.lastError ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.meadow(.mono, 11))
+                        .foregroundStyle(meadow.ink3)
+                        .textSelection(.enabled)
                 }
             }
         }
