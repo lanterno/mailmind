@@ -106,7 +106,9 @@
   the answer counts `reversed` and `failed`. When none went back it raises `Conflict`, and with nothing to undo `NotFound`
   (`empty`). A reversal reports a server NO as `(False, why)`
   (`server_ops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
-  life: the frontend's `undoGroup()` is a UUID, since the stack outlives a page load and a restart.
+  life: the frontend's `undoGroup()` is a UUID, since the stack outlives a page load and a restart. A sweep pushes every
+  child of its group at one write (`undo.push_many`, the core's `blocks::push_undo_many`), as pushing each in turn would
+  leave the stack, and caps itself at 500 a run, since Undo reverses each child on its own and a click waits on them.
 - A bulk command's confirm carries out a plan (`mailmind.assistant.application.plans`,
   `/api/ai/do-plan` → `/api/ai/do-confirm`). The preview freezes what it matched, by message key and folder, and
   the page sends back only the plan's id, so a renumber or mail that came later changes nothing. A plan is

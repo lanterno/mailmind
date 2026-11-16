@@ -6,6 +6,10 @@ message's headers and the rule book's lists, and `bootstrap.curation.classify` c
 The Rust core computes it (`mm_curation::classifier`, through `mailmind_leaves`), as every client will; the Python
 module keeps the bucket names and builds the core's copy of the rule sets once each time the rules change
 (`rulebook.as_sets`), so classifying a message costs under a microsecond however many rules there are.
+A person's reply or forward in a list's thread (a subject that opens `Re:`, `Fwd:` or a kin of them, from an address
+`looks_human` says is a person's) is `PERSONAL`, read before the list headers make it marketing: a group's, a club's or
+a school's list puts its headers on every reply. The list's own mail, a role's address (`news@`) and a no-reply one stay
+marketing.
 `curation.domain.rulebook` is a learned per-sender/domain keep/block list on top, kept in the database, which is encrypted
 ([At rest](security.md#at-rest)), as the `rules` document (`platform.db.documents`, migration 48). Its body is the JSON
 the rule book's old file held; nothing reads or writes a file of it any more. The same
@@ -30,6 +34,15 @@ Ingest keeps a message's unsubscribe headers (`messages.list_unsub_raw` and `lis
 that can say: those columns, a stored body, or for older mail the two headers read off the server, within
 `UNSUB_READ_WAIT` on the account's gate. `sender_unsub` (migration 34) keeps the answer past the sender's mail,
 so a second try after a cleanup's sweep still knows the way.
+
+An account's sweep (`Sweeps.sweep`, `mm_curation::sweeping`) reads the Inbox off the server, flags and all, and classifies
+it as it is now. Junk that is starred (`\Flagged`) or unread (no `\Seen`, or flags the server didn't say) stays, and
+the answer counts it (`held_back`). It takes the newest `SWEEP_MAX` (500) of the rest by UID and says when that left
+some (`capped`). A dry run's plan lists what goes (`going`): each junk bucket that has any, in the classifier's order,
+with its count, the `LISTED` (5) senders with the most of it and its newest five subjects. A real one audits, moves
+and verifies as before, then puts a way back for each message that went under one undo group: the request's
+`undo_group`, or a `sweep:` one of its own, which the answer names (null when nothing went). Each child is a `move`
+from the Inbox to Trash found again by its Message-ID, so one with none goes but can't come back (`no_undo`).
 
 The preview's `confirm_token` (`perimeter.tokens`) is `<time>.<hmac>`, over the purpose, the sender, the way out it showed
 and where that goes (`unsubscribe.preview_said`), under the process's secret. It stands for `TOKEN_LIFE`, ten minutes. A cleanup with one out of date
