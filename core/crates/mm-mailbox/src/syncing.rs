@@ -323,7 +323,12 @@ impl Syncing {
                 command_ports::write(&*self.store, |tx| tx.record_sync_result(email, None, &at))?;
                 self.page(Topic::SyncDone, json!({"account": email, "kept": synced.kept, "junk": synced.junk}));
                 if new > 0 {
-                    self.page(Topic::NewMail, json!({"account": email, "folder": INBOX, "count": new}));
+                    // One message names its UID, so a notification can say whose it is and open it.
+                    let mut said = json!({"account": email, "folder": INBOX, "count": new});
+                    if new == 1 {
+                        said["uid"] = json!(synced.newest_kept);
+                    }
+                    self.page(Topic::NewMail, said);
                 } else if synced.afresh && synced.kept + synced.junk > 0 {
                     // What a first scan stored changes the rail's counts, though none of it is new.
                     self.folders.invalidate(Some(email))?;

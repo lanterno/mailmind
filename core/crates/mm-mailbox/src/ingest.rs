@@ -93,8 +93,8 @@ pub struct Synced {
     /// How many messages it stored, not junk and junk.
     pub kept: usize,
     pub junk: usize,
-    /// The highest UID it stored.
-    pub max_uid: u32,
+    /// The newest UID it kept, junk aside, 0 for none: the message new-mail names.
+    pub newest_kept: u32,
     /// It read the folder afresh, a first scan or one the server renumbered: what it stored was there before, so it
     /// isn't new mail.
     pub afresh: bool,
@@ -273,13 +273,14 @@ impl Ingest {
         let mut synced = Synced { afresh: plan.whole && plan.scan != Scan::Whole, ..Synced::default() };
         let mut stored = Vec::new();
         for step in &steps {
-            let Some((kept, junk, max_uid)) = self.store_step(&mut *s.0, &acct, pass, step, &mut stored, &flight)?
+            let Some((kept, junk, newest_kept)) =
+                self.store_step(&mut *s.0, &acct, pass, step, &mut stored, &flight)?
             else {
                 break;
             };
             synced.kept += kept;
             synced.junk += junk;
-            synced.max_uid = synced.max_uid.max(max_uid);
+            synced.newest_kept = synced.newest_kept.max(newest_kept);
         }
         let leaves = steps.last().and_then(|step| step.leaves);
         if let Some(Scan::Down(_)) = leaves {
@@ -482,8 +483,9 @@ impl Ingest {
     }
 
     /// Store one step of a pass, junk kept as a badge, in one transaction with where it leaves the folder; `stored`
-    /// gets what threading has yet to hear of. (not junk, junk, the highest UID), or None when the folder was read
-    /// afresh meanwhile and the step gave way. Its account removed (`flight` stopped), it stores nothing more.
+    /// gets what threading has yet to hear of. (not junk, junk, the newest UID kept, junk aside), or None when the
+    /// folder was read afresh meanwhile and the step gave way. Its account removed (`flight` stopped), it stores
+    /// nothing more.
     fn store_step(
         &self,
         s: &mut dyn MailServer,
@@ -497,7 +499,7 @@ impl Ingest {
         let fetched = self.fetch(s, acct, &step.uids, pass)?;
         going_on(flight)?;
         let junk = fetched.iter().filter(|f| f.row.verdict.is_junk).count();
-        let max_uid = fetched.iter().map(|f| f.row.uid).max().unwrap_or(0);
+        let newest_kept = fetched.iter().filter(|f| !f.row.verdict.is_junk).map(|f| f.row.uid).max().unwrap_or(0);
         let news: Vec<bool> = match filters {
             Some(_) => fetched
                 .iter()
@@ -524,7 +526,7 @@ impl Ingest {
         if let Some(filters) = filters.filter(|_| queued) {
             filters.flags_queued();
         }
-        Ok(Some((rows.len() - junk, junk, max_uid)))
+        Ok(Some((rows.len() - junk, junk, newest_kept)))
     }
 
     /// Read the flags of the folder's mail again and store what changed, so mail read, starred or answered in
