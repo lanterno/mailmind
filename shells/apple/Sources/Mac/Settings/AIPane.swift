@@ -69,13 +69,28 @@ enum AIChoices {
     static func lookLine(_ look: Look) -> String? {
         switch look {
         case .looking: String(localized: "Looking for model servers on this Mac…")
-        case .found(let servers) where servers.isEmpty: String(localized: """
-            No model server is running on this Mac. Start one, Ollama or LM Studio for example, and look again.
-            """)
+        case .found(let servers) where servers.isEmpty: String(localized: "No model server is running on this Mac yet.")
         case .found: nil
         case .failed(let why): why
         }
     }
+
+    /// Where Ollama is got, for a person with no model server yet.
+    static let getOllama = URL(string: "https://ollama.com")!
+
+    /// The context a model on this Mac needs for long conversations, which only its server's settings give it.
+    static let contextStep = String(localized: "In Ollama’s settings, set Context length to 16K or more.")
+
+    /// For a person with no model server yet, in steps (the page's): get Ollama, the one model suggested to start
+    /// with, in plain words, its context, and look again.
+    static let firstSteps = [
+        String(localized: "Get Ollama and open it."),
+        String(localized: """
+            In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.
+            """),
+        contextStep,
+        String(localized: "Then look again."),
+    ]
 
     /// What choosing a model a server on this Mac listed sends, in one change: the server's URL ("" for Ollama's,
     /// which is the provider's own) and the model.
@@ -191,9 +206,7 @@ enum AIChoices {
     /// server's settings give it.
     static func modelHelp(_ provider: API.AiProvider) -> String {
         switch provider {
-        case .local: String(localized: """
-            Long threads need room: give the model a context of at least 16K tokens in your model server’s settings.
-            """)
+        case .local: contextStep
         case .compatible: String(localized: "The service has no model of its own: choose one it lists, or type its name.")
         default: String(localized: "The provider’s own, unless you choose another.")
         }
@@ -350,7 +363,9 @@ struct AIPane: View {
 
     @ViewBuilder private var modelLine: some View {
         let chosen = preferences?.aiModel ?? ""
-        SettingLine(String(localized: "Model"), help: AIChoices.modelHelp(provider)) {
+        // With no model server yet, the context is a step of getting one, said there.
+        SettingLine(String(localized: "Model"),
+                    help: provider == .local && look == .found([]) ? nil : AIChoices.modelHelp(provider)) {
             HStack(spacing: 6) {
                 SettingChoice(label: String(localized: "Model"),
                               title: AIChoices.title(provider, chosen: chosen, defaultModel: defaultModel), width: 320,
@@ -449,6 +464,7 @@ struct AIPane: View {
                     .foregroundStyle(look == .looking ? meadow.ink3 : meadow.ink2)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if look == .found([]) { OllamaSteps() }
         }
         HStack {
             Spacer(minLength: 0)
@@ -657,6 +673,31 @@ private struct SpentLately: View {
         .task(id: status.digest?.ai.spentTodayMicros) {
             guard let core = status.core else { return }
             if let read = try? await core.get(API.Get.AiSpending.self) { spent = read }
+        }
+    }
+}
+
+/// The steps to a model on this Mac for a person with no model server, as the page has them, with Ollama's site a
+/// click away in the person's browser.
+private struct OllamaSteps: View {
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(AIChoices.firstSteps.enumerated()), id: \.offset) { index, step in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: "\(index + 1).").monospacedDigit().foregroundStyle(meadow.ink3)
+                    Text(step).foregroundStyle(meadow.ink2).fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.meadow(.ui, 13))
+            }
+            Button { NSWorkspace.shared.open(AIChoices.getOllama) } label: {
+                Text("Get Ollama")
+                MeadowIconView(.external, size: 14)
+            }
+            .meadowButton(small: true)
+            .fixedSize()
+            .help(AIChoices.getOllama.absoluteString)
         }
     }
 }
