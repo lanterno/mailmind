@@ -1,6 +1,8 @@
 """Which preset an address's account takes, from its domain: a provider's own domains take its preset, which the form chooses
 (`sure`), and a domain whose mail a provider's servers take (a Google Workspace or Fastmail domain's, say), as its MX records
-name them, is offered it. An offer is only that: the person chooses, and nothing is guessed that they can't undo.
+name them, is offered it, as an iCloud+ custom domain's is iCloud's. An offer is only that: the person chooses, and nothing is
+guessed that they can't undo. A brand's domain is its own under `.com` or a country's ending (yahoo.fr, yahoo.co.uk), but for a
+country where the brand is another company's (Yahoo Japan's yahoo.co.jp).
 
 A preset says what the form needs of its provider: the type and servers its account takes, a line said before the password (an
 app password asked for, Proton Bridge needed), and the page where that password is made. A provider MailMind can't log in to yet
@@ -50,7 +52,8 @@ class Provider:
     preset: Preset
     name: str
     domains: tuple[str, ...] = ()
-    brands: tuple[str, ...] = ()                       # its own under any country's ending: yahoo.com, yahoo.co.uk
+    brands: tuple[str, ...] = ()                       # its own under .com or a country's ending: yahoo.com, yahoo.co.uk
+    not_in: tuple[str, ...] = ()                       # countries where the brand is another company's: Yahoo Japan's
     mail_hosts: tuple[str, ...] = ()                   # an MX record naming one of these, or a host under it
     settings: Settings | None = None                   # None: MailMind can't log in to it yet
     note: str | None = None                            # what the form says before the password
@@ -63,13 +66,13 @@ PROTON_BRIDGE = Link("https://proton.me/mail/bridge", "Get Proton Bridge")
 PROVIDERS = (
     Provider("gmail", "Gmail", domains=GOOGLE_DOMAINS, mail_hosts=("google.com", "googlemail.com"),
              settings=Settings("gmail"), link=GOOGLE_APP_PASSWORDS),
-    Provider("icloud", "iCloud", domains=("icloud.com", "me.com", "mac.com"),
+    Provider("icloud", "iCloud", domains=("icloud.com", "me.com", "mac.com"), mail_hosts=("mail.icloud.com",),
              settings=Settings("imap", Server("imap.mail.me.com", 993, False), Server("smtp.mail.me.com", 587, True),
                                "Deleted Messages"),
              note="iCloud Mail takes an app-specific password, not your Apple Account password: make one at account.apple.com, "
                   "under Sign-In and Security, then paste it here.",
              link=Link("https://account.apple.com", "Make an app-specific password")),
-    Provider("yahoo", "Yahoo", domains=("ymail.com", "rocketmail.com"), brands=("yahoo",),
+    Provider("yahoo", "Yahoo", domains=("ymail.com", "rocketmail.com"), brands=("yahoo",), not_in=("jp",),
              settings=Settings("imap", Server("imap.mail.yahoo.com", 993, False), Server("smtp.mail.yahoo.com", 465, False)),
              note="Yahoo Mail takes an app password, not your Yahoo password: make one in your Yahoo account's security "
                   "settings, then paste it here.",
@@ -108,17 +111,25 @@ def domain_of(email: str) -> str | None:
     return domain
 
 
-def _under_brand(domain: str, brand: str) -> bool:
-    """Whether `domain` is `brand` under a country's or the world's ending: brand.tld, or brand.co.cc and the like."""
+def _is_country(ending: str) -> bool:
+    """Whether `ending` is a country's: two letters."""
+    return len(ending) == 2 and ending.isascii() and ending.isalpha()
+
+
+def _under_brand(domain: str, brand: str, not_in: tuple[str, ...]) -> bool:
+    """Whether `domain` is `brand` under `.com` or a country's ending, as brand.com, brand.fr or brand.co.uk, unless the
+    country is one of `not_in`."""
     labels = domain.split(".")
+    country = _is_country(labels[-1]) and labels[-1] not in not_in
     if len(labels) == 2:
-        return labels[0] == brand
-    return len(labels) == 3 and labels[0] == brand and labels[1] in SECOND_LEVELS and len(labels[2]) == 2
+        return labels[0] == brand and (labels[1] == "com" or country)
+    return len(labels) == 3 and labels[0] == brand and labels[1] in SECOND_LEVELS and country
 
 
 def provider_of_domain(domain: str) -> Provider | None:
     """The provider whose own domain `domain` is, if one's is."""
-    return next((p for p in PROVIDERS if domain in p.domains or any(_under_brand(domain, b) for b in p.brands)), None)
+    return next((p for p in PROVIDERS
+                 if domain in p.domains or any(_under_brand(domain, b, p.not_in) for b in p.brands)), None)
 
 
 def names_provider(host: str, provider: Provider) -> bool:
