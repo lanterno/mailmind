@@ -8,7 +8,8 @@ failed, twice more, honouring retry-after, as the Anthropic SDK does. A model on
 structured output: a 400 that names `response_format` is asked once more without it, the schema stated in the prompt instead,
 and the reply read as free-form JSON. OpenAI and Gemini are given a ceiling on a reply's tokens that a model may be unable
 to meet: a 400 that names `max_tokens` or `max_completion_tokens` is asked once more without it. A rejected key's error holds
-none of what the service said, which can quote part of the key back. It takes no batch.
+none of what the service said, which can quote part of the key back, and a key with a blank or a control character in it is
+never sent: it is refused as a rejected key is. It takes no batch.
 """
 import http.client
 import json
@@ -21,7 +22,7 @@ from urllib.parse import urlsplit
 
 from mailmind.assistant.adapters import chat_wire
 from mailmind.assistant.application.ports import BatchResult, ModelError, NoBatches, Prompt, Reply
-from mailmind.assistant.domain.providers import TIMEOUT
+from mailmind.assistant.domain.providers import TIMEOUT, sendable
 from mailmind.kernel.ai_provider import AiProvider
 from mailmind.platform.db import txguard
 
@@ -104,7 +105,9 @@ class Http:
         self._base = urlsplit(base_url.rstrip("/"))
 
     def send(self, method: str, path: str, body: dict[str, Any] | None = None) -> _Answer:
-        """One attempt. Raises ModelError when nothing answered."""
+        """One attempt. Raises ModelError when nothing answered, and as a refused key, unsent, for a key that can't be one."""
+        if not sendable(self._key):
+            raise self._refused_key(401)
         base = self._base
         headers = {"Accept": "application/json", "User-Agent": "MailMind"}
         if self._key:
@@ -127,17 +130,19 @@ class Http:
             raise ModelError(f"{self.provider} unreachable: timed out") from None
         except ConnectionRefusedError:
             raise ModelError(f"{self.provider} unreachable: connection refused") from None
-        except (OSError, http.client.HTTPException) as e:
+        except (OSError, http.client.HTTPException, ValueError) as e:     # never its words, which can quote a header
             raise ModelError(f"{self.provider} unreachable: {type(e).__name__}") from None
         finally:
             conn.close()
+
+    def _refused_key(self, status: int) -> ModelError:
+        return ModelError(f"{self.provider} API {status}: the key was refused", status)
 
     def refused(self, answer: _Answer) -> ModelError:
         """The ModelError for an answer that isn't a 2xx, with what the service said unless it refused the key. A key
         refused with a 400 is refused as a 401 is, so everything that reads one reads it so."""
         if _key_refused(answer):
-            status = answer.status if answer.status in _AUTH else 401
-            return ModelError(f"{self.provider} API {status}: the key was refused", status)
+            return self._refused_key(answer.status if answer.status in _AUTH else 401)
         said = _said(answer)
         if self._key:
             said = said.replace(self._key, "<key>")         # before it is cut, which could leave part of the key
@@ -160,8 +165,8 @@ class ChatModel:
         while True:
             try:
                 answer = self._http.send("POST", "/chat/completions", body)
-            except ModelError:
-                if attempt >= self._retries:
+            except ModelError as e:
+                if e.permanent or attempt >= self._retries:
                     raise
                 headers = None
             else:

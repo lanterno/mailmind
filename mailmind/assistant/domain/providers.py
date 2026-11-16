@@ -69,6 +69,12 @@ def on_loopback(url: str) -> bool:
         return False
 
 
+def sendable(key: str) -> bool:
+    """Whether `key` can go in a request's header: printable ASCII with no space, as every provider's keys are. A key with a
+    blank, a line break or another control character in it was pasted or read wrong, and would break the header it went in."""
+    return all("!" <= ch <= "~" for ch in key)
+
+
 @dataclass(frozen=True)
 class Engine:
     """The AI in force: the provider chosen, the model asked unless a call names another, the base URL it is reached at,
