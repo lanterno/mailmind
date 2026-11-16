@@ -297,3 +297,27 @@ fn a_login_the_server_cant_take_for_now_may_pass_and_one_it_refused_shows_at_onc
     assert_eq!(standing(&syncing, ADA), None);
     assert_eq!(standing(&syncing, BEA), error("LoginRefused"));
 }
+
+#[test]
+fn a_wake_starts_trouble_that_may_pass_afresh_so_a_failure_from_before_the_sleep_never_shows_by_its_age() {
+    let world = World::with(&[ADA, BEA]);
+    fail(&world, BEA, ServerError::Unreachable("LoginRefused"));
+    let syncing = syncing(&world);
+    // The Wi-Fi went as the Mac went to sleep: the sync then failed once, and an hour passed asleep.
+    syncing.sync_guarded(None);
+    pass(&world, 3600);
+    assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"), "an hour on, it would show by its age");
+    syncing.woke();
+    assert_eq!(standing(&syncing, ADA), None);
+    // The sync on waking fails while the network comes back: the first of a new run, so still nothing shows.
+    let recorded = world.recorded.load(Ordering::SeqCst);
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), None);
+    assert_eq!(world.recorded.load(Ordering::SeqCst), recorded + 1, "only the refused login's record keeps an error");
+    // A run that lasts shows, as before the sleep.
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"));
+    // A refused password showed at once, and a wake doesn't hide it.
+    syncing.woke();
+    assert_eq!(standing(&syncing, BEA), error("LoginRefused"));
+}
