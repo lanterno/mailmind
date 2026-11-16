@@ -14,7 +14,8 @@
 //! never delays new mail.
 //!
 //! A round, or an account's sync in it, that panics ends as one that failed (`Panic`): the account says so, its
-//! flight lands, and the next sync runs as it would have.
+//! flight lands, and the next sync runs as it would have. A folder's read of older mail that panics ends as one that
+//! failed: the steps it stored stay, the account's other folders are read still, and the next round asks again.
 //!
 //! An account shows as failing only as `sync_health` says: trouble that may pass (a lost connection, a timeout, a
 //! server that can't take a login for now) once a second sync in a row has failed too, or three minutes on; until
@@ -441,7 +442,10 @@ impl Syncing {
                     self.set_reading(account, reading);
                 }
             };
-            match self.ingest.read_older(account, folder, OLDER_STEPS, &mut heard) {
+            // A read that panics ends as one that failed: the steps it stored stay, the account's other folders are
+            // read still, and the next round asks again.
+            let read = caught(|| self.ingest.read_older(account, folder, OLDER_STEPS, &mut heard));
+            match read.unwrap_or_else(|fault| Err(SyncError::Store(fault))) {
                 Ok(reading) => {
                     more |= reading.is_some();
                     if inbox && reading.is_none() {
