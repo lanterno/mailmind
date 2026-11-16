@@ -30,7 +30,8 @@ Background summaries (`triage`, `triage-batch`) run on every new message, so the
 person asks for (a thread's summary, the brief, a draft, Ask, Rewrite and the rest) goes to the model chosen. The
 status's `background_model` names the one background summaries ask ("" while AI is off), and a summary stores it beside
 what it says (`Calls.background_label`). They reach back 30 days (`Assessments.RECENT_DAYS`): the assess round and a
-backlog's batch take only mail from the last 30 days, and older mail is summarized when it is opened. The status's
+backlog's batch take only mail from the last 30 days, and older mail is summarized only when a person asks for a
+summary (the reader's, `POST /api/ai/summarize`): opening it asks for none. The status's
 `summaries_waiting`, while AI is on, counts the messages from those 30 days with no summary yet. Settings' Spending card
 says both, on the page and in the Mac app.
 
@@ -109,10 +110,13 @@ GPT4All on 4891, each `http://127.0.0.1:<port>/v1`) for `GET {url}/models`, all 
 second at most, with no key, and answers `{ok, servers: [{name, url, models}]}` for those that answered a list, in that
 order, with the models that can chat. It reaches only this Mac, goes with AI mode off, and nothing answering is
 `servers: []`, never an error (`adapters.local_servers`, `Catalog.local_servers`).
-`MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
-fire on their own — drafts wait, bulk commands require a preview and confirm. The three that do are opt-in and off by default: the morning's brief,
-written ahead of the first open, the week's review, written ahead on Monday morning and kept in the database, never sent as mail, and Tidy's
-daily run, which files only what the brief's Tidy offers and reports it for one Undo.
+`MAILMIND_NO_SCHEMA=1` falls back to free-form text. Three things go to the AI with no one asking: new mail's summaries
+(`triage`, and a backlog's batch), what came in since you looked (`delta`, which the page and the Mac app ask for as the
+new-mail pill shows), and the day's brief, which they write as the Inbox opens when none is stored. Every other AI action
+waits for a person: drafts wait, and bulk commands take a preview and a confirm. Four more are opt-in and off by default: drafting
+replies ahead for important mail (`draft_ahead`), the morning's brief written ahead of the first open, the week's review,
+written ahead on Monday morning and kept in the database, never sent as mail, and Tidy's daily run, which files only what
+the brief's Tidy offers and reports it for one Undo.
 
 An assessment keeps how it came to be (migration 43, `kernel.assessment`): `served_by`, the model `Reply.model` names, which
 a server-side fallback can make another; `prompt_version`; and `outcome`, which is `assessed`, or `unusable` or `refused` for
@@ -168,7 +172,7 @@ that fails is logged by class name and never fails the call.
 What the ledger holds is read back in four places:
 - `assistant.status.report()` carries `spent_today_micros`, which the sync menu's AI line shows.
 - `GET /api/ai/spending` (`domain.spending.report`, `mm_assistant::spending` on the Rust server) answers the last 7 days
-  and the last 31, `{ok, week, month}`, each `{calls, cost_micros, features}`: the features by what Settings calls them
+  and this month so far (its local days to today), `{ok, week, month}`, each `{calls, cost_micros, features}`: the features by what Settings calls them
   (Summaries, Today's brief, Drafted replies, Ask, ...), a name's features summed, dearest first, with none that cost
   nothing and made no call. Settings' Spending card shows the two, the three dearest by name and the rest summed, and
   says that these are MailMind's count and the provider's console holds the bill.

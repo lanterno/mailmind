@@ -8,7 +8,8 @@ so you read *summaries of what's important*, not your inbox.
 It started as a summarizer with a reading pane and is now a full mail client:
 compose and SMTP send with a durable outbox and Undo Send, conversation
 threading, attachments, full-text search with an operator grammar, IMAP IDLE
-push, snooze/mute/waiting, and a set of AI actions that never fire on their own.
+push, snooze/mute/waiting, and AI that summarizes new mail by itself, writes the day's brief as you
+open the Inbox, and otherwise waits for you or for a schedule you turn on.
 See [Features](#features) for what ships today and
 [ROADMAP.md](ROADMAP.md) for what doesn't yet.
 
@@ -259,7 +260,7 @@ or for a switch you turned on in Settings › AI.
   per-message triage runs at low effort, everything else at medium). Background summaries ask the
   provider's small model (`claude-haiku-5-5`, OpenAI's `gpt-6-luna`, Gemini's `gemini-3.5-flash-lite`;
   a model on this Mac or a compatible service, the one chosen), and reach back only 30 days: older mail
-  is summarized when you open it. Settings' Spending card names both models and how many messages wait.
+  is summarized when you ask for a summary. Settings' Spending card names both models and how many messages wait.
   Without a key, AI is off and nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
   `uv run python -m mailmind ai key` keeps the key in the login Keychain and points `"anthropic_api_key"` in
