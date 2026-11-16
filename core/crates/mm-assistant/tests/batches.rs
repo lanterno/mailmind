@@ -150,19 +150,17 @@ impl LanguageModel for Model {
     }
 }
 
-/// Claude with its key, or AI off with none; a test may choose another provider (#49) or another model.
+/// Claude with its key, or AI off with none; a test may choose another provider (#49) or another model, or turn AI
+/// off and on.
 #[derive(Debug)]
-struct Keyed(Option<Arc<dyn LanguageModel>>, Mutex<AiProvider>, Arc<Mutex<String>>);
+struct Keyed(Mutex<Option<Arc<dyn LanguageModel>>>, Mutex<AiProvider>, Arc<Mutex<String>>);
 
 impl Engine for Keyed {
     fn in_force(&self) -> InForce {
-        match &self.0 {
-            Some(lm) => InForce {
-                provider: *lock(&self.1),
-                model: lock(&self.2).clone(),
-                ..InForce::claude(lm.clone(), "ANTHROPIC_API_KEY")
-            },
-            None => InForce::off(mm_assistant::providers::Off::NoKey, "ANTHROPIC_API_KEY"),
+        let provider = *lock(&self.1);
+        match lock(&self.0).clone() {
+            Some(lm) => InForce { provider, model: lock(&self.2).clone(), ..InForce::claude(lm, "ANTHROPIC_API_KEY") },
+            None => InForce { provider, ..InForce::off(mm_assistant::providers::Off::NoKey, "ANTHROPIC_API_KEY") },
         }
     }
 }
@@ -386,7 +384,7 @@ fn world(messages: i64, on: bool, limit_micros: Option<i64>) -> World {
     let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
     let lm: Arc<dyn LanguageModel> = model.clone();
     let chosen = Arc::new(Mutex::new(DEFAULT.to_owned()));
-    let engine = Arc::new(Keyed(on.then_some(lm), Mutex::new(AiProvider::Anthropic), chosen));
+    let engine = Arc::new(Keyed(Mutex::new(on.then_some(lm)), Mutex::new(AiProvider::Anthropic), chosen));
     let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
     let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
     let calls = Arc::new(Calls::new(gateway, status.clone(), None, false));
@@ -758,25 +756,62 @@ fn with_ai_off_nothing_goes_and_nothing_is_touched() {
 }
 
 #[test]
-fn with_another_provider_no_batch_goes_the_backlog_is_triaged_at_once_and_one_out_waits_for_claude() {
+fn with_claude_chosen_and_ai_off_one_out_waits_and_comes_in_once_ai_is_back_on() {
+    let w = world(120, true, None);
+    assert_eq!(w.submit(), 100);
+    w.model.end_batch();
+    let lm = lock(&w.engine.0).take();
+    w.clock.shift(batches::POLL);
+    assert_eq!(w.collect(), 0);
+    assert_eq!(w.model.asked(), ["submit_batch"], "nothing asked while AI is off");
+    assert_eq!((w.book.states(), w.batching.status().expect("status").waiting), (vec!["running".to_owned()], 100));
+    *lock(&w.engine.0) = lm;
+    assert_eq!(w.collect(), 100, "AI on again: the one out comes in");
+}
+
+#[test]
+fn with_another_provider_no_batch_goes_one_out_is_let_go_unsaid_and_its_messages_are_triaged_at_once() {
     let w = world(120, true, None);
     assert_eq!(w.submit(), 100, "sent while Claude was the provider");
-    w.model.end_batch();
+    assert!(w.ledger.reserved().expect("booked") > 0);
     *lock(&w.engine.1) = AiProvider::OpenAi;
-    w.clock.shift(batches::POLL);
-    lock(&w.book.rows).extend((200..=330).map(message));
-    w.assessments(true).round().expect("a round");
-    assert_eq!(w.model.asked(), ["submit_batch"], "no batch went, and the one out wasn't asked about");
-    assert!(!lock(&w.model.sent).is_empty(), "the backlog is triaged a message at a time");
+    // At once: the round after the switch, its poll not yet due.
+    let round = w.assessments(true).round().expect("a round");
+    assert_eq!(w.model.asked(), ["submit_batch"], "no batch went, and the API was told nothing of the one out");
+    assert!(w.book.states().is_empty(), "the one out was let go");
+    assert_eq!((w.batching.status().expect("status").waiting, w.ledger.reserved().expect("booked")), (0, 0));
+    assert_eq!(round, None, "all 120 fit in one round");
+    assert!(w.waiting().is_empty(), "the batch's messages and the newest, triaged a message at a time");
+    assert_eq!(lock(&w.model.sent).len(), 120);
     let asked = vec![("1".to_owned(), "Triage.".to_owned())];
     let refused = w.calls.gateway().submit_batch(&asked, None, "triage-batch", None, None);
     assert_eq!(refused, Err(CallError::NotSent(NotSent::NoBatches)));
     assert_eq!(w.calls.gateway().batch_ended("msgbatch_1"), Err(CallError::NotSent(NotSent::NoBatches)));
     assert!(w.counted("triage-batch").is_empty(), "nothing sent, so nothing counted");
-    assert_eq!(w.model.asked(), ["submit_batch"]);
 
     *lock(&w.engine.1) = AiProvider::Anthropic;
-    assert_eq!(w.collect(), 100, "Claude again: the one out comes in");
+    w.model.end_batch();
+    w.clock.shift(batches::POLL);
+    assert_eq!(w.collect(), 0, "Claude again: nothing is out to come in");
+    assert_eq!(w.model.asked(), ["submit_batch"]);
+}
+
+#[test]
+fn with_another_provider_one_being_sent_is_let_go_too_and_so_with_ai_off() {
+    for on in [true, false] {
+        let w = world(120, on, None);
+        *lock(&w.engine.1) = AiProvider::Gemini;
+        // Being sent just now, so no crash cut it off: it is let go all the same.
+        w.book.begin(&Begun { keys: &[1, 2], ..begun() }).expect("begun").expect("an id");
+        assert_eq!(w.collect(), 0, "on: {on}");
+        assert!(w.book.states().is_empty(), "on: {on}");
+        let id = w.book.begin(&Begun { keys: &[1, 2], ..begun() }).expect("begun").expect("an id");
+        w.book.sent(id, "msgbatch_x", NOW).expect("sent");
+        assert_eq!(w.collect(), 0, "on: {on}");
+        assert!(w.book.states().is_empty(), "on: {on}");
+        assert_eq!(w.batching.status().expect("status").waiting, 0, "on: {on}");
+        assert!(w.model.asked().is_empty() && lock(&w.model.sent).is_empty(), "on: {on}: nothing asked of Claude");
+    }
 }
 
 #[test]
