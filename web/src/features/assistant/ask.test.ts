@@ -59,9 +59,9 @@ describe("asking your inbox", () => {
   it("says the AI is off when it is, and that the ask failed otherwise", async () => {
     the.post.mockRejectedValueOnce(aiOff()).mockRejectedValueOnce(new Error("down"));
     await ask.ask("a");
-    expect(ask.asking.get()).toEqual({ question: "a", state: "error", error: "AI is off" });
+    expect(ask.asking.get()).toEqual({ question: "a", state: "error", error: "AI is off", off: true });
     await ask.ask("b");
-    expect(ask.asking.get()).toEqual({ question: "b", state: "error", error: "ask failed" });
+    expect(ask.asking.get()).toEqual({ question: "b", state: "error", error: "ask failed", off: false });
   });
   it("once stopped, shows nothing of an answer still on its way, nor of its failure", async () => {
     const answer = later<object>(), failing = later<object>();
@@ -107,9 +107,9 @@ describe("planning a bulk action", () => {
   it("says the AI is off when it is, and that the planner failed otherwise", async () => {
     the.post.mockRejectedValueOnce(aiOff()).mockRejectedValueOnce(new Error("down"));
     await ask.runDo("a", vi.fn());
-    expect(ask.doing.get()).toEqual({ state: "error", cmd: "a", error: "AI is off" });
+    expect(ask.doing.get()).toEqual({ state: "error", cmd: "a", error: "AI is off", off: true });
     await ask.runDo("b", vi.fn());
-    expect(ask.doing.get()).toEqual({ state: "error", cmd: "b", error: "planner failed" });
+    expect(ask.doing.get()).toEqual({ state: "error", cmd: "b", error: "planner failed", off: false });
   });
   it("once stopped, neither shows a plan still on its way nor runs its search", async () => {
     const plan = later<object>();
