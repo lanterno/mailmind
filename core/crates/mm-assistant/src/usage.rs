@@ -30,7 +30,7 @@ impl UsageReport {
     }
 
     /// Each of the last `days` local days (at least one), newest first: its calls and their cost in micro-dollars, in
-    /// all and by feature. A day without calls is there with zeros.
+    /// all and by feature, a day's held at 2^63-1. A day without calls is there with zeros.
     pub fn days(&self, days: i64) -> Result<Vec<Value>, Fault> {
         let (today, _) = mm_kernel::zone::day_and_second(&*self.zone, self.clock.now().whole_seconds());
         let wanted: Vec<String> = (0..days.max(1)).map(|back| written(today - back)).collect();
@@ -39,9 +39,10 @@ impl UsageReport {
         for row in self.ledger.days(since)? {
             // A day after today's, which a clock set back would leave, isn't one of them.
             let Some(at) = wanted.iter().position(|day| *day == row.day) else { continue };
+            // Held at the most the ledger holds, as each row's cost is.
             let (calls, cost, features) = &mut out[at];
-            *calls += row.calls;
-            *cost += row.cost_micros;
+            *calls = calls.saturating_add(row.calls);
+            *cost = cost.saturating_add(row.cost_micros);
             features.insert(row.feature, json!({"calls": row.calls, "cost_micros": row.cost_micros}));
         }
         Ok(wanted

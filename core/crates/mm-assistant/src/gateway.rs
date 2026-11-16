@@ -248,13 +248,14 @@ impl Gateway {
                     tally.len() - 1
                 }
             };
+            // Held at the most an i64 holds, as each answer's cost is.
             let sum = &mut tally[at].2;
             sum.calls += 1;
-            sum.usage.input_tokens += usage.input_tokens;
-            sum.usage.output_tokens += usage.output_tokens;
-            sum.usage.cache_write_tokens += usage.cache_write_tokens;
-            sum.usage.cache_read_tokens += usage.cache_read_tokens;
-            sum.cost_micros += spent;
+            sum.usage.input_tokens = sum.usage.input_tokens.saturating_add(usage.input_tokens);
+            sum.usage.output_tokens = sum.usage.output_tokens.saturating_add(usage.output_tokens);
+            sum.usage.cache_write_tokens = sum.usage.cache_write_tokens.saturating_add(usage.cache_write_tokens);
+            sum.usage.cache_read_tokens = sum.usage.cache_read_tokens.saturating_add(usage.cache_read_tokens);
+            sum.cost_micros = sum.cost_micros.saturating_add(spent);
         }
         for (served, outcome, counted) in tally {
             self.record(feature, name, &served, outcome, counted);

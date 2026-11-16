@@ -15,16 +15,18 @@ use crate::db::Database;
 use crate::discovery::not_snoozed_sql;
 use crate::placeholders;
 
+/// A call's row added to its day's: each count of tokens and the cost held at the most a row's 64 bits take, as
+/// SQLite would otherwise turn a sum past it into a REAL that no reader takes as a whole number.
 const ADD: &str = "INSERT INTO ai_usage(day, feature, model, served, outcome, calls, input_tokens, output_tokens, \
                    cache_write_tokens, cache_read_tokens, cost_micros, last_ts) \
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
                    ON CONFLICT(day, feature, model, served, outcome) DO UPDATE SET \
                    calls = calls + excluded.calls, \
-                   input_tokens = input_tokens + excluded.input_tokens, \
-                   output_tokens = output_tokens + excluded.output_tokens, \
-                   cache_write_tokens = cache_write_tokens + excluded.cache_write_tokens, \
-                   cache_read_tokens = cache_read_tokens + excluded.cache_read_tokens, \
-                   cost_micros = cost_micros + excluded.cost_micros, \
+                   input_tokens = MIN(input_tokens + excluded.input_tokens, 9223372036854775807), \
+                   output_tokens = MIN(output_tokens + excluded.output_tokens, 9223372036854775807), \
+                   cache_write_tokens = MIN(cache_write_tokens + excluded.cache_write_tokens, 9223372036854775807), \
+                   cache_read_tokens = MIN(cache_read_tokens + excluded.cache_read_tokens, 9223372036854775807), \
+                   cost_micros = MIN(cost_micros + excluded.cost_micros, 9223372036854775807), \
                    last_ts = MAX(last_ts, excluded.last_ts)";
 
 impl UsageLedger for Database {
@@ -50,10 +52,13 @@ impl UsageLedger for Database {
         })
     }
 
+    /// What the day's rows cost, held at 2^63-1 as each row is: added here, as SQLite's SUM of whole numbers fails
+    /// past it.
     fn spent(&self, day: &str) -> Result<i64, Fault> {
         self.read(|c| {
-            c.prepare_cached("SELECT COALESCE(SUM(cost_micros), 0) FROM ai_usage WHERE day = ?")?
-                .query_row([day], |r| r.get(0))
+            c.prepare_cached("SELECT cost_micros FROM ai_usage WHERE day = ?")?
+                .query_map([day], |r| r.get::<_, i64>(0))?
+                .try_fold(0_i64, |spent, cost| Ok(spent.saturating_add(cost?)))
         })
     }
 
@@ -72,16 +77,27 @@ impl UsageLedger for Database {
 }
 
 impl UsageDays for Database {
+    /// Each day's features from `since`, newest day first: their calls and cost, each held at 2^63-1 as a row's are,
+    /// so added here and not in SQLite's SUM, which fails past it.
     fn days(&self, since: &str) -> Result<Vec<FeatureDay>, Fault> {
         self.read(|c| {
-            c.prepare_cached(
-                "SELECT day, feature, SUM(calls), SUM(cost_micros) FROM ai_usage WHERE day >= ? \
-                 GROUP BY day, feature ORDER BY day DESC, feature",
-            )?
-            .query_map([since], |r| {
+            let mut out: Vec<FeatureDay> = Vec::new();
+            let mut statement = c.prepare_cached(
+                "SELECT day, feature, calls, cost_micros FROM ai_usage WHERE day >= ? ORDER BY day DESC, feature",
+            )?;
+            for row in statement.query_map([since], |r| {
                 Ok(FeatureDay { day: r.get(0)?, feature: r.get(1)?, calls: r.get(2)?, cost_micros: r.get(3)? })
-            })?
-            .collect()
+            })? {
+                let row = row?;
+                match out.last_mut() {
+                    Some(at) if at.day == row.day && at.feature == row.feature => {
+                        at.calls = at.calls.saturating_add(row.calls);
+                        at.cost_micros = at.cost_micros.saturating_add(row.cost_micros);
+                    }
+                    _ => out.push(row),
+                }
+            }
+            Ok(out)
         })
     }
 }

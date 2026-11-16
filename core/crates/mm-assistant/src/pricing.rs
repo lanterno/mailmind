@@ -184,21 +184,25 @@ pub fn cost_micros(asked: &str, served: &str, input: i64, output: i64, cache_wri
 
 /// What the tokens (input, output, cache write, cache read) cost, in micro-dollars, rounded up, at the dearer of the
 /// model asked and the one that served the reply; on this machine (`local`) a model the table doesn't know is free.
+/// Worked out whole, as Python's integers are, and held at the most an `i64` holds: an absurd count of tokens a
+/// service reports never wraps round to a cost that is small, or less than nothing.
 pub fn cost_micros_on(local: bool, asked: &str, served: &str, tokens: (i64, i64, i64, i64)) -> i64 {
     let (input, output, cache_write, cache_read) = tokens;
-    let prompt = input + cache_write + cache_read;
+    let prompt = input.saturating_add(cache_write).saturating_add(cache_read);
     let at = |p: Price| {
         let (i, o, w, r) = p.nanos();
-        input * i + output * o + cache_write * w + cache_read * r
+        let each = [(input, i), (output, o), (cache_write, w), (cache_read, r)];
+        each.iter().map(|(tokens, nanos)| i128::from(*tokens) * i128::from(*nanos)).sum::<i128>()
     };
     let served = if served.is_empty() { asked } else { served };
     let nanos = at(price_on(local, asked, prompt)).max(at(price_on(local, served, prompt)));
-    -(-nanos).div_euclid(1000)
+    let micros = -(-nanos).div_euclid(1000);
+    i64::try_from(micros).unwrap_or(if micros < 0 { i64::MIN } else { i64::MAX })
 }
 
-/// What a call costs through the Message Batches API: half, rounded up.
+/// What a call costs through the Message Batches API: half, rounded up, for any cost `cost_micros` gives.
 pub fn batch_micros(micros: i64) -> i64 {
-    -(-micros).div_euclid(2)
+    micros.div_euclid(2) + micros.rem_euclid(2)
 }
 
 /// On the low side: mail runs near 4, and an estimate should err high.

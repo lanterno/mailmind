@@ -209,11 +209,12 @@ impl CostGovernor {
         (self.room() <= 0).then_some("limit")
     }
 
-    /// What today's limit leaves for background work, in micro-dollars.
+    /// What today's limit leaves for background work, in micro-dollars: never less than nothing, however much a
+    /// spending held at 2^63-1 and the batches out add up to.
     pub fn room(&self) -> i64 {
         let (spent, limit) = self.today();
         match (spent, self.booked()) {
-            (Some(spent), Some(booked)) => (limit - spent - booked).max(0),
+            (Some(spent), Some(booked)) => limit.saturating_sub(spent).saturating_sub(booked).max(0),
             _ => 0,
         }
     }
