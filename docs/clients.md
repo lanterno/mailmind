@@ -157,12 +157,17 @@ slice is built:
   thread's name and the file and line, never the panic's words, which can quote mail. Every background lane's round,
   the durable queues' passes, the sync's single flight (`sync_guarded`) and each account's sync in it, IDLE's workers
   and its dispatcher run under `mm_kernel::errors::caught`, so a panic ends that round as a failure, is logged, comes
-  down off its running flag, and the lane goes on.
+  down off its running flag, and the lane goes on. Within a queue's pass, each row's try is caught too, and one that
+  panics is an attempt that failed: a change to the mail backs off with the class `Panic` and is given back at its
+  last attempt; a send is judged by how far its row got (gone out: its bookkeeping is owed; its last bytes begun:
+  it waits for a person; else it backs off as `send failed`), and its account's outbox lane is freed however the
+  lane's thread ends. Neither keeps its row claimed until a restart, and the rest of the pass still goes.
 - **A wake from sleep or a change of network** is the shell's to hear, and `CoreHost::woke` (`Host::woke`) what it
   tells the core: IDLE's workers let their connections go and open fresh ones at once (`Supervisor::renew`), and the
-  sync runs its round now. A connection waiting in IDLE is probed with TCP keepalive (after a minute quiet, every 15
-  seconds, lost after four unanswered), so one that died without a word fails in about two minutes rather than at
-  IDLE's 24-minute renewal.
+  sync runs its round now. Trouble that may pass starts afresh (`Syncing::woke`), so a sync that failed as the Mac
+  went to sleep neither shows by its age on waking nor counts toward two in a row with the sync on waking. A
+  connection waiting in IDLE is probed with TCP keepalive (after a minute quiet, every 15 seconds, lost after four
+  unanswered), so one that died without a word fails in about two minutes rather than at IDLE's 24-minute renewal.
 
 ## The six questions
 
