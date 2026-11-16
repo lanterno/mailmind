@@ -12,14 +12,14 @@ export type AiPart = "mode" | "connection" | "spending" | "ahead";
 export const aiParts = (on: boolean): AiPart[] => (on ? ["mode", "connection", "spending", "ahead"] : ["mode"]);
 
 // What each provider asks of a person: a key (needed, optional or none) and where one is made; the URL it is reached at, which
-// a person gives for Ollama (its own, filled in) and for a compatible service (none until given), and Claude's and the rest
-// never; and whether it has a model of its own, or one must be chosen.
+// a person gives for a model on this Mac (Ollama's, filled in) and for a compatible service (none until given), and Claude's
+// and the rest never; and whether it has a model of its own, or one must be chosen.
 interface Needs { key: "needed" | "optional" | "none"; keysAt?: string; url: string | null; ownModel: boolean }
 export const NEEDS: Record<AiProvider, Needs> = {
   anthropic: { key: "needed", keysAt: "https://console.anthropic.com", url: null, ownModel: true },
   openai: { key: "needed", keysAt: "https://platform.openai.com/api-keys", url: null, ownModel: true },
   gemini: { key: "needed", keysAt: "https://aistudio.google.com/apikey", url: null, ownModel: true },
-  ollama: { key: "none", url: "http://127.0.0.1:11434/v1", ownModel: false },
+  local: { key: "optional", url: "http://127.0.0.1:11434/v1", ownModel: false },
   compatible: { key: "optional", url: "", ownModel: false },
 };
 

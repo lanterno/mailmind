@@ -108,7 +108,8 @@ function ModelByHand({ chosen, use, back }: { chosen: string; use: (model: strin
   );
 }
 
-// The service's URL, filled in with Ollama's own: saved as a person leaves it, "" where it is the provider's own.
+// The service's URL, filled in with the provider's own (Ollama's, for a model on this Mac): saved as a person leaves it, ""
+// where it is the provider's own.
 function UrlField({ saved, prefill, save }: { saved: string; prefill: string; save: (url: string) => void }) {
   const [typed, setTyped] = useState(saved || prefill);
   const commit = () => {
@@ -221,7 +222,7 @@ export function AiForm() {
             <>
               <label className="lbl" htmlFor="aiUrl">The service’s URL</label>
               <UrlField key={`${provider}:${p.ai_base_url}`} saved={p.ai_base_url} prefill={needs.url} save={chooseUrl} />
-              <div className="set-help">{provider === "ollama" ? "Where Ollama answers on this Mac." : "Where the service answers, up to /v1: https, or http on this Mac."}</div>
+              <div className="set-help">{provider === "local" ? "Where your model server answers on this Mac: 127.0.0.1, ::1 or localhost." : "Where the service answers, up to /v1: https, or http on this Mac."}</div>
             </>
           )}
           <div className="set-help ai-standing" id="aiStanding" role="status">{aiStanding(ai)}</div>

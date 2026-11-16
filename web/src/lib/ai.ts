@@ -9,7 +9,7 @@ export const PROVIDER_LABEL: Record<AiProvider, string> = {
   anthropic: "Claude (Anthropic)",
   openai: "OpenAI",
   gemini: "Google Gemini",
-  ollama: "Ollama, on this Mac",
+  local: "A model on this Mac",
   compatible: "Another OpenAI-compatible service",
 };
 
@@ -18,7 +18,7 @@ export const PROVIDER_NAME: Record<AiProvider, string> = {
   anthropic: "Claude",
   openai: "OpenAI",
   gemini: "Gemini",
-  ollama: "Ollama",
+  local: "your model server",
   compatible: "the OpenAI-compatible service",
 };
 
@@ -26,16 +26,17 @@ export const PROVIDER_NAME: Record<AiProvider, string> = {
 // of a key, a model or a URL, it still shows, and says how to set AI up. Before the digest has come, nothing is hidden.
 export const aiOffered = (ai: Said | null | undefined) => ai?.off !== "turned-off";
 
-// Whether the provider answers on this Mac: Ollama at its own address, or any service at a loopback one.
+// Whether the provider answers on this Mac: a model on this Mac, which the server holds there, or any service at a loopback
+// address.
 const HERE = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i;
-export const runsHere = (provider: AiProvider, baseUrl: string) => (provider === "ollama" && !baseUrl) || HERE.test(baseUrl);
+export const runsHere = (provider: AiProvider, baseUrl: string) => provider === "local" || HERE.test(baseUrl);
 
 // Who the text of a message goes to, for each provider: the company, or the server named.
 const RECIPIENT: Record<AiProvider, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   gemini: "Google",
-  ollama: "your Ollama server",
+  local: "your model server",
   compatible: "the OpenAI-compatible service",
 };
 
