@@ -19,6 +19,15 @@ describe("what the pill says", () => {
     expect(pillLabel(digest({ sync: { last: null, running: true } }), false, false, now).text).toBe("Syncing…");
     expect(pillLabel(digest({ status: { "a@example.test": { health: "syncing" } } }), false, false, now).text).toBe("Syncing…");
   });
+  it("says how far a first sync has got, ahead of what else runs", () => {
+    const n = (k: number) => k.toLocaleString();
+    const one = digest({ status: { "a@example.test": { health: "ok", done: 2300, total: 41000 }, "b@example.test": { health: "ok" } } });
+    expect(pillLabel(one, true, true, now)).toEqual({ cls: "busy", text: `Reading your inbox: ${n(2300)} of ${n(41000)}` });
+    const two = digest({ status: { "a@example.test": { health: "ok", done: 2300, total: 41000 }, "b@example.test": { health: "ok", done: 500, total: 900 } } });
+    expect(pillLabel(two, false, false, now).text).toBe(`Reading your inboxes: ${n(2800)} of ${n(41900)}`);
+    const failing = digest({ status: { "a@example.test": { health: "ok", done: 2300, total: 41000 }, "b@example.test": { health: "error" } } });
+    expect(pillLabel(failing, false, false, now).text).toBe("b can’t connect");
+  });
   it("says read-only rather than when it last synced", () => {
     expect(pillLabel(digest({ profile: "read-only", sync: { last: now.toISOString() } }), false, false, now).text).toBe("Read-only");
   });
