@@ -109,7 +109,7 @@ def test_a_file_that_wont_parse_is_never_overwritten(config, data_dir):
 @pytest.mark.parametrize("change", [{}, {"made_up": 1}])
 def test_a_change_of_nothing_writes_nothing(config, data_dir, change):
     before = path_of(data_dir).stat().st_mtime_ns, path_of(data_dir).read_bytes()
-    assert config.set_preferences(change) == dict(preferences.DEFAULTS)
+    assert config.set_preferences(change) == {**preferences.DEFAULTS, "ai_enabled": True}     # the file names Claude's key
     assert (path_of(data_dir).stat().st_mtime_ns, path_of(data_dir).read_bytes()) == before
 
 
@@ -145,10 +145,45 @@ def test_the_first_run_guide_is_offered_once_and_the_file_remembers(config, data
 
 # ── AI: on or off, its provider, model and service URL (#49) ──────────────────────────────────────────────────────────
 
-def test_ai_is_on_with_claude_and_its_own_model_and_url_to_begin_with():
+def test_ai_mode_starts_off_with_claude_and_its_own_model_and_url():
     assert {k: v for k, v in preferences.DEFAULTS.items() if k.startswith("ai_")} == {
-        "ai_enabled": True, "ai_provider": "anthropic", "ai_model": "", "ai_base_url": ""}
+        "ai_enabled": False, "ai_provider": "anthropic", "ai_model": "", "ai_base_url": ""}
     assert preferences.CHOICES["ai_provider"] == ("anthropic", "openai", "gemini", "local", "compatible")
+
+
+def directory_over(data_dir, environment_key=False, **top):
+    path_of(data_dir).write_text(json.dumps({"accounts": [ADA], **top}))
+    return Directory(config_file.ConfigFile(), secrets, lambda provider: None, lambda: environment_key)
+
+
+def test_ai_mode_the_file_doesnt_say_is_off_with_no_key_anywhere(data_dir):
+    assert directory_over(data_dir).preferences()["ai_enabled"] is False
+    assert directory_over(data_dir, preferences={"ai_enabled": "yes"}).preferences()["ai_enabled"] is False
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai", "gemini", "local", "compatible"])
+def test_ai_mode_the_file_doesnt_say_is_on_once_it_names_a_key_for_any_provider(data_dir, provider):
+    named = {f"{provider}_api_key": {"keychain": f"{provider}-api-key", "version": 1}}
+    assert directory_over(data_dir, **named).preferences()["ai_enabled"] is True
+
+
+def test_ai_mode_the_file_doesnt_say_is_on_with_claudes_key_in_the_environment(data_dir):
+    assert directory_over(data_dir, environment_key=True).preferences()["ai_enabled"] is True
+    assert directory_over(data_dir, mistral_api_key={"env": "NOT_A_PROVIDER"}).preferences()["ai_enabled"] is False
+
+
+def test_ai_mode_the_file_says_wins_over_any_key(data_dir):
+    off = directory_over(data_dir, environment_key=True, anthropic_api_key={"env": "K"}, preferences={"ai_enabled": False})
+    assert off.preferences()["ai_enabled"] is False
+    assert directory_over(data_dir, preferences={"ai_enabled": True}).preferences()["ai_enabled"] is True
+
+
+def test_ai_mode_set_is_written_and_its_answer_is_what_stands(data_dir):
+    d = directory_over(data_dir, environment_key=True)
+    assert d.set_preferences({"density": "cozy"})["ai_enabled"] is True
+    assert "ai_enabled" not in file_of(data_dir)["preferences"]          # the default isn't written for it
+    assert d.set_preferences({"ai_enabled": False})["ai_enabled"] is False
+    assert file_of(data_dir)["preferences"]["ai_enabled"] is False
 
 
 @pytest.mark.parametrize("model", ["gpt-6.1-sol", "llama3.3:70b-instruct-q4_K_M", "openai/gpt-6.1-sol", "models/gemini-4-hydrogen",

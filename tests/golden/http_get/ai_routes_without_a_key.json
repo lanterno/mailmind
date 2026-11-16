@@ -86,7 +86,7 @@
  {
   "body": {
    "ai_off": true,
-   "detail": "AI is off: there is no API key",
+   "detail": "AI is off: it is turned off in Settings",
    "status": 409,
    "title": "AI is off",
    "type": "/problems/ai-off"
@@ -107,7 +107,7 @@
  {
   "body": {
    "ai_off": true,
-   "detail": "AI is off: there is no API key",
+   "detail": "AI is off: it is turned off in Settings",
    "status": 409,
    "title": "AI is off",
    "type": "/problems/ai-off"
@@ -176,7 +176,7 @@
     "last_ts": 0,
     "limit_micros": 15000000,
     "model": "",
-    "off": "no-key",
+    "off": "turned-off",
     "provider": "anthropic",
     "spent_today_micros": 0
    },

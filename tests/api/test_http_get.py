@@ -274,7 +274,7 @@ def test_without_a_key_every_ai_request_says_ai_is_off(app, world, anthropic_api
         finally:
             c.close()
     r = app.post(path, body)
-    assert (r.status, r.json) == (409, problems.ai_off("no-key"))
+    assert (r.status, r.json) == (409, problems.ai_off("turned-off"))      # with no key anywhere, AI mode starts off
     assert anthropic_api.requests == []
     assert "failed" not in capfd.readouterr().out          # nothing was tried, so nothing failed
     ai_line = app.get("/api/digest").json["ai"]

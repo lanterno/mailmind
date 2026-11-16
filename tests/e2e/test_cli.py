@@ -92,7 +92,7 @@ def test_assess_says_ai_is_off_and_tries_nothing(data_dir, anthropic_api, monkey
     from mailmind.bootstrap import assistant
     monkeypatch.setattr(assistant.assessments, "summarize_one", lambda row: 1 / 0)
     main(["assess", "10", "1"])
-    assert capsys.readouterr().out == "AI is off: there is no API key, so nothing was summarized.\n"
+    assert capsys.readouterr().out == "AI is off: it is turned off in Settings, so nothing was summarized.\n"
     assert anthropic_api.requests == []
 
 

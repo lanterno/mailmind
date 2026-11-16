@@ -48,8 +48,21 @@ def free_port():
 
 # ── the preferences ───────────────────────────────────────────────────────────
 
-def test_ai_is_on_with_claude_and_its_own_model_and_url_to_begin_with(app):
-    assert prefs(app) == {"ai_enabled": True, "ai_provider": "anthropic", "ai_model": "", "ai_base_url": ""}
+def test_ai_mode_starts_off_with_claude_and_its_own_model_and_url(app):
+    assert prefs(app) == {"ai_enabled": False, "ai_provider": "anthropic", "ai_model": "", "ai_base_url": ""}
+
+
+def test_ai_mode_starts_on_once_a_key_is_kept_and_stays_as_it_is_set(app, fake_keychain):
+    keep(app, "openai")
+    assert prefs(app)["ai_enabled"] is True
+    choose(app, ai_enabled=False)
+    assert prefs(app)["ai_enabled"] is False
+    keep(app, "gemini")
+    assert prefs(app)["ai_enabled"] is False
+
+
+def test_with_claudes_key_in_the_environment_ai_mode_starts_on(app, ai):
+    assert prefs(app)["ai_enabled"] is True
 
 
 def test_a_model_or_url_none_can_be_is_refused_in_words_and_a_provider_or_switch_as_a_bad_request(app):
@@ -76,22 +89,22 @@ def test_a_model_on_this_mac_at_a_url_elsewhere_is_refused_in_words(app):
 
 def test_a_url_is_kept_without_its_trailing_slash_and_another_provider_sets_model_and_url_back(app):
     choose(app, ai_provider="compatible", ai_model="mixtral-9x", ai_base_url="https://llm.example.test/v1/")
-    assert prefs(app) == {"ai_enabled": True, "ai_provider": "compatible", "ai_model": "mixtral-9x",
+    assert prefs(app) == {"ai_enabled": False, "ai_provider": "compatible", "ai_model": "mixtral-9x",
                           "ai_base_url": "https://llm.example.test/v1"}
     choose(app, ai_provider="local", ai_model="llama3.3")
-    assert prefs(app) == {"ai_enabled": True, "ai_provider": "local", "ai_model": "llama3.3", "ai_base_url": ""}
-    choose(app, ai_enabled=False)
+    assert prefs(app) == {"ai_enabled": False, "ai_provider": "local", "ai_model": "llama3.3", "ai_base_url": ""}
+    choose(app, ai_enabled=True)
     assert prefs(app)["ai_model"] == "llama3.3"
     choose(app, ai_provider="anthropic")
-    assert prefs(app) == {"ai_enabled": False, "ai_provider": "anthropic", "ai_model": "", "ai_base_url": ""}
+    assert prefs(app) == {"ai_enabled": True, "ai_provider": "anthropic", "ai_model": "", "ai_base_url": ""}
 
 
 # ── what is in force ──────────────────────────────────────────────────────────
 
 def test_the_digest_says_which_provider_and_why_ai_is_off(app, fake_keychain):
     st = status(app)
-    assert (st["engine"], st["provider"], st["off"], st["model"]) == ("none", "anthropic", "no-key", "")
-    for asked, said in [({"ai_provider": "openai"}, ("openai", "no-key")),
+    assert (st["engine"], st["provider"], st["off"], st["model"]) == ("none", "anthropic", "turned-off", "")
+    for asked, said in [({"ai_enabled": True}, ("anthropic", "no-key")), ({"ai_provider": "openai"}, ("openai", "no-key")),
                         ({"ai_provider": "compatible"}, ("compatible", "no-url")),
                         ({"ai_provider": "compatible", "ai_base_url": "https://llm.example.test/v1"}, ("compatible", "no-model")),
                         ({"ai_provider": "local"}, ("local", "no-model")),

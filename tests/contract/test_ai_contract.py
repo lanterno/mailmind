@@ -267,11 +267,21 @@ def test_a_key_the_config_file_names_wins_over_the_environment(api, data_dir, mo
 def test_the_startup_line_says_when_there_is_no_key(plain, data_dir, monkeypatch):
     from mailmind.bootstrap import assistant
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    config(data_dir, preferences={"ai_enabled": True})
     assert assistant.status.describe_engine() == ("Claude (Anthropic) · claude-opus-5-5 · no key, so AI is off: "
                                                   "keep one with `uv run python -m mailmind ai key`, or set ANTHROPIC_API_KEY")
     config(data_dir, anthropic_api_key={"env": "MAILMIND_TEST_UNSET_KEY"})
     assert assistant.status.describe_engine() == ("Claude (Anthropic) · claude-opus-5-5 · no key, so AI is off: "
                                                   "the anthropic_api_key in mailmind.config.json can't be read")
+
+
+def test_with_no_key_anywhere_ai_mode_starts_off(plain, data_dir, monkeypatch):
+    from mailmind.bootstrap import assistant
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    st = assistant.status.report()
+    assert (st["engine"], st["provider"], st["off"]) == ("none", "anthropic", "turned-off")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", fa.KEY)
+    assert assistant.status.report()["off"] is None
 
 
 @pytest.mark.parametrize("preferences, line", [
@@ -286,6 +296,7 @@ def test_the_startup_line_says_when_there_is_no_key(plain, data_dir, monkeypatch
 ])
 def test_the_startup_line_names_the_provider_and_why_ai_is_off_never_its_url(plain, data_dir, preferences, line):
     from mailmind.bootstrap import assistant
+    preferences = {"ai_enabled": True, **preferences}
     config(data_dir, preferences={**preferences, "ai_base_url": "http://127.0.0.1:11500/private-path"}
            if preferences.get("ai_provider") == "local" else preferences)
     assert assistant.status.describe_engine() == line
@@ -346,10 +357,11 @@ def test_turned_off_nothing_is_sent_whatever_key_there_is(api, data_dir):
 def test_the_status_says_why_ai_is_off_and_which_provider_was_chosen(plain, data_dir, monkeypatch):
     from mailmind.bootstrap import assistant
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    config(data_dir, preferences={"ai_enabled": True})
     assert (assistant.status.report()["provider"], assistant.status.report()["off"]) == ("anthropic", "no-key")
     for preferences, said in [({"ai_provider": "gemini"}, ("gemini", "no-key")), ({"ai_provider": "compatible"}, ("compatible", "no-url")),
                               ({"ai_provider": "local"}, ("local", "no-model"))]:
-        config(data_dir, preferences=preferences)
+        config(data_dir, preferences={"ai_enabled": True, **preferences})
         st = assistant.status.report()
         assert (st["provider"], st["off"], st["engine"]) == (*said, "none")
 

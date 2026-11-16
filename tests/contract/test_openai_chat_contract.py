@@ -41,7 +41,7 @@ def choose(plain, data_dir, fake_keychain, openai_api):
         if key is not None:
             fake_keychain.add(f"{provider}-api-key", key, replace=True)
             top[f"{provider}_api_key"] = {"keychain": f"{provider}-api-key", "version": 1}
-        prefs = {"ai_provider": provider, "ai_base_url": openai_api.url, **more}
+        prefs = {"ai_enabled": True, "ai_provider": provider, "ai_base_url": openai_api.url, **more}
         (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [], "preferences": prefs, **top}))
         return openai_api
     return choosing
