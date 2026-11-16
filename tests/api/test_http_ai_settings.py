@@ -218,6 +218,27 @@ def test_a_compatible_service_lists_at_its_url_with_a_key_only_if_one_is_kept(ap
     assert openai_api.requests[-1].key == fo.KEY
 
 
+def test_another_providers_models_are_listed_at_its_own_url_never_at_the_one_chosen_for_the_provider_in_force(
+        app, ai, openai_api, fake_keychain):
+    """The URL a person chose belongs to the provider in force: listing another's at it would send that one's key there."""
+    choose(app, ai_provider="compatible", ai_base_url=openai_api.url, ai_model="mixtral-9x")
+    keep(app, "compatible")
+    ai.models = ["claude-opus-5-5"]
+    assert models(app, "anthropic").json["models"] == ["claude-opus-5-5"]             # at Claude's own
+    [req] = ai.requests
+    assert (req.method, req.path.split("?")[0], req.key) == ("GET", "/v1/models", fa.KEY)
+    assert openai_api.requests == []
+
+    choose(app, ai_provider="openai", ai_base_url=openai_api.url)
+    keep(app, "openai")
+    r = models(app, "compatible")                                                     # it has none of its own
+    assert (r.status, r.json) == (400, problems.refused("Give the service's URL first."))
+    assert openai_api.requests == []
+    assert models(app, "openai").status == 200                                        # the one in force, at its own
+    assert [(r.path, r.key) for r in openai_api.requests] == [("/models", fo.KEY)]
+    assert len(ai.requests) == 1
+
+
 # ── the model servers on this Mac ─────────────────────────────────────────────
 
 def test_the_model_servers_on_this_mac_that_answer_are_listed_in_order_with_ai_mode_off(app, local_ai):
