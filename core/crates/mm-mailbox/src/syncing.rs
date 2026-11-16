@@ -9,6 +9,10 @@
 //!
 //! A round, or an account's sync in it, that panics ends as one that failed (`Panic`): the account says so, the
 //! flight comes down, and the next sync runs as it would have.
+//!
+//! An account shows as failing only as `sync_health` says: trouble that may pass (a lost connection, a timeout, a
+//! server that can't take a login for now) once a second sync in a row has failed too, or three minutes on; until
+//! then it shows as it did before, and its record keeps no error.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -24,6 +28,7 @@ use crate::command_ports::{self, CommandStore, MoveAccounts};
 use crate::folders::Folders;
 use crate::ingest::{Ingest, SyncError};
 use crate::session::ServerError;
+use crate::sync_health::{self, Failing};
 use crate::sync_ports::{AroundSync, Events, MailboxEvent};
 use crate::warm::Warming;
 
@@ -52,6 +57,8 @@ struct Held {
     status: BTreeMap<String, AccountSync>,
     /// Syncs asked for while one ran: each its accounts, or None for all.
     asked: Vec<Option<BTreeSet<String>>>,
+    /// Each account whose syncs have failed in a row, until one works.
+    failing: BTreeMap<String, Failing>,
 }
 
 /// The coarse, scrubbed kind of a sync's failure, from its class alone (`accounts.domain.health.error_kind`).
@@ -124,9 +131,23 @@ impl Syncing {
         self.held.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// How each account's sync stands now.
+    /// How each account's sync stands now: one whose failures in a row now show, three minutes on, as failing.
     pub fn status(&self) -> Result<BTreeMap<String, AccountSync>, Fault> {
-        Ok(self.held().status.clone())
+        let now = self.seconds();
+        let held = self.held();
+        let mut status = held.status.clone();
+        for (account, run) in &held.failing {
+            let syncing = status.get(account).is_some_and(|now| now.health == "syncing");
+            if run.shows(now) && !syncing {
+                status.insert(account.clone(), AccountSync { health: "error", msg: run.class.to_owned() });
+            }
+        }
+        Ok(status)
+    }
+
+    /// The clock's seconds now.
+    fn seconds(&self) -> i64 {
+        self.clock.now().micros().div_euclid(1_000_000)
     }
 
     /// How the sync as a whole stands now.
@@ -151,12 +172,14 @@ impl Syncing {
             if emails.is_some_and(|named| !named.contains(&email)) {
                 continue;
             }
+            let before = self.held().status.get(&email).cloned();
             self.set_status(&email, "syncing", String::new())?;
             // An account whose sync panics fails as `Panic`, and the next account's goes on.
             let synced = caught(|| self.ingest.sync_folder(&email, "INBOX", false, None));
             match synced.unwrap_or_else(|fault| Err(SyncError::Store(fault))) {
                 Ok((kept, junk, _)) => {
                     new += kept;
+                    self.held().failing.remove(&email);
                     self.set_status(&email, "ok", format!("+{kept}"))?;
                     let at = when::iso(self.clock.now());
                     command_ports::write(&*self.store, |tx| tx.record_sync_result(&email, None, &at))?;
@@ -166,11 +189,29 @@ impl Syncing {
                     }
                 }
                 Err(error) => {
-                    self.set_status(&email, "error", error.class().to_owned())?;
+                    let (class, kind, now) = (error.class(), error_kind(error), self.seconds());
+                    let run = {
+                        let mut held = self.held();
+                        let run =
+                            Failing::and(held.failing.get(&email), class, sync_health::may_pass(class, kind), now);
+                        held.failing.insert(email.clone(), run.clone());
+                        run
+                    };
+                    if !run.shows(now) {
+                        // It may pass: the account shows as it did, and the next sync says.
+                        let mut held = self.held();
+                        match before {
+                            Some(before) => held.status.insert(email.clone(), before),
+                            None => held.status.remove(&email),
+                        };
+                        drop(held);
+                        log::info(TAG, "an account's sync failed; it shows if the next fails too", &[]);
+                        continue;
+                    }
+                    self.set_status(&email, "error", class.to_owned())?;
                     let at = when::iso(self.clock.now());
-                    let failed = Some((error.class(), error_kind(error)));
-                    command_ports::write(&*self.store, |tx| tx.record_sync_result(&email, failed, &at))?;
-                    log::warning(TAG, "an account's sync failed", &[], Some(error.class()));
+                    command_ports::write(&*self.store, |tx| tx.record_sync_result(&email, Some((class, kind)), &at))?;
+                    log::warning(TAG, "an account's sync failed", &[], Some(class));
                 }
             }
         }
