@@ -16,6 +16,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { offerUndo, readAgain, undoGroup, useDigest } from "../mailbox";
 import { FilterDialog, Filters } from "./Filters";
 import { curateOpen } from "./open";
+import { undoBrings } from "./sweepWords";
 
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };
 // What a sweep's plan calls each junk bucket; one it doesn't know goes by the name the server gives it.
@@ -255,7 +256,7 @@ function SweepGoing({ plan }: { plan: SweepPlan }) {
       {!!plan.held_back && <div className="sg-note">{plan.held_back} starred or unread message{s(plan.held_back)} stay{plan.held_back === 1 ? "s" : ""} in your Inbox.</div>}
       {plan.capped && <div className="sg-note">The newest {plan.planned} only — sweep again for the rest.</div>}
       {!!plan.no_undo && <div className="sg-note">{plan.no_undo} of them can’t be brought back with Undo.</div>}
-      <div className="sg-undo">Undo with <b>z</b> puts it all back.</div>
+      <div className="sg-undo">Undo with <b>z</b> {undoBrings(plan.no_undo)}.</div>
     </div>
   );
 }
