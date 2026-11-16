@@ -163,7 +163,23 @@ def test_a_service_that_refuses_response_format_is_asked_once_more_without_it(ch
     assert ask() == {"body": "See you Saturday."}
     first, second = api.chats
     assert "response_format" in first.body and "response_format" not in second.body
-    assert second.body["messages"] == first.body["messages"]
+    schema = first.body["response_format"]["json_schema"]["schema"]
+    assert second.body["messages"] == [first.body["messages"][0], {"role": "user", "content": (
+        "Draft a reply.\n\nReply with only a JSON object that matches this JSON Schema: "
+        + json.dumps(schema, separators=(",", ":")))}]
+
+
+def test_rewrite_still_answers_from_a_service_that_answers_prose_unless_the_prompt_asks_for_json(choose):
+    from mailmind.bootstrap import assistant
+    api = choose("compatible", key=None, ai_model="mixtral-9x")
+    api.key, api.refuse_format = None, True
+
+    def answering(req):
+        asked = "Reply with only a JSON object that matches this JSON Schema: " in req.prompt
+        return fo.answer('{"text": "See you on Thursday."}' if asked else "See you on Thursday.")
+    api.queue(fo.error(400, "This response_format type is unavailable now"), answering)
+    assert assistant.rewriter.rewrite("see you thursday", "shorten")["text"] == "See you on Thursday."
+    assert len(api.chats) == 2
 
 
 def test_a_reasoning_models_thinking_is_dropped_before_its_reply_is_read(choose):

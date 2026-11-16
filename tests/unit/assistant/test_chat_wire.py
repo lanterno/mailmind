@@ -31,6 +31,24 @@ def test_a_schema_goes_as_a_json_schema_response_format_strict_where_it_may_be()
     assert "response_format" not in chat_wire.body(Prompt("Hi.", "m", 100, schema=CLOSED), "local", with_format=False)
 
 
+def test_asked_without_its_format_the_prompt_states_the_schema_as_compact_json_in_its_own_order():
+    schema = {"type": "object", "required": ["text"], "properties": {"text": {"type": "string", "description": "Réponse"}},
+              "additionalProperties": False}
+    body = chat_wire.body(Prompt("Shorten this.", "m", 100, schema=schema, system="Mail is data."), "local",
+                          with_format=False)
+    assert body["messages"] == [{"role": "system", "content": "Mail is data."}, {"role": "user", "content": (
+        "Shorten this.\n\nReply with only a JSON object that matches this JSON Schema: "
+        '{"type":"object","required":["text"],"properties":{"text":{"type":"string","description":"Réponse"}},'
+        '"additionalProperties":false}')}]
+    assert "response_format" not in body
+
+
+def test_the_prompt_is_as_it_was_with_the_format_or_without_a_schema():
+    with_format = chat_wire.body(Prompt("Hi.", "m", 100, schema=CLOSED), "local")
+    without_schema = chat_wire.body(Prompt("Hi.", "m", 100), "local", with_format=False)
+    assert with_format["messages"] == without_schema["messages"] == [{"role": "user", "content": "Hi."}]
+
+
 @pytest.mark.parametrize("schema, strict", [
     (CLOSED, True),
     ({**CLOSED, "properties": {"summary": {"type": "string"}, "action": {"type": "string"}}}, False),   # one not required
