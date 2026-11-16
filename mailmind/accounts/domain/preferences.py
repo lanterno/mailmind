@@ -94,15 +94,15 @@ LOCAL_ELSEWHERE = "A model on this Mac must be at 127.0.0.1, ::1 or localhost."
 
 def _service_url(value: str) -> bool:
     """Whether `value` can be an AI service's URL: https to a host, or http to this Mac, in printable ASCII, with no user or
-    password, query or fragment."""
+    password, query or fragment, and a port from 1 to 65535 where it names one."""
     if len(value) > AI_BASE_URL_MAX or any(not "!" <= ch <= "~" for ch in value) or "?" in value or "#" in value:
         return False
     try:
         parts = urlsplit(value)
-        parts.port                                      # a port that is no number, or past 65535, raises
+        port = parts.port                               # a port that is no number, or past 65535, raises
     except ValueError:
         return False
-    if "@" in parts.netloc or not parts.hostname:
+    if "@" in parts.netloc or not parts.hostname or parts.netloc.endswith(":") or port == 0:     # "host:" names no port
         return False
     return parts.scheme == "https" or (parts.scheme == "http" and parts.hostname in LOOPBACK)
 
