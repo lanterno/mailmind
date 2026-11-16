@@ -630,6 +630,25 @@ final class SettingsCoreTests: XCTestCase {
         await close(core, status)
     }
 
+    /// General's Backup & Export says the room the mail takes on this Mac: the database's file and its log, as they
+    /// are on disk, said as Finder says a size.
+    @MainActor
+    func testGeneralSaysTheRoomTheMailTakesOnThisMac() async throws {
+        let (core, status) = try await opened()
+        let plan = try await core.get(API.Get.ExportPlan.self)
+        let onDisk = try ["mailmind.db", "mailmind.db-wal"]
+            .map { folder.appending(path: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) }
+            .map { try $0.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 }
+            .reduce(0, +)
+        XCTAssertGreaterThan(plan.databaseBytes, 0)
+        XCTAssertEqual(plan.databaseBytes, onDisk)
+        XCTAssertEqual(BackupSection.size(2_000_000_000), "2 GB")
+        XCTAssertEqual(BackupSection.size(plan.databaseBytes),
+                       ByteCountFormatter.string(fromByteCount: Int64(onDisk), countStyle: .file))
+        await close(core, status)
+    }
+
     @MainActor
     func testTheCoreSaysWhatAICostLatelyAndAFreshHomeHasSpentNothing() async throws {
         let (core, status) = try await opened()
