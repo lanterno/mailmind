@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PostBodies } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
-import { AI_KEPT, aiParts, BILLING, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, summariesWaiting, urlToSave, type LocalServer } from "./aiChoices";
+import { AI_KEPT, aiParts, BILLING, billOfRecord, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, spentOver, summariesWaiting, urlToSave, type LocalServer } from "./aiChoices";
 
 describe("the AI tab", () => {
   it("holds only AI mode's switch while it is off", () => expect(aiParts(false)).toEqual(["mode"]));
@@ -29,6 +29,21 @@ describe("the Spending card", () => {
     expect(summariesWaiting(0)).toBe("Every message from the last 30 days has its summary.");
     expect(summariesWaiting(undefined)).toBe("");
     expect(summariesWaiting(null)).toBe("");
+  });
+  it("says what the days cost in all and by their dearest features, the rest summed", () => {
+    const feature = (label: string, cost_micros: number, calls = 1) => ({ label, calls, cost_micros });
+    expect(spentOver("The last 7 days", { calls: 0, cost_micros: 0, features: [] })).toBe("The last 7 days: nothing.");
+    expect(spentOver("This month", { calls: 1, cost_micros: 12_000, features: [feature("Rewrite", 12_000)] }))
+      .toBe("This month: $0.02, 1 call (Rewrite $0.02).");
+    const week = { calls: 1203, cost_micros: 4_130_000, features: [feature("Summaries", 3_000_000, 1100), feature("Ask", 1_000_000, 100),
+      feature("Rewrite", 100_000), feature("Your week", 20_000), feature("Other", 10_000)] };
+    expect(spentOver("The last 7 days", week))
+      .toBe("The last 7 days: $4.13, 1,203 calls (Summaries $3.00, Ask $1.00, Rewrite $0.10, the rest $0.03).");
+  });
+  it("says these are MailMind's own counts, and the provider's console holds the bill", () => {
+    expect(billOfRecord("anthropic")).toBe("MailMind counts these from each call it makes; Anthropic’s console holds the bill.");
+    expect(billOfRecord("openai")).toContain("OpenAI’s platform holds the bill");
+    expect(billOfRecord("local")).toContain("a model on this Mac costs nothing");
   });
 });
 

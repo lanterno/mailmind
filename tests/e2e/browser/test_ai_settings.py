@@ -11,6 +11,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
+from fakes import anthropic_api as fa
 from fakes import openai_api as fo
 
 pytestmark = pytest.mark.browser
@@ -297,6 +298,18 @@ def test_a_services_models_are_asked_for_once_the_url_given_is_saved(page, app, 
     page.heard_all_asked()
     assert listings == [200]                                    # never before the server held the URL, to be told to give one
     assert [r.path for r in openai_api.requests] == ["/models"]
+    clean(page)
+
+
+def test_the_spending_card_says_the_last_week_and_this_month_by_feature_and_where_the_bill_is(page, app, world, ai):
+    status, said = fa.answer({"text": "the"})
+    ai.queue((status, {**said, "usage": {"input_tokens": 10_000, "output_tokens": 0}}))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 200
+    ai_open(page, app)
+    spent = page.locator("#aiSpent")
+    expect(spent).to_contain_text(re.compile(r"The last 7 days: \$\d+\.\d\d, 1 call \(Rewrite \$\d+\.\d\d\)\."))
+    expect(spent).to_contain_text(re.compile(r"This month: \$\d+\.\d\d, 1 call \(Rewrite \$\d+\.\d\d\)\."))
+    expect(spent).to_contain_text("MailMind counts these from each call it makes; Anthropic’s console holds the bill.")
     clean(page)
 
 
