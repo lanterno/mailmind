@@ -249,7 +249,7 @@ fn the_key_goes_in_the_clear_only_to_this_machine() {
 fn a_host_the_tripwire_refuses_is_never_reached() {
     let (url, log) = stand_in(vec![(200, vec![], answer("never"))]);
     let failed = api(&url, Arc::new(Closed)).complete(&prompt("claude-opus-5-5", true)).expect_err("refused");
-    assert_eq!((failed.status, failed.plain().as_str()), (None, "ModelError"));
+    assert_eq!((failed.status, failed.plain().as_str()), (None, "couldn't reach it"));
     assert!(heard(&log).is_empty());
 }
 
@@ -303,4 +303,38 @@ fn a_chunk_larger_than_any_reply_is_refused_before_it_is_waited_for() {
     }
     let sent = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\nx\r\n0\r\n\r\n";
     assert_eq!(mm_claude::http::read_response(&mut &sent[..]), Err(mm_net::Lost("ProtocolError")));
+}
+
+#[test]
+fn the_models_a_key_may_ask_are_read_page_by_page_and_asked_once() {
+    let first = json!({"data": [{"id": "claude-opus-5-5"}, {"id": "claude-sonnet-5-5"}], "has_more": true,
+                       "first_id": "claude-opus-5-5", "last_id": "claude-sonnet-5-5"})
+    .to_string();
+    let second = json!({"data": [{"id": "claude-haiku-5-5"}, {"id": ""}, {"no": "id"}], "has_more": false,
+                        "last_id": "claude-haiku-5-5"})
+    .to_string();
+    let (url, log) = stand_in(vec![(200, vec![], first), (200, vec![], second)]);
+    let ids = api(&url, Arc::new(Open::default())).list_models().expect("a list");
+    assert_eq!(ids, ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]);
+    let asked = heard(&log);
+    let lines: Vec<&str> = asked.iter().map(|h| h.request_line.as_str()).collect();
+    assert_eq!(
+        lines,
+        ["GET /v1/models?limit=1000 HTTP/1.1", "GET /v1/models?limit=1000&after_id=claude-sonnet-5-5 HTTP/1.1"]
+    );
+    assert_eq!((asked[0].header("x-api-key"), asked[0].header("anthropic-version")), (Some(KEY), Some("2026-10-21")));
+
+    let (url, log) = stand_in(vec![(429, vec![("retry-after-ms", "1")], error("rate_limit_error", "slow down"))]);
+    let failed = api(&url, Arc::new(Open::default())).list_models().expect_err("a person is waiting");
+    assert_eq!((failed.status, heard(&log).len()), (Some(429), 1));
+}
+
+#[test]
+fn a_refused_key_or_no_answer_is_no_list() {
+    let (url, _) = stand_in(vec![(401, vec![], error("authentication_error", "invalid x-api-key"))]);
+    let failed = api(&url, Arc::new(Open::default())).list_models().expect_err("refused");
+    assert_eq!(failed.status, Some(401));
+    assert!(!format!("{failed:?}").contains("sk-ant"));
+    let unreached = api("http://127.0.0.1:9", Arc::new(Closed)).list_models().expect_err("nothing reached");
+    assert_eq!((unreached.status, unreached.plain().as_str()), (None, "couldn't reach it"));
 }
