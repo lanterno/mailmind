@@ -49,6 +49,6 @@ impl Catalog {
             Err(_) => return Err(Problem::new(Kind::Unreachable, UNREACHABLE)),
         };
         let default = Some(default_model(provider)).filter(|m| !m.is_empty());
-        Ok(json!({"ok": true, "models": chat_models(ids), "default": default}))
+        Ok(json!({"ok": true, "models": chat_models(provider, ids), "default": default}))
     }
 }

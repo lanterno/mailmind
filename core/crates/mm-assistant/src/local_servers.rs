@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use mm_kernel::ai_provider::AiProvider;
 use serde_json::{Value, json};
 
 use crate::ports::LocalServers;
@@ -39,7 +40,7 @@ impl Finder {
             .ask()
             .into_iter()
             .filter_map(|asked| {
-                let models = chat_models(asked.models?);
+                let models = chat_models(AiProvider::Local, asked.models?);
                 Some(json!({"name": asked.name, "url": asked.url, "models": models}))
             })
             .collect();

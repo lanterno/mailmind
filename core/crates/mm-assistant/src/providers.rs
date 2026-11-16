@@ -161,13 +161,14 @@ const NOT_CHAT: [&str; 12] = [
 ];
 
 /// The models a provider's list names, as a person picks from them: sorted, once each, without Gemini's `models/`,
-/// and only the ones that can chat, whichever provider lists them.
-pub fn chat_models(ids: impl IntoIterator<Item = String>) -> Vec<String> {
+/// and for every provider but Claude, whose list holds no other kind, only the ones that can chat.
+pub fn chat_models(provider: AiProvider, ids: impl IntoIterator<Item = String>) -> Vec<String> {
+    let filtered = provider != AiProvider::Anthropic;
     let mut names: Vec<String> = ids
         .into_iter()
         .map(|id| id.strip_prefix("models/").map(str::to_owned).unwrap_or(id))
         .filter(|name| !name.is_empty())
-        .filter(|name| !NOT_CHAT.iter().any(|word| name.contains(word)))
+        .filter(|name| !filtered || !NOT_CHAT.iter().any(|word| name.contains(word)))
         .collect();
     names.sort();
     names.dedup();
