@@ -90,9 +90,15 @@ The fixtures, from the bottom up:
   the one a domain's mail servers are asked of: by the app in the test's process, and by a served one, which
   `MAILMIND_TEST_DNS` names it to (`mm-served` hands it to the Rust server through its seams). Without it no test asks any
   nameserver, nor reads which this computer's are, and every domain's mail servers are none.
+- `local_ai` starts fake model servers on this Mac (`tests/fakes/openai_api.py`, taking any request) named Ollama and
+  LM Studio, with llama.cpp between them at a port nothing listens on: the only ones `GET /api/ai/local` asks, by the app
+  in the test's process and by a served one, which `MAILMIND_TEST_LOCAL_AI` names them to (`name=url` pairs between `;`;
+  `mm-served` hands it to the Rust server through its seams). Without it an autouse fixture sets that variable empty and
+  no test asks a model server, so none running on the machine is ever reached.
 - `openai_api` is a fake OpenAI-compatible API (`tests/fakes/openai_api.py`) on loopback, for every other provider: a test
-  chooses the provider with `ai_base_url` at its `.url` and keeps its `KEY` (`.key = None` takes any, as Ollama does).
-  A test that chooses Ollama gives it that URL first, so nothing reaches one running on the machine.
+  chooses the provider with `ai_base_url` at its `.url` and keeps its `KEY` (`.key = None` takes any, as a model on this
+  Mac may). A test that chooses a model on this Mac gives it that URL first, so nothing reaches one running on the
+  machine.
 - `golden` records exchanges in `tests/golden/<suite>/<test>.json`, after it normalizes ports,
   paths and random ids. `uv run pytest --update-golden` rewrites the files; review the diff like
   code. `tests/golden/schema_v<N>.sql` is the schema snapshot: rename it in the commit that adds
