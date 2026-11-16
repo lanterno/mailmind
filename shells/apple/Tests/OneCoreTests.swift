@@ -41,6 +41,7 @@ final class OneCoreTests: XCTestCase {
         let once = await opened.count
         XCTAssertEqual(once, 1, "a second window's start leaves the opening to the first")
         XCTAssertEqual(app.stage, .open)
+        XCTAssertEqual(app.folder?.lastPathComponent, folder.lastPathComponent, "the folder its log and Start Fresh use")
         // The window closed, and opened again from the Dock.
         await app.start()
         let still = await opened.count

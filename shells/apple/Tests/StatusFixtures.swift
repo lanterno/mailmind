@@ -47,7 +47,8 @@ enum StatusFixtures {
     }
 
     static func account(_ email: String, alias: String? = nil, type: String = "imap", style: String = "keychain",
-                        set: Bool = true, signature: String = "", ref: String? = nil, variable: String? = nil)
+                        set: Bool = true, signature: String = "", ref: String? = nil, variable: String? = nil,
+                        host: String = "imap.example.test", smtpHost: String = "smtp.example.test")
         -> API.AccountRow
     {
         let aliasJSON = alias.map { "\"\($0)\"" } ?? "null"
@@ -57,8 +58,8 @@ enum StatusFixtures {
             {"alias": \(aliasJSON), "credential": {"set": \(set), "style": "\(style)", "ref": \(refJSON), "var": \(varJSON)},
              "defaults_applied": {"host": false, "port": false, "smtp_host": false, "smtp_port": false,
                                   "smtp_starttls": false, "starttls": false, "trash": false},
-             "disabled": false, "email": "\(email)", "host": "imap.example.test", "port": 993,
-             "signature": "\(signature)", "smtp_host": "smtp.example.test", "smtp_port": 465,
+             "disabled": false, "email": "\(email)", "host": "\(host)", "port": 993,
+             "signature": "\(signature)", "smtp_host": "\(smtpHost)", "smtp_port": 465,
              "smtp_starttls": false, "starttls": false, "trash": "Trash", "type": "\(type)"}
             """)
     }
