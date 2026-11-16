@@ -3,6 +3,7 @@ lists for a person to choose from; what the digest's `ai` says is in force and w
 than Claude, against the fake OpenAI-compatible API on loopback. Each provider's key is kept as tests/api/test_http_keychain.py
 keeps Claude's. Nothing here reaches a real provider: a test that lists a local model's gives it the fake's URL first.
 """
+import json
 import socket
 from urllib.parse import urlencode
 
@@ -141,6 +142,26 @@ def test_another_provider_is_asked_in_claudes_place(app, world, ai, openai_api, 
     assert (req.key, req.body["model"], "see you thursday" in req.prompt) == (fo.KEY, "gpt-6.1-sol", True)
     assert ai.requests == []
     assert status(app)["last_ok"] is True
+
+
+def test_the_bridges_password_is_never_an_ai_key(app, world, openai_api, fake_keychain):
+    """A hand edit may name it for a provider's key: it is no key, never sent, wherever it would go."""
+    bridge = "bridge-password-not-a-key"
+    assert app.post("/api/accounts/bridge-password", {"password": bridge}).status == 200
+    with app.stopped():
+        written = json.loads((world.dir / "mailmind.config.json").read_text())
+        written.update(openai_api_key={"proton_bridge": True}, compatible_api_key={"proton_bridge": True})
+        (world.dir / "mailmind.config.json").write_text(json.dumps(written))
+    choose(app, ai_enabled=True, ai_provider="openai", ai_base_url=openai_api.url)
+    assert (status(app)["engine"], status(app)["off"]) == ("none", "no-key")
+    assert (models(app, "openai").status, models(app, "openai").json) == (
+        400, problems.refused("Keep a key for this provider first."))
+    openai_api.key = None
+    choose(app, ai_provider="compatible", ai_base_url=openai_api.url, ai_model="mixtral-9x")
+    assert app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"}).status == 200
+    assert models(app, "compatible").status == 200
+    assert [r.path for r in openai_api.requests] == ["/chat/completions", "/models"]
+    assert not [r for r in openai_api.requests if "authorization" in r.headers or bridge in str(r.body)]
 
 
 # ── the models a provider lists ───────────────────────────────────────────────
