@@ -191,7 +191,7 @@ def test_a_sweep_the_server_stops_before_anything_moved_offers_no_undo(page, wor
     mod = drawer(page).locator(f'.acctmod[data-acct="{w.ADA}"]')
     mod.get_by_role("button", name=re.compile(r"^Sweep \d+")).click()
     mod.get_by_role("button", name="Confirm").click()
-    expect(page.locator("#toast")).to_contain_text("Sweep: ")
+    expect(page.locator("#toast")).to_contain_text("Couldn’t reach the mail server, so nothing was swept. Try again in a moment. (")
     expect(page.locator("#ufUndo")).to_be_hidden()
     assert world.where(NEWS)["server"][0][1] == "INBOX"
     clean(page)
