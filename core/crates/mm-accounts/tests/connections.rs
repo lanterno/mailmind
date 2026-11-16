@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use mm_accounts::connections::{Connections, PROBE_TIMEOUT, Trusted, quiet};
 use mm_accounts::draft::{Draft, NotTried, throwaway_account};
-use mm_accounts::ports::{AccountChange, AccountEvents, ConfigFile, LoginProbe, LoginTrouble};
+use mm_accounts::ports::{AccountChange, AccountEvents, AccountMail, ConfigFile, LoginProbe, LoginTrouble};
 use mm_accounts::{Account, Directory};
 use mm_kernel::errors::{Failure, Fault, Problem};
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Secret};
@@ -458,4 +458,37 @@ fn a_failed_test_says_what_to_do_next_and_where() {
         (answer["says"].as_str().unwrap().starts_with("Reading mail works"), &answer["link"]),
         (true, &Value::Null)
     );
+}
+
+/// What this Mac keeps of each account's mail: who was forgotten.
+#[derive(Debug, Default)]
+struct KeptMail(Mutex<Vec<String>>);
+
+impl AccountMail for KeptMail {
+    fn forget(&self, email: &str) -> Result<usize, Fault> {
+        self.0.lock().unwrap().push(email.to_owned());
+        Ok(7)
+    }
+}
+
+#[test]
+fn removing_an_account_with_its_mail_lets_go_of_what_this_mac_keeps_under_the_address_saved() {
+    let kept = Arc::new(KeptMail::default());
+    let mut w = world(None);
+    w.connections = w.connections.keeping_mail(kept.clone());
+    let removed = w.connections.delete(&object(json!({"email": "ADA@example.test", "delete_mail": true}))).unwrap();
+    assert_eq!(removed, json!({"ok": true, "removed": "ADA@example.test", "mail_deleted": 7}));
+    assert_eq!(*kept.0.lock().unwrap(), [ADA]);
+}
+
+#[test]
+fn removing_an_account_alone_keeps_its_mail() {
+    let kept = Arc::new(KeptMail::default());
+    let mut w = world(None);
+    w.connections = w.connections.keeping_mail(kept.clone());
+    let removed = w.connections.delete(&object(json!({"email": ADA, "delete_mail": false}))).unwrap();
+    assert_eq!(removed, json!({"ok": true, "removed": ADA}));
+    let not_found = w.connections.delete(&object(json!({"email": "zed@example.test", "delete_mail": true})));
+    assert_eq!(not_found.unwrap_err(), Problem::not_found("not found").into());
+    assert!(kept.0.lock().unwrap().is_empty());
 }
