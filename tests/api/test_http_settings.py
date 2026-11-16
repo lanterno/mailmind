@@ -157,6 +157,26 @@ def test_one_undo_of_a_sweep_logs_in_twice_however_much_went(app, world):
         assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
 
 
+def test_a_sweep_the_server_drops_gives_a_way_back_only_to_what_went(app, world):
+    """Dropped at its MOVE, nothing went: no undo group, and nothing of it waits on the undo stack. Dropped once its MOVE
+    ran, a fresh look finds it all gone, which is what moved, and one Undo brings it back."""
+    for name in JUNK:
+        world.server_flags(name, "\\Seen")
+    world.server.drop("UID MOVE", user=w.ADA)
+    [res] = (dropped := app.post("/api/sweep", {"account": w.ADA, "undo_group": "ug-dropped-1"}).json)["results"]
+    assert (bool(res["error"]), res["moved"], dropped["undo_group"]) == (True, 0, None)
+    assert app.post("/api/undo", {}).status == 404
+    world.server.drop_after("UID MOVE", user=w.ADA)
+    [res] = (dropped := app.post("/api/sweep", {"account": w.ADA, "undo_group": "ug-dropped-2"}).json)["results"]
+    assert (bool(res["error"]), res["moved"], dropped["undo_group"]) == (True, 3, "ug-dropped-2")
+    for name in JUNK:
+        assert [box for _, box, *_ in world.where(name)["server"]] == ["Trash"], name
+    undone = app.post("/api/undo", {}).json
+    assert (undone["label"], undone["reversed"], undone["failed"]) == ("Swept junk", 3, 0)
+    for name in JUNK:
+        assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
+
+
 def test_sync_retry_runs_a_sync_for_that_account(app, golden, world):
     world.server.deliver(w.CY, "INBOX", w.variant("cy-inbox-03-unrelated.eml", Message_ID="<parcel-2@parcels.example.test>",
                                                   Subject="Your parcel was delivered"))
