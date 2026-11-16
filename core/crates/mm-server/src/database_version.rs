@@ -61,7 +61,8 @@ pub(crate) fn ready(database: &Database, clock: &dyn Clock) -> Result<(), String
     database.ready(clock).map(|_| ()).map_err(|not| said(&not))
 }
 
-/// What a person is told of a database that isn't ready.
+/// What a person is told of a database that isn't ready: the Mac app's window shows it as it is, so it names what
+/// to do in MailMind's own words, never a developer's program or command.
 fn said(not: &NotReady) -> String {
     let (major, minor) = SQLITE_NEEDED;
     match not {
@@ -69,12 +70,12 @@ fn said(not: &NotReady) -> String {
             format!("MailMind needs SQLite {major}.{minor} or newer, and this build has {found}. Nothing was changed.")
         }
         NotReady::Older(version) => format!(
-            "the database is at version {version}, older than the version {BASE} this server upgrades from: start \
-             the Python app once (`just run`) to upgrade it"
+            "the database is at version {version}, older than the version {BASE} this MailMind can upgrade from, so \
+             it was left as it is"
         ),
         NotReady::Newer(version) => format!(
-            "the database is at version {version}, newer than the version {VERSION} this server reads: the Python \
-             app has moved on, and this server must catch up before it opens it"
+            "the database is at version {version}, made by a newer MailMind than this one, which reads up to version \
+             {VERSION}: install the newest MailMind to open it"
         ),
         NotReady::KeyDoesNotFit => "the database key doesn't open the database".into(),
         NotReady::Tripped | NotReady::Storage => "the database can't be made or read".into(),
