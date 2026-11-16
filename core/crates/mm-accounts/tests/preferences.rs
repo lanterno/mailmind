@@ -112,7 +112,7 @@ fn an_ai_setting_a_hand_edit_left_that_cant_be_one_is_its_default() {
     let read = read(&raw);
     assert_eq!(
         (&read["ai_enabled"], &read["ai_provider"], &read["ai_model"], &read["ai_base_url"]),
-        (&json!(false), &json!("ollama"), &json!("llama3.2:3b"), &json!("http://localhost:11434/v1/"))
+        (&json!(false), &json!("ollama"), &json!("llama3.2:3b"), &json!("http://localhost:11434/v1"))
     );
     assert_eq!(provider(&raw), AiProvider::Ollama);
 }
@@ -135,9 +135,9 @@ fn a_change_keeps_a_model_as_given_and_an_address_without_its_trailing_slash() {
 
 #[test]
 fn an_ai_setting_that_cant_be_one_refuses_the_change_in_words() {
-    const MODEL: &str = "a model's name is at most 200 letters, digits and . _ : / @ + -";
-    const URL: &str =
-        "the AI provider's address is an https URL, or http on this Mac, with no login, query or fragment";
+    const MODEL: &str = "the AI model must be up to 200 letters, digits and . _ : / @ + -";
+    const URL: &str = "the AI service's URL must be https, or http on this Mac, in at most 500 characters, with no \
+                       user, password, query or fragment";
     for (asked, said) in [
         (json!({"ai_enabled": "yes"}), "ai_enabled can't be that"),
         (json!({"ai_enabled": null}), "ai_enabled can't be that"),
@@ -152,6 +152,7 @@ fn an_ai_setting_that_cant_be_one_refuses_the_change_in_words() {
         (json!({"ai_base_url": "https://llm.example.test/v1?key=1"}), URL),
         (json!({"ai_base_url": format!("https://llm.example.test/{}", "a".repeat(500))}), URL),
         (json!({"ai_base_url": null}), URL),
+        (json!({"ai_base_url": "https://llm.example.test/caf\u{e9}"}), URL),
     ] {
         let refused = changes(&object(asked.clone())).err().map(|p| p.said);
         assert_eq!(refused.as_deref(), Some(said), "{asked}");
