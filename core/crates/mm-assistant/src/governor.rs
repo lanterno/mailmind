@@ -270,7 +270,8 @@ impl CostGovernor {
             return;
         }
         // What stops, as the log names it.
-        let (scope, what) = if matches!(error.status, Some(401 | 403)) {
+        // A refused key, or an account with no credit left: no feature will do better.
+        let (scope, what) = if matches!(error.status, Some(401 | 403)) || error.no_credit().is_some() {
             (Scope::Every, "every background call".to_owned())
         } else {
             let n = state.rejected.get(&key).copied().unwrap_or(0) + 1;

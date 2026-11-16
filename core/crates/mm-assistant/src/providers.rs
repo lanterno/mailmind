@@ -30,6 +30,22 @@ pub fn default_model(provider: AiProvider) -> &'static str {
     }
 }
 
+/// Whose account a call to `provider` is billed to, as "the ... account has no credit left" names it.
+pub fn billed_by(provider: AiProvider) -> &'static str {
+    match provider {
+        AiProvider::Anthropic => "Anthropic",
+        AiProvider::OpenAi => "OpenAI",
+        AiProvider::Gemini => "Gemini",
+        AiProvider::Local => "model server",
+        AiProvider::Compatible => "AI service",
+    }
+}
+
+/// What the status says of a call refused for want of credit or quota on `account`: the account to top up, not a wait.
+pub fn no_credit(account: &str) -> String {
+    format!("the {account} account has no credit left")
+}
+
 /// The model background summaries ask of a provider: "" for a model on this Mac and a compatible service, which ask
 /// the one chosen.
 pub fn small_model(provider: AiProvider) -> &'static str {

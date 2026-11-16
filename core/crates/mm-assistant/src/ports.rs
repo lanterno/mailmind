@@ -66,28 +66,47 @@ impl Reply {
 pub struct ModelError {
     pub status: Option<u16>,
     said: String,
+    /// The account the call was refused for want of credit or quota on ("Anthropic"), for that refusal only.
+    no_credit: Option<&'static str>,
 }
 
 impl fmt::Debug for ModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ModelError").field("status", &self.status).finish_non_exhaustive()
+        f.debug_struct("ModelError")
+            .field("status", &self.status)
+            .field("no_credit", &self.no_credit)
+            .finish_non_exhaustive()
     }
 }
 
 impl ModelError {
     pub fn new(said: impl Into<String>, status: Option<u16>) -> ModelError {
-        ModelError { status, said: said.into() }
+        ModelError { status, said: said.into(), no_credit: None }
     }
 
-    /// A rejection that sending the same thing again won't change: a bad request, key or model, not a rate limit or
-    /// an outage.
+    /// The same, refused for want of credit or quota on `account` (`providers::billed_by`): waiting won't change it.
+    pub fn with_no_credit(mut self, account: &'static str) -> ModelError {
+        self.no_credit = Some(account);
+        self
+    }
+
+    /// The account the call was refused for want of credit or quota on, for that refusal only.
+    pub fn no_credit(&self) -> Option<&'static str> {
+        self.no_credit
+    }
+
+    /// A rejection that sending the same thing again won't change: a bad request, key or model, or an account with no
+    /// credit left, not a rate limit or an outage.
     pub fn permanent(&self) -> bool {
-        self.status.is_some_and(|s| (400..500).contains(&s) && !RETRIED.contains(&s))
+        self.no_credit.is_some() || self.status.is_some_and(|s| (400..500).contains(&s) && !RETRIED.contains(&s))
     }
 
     /// The failure in words the setup card can show (`status._plain`), never what the API said: it can quote the
     /// request back.
     pub fn plain(&self) -> String {
+        if let Some(account) = self.no_credit {
+            return crate::providers::no_credit(account);
+        }
         let lower = self.said.to_lowercase();
         if self.said.contains(" 401") || lower.contains("authentication") || lower.contains("invalid x-api-key") {
             return "the API key was rejected".to_owned();

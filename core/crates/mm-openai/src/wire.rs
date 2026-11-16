@@ -225,6 +225,28 @@ pub fn key_invalid(body: &[u8]) -> bool {
     reason || error_text(body).starts_with("API key not valid")
 }
 
+/// Whether a service refused a call for want of credit or quota, which waiting won't change: a 402, OpenAI's 429 whose
+/// code (or type) is `insufficient_quota`, or Gemini's RESOURCE_EXHAUSTED for a quota of the day's (a quotaId with
+/// "PerDay" in it), not one by the minute.
+pub fn no_credit(status: u16, body: &[u8]) -> bool {
+    if status == 402 {
+        return true;
+    }
+    if status != 429 {
+        return false;
+    }
+    let parsed: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+    let Some(error) = error_of(&parsed) else { return false };
+    let insufficient = json!("insufficient_quota");
+    if error.get("code") == Some(&insufficient) || error.get("type") == Some(&insufficient) {
+        return true;
+    }
+    let details = error.get("details").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    let violations = details.iter().filter_map(|d| d.get("violations")?.as_array()).flatten();
+    error.get("status") == Some(&json!("RESOURCE_EXHAUSTED"))
+        && violations.filter_map(|v| v.get("quotaId")?.as_str()).any(|id| id.contains("PerDay"))
+}
+
 /// The most of what a service said that an error keeps, in characters.
 pub const SAID_MOST: usize = 200;
 

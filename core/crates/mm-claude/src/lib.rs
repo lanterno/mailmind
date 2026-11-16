@@ -20,6 +20,7 @@ use std::time::Duration;
 
 use mm_assistant::models::FALLBACK_BETA;
 use mm_assistant::ports::{BatchResult, LanguageModel, ModelError, Prompt, RETRIED, Reply};
+use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::seams::{Outside, Secret};
 use mm_net::Lost;
 use mm_net::http::backoff;
@@ -88,6 +89,8 @@ impl ClaudeApi {
 /// What a request accepts back: JSON, or a batch's results as JSON lines.
 const JSON: &str = "application/json";
 const BINARY: &str = "application/binary";
+/// In what the API says of an account with too little credit: "Your credit balance is too low…".
+const NO_CREDIT: &str = "credit balance";
 
 /// One request to the API, as `ClaudeApi::call` sends it.
 struct Call<'a> {
@@ -151,10 +154,17 @@ impl ClaudeApi {
                 Attempt::Lost(_) => Err(ModelError::new("Claude API unreachable: Connection error.", None)),
                 Attempt::Answered(response) if (200..300).contains(&response.status) => Ok(response),
                 // What the API said, which can quote the key back, with the key taken out before it is cut short.
-                Attempt::Answered(response) => Err(ModelError::new(
-                    format!("Claude API {}: {}", response.status, wire::said(&response.body, Some(self.key.expose()))),
-                    Some(response.status),
-                )),
+                Attempt::Answered(response) => {
+                    let said = wire::said(&response.body, Some(self.key.expose()));
+                    let error =
+                        ModelError::new(format!("Claude API {}: {said}", response.status), Some(response.status));
+                    // "Your credit balance is too low…": the account to top up, not a bad request.
+                    Err(if said.to_lowercase().contains(NO_CREDIT) {
+                        error.with_no_credit(mm_assistant::providers::billed_by(AiProvider::Anthropic))
+                    } else {
+                        error
+                    })
+                }
             };
         }
     }

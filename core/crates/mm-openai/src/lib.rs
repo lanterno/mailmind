@@ -135,7 +135,10 @@ impl ChatApi {
         loop {
             let attempt = self.attempt(endpoint, &request);
             let again = match &attempt {
-                Attempt::Answered(response) => retried_status(response.status),
+                // An account with no credit left isn't helped by waiting.
+                Attempt::Answered(response) => {
+                    retried_status(response.status) && !wire::no_credit(response.status, &response.body)
+                }
                 Attempt::Lost(lost) => lost.0 != "Refused",
             };
             if again && retried < retries {
@@ -175,7 +178,11 @@ impl ChatApi {
             return ModelError::new(format!("{provider} API 401: the key was refused"), Some(401));
         }
         let said = wire::said(&response.body, self.key.as_ref().map(Secret::expose));
-        ModelError::new(format!("{provider} API {status}: {said}"), Some(status))
+        let error = ModelError::new(format!("{provider} API {status}: {said}"), Some(status));
+        if wire::no_credit(status, &response.body) {
+            return error.with_no_credit(mm_assistant::providers::billed_by(self.provider));
+        }
+        error
     }
 
     /// Whether a 400 says the service doesn't take structured output: only a model on this Mac and a compatible service
