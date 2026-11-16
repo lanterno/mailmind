@@ -778,8 +778,10 @@ back, and the startup line `[imap] …` says how many accounts asked.
   `smtp_port` 587 with STARTTLS unless `smtp_starttls` is false. Trash is the folder named `trash` when the server lists
   it, else the one the server marks as Trash, else one named like one (`INBOX.Trash`, "Deleted Messages"). Run
   `uv run python -m mailmind inventory you@company.com` to see the real names.
-- **iCloud, Yahoo, AOL and Fastmail** — Settings fills in their servers from the address, and Trash for iCloud. Each
-  takes an app password, not the account's own: Settings links the provider's page for one beside the password.
+- **iCloud, Yahoo, AOL and Fastmail** — Settings fills in their servers from the address, and Trash for iCloud, and
+  offers them for an iCloud+ or Fastmail custom domain, by the mail servers the domain names. Each takes an app
+  password, not the account's own: Settings links the provider's page for one beside the password. Yahoo Japan
+  (yahoo.co.jp) is another company's, with servers of its own: type them in as Other IMAP.
 - **Microsoft** (Outlook, Hotmail, Live, Microsoft 365) — not yet: these accounts need Microsoft's own sign-in
   ([#47](https://github.com/lanterno/mailmind/issues/47)), and Settings says so before any password is asked.
 - **Proton** — install and run Proton Mail Bridge, then supply the Bridge
