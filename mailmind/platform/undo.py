@@ -6,7 +6,8 @@ Every function here but Undo's methods takes its caller's connection and leaves 
 """
 import json
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -22,7 +23,9 @@ log = get_logger("undo")
 KEEP_FOR = timedelta(hours=24)                # an entry older than this can't be undone (decision D3)
 
 type Entry = dict[str, Any]                   # what reverses one thing a person did: its kind says whose it is
-type Reverser = Callable[[Entry], tuple[bool, str | None, str | None]]     # (ok, the account it touched, the folder)
+type Reversed = tuple[bool, str | None, str | None]     # (ok, the account it touched, the folder)
+type Reverser = Callable[[Entry], Reversed]
+type Together = Callable[[list[Entry]], Sequence[Reversed]]   # a run of one kind and one account at once, in its order
 
 
 def _now():
@@ -131,11 +134,14 @@ class Undo:
     UNDO_MAX = 50                             # a group counts as one (decision D3)
 
     def __init__(self, uow: UnitOfWork, reversers: Mapping[str, Reverser], after: Callable[[], object],
-                 quiet_error: Callable[[Exception], str]):
+                 quiet_error: Callable[[Exception], str], together: Mapping[str, Together] | None = None):
         """`reversers` maps an entry's kind to what reverses it, `after()` runs once something was, and `quiet_error(e)`
-        is what may be said of an exception."""
+        is what may be said of an exception. `together` maps a kind whose entries in a group go back together, a run of
+        them on one account at one turn of its gate, to what reverses them: a sweep's hundreds ask the server once, not
+        once each."""
         self._uow = uow
         self._reversers = reversers
+        self._together = dict(together or {})
         self._after = after
         self._quiet_error = quiet_error
         self._lock = threading.Lock()
@@ -185,6 +191,43 @@ class Undo:
         return False, d.get("account"), None
 
 
+    def _reverse_members(self, newest_first: list[Entry]) -> list[Reversed | None]:
+        """A group's members, newest first, each run of one kind and one account that goes back together at one turn of
+        its gate and the rest one at a time: what each came to, None where it raised. One run's or member's trouble never
+        stops the rest."""
+        def gate(d: Entry) -> str:
+            return d.get("account") or gates.EVERY_ACCOUNT
+
+        out: list[Reversed | None] = []
+        at = 0
+        while at < len(newest_first):
+            first = newest_first[at]
+            kind = first.get("kind", "")
+            together = self._together.get(kind)
+            if together is None:
+                try:
+                    out.append(self._reverse_one(first))
+                except Exception as e:
+                    log.warning("a group member: %(why)s", {"why": self._quiet_error(e)})
+                    out.append(None)
+                at += 1
+                continue
+            run = 1
+            while (at + run < len(newest_first) and newest_first[at + run].get("kind", "") == kind
+                   and gate(newest_first[at + run]) == gate(first)):
+                run += 1
+            members = newest_first[at:at + run]
+            try:
+                answers: list[Reversed | None] = list(gates.run(gate(first), partial(together, members),
+                                                                priority=gates.Priority.INTERACTIVE))
+            except Exception as e:
+                log.warning("a group member: %(why)s", {"why": self._quiet_error(e)})
+                answers = []
+            out.extend(answers[k] if k < len(answers) else None for k in range(run))
+            at += run
+        return out
+
+
     def undo_last(self) -> dict[str, Any]:
         """Pop the last undoable action and reverse it, and say what went back: a group says how many of it did and how
         many didn't. Raises NotFound (`empty`) when there is nothing to undo, and Conflict when none of it went back. What
@@ -203,14 +246,10 @@ class Undo:
             if entry.get("kind") == "bulk":
                 acct = folder = None
                 left = []                             # newest first, as they were tried
-                for child in reversed(entry["children"]):
-                    try:
-                        ok, a, f = self._reverse_one(child)
-                    except Exception as e:            # one member's trouble never stops the rest
-                        log.warning("a group member: %(why)s", {"why": self._quiet_error(e)})
-                        ok = False
-                    if ok:
-                        acct, folder = a, f
+                newest_first = list(reversed(entry["children"]))
+                for child, answer in zip(newest_first, self._reverse_members(newest_first)):
+                    if answer is not None and answer[0]:
+                        _, acct, folder = answer
                     else:
                         left.append(child)
                 done = len(entry["children"]) - len(left)
