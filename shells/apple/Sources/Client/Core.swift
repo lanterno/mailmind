@@ -208,13 +208,36 @@ extension CoreHome {
         "MAILMIND_MEASURE", "MAILMIND_TEST_KEYCHAIN", "XCTestConfigurationFilePath", "XCTestSessionIdentifier",
     ]
 
+    /// Where Settings keeps the read-only switch ("Read only: MailMind changes nothing on your mail servers"), in the
+    /// app's defaults. The core reads it once, as it opens: a change takes effect the next time MailMind opens.
+    public static let readOnlyKey = "readOnly"
+
+    /// Whether a person turned the read-only switch on.
+    public static var readOnlyChosen: Bool { UserDefaults.standard.bool(forKey: readOnlyKey) }
+
+    /// The variables the core is handed: those passed on from the environment, and `MAILMIND_PROFILE=read-only` when
+    /// the switch is on and the environment names no profile of its own.
+    static func variables(_ environment: [String: String], readOnly: Bool) -> [String: String] {
+        var variables = environment.filter { passedOn.contains($0.key) }
+        if readOnly, variables["MAILMIND_PROFILE"] == nil { variables["MAILMIND_PROFILE"] = "read-only" }
+        return variables
+    }
+
+    /// Whether this is a person's run: one that names no home of its own and isn't a measure, demo or test run. Only
+    /// such a run may be opened again by itself (a relaunch through Finder's way of opening apps), since another run's
+    /// home and keychain are in its environment, which a relaunch wouldn't carry.
+    public static func isAPersonsRun(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        (environment["MAILMIND_HOME"] ?? "").isEmpty && !notAPersonsRun.contains { environment[$0] != nil }
+    }
+
     /// The home this process runs: `MAILMIND_HOME`'s folder when it names one (a demo's or a test's), with the file
     /// `MAILMIND_TEST_KEYCHAIN` names standing in for the login Keychain; else, in a person's run only, MailMind's own
-    /// folder in Application Support, made if it isn't there, on the login Keychain.
-    public static func ofThisProcess(_ environment: [String: String] = ProcessInfo.processInfo.environment) throws
-        -> CoreHome
+    /// folder in Application Support, made if it isn't there, on the login Keychain. Read only when `readOnly`, as the
+    /// switch in Settings says.
+    public static func ofThisProcess(_ environment: [String: String] = ProcessInfo.processInfo.environment,
+                                     readOnly: Bool = readOnlyChosen) throws -> CoreHome
     {
-        let variables = environment.filter { passedOn.contains($0.key) }
+        let variables = variables(environment, readOnly: readOnly)
         if let named = environment["MAILMIND_HOME"], !named.isEmpty {
             let standIn = environment["MAILMIND_TEST_KEYCHAIN"].flatMap { $0.isEmpty ? nil : $0 }
             return CoreHome(folder: named, variables: variables, standIn: standIn)

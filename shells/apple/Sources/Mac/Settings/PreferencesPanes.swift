@@ -85,6 +85,7 @@ struct GeneralPane: View {
                         Keys like e, r and j act on the mail without ⌘. Turn them off to use only ⌘ shortcuts.
                         """), isOn: status.preference(\.singleKeys) { .init(singleKeys: $0) })
                 }
+                ReadOnlySection(status: status)
                 BackupSection(status: status)
             }
         }
@@ -102,6 +103,77 @@ struct GeneralPane: View {
     /// No bounds of its own: the server holds the window to its limits and says them when it refuses one.
     private var undoSend: Binding<Int> {
         Preference(status: status, read: \.undoSendSeconds, change: { .init(undoSendSeconds: $0) }, fallback: 10).binding
+    }
+}
+
+/// The read-only switch: MailMind changes nothing on the mail servers, kept by the app and handed to the core as it
+/// opens (`CoreHome.ofThisProcess`), so a change asks to open MailMind again.
+struct ReadOnlySection: View {
+    let status: AppStatus
+    @AppStorage(CoreHome.readOnlyKey) private var readOnly = false
+    @State private var asking = false
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        DeskSideCard(title: String(localized: "Mail servers"), icon: .shield) {
+            SettingSwitch(String(localized: "Read only"), help: ReadOnlyRun.help,
+                          isOn: Binding(get: { readOnly }, set: { readOnly = $0; asking = true }))
+            if let pending = ReadOnlyRun.pending(chosen: readOnly, running: status.digest?.profile) {
+                HStack(spacing: 8) {
+                    SettingHelp(pending)
+                    Spacer(minLength: 0)
+                    if ReadOnlyRun.canRelaunch {
+                        Button("Relaunch Now") { ReadOnlyRun.relaunch() }
+                            .meadowButton(small: true)
+                    }
+                }
+            }
+        }
+        .alert(readOnly ? "Open MailMind again to turn read only on?" : "Open MailMind again to turn read only off?",
+               isPresented: $asking) {
+            if ReadOnlyRun.canRelaunch {
+                Button("Relaunch Now") { ReadOnlyRun.relaunch() }
+                Button("Later", role: .cancel) {}
+            } else {
+                Button("OK", role: .cancel) {}
+            }
+        } message: {
+            Text(ReadOnlyRun.canRelaunch ? "MailMind applies this as it opens."
+                                         : "MailMind applies this as it opens. Quit it, then open it again.")
+        }
+    }
+}
+
+/// What the read-only switch says, and the relaunch it asks for.
+enum ReadOnlyRun {
+    static let help = String(localized: """
+        MailMind changes nothing on your mail servers: nothing is moved, deleted, marked or sent, and new mail comes \
+        in only when you choose Get New Mail.
+        """)
+
+    /// What to say while the switch and the run disagree: the switch changed, and MailMind hasn't opened since.
+    /// `running` is the profile the core says it runs (`digest.profile`); nil before it has said.
+    static func pending(chosen: Bool, running: String?) -> String? {
+        guard let running, chosen != (running == "read-only") else { return nil }
+        return chosen ? String(localized: "Read only starts the next time MailMind opens.")
+                      : String(localized: "MailMind changes mail on your servers again the next time it opens.")
+    }
+
+    /// Only a person's run opens itself again: another's home is in an environment a relaunch wouldn't carry.
+    static var canRelaunch: Bool { CoreHome.isAPersonsRun() }
+
+    /// Quit, and open MailMind again once this run has ended, so two runs never hold its data at once.
+    @MainActor static func relaunch() {
+        let wait = Process()
+        wait.executableURL = URL(filePath: "/bin/sh")
+        wait.arguments = ["-c", "while /bin/kill -0 \"$0\" 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"$1\"",
+                          String(ProcessInfo.processInfo.processIdentifier), Bundle.main.bundlePath]
+        do {
+            try wait.run()
+        } catch {
+            return
+        }
+        NSApp.terminate(nil)
     }
 }
 

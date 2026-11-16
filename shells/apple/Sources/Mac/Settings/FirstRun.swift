@@ -41,12 +41,23 @@ struct Welcome: View {
                     VStack(spacing: 10) {
                         WelcomeStep(number: 1, title: String(localized: "Connect your first account"),
                                     text: Self.connecting) {
-                            Button { adding = true } label: {
-                                MeadowIconView(.plus, size: 15)
-                                Text("Connect Your First Account…")
+                            VStack(alignment: .leading, spacing: 10) {
+                                Button { adding = true } label: {
+                                    MeadowIconView(.plus, size: 15)
+                                    Text("Connect Your First Account…")
+                                }
+                                .meadowButton(.primary)
+                                .keyboardShortcut(.defaultAction)
+                                SettingHelp(Self.readOnly)
+                                Button {
+                                    status.settingsTab = .general
+                                    openSettings()
+                                } label: {
+                                    MeadowIconView(.shield, size: 15)
+                                    Text("Read Only in Settings…")
+                                }
+                                .meadowButton(.quiet, small: true)
                             }
-                            .meadowButton(.primary)
-                            .keyboardShortcut(.defaultAction)
                         }
                         WelcomeStep(number: 2, title: String(localized: "AI, if you want it"),
                                     text: aiMode ? Self.aiOn : Self.aiOff) {
@@ -91,6 +102,10 @@ struct Welcome: View {
     private static let connecting = String(localized: """
         Gmail, iCloud, Yahoo, AOL, Fastmail, Proton through Proton Bridge, or any other IMAP server. Type its address \
         and MailMind fills in the rest it knows. Its password is kept in your login Keychain, never in a file.
+        """)
+
+    static let readOnly = String(localized: """
+        Want to look first? Turn on Read only in Settings › General, and MailMind changes nothing on your mail servers.
         """)
 
     private static let aiOff = String(localized: """
