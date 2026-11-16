@@ -123,6 +123,16 @@ check "with the copyright About shows" equal "$(plist "$app" NSHumanReadableCopy
 check "and takes mailto: links, so it can be the Mac's mail app" equal \
     "$(plist "$app" CFBundleURLTypes:0:CFBundleURLSchemes:0)" "mailto"
 
+echo "## its symbols"
+symbolized() {
+    local dsym="$work/out/symbols/$version/MailMind.app.dSYM"
+    local uuids
+    uuids="$(xcrun dwarfdump --uuid "$app/Contents/MacOS/MailMind" | cut -d ' ' -f 2 | sort)"
+    [[ -n "$uuids" && "$(xcrun dwarfdump --uuid "$dsym" | cut -d ' ' -f 2 | sort)" == "$uuids" ]] &&
+        [[ "$(xcrun dwarfdump --show-sources "$dsym")" == *mm-host/src/* ]]
+}
+check "the version's dSYM is kept, matches the app's binary and holds the core's line tables" symbolized
+
 echo "## Sparkle.framework loads under the app's signature"
 # Library validation is checked when dyld maps a framework, before any of the app's code runs. A program signed as the
 # app is (ad hoc, hardened runtime, the app's entitlements) loads the app's own copy of Sparkle.
