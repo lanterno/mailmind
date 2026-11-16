@@ -18,7 +18,8 @@ struct MailMindApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // Named, so a notification's click can open the window again once it was closed.
+        WindowGroup(id: Root.scene) {
             Root(demo: demo)
         }
         .commands {

@@ -4,6 +4,8 @@ import SwiftUI
 /// On iPhone and iPad, and on the Mac in step 0's measure modes (`just apple measure` and `smoke`), step 0's list over
 /// its fictional mailbox.
 struct Root: View {
+    /// The window's scene.
+    static let scene = "mail"
     let demo: Demo
 
     var body: some View {

@@ -10,11 +10,12 @@ import SwiftUI
 /// app is come back to, as the page's tab title clears.
 @MainActor
 final class NewMailAlerts {
-    /// What a `new-mail` event says: an account's Inbox kept `count` new messages.
+    /// What a `new-mail` event says: an account's Inbox kept `count` new messages, and when it was one, its UID.
     struct Arrived: Decodable, Equatable, Sendable {
         var account: String?
         var folder: String?
         var count: Int?
+        var uid: Int?
     }
 
     /// What came in while nobody was at the app.
@@ -25,6 +26,9 @@ final class NewMailAlerts {
     var name: @MainActor (String) -> String = StatusWords.short
     var now: @MainActor () -> Date = Date.init
     var hasAccounts: @MainActor () -> Bool = { false }
+    /// The row of the one message that came, by its account, folder and UID, for its sender and subject: the
+    /// status reads the folder's first page for it once it has the core.
+    var lookUp: @MainActor (_ account: String, _ folder: String, _ uid: Int) async -> API.FolderRow? = { _, _, _ in nil }
 
     private let notifier: any Notifier
     private let isActive: @MainActor () -> Bool
@@ -71,11 +75,26 @@ final class NewMailAlerts {
         cameIn += count
         badge(String(cameIn))
         guard mayNotify(\.notifyNewMail) else { return }
-        let notifier = notifier
+        let notifier = notifier, lookUp = lookUp
+        let one = count == 1 && !account.isEmpty ? said.uid : nil
         Task {
-            await notifier.post(id: "mailmind-\(account)", title: String(localized: "New mail · \(name)"),
-                                body: Self.messages(count))
+            let row: API.FolderRow? = if let one { await lookUp(account, said.folder ?? "INBOX", one) } else { nil }
+            let told = Self.told(count: count, name: name, row: row)
+            await notifier.post(id: "mailmind-\(account)", title: told.title, body: told.body,
+                                opens: row.map(MailCopy.init))
         }
+    }
+
+    /// What a notification of new mail says: who sent the one message and its subject, as a Mac's mail app says
+    /// them; or, for several or one not found, the account and how many.
+    static func told(count: Int, name: String, row: API.FolderRow?) -> (title: String, body: String) {
+        if count == 1, let row {
+            let sender = [row.fromName, row.fromAddr].compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty } ?? String(localized: "New mail")
+            let subject = row.subject.trimmingCharacters(in: .whitespaces)
+            return (sender, subject.isEmpty ? String(localized: "(no subject)") : subject)
+        }
+        return (String(localized: "New mail · \(name)"), messages(count))
     }
 
     /// "1 new message", "3 new messages".
@@ -94,7 +113,10 @@ final class NewMailAlerts {
             return
         }
         let notifier = notifier
-        Task { await notifier.post(id: "mailmind-soon-\(meeting.id)", title: words, body: meeting.detail) }
+        Task {
+            await notifier.post(id: "mailmind-soon-\(meeting.id)", title: words, body: meeting.detail,
+                                opens: meeting.invite)
+        }
     }
 
     /// Whether a notification of this kind may go now: the preference is on and quiet hours don't cover now.
@@ -132,6 +154,15 @@ protocol Notifier: Sendable {
     /// Ask, once: the system shows its question the first time only and answers from then on.
     func ask() async -> Bool
     func post(id: String, title: String, body: String) async
+    /// The same, and the message a click on it opens.
+    func post(id: String, title: String, body: String, opens: MailCopy?) async
+}
+
+extension Notifier {
+    /// A notifier that opens nothing posts as it always has.
+    func post(id: String, title: String, body: String, opens: MailCopy?) async {
+        await post(id: id, title: title, body: body)
+    }
 }
 
 /// The system's notification center. A test, a measure run or a demo's smoke run gets one that never asks and never
@@ -158,10 +189,16 @@ struct SystemNotifier: Notifier {
     }
 
     func post(id: String, title: String, body: String) async {
+        await post(id: id, title: title, body: body, opens: nil)
+    }
+
+    func post(id: String, title: String, body: String, opens: MailCopy?) async {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        // What a click opens (`NotificationOpener`): the message's name, never its words.
+        if let opens { content.userInfo = NotificationOpener.userInfo(opens) }
         // The same id replaces the one before, as the page's tag does: one notification an account.
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content,
                                                                                 trigger: nil))
@@ -212,6 +249,8 @@ enum Soon {
         let end: Date?
         let location: String
         let organizer: String
+        /// The message the invite came in, which a click on the reminder opens.
+        var invite: MailCopy?
 
         /// How long until it starts, in the page's words: "in 4 min", or "now".
         func when(now: Date) -> String {
@@ -239,7 +278,8 @@ enum Soon {
             guard !closed.contains(id), left <= ahead, left > -after else { continue }
             let title = event.summary.isEmpty ? String(localized: "(no title)") : event.summary
             return Meeting(id: id, title: title, start: start, end: Moment.parse(event.end), location: event.location,
-                           organizer: event.organizer)
+                           organizer: event.organizer,
+                           invite: MailCopy(key: event.key, folder: event.folder, uid: event.uid, account: event.account))
         }
         return nil
     }

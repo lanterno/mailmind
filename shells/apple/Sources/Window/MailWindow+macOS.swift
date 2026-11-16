@@ -16,6 +16,7 @@ struct MailWindow: View {
             .task { await HomeMeasure.shared.watch(app) }
             // The palette, the dialogs and the toasts; Settings, the first run and the status; the desk's surfaces.
             .modifier(WindowAreas(app: app))
+            .modifier(OpensFromNotifications(app: app))
             .meadowLit()
     }
 
@@ -34,6 +35,35 @@ struct MailWindow: View {
                 ReaderPane(app: app)
             }
         }
+    }
+}
+
+/// The window's part in a notification's click (`NotificationOpener`): it counts itself open, leaves the way to open
+/// it again, and opens the message a click named once its mail is open, in that message's folder.
+private struct OpensFromNotifications: ViewModifier {
+    let app: MailApp
+    var status = AppStatus.shared
+    @Environment(\.openWindow) private var openWindow
+
+    private struct Ready: Equatable {
+        let copy: MailCopy?
+        let open: Bool
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                status.mailWindows += 1
+                let openWindow = openWindow
+                status.reopenWindow = { openWindow(id: Root.scene) }
+            }
+            .onDisappear { status.mailWindows -= 1 }
+            .onChange(of: Ready(copy: status.opening, open: app.stage == .open), initial: true) { _, now in
+                guard now.open, let copy = now.copy else { return }
+                status.opening = nil
+                app.place = .folder(account: copy.account, folder: copy.folder)
+                app.open(copy)
+            }
     }
 }
 #endif

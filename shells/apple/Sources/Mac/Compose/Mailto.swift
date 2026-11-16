@@ -65,6 +65,8 @@ final class MailMindDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // The Automatic light follows Dark Mode as macOS sets it (Mac/Meadow/Light.swift).
         AppStatus.shared.followSystemAppearance()
+        // A click on a notification opens what it names (Mac/Status/NotificationOpener.swift).
+        NotificationOpener.listen()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

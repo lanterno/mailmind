@@ -50,6 +50,11 @@ final class AppStatus {
 
     /// New mail's notifications and the Dock's badge.
     let newMail: NewMailAlerts
+    /// The message a notification's click opens, until the mail window has opened it (`NotificationOpener`).
+    var opening: MailCopy?
+    /// How many mail windows are open, and what opens one again when none is.
+    @ObservationIgnored var mailWindows = 0
+    @ObservationIgnored var reopenWindow: (@MainActor () -> Void)?
     /// What opens Curate from the status menu, when the window offers it.
     @ObservationIgnored var curate: (@MainActor () -> Void)?
 
@@ -69,6 +74,15 @@ final class AppStatus {
         newMail.name = { [weak self] in self?.name($0) ?? StatusWords.short($0) }
         newMail.now = { [weak self] in self?.now ?? Date() }
         newMail.hasAccounts = { [weak self] in self?.accounts.isEmpty == false }
+        newMail.lookUp = { [weak self] account, folder, uid in await self?.row(account: account, folder: folder, uid: uid) }
+    }
+
+    /// The row of a message just come, by its UID: the folder's first page holds the newest.
+    func row(account: String, folder: String, uid: Int) async -> API.FolderRow? {
+        guard let core, case .folderListing(let listing)? = try? await core.get(API.Get.Messages.self, [
+            "account": account, "folder": folder, "offset": "0", "limit": "50",
+        ]) else { return nil }
+        return listing.items.first { $0.uid == uid && $0.folder == folder }
     }
 
     /// What a test or a rendering shows with no core: the answers the routes would give.
