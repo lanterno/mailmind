@@ -69,6 +69,8 @@ final class Mailbox {
     var searchFocus = false
     /// A field of the window's is being typed in, where ⌘⌫ deletes text and not mail.
     var typing = false
+    /// The rows being dragged from the list, which the rail's folders take (`drop(on:of:)`); none between drags.
+    var dragging: [API.FolderRow] = []
 
     @ObservationIgnored private var gathered: Gathered?
     @ObservationIgnored private var load: MailListModel.Loader?

@@ -112,6 +112,9 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         // A double-click opens the row's message in a window of its own, as a Mac's mail list does.
         table.target = self
         table.doubleAction = #selector(openedTwice)
+        // Rows drag onto the rail's folders to move there; into another app they go as their subjects' text.
+        table.setDraggingSourceOperationMask(.move, forLocal: true)
+        table.setDraggingSourceOperationMask(.copy, forLocal: false)
         table.mailbox = mailbox
         table.controller = self
         table.setAccessibilityLabel(String(localized: "Messages"))
@@ -518,6 +521,29 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     func openWindow(row: Int) {
         guard row >= 0, let position = position(row), let mail = list.copy(at: position) else { return }
         mailbox?.opensWindow?(MailCopy(mail))
+    }
+
+    // MARK: Dragging rows
+
+    /// A row dragged: the rows chosen when it is one of them, else it alone. The pasteboard holds each one's subject,
+    /// for another app; the mailbox holds the rows themselves, which the rail's folders move (`Mailbox.drop`).
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
+        guard let position = position(row), let mail = list.copy(at: position) else { return nil }
+        let item = NSPasteboardItem()
+        item.setString(mail.subject, forType: .string)
+        return item
+    }
+
+    func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession,
+                   willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet)
+    {
+        mailbox?.dragging = rowIndexes.compactMap { position($0).flatMap { list.copy(at: $0) } }
+    }
+
+    func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint,
+                   operation: NSDragOperation)
+    {
+        mailbox?.dragging = []
     }
 
     // MARK: The context menu

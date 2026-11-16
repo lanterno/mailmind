@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The rail (#44), as the mockup's `.rail` draws it and with the places the page's rail offers (app/FolderRail.tsx):
 /// the accounts' button, then every place `RailPlaces` lists, then Help and Settings at its foot. Open, each place has
@@ -20,6 +21,8 @@ struct MailboxSidebar: View {
     /// The accounts whose labels are shown.
     @State private var labelsOpen: Set<String> = []
     @State private var menuOpen = false
+    /// The place rows are being dragged over, shown as chosen while they are.
+    @State private var dropOn: String?
     @FocusState private var keyed: Bool
 
     var body: some View {
@@ -62,7 +65,8 @@ struct MailboxSidebar: View {
     @ViewBuilder private func line(_ entry: RailEntry, current: String?) -> some View {
         switch entry.kind {
         case .item(let item):
-            RailPlace(item: item, open: open, current: current == entry.id, keyed: keyed && current == entry.id) {
+            RailPlace(item: item, open: open, current: current == entry.id || dropOn == entry.id,
+                      keyed: keyed && current == entry.id) {
                 app.place = item.place
             }
             .contextMenu {
@@ -70,6 +74,7 @@ struct MailboxSidebar: View {
                     Button("Remove View", role: .destructive) { mailbox.removeView(view) }
                 }
             }
+            .modifier(RailDrop(mailbox: mailbox, place: item.place, id: entry.id, on: $dropOn))
         case .head(let title):
             MeadowSectionLabel(title)
                 .padding(EdgeInsets(top: 16, leading: 10, bottom: 6, trailing: 10))
@@ -133,6 +138,29 @@ struct MailboxSidebar: View {
             scroller.scrollTo(next.id)
         }
         return .handled
+    }
+}
+
+/// A folder of the rail's that takes filing takes rows dragged from the list: they move there (`Mailbox.drop`).
+private struct RailDrop: ViewModifier {
+    let mailbox: Mailbox
+    let place: Place
+    let id: String
+    @Binding var on: String?
+
+    func body(content: Content) -> some View {
+        if case .folder(let account, let name) = place,
+           let folder = mailbox.folders(of: account).first(where: { $0.name == name }), folder.takesFiling
+        {
+            content.onDrop(of: [.plainText], isTargeted: Binding(get: { on == id }, set: { over in
+                if over, mailbox.takesDrop(folder, of: account) { on = id } else if on == id { on = nil }
+            })) { _ in
+                on = nil
+                return mailbox.drop(on: folder, of: account)
+            }
+        } else {
+            content
+        }
     }
 }
 

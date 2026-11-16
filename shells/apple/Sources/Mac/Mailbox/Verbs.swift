@@ -91,6 +91,22 @@ extension Mailbox {
         Task { await moveNow(to: folder.name, label: Words.role(folder)) }
     }
 
+    /// Whether the rows being dragged can drop on `folder` of `account`: a folder that takes filing, and rows all of
+    /// that account, as a move stays in its account.
+    func takesDrop(_ folder: API.RailFolder, of account: String) -> Bool {
+        folder.takesFiling && !dragging.isEmpty && dragging.allSatisfy { $0.account == account }
+    }
+
+    /// The rows dragged from the list dropped on one of an account's folders: moved there, as Move To moves them.
+    /// Whether the folder took them.
+    func drop(on folder: API.RailFolder, of account: String) -> Bool {
+        guard takesDrop(folder, of: account) else { return false }
+        let rows = dragging
+        dragging = []
+        Task { await moveNow(to: folder.name, label: Words.role(folder), rows: rows) }
+        return true
+    }
+
     /// Move `given`, else what is chosen or open, to `folder`.
     func moveNow(to folder: String, label: String, rows given: [API.FolderRow]? = nil) async {
         let chosen = if let given { given } else { await targets() }
