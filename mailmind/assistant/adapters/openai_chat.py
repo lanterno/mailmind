@@ -25,6 +25,7 @@ from mailmind.platform.db import txguard
 
 RETRIES = 2                        # after the first attempt
 LONGEST_WAIT = 60                  # seconds: a retry-after past this isn't waited for
+SAID = 200                         # characters of what a service said an error kept
 _RETRIED = frozenset({408, 409, 429})
 _AUTH = frozenset({401, 403})
 _KEY_INVALID = "API_KEY_INVALID"   # the reason Gemini's 400 gives for a key that isn't one
@@ -70,10 +71,10 @@ def _error(answer: _Answer) -> Any:
 
 
 def _said(answer: _Answer) -> str:
-    """What a service said of an error: its message, or the error itself where it is words."""
+    """What a service said of an error, all of it: its message, or the error itself where it is words."""
     err = _error(answer)
     said = cast(dict[str, Any], err).get("message") if isinstance(err, dict) else err
-    return str(said or "")[:200]
+    return str(said or "")
 
 
 def _key_refused(answer: _Answer) -> bool:
@@ -136,8 +137,8 @@ class Http:
             return ModelError(f"{self.provider} API {status}: the key was refused", status)
         said = _said(answer)
         if self._key:
-            said = said.replace(self._key, "<key>")
-        return ModelError(f"{self.provider} API {answer.status}: {said}", answer.status)
+            said = said.replace(self._key, "<key>")         # before it is cut, which could leave part of the key
+        return ModelError(f"{self.provider} API {answer.status}: {said[:SAID]}", answer.status)
 
 
 class ChatModel:
