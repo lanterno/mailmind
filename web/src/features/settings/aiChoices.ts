@@ -1,7 +1,6 @@
 // The AI tab's rules, with no DOM (#49): what it shows with AI mode off and on, what each provider asks of a person, the
 // models found on this Mac and what picking one changes, what choosing another provider changes, what the
 // model menu offers and in what order, what a URL typed saves as, and how a key typed leaves the page.
-import { aiPrivacy } from "../../lib/ai";
 import type { AiProvider, GetAnswers, PostAnswers, PostBodies } from "../../lib/api/types";
 import type { Store } from "../../lib/store";
 
@@ -14,12 +13,8 @@ export type LocalServer = GetAnswers["/api/ai/local"]["servers"][number];
 export type AiPart = "mode" | "connection" | "spending" | "ahead";
 export const aiParts = (on: boolean): AiPart[] => (on ? ["mode", "connection", "spending", "ahead"] : ["mode"]);
 
-// What the AI tab's header says: where its choices and keys are kept, and with AI mode on who the text of a message goes to,
-// the provider chosen or nobody off this Mac. `baseUrl` is the preference as set.
-export function aiKept(on: boolean, provider: AiProvider, baseUrl: string): string {
-  const kept = "Kept on this Mac, with each key in your login Keychain.";
-  return on ? `${kept} ${aiPrivacy(provider, baseUrl)}` : kept;
-}
+// What the AI tab's header says: where its choices and keys are kept. What AI mode sends, and to whom, is under its switch.
+export const AI_KEPT = "Kept on this Mac, with each key in your login Keychain.";
 
 // What each provider asks of a person: a key (needed, optional or none) and where one is made; the URL it is reached at, which
 // a person gives for a model on this Mac (Ollama's, filled in) and for a compatible service (none until given), and Claude's

@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input, Label, NumberField } from "react-aria-components";
-import { aiStanding, PROVIDER_LABEL, PROVIDER_NAME } from "../../lib/ai";
+import { aiSends, aiStanding, PROVIDER_LABEL, PROVIDER_NAME } from "../../lib/ai";
 import { get, post, refusalOf } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
 import type { AiProvider } from "../../lib/api/types";
@@ -250,6 +250,7 @@ export function AiForm() {
       <div className="set-form">
         <Check checked={p.ai_enabled} onChange={(ai_enabled) => setPrefs({ ai_enabled }, inForce)}>AI mode</Check>
         <div className="set-help">Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.</div>
+        <div className="set-help" id="aiSends">{aiSends(provider, p.ai_base_url)}</div>
       </div>
       {parts.has("connection") && (
         <div className="set-form" id="aiConnection">

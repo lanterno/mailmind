@@ -1,6 +1,6 @@
 // What the keys do, and the one setting WCAG 2.1.4 asks for: single keys off.
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { aiOffered, aiPrivacy, offLine, PROVIDER_NAME } from "../../lib/ai";
+import { aiOffered, aiSends, offLine, PROVIDER_NAME } from "../../lib/ai";
 import type { AiStatus } from "../../lib/api/types";
 import { prefs, singleKeys } from "../../lib/prefs";
 import { createStore } from "../../lib/store";
@@ -27,7 +27,8 @@ function Row({ keys, children }: { keys: string[]; children: React.ReactNode }) 
   return <><span className="legkeys">{keys.map((k) => <kbd key={k}>{GLYPH[k] ?? k}</kbd>)}</span><span>{children}</span></>;
 }
 
-// How MailMind uses AI, and what leaves this Mac for it: the provider chosen, or nothing. Turned off, only that nothing is sent.
+// How MailMind uses AI, and what leaves this Mac for it, to the provider chosen or to no one: said turned off as on, so it is
+// read before AI mode is turned on.
 function AiNote({ ai }: { ai: AiStatus | null | undefined }) {
   const baseUrl = prefs.useValue().ai_base_url;
   const sandbox = "Email bodies render inside a locked sandbox that can't run code or phone home.";
@@ -36,7 +37,7 @@ function AiNote({ ai }: { ai: AiStatus | null | undefined }) {
     return (
       <>
         <div className="legh"><Icon name="lock" /> Your mail stays here</div>
-        <div className="legnote">AI is turned off in Settings, so MailMind sends nothing to any AI service, and your mailbox stays in a database on this machine. {sandbox}</div>
+        <div className="legnote">AI is turned off in Settings, so MailMind sends nothing to any AI service, and your mailbox stays in a database on this machine. {aiSends(ai.provider, baseUrl)} {sandbox}</div>
       </>
     );
   }
@@ -45,7 +46,7 @@ function AiNote({ ai }: { ai: AiStatus | null | undefined }) {
       <div className="legh"><Icon name="wind" /> How MailMind uses AI</div>
       <div className="legnote">
         Summaries, importance scores, the daily brief, drafts and Ask are written by <b>{PROVIDER_NAME[ai.provider]}</b>, chosen in Settings under AI
-        {ai.off ? `; for now ${offLine(ai)}, and nothing is sent` : ""}. {aiPrivacy(ai.provider, baseUrl)} Your mailbox itself stays in a
+        {ai.off ? `; for now ${offLine(ai)}, and nothing is sent` : ""}. {aiSends(ai.provider, baseUrl)} Your mailbox itself stays in a
         database on this machine. {sandbox}
       </div>
     </>
