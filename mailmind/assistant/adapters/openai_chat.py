@@ -7,8 +7,8 @@ goes to the host the URL names. It tries the statuses a retry can help (408, 409
 failed, twice more, honouring retry-after, as the Anthropic SDK does. An attempt's time limit is a deadline for all of it,
 and an answer runs to 32 MiB at most. A model on this Mac and a compatible service may not take structured output: a 400
 that names `response_format` is asked once more without it, the schema stated in the prompt instead, and the reply read as
-free-form JSON. OpenAI and Gemini are given a ceiling on a reply's tokens that a model may be unable to meet: a 400 that
-names `max_tokens` or `max_completion_tokens` is asked once more without it. A rejected key's error holds none of what the
+free-form JSON. OpenAI and Gemini are given a ceiling on a reply's tokens that a model may be unable to meet: a 400 whose
+error names `max_tokens` or `max_completion_tokens` is asked once more without it. A rejected key's error holds none of what the
 service said, which can quote part of the key back, and a key with a blank or a control character in it is never sent: it
 is refused as a rejected key is. It takes no batch.
 """
@@ -41,7 +41,7 @@ _AUTH = frozenset({401, 403})
 _KEY_INVALID = "API_KEY_INVALID"   # the reason Gemini's 400 gives for a key that isn't one
 _NOT_VALID = "API key not valid"   # ...and how its message starts
 _FALLS_BACK = frozenset({"local", "compatible"})      # may not take response_format
-_CEILING_WORDS = (b"max_tokens", b"max_completion_tokens")       # in a 400 for a ceiling a model can't meet
+_CEILING_WORDS = ("max_tokens", "max_completion_tokens")         # in what a 400 says of a ceiling a model can't meet
 _NO_BATCHES = "Batches need Claude as the AI provider."
 
 
@@ -273,7 +273,7 @@ class ChatModel:
             if (with_format and prompt.schema is not None and provider in _FALLS_BACK
                     and b"response_format" in answer.body):
                 with_format = False
-            elif with_ceiling and provider in chat_wire.CEILING and any(w in answer.body for w in _CEILING_WORDS):
+            elif with_ceiling and provider in chat_wire.CEILING and any(w in _said(answer) for w in _CEILING_WORDS):
                 with_ceiling = False
             else:
                 break
