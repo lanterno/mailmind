@@ -22,7 +22,7 @@ enum SecretPost {
 /// Which of the variables this app hands the core gives a secret, so Settings can say when one wins over what the
 /// Keychain keeps. Only whether each is set is read here, never what it says.
 struct SecretSources: Equatable, Sendable {
-    /// `ANTHROPIC_API_KEY`: AI's key when the config file names none.
+    /// `ANTHROPIC_API_KEY`: Claude's key when the config file names none. No other provider has a variable.
     var apiKeyVariable = false
     /// `MAILMIND_PROTON_BRIDGE_PASS`: the Bridge's password, ahead of everything else.
     var bridgeVariable = false
@@ -62,28 +62,42 @@ struct SecretStanding: Equatable, Sendable {
     /// Whether the Keychain keeps one, so it can be taken out.
     let kept: Bool
 
-    /// The Claude API key: `set` is what `/api/ai/key` says (the config file names a key), `ai` what the digest says of
-    /// AI. A key MailMind keeps wins over the environment's, so the variable only stands in for one not kept.
-    static func apiKey(set: Bool, ai: API.AiStatus?, sources: SecretSources) -> SecretStanding {
-        if set {
-            if ai?.engine == "none" {
+    /// A provider's API key: `kept` is whether `/api/ai/key` lists it (the config file names a key for it), `ai` what
+    /// the digest says of AI, which speaks of the provider in force. A key MailMind keeps wins over the environment's,
+    /// and only Claude's key has a variable to stand in for one not kept.
+    static func apiKey(_ provider: API.AiProvider, kept: Bool, ai: API.AiStatus?, sources: SecretSources)
+        -> SecretStanding
+    {
+        let inForce = ai?.provider == provider ? ai : nil
+        if kept {
+            if inForce?.off == .noKey {
                 return SecretStanding(summary: String(localized: "A key is kept, but it can’t be read"),
                                       note: String(localized: "AI is off. Keep the key again, or remove it."),
                                       kept: true)
             }
-            let shadowed = sources.apiKeyVariable
+            let shadowed = provider == .anthropic && sources.apiKeyVariable
                 ? String(localized: "\(SecretSources.apiKey) is set too, and the key kept here wins over it.")
                 : nil
             return SecretStanding(summary: String(localized: "Kept in your login Keychain"), note: shadowed, kept: true)
         }
-        let fromVariable = ai.map { $0.engine == "api" && $0.keyFrom == SecretSources.apiKey } ?? sources.apiKeyVariable
-        if fromVariable {
-            return SecretStanding(
-                summary: String(localized: "From the environment variable \(SecretSources.apiKey)"),
-                note: String(localized: "A key kept here would win over it."), kept: false)
+        if provider == .anthropic {
+            // While Claude's AI is on, the digest says where its key came from; otherwise whether the variable is set.
+            let fromVariable = inForce.flatMap { $0.isOn ? $0.keyFrom == SecretSources.apiKey : nil }
+                ?? sources.apiKeyVariable
+            if fromVariable {
+                return SecretStanding(
+                    summary: String(localized: "From the environment variable \(SecretSources.apiKey)"),
+                    note: String(localized: "A key kept here would win over it."), kept: false)
+            }
+        }
+        if !provider.needsKey {
+            return SecretStanding(summary: String(localized: "No key"),
+                                  note: String(localized: "The service is asked with none. Keep one if it asks for one."),
+                                  kept: false)
         }
         return SecretStanding(summary: String(localized: "No key: AI is off"),
-                              note: String(localized: "Without a key nothing is sent to Anthropic."), kept: false)
+                              note: String(localized: "Without a key nothing is sent to \(provider.recipient ?? provider.name)."),
+                              kept: false)
     }
 
     /// The Proton Bridge's password: `set` is what `/api/accounts/bridge-password` says (the Keychain keeps one). The

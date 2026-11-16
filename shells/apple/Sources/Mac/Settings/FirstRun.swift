@@ -4,20 +4,23 @@ import SwiftUI
 
 /// The first run: no account yet. A welcome in the brief's manner (#44): the painted meadow across the top with the
 /// greeting on it, a card in the brief's hand saying what MailMind will do, and the two steps as cards: connect an
-/// account (the page's `firstrun`), and what AI needs, a Claude API key, or nothing, and AI stays off.
+/// account (the page's `firstrun`), and what AI needs, a key for the provider chosen (Claude unless another was), or
+/// nothing, and AI stays off.
 struct Welcome: View {
     let status: AppStatus
     /// Whether the window's traffic lights stand over the scene's top left; a test's picture has none.
     var lights = true
     @State private var adding = false
-    @State private var keySet: Bool?
+    @State private var kept: Set<API.AiProvider>?
     @Environment(\.meadow) private var meadow
 
-    init(status: AppStatus, keySet: Bool? = nil, lights: Bool = true) {
+    init(status: AppStatus, kept: Set<API.AiProvider>? = nil, lights: Bool = true) {
         self.status = status
         self.lights = lights
-        _keySet = State(initialValue: keySet)
+        _kept = State(initialValue: kept)
     }
+
+    private var provider: API.AiProvider { status.preferences?.aiProvider ?? .anthropic }
 
     var body: some View {
         ScrollView {
@@ -44,8 +47,13 @@ struct Welcome: View {
                         }
                         WelcomeStep(number: 2, title: String(localized: "AI, if you want it"), text: Self.ai) {
                             VStack(alignment: .leading, spacing: 10) {
-                                ClaudeKeyView(status: status, keySet: $keySet)
-                                SettingHelp(StatusWords.aiPrivacy)
+                                if provider.takesKey {
+                                    AIKeyView(status: status, provider: provider, kept: $kept)
+                                }
+                                SettingHelp(String(localized: """
+                                    Another provider, or Ollama on this Mac, is chosen in Settings › AI.
+                                    """))
+                                SettingHelp(AIWords.privacy(provider))
                             }
                         }
                     }
@@ -75,9 +83,9 @@ struct Welcome: View {
         """)
 
     private static let ai = String(localized: """
-        Summaries, the morning brief, drafted replies and asking your mail are written by Claude, through the Claude \
-        API, with an API key of yours. Without one, AI is off and nothing is sent: everything else works as it does \
-        with it.
+        Summaries, the morning brief, drafted replies and asking your mail are written by the AI service you \
+        choose: Claude, OpenAI or Gemini with an API key of yours, or a model running on this Mac. Without one, AI \
+        is off and nothing is sent: everything else works as it does with it.
         """)
 
     /// The scene across the top (`.bhero`), with the greeting on its sky. It covers the whole window, so with the

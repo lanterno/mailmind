@@ -97,7 +97,7 @@ extension SettingsTab {
         case .accounts: String(localized: "The mail MailMind reads, and how each connection stands.")
         case .general: String(localized: "How MailMind looks, how it sends, its keys, and your mail kept safe.")
         case .notifications: String(localized: "What may tap you on the shoulder, and when it may not.")
-        case .ai: String(localized: "What Claude writes for you, and what it may spend.")
+        case .ai: String(localized: "Whether AI writes for you, which service, and what it may spend.")
         }
     }
 
@@ -253,6 +253,48 @@ struct SettingSwitch: View {
     }
 }
 
+/// A setting chosen from a list, as Meadow's popovers offer one (the composer's From, `.fromsel`): what is chosen on
+/// paper with a chevron, and a click opens its menu under it. `parts` is read each time the menu is drawn, so it shows
+/// what changes while it is open; `opened` is told each time it opens.
+struct SettingChoice: View {
+    let label: String
+    let title: String
+    var width: CGFloat = 300
+    var opened: () -> Void = {}
+    let parts: () -> [MeadowMenu.Part]
+    @State private var shown = false
+    @State private var menu = MeadowMenuModel()
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        Button { shown.toggle() } label: {
+            HStack(spacing: 8) {
+                Text(title).lineLimit(1)
+                MeadowIconView(.down, size: 15).foregroundStyle(meadow.ink3)
+            }
+            .font(.meadow(.ui, 13.5, .bold))
+            .foregroundStyle(meadow.ink)
+            .padding(.horizontal, 11)
+            .frame(height: 32)
+            .background(meadow.paper, in: RoundedRectangle(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(meadow.line))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(label)
+        .accessibilityValue(title)
+        .meadowPopover(isPresented: $shown, keys: { menu.key($0) }) {
+            MeadowMenu(parts: parts(), width: width, model: menu, close: { shown = false }, label: label)
+        }
+        .onChange(of: shown) { _, now in
+            guard now else { return }
+            menu.at = 0
+            opened()
+        }
+    }
+}
+
 /// How a connection stands, as the mockup's `.dot`: moss when it is well, sunlight while it is busy, rust when it
 /// can't connect, each in a soft ring of its colour.
 struct SettingDot: View {
@@ -286,7 +328,7 @@ struct SettingHelp: View {
     }
 }
 
-/// A secret kept in the login Keychain (the Claude API key, the Proton Bridge's password): whether one is set and where
+/// A secret kept in the login Keychain (an AI provider's API key, the Proton Bridge's password): whether one is set and where
 /// the one in use comes from, never what it is; a field to keep a new one, which goes straight to its route and is
 /// emptied once sent; and a way to take the kept one out.
 struct KeptSecretView: View {
@@ -336,7 +378,7 @@ struct KeptSecretView: View {
                 Text(problem).font(.meadow(.ui, 12.5, .semibold)).foregroundStyle(meadow.rust)
             }
         }
-        .confirmationDialog("Remove the \(label.lowercased()) from the Keychain?", isPresented: $asking) {
+        .confirmationDialog("Remove the \(label) from the Keychain?", isPresented: $asking) {
             Button("Remove", role: .destructive) {
                 Task {
                     working = true

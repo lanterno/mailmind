@@ -156,7 +156,7 @@ final class AppStatus {
         return Task {
             do {
                 preferences = try await core.post(API.Post.Preferences.self, changes).preferences
-                if changes.aiDailyLimitUsd != nil { await readDigest() }
+                if Self.touchesAI(changes) { await aiChanged() }
             } catch {
                 say((error as? Problem)?.description ?? String(localized: "Couldn’t save that setting"))
                 await readPreferences()
@@ -164,7 +164,21 @@ final class AppStatus {
         }
     }
 
-    /// `held` with `changes` laid over it: what a change names wins, and what it leaves out stays.
+    /// Whether a change is one of AI's: the switch, the provider, its model or URL, or the daily limit.
+    static func touchesAI(_ changes: API.ChangedPreferences) -> Bool {
+        changes.aiEnabled != nil || changes.aiProvider != nil || changes.aiModel != nil || changes.aiBaseUrl != nil
+            || changes.aiDailyLimitUsd != nil
+    }
+
+    /// AI's settings or a key changed: read how AI stands again, and tell the window, whose cards and composers read it
+    /// on their own and hear of nothing else when Settings changes it.
+    func aiChanged() async {
+        await readDigest()
+        NotificationCenter.default.post(name: .mailmindAIChanged, object: nil)
+    }
+
+    /// `held` with `changes` laid over it: what a change names wins, and what it leaves out stays. Another provider
+    /// named without a model or URL starts from its own, as the server sets them back to "".
     static func merged(_ held: API.Preferences, _ changes: API.ChangedPreferences) -> API.Preferences? {
         let encoder = JSONEncoder()
         guard case .object(var all)? = try? JSONDecoder().decode(JSONValue.self, from: encoder.encode(held)),
@@ -172,6 +186,10 @@ final class AppStatus {
         else { return nil }
         for (name, value) in changed where value != .null {
             all[name] = value
+        }
+        if let provider = changes.aiProvider, provider != held.aiProvider {
+            if changes.aiModel == nil { all["ai_model"] = .string("") }
+            if changes.aiBaseUrl == nil { all["ai_base_url"] = .string("") }
         }
         return try? JSONDecoder().decode(API.Preferences.self, from: encoder.encode(JSONValue.object(all)))
     }
@@ -346,5 +364,10 @@ final class AppStatus {
 /// The tabs of Settings (⌘,), which the status opens at Accounts when one can't connect.
 enum SettingsTab: String, Hashable, Sendable {
     case accounts, general, notifications, ai
+}
+
+extension Notification.Name {
+    /// AI's settings or a key changed in Settings, and the digest was read again (`AppStatus.aiChanged`).
+    static let mailmindAIChanged = Notification.Name("io.github.lanterno.mailmind.ai-changed")
 }
 #endif
