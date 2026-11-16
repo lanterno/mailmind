@@ -98,8 +98,13 @@ enum Fixture {
                       snippet: "Thanks for your order.", subject: subject, uid: key, when: "Nov 2")
     }
 
-    static func folder(_ name: String, role: String, unseen: Int = 0, filing: Bool = true) -> API.RailFolder {
-        API.RailFolder(name: name, role: role, takesFiling: filing, total: 100, unseen: unseen)
+    /// A folder on the rail: a person's own (`custom`) one they may change, unless the server says otherwise.
+    static func folder(_ name: String, role: String, unseen: Int = 0, filing: Bool = true, changeable: Bool? = nil)
+        -> API.RailFolder
+    {
+        API.RailFolder(changeable: changeable ?? (role == "custom"), name: name,
+                       ownName: name.split(separator: "/").last.map(String.init) ?? name, role: role,
+                       takesFiling: filing, total: 100, unseen: unseen)
     }
 
     static let adaFolders = [
