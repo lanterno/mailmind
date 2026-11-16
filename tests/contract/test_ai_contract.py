@@ -235,6 +235,23 @@ def test_what_the_api_said_that_isnt_words_is_kept_as_compact_json(api):
     assert assistant.status.report()["last_error"] == "the API answered 400"
 
 
+@pytest.mark.parametrize("body, said", [
+    ({"type": "error", "error": {"type": "invalid_request_error", "code": 401}}, ""),    # an error with no message
+    ({"type": "error", "error": {"type": "invalid_request_error", "message": 0}}, ""),   # or an empty one
+    ({"error": ["bad", 401]}, ""), ({"error": 401}, ""), ({"error": "bad: 401"}, ""),   # an error that is no object...
+    ({"error": "bad: 401", "message": "try later"}, "try later"),                       # ...says the body's message
+    ("<html><body>401 Bad gateway</body></html>", ""),                                  # and a body that isn't JSON
+])
+def test_what_the_api_said_is_read_from_its_answer_alone_never_the_sdks_words_for_it(api, body, said):
+    from mailmind.bootstrap import assistant
+    api.queue((400, body))
+    with pytest.raises(ModelError) as e:
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
+    assert (str(e.value), e.value.status) == (f"Claude API 400: {said}", 400)
+    assert assistant.status.report()["last_error"] == "the API answered 400"
+    assert len(api.requests) == 1
+
+
 def test_a_failed_triage_is_left_for_the_next_run(api):
     from mailmind.bootstrap import assistant
     api.queue(fa.error(400, "invalid_request_error", "bad"))
