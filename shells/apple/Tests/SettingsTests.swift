@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 
@@ -257,6 +258,23 @@ final class ReadOnlyRunTests: XCTestCase {
         XCTAssertEqual(ReadOnlyRun.pending(chosen: true, running: "full"), "Read only starts the next time MailMind opens.")
         XCTAssertEqual(ReadOnlyRun.pending(chosen: false, running: "read-only"),
                        "MailMind changes mail on your servers again the next time it opens.")
+    }
+
+    /// Relaunch Now opens MailMind again only as it really quits: a quit called off leaves nothing waiting to open it
+    /// when the person next quits.
+    @MainActor
+    func testItOpensAgainOnlyAsItReallyQuits() async {
+        let center = NotificationCenter()
+        let quits = { center.post(name: NSApplication.willTerminateNotification, object: nil) }
+        let opened = expectation(description: "opened again as it quit")
+        ReadOnlyRun.quitThenOpen(center: center, quit: quits, openAgain: { opened.fulfill() })
+        await fulfillment(of: [opened], timeout: 1)
+
+        let openedLater = expectation(description: "opened again at a later quit")
+        openedLater.isInverted = true
+        ReadOnlyRun.quitThenOpen(center: center, quit: {}, openAgain: { openedLater.fulfill() })
+        quits()
+        await fulfillment(of: [openedLater], timeout: 0.3)
     }
 
     /// A test run shares the app's defaults, so it has no switch: it says how it runs in the switch's place.
