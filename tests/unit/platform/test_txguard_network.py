@@ -37,6 +37,18 @@ def write():
     held.end()
 
 
+def test_no_model_server_on_this_mac_is_asked(data_dir, write):
+    from fakes.openai_api import FakeOpenAI
+    from mailmind.assistant.adapters import local_servers
+    with FakeOpenAI(key=None) as fake:
+        write.open()
+        with pytest.raises(TxAcrossNetworkError, match="^the model servers on this Mac while"):
+            local_servers.listing([fake.url])
+        assert fake.requests == []
+        write.end()
+        assert local_servers.listing([fake.url]) == {fake.url: fake.models}
+
+
 def test_no_unsubscribe_request_is_made_not_even_its_dns_lookup(data_dir, write, monkeypatch):
     import socket
     looked_up = []

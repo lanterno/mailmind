@@ -192,6 +192,36 @@ def test_a_compatible_service_lists_at_its_url_with_a_key_only_if_one_is_kept(ap
     assert openai_api.requests[-1].key == fo.KEY
 
 
+# ── the model servers on this Mac ─────────────────────────────────────────────
+
+def test_the_model_servers_on_this_mac_that_answer_are_listed_in_order_with_ai_mode_off(app, local_ai):
+    local_ai["Ollama"].models = ["qwen3:8b", "nomic-embed-text", "llama3.3:latest"]
+    local_ai["LM Studio"].models = ["mistral-small-4"]
+    assert prefs(app)["ai_enabled"] is False
+    r = app.get("/api/ai/local")
+    assert (r.status, r.json) == (200, {"ok": True, "servers": [
+        {"name": "Ollama", "url": local_ai["Ollama"].url, "models": ["llama3.3:latest", "qwen3:8b"]},
+        {"name": "LM Studio", "url": local_ai["LM Studio"].url, "models": ["mistral-small-4"]}]})
+
+
+def test_a_model_server_on_this_mac_is_never_sent_a_key_even_one_kept_for_a_model_on_this_mac(app, local_ai, fake_keychain):
+    keep(app, "local")
+    assert [s["name"] for s in app.get("/api/ai/local").json["servers"]] == ["Ollama", "LM Studio"]
+    for fake in local_ai.values():
+        [req] = fake.requests
+        assert (req.method, req.path, req.key) == ("GET", "/models", "")
+
+
+def test_one_that_answers_no_list_of_models_is_left_out(app, local_ai):
+    local_ai["Ollama"].queue((200, {"models": [{"name": "llama3.3"}]}))
+    assert [s["name"] for s in app.get("/api/ai/local").json["servers"]] == ["LM Studio"]
+
+
+def test_with_no_model_server_on_this_mac_there_are_none(app):
+    r = app.get("/api/ai/local")
+    assert (r.status, r.json) == (200, {"ok": True, "servers": []})
+
+
 def test_a_provider_with_no_key_kept_is_refused_before_anything_is_sent(app):
     for provider in ("openai", "gemini"):
         r = models(app, provider)

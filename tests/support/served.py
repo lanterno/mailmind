@@ -154,13 +154,13 @@ def serving(request, world, dist, tmp_path_factory, now, guarded):
     """A suite's `app`: the server started over this test's world, serving the page built in `dist`, with its clock
     frozen at `now` and the world's folder syncs handed to it, then settled, checked and stopped as the test ends. What
     its own checks refused during the test fails the test, and its tripwire guards `guarded` as well as the repo root.
-    A test that asks for `ai` has the key in the server's environment before it starts, and one that asks for `dns` the
-    fake nameserver's address.
+    A test that asks for `ai` has the key in the server's environment before it starts, one that asks for `dns` the
+    fake nameserver's address, and one that asks for `local_ai` the fake model servers on this Mac.
 
     `now` and `guarded` come from the suite's conftest, which imports tests/conftest.py as pytest collects it: imported
     here, during a test, it would run again and clear the environment the session set up."""
     import time_machine
-    for named in ("ai", "dns"):
+    for named in ("ai", "dns", "local_ai"):
         if named in request.fixturenames:
             request.getfixturevalue(named)
     env = {**os.environ, "MAILMIND_HOME": str(world.dir), "MAILMIND_TEST_DIST": str(dist),

@@ -156,6 +156,34 @@ def dns(monkeypatch, _no_nameserver):
         yield fake
 
 
+@pytest.fixture(autouse=True)
+def _no_local_ai(monkeypatch):
+    """No test asks a model server running on this computer: the ones on this Mac are none, unless `local_ai`, here and in a
+    served app, which MAILMIND_TEST_LOCAL_AI, set even when empty, tells which to ask in place of those there may be."""
+    from mailmind.assistant.adapters import local_servers
+    monkeypatch.setattr(local_servers, "known", lambda: [])
+    monkeypatch.setenv("MAILMIND_TEST_LOCAL_AI", "")
+
+
+@pytest.fixture
+def local_ai(monkeypatch, _no_local_ai):
+    """Model servers on this Mac, the only ones asked: fake OpenAI-compatible APIs on loopback (fakes/openai_api.py) that
+    take any request, named Ollama and LM Studio, with "llama.cpp" between them at a port nothing listens on. The app in
+    this process asks them, and a served one, which MAILMIND_TEST_LOCAL_AI names them to (`name=url` pairs between `;`).
+    Returns the fakes by name; a test sets each one's .models, or queues what it answers."""
+    import socket
+    from fakes.openai_api import FakeOpenAI
+    from mailmind.assistant.adapters import local_servers
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        nothing = f"http://127.0.0.1:{s.getsockname()[1]}/v1"
+    with FakeOpenAI(key=None) as ollama, FakeOpenAI(key=None) as lm_studio:
+        known = [("Ollama", ollama.url), ("llama.cpp", nothing), ("LM Studio", lm_studio.url)]
+        monkeypatch.setattr(local_servers, "known", lambda: known)
+        monkeypatch.setenv("MAILMIND_TEST_LOCAL_AI", ";".join(f"{name}={url}" for name, url in known))
+        yield {"Ollama": ollama, "LM Studio": lm_studio}
+
+
 @pytest.fixture
 def openai_api():
     """A fake OpenAI-compatible API on loopback (fakes/openai_api.py), for this test alone: its .url is the base URL a
