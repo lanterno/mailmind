@@ -114,7 +114,7 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
       const to = m.replyTo();
       if (to !== null) void run(to);
     };
-    add({ id: "reply", group: "Actions", label: "Reply", keys: ["r"], hint: "r", run: replying(answer) });
+    add({ id: "reply", group: "Actions", label: "Reply", keys: ["r"], hint: "r", run: replying((to) => answer(to, ai)) });
     add({ id: "reply-all", group: "Actions", label: "Reply all", keys: ["a"], hint: "a", run: replying((to) => composing.reply(to, true)) });
     add({ id: "forward", group: "Actions", label: "Forward", keys: ["f"], hint: "f", run: replying(composing.forward) });
     add({

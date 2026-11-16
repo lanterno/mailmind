@@ -61,7 +61,7 @@ function Answering({ to, thread, drafts, ai }: { to: Copy | null; thread: boolea
   return (
     <>
       {chip === "ready"
-        ? <button {...verb("draftready")} className="cab cab-draft" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do (r)" onClick={() => void answer(to)}><span><Icon name="wind" /></span> Draft ready</button>
+        ? <button {...verb("draftready")} className="cab cab-draft" title="AI pre-drafted a reply — opens in the composer for review; nothing sends until you do (r)" onClick={() => void answer(to, ai)}><span><Icon name="wind" /></span> Draft ready</button>
         : drafts && chip === "drafting"
           ? <button {...verb("reply")} className="cab cab-drafting" title="AI is drafting a reply in the background — click for a plain reply now" onClick={() => { forget(to.key); void composing.reply(to); }}><span><Icon name="wind" /></span> Drafting…</button>
           : <button {...verb("reply")} className="cab" title="Reply (r)" onClick={() => void composing.reply(to)}><span><Icon name="reply" /></span> Reply</button>}

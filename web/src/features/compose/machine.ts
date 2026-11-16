@@ -1000,6 +1000,7 @@ export function createComposing(env: Env) {
         env.toast("Draft ready — review and edit before sending");
       } else {
         forget();
+        if (!env.ai()) return;     // AI off: the reply stays plain, and nothing asks for one
         env.toast("Thread moved on — drafting a fresh reply…");
         void aiDraft();
       }

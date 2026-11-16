@@ -69,8 +69,8 @@ function NeedCard({ it, m, multi, ai }: { it: DigestItem; m: Mailbox; multi: boo
         {action && <span className="rchip need">{action}</span>}
         <footer className="bf-acts">
           {chip === "ready"
-            ? <button className="bf-act ai" title="Opens the pre-written reply in the composer; nothing sends until you do" onClick={() => void answer(copyOf(it))}><Icon name="wind" />Use draft</button>
-            : <button className="bf-act" onClick={() => void answer(copyOf(it))}><Icon name="reply" />Reply</button>}
+            ? <button className="bf-act ai" title="Opens the pre-written reply in the composer; nothing sends until you do" onClick={() => void answer(copyOf(it), ai)}><Icon name="wind" />Use draft</button>
+            : <button className="bf-act" onClick={() => void answer(copyOf(it), ai)}><Icon name="reply" />Reply</button>}
           <button className="bf-act quiet" onClick={() => m.openAny(it)}><Icon name="eye" />Read</button>
           <span className="sp" />
           <button className="bf-ic" title="Snooze" aria-label={`Snooze “${subject}”`} onClick={(e) => snoozeAsk.set({ target: copyOf(it), rows: [copyId(it)], anchor: e.currentTarget, canUnsnooze: false })}><Icon name="clock" /></button>

@@ -107,8 +107,9 @@ export async function peekCards(copies: Copy[]) {
   }));
 }
 
-// r, and the Reply button: the draft written ahead if there is one, else a plain reply.
-export const answer = (to: Copy) => (chips.get().get(to.key) === "ready" ? composing.openDraftAhead(to, () => forget(to.key)) : composing.reply(to));
+// r, and the Reply button: the draft written ahead if there is one, else a plain reply. `ai`: whether AI is offered. Turned
+// off, a reply is plain though one was written ahead before then, and nothing asks for one.
+export const answer = (to: Copy, ai: boolean) => (ai && chips.get().get(to.key) === "ready" ? composing.openDraftAhead(to, () => forget(to.key)) : composing.reply(to));
 
 // A message's chip, by its key.
 export const useDraftChip = (key: number | null) => {
