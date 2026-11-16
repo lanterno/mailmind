@@ -152,7 +152,8 @@ pub trait LanguageModel: Send + Sync + fmt::Debug {
 #[derive(Clone, Debug)]
 pub struct InForce {
     pub provider: AiProvider,
-    /// MAILMIND_MODEL's, else the one a person chose, else the provider's own: "" where there is none.
+    /// MAILMIND_MODEL's while Claude is the provider, else the one a person chose, else the provider's own: "" where
+    /// there is none.
     pub model: String,
     /// "" where the file names no key for it and, but for Claude, nothing else is looked at.
     pub key_from: &'static str,

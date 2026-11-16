@@ -4,8 +4,9 @@
 //! The engine in force is read from what a person chose (#49): AI on or off, its provider, model and URL, which are
 //! preferences in mailmind.config.json, and the key kept for that provider. Claude, the default, goes through
 //! mm-claude; every other provider through mm-openai's Chat Completions. AI off, turned off or with no key, URL or
-//! model to ask, nothing is sent. MAILMIND_MODEL wins over the model a person chose, and ANTHROPIC_BASE_URL stands in
-//! for Claude's own URL where none was chosen.
+//! model to ask, nothing is sent. MAILMIND_MODEL is the Claude model: it wins over the model a person chose while
+//! Claude is the provider, and is ignored for any other. ANTHROPIC_BASE_URL stands in for Claude's own URL where none
+//! was chosen.
 //!
 //! A provider's key is the config file's `anthropic_api_key`, `openai_api_key` and the like (a Keychain item, a
 //! 1Password reference, or a variable it names, a 1Password read kept for the process as an account's password is),
@@ -190,7 +191,9 @@ impl ApiEngine {
         let (chosen, provider) = self.preferences();
         let said = |name: &str| chosen.get(name).and_then(Value::as_str).unwrap_or_default().to_owned();
         let enabled = chosen.get(mm_accounts::preferences::AI_ENABLED).and_then(Value::as_bool).unwrap_or(false);
-        let model = self.environment.model().unwrap_or_else(|| said(mm_accounts::preferences::AI_MODEL));
+        // MAILMIND_MODEL is the Claude model: it wins over the one chosen only while Claude is the provider.
+        let claude_model = if speaks_anthropic(provider) { self.environment.model() } else { None };
+        let model = claude_model.unwrap_or_else(|| said(mm_accounts::preferences::AI_MODEL));
         let model = if model.is_empty() { default_model(provider).to_owned() } else { model };
         let base_url = self.chosen_url(provider, &said(mm_accounts::preferences::AI_BASE_URL));
         let base_url = if base_url.is_empty() { default_base_url(provider).to_owned() } else { base_url };
@@ -330,7 +333,8 @@ impl Assistant {
         let finder = Arc::new(Finder::new(local_ai));
         let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
         let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
-        let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
+        // The engine puts MAILMIND_MODEL in force for Claude alone, so no call names a model of its own.
+        let calls = Arc::new(Calls::new(gateway, status.clone(), None, environment.no_schema()));
         let fetch = Arc::new(Fetching::new(FetchingParts {
             stored: database.clone(),
             kept: database.clone(),
