@@ -6,7 +6,7 @@ retry-after, and raises typed errors, which become ModelError here, with what th
 error: its message as words, or as compact JSON where it is anything else, and nothing where it
 said none, the key taken out of all of it before it is cut to SAID characters. The server-side
 refusal fallback is a beta, so a prompt that asks for it goes through client.beta.messages. A key
-with a blank or a control character in it is never sent: it is refused as a rejected key is.
+that isn't printable ASCII without a space is never sent: it is refused as a rejected key is.
 
 The SDK sends nothing itself: each of its attempts is an `exchange` with the endpoint the client was
 made for (`_Exchange`), as every other provider's are. So no proxy and no header the environment names

@@ -8,9 +8,9 @@ most. It tries the statuses a retry can help (408, 409, 429 and 5xx), and a conn
 retry-after, as the Anthropic SDK does. A model on this Mac and a compatible service may not take structured output: a 400
 that names `response_format` is asked once more without it, the schema stated in the prompt instead, and the reply read as
 free-form JSON. OpenAI and Gemini are given a ceiling on a reply's tokens that a model may be unable to meet: a 400 whose
-error names `max_tokens` or `max_completion_tokens` is asked once more without it. A rejected key's error holds none of what the
-service said, which can quote part of the key back, and a key with a blank or a control character in it is never sent: it
-is refused as a rejected key is. It takes no batch.
+error names `max_tokens` or `max_completion_tokens` is asked once more without it. A rejected key's error holds none of
+what the service said, which can quote part of the key back, and a key that isn't printable ASCII without a space is never
+sent: it is refused as a rejected key is. It takes no batch.
 """
 import json
 import random
