@@ -18,7 +18,7 @@ struct BriefActions {
 }
 
 /// Today's brief, in the reading pane beside the Inbox, as Meadow draws it (`briefHTML()`): the scene with the date
-/// and a greeting, the brief Claude wrote on a card over the hills with the mail it names as links and the tallies
+/// and a greeting, the brief the AI wrote on a card over the hills with the mail it names as links and the tallies
 /// under it, then what needs you, what is worth a read and what can wait, and beside them (below them in a narrow
 /// pane) today and next, who you're waiting on, the paper trail and your commitments. The cards, tallies and side
 /// come from the digest, so they stand with AI off.
@@ -195,7 +195,7 @@ struct BriefScreen: View {
 
     @ViewBuilder private var narrative: some View {
         if model.aiOn == false && (model.brief?.narrative ?? "").isEmpty {
-            AIOffNote()
+            AIOffNote(ai: model.digest?.ai)
         } else if model.writing {
             DeskThinking(saying: "Reading your inbox…")
         } else if let narrative = model.brief?.narrative, !narrative.isEmpty {
@@ -399,28 +399,33 @@ extension BriefClock where Schedule == EveryMinuteTimelineSchedule {
     }
 }
 
-/// AI off, in the page's words, with where a key goes in this app.
+/// AI off for want of something, in the page's words for the provider chosen: why, where in Settings it turns on, and
+/// what would be sent and to whom.
 struct AIOffNote: View {
+    /// How AI stands: off for want of a key, a model or a URL says why and where it turns on; turned off, nothing is
+    /// said at all.
+    let ai: API.AiStatus?
     @Environment(\.meadow) private var meadow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("**AI is off.** Summaries, this brief and reply drafts come from Claude, and MailMind has no Anthropic API key. Your mail works the same without it.")
-                .font(.meadow(.ui, 14.5))
-                .foregroundStyle(meadow.ink2)
-                .lineSpacing(MeadowFace.ui.lineSpacing(size: 14.5, lineHeight: 1.55))
-            Text("To turn it on, add your key in MailMind’s Settings.")
+        if let ai, let note = AIWords.offNote(ai) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("\(Text(note.why).bold()) Summaries, this brief and reply drafts come from \(ai.provider.name). Your mail works the same without them.")
+                    .font(.meadow(.ui, 14.5))
+                    .foregroundStyle(meadow.ink2)
+                    .lineSpacing(MeadowFace.ui.lineSpacing(size: 14.5, lineHeight: 1.55))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(note.fix)
+                    .font(.meadow(.ui, 13))
+                    .foregroundStyle(meadow.ink3)
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    MeadowIconView(.lock, size: 14).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                    Text(AIWords.privacy(ai.provider))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 .font(.meadow(.ui, 13))
                 .foregroundStyle(meadow.ink3)
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
-                MeadowIconView(.lock, size: 14).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
-                Text("""
-                    With AI on, the text of a message goes to Anthropic only when it is summarized, briefed or \
-                    drafted; nothing else leaves this Mac.
-                    """)
             }
-            .font(.meadow(.ui, 13))
-            .foregroundStyle(meadow.ink3)
         }
     }
 }

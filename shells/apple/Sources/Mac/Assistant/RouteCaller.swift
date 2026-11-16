@@ -4,7 +4,7 @@ import Foundation
 /// What the assistant's, curation's, attention's and the calendar's models ask of the core: a route's GET or POST as
 /// its generated types (a POST a person started may go over today's AI limit with their leave), or a document's
 /// bytes. `Core` is one; a test's stand-in is another, so each turn a model takes can be held without a mail server or
-/// Claude.
+/// an AI service.
 protocol RouteCaller: OverLimitRoutes {
     func get<R: GetRoute>(_ route: R.Type, _ query: KeyValuePairs<String, String?>) async throws -> R.Answer
         where R.Answer: Decodable
@@ -30,9 +30,14 @@ final class CoreLink {
 
 /// How a refusal reads to a person, as the page reads it: the server's words, or the page's own where it has some.
 enum DeskRefusal {
-    /// AI is off: MailMind has no Claude API key (a 409 with `ai_off`).
+    /// AI is off (a 409 with `ai_off`): turned off in Settings, or no key, URL or model; its detail says which.
     static func isAIOff(_ error: any Error) -> Bool {
         (error as? Problem)?.more["ai_off"] == .bool(true)
+    }
+
+    /// Why AI is off, as the refusal says it ("AI is off: there is no API key"), else only that it is.
+    static func aiOff(_ error: any Error) -> String {
+        words(error, else: String(localized: "AI is off"))
     }
 
     /// Today's AI spending has reached the daily limit (a 402 with `over_limit`). A call a person started has already

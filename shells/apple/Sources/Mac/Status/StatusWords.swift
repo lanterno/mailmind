@@ -100,11 +100,20 @@ enum StatusWords {
         return "$\((cents / 100).formatted(.number.locale(Locale(identifier: "en_US")))).\(String(format: "%02d", cents % 100))"
     }
 
-    /// The status menu's line on AI (`AiLine`): off with no key, else the model, what today cost of the limit, a batch
-    /// out, and a last call that failed.
+    /// The status menu's line on AI (`AiLine`): off and why, else the provider and its model, what today cost of the
+    /// limit, a batch out, and a last call that failed.
     static func ai(_ ai: API.AiStatus) -> (text: String, failing: Bool) {
-        if ai.engine == "none" { return (String(localized: "AI is off · no API key"), false) }
-        var text = "Claude API · \(ai.model)"
+        guard ai.isOn else {
+            let off = switch ai.off {
+            case .turnedOff?: String(localized: "AI is off")
+            case .noUrl?: String(localized: "AI is off · no URL for the service")
+            case .noModel?: String(localized: "AI is off · no model chosen")
+            case .noKey?: String(localized: "AI is off · no \(ai.provider.name) API key")
+            case nil: String(localized: "AI is off · no API key")
+            }
+            return (off, false)
+        }
+        var text = "\(ai.provider.name) · \(ai.model)"
         if let spent = ai.spentTodayMicros, spent > 0 {
             text += " · \(dollars(spent))"
             if ai.limitMicros > 0 { text += String(localized: " of \(dollars(ai.limitMicros))") }
@@ -115,12 +124,6 @@ enum StatusWords {
         if failing, let error = ai.lastError { text += String(localized: " · last call failed: \(error)") }
         return (text, failing)
     }
-
-    /// What the page promises about AI and privacy (`AI_PRIVACY`).
-    static let aiPrivacy = String(localized: """
-        With AI on, the text of a message goes to Anthropic only when it is summarized, briefed or drafted; nothing \
-        else leaves this machine.
-        """)
 
     /// An account's line in Settings (`HealthLine`): a certificate that changed, a sync error, or when it last synced.
     enum HealthLine: Equatable, Sendable {

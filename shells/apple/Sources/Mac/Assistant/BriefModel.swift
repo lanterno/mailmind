@@ -3,7 +3,7 @@ import Foundation
 import Observation
 
 /// Today's brief, as the page's BriefPane reads it: the digest (what needs you, what can be filed, the AI's state),
-/// the brief Claude wrote of it, today and next, who you're waiting on, and what Tidy filed. A GET reads only what is
+/// the brief the AI wrote of it, today and next, who you're waiting on, and what Tidy filed. A GET reads only what is
 /// stored; opening the brief writes the day's one if there is none and AI is on, and never asks at the daily limit:
 /// only a person's press asks to go over it. Passing over its row with the arrow keys isn't opening it: that shows
 /// what is stored, and offers to write the rest.

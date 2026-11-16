@@ -4,7 +4,7 @@ import SwiftUI
 
 /// A summary above the mail, as the page's AiCard shows one: the one ingest already wrote, shown at once with no AI
 /// call, or the deeper one a person asks for (`/api/ai/summarize`). One card is shown at a time, for the message it is
-/// about, and asking again while one is being written asks Claude nothing more.
+/// about, and asking again while one is being written asks the AI nothing more.
 @MainActor
 @Observable
 final class SummaryCards {
@@ -32,7 +32,7 @@ final class SummaryCards {
         shown?.copy == copy ? shown?.card : nil
     }
 
-    /// Ask Claude for `copy`'s summary; `force` writes it again even where one is stored.
+    /// Ask the AI for `copy`'s summary; `force` writes it again even where one is stored.
     func summarize(_ copy: MailCopy, force: Bool = false) async {
         guard let routes = link.routes, !asking.contains(copy) else { return }
         asking.insert(copy)
@@ -53,7 +53,7 @@ final class SummaryCards {
     }
 }
 
-/// The card, as Meadow's summary note draws it (`.note`, #44): the stored summary with no call made, Claude reading,
+/// The card, as Meadow's summary note draws it (`.note`, #44): the stored summary with no call made, the AI reading,
 /// what went wrong, or the summary written; its lead in moss, its points, the next step with the reply written ahead
 /// when there is one, and a foot that says whose words these are not.
 struct SummaryCard: View {
@@ -89,7 +89,7 @@ struct SummaryCard: View {
             SummaryNote(source: Self.source(1)) {
                 if !summary.isEmpty { SummaryLead(text: summary) }
                 if !action.isEmpty { SummaryNext(text: action, copy: copy) }
-                SummaryFoot(author: author, help: String(localized: "Ask Claude for a deeper summary of the thread")) {
+                SummaryFoot(author: author, help: String(localized: "Ask the AI for a deeper summary of the thread")) {
                     rerun(force: false)
                 }
             }

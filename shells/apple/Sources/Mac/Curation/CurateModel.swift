@@ -19,7 +19,7 @@ final class CurateModel {
         var method: String { preview.unsub.method }
     }
 
-    /// Several senders' cleanup, previewed, with why each is here once Claude has said.
+    /// Several senders' cleanup, previewed, with why each is here once the AI has said.
     struct Batching: Equatable {
         var preview: API.BatchPreview
         var armed = false

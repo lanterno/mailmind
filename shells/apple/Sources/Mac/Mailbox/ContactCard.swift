@@ -256,9 +256,12 @@ private struct SenderSummary: View {
                 }
             }
         } else if !mailbox.aiOn || off {
-            HStack(spacing: 6) {
-                MeadowIconView(.wind, size: 14)
-                Text("AI is off.")
+            // Off for want of a key, a model or a URL: why, and where in Settings it turns on.
+            let note = AIWords.offNote(mailbox.ai)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                MeadowIconView(.wind, size: 14).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                Text(note.map { "\($0.why) \($0.fix)" } ?? refused ?? String(localized: "AI is off."))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .font(.meadow(.ui, 13))
             .foregroundStyle(meadow.ink3)

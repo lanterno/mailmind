@@ -43,7 +43,7 @@ extension Desk {
     }
 }
 
-/// A question's answer in the palette (`.answer`): on moss's wash, the question, then Claude reading, or what it
+/// A question's answer in the palette (`.answer`): on moss's wash, the question, then the AI reading, or what it
 /// answered from your mail and the messages it cites, each opening where it is.
 struct AskCard: View {
     let model: AskModel
@@ -82,7 +82,7 @@ struct AskCard: View {
                     .font(.meadow(.ui, 16, .semibold))
                     .foregroundStyle(meadow.moss)
                     .padding(.top, 8)
-                note(String(localized: "Claude reads your mail to answer and cites what it read. Nothing is changed."))
+                note(String(localized: "The AI reads your mail to answer and cites what it read. Nothing is changed."))
             case .reading?:
                 MeadowThinking(text: String(localized: "Reading your mail…"))
             case .failed(let question, let why)?:

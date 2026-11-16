@@ -60,7 +60,7 @@ struct HelpWindow: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .padding(.top, 6)
-            Text("Where the keys are, what search understands, and what MailMind sends to Claude.")
+            Text("Where the keys are, what search understands, and what MailMind sends to an AI service.")
                 .font(.meadow(.ui, 17))
                 .lineSpacing(MeadowFace.ui.lineSpacing(size: 17, lineHeight: 1.65))
                 .foregroundStyle(meadow.ink2)
@@ -150,10 +150,12 @@ struct HelpWindow: View {
     }
 
     static let howAI = String(localized: """
-        Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox are written by Claude, through \
-        the Claude API, when an API key is set; without one, AI is off and nothing is sent. Only the text of the mail \
-        being summarized, drafted or asked about is sent to Anthropic; your mailbox itself stays in a database on this \
-        Mac. Email bodies show inside a locked sandbox that can't run code or phone home.
+        Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox are written by the AI service \
+        you choose in Settings › AI: Claude, OpenAI or Gemini with an API key of yours, or a model on this Mac through \
+        Ollama. Turned off there, or without what it needs, AI is off and nothing is sent. Only the text of the mail \
+        being summarized, drafted or asked about goes to that service, and with Ollama it never leaves this Mac; your \
+        mailbox itself stays in a database on this Mac. Email bodies show inside a locked sandbox that can't run code \
+        or phone home.
         """)
 }
 

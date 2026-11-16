@@ -77,7 +77,7 @@ final class PlanModel {
                                            asking: link.asksOverLimit)
         } catch {
             guard mine == seq else { return }
-            let why = DeskRefusal.isAIOff(error) ? String(localized: "AI is off")
+            let why = DeskRefusal.isAIOff(error) ? DeskRefusal.aiOff(error)
                 : DeskRefusal.isOverLimit(error) ? String(localized: "today’s AI limit is reached")
                 : String(localized: "planner failed")
             doing = .failed(command: command, why: why)

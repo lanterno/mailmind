@@ -2,7 +2,7 @@
 import Foundation
 import Observation
 
-/// Whether what's typed in the search field reads as a sentence worth asking Claude to turn into a search, as the
+/// Whether what's typed in the search field reads as a sentence worth asking the AI to turn into a search, as the
 /// page's `readsAsProse` decides it. It decides a call that costs money, on Return only, so it leans hard towards no:
 /// a miss is only the literal search. Three or more words that don't speak the search grammar, opening like a request
 /// or a question, or holding a word that relates one term to another, or a time said in words. English only, as the

@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// One message that needs you (`.need`): who, which account, the next step in sunlight, the subject that opens it,
-/// what Claude made of it in moss, and what to do about it: the reply (or the one written ahead), Read, and snooze,
+/// what the AI made of it in moss, and what to do about it: the reply (or the one written ahead), Read, and snooze,
 /// file and delete.
 struct NeedCard: View {
     let item: API.DigestItem

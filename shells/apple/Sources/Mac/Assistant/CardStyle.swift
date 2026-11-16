@@ -73,7 +73,7 @@ extension DeskSideCard where Trailing == EmptyView {
     }
 }
 
-/// A card's heading: the AI's mark for what Claude wrote, else the section's icon and label, and what goes beside.
+/// A card's heading: the AI's mark for what the AI wrote, else the section's icon and label, and what goes beside.
 struct DeskCardHeading<Trailing: View>: View {
     let title: String
     let icon: MeadowIcon
@@ -144,7 +144,7 @@ struct DeskCardFoot<Content: View>: View {
     }
 }
 
-/// Bars of paper where words are coming, and the AI's "thinking" in moss (`.thinking`), while Claude reads.
+/// Bars of paper where words are coming, and the AI's "thinking" in moss (`.thinking`), while the AI reads.
 struct DeskWaitingBars: View {
     var lines = 3
     let saying: LocalizedStringKey

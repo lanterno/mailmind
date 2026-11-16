@@ -341,7 +341,7 @@ private struct CommitmentRow: View {
     }
 }
 
-/// Your week: what Claude made of the week behind you, its numbers, and what still needs you.
+/// Your week: what the AI made of the week behind you, its numbers, and what still needs you.
 struct ReviewSheet: View {
     let model: ReviewModel
     let open: (MailCopy) -> Void
@@ -385,7 +385,7 @@ struct ReviewSheet: View {
         case nil, .reading:
             DeskWaitingBars(lines: 4, saying: "Looking back over your week…")
         case .aiOff:
-            Text("AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.")
+            Text("AI is off, so there is no review: the AI writes it. Settings › AI says why, and turns it on.")
                 .font(.meadow(.ui, 13.5))
                 .foregroundStyle(meadow.ink2)
         case .limit:
@@ -477,7 +477,7 @@ struct ReviewBody: View {
         }
         HStack(spacing: 4) {
             Text(verbatim: review.model == "fallback" ? String(localized: "summary from your data")
-                 : review.model.isEmpty ? "claude" : review.model)
+                 : review.model)
             if !review.generated.isEmpty { Text(verbatim: "· \(review.generated.prefix(10))") }
             if review.cached { Text("· cached") }
             if review.stale {

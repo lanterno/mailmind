@@ -3,7 +3,7 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// What the open message proposes, found by Claude on a click (`/api/ai/extract`), as the page's Suggestions shows
+/// What the open message proposes, found by the AI on a click (`/api/ai/extract`), as the page's Suggestions shows
 /// it. Each is a suggestion: its fields can be changed, and nothing is made until someone confirms it. An event becomes
 /// a calendar file that opens in the person's calendar app and invites no one; a task joins their list.
 @MainActor

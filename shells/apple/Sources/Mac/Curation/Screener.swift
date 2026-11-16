@@ -113,7 +113,7 @@ final class ScreenerModel {
             asked = Set(waiting.prefix(answer.asked)).union(answer.suggestions.map(\.fromAddr))
             if answer.suggestions.isEmpty { notices.say(String(localized: "The AI isn’t sure of any of these")) }
         } catch {
-            notices.say(DeskRefusal.isAIOff(error) ? String(localized: "AI is off")
+            notices.say(DeskRefusal.isAIOff(error) ? DeskRefusal.aiOff(error)
                 : DeskRefusal.isOverLimit(error) ? String(localized: "Today’s AI limit is reached")
                 : String(localized: "Couldn’t get suggestions"))
         }

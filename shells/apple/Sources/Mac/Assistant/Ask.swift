@@ -2,7 +2,7 @@
 import Observation
 import SwiftUI
 
-/// A question asked of your mail (`/api/ai/ask`), as the page's "?…" asks it: Claude answers from your mail and
+/// A question asked of your mail (`/api/ai/ask`), as the page's "?…" asks it: the AI answers from your mail and
 /// cites what it read, and nothing changes. A newer question takes the place of one still being answered.
 @MainActor
 @Observable
@@ -43,7 +43,7 @@ final class AskModel {
             AccessibilityNotification.Announcement(String(localized: "Answer ready — \(count) cited sources")).post()
         } catch {
             guard mine == seq else { return }
-            let why = DeskRefusal.isAIOff(error) ? String(localized: "AI is off")
+            let why = DeskRefusal.isAIOff(error) ? DeskRefusal.aiOff(error)
                 : DeskRefusal.isOverLimit(error) ? String(localized: "today’s AI limit is reached")
                 : String(localized: "ask failed")
             asking = .failed(question: question, why: why)
@@ -139,7 +139,7 @@ struct AskScreen: View {
             .fixedSize()
             Spacer(minLength: 4)
             // Which model answered, where the column has room for it after the buttons.
-            Text(answer.model.isEmpty ? "claude" : answer.model)
+            Text(verbatim: answer.model)
                 .font(.meadow(.ui, 12))
                 .foregroundStyle(meadow.ink3)
                 .lineLimit(1)
@@ -150,7 +150,7 @@ struct AskScreen: View {
 
     private static let nothingAsked = String(localized: """
         Type ? and a question in the search, or choose Ask Your Mail in the Assistant menu. \
-        Claude answers from your mail and says what it read.
+        The AI answers from your mail and says what it read.
         """)
 
     /// What the answer read and left alone (the palette's line under the cites).
