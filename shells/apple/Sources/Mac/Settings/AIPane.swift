@@ -655,7 +655,6 @@ struct AIPane: View {
     }
 }
 
-/// A model a server on this Mac listed, to choose with a click: ticked while it is the one chosen.
 /// What AI cost over the last 7 days and this month, by feature, as the server counts it (`/api/ai/spending`), and
 /// where the bill is. Asked for as the card shows, and again as today's spending changes.
 private struct SpentLately: View {
@@ -703,6 +702,7 @@ private struct OllamaSteps: View {
     }
 }
 
+/// A model a server on this Mac listed, to choose with a click: ticked while it is the one chosen.
 private struct FoundModelRow: View {
     let model: String
     let chosen: Bool
