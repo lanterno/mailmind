@@ -594,6 +594,36 @@ fn a_providers_models_are_listed_with_its_key_at_the_url_chosen() {
 }
 
 #[test]
+fn a_providers_models_are_asked_at_its_own_url_never_at_the_one_chosen_for_the_provider_in_force() {
+    let (chosen, chosen_log) = provider(vec![(200, json!({"data": [{"id": "mixtral"}]}))]);
+    let (claude, claude_log) = provider(vec![(200, json!({"data": [{"id": "claude-opus-5-5"}], "has_more": false}))]);
+    let config = json!({"preferences": {"ai_provider": "compatible", "ai_base_url": chosen, "ai_model": "mixtral"}});
+    let r = running(&config, &[("ANTHROPIC_BASE_URL", claude.trim_end_matches("/v1"))]);
+    for provider in ["anthropic", "openai"] {
+        r.post("/api/ai/key", &json!({"provider": provider, "key": "sk-fictional"}));
+    }
+
+    // Claude's at its own (here ANTHROPIC_BASE_URL's), not the compatible service's chosen.
+    assert_eq!(r.get("/api/ai/models?provider=anthropic").status, 200);
+    let [asked] = heard(&claude_log).try_into().unwrap();
+    assert!(asked.line.starts_with("GET /v1/models?limit="), "{}", asked.line);
+    // OpenAI's at its own: the tripwire refuses it, so nothing is sent anywhere.
+    let openai = r.get("/api/ai/models?provider=openai");
+    assert_eq!((openai.status, openai.json()["type"].clone()), (502, json!("/problems/unreachable")));
+    assert_eq!(r.outside.0.lock().unwrap().last().map(String::as_str), Some("api.openai.com"));
+    assert!(heard(&chosen_log).is_empty(), "the URL chosen for the provider in force was never asked for another's");
+
+    // Only the provider in force is listed at the URL chosen.
+    assert_eq!(r.get("/api/ai/models?provider=compatible").status, 200);
+    let [asked] = heard(&chosen_log).try_into().unwrap();
+    assert_eq!(asked.line, "GET /v1/models HTTP/1.1");
+    r.post("/api/preferences", &json!({"ai_provider": "openai", "ai_base_url": chosen}));
+    let compatible = r.get("/api/ai/models?provider=compatible");
+    assert_eq!((compatible.status, compatible.json()["detail"].clone()), (400, json!("Give the service's URL first.")));
+    assert_eq!(heard(&chosen_log).len(), 1);
+}
+
+#[test]
 fn what_cant_be_listed_is_refused_in_words_and_a_provider_that_didnt_answer_is_unreachable() {
     let r = running(&json!({}), &[]);
     let said = |path: &str| {
