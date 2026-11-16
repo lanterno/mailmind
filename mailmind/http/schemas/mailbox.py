@@ -354,7 +354,8 @@ class SyncState(Answer):
 
 class AiStatus(Answer):
     """`Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
-    is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off."""
+    is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off.
+    `summaries_waiting` is how many messages from the last 30 days wait for a summary, there while AI is on."""
     engine: str
     provider: AiProvider
     off: AiOff | None
@@ -367,6 +368,7 @@ class AiStatus(Answer):
     spent_today_micros: int | None
     limit_micros: int
     batch_waiting: int | None = None
+    summaries_waiting: int | None = None
 
 
 class Digest(Answer):

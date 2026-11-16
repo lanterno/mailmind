@@ -169,6 +169,17 @@ def needs_summary(c, limit=200, newer_than=None):
     ).fetchall()
 
 
+def summaries_waiting(c, newer_than):
+    """How many messages newer than `newer_than` wait for a summary: non-junk, with a key, one count for each, and those
+    a batch holds among them, since they have none yet."""
+    return c.execute(
+        """SELECT COUNT(DISTINCT m.message_key) FROM messages m
+           LEFT JOIN assessments s ON s.message_key = m.message_key
+           WHERE m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL
+             AND m.message_key IS NOT NULL AND COALESCE(m.ts, 0) > ?""", (newer_than,)
+    ).fetchone()[0]
+
+
 _BATCH_OUT = "('submitting', 'running')"
 
 

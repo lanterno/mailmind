@@ -32,11 +32,13 @@ def _plain(e: Exception) -> str:
 
 class Status:
     def __init__(self, gateway: Callable[[], Gateway], engine: Callable[[], Engine],
-                 governor: Callable[[], CostGovernor], batch_status: Callable[[], BatchStatus]):
+                 governor: Callable[[], CostGovernor], batch_status: Callable[[], BatchStatus],
+                 waiting: Callable[[], int] | None = None):
         self._gateway = gateway
         self._engine = engine
         self._governor = governor
         self._batch_status = batch_status
+        self._waiting = waiting                 # how many recent messages wait for a summary
         self._last: dict[str, Any] = {"ok": None, "ts": 0, "error": ""}   # how the most recent AI call went, for report()
 
     def note(self, ok: bool, error: str) -> None:
@@ -81,8 +83,9 @@ class Status:
     def report(self) -> dict[str, Any]:
         """What the UI says about AI, with no call made: the engine ("api", or "none" while AI is off), the provider chosen and
         why AI is off (None while it is on), the model in force and the one background summaries ask, where the key came
-        from, how the most recent call went (last_ok None until one has run), and what today's calls cost so far in
-        micro-dollars (None when the usage ledger can't be read)."""
+        from, how the most recent call went (last_ok None until one has run), what today's calls cost so far in
+        micro-dollars (None when the usage ledger can't be read), and while AI is on how many messages from the last 30
+        days wait for a summary."""
         engine = self._engine()
         on = self._gateway().on
         return {"engine": "api" if on else "none", "provider": engine.provider, "off": None if on else engine.off,
@@ -90,7 +93,17 @@ class Status:
                 "key_from": engine.key_from if on else "",
                 "last_ok": self._last["ok"], "last_ts": self._last["ts"], "last_error": self._last["error"],
                 "spent_today_micros": self._spent_today(), "limit_micros": self._governor().limit_micros(),
-                **self._batch_note(on)}
+                **self._batch_note(on), **self._waiting_note(on)}
+
+    def _waiting_note(self, on: bool) -> dict[str, int]:
+        """`summaries_waiting`, while AI is on and the store can be read."""
+        if not on or self._waiting is None:
+            return {}
+        try:
+            return {"summaries_waiting": self._waiting()}
+        except Exception as e:
+            log.warning("what waits for a summary can't be read", exc_info=e)
+            return {}
 
     def _batch_note(self, on: bool) -> dict[str, int]:
         """`batch_waiting`, when there's a batch out to say so of."""

@@ -278,6 +278,11 @@ class Assessments:
             pass
         return stored
 
+    def summaries_waiting(self) -> int:
+        """How many messages from the last RECENT_DAYS wait for a summary, those out in a batch among them."""
+        with self._uow.read() as c:
+            return self._answers.summaries_waiting(c, self._recent())
+
     def batch_status(self) -> BatchStatus:
         """What's out in a batch, with no call made: how many messages, and what it may cost."""
         with self._uow.read() as c:

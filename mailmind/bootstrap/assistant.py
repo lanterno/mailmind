@@ -294,7 +294,8 @@ def assemble():
     LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
     GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros, reserved=lambda: LEDGER.reserved())
     GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
-    status = Status(lambda: gateway(), engine, lambda: governor(), lambda: assessments.batch_status())
+    status = Status(lambda: gateway(), engine, lambda: governor(), lambda: assessments.batch_status(),
+                    lambda: assessments.summaries_waiting())
     calls = Calls(lambda: gateway(), status, background_model)
     assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail, lambda: _preferences()["ai_provider"])
     context = ContextAssembler(_mail)
