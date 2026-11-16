@@ -327,6 +327,35 @@ final class AIWordsTests: XCTestCase {
         }
     }
 
+    /// What AI mode sends is said before it is turned on: what goes to the provider by itself, what goes only when asked,
+    /// and that attachments never leave; with a model on this Mac, or a service answering here, nothing leaves.
+    func testWhatAIModeSendsIsSaidBeforeItIsOn() {
+        XCTAssertEqual(AIWords.sends(.anthropic), """
+            With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be summarized, \
+            automatically. Whole conversations go when you ask for a summary, a draft or the brief, with what you type \
+            into Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac.
+            """)
+        XCTAssertTrue(AIWords.sends(.openai).contains("opening text go to OpenAI to be summarized"))
+        XCTAssertTrue(AIWords.sends(.gemini).contains("opening text go to Google to be summarized"))
+        XCTAssertTrue(AIWords.sends(.compatible).contains("go to the service at the URL you gave to be summarized"))
+        XCTAssertEqual(AIWords.sends(.local), "With a model on this Mac, nothing leaves this Mac.")
+        XCTAssertEqual(AIWords.sends(.compatible, url: "http://localhost:8080/v1"),
+                       "With the service on this Mac, nothing leaves this Mac.")
+        XCTAssertEqual(AIWords.sends(.local, url: "http://127.0.0.1:1234/v1"),
+                       "With a model on this Mac, nothing leaves this Mac.")
+        for provider in API.AiProvider.allCases where provider != .anthropic {
+            XCTAssertFalse(AIWords.sends(provider).contains("Anthropic"), "\(provider)")
+        }
+    }
+
+    /// Help says the same of the provider chosen, whether AI mode is on or off.
+    @MainActor func testHelpSaysWhatAIModeSends() {
+        let help = HelpWindow.howAI(sends: AIWords.sends(.gemini))
+        XCTAssertTrue(help.contains("nothing is sent. " + AIWords.sends(.gemini) + " Your mailbox itself stays"), help)
+        XCTAssertTrue(HelpWindow.howAI(sends: AIWords.sends(.local))
+            .contains("With a model on this Mac, nothing leaves this Mac."))
+    }
+
     /// On this Mac is http or https at 127.0.0.1, ::1 or localhost, as the core holds a model on this Mac to.
     func testWhatIsOnThisMac() {
         for url in ["http://127.0.0.1:11434/v1", "https://localhost:1234/v1", "http://[::1]:8080/v1",
