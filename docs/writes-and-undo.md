@@ -76,11 +76,14 @@
   client sends none, so only a resubmit of the same request dedupes.
 - `ingest.ingest_message` (undo's one-message re-ingest) never moves the sync watermark or
   creates a folder's `sync_state` row; only a sync that saw every UID may.
-- A folder counts as synced (`ingest.folder_synced`) only when its `scan_state` (migration 24)
+- On the Python server a folder counts as synced (`ingest.folder_synced`) only when its `scan_state` (migration 24)
   is `synced`: a whole scan sets it, one cut to warming's newest messages sets `recent`, and an
   incremental sync, a failed scan or a one-message re-ingest leaves it be. Anything else, the
   first open scans the folder whole, as a job of its own (`mailbox.folders._folder_sync`, one per folder at
-  a time) that the list request waits for up to `FIRST_SYNC_WAIT` seconds. Past that it answers
+  a time). On the Rust server a folder's first scan has begun (`StoredLists::scan_begun`) once its `scan_state` is
+  `synced` or `down-to:<uid>` (`Scan::begun`): the first open stores its newest step and leaves the rest to the `older-mail`
+  lane (below), and every later open is a catch-up. The list request waits for a first scan up to `FIRST_SYNC_WAIT`
+  seconds (`Waits::first_scan`). Past that it answers
   with what is stored and `syncing: true`; a scan that failed answers `sync_failed: true`.
   Opening a folder already read, other than INBOX, catches it up the same way, an incremental
   sync waited for up to `CATCH_UP_WAIT` seconds (`catching_up: true` past that), at most once

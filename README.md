@@ -99,10 +99,12 @@ and the AI provider you chose (Claude by default).
   Inbox by **Needs you** (the default, the brief's to-do test), **Everything** and
   **Unread**, each with its count; `j`/`k` walk the tab you're on, and the choice is
   remembered.
-- **A big folder opens at once.** The first time you open a folder, MailMind reads it
-  whole in the background. The list waits a few seconds for it, then says "Reading this
-  folder for the first time…" and fills in when the scan ends; a folder it couldn't read
-  says so, with a Retry.
+- **A big folder opens at once.** The first time you open a folder, MailMind reads it in
+  the background. The list waits a few seconds for it, then says "Reading this folder for
+  the first time…" and fills in as it reads; a folder it couldn't read says so, with a
+  Retry. In the Mac app (the Rust server) the first read stores the folder's newest 500
+  messages, which show then, and reads the rest newest first in the background; the older
+  Python server reads it whole, and fills in when the scan ends.
 - **Folders stay current, not only the Inbox.** Opening a folder read before catches it
   up — mail another client filed there, a draft just saved, flags changed elsewhere — at
   most once a minute, and the list fills in if that takes more than a moment.
