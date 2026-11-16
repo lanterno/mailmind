@@ -221,6 +221,26 @@ fn a_bad_request_says_its_status() {
 }
 
 #[test]
+fn the_key_is_taken_out_of_all_the_api_said_before_it_is_cut_short() {
+    use mm_claude::wire::{SAID_MOST, said};
+    // The key starts before the cut and runs past it.
+    let lead = "x".repeat(SAID_MOST - 30);
+    let quoted = error("invalid_request_error", &format!("{lead} bad X-Api-Key: {KEY} and more after it"));
+    let kept = said(quoted.as_bytes(), Some(KEY));
+    assert_eq!(kept.chars().count(), SAID_MOST);
+    assert!(!kept.contains("sk-ant") && kept.ends_with("X-Api-Key: <key> and more"), "{kept}");
+    assert_eq!(said(error("x", &format!("{KEY}, {KEY}")).as_bytes(), Some(KEY)), "<key>, <key>");
+    assert_eq!(said(error("x", "no key here").as_bytes(), Some("")), "no key here");
+    // A message that isn't words is said as compact JSON, in its own order and its own characters.
+    let odd = json!({"type": "error", "error": {"message": {"z": 1, "a": "caf\u{e9}"}}}).to_string();
+    assert_eq!(said(odd.as_bytes(), None), "{\"z\":1,\"a\":\"caf\u{e9}\"}");
+
+    let (url, _) = stand_in(vec![(400, vec![], quoted)]);
+    let failed = api(&url, Arc::new(Open::default())).complete(&prompt("claude-opus-5-5", true)).expect_err("bad");
+    assert_eq!(failed, mm_assistant::ports::ModelError::new(format!("Claude API 400: {kept}"), Some(400)));
+}
+
+#[test]
 fn a_refusal_reads_as_an_empty_reply_and_only_the_text_after_a_fallback_counts() {
     let refused = json!({"stop_reason": "refusal", "content": [], "model": "claude-opus-5-5"}).to_string();
     let handed = json!({"model": "claude-opus-5-5", "stop_reason": "end_turn", "content": [

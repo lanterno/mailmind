@@ -406,6 +406,24 @@ fn what_a_service_said_is_read_from_the_first_of_a_list_too() {
 }
 
 #[test]
+fn the_key_is_taken_out_of_all_a_service_said_before_it_is_cut_short() {
+    use mm_openai::wire::{SAID_MOST, said};
+    // The key starts before the cut and runs past it.
+    let lead = "x".repeat(SAID_MOST - 45);
+    let quoted = error(&format!("{lead} invalid header Authorization: Bearer {KEY} and more after it"));
+    let kept = said(quoted.as_bytes(), Some(KEY));
+    assert_eq!(kept.chars().count(), SAID_MOST);
+    assert!(!kept.contains("sk-proj") && kept.ends_with("Bearer <key> a"), "{kept}");
+    let lead = "x".repeat(SAID_MOST - 10);
+    let whole = format!("{lead} <key> and more");
+    assert_eq!(said(error(&format!("{lead} {KEY} and more")).as_bytes(), Some(KEY)), whole[..SAID_MOST]);
+    // Every place it is said, and nothing to take out with no key.
+    assert_eq!(said(error(&format!("{KEY}, {KEY}")).as_bytes(), Some(KEY)), "<key>, <key>");
+    assert_eq!(said(error("no key here").as_bytes(), None), "no key here");
+    assert_eq!(said(error("no key here").as_bytes(), Some("")), "no key here");
+}
+
+#[test]
 fn a_rate_limit_is_sent_again_and_an_outage_that_stays_gives_up_after_two_retries() {
     let (url, log) = stand_in(vec![
         (429, vec![("retry-after-ms", "1")], error("slow down")),
