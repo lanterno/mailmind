@@ -298,7 +298,22 @@ fn a_service_that_refuses_structured_output_is_asked_once_more_without_it() {
         let asked = heard(&log);
         assert_eq!(asked.len(), 2, "{provider:?}");
         assert!(asked[0].body.get("response_format").is_some() && asked[1].body.get("response_format").is_none());
+        // Asked again, it is told the shape in words: the schema as compact JSON, its keys in their own order.
+        let stated = "Say hello.\n\nReply with only a JSON object that matches this JSON Schema: \
+                      {\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}},\"required\":[\"text\"],\
+                      \"additionalProperties\":false}";
+        assert_eq!(
+            asked[1].body["messages"],
+            json!([{"role": "system", "content": "Be brief."}, {"role": "user", "content": stated}]),
+            "{provider:?}"
+        );
+        assert_eq!(asked[0].body["messages"][1]["content"], "Say hello.", "the first time, only the prompt");
     }
+    // With no schema there is nothing to fall back from, nor to state.
+    let (url, log) = stand_in(vec![(400, vec![], error("unknown field: response_format"))]);
+    let failed = api(Local, &url, None, Arc::new(Open::default())).complete(&prompt("m", None)).expect_err("400");
+    assert_eq!((failed.status, heard(&log).len()), (Some(400), 1));
+    assert_eq!(heard(&log)[0].body["messages"][1]["content"], "Say hello.");
     // OpenAI's own 400 is the request's fault, and another 400 is no refusal of structured output.
     for (provider, said) in [(OpenAi, "unknown field: response_format"), (Local, "model is required")] {
         let (url, log) = stand_in(vec![(400, vec![], error(said)), (200, vec![], answer("never", "m"))]);
