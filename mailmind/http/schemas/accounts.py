@@ -148,11 +148,37 @@ class PresetArgs(QueryArgs):
     email: str | None = None
 
 
+class Link(Answer):
+    """A page a person is sent to (a provider's, where its app password is made), and the words of its link."""
+    url: str
+    words: str
+
+
+class PresetSettings(Answer):
+    """What an account of a preset is saved as, in `AccountBody`'s fields: its type, and a generic IMAP account's servers
+    and Trash. A field its type gives is None."""
+    type: str
+    host: str | None
+    port: int | None
+    starttls: bool | None
+    smtp_host: str | None
+    smtp_port: int | None
+    smtp_starttls: bool | None
+    trash: str | None
+
+
 class PresetFound(Answer):
-    """`Presets.preset`: Gmail's preset for an address at one of Google's own domains, `sure`, which the form chooses; for
-    one whose domain's mail servers are Google's, offered (`sure` false); none for any other. `domain` is the address's,
-    in lower case, or None when it names none a lookup could ask about."""
+    """`Presets.preset`: a provider's preset for an address at one of its own domains, `sure`, which the form chooses; for
+    one whose domain's mail servers are a provider's, offered (`sure` false); none for any other. `domain` is the
+    address's, in lower case, or None when it names none a lookup could ask about. `name` is the provider's; `settings`
+    what its account is saved as, None where MailMind can't log in to it yet (`supported` false); `note` what the form
+    says before the password, and `link` where that password is made."""
     ok: Literal[True]
     domain: str | None
     preset: Preset | None
     sure: bool
+    name: str | None
+    supported: bool
+    settings: PresetSettings | None
+    note: str | None
+    link: Link | None
