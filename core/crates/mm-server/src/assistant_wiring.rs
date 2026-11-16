@@ -62,21 +62,27 @@ use crate::wiring::AiConfig;
 const CONFIG: &str = providers::CONFIG;
 const ENVIRONMENT: &str = "ANTHROPIC_API_KEY";
 
-/// What a language model was made for: the provider, the URL it is reached at, and its key.
+/// What a language model was made for: the provider, the URL it is reached at, its key, and the model in force. A
+/// new one is a new language model, so a breaker a refused key opened on the last is closed by another choice of
+/// model too, as by AI turned off and on again (which lets the last one go).
 struct MadeFor {
     provider: AiProvider,
     base_url: String,
     key: Secret,
+    model: String,
 }
 
 impl MadeFor {
     fn same(&self, other: &MadeFor) -> bool {
-        self.provider == other.provider && self.base_url == other.base_url && self.key.expose() == other.key.expose()
+        self.provider == other.provider
+            && self.base_url == other.base_url
+            && self.key.expose() == other.key.expose()
+            && self.model == other.model
     }
 }
 
-/// The language model of the provider and key in force, made once for each provider, URL and key; and the models a
-/// provider lists.
+/// The language model of the provider and key in force, made once for each provider, URL, key and model, and again
+/// after AI was off; and the models a provider lists.
 pub(crate) struct ApiEngine {
     file: Arc<dyn ConfigFile>,
     keychain: Arc<dyn Keychain>,
@@ -194,8 +200,12 @@ impl ApiEngine {
         let keyed = !key.expose().is_empty();
         let off = providers::off(enabled, provider, keyed, &base_url, &model);
         let lm = match off {
-            Some(why) => Err(why),
-            None => Ok(self.model_for(MadeFor { provider, base_url, key })),
+            Some(why) => {
+                // Off, the last language model is let go: on again, a new one is made.
+                *self.made.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+                Err(why)
+            }
+            None => Ok(self.model_for(MadeFor { provider, base_url, key, model: model.clone() })),
         };
         (InForce { provider, model, key_from, local, lm }, keyed)
     }
