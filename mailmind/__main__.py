@@ -208,7 +208,7 @@ def ai_usage(days):
     if not os.path.exists(db):
         print("There is no database yet, so no usage either.")
         return 1
-    from mailmind.assistant.domain.pricing import usd
+    from mailmind.assistant.domain.pricing import MOST, usd
     from mailmind.bootstrap import assistant
     try:
         report = assistant.gateway().usage(max(1, days))
@@ -219,8 +219,8 @@ def ai_usage(days):
         return 1
     span = "today" if len(report) == 1 else f"the last {len(report)} days"
     print(f"AI usage by local day at the providers' list prices, {span}:")
-    calls = sum(d["calls"] for d in report)
-    total = usd(sum(d["cost_micros"] for d in report))
+    calls = min(sum(d["calls"] for d in report), MOST)          # held at the most the ledger holds, as each day is
+    total = usd(min(sum(d["cost_micros"] for d in report), MOST))
     width = max([len(total)] + [len(usd(d["cost_micros"])) for d in report])
     for d in report:
         if not d["calls"]:
