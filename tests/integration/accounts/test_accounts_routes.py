@@ -23,9 +23,10 @@ def config(world):
 
 
 def dee(world):
-    """A draft that would log in, with the password that fake server takes."""
-    entry = world.server.add_account(NEW, password="dee-password")
+    """A draft that would log in, with the password those fake servers take."""
+    entry = world.add_account(NEW, password="dee-password")
     return {"email": NEW, "type": "imap", "host": entry["host"], "port": entry["port"], "starttls": True,
+            "smtp_host": entry["smtp_host"], "smtp_port": entry["smtp_port"],
             "credential": {"style": "keychain", "value": "dee-password"}}
 
 

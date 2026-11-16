@@ -60,9 +60,10 @@ def test_saved_views(app, golden, world):
 
 
 def test_accounts_add_test_edit_delete(app, golden, world):
-    entry = world.server.add_account(DEE, password="dee-password")
-    add = {"email": DEE, "type": "imap", "host": entry["host"], "port": entry["port"],
-           "starttls": True, "alias": "Dee", "credential": {"style": "keychain", "value": "dee-password"}}
+    entry = world.add_account(DEE, password="dee-password")
+    add = {"email": DEE, "type": "imap", "host": entry["host"], "port": entry["port"], "starttls": True,
+           "smtp_host": entry["smtp_host"], "smtp_port": entry["smtp_port"], "smtp_starttls": True, "alias": "Dee",
+           "credential": {"style": "keychain", "value": "dee-password"}}
     post(app, golden, "add Dee", "/api/accounts/add", add)
     post(app, golden, "add Dee again", "/api/accounts/add", add)
     post(app, golden, "add one with no credential", "/api/accounts/add", {"email": "eve@example.test", "type": "imap",

@@ -14,12 +14,12 @@ def typed(password):
 
 
 def at(entry):
-    """The fake server's endpoint for an account it holds, in place of the one its type would give."""
-    return {"host": entry["host"], "port": entry["port"], "starttls": entry["starttls"]}
+    """The fake servers' endpoints for an account they hold, in place of the ones its type would give."""
+    return {k: entry[k] for k in ("host", "port", "starttls", "smtp_host", "smtp_port", "smtp_starttls")}
 
 
 def test_a_gmail_app_password_as_google_shows_it_is_kept_without_its_spaces_and_logs_in(app, world, fake_keychain):
-    entry = world.server.add_account(DEE, password=APP_PASSWORD, kind="gmail")
+    entry = world.add_account(DEE, password=APP_PASSWORD, kind="gmail")
     fake_keychain.delete(f"account:{DEE}")      # what the fake server's own entry kept
     draft = {"email": DEE, "type": "gmail", **at(entry), "credential": typed(SHOWN)}
     assert app.post("/api/accounts/test", {"draft": draft}).json["connect"] is True
@@ -34,7 +34,7 @@ def test_a_gmail_app_password_as_google_shows_it_is_kept_without_its_spaces_and_
 
 
 def test_another_accounts_password_is_kept_as_it_was_typed(app, world, fake_keychain):
-    entry = world.server.add_account(DEE, password=SHOWN)
+    entry = world.add_account(DEE, password=SHOWN)
     fake_keychain.delete(f"account:{DEE}")
     app.post("/api/accounts/add", {"email": DEE, "type": "imap", **at(entry), "credential": typed(SHOWN)})
     assert fake_keychain.find(f"account:{DEE}") == SHOWN

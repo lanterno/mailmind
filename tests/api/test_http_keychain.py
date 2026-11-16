@@ -136,10 +136,14 @@ def test_a_key_is_kept_without_the_spaces_and_line_breaks_around_it(app, world, 
     assert fake_keychain.items()["openai-api-key"] == "sk-test-pasted-with-a-line-break"
 
 
+def at(entry):
+    """The fake servers' endpoints for an account they hold, in place of the Bridge's own that its type would give."""
+    return {k: entry[k] for k in ("host", "port", "starttls", "smtp_host", "smtp_port", "smtp_starttls")}
+
+
 def test_the_bridges_password_is_kept_and_a_proton_account_logs_in_with_it(app, world, fake_keychain):
-    entry = world.server.add_account(PIA, password=BRIDGE, kind="proton")
-    added = app.post("/api/accounts/add", {"email": PIA, "type": "proton", "host": entry["host"], "port": entry["port"],
-                                           "starttls": entry["starttls"], "credential": {"style": "proton_bridge"}})
+    entry = world.add_account(PIA, password=BRIDGE, kind="proton")
+    added = app.post("/api/accounts/add", {**at(entry), "email": PIA, "type": "proton", "credential": {"style": "proton_bridge"}})
     assert added.json["account"]["credential"] == {"style": "proton_bridge", "set": True}
     tested = app.post("/api/accounts/test", {"email": PIA}).json
     assert (tested["connect"], tested["error"]) == (False, "AUTHENTICATIONFAILED")
@@ -161,9 +165,8 @@ def test_the_bridges_password_is_kept_and_a_proton_account_logs_in_with_it(app, 
 
 
 def test_a_new_bridge_password_takes_the_place_of_the_one_a_login_found(app, world, fake_keychain):
-    entry = world.server.add_account(PIA, password=BRIDGE, kind="proton")
-    app.post("/api/accounts/add", {"email": PIA, "type": "proton", "host": entry["host"], "port": entry["port"],
-                                   "starttls": entry["starttls"], "credential": {"style": "proton_bridge"}})
+    entry = world.add_account(PIA, password=BRIDGE, kind="proton")
+    app.post("/api/accounts/add", {**at(entry), "email": PIA, "type": "proton", "credential": {"style": "proton_bridge"}})
     app.post("/api/accounts/bridge-password", {"password": "an-old-one"})
     assert app.post("/api/accounts/test", {"email": PIA}).json["connect"] is False
     app.post("/api/accounts/bridge-password", {"password": BRIDGE})

@@ -20,7 +20,15 @@ def draft(**fields):
 def test_a_draft_tries_what_was_typed_where_it_was_typed():
     assert throwaway_account(draft(port=143, starttls=True)) == {
         "email": "dee@example.test", "kind": "imap", "host": "imap.example.test", "port": 143, "starttls": True,
-        "strip_spaces": False, "trash": "Trash", "credential": Typed("typed-password")}
+        "strip_spaces": False, "trash": "Trash", "credential": Typed("typed-password"),
+        "smtp_host": "imap.example.test", "smtp_port": 587, "smtp_starttls": True}
+
+
+def test_a_draft_tries_the_outgoing_server_typed_with_it_or_its_types():
+    typed = throwaway_account(draft(smtp_host="smtp.example.test", smtp_port="465", smtp_starttls=False))
+    assert (typed["smtp_host"], typed["smtp_port"], typed["smtp_starttls"]) == ("smtp.example.test", 465, False)
+    gmail = throwaway_account(draft(type="gmail", host=None))
+    assert (gmail["smtp_host"], gmail["smtp_port"], gmail["smtp_starttls"]) == ("smtp.gmail.com", 587, True)
 
 
 def test_what_a_draft_tries_can_never_be_written_to_a_file_or_the_keychain(data_dir, fake_keychain):

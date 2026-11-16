@@ -178,6 +178,15 @@ class World:
         # of its own do it (served.Served.work).
         self.sync = None
 
+    def add_account(self, user, password="app-password", kind=None, folders=()):
+        """One more account on the fake IMAP server, and its login on the fake SMTP server: its config entry, which
+        sends there as the world's accounts do, so a test of its login logs in at both."""
+        entry = self.server.add_account(user, password=password, kind=kind, folders=folders)
+        if self.smtp is not None:
+            self.smtp.add_user(user, password)
+            entry.update(smtp_host="127.0.0.1", smtp_port=self.smtp.port, smtp_starttls=True)
+        return entry
+
     def uid(self, name):
         return self.placed[name][2]
 

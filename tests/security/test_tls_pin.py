@@ -78,10 +78,11 @@ def test_off_this_machine_nothing_is_pinned(world):
 
 
 def test_a_draft_for_a_new_address_pins_nothing(app, world):
-    entry = world.server.add_account("dee@example.test")
+    entry = world.add_account("dee@example.test")
     before = cfg(world)
     r = app.post("/api/accounts/test", {"draft": {"email": "dee@example.test", "type": "imap", "host": entry["host"],
-                                                  "port": entry["port"], "starttls": True,
+                                                  "port": entry["port"], "starttls": True, "smtp_host": entry["smtp_host"],
+                                                  "smtp_port": entry["smtp_port"],
                                                   "credential": {"style": "keychain", "value": "app-password"}}})
     assert r.json["connect"] is True
     assert cfg(world) == before

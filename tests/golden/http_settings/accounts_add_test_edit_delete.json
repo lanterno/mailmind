@@ -11,9 +11,9 @@
     "defaults_applied": {
      "host": false,
      "port": false,
-     "smtp_host": true,
-     "smtp_port": true,
-     "smtp_starttls": true,
+     "smtp_host": false,
+     "smtp_port": false,
+     "smtp_starttls": false,
      "starttls": false,
      "trash": true
     },
@@ -23,7 +23,7 @@
     "port": "<imap>",
     "signature": "",
     "smtp_host": "127.0.0.1",
-    "smtp_port": 587,
+    "smtp_port": "<smtp>",
     "smtp_starttls": true,
     "starttls": true,
     "trash": "Trash",
@@ -237,9 +237,9 @@
     "defaults_applied": {
      "host": false,
      "port": false,
-     "smtp_host": true,
-     "smtp_port": true,
-     "smtp_starttls": true,
+     "smtp_host": false,
+     "smtp_port": false,
+     "smtp_starttls": false,
      "starttls": false,
      "trash": true
     },
@@ -249,7 +249,7 @@
     "port": "<imap>",
     "signature": "Dee\n-- sent from a test",
     "smtp_host": "127.0.0.1",
-    "smtp_port": 587,
+    "smtp_port": "<smtp>",
     "smtp_starttls": true,
     "starttls": true,
     "trash": "Trash",
@@ -346,9 +346,13 @@
      "host": "127.0.0.1",
      "port": "<imap>",
      "signature": "Dee\n-- sent from a test",
+     "smtp_host": "127.0.0.1",
+     "smtp_port": "<smtp>",
+     "smtp_starttls": true,
      "starttls": true,
      "tls_pins": {
-      "127.0.0.1:<imap>": "sha256:<imap certificate>"
+      "127.0.0.1:<imap>": "sha256:<imap certificate>",
+      "127.0.0.1:<smtp>": "sha256:<smtp certificate>"
      },
      "type": "imap"
     }

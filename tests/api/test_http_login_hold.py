@@ -30,7 +30,8 @@ def health(app, who=w.ADA):
 
 def draft(world, password):
     return {"email": w.ADA, "type": "imap", "host": "127.0.0.1", "port": world.server.port,
-            "starttls": not world.server.implicit_tls, "credential": {"style": "keychain", "value": password}}
+            "starttls": not world.server.implicit_tls, "smtp_host": "127.0.0.1", "smtp_port": world.smtp.port,
+            "credential": {"style": "keychain", "value": password}}
 
 
 def test_a_refused_login_waits_five_minutes_then_twice_that(app, world):

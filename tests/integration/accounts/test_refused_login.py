@@ -221,6 +221,7 @@ def test_a_draft_that_logs_in_says_nothing_of_the_login_saved_under_its_address(
     world.server.fail("LOGIN", REFUSED, user=w.ADA)
     sync()
     draft = {"email": w.ADA, "type": "imap", "host": acct["host"], "port": acct["port"], "starttls": True,
+             "smtp_host": acct["smtp_host"], "smtp_port": acct["smtp_port"],
              "credential": {"style": "keychain", "value": "app-password"}}
     assert app.post("/api/accounts/test", {"draft": draft}).json["connect"] is True
     assert accounts.logins.held(acct)
