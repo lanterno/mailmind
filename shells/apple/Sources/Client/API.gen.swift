@@ -225,9 +225,10 @@ extension API {
         public var junk: Int
         public var keep: Int
         public var kind: String
+        public var sweepable: Int
         public var topSenders: [String: [String]]
 
-        public init(account: String, alias: String? = nil, byBucket: [String: Int], error: String? = nil, inInbox: Int, junk: Int, keep: Int, kind: String, topSenders: [String: [String]]) {
+        public init(account: String, alias: String? = nil, byBucket: [String: Int], error: String? = nil, inInbox: Int, junk: Int, keep: Int, kind: String, sweepable: Int, topSenders: [String: [String]]) {
             self.account = account
             self.alias = alias
             self.byBucket = byBucket
@@ -236,6 +237,7 @@ extension API {
             self.junk = junk
             self.keep = keep
             self.kind = kind
+            self.sweepable = sweepable
             self.topSenders = topSenders
         }
 
@@ -248,6 +250,7 @@ extension API {
             case junk
             case keep
             case kind
+            case sweepable
             case topSenders = "top_senders"
         }
     }
@@ -256,17 +259,25 @@ extension API {
     public struct AccountSwept: Codable, Hashable, Sendable {
         public var account: String
         public var byBucket: [String: Int]?
+        public var capped: Bool?
         public var error: String?
+        public var going: [SweepBucket]?
+        public var heldBack: Int?
         public var moved: Int?
+        public var noUndo: Int?
         public var planned: Int
         public var senders: Int?
         public var stragglers: [String]?
 
-        public init(account: String, byBucket: [String: Int]? = nil, error: String? = nil, moved: Int? = nil, planned: Int, senders: Int? = nil, stragglers: [String]? = nil) {
+        public init(account: String, byBucket: [String: Int]? = nil, capped: Bool? = nil, error: String? = nil, going: [SweepBucket]? = nil, heldBack: Int? = nil, moved: Int? = nil, noUndo: Int? = nil, planned: Int, senders: Int? = nil, stragglers: [String]? = nil) {
             self.account = account
             self.byBucket = byBucket
+            self.capped = capped
             self.error = error
+            self.going = going
+            self.heldBack = heldBack
             self.moved = moved
+            self.noUndo = noUndo
             self.planned = planned
             self.senders = senders
             self.stragglers = stragglers
@@ -275,8 +286,12 @@ extension API {
         enum CodingKeys: String, CodingKey {
             case account
             case byBucket = "by_bucket"
+            case capped
             case error
+            case going
+            case heldBack = "held_back"
             case moved
+            case noUndo = "no_undo"
             case planned
             case senders
             case stragglers
@@ -325,8 +340,10 @@ extension API {
     }
 
     /// `Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
-    /// is on).
+    /// is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off.
+    /// `summaries_waiting` is how many messages from the last 30 days wait for a summary, there while AI is on.
     public struct AiStatus: Codable, Hashable, Sendable {
+        public var backgroundModel: String
         public var batchWaiting: Int?
         public var engine: String
         public var keyFrom: String
@@ -338,8 +355,10 @@ extension API {
         public var off: AiOff?
         public var provider: AiProvider
         public var spentTodayMicros: Int?
+        public var summariesWaiting: Int?
 
-        public init(batchWaiting: Int? = nil, engine: String, keyFrom: String, lastError: String? = nil, lastOk: Bool? = nil, lastTs: Int, limitMicros: Int, model: String, off: AiOff? = nil, provider: AiProvider, spentTodayMicros: Int? = nil) {
+        public init(backgroundModel: String, batchWaiting: Int? = nil, engine: String, keyFrom: String, lastError: String? = nil, lastOk: Bool? = nil, lastTs: Int, limitMicros: Int, model: String, off: AiOff? = nil, provider: AiProvider, spentTodayMicros: Int? = nil, summariesWaiting: Int? = nil) {
+            self.backgroundModel = backgroundModel
             self.batchWaiting = batchWaiting
             self.engine = engine
             self.keyFrom = keyFrom
@@ -351,9 +370,11 @@ extension API {
             self.off = off
             self.provider = provider
             self.spentTodayMicros = spentTodayMicros
+            self.summariesWaiting = summariesWaiting
         }
 
         enum CodingKeys: String, CodingKey {
+            case backgroundModel = "background_model"
             case batchWaiting = "batch_waiting"
             case engine
             case keyFrom = "key_from"
@@ -365,6 +386,7 @@ extension API {
             case off
             case provider
             case spentTodayMicros = "spent_today_micros"
+            case summariesWaiting = "summaries_waiting"
         }
     }
 
@@ -819,6 +841,7 @@ extension API {
         public var autoTidy: Bool?
         public var conversations: Bool?
         public var density: Density?
+        public var draftAhead: Bool?
         public var draftTone: DraftTone?
         public var guideOffered: Bool?
         public var highContrast: Bool?
@@ -838,7 +861,7 @@ extension API {
         public var undoSendSeconds: Int?
         public var weeklyReview: Bool?
 
-        public init(aiBaseUrl: String? = nil, aiDailyLimitUsd: Double? = nil, aiEnabled: Bool? = nil, aiModel: String? = nil, aiProvider: AiProvider? = nil, autoTidy: Bool? = nil, conversations: Bool? = nil, density: Density? = nil, draftTone: DraftTone? = nil, guideOffered: Bool? = nil, highContrast: Bool? = nil, mailColors: MailColors? = nil, morningBrief: Bool? = nil, notifyMeetings: Bool? = nil, notifyNewMail: Bool? = nil, quietFrom: String? = nil, quietHours: Bool? = nil, quietUntil: String? = nil, readFont: ReadFont? = nil, readSize: ReadSize? = nil, readWidth: ReadWidth? = nil, searchScope: SearchScope? = nil, singleKeys: Bool? = nil, theme: Theme? = nil, undoSendSeconds: Int? = nil, weeklyReview: Bool? = nil) {
+        public init(aiBaseUrl: String? = nil, aiDailyLimitUsd: Double? = nil, aiEnabled: Bool? = nil, aiModel: String? = nil, aiProvider: AiProvider? = nil, autoTidy: Bool? = nil, conversations: Bool? = nil, density: Density? = nil, draftAhead: Bool? = nil, draftTone: DraftTone? = nil, guideOffered: Bool? = nil, highContrast: Bool? = nil, mailColors: MailColors? = nil, morningBrief: Bool? = nil, notifyMeetings: Bool? = nil, notifyNewMail: Bool? = nil, quietFrom: String? = nil, quietHours: Bool? = nil, quietUntil: String? = nil, readFont: ReadFont? = nil, readSize: ReadSize? = nil, readWidth: ReadWidth? = nil, searchScope: SearchScope? = nil, singleKeys: Bool? = nil, theme: Theme? = nil, undoSendSeconds: Int? = nil, weeklyReview: Bool? = nil) {
             self.aiBaseUrl = aiBaseUrl
             self.aiDailyLimitUsd = aiDailyLimitUsd
             self.aiEnabled = aiEnabled
@@ -847,6 +870,7 @@ extension API {
             self.autoTidy = autoTidy
             self.conversations = conversations
             self.density = density
+            self.draftAhead = draftAhead
             self.draftTone = draftTone
             self.guideOffered = guideOffered
             self.highContrast = highContrast
@@ -876,6 +900,7 @@ extension API {
             case autoTidy = "auto_tidy"
             case conversations
             case density
+            case draftAhead = "draft_ahead"
             case draftTone = "draft_tone"
             case guideOffered = "guide_offered"
             case highContrast = "high_contrast"
@@ -2006,6 +2031,25 @@ extension API {
         enum CodingKeys: String, CodingKey {
             case calls
             case costMicros = "cost_micros"
+        }
+    }
+
+    /// What one feature's calls cost, by the name a person knows it by (`spending.label`).
+    public struct FeatureSpent: Codable, Hashable, Sendable {
+        public var calls: Int
+        public var costMicros: Int
+        public var label: String
+
+        public init(calls: Int, costMicros: Int, label: String) {
+            self.calls = calls
+            self.costMicros = costMicros
+            self.label = label
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case calls
+            case costMicros = "cost_micros"
+            case label
         }
     }
 
@@ -3427,6 +3471,25 @@ extension API {
         }
     }
 
+    /// What AI cost over some days, in micro-dollars: in all, and by feature, the dearest first.
+    public struct PeriodSpent: Codable, Hashable, Sendable {
+        public var calls: Int
+        public var costMicros: Int
+        public var features: [FeatureSpent]
+
+        public init(calls: Int, costMicros: Int, features: [FeatureSpent]) {
+            self.calls = calls
+            self.costMicros = costMicros
+            self.features = features
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case calls
+            case costMicros = "cost_micros"
+            case features
+        }
+    }
+
     public enum PictureType: String, Codable, Hashable, Sendable, CaseIterable {
         case imagePng = "image/png"
         case imageJpeg = "image/jpeg"
@@ -3636,6 +3699,7 @@ extension API {
         public var autoTidy: Bool
         public var conversations: Bool
         public var density: Density
+        public var draftAhead: Bool
         public var draftTone: DraftTone
         public var guideOffered: Bool
         public var highContrast: Bool
@@ -3655,7 +3719,7 @@ extension API {
         public var undoSendSeconds: Int
         public var weeklyReview: Bool
 
-        public init(aiBaseUrl: String, aiDailyLimitUsd: Double, aiEnabled: Bool, aiModel: String, aiProvider: AiProvider, autoTidy: Bool, conversations: Bool, density: Density, draftTone: DraftTone, guideOffered: Bool, highContrast: Bool, mailColors: MailColors, morningBrief: Bool, notifyMeetings: Bool, notifyNewMail: Bool, quietFrom: String, quietHours: Bool, quietUntil: String, readFont: ReadFont, readSize: ReadSize, readWidth: ReadWidth, searchScope: SearchScope, singleKeys: Bool, theme: Theme, undoSendSeconds: Int, weeklyReview: Bool) {
+        public init(aiBaseUrl: String, aiDailyLimitUsd: Double, aiEnabled: Bool, aiModel: String, aiProvider: AiProvider, autoTidy: Bool, conversations: Bool, density: Density, draftAhead: Bool, draftTone: DraftTone, guideOffered: Bool, highContrast: Bool, mailColors: MailColors, morningBrief: Bool, notifyMeetings: Bool, notifyNewMail: Bool, quietFrom: String, quietHours: Bool, quietUntil: String, readFont: ReadFont, readSize: ReadSize, readWidth: ReadWidth, searchScope: SearchScope, singleKeys: Bool, theme: Theme, undoSendSeconds: Int, weeklyReview: Bool) {
             self.aiBaseUrl = aiBaseUrl
             self.aiDailyLimitUsd = aiDailyLimitUsd
             self.aiEnabled = aiEnabled
@@ -3664,6 +3728,7 @@ extension API {
             self.autoTidy = autoTidy
             self.conversations = conversations
             self.density = density
+            self.draftAhead = draftAhead
             self.draftTone = draftTone
             self.guideOffered = guideOffered
             self.highContrast = highContrast
@@ -3693,6 +3758,7 @@ extension API {
             case autoTidy = "auto_tidy"
             case conversations
             case density
+            case draftAhead = "draft_ahead"
             case draftTone = "draft_tone"
             case guideOffered = "guide_offered"
             case highContrast = "high_contrast"
@@ -5207,6 +5273,19 @@ extension API {
         }
     }
 
+    /// `Calls.spending`: what AI cost over the last seven days, today's among them, and this month so far.
+    public struct Spending: Codable, Hashable, Sendable {
+        public var month: PeriodSpent
+        public var ok: Bool
+        public var week: PeriodSpent
+
+        public init(month: PeriodSpent, ok: Bool, week: PeriodSpent) {
+            self.month = month
+            self.ok = ok
+            self.week = week
+        }
+    }
+
     public struct Standing: Codable, Hashable, Sendable {
         public var accounts: [AccountStanding]
         public var generated: String
@@ -5369,15 +5448,49 @@ extension API {
     public struct SweepBody: Codable, Hashable, Sendable {
         public var account: String?
         public var dryRun: Bool?
+        public var undoGroup: String?
 
-        public init(account: String? = nil, dryRun: Bool? = nil) {
+        public init(account: String? = nil, dryRun: Bool? = nil, undoGroup: String? = nil) {
             self.account = account
             self.dryRun = dryRun
+            self.undoGroup = undoGroup
         }
 
         enum CodingKeys: String, CodingKey {
             case account
             case dryRun = "dry_run"
+            case undoGroup = "undo_group"
+        }
+    }
+
+    /// A junk bucket a sweep would move: how much of it, the senders with the most and the newest subjects, a few of each.
+    public struct SweepBucket: Codable, Hashable, Sendable {
+        public var bucket: String
+        public var count: Int
+        public var senders: [SweepSender]
+        public var subjects: [String]
+
+        public init(bucket: String, count: Int, senders: [SweepSender], subjects: [String]) {
+            self.bucket = bucket
+            self.count = count
+            self.senders = senders
+            self.subjects = subjects
+        }
+    }
+
+    /// One of the senders with the most of a bucket a sweep would move.
+    public struct SweepSender: Codable, Hashable, Sendable {
+        public var count: Int
+        public var fromAddr: String
+
+        public init(count: Int, fromAddr: String) {
+            self.count = count
+            self.fromAddr = fromAddr
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case count
+            case fromAddr = "from_addr"
         }
     }
 
@@ -5386,12 +5499,14 @@ extension API {
         public var generated: String
         public var ok: Bool
         public var results: [AccountSwept]
+        public var undoGroup: String?
 
-        public init(dryRun: Bool, generated: String, ok: Bool, results: [AccountSwept]) {
+        public init(dryRun: Bool, generated: String, ok: Bool, results: [AccountSwept], undoGroup: String? = nil) {
             self.dryRun = dryRun
             self.generated = generated
             self.ok = ok
             self.results = results
+            self.undoGroup = undoGroup
         }
 
         enum CodingKeys: String, CodingKey {
@@ -5399,6 +5514,7 @@ extension API {
             case generated
             case ok
             case results
+            case undoGroup = "undo_group"
         }
     }
 
@@ -6699,6 +6815,8 @@ extension API {
         public enum AiLocal {}
         /// GET /api/ai/models
         public enum AiModels {}
+        /// GET /api/ai/spending
+        public enum AiSpending {}
         /// GET /api/audit
         public enum Audit {}
         /// GET /api/briefing
@@ -6989,6 +7107,11 @@ extension API.Get.AiLocal: GetRoute {
 extension API.Get.AiModels: GetRoute {
     public static let path = "/api/ai/models"
     public typealias Answer = API.ModelList
+}
+
+extension API.Get.AiSpending: GetRoute {
+    public static let path = "/api/ai/spending"
+    public typealias Answer = API.Spending
 }
 
 extension API.Get.Audit: GetRoute {
