@@ -21,6 +21,13 @@ final class MailApp {
         "resync", "sync-done",
     ]
 
+    /// The one this process runs. Every window the mail scene opens shows it, so the window closed and opened again
+    /// from the Dock finds the core already open: one core over the data folder, never a second with its own sync.
+    static let shared = MailApp()
+
+    /// Opens a home's core: the host's, or a test's in its place.
+    typealias Opener = @Sendable (CoreHome) async throws -> Core
+
     private(set) var stage = Stage.opening
     /// Where the window is. Choosing a place opens its list; the brief, in the pane beside the Inbox, keeps the
     /// Inbox's list and closes the message open, as the pane is the brief's.
@@ -41,16 +48,33 @@ final class MailApp {
     let reader = ReaderModel()
     @ObservationIgnored private(set) var core: Core?
     @ObservationIgnored private var listening: Task<Void, Never>?
+    @ObservationIgnored private let home: () throws -> CoreHome
+    @ObservationIgnored private let opener: Opener
+    /// Set while the core is being opened, so a second window's start leaves it to the first rather than opening
+    /// another.
+    @ObservationIgnored private var opening = false
     #if os(macOS)
     /// The sidebar's places and counts, every place's list, the rows chosen and the verbs on them (Mac/Mailbox).
     @ObservationIgnored private(set) lazy var mailbox = Mailbox(app: self)
     #endif
 
-    /// Open the core over this process's home, then the first list and the sidebar, then listen.
+    /// `home` picks the data folder and `open` opens a core over it: this process's and the host's, unless a test
+    /// gives its own.
+    init(home: @escaping () throws -> CoreHome = { try CoreHome.ofThisProcess() },
+         open: @escaping Opener = { try await Core.open($0) })
+    {
+        self.home = home
+        opener = open
+    }
+
+    /// Open the core over this process's home, then the first list and the sidebar, then listen. Once: a start while
+    /// one is opening, or after one opened, does nothing.
     func start() async {
-        guard stage == .opening, core == nil else { return }
+        guard stage == .opening, core == nil, !opening else { return }
+        opening = true
+        defer { opening = false }
         do {
-            let core = try await Core.open(try CoreHome.ofThisProcess())
+            let core = try await opener(try home())
             self.core = core
             reader.core = core
             stage = .open

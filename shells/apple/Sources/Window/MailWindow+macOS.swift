@@ -5,7 +5,9 @@ import SwiftUI
 /// The Mac app's window, as Meadow draws it (Mac/Meadow): the top bar on the sky, and below it the accounts and their
 /// places, the mail in the one chosen, and the message chosen in it.
 struct MailWindow: View {
-    @State private var app = MailApp()
+    /// The process's one: a window opened again from the Dock shows the core already open, never a second over the
+    /// same data.
+    private let app = MailApp.shared
 
     var body: some View {
         content
