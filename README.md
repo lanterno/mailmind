@@ -266,7 +266,9 @@ Nothing is ever sent automatically.
   `ai off` turn AI mode on and off from the command line. A reasoning model's thinking is left out of
   what it answers, and a model on this Mac is given five minutes to load. Every provider goes through
   the same daily limit and usage ledger, priced from its own list (a model on this Mac costs nothing),
-  and only Claude takes batches.
+  and only Claude takes batches: choosing another drops a batch that is out (MailMind asks nothing more
+  of Anthropic for it, so it isn't deleted there, and what it costs is still billed but never counted
+  against the daily limit), and its messages wait for the provider chosen.
   The sync menu names the model, and in red the reason ("the API key was rejected",
   "rate-limited for now") when the last call failed. With AI mode on and no key, the brief says
   AI is off calmly and the composer drops Draft and Rewrite. The brief's card, and the sync
@@ -279,7 +281,9 @@ Nothing is ever sent automatically.
   A backlog (a first import, or after an outage) goes to the Message Batches API at half price,
   one batch at a time, while new mail is still triaged as it arrives, so a large import can leave
   older mail without a summary for up to a day. Anthropic holds a batch until MailMind has brought
-  its answers in, then MailMind deletes it. The sync menu says how many messages are out.
+  its answers in, then MailMind deletes it (all but one dropped for another provider, above). A
+  batch whose answers are in but that isn't deleted yet waits at Anthropic, holding mail, until
+  Claude is the provider with AI mode on again. The sync menu says how many messages are out.
   MailMind spends at most $15 a day unless `"ai_daily_limit_usd"` in `mailmind.config.json`
   names another amount. At the limit, triage and pre-drafting stop until the next day,
   anything you ask the AI for asks first whether to go over, and a brief not yet written waits

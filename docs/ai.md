@@ -92,8 +92,9 @@ An assessment keeps how it came to be (migration 43, `kernel.assessment`): `serv
 a server-side fallback can make another; `prompt_version`; and `outcome`, which is `assessed`, or `unusable` or `refused` for
 the stand-in stored so a message doesn't go round for ever. `assessments.model` stays the label shown beside a summary, the
 model asked for or `parse-error`. `Calls.reply_to` is the whole `Reply` for a caller that keeps these. A batch's answers take
-the version its row was sent with, since they can come in after an upgrade. A row from before has all three NULL, and
-`answers.assessment` reads them as None: unknown, never worked out. So far nothing but that read looks at them.
+the version its row was sent with, since they can come in after an upgrade, and as their label the model its row asked,
+never the one in force when they come in. A row from before has all three NULL, and `answers.assessment` reads them
+as None: unknown, never worked out. So far nothing but that read looks at them.
 
 `domain.prompts` is every word the model is told. `SYSTEM` goes on every call, a batch's requests included, and is the
 one statement that the mail is untrusted data. Each kind of call has a `Template` and a version, which says what to do and
@@ -172,9 +173,9 @@ holds across one because the ledger does. `/api/debug/ai` shows its `snapshot()`
 tests start each one afresh with `forget()`.
 
 A backlog goes through the Message Batches API at half price (`pricing.batch_micros`, decision D7), only while Claude
-is the provider (`LanguageModel.takes_batches`): with another, a backlog goes synchronously, a batch already out waits
-until Claude is chosen again, and `assess --batch` says "Batches need Claude as the AI provider." `BATCH_MIN`
-messages waiting is one, whether a first import or after an outage, and new mail stays synchronous.
+is the provider (`LanguageModel.takes_batches`): with another, a backlog goes synchronously and `assess --batch` says
+"Batches need Claude as the AI provider." `BATCH_MIN` messages waiting is one, whether a first import or after an
+outage, and new mail stays synchronous.
 `assistant.assessments.batch_submit` sends it and `batch_collect` brings the answers in, both from its `round`, which
 collects first since that sends no mail and the answers are paid for. `uv run python -m mailmind assess --batch` does
 the same for any size. `MAILMIND_NO_BATCHES=1` keeps the job from sending one, so a backlog goes synchronously as it
@@ -193,7 +194,14 @@ else.
   anyway. A row is committed as `submitting` first. One that fails is dropped, and one a crash left is dropped after
   `BATCH_SEND_GIVE_UP`; a batch that reached the API in that window is paid for and never collected.
 - A batch holds mail, so `batch_collect` deletes it from the API once its answers are stored, trying again each
-  round until it goes. A message with no answer (errored, expired, canceled) waits again.
+  round until it goes, while Claude is the provider and AI mode is on. A batch already collected but not yet deleted
+  waits at Anthropic, holding mail, until Claude is chosen with AI mode on again. A message with no answer (errored,
+  expired, canceled) waits again.
+- Another provider. A batch out (`submitting` or `running`) once another provider is chosen is dropped here by the next
+  batch round at the latest, as one whose send failed is: its messages wait for a summary again, and its estimate no
+  longer counts as reserved. Nothing is sent to Anthropic for it, not even a cancel, so one the API has is still run and
+  paid for there and never deleted from it, and what it costs never reaches the usage ledger or the daily limit. With
+  Claude chosen and AI mode off, a batch out is left alone, and brought in once AI mode is on again.
 
 The brief, the delta and the review each have a table (migration 37): `briefs` and `reviews` by account set
 and local day, `deltas` by account set, watermark and fingerprint, so a window that changes is written once
