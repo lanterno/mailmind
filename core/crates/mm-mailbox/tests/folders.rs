@@ -200,3 +200,16 @@ fn roles_come_from_the_name_inbox_then_attributes_then_names() {
     assert_eq!(names, ["A", "b", "Trash"]);
     assert!(!roles::takes_filing("drafts") && !roles::takes_filing("all") && roles::takes_filing("junk"));
 }
+
+#[test]
+fn trash_is_the_accounts_own_where_the_server_lists_it_and_else_the_folder_that_plays_trash() {
+    let gmail_de =
+        [folder("INBOX", &[]), folder("[Google Mail]/Papierkorb", &["\\trash"]), folder("Trash", &["\\noselect"])];
+    assert_eq!(roles::trash(&gmail_de, "[Gmail]/Trash"), "[Google Mail]/Papierkorb");
+    assert_eq!(roles::trash(&gmail_de, "Trash"), "[Google Mail]/Papierkorb");
+    let icloud = [folder("INBOX", &[]), folder("Deleted Messages", &[])];
+    assert_eq!(roles::trash(&icloud, "Trash"), "Deleted Messages");
+    let both = [folder("Trash", &[]), folder("Deleted Messages", &["\\trash"])];
+    assert_eq!(roles::trash(&both, "Trash"), "Trash");
+    assert_eq!(roles::trash(&[folder("INBOX", &[])], "Trash"), "Trash");
+}

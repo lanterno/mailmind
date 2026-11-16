@@ -253,10 +253,11 @@ fn trash_and_junk_go_where_the_account_and_its_provider_say() {
 
 #[test]
 fn as_a_command_is_accepted_only_what_needs_no_server_is_known() {
-    assert_eq!(known_without_server("trash", false, Some("Trash")), at("Trash"));
-    assert!(known_without_server("archive", true, Some("Trash")).drop_inbox_label);
-    assert_eq!(known_without_server("archive", false, Some("Trash")), Destination::default());
-    assert_eq!(known_without_server("junk", false, Some("Trash")), Destination::default());
+    // Trash is found among the server's folders, as a try lists them.
+    assert_eq!(known_without_server("trash", false), Destination::default());
+    assert!(known_without_server("archive", true).drop_inbox_label);
+    assert_eq!(known_without_server("archive", false), Destination::default());
+    assert_eq!(known_without_server("junk", false), Destination::default());
 }
 
 // -- which way --

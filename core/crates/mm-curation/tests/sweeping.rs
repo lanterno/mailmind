@@ -29,6 +29,8 @@ struct Inbox {
     moves: Vec<(Vec<u32>, String)>,
     selected: Vec<(String, bool)>,
     closed: Option<bool>,
+    /// The folder playing Trash on the server, where the account's own isn't listed.
+    trash_listed: Option<String>,
 }
 
 impl Inbox {
@@ -84,6 +86,10 @@ impl LiveSession for Inbox {
             return Err(LiveError::Lost("ConnectionLost"));
         }
         Ok(())
+    }
+
+    fn trash(&mut self, named: &str) -> Result<String, LiveError> {
+        Ok(self.trash_listed.clone().unwrap_or_else(|| named.to_owned()))
     }
 
     fn close(&mut self, failed: bool) {
@@ -241,6 +247,9 @@ impl LiveSession for Session {
     }
     fn move_to(&mut self, uids: &[u32], dest: &str) -> Result<(), LiveError> {
         self.inbox().move_to(uids, dest)
+    }
+    fn trash(&mut self, named: &str) -> Result<String, LiveError> {
+        self.inbox().trash(named)
     }
     fn close(&mut self, failed: bool) {
         let mut inbox = self.1.take().expect("open");
@@ -611,6 +620,15 @@ fn a_plan_names_the_senders_with_the_most_and_the_newest_subjects_of_each_bucket
     );
     assert_eq!(plan["results"][0]["going"][1]["bucket"], json!("automated-notifications"));
     assert_eq!(plan["results"][0]["going"].as_array().map(Vec::len), Some(2));
+}
+
+#[test]
+fn a_sweep_moves_to_the_trash_the_server_lists_where_the_accounts_own_isnt() {
+    let world = world();
+    world.0.inbox.lock().expect("lock").as_mut().expect("open").trash_listed = Some("Deleted Messages".into());
+    sweeps(&world, true).run(None, false, None).expect("swept");
+    let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
+    assert_eq!(inbox.moves, [(vec![2, 3], "Deleted Messages".to_owned())]);
 }
 
 #[test]

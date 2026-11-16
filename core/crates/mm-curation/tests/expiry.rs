@@ -208,6 +208,8 @@ struct World {
     held: Vec<&'static str>,
     audit_fails: bool,
     folders_failing: Vec<&'static str>,
+    /// The folder playing Trash on the server, where the account's own isn't listed.
+    trash_listed: Option<&'static str>,
     said: Mutex<Vec<String>>,
 }
 
@@ -225,6 +227,7 @@ impl World {
             held: Vec::new(),
             audit_fails: false,
             folders_failing: Vec::new(),
+            trash_listed: None,
             said: Mutex::new(Vec::new()),
         }
     }
@@ -311,6 +314,9 @@ impl LiveSession for Session {
             }
         });
         Ok(())
+    }
+    fn trash(&mut self, named: &str) -> Result<String, LiveError> {
+        Ok(self.0.trash_listed.unwrap_or(named).to_owned())
     }
     fn close(&mut self, failed: bool) {
         self.0.tell(if failed { "hangup".into() } else { "logout".into() });
@@ -432,6 +438,13 @@ fn mail_past_its_rule_is_audited_then_moved_then_forgotten() {
         ]
     );
     assert_eq!(world.inbox(ADA, |inbox| inbox.keys().copied().collect::<Vec<_>>()), [3]);
+}
+
+#[test]
+fn expired_mail_goes_to_the_trash_the_server_lists_where_the_accounts_own_isnt() {
+    let (world, expiry) = expiry(World { trash_listed: Some("[Google Mail]/Papierkorb"), ..World::new() });
+    expiry.account(&account(ADA), false).unwrap();
+    assert_eq!(world.asked(&["move"]), ["move [1, 2] [Google Mail]/Papierkorb"]);
 }
 
 #[test]
