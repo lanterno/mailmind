@@ -1,7 +1,7 @@
-"""What a person keeps in the login Keychain from Settings, over HTTP: the Claude API key, which mailmind.config.json names
-where the Assistant reads it, and the Proton Bridge's password, which a proton_bridge account logs in with. Each is kept
-with a POST and taken out with another, in the tests' stand-in for the Keychain, which the server shares; no answer
-holds the secret, and each says only whether one is set.
+"""What a person keeps in the login Keychain from Settings, over HTTP: each AI provider's API key, which mailmind.config.json
+names where the Assistant reads it (#49), and the Proton Bridge's password, which a proton_bridge account logs in with. Each is
+kept with a POST and taken out with another, in the tests' stand-in for the Keychain, which the server shares; no answer or
+log line holds the secret, the keys' answers say only which providers have one, and the Bridge's whether it is set.
 
 Where the Bridge's password is looked for, and that what is found is kept for the process, are
 tests/unit/accounts/test_secrets.py's and the Rust server's own tests' (mm-accounts' tests/bridge.rs).
@@ -30,31 +30,31 @@ def says_nothing_of(answer, *secrets):
 
 
 def test_nothing_is_set_to_begin_with(app):
-    assert app.get("/api/ai/key").json == {"ok": True, "set": False}
+    assert app.get("/api/ai/key").json == {"ok": True, "kept": []}
     assert app.get("/api/accounts/bridge-password").json == {"ok": True, "set": False}
 
 
 def test_the_claude_api_key_is_kept_in_the_keychain_and_the_config_names_it(app, world, fake_keychain):
     assert app.get("/api/digest").json["ai"]["engine"] == "none"
-    kept = app.post("/api/ai/key", {"key": KEY})
-    assert (kept.status, kept.json) == (200, {"ok": True, "set": True})
+    kept = app.post("/api/ai/key", {"provider": "anthropic", "key": KEY})
+    assert (kept.status, kept.json) == (200, {"ok": True, "kept": ["anthropic"]})
     assert fake_keychain.items()["anthropic-api-key"] == KEY
     assert config(world)["anthropic_api_key"] == {"keychain": "anthropic-api-key", "version": 1}
-    assert app.get("/api/ai/key").json == {"ok": True, "set": True}
+    assert app.get("/api/ai/key").json == {"ok": True, "kept": ["anthropic"]}
     ai = app.get("/api/digest").json["ai"]
     assert (ai["engine"], ai["key_from"]) == ("api", "mailmind.config.json")
 
     # Another takes its place, under a new version, so a process that read the first reads the Keychain again.
-    assert app.post("/api/ai/key", {"key": OTHER_KEY}).json == {"ok": True, "set": True}
+    assert app.post("/api/ai/key", {"provider": "anthropic", "key": OTHER_KEY}).json == {"ok": True, "kept": ["anthropic"]}
     assert fake_keychain.items()["anthropic-api-key"] == OTHER_KEY
     assert config(world)["anthropic_api_key"] == {"keychain": "anthropic-api-key", "version": 2}
 
-    cleared = app.post("/api/ai/key/clear", {})
-    assert (cleared.status, cleared.json) == (200, {"ok": True, "set": False})
+    cleared = app.post("/api/ai/key/clear", {"provider": "anthropic"})
+    assert (cleared.status, cleared.json) == (200, {"ok": True, "kept": []})
     assert "anthropic-api-key" not in fake_keychain.items() and "anthropic_api_key" not in config(world)
-    assert app.get("/api/ai/key").json == {"ok": True, "set": False}
+    assert app.get("/api/ai/key").json == {"ok": True, "kept": []}
     assert app.get("/api/digest").json["ai"]["engine"] == "none"
-    assert app.post("/api/ai/key/clear", {}).json == {"ok": True, "set": False}
+    assert app.post("/api/ai/key/clear", {"provider": "anthropic"}).json == {"ok": True, "kept": []}
 
 
 def test_clearing_the_key_takes_out_whatever_the_config_named(app, world):
@@ -62,19 +62,59 @@ def test_clearing_the_key_takes_out_whatever_the_config_named(app, world):
         written = config(world)
         written["anthropic_api_key"] = {"env": "A_KEY_OF_MY_OWN"}
         (world.dir / "mailmind.config.json").write_text(json.dumps(written))
-    assert app.get("/api/ai/key").json == {"ok": True, "set": True}
-    assert app.post("/api/ai/key/clear", {}).json == {"ok": True, "set": False}
+    assert app.get("/api/ai/key").json == {"ok": True, "kept": ["anthropic"]}
+    assert app.post("/api/ai/key/clear", {"provider": "anthropic"}).json == {"ok": True, "kept": []}
     assert "anthropic_api_key" not in config(world)
 
 
-@pytest.mark.parametrize("path, field", [("/api/ai/key", "key"), ("/api/accounts/bridge-password", "password")])
+def test_each_providers_key_is_kept_in_its_own_item_and_the_answers_name_only_the_providers(app, world, fake_keychain):
+    keys = {"compatible": "sk-test-compatible-0001", "openai": "sk-test-openai-0002", "gemini": "test-gemini-0003"}
+    for provider, key in keys.items():
+        kept = app.post("/api/ai/key", {"provider": provider, "key": key})
+        assert kept.status == 200 and says_nothing_of(kept, key, key[-4:])
+    assert kept.json == {"ok": True, "kept": ["openai", "gemini", "compatible"]}
+    assert {item: fake_keychain.items()[item] for item in ("openai-api-key", "gemini-api-key", "compatible-api-key")} == {
+        f"{provider}-api-key": key for provider, key in keys.items()}
+    assert {name: config(world)[f"{name}_api_key"] for name in keys} == {
+        name: {"keychain": f"{name}-api-key", "version": 1} for name in keys}
+    assert app.get("/api/ai/key").json == {"ok": True, "kept": ["openai", "gemini", "compatible"]}
+    cleared = app.post("/api/ai/key/clear", {"provider": "gemini"})
+    assert cleared.json == {"ok": True, "kept": ["openai", "compatible"]}
+    assert "gemini-api-key" not in fake_keychain.items() and "gemini_api_key" not in config(world)
+    app.settle()
+    logged = [p.read_text(errors="replace") for p in world.dir.glob("mailmind.log*")] + [app.log_path.read_text(errors="replace")]
+    assert not [key for key in keys.values() for text in logged if key in text]
+
+
+def test_ollama_takes_no_key(app, world, fake_keychain):
+    before = (config(world), fake_keychain.items())
+    refused = app.post("/api/ai/key", {"provider": "ollama", "key": "sk-test-not-for-ollama"})
+    assert (refused.status, refused.json) == (400, problems.refused("Ollama takes no key."))
+    assert says_nothing_of(refused, "sk-test-not-for-ollama")
+    assert app.post("/api/ai/key/clear", {"provider": "ollama"}).json == {"ok": True, "kept": []}
+    assert (config(world), fake_keychain.items()) == before
+
+
+@pytest.mark.parametrize("path, body", [("/api/ai/key", {"key": KEY}), ("/api/ai/key", {"provider": "mistral", "key": KEY}),
+                                        ("/api/ai/key", {"provider": None, "key": KEY}), ("/api/ai/key/clear", {}),
+                                        ("/api/ai/key/clear", {"provider": "Anthropic"})])
+def test_a_key_for_no_provider_there_is_is_a_bad_request(app, world, fake_keychain, path, body):
+    before = (config(world), fake_keychain.items())
+    refused = app.post(path, body)
+    assert (refused.status, refused.json) == (400, problems.BAD_REQUEST) and says_nothing_of(refused, KEY)
+    assert (config(world), fake_keychain.items()) == before
+
+
+@pytest.mark.parametrize("path, field, more", [("/api/ai/key", "key", {"provider": "openai"}),
+                                               ("/api/accounts/bridge-password", "password", {})],
+                         ids=["/api/ai/key-key", "/api/accounts/bridge-password-password"])
 def test_a_secret_the_keychain_cant_hold_is_refused_in_its_words_and_nothing_is_kept(app, world, fake_keychain, path,
-                                                                                      field):
+                                                                                      field, more):
     before = (config(world), fake_keychain.items())
     for typed in ["", "sk-ant-café", "two\nlines"]:
-        refused = app.post(path, {field: typed})
+        refused = app.post(path, {**more, field: typed})
         assert (refused.status, refused.json) == (400, problems.refused(UNPRINTABLE)), typed
-    for body in [{}, {field: None}, {field: 7}, {field: ["x"]}]:
+    for body in [more, {**more, field: None}, {**more, field: 7}, {**more, field: ["x"]}]:
         refused = app.post(path, body)
         assert (refused.status, refused.json) == (400, problems.BAD_REQUEST), body
     assert (config(world), fake_keychain.items()) == before

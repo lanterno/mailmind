@@ -1,6 +1,6 @@
 """The secrets a person keeps in the login Keychain from Settings beside each account's own password (Directory), as the Rust
-core's tests hold its own (core/crates/mm-accounts' tests/kept_secrets.rs): the Claude API key, kept in its item and named in
-the file one version on, and taken out of both; the Proton Bridge's password, kept in its item, the one a login found let go,
+core's tests hold its own (core/crates/mm-accounts' tests/kept_secrets.rs): each AI provider's API key, kept in its item and
+named in the file one version on, and taken out of both, and none for Ollama, which takes none (#49); the Proton Bridge's password, kept in its item, the one a login found let go,
 and each account that logs in with it told it changed. A secret the Keychain can't hold is refused in its words, a Keychain
 that won't is Unreachable, and either leaves the file as it was. The Keychain is the guard's stand-in."""
 import json
@@ -10,7 +10,7 @@ import pytest
 from mailmind.accounts.adapters import config_file, secrets
 from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.domain import events
-from mailmind.kernel.errors import Unreachable
+from mailmind.kernel.errors import Refused, Unreachable
 from mailmind.platform import bus, keychain
 
 KEY_ITEM, BRIDGE_ITEM = "anthropic-api-key", "proton-bridge-password"
@@ -20,7 +20,7 @@ OP_KEY = "op://Private/Claude/credential"
 @pytest.fixture
 def directory(data_dir):
     secrets.forget()
-    yield Directory(config_file.ConfigFile(), secrets, lambda: None)
+    yield Directory(config_file.ConfigFile(), secrets, lambda provider: None)
     secrets.forget()
 
 
@@ -69,6 +69,37 @@ def test_a_key_the_keychain_cant_hold_is_refused_in_its_words_and_nothing_change
     with pytest.raises(ValueError, match="A secret MailMind keeps in the Keychain is printable ASCII, and not empty"):
         directory.set_api_key(typed)
     assert fake_keychain.items() == {} and written(data_dir) == {"accounts": []}
+
+
+@pytest.mark.parametrize("provider", ["openai", "gemini", "compatible"])
+def test_another_providers_key_is_kept_in_its_own_item_and_named_under_its_own_name(directory, data_dir, fake_keychain,
+                                                                                   provider):
+    assert directory.set_api_key("sk-other-first", provider) == f"{provider}-api-key"
+    assert fake_keychain.items() == {f"{provider}-api-key": "sk-other-first"}
+    assert written(data_dir) == {"accounts": [], f"{provider}_api_key": {"keychain": f"{provider}-api-key", "version": 1}}
+    assert directory.api_key_set(provider) and not directory.api_key_set()
+    assert directory.api_keys_kept() == [provider]
+    directory.clear_api_key(provider)
+    assert fake_keychain.items() == {} and written(data_dir) == {"accounts": []} and directory.api_keys_kept() == []
+
+
+def test_the_keys_kept_are_each_provider_the_file_names_one_for_in_the_providers_order(directory, fake_keychain):
+    directory.set_api_key("sk-compatible", "compatible")
+    directory.set_api_key("sk-ant", "anthropic")
+    directory.save({**directory._raw(), "gemini_api_key": {"env": "MY_GEMINI_KEY"}, "ollama_api_key": {"env": "NOT_READ"}})
+    assert directory.api_keys_kept() == ["anthropic", "gemini", "compatible"]
+    directory.clear_api_key("anthropic")
+    assert directory.api_keys_kept() == ["gemini", "compatible"]
+    assert fake_keychain.items() == {"compatible-api-key": "sk-compatible"}
+
+
+def test_ollama_takes_no_key_so_none_is_kept_and_none_is_taken_out(directory, data_dir, fake_keychain):
+    directory.save({"accounts": []})
+    with pytest.raises(Refused, match="^Ollama takes no key.$"):
+        directory.set_api_key("sk-anything", "ollama")
+    directory.clear_api_key("ollama")
+    assert fake_keychain.items() == {} and written(data_dir) == {"accounts": []}
+    assert not directory.api_key_set("ollama")
 
 
 class _Locked:

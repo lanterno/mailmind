@@ -31,7 +31,7 @@ class _Secrets:
 @pytest.fixture
 def directory(data_dir):
     def make(secrets, *, ai_key=None, **top):
-        d = Directory(config_file.ConfigFile(), secrets, ai_key or (lambda: None))
+        d = Directory(config_file.ConfigFile(), secrets, ai_key or (lambda provider: None))
         d.save({"accounts": [dict(a) for a in ACCOUNTS], **top})
         return d
     return make
@@ -58,17 +58,27 @@ def test_check_says_ok_with_a_length_or_fail_with_why_for_each_account(directory
 
 
 def test_check_says_how_the_claude_key_went_when_the_file_names_one(directory, capsys):
-    directory(_Secrets(), ai_key=lambda: "sk-ant-hunter22", anthropic_api_key={"keychain": "anthropic-api-key", "version": 1}).check()
+    directory(_Secrets(), ai_key=lambda provider: "sk-ant-hunter22",
+              anthropic_api_key={"keychain": "anthropic-api-key", "version": 1}).check()
     assert capsys.readouterr().out.splitlines()[-1].split() == ["ok", "anthropic_api_key", "(15", "chars)"]
 
 
+def test_check_says_how_each_providers_key_went_and_asks_for_each_by_its_provider(directory, capsys):
+    asked = []
+    directory(_Secrets(), ai_key=lambda provider: asked.append(provider) or "sk-hunter22",
+              openai_api_key={"keychain": "openai-api-key", "version": 1}, compatible_api_key={"env": "MY_SERVICE_KEY"}).check()
+    assert [line.split()[:2] for line in capsys.readouterr().out.splitlines()[-2:]] == [
+        ["ok", "openai_api_key"], ["ok", "compatible_api_key"]]
+    assert asked == ["openai", "compatible"]
+
+
 def test_check_says_why_the_claude_key_failed(directory, capsys):
-    def refused():
+    def refused(provider):
         raise RuntimeError("env var ANTHROPIC_KEY not set for anthropic_api_key")
     directory(_Secrets(), ai_key=refused, anthropic_api_key={"env": "ANTHROPIC_KEY"}).check()
     assert capsys.readouterr().out.splitlines()[-1].split()[:3] == ["FAIL", "anthropic_api_key", "env"]
 
 
 def test_check_never_shows_a_secret(directory, capsys):
-    directory(_Secrets(refusing={BEA}), ai_key=lambda: "sk-ant-hunter22", anthropic_api_key={"keychain": "anthropic-api-key", "version": 1}).check()
+    directory(_Secrets(refusing={BEA}), ai_key=lambda provider: "sk-ant-hunter22", anthropic_api_key={"keychain": "anthropic-api-key", "version": 1}).check()
     assert "hunter22" not in capsys.readouterr().out

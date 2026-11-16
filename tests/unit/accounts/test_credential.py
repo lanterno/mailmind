@@ -95,6 +95,20 @@ def test_a_claude_key_the_file_holds_itself_is_refused_too():
                              "in the login Keychain instead: `uv run python -m mailmind ai key`.")
 
 
+@pytest.mark.parametrize("who, named, how", [
+    ("openai_api_key", "the OpenAI API key", "ai key --provider openai"),
+    ("gemini_api_key", "the Gemini API key", "ai key --provider gemini"),
+    ("compatible_api_key", "the AI service's API key", "ai key --provider compatible"),
+])
+def test_another_providers_key_the_file_holds_itself_is_refused_saying_how_to_move_it(who, named, how):
+    with pytest.raises(PlaintextSecret) as no:
+        secrets.resolve("sk-in-the-file", who=who)
+    assert str(no.value) == (f"mailmind.config.json holds {named} in plain text, which MailMind no longer reads. Keep it "
+                             f"in the login Keychain instead: `uv run python -m mailmind {how}`.")
+    found = plaintext({"accounts": [], who: "sk-in-the-file", "ollama_api_key": "not a key MailMind reads"})
+    assert [(w, key, item) for w, _, key, item in found] == [(who, who, who.replace("_api_key", "-api-key"))]
+
+
 def test_plaintext_finds_each_secret_the_file_holds_itself_in_its_order():
     raw = {"anthropic_api_key": "sk-ant-x", "accounts": [
         {"email": "ada@example.test", "credential": {"plain": "a"}},
