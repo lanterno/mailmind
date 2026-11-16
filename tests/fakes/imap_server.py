@@ -2,10 +2,11 @@
 
 It speaks enough IMAP4rev1 for everything the app sends: CAPABILITY, STARTTLS, LOGIN, LIST,
 STATUS, SELECT and EXAMINE, UID SEARCH, UID FETCH, UID STORE, UID COPY, UID MOVE, UID EXPUNGE,
-EXPUNGE, APPEND, IDLE, NOOP, CLOSE and LOGOUT, with literals both ways. Each account has a kind:
+EXPUNGE, APPEND, CREATE, RENAME, DELETE, IDLE, NOOP, CLOSE and LOGOUT, with literals both ways. Each account has a kind:
 
 - "imap": a plain server with UIDPLUS, MOVE, IDLE and SPECIAL-USE.
-- "proton": Proton Bridge's habits. A message copied or moved into Trash is marked read.
+- "proton": Proton Bridge's habits. A message copied or moved into Trash is marked read, and a folder is made only
+  under Folders/ or Labels/.
 - "gmail": X-GM-EXT-1. Every message also sits in [Gmail]/All Mail, carries X-GM-THRID and
   X-GM-MSGID, and STORE +/-X-GM-LABELS (\\Inbox) adds it to or drops it from INBOX. A message
   re-labelled \\Inbox gets its old INBOX UID back, as the app's ingest_message expects. Trash
@@ -502,6 +503,41 @@ class Session:
     def do_examine(self, tag, args):
         self._select(tag, args, True)
 
+    # a folder itself: as Dovecot does, a renamed folder takes the folders inside it along and keeps its UIDVALIDITY, and a
+    # folder may not be deleted while it is selected. One deleted with mail in it is kept in `deleted_holding`, so a test sees
+    # that it happened.
+    def do_create(self, tag, args):
+        name = str(args[0])
+        if self.acct.box(name) is not None:
+            raise _No("[ALREADYEXISTS] mailbox exists")
+        if self.acct.kind == "proton" and not name.startswith(("Folders/", "Labels/")):
+            raise _No("[CANNOT] folders go under Folders/ or Labels/")
+        self.acct.mailboxes[name] = Mailbox(name, uidvalidity=next(self.srv._uidv))
+        self.ok(tag)
+
+    def do_rename(self, tag, args):
+        old, new = str(args[0]), str(args[1])
+        if self.acct.box(old) is None or old.upper() == "INBOX":
+            raise _No("[NONEXISTENT] no such mailbox")
+        if self.acct.box(new) is not None:
+            raise _No("[ALREADYEXISTS] mailbox exists")
+        for name in [n for n in self.acct.mailboxes if n == old or n.startswith(old + "/")]:
+            box = self.acct.mailboxes.pop(name)
+            box.name = new + name[len(old):]
+            self.acct.mailboxes[box.name] = box
+        self.ok(tag)
+
+    def do_delete(self, tag, args):
+        box = self.acct.box(str(args[0]))
+        if box is None or box.name == "INBOX":
+            raise _No("[NONEXISTENT] no such mailbox")
+        if box is self.box:
+            raise _No("[INUSE] mailbox is selected")
+        if box.messages:
+            self.srv.deleted_holding.append((self.acct.user, box.name, len(box.messages)))
+        del self.acct.mailboxes[box.name]
+        self.ok(tag)
+
     def do_close(self, tag, args):
         if not self.readonly:
             for uid in [u for u, m in self.box.messages.items() if "\\Deleted" in m.flags]:
@@ -857,6 +893,7 @@ class FakeIMAPServer:
         self._uidv = itertools.count(UIDVALIDITY_BASE)
         self._gm = itertools.count(GM_ID_BASE)
         self.commands = []
+        self.deleted_holding = []           # (user, folder, how many) for each folder a DELETE took with mail in it
         self.connections = 0
         self.lock = threading.RLock()
         self._faults = []

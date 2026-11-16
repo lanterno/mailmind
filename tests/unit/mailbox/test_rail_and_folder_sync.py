@@ -45,7 +45,8 @@ def test_the_stored_rail_gives_a_role_to_the_shallower_of_two(deeper):
 
 
 def test_the_stored_rail_says_a_sum_it_doesnt_have_as_nothing():
-    assert roles.stored_rail({"INBOX": (None, 4)}) == [{"name": "INBOX", "role": "inbox", "unseen": 0, "total": 4}]
+    assert roles.stored_rail({"INBOX": (None, 4)}) == [{"name": "INBOX", "role": "inbox", "unseen": 0, "total": 4,
+                                                        "own_name": "INBOX", "changeable": False}]
 
 
 def test_the_stored_rail_leaves_what_it_was_given_alone():

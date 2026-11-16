@@ -53,6 +53,9 @@ WRITES = [
     ("move", ([7], "Archive"), {}),
     ("expunge", ([7],), {}),
     ("append", ("Drafts", b"Subject: hi\r\n\r\nhi"), {"flags": ["\\Draft"], "when": datetime(2026, 11, 2, tzinfo=timezone.utc)}),
+    ("create", ("Receipts",), {}),
+    ("rename", ("Receipts", "Old"), {}),
+    ("delete", ("Receipts",), {}),
 ]
 
 

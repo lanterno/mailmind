@@ -118,6 +118,19 @@ def test_odd_folder_names_come_back_as_list_gave_them_and_work_as_given(world, k
         s.logout()
 
 
+def test_a_folder_is_made_renamed_and_deleted_by_its_name_as_list_gives_it(world, session):
+    since = len(world.server.commands)
+    session.create('Say \\"hi\\"')
+    assert 'Say "hi"' in world.server.accounts[w.ADA].mailboxes
+    session.rename('Say \\"hi\\"', "Caf&AOk-")
+    assert "Caf&AOk-" in world.server.accounts[w.ADA].mailboxes
+    session.delete("Caf&AOk-")
+    assert not {'Say "hi"', "Caf&AOk-"} & set(world.server.accounts[w.ADA].mailboxes)
+    assert sent(world, since) == ['CREATE "Say \\"hi\\""', 'RENAME "Say \\"hi\\"" "Caf&AOk-"', 'DELETE "Caf&AOk-"']
+    with pytest.raises(imaplib.IMAP4.error):
+        session.delete("Caf&AOk-")
+
+
 def test_a_folder_name_that_cant_be_sent_is_refused_before_it_is(world, session):
     from mailmind.bootstrap import accounts
     since = len(world.server.commands)
@@ -555,7 +568,8 @@ def test_a_read_only_process_examines_and_writes_nothing(world, kind, monkeypatc
         for write in (lambda: s.add_flags([1], ["\\Seen"]), lambda: s.remove_flags([1], ["\\Seen"]),
                       lambda: s.move([1], "Archive"), lambda: s.copy([1], "Archive"), lambda: s.expunge([1]),
                       lambda: s.append("Drafts", b"x"), lambda: s.add_labels([1], ["\\Inbox"]),
-                      lambda: s.remove_labels([1], ["\\Inbox"])):
+                      lambda: s.remove_labels([1], ["\\Inbox"]), lambda: s.create("Receipts"),
+                      lambda: s.rename("Archive", "Old"), lambda: s.delete("Archive")):
             with pytest.raises(profile.ReadOnlyError):
                 write()
         assert sent(world, since) == ['EXAMINE "INBOX"']

@@ -25,42 +25,54 @@
    "account": "ada@example.test",
    "folders": [
     {
+     "changeable": false,
      "name": "INBOX",
+     "own_name": "INBOX",
      "role": "inbox",
      "takes_filing": true,
      "total": 12,
      "unseen": 10
     },
     {
+     "changeable": false,
      "name": "Sent",
+     "own_name": "Sent",
      "role": "sent",
      "takes_filing": false,
      "total": 1,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "Drafts",
+     "own_name": "Drafts",
      "role": "drafts",
      "takes_filing": false,
      "total": 2,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "Archive",
+     "own_name": "Archive",
      "role": "archive",
      "takes_filing": true,
      "total": 1,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "Junk",
+     "own_name": "Junk",
      "role": "junk",
      "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "Trash",
+     "own_name": "Trash",
      "role": "trash",
      "takes_filing": true,
      "total": 1,
@@ -91,63 +103,81 @@
    "account": "bea@example.test",
    "folders": [
     {
+     "changeable": false,
      "name": "INBOX",
+     "own_name": "INBOX",
      "role": "inbox",
      "takes_filing": true,
      "total": 2,
      "unseen": 1
     },
     {
+     "changeable": false,
      "name": "Sent",
+     "own_name": "Sent",
      "role": "sent",
      "takes_filing": false,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "Drafts",
+     "own_name": "Drafts",
      "role": "drafts",
      "takes_filing": false,
      "total": 1,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "Archive",
+     "own_name": "Archive",
      "role": "archive",
      "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "All Mail",
+     "own_name": "All Mail",
      "role": "all",
      "takes_filing": false,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": true,
      "name": "Folders/Clients",
+     "own_name": "Clients",
      "role": "custom",
      "takes_filing": true,
      "total": 1,
      "unseen": 0
     },
     {
+     "changeable": true,
      "name": "Labels/Important",
+     "own_name": "Important",
      "role": "custom",
      "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "Spam",
+     "own_name": "Spam",
      "role": "junk",
      "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "Trash",
+     "own_name": "Trash",
      "role": "trash",
      "takes_filing": true,
      "total": 0,
@@ -178,49 +208,63 @@
    "account": "cy@example.test",
    "folders": [
     {
+     "changeable": false,
      "name": "INBOX",
+     "own_name": "INBOX",
      "role": "inbox",
      "takes_filing": true,
      "total": 3,
      "unseen": 2
     },
     {
+     "changeable": false,
      "name": "[Gmail]/Sent Mail",
+     "own_name": "Sent Mail",
      "role": "sent",
      "takes_filing": false,
      "total": 1,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "[Gmail]/Drafts",
+     "own_name": "Drafts",
      "role": "drafts",
      "takes_filing": false,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "[Gmail]/All Mail",
+     "own_name": "All Mail",
      "role": "all",
      "takes_filing": false,
      "total": 4,
      "unseen": 2
     },
     {
+     "changeable": false,
      "name": "[Gmail]/Starred",
+     "own_name": "Starred",
      "role": "custom",
      "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "[Gmail]/Spam",
+     "own_name": "Spam",
      "role": "junk",
      "takes_filing": true,
      "total": 0,
      "unseen": 0
     },
     {
+     "changeable": false,
      "name": "[Gmail]/Trash",
+     "own_name": "Trash",
      "role": "trash",
      "takes_filing": true,
      "total": 0,

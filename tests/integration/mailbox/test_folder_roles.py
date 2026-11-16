@@ -76,5 +76,6 @@ def test_an_account_out_of_reach_shows_the_folders_it_has_stored(app, world):
     finally:
         c.close()
     assert r.json["folders"][0] == {"name": "INBOX", "role": "inbox", "unseen": stored["INBOX"][0],
-                                    "total": stored["INBOX"][1], "takes_filing": True}
+                                    "total": stored["INBOX"][1], "takes_filing": True, "own_name": "INBOX",
+                                    "changeable": False}
     assert {f["name"] for f in r.json["folders"]} >= set(stored)
