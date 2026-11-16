@@ -85,6 +85,7 @@ struct GeneralPane: View {
                         Keys like e, r and j act on the mail without ⌘. Turn them off to use only ⌘ shortcuts.
                         """), isOn: status.preference(\.singleKeys) { .init(singleKeys: $0) })
                 }
+                OpenAtLoginCard()
                 ReadOnlySection(status: status)
                 BackupSection(status: status)
             }

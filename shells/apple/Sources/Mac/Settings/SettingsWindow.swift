@@ -95,7 +95,7 @@ extension SettingsTab {
     var lede: String {
         switch self {
         case .accounts: String(localized: "The mail MailMind reads, and how each connection stands.")
-        case .general: String(localized: "How MailMind looks, how it sends, its keys, and your mail kept safe.")
+        case .general: String(localized: "How MailMind looks, how it sends, its keys, when it opens, and your mail kept safe.")
         case .notifications: String(localized: "What may tap you on the shoulder, and when it may not.")
         case .ai: String(localized: "Whether AI writes for you, which service, and what it may spend.")
         }
