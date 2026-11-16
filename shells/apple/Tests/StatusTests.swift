@@ -29,7 +29,7 @@ final class StatusWordsTests: XCTestCase {
     }
 
     func testWhatIsRunningComesNext() {
-        XCTAssertEqual(pill(F.digest(), reconciling: true), .init(dot: .busy, text: "Reconciling…"))
+        XCTAssertEqual(pill(F.digest(), reconciling: true), .init(dot: .busy, text: "Checking against the server…"))
         XCTAssertEqual(pill(F.digest(), syncing: true), .init(dot: .busy, text: "Syncing…"))
         XCTAssertEqual(pill(F.digest(running: true)), .init(dot: .busy, text: "Syncing…"))
         XCTAssertEqual(pill(F.digest(status: ["ada@example.test": "syncing"])), .init(dot: .busy, text: "Syncing…"))
