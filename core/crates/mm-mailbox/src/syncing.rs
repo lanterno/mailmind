@@ -12,7 +12,8 @@
 //!
 //! An account shows as failing only as `sync_health` says: trouble that may pass (a lost connection, a timeout, a
 //! server that can't take a login for now) once a second sync in a row has failed too, or three minutes on; until
-//! then it shows as it did before, and its record keeps no error.
+//! then it shows as it did before, and its record keeps no error. A wake, or a change of network, starts each such
+//! run again (`woke`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -143,6 +144,14 @@ impl Syncing {
             }
         }
         Ok(status)
+    }
+
+    /// The computer woke from sleep, or its network changed: trouble that may pass from before is no measure of now.
+    /// Each such run starts again, so a failure from before neither shows by its age nor counts toward two in a row,
+    /// and the sync on waking, while the network comes back, is the first of a new run. What shows already stays
+    /// until a sync says otherwise.
+    pub fn woke(&self) {
+        self.held().failing.retain(|_, run| !run.passing);
     }
 
     /// The clock's seconds now.
