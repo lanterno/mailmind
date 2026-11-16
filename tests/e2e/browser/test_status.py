@@ -86,6 +86,7 @@ def test_settings_adds_edits_tests_and_removes_a_connection(page, world):
     dialog = page.get_by_role("dialog", name="Email connections")
     expect(dialog.locator(".set-row")).to_have_count(3)
     expect(dialog.locator("#exportPlan")).to_contain_text("messages")
+    expect(dialog.locator("#exportPlan")).to_contain_text(re.compile(r" · \d+(\.\d)? (KB|MB) on this Mac$"))
     assert w.ADA in dialog.locator(".set-row").first.get_attribute("data-email")
 
     page.get_by_role("button", name="+ Add a connection").click()
