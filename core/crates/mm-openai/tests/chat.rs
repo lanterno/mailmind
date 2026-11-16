@@ -258,6 +258,35 @@ fn a_refusal_reads_as_an_empty_reply_and_cached_tokens_as_cache_reads() {
 }
 
 #[test]
+fn the_output_is_whatever_total_tokens_says_beyond_the_prompt_where_that_is_more() {
+    let usage = |usage: Value| {
+        json!({"model": "gemini-4-hydrogen", "choices": [{"message": {"role": "assistant", "content": "Hi."},
+               "finish_reason": "stop"}], "usage": usage})
+        .to_string()
+    };
+    let (url, _) = stand_in(vec![
+        // Gemini's thinking: in the total, not in the completion's count.
+        (200, vec![], usage(json!({"prompt_tokens": 3000, "completion_tokens": 200, "total_tokens": 4800}))),
+        (200, vec![], usage(json!({"prompt_tokens": 3000, "completion_tokens": 200, "total_tokens": 3200}))),
+        (200, vec![], usage(json!({"prompt_tokens": 3000, "completion_tokens": 200, "total_tokens": 3100}))),
+        (200, vec![], usage(json!({"prompt_tokens": 3000, "completion_tokens": 200}))),
+        (
+            200,
+            vec![],
+            usage(json!({"prompt_tokens": 3000, "completion_tokens": 200, "total_tokens": 4800,
+                      "prompt_tokens_details": {"cached_tokens": 1000}})),
+        ),
+    ]);
+    let client = api(Gemini, &url, Some(KEY), Arc::new(Open::default()));
+    let mut counted = Vec::new();
+    for _ in 0..5 {
+        let usage = client.complete(&prompt("gemini-4-hydrogen", None)).expect("a reply").usage;
+        counted.push((usage.input_tokens, usage.cache_read_tokens, usage.output_tokens));
+    }
+    assert_eq!(counted, [(3000, 0, 1800), (3000, 0, 200), (3000, 0, 200), (3000, 0, 200), (2000, 1000, 1800)]);
+}
+
+#[test]
 fn a_service_that_refuses_structured_output_is_asked_once_more_without_it() {
     for provider in [Local, Compatible] {
         let refusal = error("unknown field: response_format");
