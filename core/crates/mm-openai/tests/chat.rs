@@ -213,21 +213,115 @@ fn a_schema_is_strict_only_with_every_object_closed_and_every_property_required(
 }
 
 #[test]
-fn every_provider_but_openai_takes_max_tokens_and_any_with_a_key_sends_it() {
-    for (provider, key, bearer) in [
-        (Gemini, Some(KEY), Some("Bearer sk-proj-test-fake-key")),
-        (Local, Some(KEY), Some("Bearer sk-proj-test-fake-key")),
-        (Local, None, None),
-        (Compatible, None, None),
-        (Compatible, Some(""), None),
-        (Compatible, Some(KEY), Some("Bearer sk-proj-test-fake-key")),
+fn gemini_takes_max_tokens_this_mac_and_a_compatible_service_no_ceiling_and_any_with_a_key_sends_it() {
+    for (provider, key, bearer, ceiling) in [
+        (Gemini, Some(KEY), Some("Bearer sk-proj-test-fake-key"), Some(16000)),
+        (Local, Some(KEY), Some("Bearer sk-proj-test-fake-key"), None),
+        (Local, None, None, None),
+        (Compatible, None, None, None),
+        (Compatible, Some(""), None, None),
+        (Compatible, Some(KEY), Some("Bearer sk-proj-test-fake-key"), None),
     ] {
         let (url, log) = stand_in(vec![(200, vec![], answer("Hi.", "m"))]);
         api(provider, &url, key, Arc::new(Open::default())).complete(&prompt("m", None)).expect("a reply");
         let [req] = heard(&log).try_into().expect("one request");
         assert_eq!(req.header("authorization"), bearer, "{provider:?}");
-        assert_eq!(req.body["max_tokens"], 16000, "{provider:?}");
+        assert_eq!(req.body.get("max_tokens").and_then(Value::as_u64), ceiling, "{provider:?}");
         assert!(req.body.get("max_completion_tokens").is_none() && req.body.get("response_format").is_none());
+    }
+}
+
+#[test]
+fn openai_and_gemini_are_asked_once_more_without_a_ceiling_they_refuse() {
+    for (provider, field, said) in [
+        (
+            OpenAi,
+            "max_completion_tokens",
+            "max_completion_tokens is too large: 16000. This model supports at most 4096.",
+        ),
+        (OpenAi, "max_completion_tokens", "Unsupported parameter: 'max_tokens' is not supported with this model."),
+        (Gemini, "max_tokens", "Invalid value for max_tokens: must be at most 8192."),
+    ] {
+        let (url, log) = stand_in(vec![(400, vec![], error(said)), (200, vec![], answer("{\"text\": \"hi\"}", "m"))]);
+        let reply = api(provider, &url, Some(KEY), Arc::new(Open::default()))
+            .complete(&prompt("m", Some(closed())))
+            .expect("a reply");
+        assert_eq!(reply.text, "{\"text\": \"hi\"}");
+        let asked = heard(&log);
+        assert_eq!(asked.len(), 2, "{provider:?}");
+        assert_eq!(asked[0].body[field], 16000, "{provider:?}");
+        let mut again = asked[1].body.clone();
+        assert!(again.as_object_mut().expect("a body").remove(field).is_none(), "{provider:?}: no ceiling again");
+        let mut first = asked[0].body.clone();
+        first.as_object_mut().expect("a body").remove(field);
+        assert_eq!(again, first, "{provider:?}: all else as it was, structured output too");
+    }
+    // Once a call: a second refusal is the answer, and another 400 is the request's fault.
+    let refused = || (400, vec![], error("max_tokens is too large"));
+    let (url, log) = stand_in(vec![refused(), refused(), (200, vec![], answer("never", "m"))]);
+    let failed = api(Gemini, &url, Some(KEY), Arc::new(Open::default())).complete(&prompt("m", None)).expect_err("400");
+    assert_eq!((failed.status, heard(&log).len()), (Some(400), 2));
+    let (url, log) = stand_in(vec![(400, vec![], error("model is required")), (200, vec![], answer("never", "m"))]);
+    let failed = api(OpenAi, &url, Some(KEY), Arc::new(Open::default())).complete(&prompt("m", None)).expect_err("400");
+    assert_eq!((failed.status, heard(&log).len()), (Some(400), 1));
+    // Words that name it anywhere but in what the service said are no refusal of it.
+    let (url, log) = stand_in(vec![(400, vec![], json!({"max_tokens": 1, "error": "bad"}).to_string())]);
+    api(OpenAi, &url, Some(KEY), Arc::new(Open::default())).complete(&prompt("m", None)).expect_err("400");
+    assert_eq!(heard(&log).len(), 1);
+    // A service sent no ceiling isn't asked again for one it names.
+    let (url, log) =
+        stand_in(vec![(400, vec![], error("max_tokens must be set")), (200, vec![], answer("never", "m"))]);
+    api(Compatible, &url, None, Arc::new(Open::default())).complete(&prompt("m", None)).expect_err("400");
+    assert_eq!(heard(&log).len(), 1);
+}
+
+#[test]
+fn a_body_leaves_out_each_thing_a_service_refused_and_each_is_left_out_once_a_call() {
+    use mm_kernel::ai_provider::AiProvider;
+    use mm_openai::wire::{Without, body};
+    // No provider is sent both structured output and a ceiling it may refuse, so the two together are the wire's.
+    let asked = prompt("m", Some(closed()));
+    let both = body(&asked, AiProvider::Anthropic, Without { format: true, ceiling: true });
+    assert!(both.get("max_tokens").is_none() && both.get("response_format").is_none());
+    let neither = body(&asked, AiProvider::Gemini, Without::default());
+    assert!(neither.get("max_tokens").is_some() && neither.get("response_format").is_some());
+    let format_only = body(&asked, AiProvider::Gemini, Without { format: true, ceiling: false });
+    assert_eq!((format_only.get("max_tokens"), format_only.get("response_format")), (Some(&json!(16000)), None));
+    // Refused again without it, structured output isn't asked without a third time.
+    let refusal = || (400, vec![], error("unknown field: response_format"));
+    let (url, log) = stand_in(vec![refusal(), refusal(), (200, vec![], answer("never", "m"))]);
+    let failed = api(Local, &url, None, Arc::new(Open::default())).complete(&asked).expect_err("400");
+    assert_eq!((failed.status, heard(&log).len()), (Some(400), 2));
+}
+
+#[test]
+fn a_key_refused_with_a_400_is_never_asked_again_without_structured_output_or_a_ceiling() {
+    // As a 401 is never asked again: the same refused key would go once more.
+    let not_valid = |also: &str| {
+        json!({"error": {"code": 400, "message": format!("API key not valid. {also}"),
+                         "details": [{"reason": "API_KEY_INVALID"}]}})
+        .to_string()
+    };
+    let by_reason = |also: &str| {
+        json!([{"error": {"message": format!("Bad request: {also}"), "details": [{"reason": "API_KEY_INVALID"}]}}])
+            .to_string()
+    };
+    for (provider, body) in [
+        (Compatible, not_valid("response_format is unsupported")),
+        (Local, by_reason("unknown field: response_format")),
+        (Gemini, not_valid("max_tokens is too large")),
+        (OpenAi, by_reason("max_completion_tokens is too large")),
+        (Gemini, json!({"error": "API key not valid; max_tokens is too large"}).to_string()),
+    ] {
+        let (url, log) = stand_in(vec![(400, vec![], body.clone()), (200, vec![], answer("never", "m"))]);
+        let failed = api(provider, &url, Some(KEY), Arc::new(Open::default()))
+            .complete(&prompt("m", Some(closed())))
+            .expect_err("refused");
+        assert_eq!(
+            failed,
+            mm_assistant::ports::ModelError::new(format!("{} API 401: the key was refused", provider.id()), Some(401))
+        );
+        assert_eq!(heard(&log).len(), 1, "{provider:?}: {body}");
     }
 }
 

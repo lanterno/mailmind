@@ -442,7 +442,8 @@ fn a_call_goes_to_the_provider_chosen_and_with_ai_turned_off_nowhere() {
     let [asked] = heard(&log).try_into().unwrap();
     assert_eq!(asked.line, "POST /v1/chat/completions HTTP/1.1");
     assert_eq!(asked.header("authorization"), None, "no key is kept for it");
-    assert_eq!((asked.body["model"].clone(), asked.body["max_tokens"].clone()), (json!("llama3.2:3b"), json!(16000)));
+    assert_eq!(asked.body["model"], json!("llama3.2:3b"));
+    assert!(asked.body.get("max_tokens").is_none(), "no ceiling for a model on this Mac: the server's own fits");
     assert_eq!(asked.body["response_format"]["json_schema"]["strict"], true);
     let today = r.get("/api/debug/ai?days=1").json()["days"][0].clone();
     assert_eq!((today["calls"].clone(), today["cost_micros"].clone()), (json!(1), json!(0)), "{today}");
