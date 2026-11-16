@@ -82,10 +82,13 @@ def _error(answer: _Answer) -> Any:
 
 
 def _said(answer: _Answer) -> str:
-    """What a service said of an error, all of it: its message, or the error itself where it is words."""
+    """What a service said of an error, all of it: an error object's message, or else the error itself; words as they are,
+    and anything else as compact JSON."""
     err = _error(answer)
     said = cast(dict[str, Any], err).get("message") if isinstance(err, dict) else err
-    return str(said or "")
+    if not said:
+        return ""
+    return said if isinstance(said, str) else json.dumps(said, separators=(",", ":"), ensure_ascii=False)
 
 
 def _key_refused(answer: _Answer) -> bool:

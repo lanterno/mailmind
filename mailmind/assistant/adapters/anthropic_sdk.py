@@ -2,12 +2,15 @@
 
 The client is given its key and base URL, so the SDK reads no credential or profile of its own
 from the environment or the disk. It retries the statuses in ports.RETRIED, twice, honouring
-retry-after, and raises typed errors, which become ModelError here. The server-side refusal
-fallback is a beta, so a prompt that asks for it goes through client.beta.messages. A key with a
-blank or a control character in it is never sent: it is refused as a rejected key is.
+retry-after, and raises typed errors, which become ModelError here, with what the API said of an
+error: its message as words, or as compact JSON where it is anything else, the key taken out of all
+of it before it is cut to SAID characters. The server-side refusal fallback is a beta, so a prompt
+that asks for it goes through client.beta.messages. A key with a blank or a control character in it
+is never sent: it is refused as a rejected key is.
 
 Only this module imports anthropic.
 """
+import json
 from collections.abc import Callable
 
 import anthropic
@@ -23,24 +26,32 @@ RETRIES = 2                        # after the first attempt
 DEFAULT_URL = "https://api.anthropic.com"
 MODELS_PAGE = 1000                 # the most the API lists at once
 KEY_REFUSED = "Claude API 401: the key was refused"     # for a key that can't be one, never sent
+SAID = 200                         # characters of what the API said an error keeps
 
 
-def _error_text(e: anthropic.APIStatusError) -> str:
+def _error_text(e: anthropic.APIStatusError, key: str) -> str:
+    """What the API said of an error: its error's message, else the body's, else the SDK's words for it; words as they are
+    and anything else as compact JSON, with `key` taken out of all of it before it is cut to SAID characters, so no part of
+    a key the cut runs through is left."""
     body = e.body if isinstance(e.body, dict) else {}
     inner = body.get("error")
     err = inner if isinstance(inner, dict) else body
-    return str(err.get("message") or e.message or "")[:200]
+    said = err.get("message")
+    if not said:
+        said = e.message or ""
+    text = said if isinstance(said, str) else json.dumps(said, separators=(",", ":"), ensure_ascii=False)
+    return (text.replace(key, "<key>") if key else text)[:SAID]
 
 
-def _calling[T](call: Callable[[], T], key_ok: bool) -> T:
-    """Make a call on this thread, as the SDK's retries are, its errors as ModelError: none with a key that isn't `key_ok`."""
+def _calling[T](call: Callable[[], T], key: str) -> T:
+    """Make a call on this thread, as the SDK's retries are, its errors as ModelError: none with a key that isn't sendable."""
     txguard.refuse_network("a Claude API request")
-    if not key_ok:
+    if not sendable(key):
         raise ModelError(KEY_REFUSED, 401)
     try:
         return call()
     except anthropic.APIStatusError as e:
-        raise ModelError(f"Claude API {e.status_code}: {_error_text(e)}", e.status_code) from None
+        raise ModelError(f"Claude API {e.status_code}: {_error_text(e, key)}", e.status_code) from None
     except anthropic.APIConnectionError as e:
         raise ModelError(f"Claude API unreachable: {e.message}") from None
     except anthropic.AnthropicError as e:
@@ -59,36 +70,36 @@ class AnthropicModel:
                  retries: int = RETRIES, model: str = models.DEFAULT, local: bool = False):
         self.model, self.local = model, local
         self._client = _client(key, base_url, timeout, retries)
-        self._key_ok = sendable(key)
+        self._key = key
 
     def complete(self, prompt: Prompt) -> Reply:
         body = wire.body(prompt)
         if prompt.fallback:
             resp = _calling(lambda: self._client.beta.messages.create(**body, fallbacks="default",
-                                                                      betas=[FALLBACK_BETA]), self._key_ok)
+                                                                      betas=[FALLBACK_BETA]), self._key)
         else:
-            resp = _calling(lambda: self._client.messages.create(**body), self._key_ok)
+            resp = _calling(lambda: self._client.messages.create(**body), self._key)
         return wire.reply(resp.to_dict(), prompt.model)
 
     def submit_batch(self, requests: list[tuple[str, Prompt]]) -> str:
         batches = self._client.with_options(max_retries=0).messages.batches
         return _calling(lambda: batches.create(
-            requests=[wire.batch_request(i, p) for i, p in requests]), self._key_ok).id  # pyright: ignore[reportArgumentType]
+            requests=[wire.batch_request(i, p) for i, p in requests]), self._key).id  # pyright: ignore[reportArgumentType]
 
     def batch_ended(self, batch_id: str) -> bool:
-        batch = _calling(lambda: self._client.messages.batches.retrieve(batch_id), self._key_ok)
+        batch = _calling(lambda: self._client.messages.batches.retrieve(batch_id), self._key)
         return batch.processing_status == "ended"
 
     def batch_results(self, batch_id: str, asked: str) -> list[BatchResult]:
         return _calling(lambda: [wire.batch_result(line.to_dict(), asked)
-                                 for line in self._client.messages.batches.results(batch_id)], self._key_ok)
+                                 for line in self._client.messages.batches.results(batch_id)], self._key)
 
     def discard_batch(self, batch_id: str) -> None:
-        _calling(lambda: self._client.messages.batches.delete(batch_id), self._key_ok)
+        _calling(lambda: self._client.messages.batches.delete(batch_id), self._key)
 
 
 def list_models(key: str, base_url: str | None = None, timeout: float = TIMEOUT) -> list[str]:
     """The ids of the models the key may ask, from GET /v1/models, every page of it. Raises ModelError as a call does,
     without trying again: a person is waiting."""
     client = _client(key, base_url, timeout, 0)
-    return _calling(lambda: [m.id for m in client.models.list(limit=MODELS_PAGE)], sendable(key))
+    return _calling(lambda: [m.id for m in client.models.list(limit=MODELS_PAGE)], key)
