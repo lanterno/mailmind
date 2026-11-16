@@ -70,6 +70,13 @@ pub trait Triage: Send + Sync + fmt::Debug {
     fn save_summary(&self, pk: i64, said: &Assessment, when: &str) -> Result<(), Fault>;
 }
 
+/// How much triage has left (`Answers.summaries_waiting`), as the status says it.
+pub trait Backlog: Send + Sync + fmt::Debug {
+    /// How many messages newer than `newer_than` wait for a summary: not junk, with a key, none on its way out, one
+    /// count for each, and those a batch holds among them, since they have none yet.
+    fn summaries_waiting(&self, newer_than: i64) -> Result<i64, Fault>;
+}
+
 /// The mail drafting ahead may pick from (`Mail.draft_candidates`).
 pub trait DraftCandidates: Send + Sync + fmt::Debug {
     /// Reply-worthy Inbox mail since `since_ts`, unanswered, not junk, snoozed, muted or on its way out, each thread by

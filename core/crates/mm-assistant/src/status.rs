@@ -9,6 +9,8 @@ use mm_kernel::log;
 use mm_kernel::seams::Clock;
 use serde_json::{Map, Value, json};
 
+use crate::assessments::recent;
+use crate::background_ports::Backlog;
 use crate::gateway::Gateway;
 use crate::refusals::CallError;
 
@@ -25,11 +27,20 @@ pub struct Status {
     gateway: Arc<Gateway>,
     clock: Arc<dyn Clock>,
     last: Mutex<Last>,
+    /// Where it counts what waits for a summary: nowhere, for a status that says nothing of it.
+    backlog: Option<Arc<dyn Backlog>>,
 }
 
 impl Status {
     pub fn new(gateway: Arc<Gateway>, clock: Arc<dyn Clock>) -> Status {
-        Status { gateway, clock, last: Mutex::new(Last::default()) }
+        Status { gateway, clock, last: Mutex::new(Last::default()), backlog: None }
+    }
+
+    /// The same, saying while AI is on how many messages from the last 30 days wait for a summary, as `backlog`
+    /// counts them.
+    pub fn with_backlog(mut self, backlog: Arc<dyn Backlog>) -> Status {
+        self.backlog = Some(backlog);
+        self
     }
 
     fn note(&self, ok: bool, error: String) {
@@ -52,7 +63,8 @@ impl Status {
     /// What the page says of AI, with no call made: the engine ("api", or "none" while AI is off), the provider
     /// chosen and why AI is off (null while it is on), the model in force, where the key came from, how the most
     /// recent call went, what today's calls cost so far in micro-dollars (null when the ledger can't be read) beside
-    /// the daily limit, and how many messages a batch out holds, when one does.
+    /// the daily limit, how many messages a batch out holds, when one does, and while AI is on how many messages from
+    /// the last 30 days wait for a summary.
     pub fn report(&self) -> Result<Value, Fault> {
         let in_force = self.gateway.in_force();
         let on = in_force.on();
@@ -83,6 +95,14 @@ impl Status {
             && waiting > 0
         {
             report.insert("batch_waiting".into(), json!(waiting));
+        }
+        if on && let Some(backlog) = &self.backlog {
+            match backlog.summaries_waiting(recent(self.clock.now().whole_seconds())) {
+                Ok(waiting) => {
+                    report.insert("summaries_waiting".into(), json!(waiting));
+                }
+                Err(fault) => log::warning("ai", "what waits for a summary can't be read", &[], Some(fault.class)),
+            }
         }
         Ok(Value::Object(report))
     }

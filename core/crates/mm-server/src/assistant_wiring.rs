@@ -349,7 +349,7 @@ impl Assistant {
         let catalog = Arc::new(Catalog::new(engine.clone()));
         let finder = Arc::new(Finder::new(local_ai));
         let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
-        let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
+        let status = Arc::new(Status::new(gateway.clone(), clock.clone()).with_backlog(database.clone()));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.no_schema()));
         let fetch = Arc::new(Fetching::new(FetchingParts {
             stored: database.clone(),

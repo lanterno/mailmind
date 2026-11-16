@@ -2,7 +2,7 @@
 //! and `save_summary`, and `mailbox.adapters.sqlite.assistant_reads.draft_candidates`): the mail triage hasn't
 //! summarized, what it says kept under each message's key, and the mail a reply may be drafted ahead for.
 
-use mm_assistant::background_ports::{Assessment, DraftCandidates, FinishedBatches, Pending, Triage};
+use mm_assistant::background_ports::{Assessment, Backlog, DraftCandidates, FinishedBatches, Pending, Triage};
 use mm_assistant::ports::Message;
 use mm_kernel::errors::Fault;
 use rusqlite::{OptionalExtension, params};
@@ -20,6 +20,11 @@ const NEEDS_SUMMARY: &str = "SELECT m.* FROM messages m \
        AND COALESCE(m.ts, 0) > ? \
      GROUP BY COALESCE(m.message_key, -m.pk) \
      ORDER BY m.ts DESC LIMIT ?";
+
+const SUMMARIES_WAITING: &str = "SELECT COUNT(DISTINCT m.message_key) FROM messages m \
+     LEFT JOIN assessments s ON s.message_key = m.message_key \
+     WHERE m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL \
+       AND m.message_key IS NOT NULL AND COALESCE(m.ts, 0) > ?";
 
 const BATCH_CUTOFF: &str =
     "SELECT cutoff_ts FROM ai_batches WHERE state IN ('submitting', 'running') ORDER BY id DESC LIMIT 1";
@@ -44,6 +49,12 @@ pub(crate) fn pending(r: &rusqlite::Row<'_>) -> rusqlite::Result<Pending> {
         snippet: r.get("snippet")?,
         ts: r.get("ts")?,
     })
+}
+
+impl Backlog for Database {
+    fn summaries_waiting(&self, newer_than: i64) -> Result<i64, Fault> {
+        self.read(|c| c.prepare_cached(SUMMARIES_WAITING)?.query_row([newer_than], |r| r.get(0)))
+    }
 }
 
 impl Triage for Database {
