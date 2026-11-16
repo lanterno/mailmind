@@ -3,8 +3,9 @@
 A name the block doesn't hold, or holds something that can't be that preference (a hand edit), is that preference's default, so a
 file with no block goes on exactly as before and reading one writes nothing. A change names only what changes and leaves the rest
 of the file as it stands. The AI's daily limit is one more setting, but the file keeps it at the top level, as it always did
-("ai_daily_limit_usd"), where the Assistant reads it. Whether AI is on, its provider, model and service URL are preferences like
-the rest (#49): "" for a model or URL is the provider's own, and choosing another provider sets the last one's model and URL back
+("ai_daily_limit_usd"), where the Assistant reads it. AI mode (whether AI is on), its provider, model and service URL are
+preferences like the rest (#49). AI mode the file doesn't say is on when a key is there for AI, named in the file for any
+provider or in ANTHROPIC_API_KEY, so whoever set Claude up keeps AI, and off otherwise, so a fresh install starts with it off: "" for a model or URL is the provider's own, and choosing another provider sets the last one's model and URL back
 to "", unless the same change names them, so one provider's are never sent to another. A model on this Mac is reached on this Mac
 alone: a URL elsewhere is refused for it, and one a hand edit gave it reads as its own.
 
@@ -16,6 +17,7 @@ from collections.abc import Mapping
 from typing import Any, Literal, get_args
 from urllib.parse import urlsplit
 
+from mailmind.accounts.domain.credential import api_key_who
 from mailmind.kernel import send_window
 from mailmind.kernel.ai_provider import AI_PROVIDERS, DEFAULT_PROVIDER
 from mailmind.kernel.draft_tone import DEFAULT_TONE, DraftTone
@@ -64,7 +66,7 @@ DEFAULTS: Mapping[str, Any] = {
     "morning_brief": False,
     "weekly_review": False,                 # the week's review written ahead on Monday morning, and read all week
     "auto_tidy": False,
-    "ai_enabled": True,
+    "ai_enabled": False,                    # AI mode, with no key anywhere: read() is given the default a key makes
     "ai_provider": DEFAULT_PROVIDER,
     "ai_model": "",                         # the provider's own
     "ai_base_url": "",                      # the provider's own
@@ -151,11 +153,19 @@ def said(raw: Mapping[str, Any], name: str) -> Any:
     return _kept(name, value) if _takes(name, value) else None
 
 
-def read(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """Every preference as it stands: what the file says where that can be it, and else the default. It never raises."""
+def ai_mode_default(raw: Mapping[str, Any], key_in_environment: bool) -> bool:
+    """AI mode where the file doesn't say it: on when there is a key for AI, the file naming one for any provider or the
+    environment giving Claude's."""
+    return key_in_environment or any(raw.get(api_key_who(p)) for p in AI_PROVIDERS)
+
+
+def read(raw: Mapping[str, Any], ai_default: bool = False) -> dict[str, Any]:
+    """Every preference as it stands: what the file says where that can be it, and else the default, AI mode's
+    `ai_default` (ai_mode_default's). It never raises."""
     there = _block_of(raw)
+    defaults = {**DEFAULTS, "ai_enabled": ai_default}
     prefs = {name: _kept(name, there[name]) if name in there and _takes(name, there[name]) else default
-             for name, default in DEFAULTS.items()}
+             for name, default in defaults.items()}
     if not _here_for_local(prefs):
         prefs["ai_base_url"] = DEFAULTS["ai_base_url"]
     return prefs

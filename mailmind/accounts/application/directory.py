@@ -49,8 +49,10 @@ log = get_logger("accounts")
 
 
 class Directory:
-    def __init__(self, file: AccountRepository, secrets: SecretStore, ai_key: Callable[[AiProvider], str | None]):
+    def __init__(self, file: AccountRepository, secrets: SecretStore, ai_key: Callable[[AiProvider], str | None],
+                 key_in_environment: Callable[[], bool] = lambda: False):
         self._file, self._secrets, self._ai_key = file, secrets, ai_key
+        self._key_in_environment = key_in_environment
         self._write_lock = threading.Lock()
 
     def _raw(self) -> Entry:
@@ -138,8 +140,12 @@ class Directory:
         return True
 
     def preferences(self) -> dict[str, Any]:
-        """Every preference as it stands. Reading one writes nothing, so a file with no block keeps none."""
-        return preferences.read(self._raw())
+        """Every preference as it stands, AI mode on where the file doesn't say it and a key is there. Reading one writes
+        nothing, so a file with no block keeps none."""
+        return self._read(self._raw())
+
+    def _read(self, raw: Entry) -> dict[str, Any]:
+        return preferences.read(raw, preferences.ai_mode_default(raw, self._key_in_environment()))
 
     def preference(self, name: str) -> Any:
         """What the file says of one preference, or None where it says nothing that preference can be."""
@@ -163,7 +169,7 @@ class Directory:
                 raw.setdefault("accounts", [])
                 preferences.apply(raw, wanted)
                 self.save(raw)
-            return preferences.read(raw)
+            return self._read(raw)
 
     def masked_rows(self) -> list[MaskedRow]:
         return [account.masked_row(e) for e in self._raw().get("accounts", [])]

@@ -10,6 +10,7 @@ from mailmind.accounts.application.presets import Presets
 from mailmind.accounts.domain import conn_error, provider
 from mailmind.accounts.domain.health import error_kind
 from mailmind.mailbox.adapters.imap.imap_names import BadMailbox, imap_quote, mailbox_arg
+from mailmind.platform import environment
 
 __all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_pin", "config", "connections", "error_kind", "health", "login_failed", "logins", "quiet_error", "connect", "get",
            "imap_quote", "mailbox_arg", "preload_creds", "presets", "tls_context", "trash_folder"]
@@ -18,6 +19,11 @@ __all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_
 def _ai_key(provider):
     from mailmind.bootstrap import assistant
     return assistant.config_key(provider)
+
+
+def _key_in_environment():
+    """Whether the environment gives Claude's key, so AI mode is on unless the file says otherwise."""
+    return bool((environment.ANTHROPIC_API_KEY.value() or "").strip())
 
 
 quiet_error = conn_error.quiet
@@ -90,7 +96,7 @@ def assemble():
     read yet. Importing this module assembles them once; wiring.assemble makes a new set of every context's."""
     global config, _connector, connections, health, logins, presets
     secrets.forget()
-    config = Directory(config_file.FILE, secrets, _ai_key)
+    config = Directory(config_file.FILE, secrets, _ai_key, _key_in_environment)
     _connector = imap_connection.Connector(config)
     connections = Connections(config, get, accounts, _Probe(), quiet_error, _retry_sync, _forget_status)
     health = Health(_sync_record)

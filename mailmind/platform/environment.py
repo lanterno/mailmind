@@ -205,7 +205,8 @@ MODEL = Text("MAILMIND_MODEL", "The Claude model every feature asks. Unset, mode
 PROTON_BRIDGE_PASS = Secret("MAILMIND_PROTON_BRIDGE_PASS", "The Proton Bridge password, before any other source.")
 PROTON_OP_ITEM = Text("MAILMIND_PROTON_OP_ITEM", "The 1Password item holding the Proton Bridge password.")
 ANTHROPIC_API_KEY = Secret("ANTHROPIC_API_KEY", "The Claude API key, when mailmind.config.json names none "
-                                                "(bootstrap.assistant). Neither: AI is off.")
+                                                "(bootstrap.assistant). Set, AI mode is on unless Settings turned it "
+                                                "off; with no key anywhere, AI mode starts off.")
 ANTHROPIC_BASE_URL = Text("ANTHROPIC_BASE_URL", "Where API calls go, in place of https://api.anthropic.com.")
 DB_KEY = Secret("MAILMIND_DB_KEY", "The key the database is encrypted with, 64 hex digits, in place of the Keychain's (db.key): "
                                     "for the tests, the demo and a computer with no Keychain.")
