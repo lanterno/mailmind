@@ -1115,6 +1115,7 @@ dependencies = [
  "mm-mailbox",
  "mm-net",
  "mm-oneclick",
+ "mm-openai",
  "mm-smtp",
  "mm-store",
  "rcgen",
