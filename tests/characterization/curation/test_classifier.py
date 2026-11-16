@@ -23,8 +23,9 @@ PRECEDENCE = [
     ("ops@bank.example.test", "Your invoice", False, "personal/protected", "high"),  # protected beats receipt
     ("news@bank.example.test", "Rates", False, "newsletters/marketing", "med"),      # a marketing role loses it
     ("billing@studio.example.test", "hi", True, "receipts/transactional", "med"),    # receipt beats List-Unsubscribe
-    ("lin@studio.example.test", "Re: lunch", True, "newsletters/marketing", "high"),  # list header beats a reply
-    ("lin.example@gmail.com", "Re: [weave] patterns", True, "newsletters/marketing", "high"),
+    ("lin@studio.example.test", "Re: lunch", True, "other/personal-ish", "med"),  # a person's reply beats a list header
+    ("lin.example@gmail.com", "Re: [weave] patterns", True, "other/personal-ish", "med"),
+    ("news@studio.example.test", "Re: lunch", True, "newsletters/marketing", "high"),  # but not a list's role address
     ("lin@sendgrid.example.test", "Re: lunch", False, "newsletters/marketing", "high"),  # ESP beats a reply
     ("lin@e.studio.example.test", "Re: lunch", False, "newsletters/marketing", "med"),   # bulk sub-domain too
     ("marketing@studio.example.test", "Re: your quote", False, "other/personal-ish", "high"),  # reply beats role
