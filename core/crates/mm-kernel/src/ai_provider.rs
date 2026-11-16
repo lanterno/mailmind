@@ -64,7 +64,8 @@ impl AiProvider {
 pub const BASE_URL_MOST: usize = 500;
 
 /// The host a URL in printable ASCII names, its scheme `https` or `http` in any case, with no user or password, no
-/// query and no fragment, and a port that is a number when it names one: None for any other URL, or text that is none.
+/// query and no fragment, and a port from 1 to 65535 when it names one, a `:` naming none: None for any other URL, or
+/// text that is none.
 fn host_of(url: &str) -> Option<(bool, String)> {
     if url.chars().any(|c| !('!'..='~').contains(&c)) || url.contains(['?', '#']) {
         return None;
@@ -93,9 +94,9 @@ fn host_of(url: &str) -> Option<(bool, String)> {
             None => (authority, None),
         },
     };
-    if let Some(port) = port.filter(|p| !p.is_empty())
-        && !(port.bytes().all(|b| b.is_ascii_digit()) && port.parse::<u16>().is_ok())
-    {
+    // An empty port is malformed, as is port 0: no HTTP client reaches a service at either.
+    let a_port = |p: &str| p.bytes().all(|b| b.is_ascii_digit()) && p.parse::<u16>().is_ok_and(|n| n > 0);
+    if port.is_some_and(|p| !a_port(p)) {
         return None;
     }
     if host.is_empty() || host.contains(['[', ']']) {
@@ -115,7 +116,7 @@ const LOOPBACK: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
 
 /// A base URL as a person may give one, its trailing `/` dropped: at most `BASE_URL_MOST` characters of printable
 /// ASCII, an `https` URL with a host, or an `http` one whose host is this machine (`127.0.0.1`, `::1`, `localhost`),
-/// with no user or password, no query and no fragment. None for any other.
+/// with no user or password, no query and no fragment, and any port it names from 1 to 65535. None for any other.
 pub fn base_url(given: &str) -> Option<String> {
     if given.chars().count() > BASE_URL_MOST {
         return None;
