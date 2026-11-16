@@ -686,6 +686,45 @@ fn a_key_with_a_line_break_in_it_from_anywhere_but_settings_is_refused_and_never
 }
 
 #[test]
+fn a_key_in_the_keychain_is_read_once_for_each_version_the_file_names_as_the_python_app_reads_it() {
+    let listed = || (200, json!({"data": [{"id": "claude-opus-5-5"}], "has_more": false}));
+    let (claude, log) = provider(vec![listed(), listed(), listed(), listed()]);
+    let r = running(
+        &json!({"preferences": {"ai_enabled": true}}),
+        &[("ANTHROPIC_BASE_URL", claude.trim_end_matches("/v1"))],
+    );
+    let sent = || {
+        assert_eq!(r.get("/api/ai/models?provider=anthropic").status, 200);
+        heard(&log).last().and_then(|asked| asked.header("x-api-key").map(str::to_owned)).unwrap()
+    };
+    let asked = || *r.keychain.asked.lock().unwrap();
+    r.post("/api/ai/key", &json!({"provider": "anthropic", "key": "sk-ant-fictional-one"}));
+    let before = asked();
+    for _ in 0..3 {
+        assert_eq!(r.ai()[0], json!("api"));
+    }
+    assert_eq!(sent(), "sk-ant-fictional-one");
+    assert_eq!(asked() - before, 1, "read once, not at each look at the AI in force");
+
+    // Kept again outside MailMind, it is used once the file names its next version, as another process keeping it
+    // does: until then, the key read for the version named.
+    r.keychain.items.lock().unwrap().insert("anthropic-api-key".into(), "sk-ant-fictional-two".into());
+    assert_eq!(sent(), "sk-ant-fictional-one");
+    let mut config: Value = serde_json::from_slice(&std::fs::read(r.config()).unwrap()).unwrap();
+    assert_eq!(config["anthropic_api_key"], json!({"keychain": "anthropic-api-key", "version": 1}));
+    config["anthropic_api_key"]["version"] = json!(2);
+    r.write_config(&config);
+    assert_eq!(sent(), "sk-ant-fictional-two");
+
+    // Kept again in Settings, or taken out, at once.
+    r.post("/api/ai/key", &json!({"provider": "anthropic", "key": "sk-ant-fictional-three"}));
+    assert_eq!(sent(), "sk-ant-fictional-three");
+    r.post("/api/ai/key/clear", &json!({"provider": "anthropic"}));
+    assert_eq!(r.ai()[2], json!("no-key"));
+    assert!(!r.get("/api/digest").text().contains("fictional"));
+}
+
+#[test]
 fn an_anthropic_base_url_that_breaks_the_rules_a_chosen_url_is_held_to_reaches_nothing() {
     let (claude, log) = provider(vec![(200, json!({"data": [{"id": "claude-opus-5-5"}], "has_more": false}))]);
     let base = claude.trim_end_matches("/v1");
