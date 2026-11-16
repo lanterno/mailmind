@@ -16,7 +16,9 @@ import json
 import random
 import ssl
 import time
+import unicodedata
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -96,19 +98,52 @@ def _key_refused(answer: _Answer) -> bool:
     return _said(answer).startswith(_NOT_VALID)
 
 
+@dataclass(frozen=True)
+class Endpoint:
+    """Where an API is: over TLS or not, its host (an IPv6 address without its brackets), its port, and the path its routes
+    hang from, without a trailing /."""
+    tls: bool
+    host: str
+    port: int
+    base: str
+
+
+def endpoint(url: str) -> Endpoint | None:
+    """An http or https URL as where its API is, at the scheme's port where it names none, or None for one that names no
+    API: another scheme, no host, a user, a blank or a control character, or a port that is empty, no number, or outside 1
+    to 65535."""
+    url = url.strip()
+    if any(ch.isspace() or unicodedata.category(ch) == "Cc" for ch in url):
+        return None
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or not parts.hostname or "@" in parts.netloc or parts.netloc.endswith(":"):
+        return None
+    tls = parts.scheme == "https"
+    port = (443 if tls else 80) if port is None else port
+    if not 1 <= port <= 65535:
+        return None
+    return Endpoint(tls, parts.hostname, port, parts.path.rstrip("/"))
+
+
 class Http:
     """One service's HTTP: requests to `base_url` with `key`, each attempt its own connection."""
 
     def __init__(self, provider: AiProvider, base_url: str, key: str, timeout: float = TIMEOUT):
         self.provider: AiProvider = provider
         self._key, self._timeout = key, timeout
-        self._base = urlsplit(base_url.rstrip("/"))
+        self._endpoint = endpoint(base_url)
 
     def send(self, method: str, path: str, body: dict[str, Any] | None = None) -> _Answer:
         """One attempt. Raises ModelError when nothing answered, and as a refused key, unsent, for a key that can't be one."""
+        end = self._endpoint
+        if end is None:
+            raise ModelError(f"{self.provider} unreachable: no API address")
         if not sendable(self._key):
             raise self._refused_key(401)
-        base = self._base
         headers = {"Accept": "application/json", "User-Agent": "MailMind"}
         if self._key:
             headers["Authorization"] = f"Bearer {self._key}"
@@ -117,13 +152,13 @@ class Http:
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
         conn: http.client.HTTPConnection
-        if base.scheme == "https":
-            conn = http.client.HTTPSConnection(base.hostname or "", base.port, timeout=self._timeout,
+        if end.tls:
+            conn = http.client.HTTPSConnection(end.host, end.port, timeout=self._timeout,
                                                context=ssl.create_default_context())
         else:
-            conn = http.client.HTTPConnection(base.hostname or "", base.port, timeout=self._timeout)
+            conn = http.client.HTTPConnection(end.host, end.port, timeout=self._timeout)
         try:
-            conn.request(method, base.path + path, body=data, headers=headers)
+            conn.request(method, end.base + path, body=data, headers=headers)
             resp = conn.getresponse()
             return _Answer(resp.status, resp.read(), {k.lower(): v for k, v in resp.getheaders()})
         except TimeoutError:
