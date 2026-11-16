@@ -21,7 +21,7 @@ from typing import Any, cast
 from mailmind.assistant.adapters import chat_wire, exchange
 from mailmind.assistant.adapters.exchange import Answer as _Answer
 from mailmind.assistant.application.ports import BatchResult, ModelError, NoBatches, Prompt, Reply
-from mailmind.assistant.domain.providers import TIMEOUT, sendable
+from mailmind.assistant.domain.providers import TIMEOUT, sendable, unkeyed
 from mailmind.kernel.ai_provider import AiProvider
 from mailmind.platform.db import txguard
 
@@ -124,9 +124,7 @@ class Http:
         refused with a 400 is refused as a 401 is, so everything that reads one reads it so."""
         if _key_refused(answer):
             return self._refused_key(answer.status if answer.status in _AUTH else 401)
-        said = _said(answer)
-        if self._key:
-            said = said.replace(self._key, "<key>")         # before it is cut, which could leave part of the key
+        said = unkeyed(_said(answer), self._key or "")      # before it is cut, which could leave part of the key
         return ModelError(f"{self.provider} API {answer.status}: {said[:SAID]}", answer.status)
 
 

@@ -5,6 +5,7 @@ a key (or none) and a model. Each provider says how it is reached (`wire`), wher
 model it asks unless a person picks one. `in_force` reads what a person chose into the `Engine`: the provider, the model and
 URL it is asked at, its key, and why AI is off, in the order a person can do something about it.
 """
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal
@@ -71,6 +72,16 @@ def sendable(key: str) -> bool:
     """Whether `key` can go in a request's header: printable ASCII with no space, as every provider's keys are. A key with a
     blank, a line break or another control character in it was pasted or read wrong, and would break the header it went in."""
     return all("!" <= ch <= "~" for ch in key)
+
+
+def unkeyed(text: str, key: str) -> str:
+    """`text` with `key` taken out of it, as it is and as JSON writes it in a string (a `"` or `\\` in it escaped), so
+    what a service said, words or compact JSON, quotes no key back."""
+    if not key:
+        return text
+    for form in dict.fromkeys((json.dumps(key)[1:-1], key)):       # the longer, escaped form first
+        text = text.replace(form, "<key>")
+    return text
 
 
 @dataclass(frozen=True)

@@ -27,7 +27,7 @@ from mailmind.assistant.adapters import exchange, wire
 from mailmind.assistant.application.ports import BatchResult, ModelError, Prompt, Reply
 from mailmind.assistant.domain import models
 from mailmind.assistant.domain.models import FALLBACK_BETA
-from mailmind.assistant.domain.providers import TIMEOUT, sendable
+from mailmind.assistant.domain.providers import TIMEOUT, sendable, unkeyed
 from mailmind.kernel import ai_provider
 from mailmind.platform.db import txguard
 
@@ -86,7 +86,7 @@ def _error_text(e: anthropic.APIStatusError, key: str) -> str:
     if not said:
         return ""
     text = said if isinstance(said, str) else json.dumps(said, separators=(",", ":"), ensure_ascii=False)
-    return (text.replace(key, "<key>") if key else text)[:SAID]
+    return unkeyed(text, key)[:SAID]
 
 
 def _calling[T](call: Callable[[anthropic.Anthropic], T], client: anthropic.Anthropic | None, key: str) -> T:
