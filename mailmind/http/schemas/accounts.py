@@ -71,7 +71,8 @@ class DefaultsApplied(Answer):
 
 
 class AccountRow(Answer):
-    """`account.masked_row`. The page reads no `smtp_*` here."""
+    """`account.masked_row`: the servers the account reaches, incoming and outgoing, which the account form starts from.
+    An outgoing server none was saved for is its type's, else the incoming host (`defaults_applied` says which)."""
     email: str | None
     type: str
     alias: str | None
