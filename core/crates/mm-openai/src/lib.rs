@@ -175,10 +175,7 @@ impl ChatApi {
         if status == 400 && wire::key_invalid(&response.body) {
             return ModelError::new(format!("{provider} API 401: the key was refused"), Some(401));
         }
-        let mut said = wire::error_text(&response.body);
-        if let Some(key) = self.key.as_ref().map(Secret::expose).filter(|k| !k.is_empty()) {
-            said = said.replace(key, "<key>");
-        }
+        let said = wire::said(&response.body, self.key.as_ref().map(Secret::expose));
         ModelError::new(format!("{provider} API {status}: {said}"), Some(status))
     }
 

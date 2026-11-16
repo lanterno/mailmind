@@ -150,8 +150,9 @@ impl ClaudeApi {
                 }
                 Attempt::Lost(_) => Err(ModelError::new("Claude API unreachable: Connection error.", None)),
                 Attempt::Answered(response) if (200..300).contains(&response.status) => Ok(response),
+                // What the API said, which can quote the key back, with the key taken out before it is cut short.
                 Attempt::Answered(response) => Err(ModelError::new(
-                    format!("Claude API {}: {}", response.status, wire::error_text(&response.body)),
+                    format!("Claude API {}: {}", response.status, wire::said(&response.body, Some(self.key.expose()))),
                     Some(response.status),
                 )),
             };

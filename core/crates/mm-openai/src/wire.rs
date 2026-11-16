@@ -195,8 +195,21 @@ pub fn key_invalid(body: &[u8]) -> bool {
     reason || error_text(body).starts_with("API key not valid")
 }
 
-/// What a service said of an error, at most 200 characters: OpenAI's `{"error": {"message"}}`, Ollama's
-/// `{"error": "..."}`, or Gemini's either in a list.
+/// The most of what a service said that an error keeps, in characters.
+pub const SAID_MOST: usize = 200;
+
+/// What a service said of an error, as an error keeps it: `error_text` with `key` taken out of the whole of it, and
+/// only then cut to `SAID_MOST` characters, so no part of a key the cut runs through is left.
+pub fn said(body: &[u8], key: Option<&str>) -> String {
+    let mut said = error_text(body);
+    if let Some(key) = key.filter(|k| !k.is_empty()) {
+        said = said.replace(key, "<key>");
+    }
+    said.chars().take(SAID_MOST).collect()
+}
+
+/// What a service said of an error, the whole of it: OpenAI's `{"error": {"message"}}`, Ollama's `{"error": "..."}`,
+/// or Gemini's either in a list.
 pub fn error_text(body: &[u8]) -> String {
     let parsed: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
     let error = error_of(&parsed);
@@ -204,10 +217,9 @@ pub fn error_text(body: &[u8]) -> String {
         Some(Value::Object(inner)) => inner.get("message"),
         other => other,
     };
-    let said = match said {
+    match said {
         Some(Value::String(s)) => s.clone(),
         Some(other) if truthy(Some(other)) => other.to_string(),
         _ => String::new(),
-    };
-    said.chars().take(200).collect()
+    }
 }
