@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { go, type DigestList, type ListSource } from "../../app/route";
+import { aiOffered } from "../../lib/ai";
 import { get, post } from "../../lib/api/client";
 import { EMPTY } from "../../lib/emptyWords";
 import { minute } from "../../lib/clock";
@@ -45,8 +46,9 @@ function AiOff() {
   );
 }
 
-function NeedCard({ it, m, multi }: { it: DigestItem; m: Mailbox; multi: boolean }) {
-  const chip = useDraftChip(it.key);
+function NeedCard({ it, m, multi, ai }: { it: DigestItem; m: Mailbox; multi: boolean; ai: boolean }) {
+  const written = useDraftChip(it.key);
+  const chip = ai ? written : undefined;
   const subject = it.subject || "(no subject)";
   const action = String(it.action ?? "").trim();
   return (
@@ -164,6 +166,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
   const items = (m.digest?.items ?? []).filter((it) => !hidden.has(copyId(it)));
   const ai = m.digest?.ai;
   const aiOn = ai ? ai.engine !== "none" : undefined;
+  const offered = aiOffered(ai);     // AI turned off: the brief is what the digest says, with nothing of AI's and no word of it
   const { brief, writing, error, write } = useBrief(aiOn);
   const needs = needsYou(items);
   const shown = needs.slice(0, BRIEF_CAP);
@@ -172,15 +175,16 @@ export function BriefPane({ m }: { m: Mailbox }) {
   const commits = commitments(items).length + (tasks?.filter((t) => !t.done).length ?? 0);
   const multi = m.accounts.length > 1;
   const waiting = m.folders?.waiting ?? 0, later = m.folders?.replylater ?? 0;
-  const topics = (brief?.groups ?? []).map((g) => ({ label: g.label, items: topicItems(g.messages, items) })).filter((g) => g.items.length);
+  const topics = (offered ? brief?.groups ?? [] : []).map((g) => ({ label: g.label, items: topicItems(g.messages, items) })).filter((g) => g.items.length);
   const peekList = shown.map((x) => copyId(x)).join("\n");
   useEffect(() => {
-    if (peekList) void peekCards(peekList.split("\n").map(copyFromId));
-  }, [peekList]);
+    if (offered && peekList) void peekCards(peekList.split("\n").map(copyFromId));
+  }, [offered, peekList]);
 
   const failing = ai && ai.engine !== "none" && ai.last_ok === false && ai.last_error;
   let narrative: React.ReactNode;
-  if (aiOn === false && !brief?.narrative) narrative = <AiOff />;
+  if (!offered) narrative = null;
+  else if (aiOn === false && !brief?.narrative) narrative = <AiOff />;
   else if (writing) narrative = <p className="bf-wait"><span className="spin"><Icon name="wind" /></span> Reading your inbox…</p>;
   else if (brief?.narrative) narrative = <p className="ai-tldr bf-narr">{brief.narrative}</p>;
   else if (error === LIMIT) narrative = <p className="bf-wait">Today’s AI limit is reached, so the brief isn’t written yet. <button className="btn-retry" onClick={() => write(false)}>Write it</button></p>;
@@ -202,7 +206,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
       <div className="rd-actions">
         <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
         <span className="rd-sp" aria-hidden="true" />
-        <button className="cab" data-brief="refresh" title="Write the brief again from your mail as it is now (runs the AI)" disabled={writing} onClick={() => write(true)}><span><Icon name="refresh" /></span> Refresh brief</button>
+        {offered && <button className="cab" data-brief="refresh" title="Write the brief again from your mail as it is now (runs the AI)" disabled={writing} onClick={() => write(true)}><span><Icon name="refresh" /></span> Refresh brief</button>}
       </div>
       <Hero />
       <section className="ai-card bf-card" aria-label="Today’s brief">
@@ -218,7 +222,7 @@ export function BriefPane({ m }: { m: Mailbox }) {
           {waiting > 0 && <button className="bf-tally" data-brief="__waiting__" onClick={() => m.goToFolder("__waiting__")}><b>{waiting}</b> waiting on others</button>}
           {later > 0 && <button className="bf-tally" data-brief="__replylater__" onClick={() => m.goToFolder("__replylater__")}><b>{later}</b> to reply later</button>}
           {commits > 0 && <button className="bf-tally" data-brief="commits" onClick={() => panel.set("commits")}><Icon name="todo" /><b>{commits}</b> commitment{commits > 1 ? "s" : ""}</button>}
-          <button className="bf-tally" data-brief="week" onClick={() => panel.set("week")}><Icon name="cal" />Your week</button>
+          {offered && <button className="bf-tally" data-brief="week" onClick={() => panel.set("week")}><Icon name="cal" />Your week</button>}
         </div>
       </section>
       <div className="bf-grid">
@@ -227,13 +231,13 @@ export function BriefPane({ m }: { m: Mailbox }) {
           {needs.length > 0
             ? (
               <>
-                <div className="bf-needs">{shown.map((it) => <NeedCard key={copyId(it)} it={it} m={m} multi={multi} />)}</div>
+                <div className="bf-needs">{shown.map((it) => <NeedCard key={copyId(it)} it={it} m={m} multi={multi} ai={offered} />)}</div>
                 {needs.length > BRIEF_CAP && <button className="bf-tally" data-brief="needs" onClick={() => openDigestList(m.source, { list: "needs" }, needs)}>Show all {needs.length}</button>}
               </>
             )
             : <p className="bf-calm">{EMPTY.briefCalm}</p>}
           <TidyRun />
-          {tidy.length > 0 && (
+          {offered && tidy.length > 0 && (
             <div className="bf-tidy">
               <span><Icon name="wind" /> <b>{tidy.length}</b> low-priority message{tidy.length > 1 ? "s" : ""} the AI rates as safe to file: no next step, nothing asked of you.</span>
               <button className="bf-tally" data-brief="tidyreview" onClick={() => openDigestList(m.source, { list: "tidy" }, tidy)}>Review</button>

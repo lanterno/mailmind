@@ -2,13 +2,14 @@
 // on a click, for the senders it is sure of. Only a click on a row decides.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { aiOffered } from "../../lib/ai";
 import { ApiError, get, post } from "../../lib/api/client";
 import type { Verdict } from "../../lib/api/types";
 import { askOverLimit } from "../../lib/overLimit";
 import { avatarHue, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
-import { readAgain } from "../mailbox";
+import { readAgain, useDigest } from "../mailbox";
 
 const VERDICT_WORD: Record<Verdict, string> = { keep: "Allow", block: "Screen out" };
 
@@ -37,6 +38,7 @@ export function ScreenerPane({ account }: { account: string | undefined }) {
   const qc = useQueryClient();
   const { data } = useScreener(account);
   const suggested = useSuggestions(account);
+  const ai = aiOffered(useDigest().data?.ai);     // AI turned off: no verdict is suggested, and nothing offers one
   const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
   const rows = (data?.items ?? []).filter((s) => !decided.has(s.from_addr));
   const decide = async (addr: string, verdict: Verdict) => {
@@ -57,12 +59,12 @@ export function ScreenerPane({ account }: { account: string | undefined }) {
   }
   return (
     <div id="rows">
-      <div className="scr-bar">
+      {ai && <div className="scr-bar">
         <span>{suggested.asked ? `The AI suggests a verdict for ${suggested.by.size} of these. You still decide.` : "The AI can suggest a verdict for the senders it’s sure of. You still decide."}</span>
         <button className="scr-suggest" disabled={suggested.asking} onClick={() => void suggested.ask()}><Icon name="wind" /> {suggested.asking ? "Reading…" : suggested.asked ? "Suggest again" : "Suggest"}</button>
-      </div>
+      </div>}
       {rows.map((s) => {
-        const hint = suggested.by.get(s.from_addr);
+        const hint = ai ? suggested.by.get(s.from_addr) : undefined;
         return (
           <div className={hint ? `scr-row suggested ${hint.verdict}` : "scr-row"} key={s.from_addr} data-scr={s.from_addr}>
             <span className="mono-dot" style={{ color: `hsl(${avatarHue(s.from_addr)} var(--mono-s) var(--mono-l))` }}>{(s.from_name || s.from_addr || "?")[0]!.toUpperCase()}</span>

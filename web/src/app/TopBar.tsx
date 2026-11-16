@@ -10,6 +10,7 @@ import { setReadFocus } from "../features/reader/Reader";
 import type { Mailbox } from "../features/mailbox/useMailbox";
 import { helpOpen } from "../features/status/Help";
 import { SoonPill, StatusPill } from "../features/status/Status";
+import { aiOffered } from "../lib/ai";
 import { createStore, store, stored } from "../lib/store";
 import { nextTheme, setTheme, theme, THEME_LABEL } from "../lib/theme";
 import { toast } from "../lib/toast";
@@ -100,6 +101,7 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
     ? source.account ? { kind: "folder", account: source.account, folder: "INBOX" } : { kind: "allInboxes" }
     : null;
   const account = source?.kind === "folder" || source?.kind === "search" ? source.account : "";
+  const asks = aiOffered(m.digest?.ai);     // AI turned off: the box only searches, and ? and ! are words like any other
   const suggest = useSuggestions(input);
   const leave = () => {
     setText("");
@@ -150,7 +152,7 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
           ref={input}
           className="search"
           id="search"
-          placeholder="Ask a question (start with ?) or search — is:unread, from:amazon"
+          placeholder={asks ? "Ask a question (start with ?) or search — is:unread, from:amazon" : "Search — is:unread, from:amazon"}
           aria-label="Search"
           role="combobox"
           aria-autocomplete="list"
@@ -174,7 +176,10 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
               suggest.close();
               const q = text.trim();
               const words = q.slice(1).trim();
-              if (q.startsWith("?") && words) void ask(words, searchScope.get() === "account" && account ? account : "all");
+              if (!asks) {
+                if (q) searchFor(q);
+                else leave();
+              } else if (q.startsWith("?") && words) void ask(words, searchScope.get() === "account" && account ? account : "all");
               else if (q.startsWith("!")) {
                 stopAsking();
                 if (words) void runDo(words, (filter) => go({ source: { kind: "search", q: filter, account }, opened: null }));
@@ -188,8 +193,8 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
         <button className="tbtn search-x" onMouseDown={(e) => e.preventDefault()} onClick={leave}>Cancel</button>
         <button
           className="tbtn icon search-tog"
-          title="Search or ask your inbox (/)"
-          aria-label="Search or ask your inbox"
+          title={asks ? "Search or ask your inbox (/)" : "Search your inbox (/)"}
+          aria-label={asks ? "Search or ask your inbox" : "Search your inbox"}
           onClick={() => setFolded(false)}
         >
           <Icon name="search" />

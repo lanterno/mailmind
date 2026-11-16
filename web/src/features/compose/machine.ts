@@ -30,6 +30,7 @@ export interface Env {
   mine(): Set<string>;
   signature(email: string): string;
   tone(): DraftTone;
+  ai(): boolean;      // whether AI answers now: off, for whatever reason, nothing asks it to write
   limits: Limits;   // the server's, as lib/api/limits.gen.ts has them
   // Where focus is, to put it back after a check; and to put it somewhere the machine names.
   focusHere(): unknown;
@@ -976,7 +977,7 @@ export function createComposing(env: Env) {
     publish();
     env.focus("body");
     env.select(q.line.length, q.line.length);
-    void aiDraft({ tone: "brief", instruction: `${q.ask} One or two sentences.`, unless: start, quiet: true });   // no AI → the line stays, silently
+    if (env.ai()) void aiDraft({ tone: "brief", instruction: `${q.ask} One or two sentences.`, unless: start, quiet: true });   // else the line stays, silently
   }
 
   // Always ask again: the server checks the thread hasn't moved on, so a stale draft is never put in the box.

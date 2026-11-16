@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
+import { aiOffered } from "../../lib/ai";
 import { get, post } from "../../lib/api/client";
 import { minute } from "../../lib/clock";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
@@ -65,7 +66,7 @@ export async function reconcile(qc: QueryClient) {
 
 function AiLine({ digest }: { digest: Digest }) {
   const a = digest.ai;
-  if (!a) return null;
+  if (!a || !aiOffered(a)) return null;     // turned off: nothing to say of it here
   if (a.engine === "none") return <div className="sm-sub sm-ai"><Icon name="wind" /><span>AI is off · no API key</span></div>;
   const failing = a.last_ok === false && a.last_error;
   const spent = a.spent_today_micros, limit = a.limit_micros, batch = (a as { batch_waiting?: number }).batch_waiting;
@@ -97,7 +98,7 @@ function StatusMenu({ digest, label, close, m }: { digest: Digest; label: { cls:
         <div className="sm-hd"><i className={`sdot ${label.cls}`} aria-hidden="true" />{label.text}</div>
         {digest.profile === "read-only" && <div className="sm-sub">MailMind is running read-only: it writes nothing to your mail servers and syncs only when asked. What you file, star or send waits for a full run.</div>}
         {sy.last && sy.result && <div className="sm-sub">Last sync: {sy.result}</div>}
-        <div className="sm-sub">{inboxes !== undefined ? <><b>{inboxes.toLocaleString()}</b> in your inboxes</> : "counting your inboxes…"} · <b>{(s?.summarized ?? 0).toLocaleString()}</b> summarized</div>
+        <div className="sm-sub">{inboxes !== undefined ? <><b>{inboxes.toLocaleString()}</b> in your inboxes</> : "counting your inboxes…"}{aiOffered(digest.ai) && <> · <b>{(s?.summarized ?? 0).toLocaleString()}</b> summarized</>}</div>
         <AiLine digest={digest} />
         {(accounts.length > 1 || bad.length > 0) && (
           <div className="sm-accts">

@@ -1,6 +1,7 @@
 // The reader pane: one message, or a whole conversation with its latest open.
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { aiOffered } from "../../lib/ai";
 import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers, RsvpDecision } from "../../lib/api/types";
@@ -52,8 +53,9 @@ function ReaderNav({ m }: { m: Mailbox }) {
 }
 
 // Reply says which of three it is: a draft written ahead, one being written, or just Reply. `to` is the copy it answers.
-function Answering({ to, thread, drafts }: { to: Copy | null; thread: boolean; drafts: boolean }) {
-  const chip = useDraftChip(to?.key ?? null);
+function Answering({ to, thread, drafts, ai }: { to: Copy | null; thread: boolean; drafts: boolean; ai: boolean }) {
+  const written = useDraftChip(to?.key ?? null);
+  const chip = ai ? written : undefined;     // AI turned off: a reply written ahead before then isn't offered
   if (to === null) return null;
   const verb = (ca: string) => (thread ? { "data-tca": ca } : { "data-ca": ca });
   return (
@@ -110,13 +112,17 @@ function Rsvp({ invite }: { invite: Copy }) {
 }
 
 // The verbs both views share, ahead of filing.
-function Triage({ m, thread }: { m: Mailbox; thread: boolean }) {
+function Triage({ m, thread, ai }: { m: Mailbox; thread: boolean; ai: boolean }) {
   const target = m.target();
   const later = m.folder === "__replylater__", muted = m.folder === "__muted__", waiting = m.folder === "__waiting__";
   return (
     <>
-      <Cab ca="summarize" thread={thread} icon="wind" label="Summarize" title="AI summary (i)" onClick={() => { if (target) void summarize(target); }} />
-      <Cab ca="extract" thread={thread} icon="todo" label="Find events and tasks" title="Find events and tasks in this message" onClick={() => { const to = m.replyTo(); if (to) void findSuggestions(to); }}>Find dates</Cab>
+      {ai && (
+        <>
+          <Cab ca="summarize" thread={thread} icon="wind" label="Summarize" title="AI summary (i)" onClick={() => { if (target) void summarize(target); }} />
+          <Cab ca="extract" thread={thread} icon="todo" label="Find events and tasks" title="Find events and tasks in this message" onClick={() => { const to = m.replyTo(); if (to) void findSuggestions(to); }}>Find dates</Cab>
+        </>
+      )}
       <Cab ca="snooze" thread={thread} icon="clock" label="Snooze" title="Snooze (h)" onClick={(e) => { if (target && m.openId !== null) snoozeAsk.set({ target, rows: [m.openId], anchor: e.currentTarget, canUnsnooze: m.folder === "__snoozed__" }); }} />
       {later
         ? <Cab ca="rldone" thread={thread} icon="check" label="Done" title="Done — remove from Reply later" onClick={m.replyLaterDone} />
@@ -268,7 +274,8 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
   }, [m.qc, key, folder, uid, known]);
   const flagged = row?.flagged ?? false;
   const isDraft = Boolean(d?.is_draft);
-  useDraftAhead(d ? copy : null, row?.replyWorthy ?? false, isDraft || m.folder === "__muted__");
+  const ai = aiOffered(m.digest?.ai);     // AI turned off: no summary, no dates found, no reply written ahead
+  useDraftAhead(d ? copy : null, row?.replyWorthy ?? false, !ai || isDraft || m.folder === "__muted__");
   const mine = myAddresses(m.digest);
   const quick = d && !isDraft && canQuickReply(d.from_addr, mine, row);
   return (
@@ -277,7 +284,7 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
         <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
         {isDraft
           ? <Cab ca="edit" thread={false} icon="pen" label="Edit" title="Edit draft" onClick={() => void composing.editDraft(copy)} />
-          : <><Answering to={copy} thread={false} drafts /><Triage m={m} thread={false} /></>}
+          : <><Answering to={copy} thread={false} drafts ai={ai} /><Triage m={m} thread={false} ai={ai} /></>}
         <span className="rd-sp" aria-hidden="true" />
         {!isDraft && <Cab ca="archive" thread={false} icon="archive" label="Archive" title="Archive (e)" onClick={() => m.fileOpen("archive")} />}
         {!isDraft && <Cab ca="move" thread={false} icon="folder" label="Move" title="Move to folder (m)" onClick={m.askMove} />}
@@ -310,8 +317,12 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
           </div>
         </>
       )}
-      <AiCard target={m.target()} row={row} />
-      <SuggestionCard copy={copy} />
+      {ai && (
+        <>
+          <AiCard target={m.target()} row={row} />
+          <SuggestionCard copy={copy} />
+        </>
+      )}
       <MailContent key={copyId(copy)} copy={copy} mine={mine} minHeight={400} pad={30} whole />
       {quick && <QuickReplies to={copy} />}
       <UpNext m={m} canArchive={!isDraft} />
@@ -355,7 +366,8 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
   const items = eachCopyOnce(d?.items ?? []);
   const latest = items.find((x) => x.key === d?.reply_key);
   const replyTo = latest ? copyOf(latest) : null;
-  useDraftAhead(replyTo, false, m.folder === "__muted__");
+  const ai = aiOffered(m.digest?.ai);
+  useDraftAhead(replyTo, false, !ai || m.folder === "__muted__");
   const mine = myAddresses(m.digest);
   const quick = latest && canQuickReply(latest.from_addr, mine, { isJunk: Boolean(latest.is_junk), bucket: m.openRow?.bucket });
   // The members still closed, made ready: the last opens by itself.
@@ -371,8 +383,8 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
     <>
       <div className="rd-actions">
         <button className="cab rd-back" title="Back to list" onClick={m.close}><span><Icon name="left" /></span> List</button>
-        <Answering to={replyTo} thread drafts={false} />
-        <Triage m={m} thread />
+        <Answering to={replyTo} thread drafts={false} ai={ai} />
+        <Triage m={m} thread ai={ai} />
         <span className="rd-sp" aria-hidden="true" />
         <Cab ca="archive" thread icon="archive" label="Archive conversation" title="Archive conversation (e)" onClick={() => m.fileOpen("archive")}>Archive</Cab>
         <Cab ca="move" thread icon="folder" label="Move conversation" title="Move conversation to folder (m)" onClick={m.askMove}>Move</Cab>
@@ -385,8 +397,12 @@ function ConversationView({ opened, m }: { opened: { id: string; account: string
       {d && items.length > 0 && (
         <>
           <div className="rd-subj">{items[0]!.subject || "(no subject)"} <span className="thr-n">{d.count} message{d.count === 1 ? "" : "s"}</span></div>
-          <AiCard target={m.target()} row={m.openRow} />
-          <SuggestionCard copy={m.replyTo()} />
+          {ai && (
+            <>
+              <AiCard target={m.target()} row={m.openRow} />
+              <SuggestionCard copy={m.replyTo()} />
+            </>
+          )}
           <div className="thread" id="thread">
             {items.map((x, i) => <Member key={copyId(x)} m={x} mine={mine} startsOpen={i === items.length - 1} />)}
           </div>

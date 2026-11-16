@@ -15,6 +15,7 @@ import { snoozeAsk } from "../features/attention/SnoozeMenu";
 import { setGrouping, type Mailbox } from "../features/mailbox/useMailbox";
 import { helpOpen, type Legend } from "../features/status/Help";
 import { reconcile, syncNow } from "../features/status/Status";
+import { aiOffered } from "../lib/ai";
 import { copyOf, type Copy } from "../lib/copy";
 import { shortAddress } from "../lib/text";
 import { setTheme, theme, THEME_LABEL } from "../lib/theme";
@@ -63,10 +64,11 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   const any = m.marks.size > 0;
   const on = whatever || m.openId !== null;
   const nameOf = (a: string) => m.aliases[a] || shortAddress(a);
+  const ai = aiOffered(m.digest?.ai);     // AI turned off: nothing only AI can do is offered, or named in the legend
 
   add({ id: "all-inboxes", group: "Navigation", label: "All inboxes", run: () => go({ source: { kind: "allInboxes" }, opened: null }) });
   add({ id: "commitments", group: "Navigation", label: "Commitments — your to-dos", run: () => panel.set("commits") });
-  add({ id: "review", group: "Navigation", label: "Weekly review — how your week went", run: () => panel.set("week") });
+  if (ai) add({ id: "review", group: "Navigation", label: "Weekly review — how your week went", run: () => panel.set("week") });
   for (const name of VIRTUAL_FOLDERS) {
     add({ id: `across:${name}`, group: "Navigation", label: `All inboxes / ${VIRTUAL_TITLE[name]}`, run: () => go({ source: { kind: "across", folder: name }, opened: null }) });
   }
@@ -120,8 +122,10 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
       run: () => (m.folder === "__replylater__" ? m.replyLaterDone() : m.replyLater()),
     });
     if (m.folder === "__waiting__") add({ id: "dismiss", group: "Actions", label: "Dismiss follow-up", run: m.dismissFollowup });
-    add({ id: "summarize", group: "Actions", label: "AI summarize", keys: ["i"], hint: "i", run: () => { const t = m.target(); if (t) void summarize(t); } });
-    add({ id: "extract", group: "Actions", label: "Find events and tasks in this message", run: () => { const to = m.replyTo(); if (to) void findSuggestions(to); } });
+    if (ai) {
+      add({ id: "summarize", group: "Actions", label: "AI summarize", keys: ["i"], hint: "i", run: () => { const t = m.target(); if (t) void summarize(t); } });
+      add({ id: "extract", group: "Actions", label: "Find events and tasks in this message", run: () => { const to = m.replyTo(); if (to) void findSuggestions(to); } });
+    }
     add({ id: "mark", group: "Actions", label: "Select", keys: ["x"], hint: "x", run: () => actions.toggleMark(m.openId!) });
     add({ id: "read-settings", group: "Commands", label: "Reading settings — width, text, mail colors", run: () => void setTimeout(() => document.querySelector<HTMLElement>("#reader [data-readset]")?.click()) });
     add({
@@ -144,7 +148,7 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   add({ id: "sync", group: "Commands", label: "Sync now", run: () => void syncNow(m.qc) });
   add({ id: "reconcile", group: "Commands", label: "Reconcile (prune ghosts)", run: () => void reconcile(m.qc) });
   add({ id: "docs", group: "Navigation", label: "Documents — find any attachment", run: () => go({ source: { kind: "documents" }, opened: null }) });
-  add({ id: "do", group: "Commands", label: "Do… — natural-language bulk action", run: () => doing.set({ state: "intro" }) });
+  if (ai) add({ id: "do", group: "Commands", label: "Do… — natural-language bulk action", run: () => doing.set({ state: "intro" }) });
   add({ id: "curate", group: "Commands", label: "Curate — rules and audit", run: () => curateOpen.set(true) });
   add({ id: "cleanup", group: "Commands", label: "Clean up senders (unsubscribe)", run: () => curateOpen.set(true) });
   add({ id: "new-filter", group: "Commands", label: "New filter — star or mark read new mail", run: () => filterForm.set(newFilter()) });
@@ -154,7 +158,7 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   }
   add({ id: "grouping", group: "Commands", label: "Toggle conversations / messages", run: () => setGrouping(!m.grouped) });
   add({ id: "rail", group: "Commands", label: "Folders: icons ⇄ names", legend: "Folders: icons ⇄ names · drag the list edge to resize", keys: ["["], hint: "[", run: ui.toggleRail });
-  add({ id: "search", group: "Commands", label: "Search", legend: "Search · ?question asks your inbox · !command plans a bulk action", keys: ["/"], hint: "/", run: ui.openSearchBar });
+  add({ id: "search", group: "Commands", label: "Search", legend: ai ? "Search · ?question asks your inbox · !command plans a bulk action" : "Search", keys: ["/"], hint: "/", run: ui.openSearchBar });
   if (whatever || (m.searching && !onSavedView(m))) add({ id: "save-view", group: "Commands", label: "Save this search as a view", keys: ["v"], hint: "v", run: ui.saveSearch });
   if (whatever || (m.source?.kind === "search" && !m.source.lane && !m.source.thread)) add({ id: "create-filter", group: "Commands", label: "Create a filter from this search", run: ui.createFilter });
   for (const t of (["day", "dusk", "night"] as const).filter((x) => x !== theme.get())) {

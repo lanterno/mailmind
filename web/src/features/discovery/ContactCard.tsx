@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
+import { aiOffered } from "../../lib/ai";
 import { ApiError, get, post } from "../../lib/api/client";
 import { go } from "../../app/route";
 import { copyId, copyOf } from "../../lib/copy";
@@ -65,7 +66,7 @@ function Card({ addr, m, close }: { addr: string; m: Mailbox; close: () => void 
           ))}
         </div>
       )}
-      <Summarize addr={d.addr} />
+      {aiOffered(m.digest?.ai) && <Summarize addr={d.addr} />}
       <div className="cc-actions">
         <button onClick={() => { close(); void composing.open({ mode: "new", to: [d.addr] }); }}><Icon name="pen" /> Compose</button>
         <button onClick={() => { close(); go({ source: { kind: "search", q: `from:${d.addr}`, account: "" }, opened: null }); }}><Icon name="search" /> From this sender</button>

@@ -1,5 +1,5 @@
-// What the page says of AI (#49). Which provider is chosen and why AI is off are the digest's to say (`ai`, as the server has
-// them in force); the page keeps only its words for each.
+// What the page says of AI, and whether it offers what only AI can do (#49). Which provider is chosen and why AI is off are the
+// digest's to say (`ai`, as the server has them in force); the page keeps only its words for each.
 import type { AiProvider, AiStatus } from "./api/types";
 
 type Said = Pick<AiStatus, "off" | "provider">;
@@ -21,6 +21,10 @@ export const PROVIDER_NAME: Record<AiProvider, string> = {
   ollama: "Ollama",
   compatible: "the OpenAI-compatible service",
 };
+
+// Whether what only AI can do is offered. Turned off in Settings, none of it shows and nothing says it is missing. Off for want
+// of a key, a model or a URL, it still shows, and says how to set AI up. Before the digest has come, nothing is hidden.
+export const aiOffered = (ai: Said | null | undefined) => ai?.off !== "turned-off";
 
 // Why AI is off, in plain words for the provider chosen: "" while it is on.
 export function whyOff(ai: Said | null | undefined): string {

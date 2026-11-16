@@ -10,7 +10,12 @@ export interface GuideStep {
 // Hold it to what is true on this install: a key that's switched off isn't taught, and nor is what needs an AI that isn't on.
 export function guideSteps({ ai, singleKeys }: { ai: boolean; singleKeys: boolean }): GuideStep[] {
   return [
-    { id: "brief", at: [".reader.brief-pane"], title: "Today’s brief", text: "Your Inbox opens on this page: what needs you, what’s safe to file, and what’s coming up." },
+    {
+      id: "brief", at: [".reader.brief-pane"], title: "Today’s brief",
+      text: ai
+        ? "Your Inbox opens on this page: what needs you, what’s safe to file, and what’s coming up."
+        : "Your Inbox opens on this page: what needs you, and what’s coming up.",
+    },
     {
       id: "rail", at: ["#rail"], title: "Folders, and focus reading",
       text: singleKeys

@@ -55,6 +55,7 @@ export const composing = createComposing({
     return d?.signatures?.[email] || d?.signature_default || "";
   },
   tone: draftTone.get,
+  ai: () => digest()?.ai?.engine !== "none",
   limits: LIMITS,
   focusHere: () => {   // a chip's input by its field: chips come and go around it
     const el = document.activeElement as HTMLElement | null;
