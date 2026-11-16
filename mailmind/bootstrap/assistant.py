@@ -7,9 +7,9 @@ ask, the model is DisabledModel, and nothing is sent. MAILMIND_MODEL wins over t
 
 A provider's key is config_key() (mailmind.config.json's "anthropic_api_key", "openai_api_key" and the like, in any
 credential style but the Proton Bridge's password, read through the Accounts context), and for Claude only then
-ANTHROPIC_API_KEY. A config key that won't
-resolve is no key, never a quiet switch to the environment's. Each is read at each call, so a change in Settings takes effect
-at once, and the model is made again only when what it was made for changes: the provider, model, URL or key.
+ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet switch to the environment's. Each is read at
+each call, so a change in Settings takes effect at once, and the model is made again only when what it was made for
+changes: the provider, model, URL or key. With AI mode off no key is read at all: not the Keychain, nor 1Password.
 
 Every call is counted in the usage ledger, the ai_usage table of the data directory's database,
 and passes the cost governor first, whose daily limit is the config's "ai_daily_limit_usd" ($15
@@ -103,10 +103,11 @@ def _base_url(provider: AiProvider, chosen: str) -> str:
 
 
 def engine() -> Engine:
-    """The AI in force now, from the preferences and the key kept for the provider chosen."""
+    """The AI in force now, from the preferences and the key kept for the provider chosen: none is looked up while AI mode
+    is off."""
     prefs = _preferences()
     provider: AiProvider = prefs["ai_provider"]
-    api_key, source = key(provider)
+    api_key, source = key(provider) if prefs["ai_enabled"] else ("", "")
     return providers.in_force(enabled=prefs["ai_enabled"], provider=provider, model=calls.MODEL or prefs["ai_model"],
                               base_url=_base_url(provider, prefs["ai_base_url"]), key=api_key, key_from=source)
 
