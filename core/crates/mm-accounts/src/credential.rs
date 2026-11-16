@@ -24,6 +24,8 @@ pub const DATABASE_KEY_ITEM: &str = "database-key";
 pub const API_KEY_ITEM: &str = "anthropic-api-key";
 /// The file's key for where the Claude API key is.
 pub const API_KEY_WHO: &str = "anthropic_api_key";
+/// The environment variable a Claude API key may come from when the file names none.
+pub const API_KEY_VARIABLE: &str = "ANTHROPIC_API_KEY";
 
 /// The Keychain item MailMind keeps an AI provider's API key in (#49): `<provider>-api-key`.
 pub fn api_key_item(provider: AiProvider) -> &'static str {

@@ -136,7 +136,8 @@ impl ApiEngine {
     /// The preferences as they stand; their defaults when the file can't be read.
     fn preferences(&self) -> (serde_json::Map<String, Value>, AiProvider) {
         let raw = self.file.read().unwrap_or_default();
-        (mm_accounts::preferences::read(&raw), mm_accounts::preferences::provider(&raw))
+        let key_in_environment = self.environment.anthropic_key().is_some();
+        (mm_accounts::preferences::read(&raw, key_in_environment), mm_accounts::preferences::provider(&raw))
     }
 
     /// Where `provider` is reached as chosen: the URL a person chose for it, else for Claude ANTHROPIC_BASE_URL's,
@@ -178,7 +179,7 @@ impl ApiEngine {
     fn chosen(&self) -> (InForce, bool) {
         let (chosen, provider) = self.preferences();
         let said = |name: &str| chosen.get(name).and_then(Value::as_str).unwrap_or_default().to_owned();
-        let enabled = chosen.get(mm_accounts::preferences::AI_ENABLED).and_then(Value::as_bool).unwrap_or(true);
+        let enabled = chosen.get(mm_accounts::preferences::AI_ENABLED).and_then(Value::as_bool).unwrap_or(false);
         let model = self.environment.model().unwrap_or_else(|| said(mm_accounts::preferences::AI_MODEL));
         let model = if model.is_empty() { default_model(provider).to_owned() } else { model };
         let base_url = self.chosen_url(provider, &said(mm_accounts::preferences::AI_BASE_URL));

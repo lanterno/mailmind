@@ -260,11 +260,17 @@ impl Directory {
 /// A person's preferences (`Directory.preferences` and its changes): what the Settings page shows and changes.
 impl Directory {
     /// Every preference as it stands, and the AI's daily limit. Reading one writes nothing, so a file with no block
-    /// keeps none.
+    /// keeps none. AI mode is what is in force: the file's, or with none said whether there is a key to ask with.
     pub fn preferences(&self) -> Result<Value, Failure> {
         let raw = self.file.read()?;
-        let read = preferences::read(&raw);
+        let read = preferences::read(&raw, self.key_in_environment());
         Ok(Directory::preferences_answer(read, &self.file.read()?))
+    }
+
+    /// Whether the environment gives Claude's API key, which turns AI mode on when the file doesn't say.
+    fn key_in_environment(&self) -> bool {
+        let given = self.variables.as_ref().and_then(|v| v.variable(credential::API_KEY_VARIABLE));
+        given.is_some_and(|key| !mm_kernel::text::strip(key.expose()).is_empty())
     }
 
     /// Keep what `asked` changes (named in the order `preferences::changeable` gives), and leave every other key in
@@ -297,7 +303,7 @@ impl Directory {
                 preferences::apply(&mut raw, &wanted);
                 self.file.write(&raw)?;
             }
-            preferences::read(&raw)
+            preferences::read(&raw, self.key_in_environment())
         };
         Ok(Directory::preferences_answer(read, &self.file.read()?))
     }

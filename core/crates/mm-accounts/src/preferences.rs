@@ -9,14 +9,19 @@
 //! A value is JSON as it parsed, read as Python reads it: an integer is a number written without a fraction or an
 //! exponent, and true is never a number.
 //!
-//! AI's switch and its provider are preferences too (#49): whether AI is on, which provider answers, the model asked
-//! (none: the provider's own) and where the provider is (none: its usual address). A change to another provider that
-//! names no model or address of its own clears those, so one provider's never go to another. A model on this Mac
-//! (`local`) is at an address on this Mac, or at its usual one: a server elsewhere is `compatible`, over https.
+//! AI's switch, AI mode, and its provider are preferences too (#49): whether AI is on, which provider answers, the
+//! model asked (none: the provider's own) and where the provider is (none: its usual address). A change to another
+//! provider that names no model or address of its own clears those, so one provider's never go to another. A model
+//! on this Mac (`local`) is at an address on this Mac, or at its usual one: a server elsewhere is `compatible`, over
+//! https. AI mode the file doesn't set is on when there is a key to ask with: one the file names for any provider, or
+//! Claude's in ANTHROPIC_API_KEY. So whoever set Claude up keeps AI, and a fresh install starts with AI mode off.
 
 use mm_kernel::ai_provider::{self, AiProvider};
 use mm_kernel::errors::Problem;
 use serde_json::{Map, Number, Value};
+
+use crate::account::truthy;
+use crate::credential::api_key_who;
 
 /// The Undo Send window (`kernel.send_window`), in seconds: its default, and the shortest and longest it may be.
 pub const SEND_WINDOW: (i64, i64, i64) = (10, 5, 60);
@@ -50,7 +55,7 @@ pub enum Kind {
 pub const MODEL_MOST: usize = 200;
 /// What a model on this Mac at an address off it is told.
 pub const LOCAL_ELSEWHERE: &str = "A model on this Mac must be at 127.0.0.1, ::1 or localhost.";
-/// The preferences that say whether AI answers, who does, and how.
+/// The preferences that say whether AI answers (AI mode), who does, and how.
 pub const AI_ENABLED: &str = "ai_enabled";
 pub const AI_PROVIDER: &str = "ai_provider";
 pub const AI_MODEL: &str = "ai_model";
@@ -81,8 +86,9 @@ const DEFAULTS: [(&str, Kind); 25] = [
     // the week's review written ahead on Monday morning, and read all week
     ("weekly_review", Kind::Flag(false)),
     ("auto_tidy", Kind::Flag(false)),
-    // AI on or off, who answers, the model asked and where the provider is (#49)
-    (AI_ENABLED, Kind::Flag(true)),
+    // AI mode, who answers, the model asked and where the provider is (#49); AI mode the file doesn't set is on
+    // where there is a key (`ai_mode_unset`)
+    (AI_ENABLED, Kind::Flag(false)),
     (AI_PROVIDER, Kind::Choice("anthropic", &AiProvider::IDS)),
     (AI_MODEL, Kind::Model),
     (AI_BASE_URL, Kind::BaseUrl),
@@ -176,9 +182,16 @@ fn kept(kind: Kind, value: &Value) -> Value {
     }
 }
 
-/// Every preference as it stands: what the file says where that can be it, and else the default. It never fails. A
-/// model on this Mac at an address off it (a hand edit) is at its usual address.
-pub fn read(raw: &Map<String, Value>) -> Map<String, Value> {
+/// Whether AI mode is on where the file doesn't set it: when the file names a key for any provider, wherever it keeps
+/// it, or the environment gives Claude's (`key_in_environment`).
+pub fn ai_mode_unset(raw: &Map<String, Value>, key_in_environment: bool) -> bool {
+    key_in_environment || AiProvider::ALL.into_iter().any(|p| raw.get(api_key_who(p)).is_some_and(truthy))
+}
+
+/// Every preference as it stands: what the file says where that can be it, and else the default. It never fails. AI
+/// mode the file doesn't set is `ai_mode_unset`'s, and a model on this Mac at an address off it (a hand edit) is at
+/// its usual address.
+pub fn read(raw: &Map<String, Value>, key_in_environment: bool) -> Map<String, Value> {
     let mut read: Map<String, Value> = DEFAULTS
         .iter()
         .map(|(name, default)| {
@@ -192,6 +205,9 @@ pub fn read(raw: &Map<String, Value>) -> Map<String, Value> {
             ((*name).to_owned(), value)
         })
         .collect();
+    if said(raw, AI_ENABLED).is_none() {
+        read.insert(AI_ENABLED.to_owned(), Value::Bool(ai_mode_unset(raw, key_in_environment)));
+    }
     let local = read.get(AI_PROVIDER).and_then(Value::as_str) == Some(AiProvider::Local.id());
     let url = read.get(AI_BASE_URL).and_then(Value::as_str).unwrap_or_default();
     if local && !url.is_empty() && !ai_provider::on_this_machine(url) {
@@ -245,7 +261,7 @@ pub fn on_this_mac(wanted: Map<String, Value>, raw: &Map<String, Value>) -> Resu
         == AiProvider::Local;
     let url = match wanted.get(AI_BASE_URL) {
         Some(url) => url.as_str().unwrap_or_default().to_owned(),
-        None => read(raw).get(AI_BASE_URL).and_then(Value::as_str).unwrap_or_default().to_owned(),
+        None => read(raw, false).get(AI_BASE_URL).and_then(Value::as_str).unwrap_or_default().to_owned(),
     };
     if local && !url.is_empty() && !ai_provider::on_this_machine(&url) {
         return Err(Problem::refused(LOCAL_ELSEWHERE));
