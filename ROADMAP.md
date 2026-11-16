@@ -57,7 +57,11 @@ Python app gets fixes only.
   are decoded only in UTF-8, ASCII or Latin-1, a few broken-MIME drafts reopen differently, and an original fetched to
   reply to isn't stored. Expiry: with no INTERNALDATE, a Date of `-0000` is read as UTC, where Python read it as local time. Two Rust servers
   starting at once on a fresh machine can each make a database key, the second's replacing the first's in the Keychain,
-  where Python's second finds the first's (`database_version::made`).
+  where Python's second finds the first's (`database_version::made`). AI (#49): a Claude call that runs out of time says
+  the SDK's longer words on Python ("Request timed out or interrupted…") where Rust says "Request timed out."; a batch's
+  results, at a gateway whose URL has a path, are asked where `results_url` names them on Python and under the URL's
+  path on Rust; and a count of tokens given as a digit string past 2^63−1, or as `true` on the Chat Completions wire,
+  reads as the most or 1 on Python and 0 on Rust.
 - **The rarer broken MIME parameters** · low value · effort M · [#48](https://github.com/lanterno/mailmind/issues/48) — A scan of the `name` and
   `filename` parameters found broken mail the core reads apart from Python, which the property tests rarely draw: a stray
   quote in an earlier parameter, a value or name starting with a tspecial, `*` or `\`, an apostrophe in an unquoted value,
