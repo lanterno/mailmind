@@ -76,12 +76,14 @@ def without_thinking(text: str) -> str:
 def reply(resp: dict[str, Any], asked: str) -> Reply:
     """The Reply in a response to a request for model `asked`. A refusal reads as "", as Claude's does: the call worked, so
     callers store their fallback rather than retry. Cached prompt tokens count as cache reads, and the rest of the prompt as
-    input."""
+    input. The output is the completion's tokens, or all but the prompt's where the total says more: Gemini leaves a model's
+    thinking out of the completion's count and bills it as output all the same."""
     usage = resp.get("usage") or {}
     prompt_tokens = _count(usage, "prompt_tokens")
     cached = min(_count(usage.get("prompt_tokens_details") if isinstance(usage, dict) else None, "cached_tokens"),
                  prompt_tokens)
-    spent = Usage(prompt_tokens - cached, _count(usage, "completion_tokens"), 0, cached)
+    output = max(_count(usage, "completion_tokens"), _count(usage, "total_tokens") - prompt_tokens)
+    spent = Usage(prompt_tokens - cached, output, 0, cached)
     served = str(resp.get("model") or asked)
     choices = resp.get("choices")
     first: dict[str, Any] = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
