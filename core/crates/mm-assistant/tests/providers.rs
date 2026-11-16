@@ -83,6 +83,22 @@ fn each_provider_has_its_own_model_and_url_where_it_has_one() {
 }
 
 #[test]
+fn a_call_to_a_model_on_this_mac_waits_five_minutes_an_attempt_and_any_other_two() {
+    use providers::attempt_limit;
+    use std::time::Duration;
+    let five = Duration::from_secs(300);
+    assert_eq!(attempt_limit(Local, default_base_url(Local)), five);
+    assert_eq!(attempt_limit(Local, "http://[::1]:8080/v1"), five);
+    assert_eq!(attempt_limit(Compatible, "http://localhost:1234/v1"), five, "any provider whose URL is on this Mac");
+    assert_eq!(attempt_limit(Anthropic, "http://127.0.0.1:8080"), five);
+    let two = Duration::from_secs(120);
+    for (provider, url) in [(Compatible, "https://llm.example.test/v1"), (Anthropic, default_base_url(Anthropic))] {
+        assert_eq!(attempt_limit(provider, url), two, "{provider:?}");
+    }
+    assert_eq!(attempt_limit(OpenAi, default_base_url(OpenAi)), two);
+}
+
+#[test]
 fn the_startup_line_names_the_provider_the_model_and_the_key_or_why_ai_is_off_and_how_to_turn_it_on() {
     use providers::startup_line as line;
     let config = providers::CONFIG;
