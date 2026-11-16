@@ -142,12 +142,13 @@ def test_a_password_typed_into_settings_goes_to_the_keychain_and_never_to_the_fi
     clean(page)
 
 
-def test_the_help_overlay_lists_the_keys_and_can_turn_single_keys_off(page, world):
+def test_the_help_overlay_lists_the_keys_and_can_turn_single_keys_off(page, app, world):
+    assert app.post("/api/preferences", {"ai_enabled": True}).status == 200     # AI mode on, with no key: off for want of one
     opened(page)
     page.keyboard.press("?")
     dialog = page.get_by_role("dialog", name="Keyboard")
     expect(dialog).to_contain_text("Next unread")
-    expect(dialog).to_contain_text("written by Claude (Anthropic), chosen in Settings under AI; for now AI is off: "
+    expect(dialog).to_contain_text("written by Claude, chosen in Settings under AI; for now AI is off: "
                                    "there’s no key for Claude, and nothing is sent.")
     dialog.get_by_label(re.compile("Disable single-key shortcuts")).check()
     page.keyboard.press("Escape")
@@ -246,7 +247,9 @@ def preferences_open(page):
     return dialog
 
 
-def ai_open(page):
+def ai_open(page, app):
+    """The AI tab, with AI mode turned on first: a fresh install starts with it off, and shows only its switch."""
+    assert app.post("/api/preferences", {"ai_enabled": True}).status == 200
     opened(page)
     page.locator("#settingsBtn").click()
     page.get_by_role("tab", name="AI").click()
@@ -396,8 +399,8 @@ def test_axe_finds_nothing_on_high_contrast(page, app, world, every_theme):
     clean(page)
 
 
-def test_the_ai_limit_goes_in_the_file_at_its_top_level_within_its_bounds(page, world):
-    dialog = ai_open(page)
+def test_the_ai_limit_goes_in_the_file_at_its_top_level_within_its_bounds(page, app, world):
+    dialog = ai_open(page, app)
     field = dialog.get_by_label("Daily limit, in US dollars")
     expect(field).to_have_value("15")
     with page.pw.expect_response(lambda r: r.url.endswith("/api/digest") and r.request.method == "GET") as digest:
@@ -413,8 +416,8 @@ def test_the_ai_limit_goes_in_the_file_at_its_top_level_within_its_bounds(page, 
     clean(page)
 
 
-def test_the_morning_brief_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
-    dialog = ai_open(page)
+def test_the_morning_brief_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, app, world):
+    dialog = ai_open(page, app)
     held = lambda: file_of(world).get("preferences", {})
     box = dialog.get_by_label("Have today\u2019s brief ready each morning")
     expect(box).not_to_be_checked()
@@ -424,8 +427,8 @@ def test_the_morning_brief_is_off_until_it_is_ticked_and_then_it_goes_in_the_fil
     clean(page)
 
 
-def test_last_weeks_review_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
-    dialog = ai_open(page)
+def test_last_weeks_review_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, app, world):
+    dialog = ai_open(page, app)
     held = lambda: file_of(world).get("preferences", {})
     box = dialog.get_by_label("Have last week\u2019s review ready each Monday")
     expect(box).not_to_be_checked()
@@ -435,8 +438,8 @@ def test_last_weeks_review_is_off_until_it_is_ticked_and_then_it_goes_in_the_fil
     clean(page)
 
 
-def test_tidy_by_itself_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
-    dialog = ai_open(page)
+def test_tidy_by_itself_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, app, world):
+    dialog = ai_open(page, app)
     held = lambda: file_of(world).get("preferences", {})
     box = dialog.get_by_label("File low-priority mail by itself, once a day")
     expect(box).not_to_be_checked()

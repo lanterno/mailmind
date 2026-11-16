@@ -146,7 +146,8 @@ def test_nothing_found_says_so(page, world, ai):
     clean(page)
 
 
-def test_ai_off_says_so(page, world):
+def test_ai_off_says_so(page, app, world):
+    assert app.post("/api/preferences", {"ai_enabled": True}).status == 200     # AI mode on, with no key: off for want of one
     opening_the_message(page, world)
     page.locator('[data-ca="extract"]').click()
     expect(page.locator("#sgCard .ai-err")).to_contain_text("AI is off")

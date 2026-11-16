@@ -176,7 +176,8 @@ def test_show_as_search_runs_the_plans_filter(page, world, ai):
     clean(page)
 
 
-def test_a_bare_bang_explains_itself(page, world):
+def test_a_bare_bang_explains_itself(page, app, world):
+    assert app.post("/api/preferences", {"ai_enabled": True}).status == 200     # AI mode on: ! plans
     opened(page)
     type_in_search(page, "!")
     expect(page.locator(".do-intro")).to_contain_text("before anything happens")

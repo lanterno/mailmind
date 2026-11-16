@@ -111,6 +111,7 @@ def test_at_the_daily_limit_the_brief_waits_for_a_click(page, app, world, ai):
 
 
 def test_with_ai_off_the_brief_and_the_review_say_so_and_ask_for_nothing(page, app, world, anthropic_api):
+    assert app.post("/api/preferences", {"ai_enabled": True}).status == 200     # AI mode on, with no key: off for want of one
     lunch_needs_a_reply(app, world)
     page.goto("/")
     expect(page.locator(".bf-aioff")).to_contain_text("AI is off: there’s no key for Claude.")

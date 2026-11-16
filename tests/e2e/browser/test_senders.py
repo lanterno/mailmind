@@ -137,7 +137,8 @@ def test_summarizing_a_sender_waits_for_the_click_and_shows_what_came_back(page,
     clean(page)
 
 
-def test_with_ai_off_a_sender_summary_says_so(page, world):
+def test_with_ai_off_a_sender_summary_says_so(page, app, world):
+    assert app.post("/api/preferences", {"ai_enabled": True}).status == 200     # AI mode on, with no key: off for want of one
     opened_receipt(page, world)
     page.locator("button.rd-sender").click()
     card = page.get_by_role("dialog", name="About this sender")

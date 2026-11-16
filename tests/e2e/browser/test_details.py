@@ -472,7 +472,8 @@ def test_a_message_that_wont_load_offers_retry(page, world):
     clean(page)
 
 
-def test_the_palette_says_what_each_command_does(page, world):
+def test_the_palette_says_what_each_command_does(page, app, world):
+    assert app.post("/api/preferences", {"ai_enabled": True}).status == 200     # AI mode on: the weekly review is offered
     opened(page)
     page.keyboard.press("ControlOrMeta+k")
     labels = page.locator("#plist .pi-l").all_inner_texts()
