@@ -85,8 +85,13 @@ def test_account_health_and_stats(app, golden):
     fetch(app, golden, "/api/stats")
 
 
-def test_export_plan_and_database_export(app, golden, tmp_path):
-    fetch(app, golden, "/api/export/plan")
+def test_export_plan_and_database_export(app, golden, tmp_path, world):
+    plan = app.get("/api/export/plan")
+    # The room the database takes on this disk, as Settings says it: its file and the log of what it hasn't taken in
+    # yet, which no work changes while the test reads them. Its bytes are each server's own.
+    files = (world.dir / "mailmind.db", world.dir / "mailmind.db-wal")
+    assert plan.body.pop("database_bytes") == sum(f.stat().st_size for f in files if f.exists()) > 0
+    golden.record("GET /api/export/plan", plan)
     r = app.get("/api/export")
     golden.record("GET /api/export", r, body=False)
     assert not r.body.startswith(b"SQLite format 3\x00")           # encrypted with the database's key, which opens it below
