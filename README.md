@@ -17,13 +17,13 @@ See [Features](#features) for what ships today and
   [uv](https://docs.astral.sh/uv/) fetches on first run.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail the AI works on, sent to
-  the provider you chose (Claude by default), or to none with Ollama on this Mac or AI turned off.
+  the provider you chose (Claude by default), or to none with a model on this Mac or AI mode off.
 - **Any mailbox.** Gmail/Workspace, generic IMAP (cPanel/Dovecot/…), and Proton
   (via Bridge) — all configured in one JSON file.
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
-> **Heads-up:** summaries and the other AI features need a Claude API key, kept in your login Keychain with `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`, unless you choose another provider in Settings; calls are billed per token to that key's organization. Without one, or with AI turned off, MailMind still ingests and curates mail, sends nothing to any AI provider, and the brief says AI is off and how to turn it on.
+> **Heads-up:** summaries and the other AI features need a Claude API key, kept in your login Keychain with `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`, unless you choose another provider in Settings; calls are billed per token to that key's organization. Without one AI mode starts off: MailMind still ingests and curates mail, sends nothing to any AI provider and offers nothing only AI can do, until AI mode is turned on in Settings. On without a key, the brief says AI is off and how to set it up.
 
 ---
 
@@ -255,15 +255,19 @@ automatically.
   takes it out; or name it there with `{"op": …}` / `{"env": …}`, like an account password), and
   that wins over `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
   accident. The server's startup line names the model and where the key came from.
-  **Or another provider.** Settings has a switch that turns AI off altogether, every background job
-  included, and a choice of provider: Claude (the default), OpenAI, Google Gemini, Ollama on this Mac
-  (no key, and nothing leaves the machine) or any other OpenAI-compatible service at a URL you give,
-  each with a model of your choosing from the list the provider offers. Each provider's key is kept
-  in the login Keychain like Claude's (`ai key --provider openai`); `ai on` and `ai off` turn the
-  switch from the command line. Every provider goes through the same daily limit and usage ledger,
-  priced from its own list (a model on this Mac costs nothing), and only Claude takes batches.
+  **Or another provider.** Settings has AI mode, which turns AI off altogether, every background job
+  included: it starts off on a fresh install, and on where a key for AI is already there. On, it offers
+  a choice of provider: Claude (the default), OpenAI, Google Gemini, a model on this Mac (Ollama,
+  LM Studio, llama.cpp, vLLM, Jan or GPT4All, which Settings finds running and lists with their models;
+  nothing leaves the machine) or any other OpenAI-compatible service at a URL you give, each with a
+  model of your choosing from the list the provider offers. Each provider's key is kept in the login
+  Keychain like Claude's (`ai key --provider openai`; a model on this Mac needs none); `ai on` and
+  `ai off` turn AI mode on and off from the command line. A reasoning model's thinking is left out of
+  what it answers, and a model on this Mac is given five minutes to load. Every provider goes through
+  the same daily limit and usage ledger, priced from its own list (a model on this Mac costs nothing),
+  and only Claude takes batches.
   The sync menu names the model, and in red the reason ("the API key was rejected",
-  "rate-limited for now") when the last call failed. With no key, the brief says
+  "rate-limited for now") when the last call failed. With AI mode on and no key, the brief says
   AI is off calmly and the composer drops Draft and Rewrite. The brief's card, and the sync
   menu with AI on, say that message text goes to Anthropic only when it is summarized, briefed or
   drafted.
@@ -604,7 +608,7 @@ How a release is made is in [docs/releasing.md](docs/releasing.md).
 - **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
   builds it first.
 - **A Claude API key**, for summaries and the other AI features, kept in the Keychain with
-  `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`. Without one, AI is off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
+  `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`. Without one, AI mode starts off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
 - **Optional:** [`just`](https://just.systems), which wraps the commands below. Without it, build
   the app with `cd web && npm ci && npx vite build`, then run `uv run python -m mailmind serve`.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
@@ -738,8 +742,8 @@ uv run python -m mailmind rules                  # show the learned lists
 uv run python -m mailmind rules expire github.com 72  # trash this domain's INBOX mail after 72h (0 clears)
 uv run python -m mailmind expire all --dry       # preview what the expiry rules would trash now
 uv run python -m mailmind accounts password you@x.com  # keep an account's password in the login Keychain
-uv run python -m mailmind ai key                  # keep the Claude API key there (--provider openai|gemini|compatible for another's)
-uv run python -m mailmind ai off                  # turn AI off: nothing goes to any AI provider (`ai on` turns it back on)
+uv run python -m mailmind ai key                  # keep the Claude API key there (--provider openai|gemini|local|compatible for another's)
+uv run python -m mailmind ai off                  # turn AI mode off: nothing goes to any AI provider (`ai on` turns it back on)
 uv run python -m mailmind assess --batch         # what has no summary yet, as a batch at half price, within today's limit; again for the answers
 ```
 
@@ -756,7 +760,7 @@ uv run python -m mailmind assess --batch         # what has no summary yet, as a
 | `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves, flag changes and a draft's copy on the server wait for a full run, sweeps and one-click unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |
-| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. Neither set: AI is off. |
+| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. Either set, AI mode starts on; neither, it starts off. |
 | `MAILMIND_LOG_LEVEL=DEBUG` | Show debug lines and each error's text and traceback on the terminal, for chasing a fault. They can hold addresses and subjects. `mailmind.log` never does. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5` |
 | `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). |
