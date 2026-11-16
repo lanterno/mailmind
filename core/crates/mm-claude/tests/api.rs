@@ -265,6 +265,12 @@ fn an_endpoint_is_read_from_its_url() {
     assert!(Endpoint::parse("http://[::1]:9/").expect("IPv6").loopback());
     assert!(!Endpoint::parse("http://localhost.example.test").expect("a name").loopback());
     assert_eq!(Endpoint::parse("ftp://api.example.test"), None);
+    // The scheme in any case.
+    let upper = Endpoint::parse("HTTPS://api.example.test/v1").expect("a scheme in capitals");
+    assert_eq!((upper.tls, upper.port, upper.base.as_str()), (true, 443, "/v1"));
+    let mixed = Endpoint::parse("Http://127.0.0.1:11434/v1").expect("a scheme in mixed case");
+    assert_eq!((mixed.tls, mixed.port, mixed.loopback()), (false, 11434, true));
+    assert_eq!(Endpoint::parse("api.example.test/v1"), None);
 }
 
 #[test]
