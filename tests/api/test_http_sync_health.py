@@ -80,3 +80,16 @@ def test_the_first_sync_that_fails_shows_nothing_until_it_shows(app, world):
     assert status(app) is None
     assert health(app)["live"] == ""
     assert status(app, w.BEA)["health"] == "ok"
+
+
+def test_a_removed_accounts_trouble_goes_with_it(app, world):
+    """Removing an account keeps nothing of how its syncs went: a run of trouble that would show by its age shows
+    nothing, and the other accounts stand as they did."""
+    sync(app)
+    world.server.drop("LOGIN", user=w.ADA)
+    sync(app)
+    assert app.post("/api/accounts/delete", {"email": w.ADA}).status == 200
+    assert status(app) is None
+    app.clock.shift(timedelta(seconds=THREE_MINUTES))
+    assert status(app) is None
+    assert status(app, w.BEA)["health"] == "ok"
