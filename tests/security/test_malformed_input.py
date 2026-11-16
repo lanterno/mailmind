@@ -223,9 +223,13 @@ def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai
             "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
             "action": "keep", "verb": "archive", "decision": "accepted", "rows": [copy]}
     routes = sorted(path for method, path in route_tables.paths() if method == "POST" and path not in WALK_LEAVES_OUT)
-    def broke(r):        # the 502 that says ask again later is no bug: what came in since you looked waits for the calls before it
-        return r.status >= 500 and not (r.status == 502 and r.json.get("type") == "/problems/unreachable" and r.json.get("retry"))
+    def broke(path, r):
+        # The 502 that says ask again later is no bug from what came in since you looked alone: it waits for the walk's
+        # calls before it. From any other route it would be junk taken for the model's failure.
+        waits = path == "/api/briefing/since" and r.status == 502 and r.json.get("type") == "/problems/unreachable" \
+            and r.json.get("retry")
+        return r.status >= 500 and not waits
     bad = [(path, field, junk) for path in routes for field in WALK_FIELDS for junk in WALK_JUNK
-           if broke(app.post(path, {**good, field: junk}))]
+           if broke(path, app.post(path, {**good, field: junk}))]
     app.settle(120)
     assert not bad
