@@ -135,6 +135,14 @@ impl LiveSync {
         let _ = self.0.set(syncing);
     }
 
+    /// The account was removed: nothing is kept of how its syncs went (`Syncing::removed`). Before the binding no sync
+    /// has run, so there is nothing to forget.
+    pub(crate) fn removed(&self, account: &str) {
+        if let Some(syncing) = self.0.get() {
+            syncing.removed(account);
+        }
+    }
+
     /// An account's sync now: "ok", "syncing", "error", or "" when none has run since the start.
     fn health(&self, account: &str) -> &'static str {
         let status = self.0.get().and_then(|syncing| syncing.status().ok());

@@ -175,8 +175,14 @@ impl App {
         let logins = Arc::new(mm_accounts::logins::Logins::new(login_key, seams.clock.clone()));
         // Each account's syncs now, which its removal stops.
         let flights = Arc::new(mm_mailbox::flights::Flights::default());
-        let account_events: Arc<dyn mm_accounts::ports::AccountEvents> =
-            Arc::new(crate::heard::AccountsHeard { logins: logins.clone(), flights: flights.clone() });
+        // How the sync stands now, for the digest and each account's health, and what a removal lets go of: bound to
+        // the Syncing once it exists.
+        let live_sync = Arc::new(LiveSync::default());
+        let account_events: Arc<dyn mm_accounts::ports::AccountEvents> = Arc::new(crate::heard::AccountsHeard {
+            logins: logins.clone(),
+            flights: flights.clone(),
+            live_sync: live_sync.clone(),
+        });
         // IDLE's workers hear an account added, changed or removed once its logins have (`realtime.reconcile`).
         let idle_heard = crate::idle_wiring::IdleHeard::over(account_events);
         let account_events: Arc<dyn mm_accounts::ports::AccountEvents> = idle_heard.clone();
@@ -225,8 +231,6 @@ impl App {
         let places = Places::new(database.clone(), seams.clock.clone());
         let events = Arc::new(Hub::new().map_err(|_| "the system's random source failed")?);
         let snippets = Snippets::new(Arc::new(SnippetsDocument::new(database.clone(), seams.clock.clone())));
-        // How the sync stands now, for the digest and each account's health: bound to the Syncing once it exists.
-        let live_sync = Arc::new(LiveSync::default());
         let syncs = MailboxSyncs(SyncRecords::new(database.clone()), live_sync.clone());
         let health = Health::new(Arc::new(syncs), seams.clock.clone());
         let plans = CurationPlans(StoredPlans::new(database.clone(), database.clone()));

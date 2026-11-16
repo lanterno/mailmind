@@ -51,12 +51,14 @@ impl mm_mailbox::sync_ports::Events for Heard {
 }
 
 /// What happened to an account, heard by its logins: a refusal holds its login back, and a change or a removal lets
-/// the next try go. A removal stops each sync reading its mail at its next message. The page hears of a removal as
-/// its route answers; IDLE's workers hear the rest after this (`idle_wiring::IdleHeard`).
+/// the next try go. A removal stops each sync reading its mail at its next message, and the sync keeps nothing of how
+/// the account's syncs went. The page hears of a removal as its route answers; IDLE's workers hear the rest after this
+/// (`idle_wiring::IdleHeard`).
 #[derive(Debug)]
 pub(crate) struct AccountsHeard {
     pub(crate) logins: Arc<mm_accounts::logins::Logins>,
     pub(crate) flights: Arc<mm_mailbox::flights::Flights>,
+    pub(crate) live_sync: Arc<crate::wiring::LiveSync>,
 }
 
 impl mm_accounts::ports::AccountEvents for AccountsHeard {
@@ -67,6 +69,7 @@ impl mm_accounts::ports::AccountEvents for AccountsHeard {
             Changed(_) => self.logins.changed(&change),
             Removed(email) => {
                 self.flights.stop(email);
+                self.live_sync.removed(email);
                 self.logins.changed(&change);
             }
             Added(_) => {}

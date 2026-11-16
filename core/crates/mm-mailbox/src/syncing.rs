@@ -21,6 +21,10 @@
 //! server that can't take a login for now) once a second sync in a row has failed too, or three minutes on; until
 //! then it shows as it did before, and its record keeps no error. A wake, or a change of network, starts each such
 //! run again (`woke`).
+//!
+//! An account removed (`removed`) stops each sync and read of older mail reading its mail at its next step, as its
+//! flights (`flights`) were told, and nothing is kept of how its syncs went: its status, how far its first scan had
+//! got, its run of failures, an ask to sync it again; now, and again as the last of them lands.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
@@ -257,8 +261,22 @@ impl Syncing {
         now.reading = reading;
     }
 
-    fn forget_status(&self, account: &str) {
-        self.held().status.remove(account);
+    /// Nothing is kept of how a removed account's syncs went: its status, with how far its Inbox's first scan had got,
+    /// its run of failures, and an ask to sync it again.
+    fn forget(&self, account: &str) {
+        let mut held = self.held();
+        held.status.remove(account);
+        held.failing.remove(account);
+        held.again.remove(account);
+    }
+
+    /// The account was removed: each sync reading its mail stops at its next step (its flights were told), and nothing
+    /// is kept of how its syncs went, now or as the last of them lands, so a sync that ended meanwhile leaves nothing
+    /// either.
+    pub fn removed(self: &Arc<Self>, account: &str) {
+        self.forget(account);
+        let (syncing, gone) = (Arc::clone(self), account.to_owned());
+        self.ingest.flights().after(account, Box::new(move || syncing.forget(&gone)));
     }
 
     fn page(&self, topic: Topic, data: serde_json::Value) {
@@ -276,11 +294,11 @@ impl Syncing {
         let synced = caught(|| self.ingest.sync_folder(email, INBOX, false, None));
         match synced.unwrap_or_else(|fault| Err(SyncError::Store(fault))) {
             _ if flight.stopped() => {
-                self.forget_status(email);
+                self.forget(email);
                 Ok(0)
             }
             Err(SyncError::UnknownAccount) => {
-                self.forget_status(email);
+                self.forget(email);
                 Ok(0)
             }
             Ok(synced) => {
@@ -447,10 +465,15 @@ impl Syncing {
         Ok(more)
     }
 
-    /// One account's part of a round of reading older mail: whether it has more to read after this.
+    /// One account's part of a round of reading older mail: whether it has more to read after this. An account removed
+    /// meanwhile stops it at its next step, and nothing more is read or said of it.
     fn read_older_of(&self, account: &str, folders: &[String]) -> bool {
-        let mut more = false;
+        let flight = self.ingest.flights().fly(account);
+        let (mut more, mut gone) = (false, false);
         for folder in folders {
+            if flight.stopped() {
+                break;
+            }
             let inbox = folder.eq_ignore_ascii_case(INBOX);
             let mut heard = |reading: Option<Progress>| {
                 if inbox {
@@ -467,8 +490,16 @@ impl Syncing {
                         self.set_reading(account, None);
                     }
                 }
+                Err(SyncError::UnknownAccount) => {
+                    gone = true;
+                    break;
+                }
                 Err(error) => log::warning(TAG, "older mail wasn't read", &[], Some(error.class())),
             }
+        }
+        if gone || flight.stopped() {
+            self.forget(account);
+            return false;
         }
         more
     }
