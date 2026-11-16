@@ -18,6 +18,10 @@ import { FilterDialog, Filters } from "./Filters";
 import { curateOpen } from "./open";
 
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };
+// What a sweep's plan calls each junk bucket; one it doesn't know goes by the name the server gives it.
+const BUCKET_WORDS: Record<string, string> = { "spam/scam": "Spam and scams", blocked: "Senders you blocked", "newsletters/marketing": "Newsletters and marketing", "automated-notifications": "Automatic notifications" };
+
+type SweepPlan = PostAnswers["/api/sweep"]["results"][number];
 
 type Sender = GetAnswers["/api/cleanup/sender"];
 interface Cleaning { d: Sender; scope: BlockScope; unsubscribe: boolean; armed: boolean }
@@ -236,6 +240,26 @@ function Flood() {
   );
 }
 
+// What a sweep would move, bucket by bucket with a few of its senders and subjects, and what it leaves: shown before Confirm.
+function SweepGoing({ plan }: { plan: SweepPlan }) {
+  const s = (n: number) => (n === 1 ? "" : "s");
+  return (
+    <div className="sweep-going">
+      {plan.going?.map((g) => (
+        <div className="sg-bucket" key={g.bucket}>
+          <div className="sg-hd"><i style={{ background: `var(${BUCKET_COLOR[g.bucket] ?? "--mute"})` }} />{BUCKET_WORDS[g.bucket] ?? g.bucket}<span className="sg-n">{g.count}</span></div>
+          <div className="sg-from">{g.senders.map((f) => (f.count > 1 ? `${f.from_addr} (${f.count})` : f.from_addr)).join(", ")}</div>
+          {g.subjects.map((subject, i) => <div className="sg-subj" key={i}>{subject || "(no subject)"}</div>)}
+        </div>
+      ))}
+      {!!plan.held_back && <div className="sg-note">{plan.held_back} starred or unread message{s(plan.held_back)} stay{plan.held_back === 1 ? "s" : ""} in your Inbox.</div>}
+      {plan.capped && <div className="sg-note">The newest {plan.planned} only — sweep again for the rest.</div>}
+      {!!plan.no_undo && <div className="sg-note">{plan.no_undo} of them can’t be brought back with Undo.</div>}
+      <div className="sg-undo">Undo with <b>z</b> puts it all back.</div>
+    </div>
+  );
+}
+
 function Inboxes() {
   const qc = useQueryClient();
   const abort = () => {
@@ -244,25 +268,27 @@ function Inboxes() {
   };
   const { data: digest } = useDigest();
   const { data } = useQuery({ queryKey: ["stats"], queryFn: () => get("/api/stats") });
-  const [armed, setArmed] = useState<{ account: string; planned: number } | null>(null);
+  const [armed, setArmed] = useState<SweepPlan | null>(null);
   const nameOf = (a: string) => digest?.aliases?.[a] || shortAddress(a);
   if (!data) return <div style={{ color: "var(--faint)", fontSize: 11 }}>Measuring live inboxes…</div>;
   const arm = async (account: string) => {
     try {
       const r = (await post("/api/sweep", { account, dry_run: true })).results[0]!;
       if (r.error) toast(`Sweep: ${r.error}`);
-      else if (!r.planned) toast("Nothing to sweep");
-      else setArmed({ account, planned: r.planned });
+      else if (!r.planned) toast(r.held_back ? `Nothing to sweep: ${r.held_back} starred or unread stay` : "Nothing to sweep");
+      else setArmed(r);
     } catch {
       toast("Plan failed");
     }
   };
-  const sweep = async ({ account, planned }: { account: string; planned: number }) => {
+  const sweep = async ({ account, planned }: SweepPlan) => {
     setArmed(null);
     toast(`Sweeping ${planned}…`);
     try {
-      const r = (await post("/api/sweep", { account, dry_run: false })).results[0]!;
-      toast(`Swept ${r.moved}/${r.planned}${r.stragglers?.length ? ` · ${r.stragglers.length} unverified` : ""}`);
+      const d = await post("/api/sweep", { account, dry_run: false, undo_group: undoGroup() });
+      const r = d.results[0]!;
+      toast(r.error ? `Sweep: ${r.error}` : `Swept ${r.moved}/${r.planned}${r.stragglers?.length ? ` · ${r.stragglers.length} unverified` : ""}`);
+      if (d.undo_group) offerUndo(`Swept ${r.moved ?? 0} to Trash`);
     } catch {
       toast("Sweep failed");
     }
@@ -286,7 +312,8 @@ function Inboxes() {
             {armed?.account === a.account && (
               // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- Esc while the focus is on its buttons: the line itself takes no focus
               <div className="armline" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); abort(); } }}>
-                ▸ sweep <b>{nameOf(a.account)}</b> · <b>{armed.planned}</b> msgs<br />
+                ▸ sweep <b>{nameOf(a.account)}</b> · <b>{armed.planned}</b> to Trash
+                <SweepGoing plan={armed} />
                 {/* eslint-disable-next-line jsx-a11y/no-autofocus -- it appears because of the click just made on Sweep, and answers that click */}
                 <button className="sweep" autoFocus onClick={() => void sweep(armed)}>Confirm</button> <button className="sweep" onClick={abort}>Abort</button>
               </div>
