@@ -291,6 +291,13 @@ final class MeadowDialogPictures: XCTestCase {
         }
     }
 
+    /// Removing an account, with its mail on this Mac going too unless unticked.
+    func testRemovingAnAccount() throws {
+        try draw("settings-account-remove", CGSize(width: 420, height: 240)) { _ in
+            RemoveAccount(row: F.account("ada@example.test", alias: "Ada"), done: { _ in })
+        }
+    }
+
     func testTheFirstRunInTheBriefsManner() throws {
         try draw("first-run", CGSize(width: 1000, height: 760)) { _ in
             Welcome(status: status(firstRun: true), kept: [], lights: false)

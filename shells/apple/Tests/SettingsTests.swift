@@ -494,7 +494,9 @@ final class SettingsCoreTests: XCTestCase {
         XCTAssertEqual(detail, "connection refused", "the class, in small type")
         XCTAssertFalse(why.contains(Self.password))
 
-        _ = try await core.post(API.Post.AccountsDelete.self, API.RemoveBody(email: "ada@example.test"))
+        let removed = try await core.post(API.Post.AccountsDelete.self,
+                                          API.RemoveBody(deleteMail: true, email: "ada@example.test"))
+        XCTAssertEqual(removed.mailDeleted, 0, "its mail on this Mac went too, of which there was none")
         await status.readAccounts()
         XCTAssertTrue(status.firstRun)
         await close(core, status)
@@ -528,7 +530,8 @@ final class SettingsCoreTests: XCTestCase {
         let stood = try String(contentsOf: keychain, encoding: .utf8)
         XCTAssertTrue(stood.contains("abcdefghijklmnop"))
         XCTAssertFalse(stood.contains("abcd efgh"))
-        _ = try await core.post(API.Post.AccountsDelete.self, API.RemoveBody(email: "dee@example.test"))
+        let removed = try await core.post(API.Post.AccountsDelete.self, API.RemoveBody(email: "dee@example.test"))
+        XCTAssertNil(removed.mailDeleted, "its mail here is let go of only when asked")
         await close(core, status)
     }
 
