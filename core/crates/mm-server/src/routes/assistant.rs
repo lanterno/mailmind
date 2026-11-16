@@ -79,15 +79,10 @@ fn not_sent(not: NotSent, method: &Method, uri: &Uri) -> Response<Body> {
                 &[("over_limit", json!(true)), ("spent_micros", json!(spent)), ("limit_micros", json!(limit))],
             ),
         ),
-        NotSent::AiOff(_) => answer::problem_document(
+        // Why, in the reason's own words (#49): turned off, or no key, URL or model.
+        NotSent::AiOff(off) => answer::problem_document(
             409,
-            &document(
-                409,
-                "ai-off",
-                "AI is off",
-                "AI is off: MailMind has no Claude API key",
-                &[("ai_off", json!(true))],
-            ),
+            &document(409, "ai-off", "AI is off", off.words(), &[("ai_off", json!(true))]),
         ),
         NotSent::NoBatches => answer::problem(&Problem::refused(mm_assistant::providers::NO_BATCHES)),
         NotSent::Deferred(_) => answer::failure(&Failure::Fault(Fault::new("Deferred")), method.as_str(), uri.path()),
