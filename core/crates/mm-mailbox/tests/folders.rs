@@ -133,6 +133,16 @@ fn the_rail_is_each_selectable_folder_in_its_place_with_its_counts() {
 }
 
 #[test]
+fn the_rail_says_which_folders_a_person_may_change_and_each_ones_own_name() {
+    let folders = folders(&Server::answering(vec![]), &Arc::new(Ticking::default()));
+    let found = folders.of_account("ada@example.test").unwrap();
+    let changeable: Vec<&str> =
+        found.folders.iter().filter(|(f, _)| f.changeable).map(|(f, _)| f.name.as_str()).collect();
+    assert_eq!(changeable, ["Clients"]);
+    assert!(found.folders.iter().all(|(f, _)| f.own_name == f.name));
+}
+
+#[test]
 fn an_account_not_saved_is_refused() {
     let folders = folders(&Server::answering(vec![]), &Arc::new(Ticking::default()));
     let Err(Failure::Problem(problem)) = folders.of_account("nobody@example.test") else { panic!("not refused") };
@@ -194,7 +204,14 @@ fn roles_come_from_the_name_inbox_then_attributes_then_names() {
     assert_eq!(roles::role_by_name("INBOX.Deleted Items", None), "trash");
     assert_eq!(roles::role_by_name("Labels/Important", Some("/")), "custom");
     assert_eq!(roles::role_of(&folder("Stuff", &["\\junk"])), "junk");
-    let named = |name: &str, role| RailFolder { name: name.into(), role, unseen: 0, total: 0 };
+    let named = |name: &str, role| RailFolder {
+        name: name.into(),
+        role,
+        unseen: 0,
+        total: 0,
+        own_name: name.into(),
+        changeable: false,
+    };
     let ordered = roles::rail_order(vec![named("b", "custom"), named("Trash", "trash"), named("A", "custom")]);
     let names: Vec<&str> = ordered.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, ["A", "b", "Trash"]);
