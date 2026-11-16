@@ -121,7 +121,7 @@ final class ScreensTests: XCTestCase {
         let composer = Composer(ComposeSeed(), host: host)
         open.append(composer)
         for dark in [false, true] {
-            try await drawn("later", size: CGSize(width: 320, height: 210), dark: dark, LaterChoices(composer: composer))
+            try await drawn("later", size: CGSize(width: 320, height: 270), dark: dark, LaterChoices(composer: composer))
             try await drawn("draft-options", size: CGSize(width: 320, height: 200), dark: dark,
                             DraftOptions(tone: .warm, chooseTone: { _ in }, go: { _ in }))
             try await drawn("snippets", size: CGSize(width: 340, height: 300), dark: dark,

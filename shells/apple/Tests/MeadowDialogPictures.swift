@@ -140,7 +140,7 @@ final class MeadowDialogPictures: XCTestCase {
         host.snippets = [API.Snippet(text: "Best, Hana", trigger: "sig")]
         let composer = Composer(ComposeSeed(), host: host)
         open.append(composer)
-        try draw("compose-later", CGSize(width: 320, height: 250)) { _ in LaterChoices(composer: composer) }
+        try draw("compose-later", CGSize(width: 320, height: 300)) { _ in LaterChoices(composer: composer) }
         try draw("compose-draft-options", CGSize(width: 340, height: 250)) { _ in
             DraftOptions(tone: .warm, chooseTone: { _ in }, go: { _ in })
         }
