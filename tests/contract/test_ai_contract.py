@@ -492,6 +492,53 @@ def test_a_redirect_is_an_answer_like_any_other_and_never_followed(api, elsewher
     assert len(api.requests) == 1 and elsewhere.reached == []
 
 
+UNREACHABLE = "Claude API unreachable: no API address"
+
+
+@pytest.mark.parametrize("url", [
+    "http://llm.example.test", "http://192.0.2.7:8080/v1",                  # the key in the clear off this Mac
+    "https://llm.example.test:", "http://127.0.0.1:/", "https://llm.example.test:0", "http://localhost:65536",
+    "https://user@llm.example.test", "https://llm.example.test/v1?x=1", "https://llm.example.test/#top",
+    "https://[v1.ab]/v1", "https://[fe80::1%25en0]/v1", "ftp://llm.example.test", "https://" + "a" * 500,
+    "   ", " https://llm.example.test", "https://llm.example.test/v 1",
+])
+def test_a_url_a_person_couldnt_give_a_service_is_unreachable_with_nothing_sent(url, monkeypatch):
+    """ANTHROPIC_BASE_URL is held to the rules a URL a person gives a service keeps, spaces and all: unreachable before
+    anything else is said of a call, a key that can't be one among it, and no connection made."""
+    from mailmind.assistant.adapters.anthropic_sdk import list_models
+    from mailmind.assistant.application.ports import Prompt
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: pytest.fail("connected"))
+    model, spaced = claude(url), claude(url, retries=0)
+    spaced._key = "sk-ant with-a-space"
+    for call in (lambda: model.complete(Prompt(*PROMPT)), lambda: model.submit_batch([("1", Prompt(*PROMPT))]),
+                 lambda: model.batch_ended("msgbatch_0001"), lambda: model.batch_results("msgbatch_0001", "claude-opus-5-5"),
+                 lambda: model.discard_batch("msgbatch_0001"), lambda: list_models(fa.KEY, url),
+                 lambda: spaced.complete(Prompt(*PROMPT)), lambda: list_models("sk-ant with-a-space", url)):
+        with pytest.raises(ModelError) as e:
+            call()
+        assert (str(e.value), e.value.status, e.value.permanent) == (UNREACHABLE, None, False)
+
+
+def test_with_anthropic_base_url_in_plain_http_off_this_mac_claude_is_unreachable_and_the_key_goes_nowhere(api, monkeypatch):
+    from mailmind.bootstrap import assistant
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://llm.example.test")
+    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: pytest.fail("connected"))
+    with pytest.raises(RuntimeError, match=f"^{UNREACHABLE}$"):
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA)
+    assert api.requests == []
+
+
+@pytest.mark.parametrize("url, local", [("http://127.0.0.1:9/", True), ("http://[::1]:9", True),
+                                        ("http://127.0.0.1:/", False), ("http://localhost:9/?x=1", False),
+                                        ("http://user@127.0.0.1:9/", False), ("http://localhost:0/", False)])
+def test_an_anthropic_base_url_on_this_mac_is_so_only_where_a_person_could_give_it(api, monkeypatch, url, local):
+    """One that isn't is priced as Claude elsewhere is, and waited for as long."""
+    from mailmind.bootstrap import assistant
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", url)
+    e = assistant.engine()
+    assert (e.base_url, e.local, e.timeout) == (url, local, 300 if local else 120)
+
+
 def test_a_batchs_results_named_on_another_host_are_asked_of_the_endpoint_the_call_was_made_for(api):
     """The API names a batch's results by a URL of its own: one on another host is asked of the endpoint in force, at the
     same path, and the key never goes there."""
