@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 import XCTest
 
@@ -246,6 +247,19 @@ final class MeadowDialogPictures: XCTestCase {
         }
     }
 
+    /// General's This Mac card: Open at Login on, and waiting for macOS to allow it, over a stand-in for the login
+    /// items (a picture never makes the test runner one).
+    func testOpenAtLogin() throws {
+        let on = OpenAtLogin(item: HeldLoginItem(.enabled))
+        try draw("settings-open-at-login", CGSize(width: 620, height: 200)) { _ in
+            OnPaper { OpenAtLoginCard(model: on).padding(20) }
+        }
+        let waiting = OpenAtLogin(item: HeldLoginItem(.requiresApproval))
+        try draw("settings-open-at-login-approval", CGSize(width: 620, height: 260)) { _ in
+            OnPaper { OpenAtLoginCard(model: waiting).padding(20) }
+        }
+    }
+
     func testTheAccountFormAsADialog() throws {
         var draft = AccountDraft()
         draft.email = "ada@example.test"
@@ -361,6 +375,19 @@ final class MeadowDialogPictures: XCTestCase {
                 .meadowPanel(radius: 18, raised: true)
         }
     }
+}
+
+/// macOS's login items as a picture needs them: one status, and nothing asked of macOS.
+@MainActor
+private final class HeldLoginItem: LoginItem {
+    let status: SMAppService.Status
+
+    init(_ status: SMAppService.Status) {
+        self.status = status
+    }
+
+    func register() throws {}
+    func unregister() throws {}
 }
 
 /// A pane on the Settings dialog's paper, as the dialog lays it.
