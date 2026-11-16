@@ -1,13 +1,15 @@
-"""The limits on an answer from a service that speaks OpenAI's Chat Completions (mailmind.assistant.adapters.openai_chat, each
-attempt an `exchange`, #49), and from a model server on this Mac the finder asks: an attempt's time limit is a deadline for all
-of it, however the peer trickles its answer in, and an answer runs to MOST bytes at most. Peers on loopback send what no
-well-behaved server would."""
+"""The limits on an answer from an AI provider's API, each attempt an `exchange` (#49): a service that speaks OpenAI's Chat
+Completions (mailmind.assistant.adapters.openai_chat), the Claude API through the Anthropic SDK (anthropic_sdk), and a model
+server on this Mac the finder asks. An attempt's time limit is a deadline for all of it, however the peer trickles its answer
+in, and an answer runs to MOST bytes at most. Peers on loopback send what no well-behaved server would."""
+import json
 import socket
 import threading
 import time
 
 import pytest
 
+from fakes import anthropic_api as fa
 from fakes import openai_api as fo
 from mailmind.assistant.adapters import exchange, local_servers
 from mailmind.assistant.adapters.openai_chat import Http
@@ -150,3 +152,41 @@ def test_an_answer_that_ends_short_of_its_length_is_no_answer():
     with Peer(sending(HEAD + b"Content-Length: 100\r\n\r\n", b'{"data": []')) as peer:
         said, _ = asked(peer)
     assert said == "compatible unreachable: IncompleteRead"
+
+
+# ── Claude's, each attempt the SDK makes an exchange too ──────────────────────
+
+def claude_asked(peer, timeout=1):
+    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
+    from mailmind.assistant.application.ports import Prompt
+    began = time.monotonic()
+    with pytest.raises(ModelError) as e:
+        AnthropicModel("sk-ant-test-fictional", peer.url, timeout=timeout, retries=0).complete(
+            Prompt("Hi.", "claude-opus-5-5", 100))
+    return str(e.value), time.monotonic() - began
+
+
+@pytest.mark.parametrize("answering", [trickling(), trickling(HEAD, b"X-Slow: 1\r\n"), trickling(ENDING["no-length"], b"x")],
+                         ids=["body", "head", "no-length"])
+def test_a_claude_answer_trickled_in_is_let_go_at_the_deadline(answering):
+    with Peer(answering) as peer:
+        said, took = claude_asked(peer)
+    assert said.startswith("Claude API unreachable: Request timed out") and 0.9 < took < 2.5
+
+
+def test_a_claude_answer_that_runs_past_the_most_is_let_go_there(monkeypatch):
+    monkeypatch.setattr(exchange, "MOST", 1000)
+    with Peer(sending(HEAD + b"\r\n", b"x" * 600, b"x" * 600)) as peer:
+        said, _ = claude_asked(peer, timeout=5)
+    assert said == "Claude API unreachable: Connection error."
+
+
+def test_a_claude_answer_of_the_most_is_read_whole(monkeypatch):
+    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
+    from mailmind.assistant.application.ports import Prompt
+    monkeypatch.setattr(exchange, "MOST", 1000)
+    body = json.dumps(fa.answer("Read whole.")[1]).encode().ljust(1000)
+    with Peer(sending(HEAD + b"Content-Length: 1000\r\n\r\n", body)) as peer:
+        reply = AnthropicModel("sk-ant-test-fictional", peer.url, timeout=1, retries=0).complete(
+            Prompt("Hi.", "claude-opus-5-5", 100))
+    assert reply.text == "Read whole."

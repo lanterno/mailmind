@@ -4,6 +4,9 @@ what a request carries, how replies, refusals and errors come back, when calls a
 that with no key AI is off and nothing is sent. All addresses are fictional; the key is the fake's.
 """
 import json
+import socket
+import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -413,6 +416,96 @@ def test_a_key_with_a_blank_or_a_control_character_in_it_is_refused_unsent(api, 
             call()
         assert (str(e.value), e.value.status, e.value.permanent) == ("Claude API 401: the key was refused", 401, True)
     assert api.requests == []
+
+
+# ── where a request goes, and nothing the environment says of it ──────────────
+
+@pytest.fixture
+def elsewhere():
+    """A loopback port no request should reach: the connections made to it, counted, and none answered."""
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    sock.listen()
+    sock.settimeout(0.05)
+    reached, stop = [], threading.Event()
+
+    def accepting():
+        while not stop.is_set():
+            try:
+                conn, _ = sock.accept()
+            except TimeoutError:
+                continue
+            reached.append(conn)
+            conn.close()
+    thread = threading.Thread(target=accepting, name="elsewhere", daemon=True)
+    thread.start()
+    yield SimpleNamespace(url=f"http://127.0.0.1:{sock.getsockname()[1]}", reached=reached)
+    stop.set()
+    thread.join()
+    sock.close()
+
+
+def claude(url, **kw):
+    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
+    return AnthropicModel(fa.KEY, url, **kw)
+
+
+PROMPT = ("Hi.", "claude-opus-5-5", 100)
+
+
+def test_a_call_carries_the_apis_headers_and_none_the_environment_names(api, monkeypatch):
+    from mailmind.assistant.application.ports import Prompt
+    from mailmind.assistant.domain.models import FALLBACK_BETA
+    monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", "X-Leak: custom\nAuthorization: Bearer sk-ant-elsewhere")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "sk-ant-token-from-the-environment")
+    model = claude(api.url)
+    model.complete(Prompt(*PROMPT))
+    model.complete(Prompt(*PROMPT, fallback=True))
+    plain, fallback = api.requests
+    assert set(plain.headers) == {"host", "accept-encoding", "content-length", "accept", "content-type",
+                                  "anthropic-version", "x-api-key"}
+    assert [plain.headers[h] for h in ("accept", "content-type", "anthropic-version", "x-api-key")] == [
+        "application/json", "application/json", "2026-10-21", fa.KEY]
+    assert set(fallback.headers) - set(plain.headers) == {"anthropic-beta"}
+    assert fallback.headers["anthropic-beta"] == FALLBACK_BETA
+
+
+def test_a_call_goes_straight_to_its_endpoint_whatever_proxy_the_environment_names(api, elsewhere, monkeypatch):
+    from mailmind.assistant.adapters.anthropic_sdk import list_models
+    from mailmind.assistant.application.ports import Prompt
+    for name in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "https_proxy", "http_proxy", "all_proxy"):
+        monkeypatch.setenv(name, elsewhere.url)
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    claude(api.url, retries=0).complete(Prompt(*PROMPT))
+    assert list_models(fa.KEY, api.url) == list(fa.MODELS)
+    assert len(api.requests) == 2 and elsewhere.reached == []
+
+
+def test_a_redirect_is_an_answer_like_any_other_and_never_followed(api, elsewhere):
+    from mailmind.assistant.application.ports import Prompt
+    api.queue((307, {"type": "error", "error": {"type": "moved", "message": "moved"}},
+               {"Location": f"{elsewhere.url}/v1/messages"}))
+    with pytest.raises(ModelError) as e:
+        claude(api.url, retries=0).complete(Prompt(*PROMPT))
+    assert (str(e.value), e.value.status) == ("Claude API 307: moved", 307)
+    assert len(api.requests) == 1 and elsewhere.reached == []
+
+
+def test_a_batchs_results_named_on_another_host_are_asked_of_the_endpoint_the_call_was_made_for(api):
+    """The API names a batch's results by a URL of its own: one on another host is asked of the endpoint in force, at the
+    same path, and the key never goes there."""
+    from mailmind.assistant.application.ports import Prompt
+    model = claude(api.url)
+    batch_id = model.submit_batch([("1", Prompt(*PROMPT))])
+    api.end_batch(batch_id)
+    api.queue(lambda req: (200, {**api._view(batch_id),
+                                 "results_url": f"https://batches.example.test{fa.BATCHES}/{batch_id}/results"}))
+    [result] = model.batch_results(batch_id, "claude-opus-5-5")
+    assert result.custom_id == "1" and result.reply is not None
+    asked = api.requests[-1]
+    assert (asked.method, asked.path, asked.headers["accept"], asked.key) == (
+        "GET", f"{fa.BATCHES}/{batch_id}/results", "application/binary", fa.KEY)
 
 
 # ── what the app talks through ────────────────────────────────────────────────

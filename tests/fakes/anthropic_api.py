@@ -5,8 +5,8 @@ It keeps every request it receives (headers and JSON body), in order, so a test 
 app sent: which prompt, which schema, which model and effort, and whether anything was sent at all.
 
 What it answers:
-- 401 authentication_error unless the request carries KEY, as an `Authorization: Bearer` token (the
-  SDK's way) or as `x-api-key`, as the real API does for a missing or wrong key;
+- 401 authentication_error unless the request carries KEY, as `x-api-key` (both servers' way) or as an
+  `Authorization: Bearer` token, as the real API does for a missing or wrong key;
 - the next reply a test queued with `queue`, if any, with the response headers it names;
 - else what the test's `responder` returns for the request, if it set one and it returns a reply;
 - otherwise an answer built from the request's own schema (see `instance`), or STUB_TEXT for a
