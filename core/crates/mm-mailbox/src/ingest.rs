@@ -7,7 +7,8 @@
 //! at a time, newest first, each step giving way to a sync that read the folder afresh meanwhile.
 //!
 //! A message's text comes from its first `HEAD_BYTES` (`BODY.PEEK[]<0.65536>`), so no attachment is downloaded for a
-//! snippet. The whole message is fetched only for an invite: an Inbox message that carries one keeps its body as it
+//! snippet; that text is kept for search too, so the body backfill never fetches the mail a sync read. The whole
+//! message is fetched only for an invite: an Inbox message that carries one keeps its body as it
 //! is stored, as opening it would, so Today & next finds it. A message whose opening the server won't send costs only
 //! its own text, and one whose headers it won't send is left out of a read of older mail; a connection lost part way
 //! stores nothing of the step, which is read again.
@@ -428,6 +429,7 @@ impl Ingest {
                     gmail_labels: h.gmail_labels,
                     verdict,
                     snippet: String::new(),
+                    body_text: None,
                 },
                 invite: None,
             })
@@ -449,6 +451,7 @@ impl Ingest {
         for f in &mut fetched {
             let Some(head) = heads.remove(&f.row.uid) else { continue };
             f.row.snippet = mime::text_body(&head);
+            f.row.body_text = Some(mime::body_text_of(&mime::parse(&head)));
             f.invite = self.invite_of(s, f.row.uid, head)?;
         }
         Ok(fetched)

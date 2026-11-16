@@ -84,9 +84,10 @@ fn upsert(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) -> 
     c.prepare_cached("UPDATE message_identity SET gone_at=NULL WHERE key=? AND gone_at IS NOT NULL")?.execute([key])?;
     c.prepare_cached(
         "INSERT INTO messages (account,kind,folder,uid,message_id,gmail_thread,from_addr,from_name,subject,date_iso,ts,\
-         snippet,bucket,confidence,reason,is_junk,message_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
+         snippet,body_text,bucket,confidence,reason,is_junk,message_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
          ON CONFLICT(account,folder,uid) DO UPDATE SET subject=excluded.subject, \
-         snippet=COALESCE(NULLIF(excluded.snippet, ''), snippet), bucket=excluded.bucket, \
+         snippet=COALESCE(NULLIF(excluded.snippet, ''), snippet), body_text=COALESCE(body_text, excluded.body_text), \
+         bucket=excluded.bucket, \
          confidence=excluded.confidence, reason=excluded.reason, is_junk=excluded.is_junk, \
          message_key=COALESCE(message_key, excluded.message_key) RETURNING pk",
     )?
@@ -104,6 +105,7 @@ fn upsert(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) -> 
             f.date_iso,
             f.ts,
             m.snippet,
+            m.body_text,
             m.verdict.bucket,
             m.verdict.confidence,
             m.verdict.reason,

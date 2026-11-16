@@ -64,6 +64,9 @@ pub struct Incoming {
     pub verdict: Verdict,
     /// Its body's text, for the Inbox; empty elsewhere and for junk.
     pub snippet: String,
+    /// The text search indexes of it (`KeptBody::of`'s), from the opening a sync read for the snippet: kept so the
+    /// body backfill never fetches that mail again. None where no opening was read.
+    pub body_text: Option<String>,
 }
 
 /// What is stored of a folder's sync so far.
