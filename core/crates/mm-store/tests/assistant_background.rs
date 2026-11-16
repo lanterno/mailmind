@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use mm_assistant::background_ports::{Assessment, DraftCandidates, FinishedBatches, Outcome, Triage};
+use mm_assistant::background_ports::{Assessment, Backlog, DraftCandidates, FinishedBatches, Outcome, Triage};
 use mm_assistant::ports::Message;
 use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
 use mm_store::{Database, DbKey};
@@ -93,6 +93,16 @@ fn triage_reads_one_copy_of_each_message_it_hasnt_summarized_newest_first() {
         (lunch.from_name.as_deref(), lunch.date_iso.as_deref(), lunch.snippet.as_deref()),
         (Some("Lin"), Some("2026-11-02"), Some("Free?"))
     );
+}
+
+#[test]
+fn what_waits_for_a_summary_counts_each_message_once_those_a_batch_holds_among_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path(), PENDING);
+    // 1 (in two folders), 5 (in a batch), 6 and 7 (with no time); not junk, summarized, on its way out or keyless.
+    assert_eq!(database.summaries_waiting(-1), Ok(4));
+    assert_eq!(database.summaries_waiting(999), Ok(3));
+    assert_eq!(database.summaries_waiting(2000), Ok(1));
 }
 
 #[test]

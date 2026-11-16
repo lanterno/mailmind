@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use mm_assistant::assessments::{Assessments, triage_prompt};
-use mm_assistant::background_ports::{Assessment, Batch, BatchBook, Begun, Judge, Outcome, Pending, Triage};
+use mm_assistant::background_ports::{Assessment, Backlog, Batch, BatchBook, Begun, Judge, Outcome, Pending, Triage};
 use mm_assistant::batches::{self, Batching};
 use mm_assistant::calls::Calls;
 use mm_assistant::gateway::{Budget, Gateway};
@@ -219,6 +219,15 @@ impl Triage for Book {
             lock(&self.said).insert(key, said.clone());
         }
         Ok(())
+    }
+}
+
+impl Backlog for Book {
+    fn summaries_waiting(&self, newer_than: i64) -> Result<i64, Fault> {
+        let said = lock(&self.said);
+        let rows = lock(&self.rows);
+        let waiting = rows.iter().filter(|r| r.message_key.is_some_and(|k| !said.contains_key(&k)));
+        Ok(i64::try_from(waiting.filter(|r| r.ts.unwrap_or(0) > newer_than).count()).expect("a count"))
     }
 }
 
@@ -880,6 +889,27 @@ fn while_someone_uses_ai_no_batch_goes_and_the_backlog_still_waits() {
     assert_eq!((w.waiting(), w.batching.status().expect("status").waiting), (before, 0));
     w.governor.forget();
     assert_eq!(w.submit(), 100);
+}
+
+#[test]
+fn the_status_counts_what_waits_for_a_summary_from_the_last_thirty_days_those_out_in_a_batch_among_them() {
+    let w = world(120, true, None);
+    for row in lock(&w.book.rows).iter_mut().take(20) {
+        row.ts = Some(NOW - 31 * 86_400 + row.pk);
+    }
+    let status = Status::new(w.calls.gateway().clone(), w.clock.clone()).with_backlog(w.book.clone());
+    let waiting = || status.report().expect("a report").get("summaries_waiting").cloned();
+    assert_eq!(waiting(), Some(json!(100)));
+    assert_eq!(w.batching.submit(1, 20).expect("a round"), 80);
+    assert_eq!(waiting(), Some(json!(100)), "a batch out holds them, with no summary yet");
+    w.model.end_batch();
+    w.clock.shift(batches::POLL);
+    assert_eq!(w.collect(), 80);
+    assert_eq!(waiting(), Some(json!(20)));
+    // A status that counts nowhere says nothing of it, and nor does one with AI off.
+    assert_eq!(w.status.report().expect("a report").get("summaries_waiting"), None);
+    *lock(&w.engine.0) = None;
+    assert_eq!(waiting(), None);
 }
 
 #[test]
