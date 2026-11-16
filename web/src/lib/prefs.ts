@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { get, post, refusalOf } from "./api/client";
 import { PREFERENCE_DEFAULTS } from "./api/limits.gen";
 import type { GetAnswers, PostBodies } from "./api/types";
+import { lightOf, type Light } from "./light";
 import { createStore, store, stored, type Store } from "./store";
 import { toast } from "./toast";
 
@@ -52,11 +53,16 @@ function lastKnown(): Partial<Prefs> {
 export const prefs = createStore<Prefs>({ ...PREFERENCE_DEFAULTS, ...lastKnown(), ...heldUnderOldKeys(stored) });
 export const prefsRead = createStore(false);     // the server has answered, so `prefs` is what it holds and not this browser's guess
 
+// The light the page is painted in now: the theme chosen, or Automatic's for this moment (lib/light.ts).
+export const shownLight = createStore<Light>(lightOf(prefs.get().theme));
+
 function showing(p: Prefs) {
+  const light = lightOf(p.theme);
+  shownLight.set(light);
   if (typeof document === "undefined") return;     // a test with no page
   const body = document.body;
-  body.classList.toggle("theme-light", p.theme !== "night");
-  body.classList.toggle("theme-dusk", p.theme === "dusk");
+  body.classList.toggle("theme-light", light !== "night");
+  body.classList.toggle("theme-dusk", light === "dusk");
   body.classList.toggle("hc", p.high_contrast);
   body.dataset["density"] = p.density;
 }
@@ -67,6 +73,20 @@ function settle(p: Prefs) {
   showing(p);
 }
 showing(prefs.get());
+
+// Automatic follows this computer's dark mode as it changes, and the clock: looked at again each minute, it moves only at the
+// hours its light changes.
+export function followLight(every = 60_000): () => void {
+  if (typeof window === "undefined") return () => {};
+  const again = () => showing(prefs.get());
+  const dark = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  dark?.addEventListener("change", again);
+  const ticking = setInterval(again, every);
+  return () => {
+    dark?.removeEventListener("change", again);
+    clearInterval(ticking);
+  };
+}
 
 // Change what this names: on the page at once, on the server right after. A value the server refuses puts back what it holds.
 export function setPrefs(changes: Changes, saved?: () => void) {

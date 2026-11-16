@@ -10,7 +10,7 @@ import { useLayer } from "../../lib/backTrap";
 import type { Command } from "../../app/commands";
 
 export const helpOpen = createStore(false);
-const THEMES: ThemeName[] = ["day", "dusk", "night"];
+const THEMES = Object.keys(THEME_LABEL) as ThemeName[];
 
 // What the app's own list of commands says about keys, so the legend can't drift from what they do: `commands` are those
 // with keys, and `go` where g then a letter goes.
@@ -82,7 +82,7 @@ function Keys({ legend, ai }: { legend: () => Legend; ai: AiStatus | null | unde
       <AiNote ai={ai} />
       <div className="legtoggle legtheme" role="group" aria-label="Theme">Theme
         {THEMES.map((t) => <button type="button" key={t} aria-pressed={t === current} onClick={() => setTheme(t)}>{THEME_LABEL[t]}</button>)}
-        <span>also the sun button, or ⌘K → “Theme”</span>
+        <span>Automatic follows dark mode and the time of day · also the sun button, or ⌘K → “Theme”</span>
       </div>
       <label className="legtoggle">
         <input

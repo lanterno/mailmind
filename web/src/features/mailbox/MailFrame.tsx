@@ -3,7 +3,8 @@
 // page can size the frame, take its link clicks and give it its look. That is safe only because no script can run in it,
 // so guardFrames strips allow-scripts off any frame that ever gets it.
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { theme as themeStore, type ThemeName } from "../../lib/theme";
+import type { Light } from "../../lib/light";
+import { shownLight } from "../../lib/prefs";
 import { toast } from "../../lib/toast";
 import { linkRisk } from "./linkRisk";
 import { bodyUrl, foldPlainQuote, lookOf, quoteDoc, type FrameTheme, type Look, type MailPrefs } from "./mailDoc";
@@ -16,7 +17,7 @@ function mailPrefs(p: ReadPrefs): MailPrefs {
 }
 
 // :root holds the night palette and only the body's classes change it, so the root element reads as night under every theme.
-function frameTheme(name: ThemeName): FrameTheme {
+function frameTheme(name: Light): FrameTheme {
   const body = getComputedStyle(document.body), root = getComputedStyle(document.documentElement);
   const tk = (css: CSSStyleDeclaration, t: string) => css.getPropertyValue(t).trim();
   return { light: name !== "night", panel: tk(body, "--panel"), night: { bg: tk(root, "--bg"), ink: tk(root, "--ink"), primaryInk: tk(root, "--primary-ink"), lineHi: tk(root, "--line-hi"), mute: tk(root, "--mute") } };
@@ -89,7 +90,7 @@ function contentHeight(doc: Document): number | undefined {
 }
 
 export function MailFrame({ body, images, minHeight, pad }: { body: MailBody; images: boolean; minHeight: number; pad: number }) {
-  const name = themeStore.useValue();
+  const name = shownLight.useValue();
   const prefs = readPrefs.useValue();
   const isHtml = Boolean(body.has_html);
   const look = lookOf(isHtml, mailPrefs(prefs), frameTheme(name));
@@ -159,7 +160,7 @@ export function MailFrame({ body, images, minHeight, pad }: { body: MailBody; im
 // The message a reply quotes, or how what you typed will read, in the composer. Nothing here reaches inside this one, so its
 // sandbox allows nothing at all.
 export function QuoteFrame({ html, title = "The message you’re answering" }: { html: string; title?: string }) {
-  const name = themeStore.useValue();
+  const name = shownLight.useValue();
   const prefs = readPrefs.useValue();
   return <iframe sandbox="" title={title} srcDoc={quoteDoc(html, mailPrefs(prefs), frameTheme(name))} />;
 }

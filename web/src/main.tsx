@@ -5,7 +5,7 @@ import { App } from "./app/App";
 import { bindComposer } from "./features/compose/compose";
 import { refusalOf } from "./lib/api/client";
 import { guardFrames } from "./features/mailbox/MailFrame";
-import { loadPrefs } from "./lib/prefs";
+import { followLight, loadPrefs } from "./lib/prefs";
 
 guardFrames();
 
@@ -16,6 +16,7 @@ const queries = new QueryClient({
 });
 bindComposer(queries);
 void loadPrefs();
+followLight();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

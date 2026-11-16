@@ -18,7 +18,7 @@ import { reconcile, syncNow } from "../features/status/Status";
 import { aiOffered } from "../lib/ai";
 import { copyOf, type Copy } from "../lib/copy";
 import { shortAddress } from "../lib/text";
-import { setTheme, theme, THEME_LABEL } from "../lib/theme";
+import { setTheme, theme, THEME_LABEL, themeSaid, type ThemeName } from "../lib/theme";
 import { toast } from "../lib/toast";
 import { go, VIRTUAL_FOLDERS } from "./route";
 
@@ -161,8 +161,8 @@ export function buildCommands(m: Mailbox, ui: Ui, whatever = false): Command[] {
   add({ id: "search", group: "Commands", label: "Search", legend: ai ? "Search · ?question asks your inbox · !command plans a bulk action" : "Search", keys: ["/"], hint: "/", run: ui.openSearchBar });
   if (whatever || (m.searching && !onSavedView(m))) add({ id: "save-view", group: "Commands", label: "Save this search as a view", keys: ["v"], hint: "v", run: ui.saveSearch });
   if (whatever || (m.source?.kind === "search" && !m.source.lane && !m.source.thread)) add({ id: "create-filter", group: "Commands", label: "Create a filter from this search", run: ui.createFilter });
-  for (const t of (["day", "dusk", "night"] as const).filter((x) => x !== theme.get())) {
-    add({ id: `theme:${t}`, group: "Commands", label: `Theme → ${THEME_LABEL[t]}`, run: () => { setTheme(t); toast(`${THEME_LABEL[t]} theme`); } });
+  for (const t of (Object.keys(THEME_LABEL) as ThemeName[]).filter((x) => x !== theme.get())) {
+    add({ id: `theme:${t}`, group: "Commands", label: `Theme → ${THEME_LABEL[t]}`, run: () => { setTheme(t); toast(themeSaid(t)); } });
   }
   return out;
 }
