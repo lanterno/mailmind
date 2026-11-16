@@ -11,6 +11,7 @@ pub mod command_ports;
 pub mod commands;
 pub mod destination;
 pub mod filing;
+pub mod flights;
 pub mod folders;
 pub mod gates;
 pub mod ingest;

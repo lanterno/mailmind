@@ -204,17 +204,20 @@ impl Connections {
 
     /// Remove the account saved under the body's `email` (`change("delete")`), and with `delete_mail`, what this Mac
     /// keeps of its mail: how many stored copies went is `mail_deleted`. Its mail on the server is untouched.
+    ///
+    /// Who hears of the removal hears first (its logins, IDLE, a sync reading its mail, which stops), so nothing of
+    /// the account is still at work as its mail goes.
     pub fn delete(&self, body: &Asked) -> Result<Value, Failure> {
         let asked = body.get("email").cloned().unwrap_or(Value::Null);
         let saved_as = self
             .directory
             .remove_account(asked.as_str().unwrap_or_default())?
             .ok_or_else(|| Problem::not_found("not found"))?;
+        self.events.publish(AccountChange::Removed(saved_as.clone()));
         let forgotten = match (body.get("delete_mail").is_some_and(truthy), &self.mail) {
             (true, Some(mail)) => Some(mail.forget(&saved_as)?),
             _ => None,
         };
-        self.events.publish(AccountChange::Removed(saved_as));
         Ok(match forgotten {
             Some(n) => json!({"ok": true, "removed": asked, "mail_deleted": n}),
             None => json!({"ok": true, "removed": asked}),

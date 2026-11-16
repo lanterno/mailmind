@@ -257,17 +257,32 @@ impl Syncing {
         now.reading = reading;
     }
 
+    fn forget_status(&self, account: &str) {
+        self.held().status.remove(account);
+    }
+
     fn page(&self, topic: Topic, data: serde_json::Value) {
         self.events.publish(MailboxEvent::Page { topic, data });
     }
 
     /// Sync one account's INBOX: how many new messages it kept. A first scan keeps none new.
     fn sync_account(&self, email: &str) -> Result<usize, Fault> {
+        // While it reads, a removal stops it at its next step; then nothing more is said or kept of the account, and a
+        // sync that finds it gone already has nothing to say either.
+        let flight = self.ingest.flights().fly(email);
         let before = self.held().status.get(email).cloned();
         self.set_status(email, "syncing", String::new());
         // A sync that panics fails as `Panic`, and the other accounts' go on.
         let synced = caught(|| self.ingest.sync_folder(email, INBOX, false, None));
         match synced.unwrap_or_else(|fault| Err(SyncError::Store(fault))) {
+            _ if flight.stopped() => {
+                self.forget_status(email);
+                Ok(0)
+            }
+            Err(SyncError::UnknownAccount) => {
+                self.forget_status(email);
+                Ok(0)
+            }
             Ok(synced) => {
                 self.held().failing.remove(email);
                 let new = if synced.afresh { 0 } else { synced.kept };

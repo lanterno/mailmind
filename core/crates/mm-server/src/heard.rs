@@ -51,11 +51,12 @@ impl mm_mailbox::sync_ports::Events for Heard {
 }
 
 /// What happened to an account, heard by its logins: a refusal holds its login back, and a change or a removal lets
-/// the next try go. The page hears of neither, only of the syncs that follow; IDLE's workers hear the rest after
-/// this (`idle_wiring::IdleHeard`).
+/// the next try go. A removal stops each sync reading its mail at its next message. The page hears of a removal as
+/// its route answers; IDLE's workers hear the rest after this (`idle_wiring::IdleHeard`).
 #[derive(Debug)]
 pub(crate) struct AccountsHeard {
     pub(crate) logins: Arc<mm_accounts::logins::Logins>,
+    pub(crate) flights: Arc<mm_mailbox::flights::Flights>,
 }
 
 impl mm_accounts::ports::AccountEvents for AccountsHeard {
@@ -63,7 +64,11 @@ impl mm_accounts::ports::AccountEvents for AccountsHeard {
         use mm_accounts::ports::AccountChange::{Added, Changed, CredentialsRejected, Removed};
         match &change {
             CredentialsRejected(email, login) => self.logins.rejected(email, *login),
-            Changed(_) | Removed(_) => self.logins.changed(&change),
+            Changed(_) => self.logins.changed(&change),
+            Removed(email) => {
+                self.flights.stop(email);
+                self.logins.changed(&change);
+            }
             Added(_) => {}
         }
     }

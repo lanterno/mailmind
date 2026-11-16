@@ -173,8 +173,10 @@ impl App {
         getrandom::fill(&mut login_key).map_err(|_| "the system's random source failed")?;
         let login_key = mm_accounts::login_hold::LoginKey::new(login_key);
         let logins = Arc::new(mm_accounts::logins::Logins::new(login_key, seams.clock.clone()));
+        // Each account's syncs now, which its removal stops.
+        let flights = Arc::new(mm_mailbox::flights::Flights::default());
         let account_events: Arc<dyn mm_accounts::ports::AccountEvents> =
-            Arc::new(crate::heard::AccountsHeard { logins: logins.clone() });
+            Arc::new(crate::heard::AccountsHeard { logins: logins.clone(), flights: flights.clone() });
         // IDLE's workers hear an account added, changed or removed once its logins have (`realtime.reconcile`).
         let idle_heard = crate::idle_wiring::IdleHeard::over(account_events);
         let account_events: Arc<dyn mm_accounts::ports::AccountEvents> = idle_heard.clone();
@@ -234,14 +236,17 @@ impl App {
         // What the Mailbox and Attention say happened, told to the open tabs.
         let heard = Arc::new(Heard { hub: events.clone(), stats: stats.clone(), folders: folders.clone() });
         let mailbox_events: Arc<dyn Events> = heard.clone();
-        let ingest = Arc::new(Ingest::new(
-            Arc::new(DirectoryAccounts(directory.clone())),
-            servers.clone(),
-            database.clone(),
-            Arc::new(RuleBookClassifier { database: database.clone(), last: Mutex::new(None) }),
-            mailbox_events.clone(),
-            seams.clock.clone(),
-        ));
+        let ingest = Arc::new(
+            Ingest::new(
+                Arc::new(DirectoryAccounts(directory.clone())),
+                servers.clone(),
+                database.clone(),
+                Arc::new(RuleBookClassifier { database: database.clone(), last: Mutex::new(None) }),
+                mailbox_events.clone(),
+                seams.clock.clone(),
+            )
+            .flying_in(flights.clone()),
+        );
         // A message's body from its server where it isn't stored, on its account's gate; the reads a person waits on.
         let fetch: Arc<dyn mm_mailbox::ports::BodyFetch> =
             Arc::new(mm_mailbox::fetching::Fetching::new(mm_mailbox::fetching::FetchingParts {
@@ -373,7 +378,11 @@ impl App {
             account_events,
             seams.clock.clone(),
         )
-        .keeping_mail(database.clone());
+        .keeping_mail(Arc::new(crate::account_wiring::KeptMail {
+            database: database.clone(),
+            gates: gates.clone(),
+            flights,
+        }));
         // Compose's, over sessions of its own and the config file as it is when each send goes.
         let compose = crate::compose_wiring::Compose::assemble(crate::compose_wiring::Parts {
             database: database.clone(),

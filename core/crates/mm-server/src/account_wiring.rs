@@ -1,5 +1,6 @@
 //! What Accounts' connections need of the world (`bootstrap.accounts`' `_Probe`): a test login through `mm_imap`, and
-//! then through `mm_smtp` at the outgoing server. Who hears of an account's change is in `heard`.
+//! then through `mm_smtp` at the outgoing server; and what this Mac keeps of a removed account's mail, let go
+//! (`bootstrap.mailbox.forget_account`). Who hears of an account's change is in `heard`.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,10 +8,15 @@ use std::time::Duration;
 use mm_accounts::account;
 use mm_accounts::directory::Pin;
 use mm_accounts::draft::Draft;
-use mm_accounts::ports::{ConfigFile, LoginProbe, LoginTrouble};
+use mm_accounts::ports::{AccountMail, ConfigFile, LoginProbe, LoginTrouble};
 use mm_accounts::{Account, tls_pin};
+use mm_kernel::errors::Fault;
+use mm_kernel::log;
 use mm_kernel::seams::Secret;
+use mm_mailbox::flights::Flights;
+use mm_mailbox::gates::{Gates, Priority, Wait, on_gate};
 use mm_mailbox::ports::MailSession;
+use mm_store::Database;
 use serde_json::Value;
 
 use crate::login_wiring::ImapLogin;
@@ -24,6 +30,42 @@ pub(crate) struct ServerProbe {
     pub(crate) config: Arc<dyn ConfigFile>,
     /// A read-only process sends nothing, and tries no outgoing server.
     pub(crate) read_only: bool,
+}
+
+/// How long letting go of a removed account's mail waits for what holds its gate (opening a body, a move, reconcile)
+/// to end: then it goes anyway, as the account is already gone.
+const FORGET_WAIT: Duration = Duration::from_secs(30);
+
+/// What this Mac keeps of a removed account's mail, let go on the account's gate, once what holds the gate has ended;
+/// and again as each sync that was reading its mail lands, so what one stored after the removal goes too.
+#[derive(Debug)]
+pub(crate) struct KeptMail {
+    pub(crate) database: Arc<Database>,
+    pub(crate) gates: Arc<dyn Gates>,
+    pub(crate) flights: Arc<Flights>,
+}
+
+impl AccountMail for KeptMail {
+    fn forget(&self, email: &str) -> Result<usize, Fault> {
+        let forget = || AccountMail::forget(&*self.database, email);
+        let forgotten = match on_gate(&*self.gates, email, Priority::Interactive, Wait::For(FORGET_WAIT), forget) {
+            Ok(forgotten) => forgotten,
+            Err(_) => {
+                log::warning("accounts", "a removed account's gate stayed held: its mail goes anyway", &[], None);
+                AccountMail::forget(&*self.database, email)
+            }
+        }?;
+        let (database, account) = (self.database.clone(), email.to_owned());
+        self.flights.after(
+            email,
+            Box::new(move || {
+                if let Err(fault) = AccountMail::forget(&*database, &account) {
+                    log::warning("accounts", "what a removed account's sync read couldn't go", &[], Some(fault.class));
+                }
+            }),
+        );
+        Ok(forgotten)
+    }
 }
 
 /// What an SMTP login's trouble is, by the class the Python app's `conn_error.quiet` reads of `smtplib`'s.

@@ -16,6 +16,8 @@
 //! what they ask is queued for the server (`arrival_flags`).
 //!
 //! No transaction stays open while the server is asked: each store call is its own.
+//!
+//! Each sync of an account is a flight (`flights`): one whose account is removed stops before it stores its next step.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
@@ -30,6 +32,7 @@ use serde_json::json;
 
 use crate::arrival_ports::ArrivalFilters;
 use crate::fetch_ports::KeptBody;
+use crate::flights::{Flight, Flights};
 use crate::session::{
     HEADER_BATCH, HEADER_FIELDS, Headers, MailServer, MailServers, Search, ServerError, found_by_message_id,
 };
@@ -99,6 +102,11 @@ pub struct Synced {
     pub reading: Option<Progress>,
 }
 
+/// A sync whose account was removed goes no further: there is no account to read for.
+fn going_on(flight: &Flight<'_>) -> Result<(), SyncError> {
+    if flight.stopped() { Err(SyncError::UnknownAccount) } else { Ok(()) }
+}
+
 #[derive(Debug)]
 pub struct Ingest {
     accounts: Arc<dyn SyncAccounts>,
@@ -109,6 +117,8 @@ pub struct Ingest {
     clock: Arc<dyn Clock>,
     /// The person's filters, heard once what queues their flags is built (it files through this sync).
     arrivals: OnceLock<Arc<dyn ArrivalFilters>>,
+    /// Each account's syncs now, which its removal stops.
+    flights: Arc<Flights>,
 }
 
 /// A session that logs out however the work on it ends.
@@ -196,7 +206,19 @@ impl Ingest {
         events: Arc<dyn Events>,
         clock: Arc<dyn Clock>,
     ) -> Ingest {
-        Ingest { accounts, servers, store, classifier, events, clock, arrivals: OnceLock::new() }
+        let flights = Arc::new(Flights::default());
+        Ingest { accounts, servers, store, classifier, events, clock, arrivals: OnceLock::new(), flights }
+    }
+
+    /// The same, its syncs in `flights`, which a removal stops through.
+    #[must_use]
+    pub fn flying_in(self, flights: Arc<Flights>) -> Ingest {
+        Ingest { flights, ..self }
+    }
+
+    /// Each account's syncs now.
+    pub fn flights(&self) -> &Flights {
+        &self.flights
     }
 
     /// From now on, new Inbox mail is judged by the person's filters as it is stored. The first call binds them; a
@@ -223,6 +245,7 @@ impl Ingest {
         full: bool,
         recent: Option<usize>,
     ) -> Result<Synced, SyncError> {
+        let flight = self.flights.fly(account);
         let acct = self.account(account)?;
         let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
         let condstore = s.0.enable_condstore()?;
@@ -250,7 +273,8 @@ impl Ingest {
         let mut synced = Synced { afresh: plan.whole && plan.scan != Scan::Whole, ..Synced::default() };
         let mut stored = Vec::new();
         for step in &steps {
-            let Some((kept, junk, max_uid)) = self.store_step(&mut *s.0, &acct, pass, step, &mut stored)? else {
+            let Some((kept, junk, max_uid)) = self.store_step(&mut *s.0, &acct, pass, step, &mut stored, &flight)?
+            else {
                 break;
             };
             synced.kept += kept;
@@ -261,6 +285,7 @@ impl Ingest {
         if let Some(Scan::Down(_)) = leaves {
             synced.reading = Some(Progress { done: steps.iter().map(|step| step.uids.len()).sum(), total });
         }
+        going_on(&flight)?;
         if plan.read_flags {
             self.refresh_flags(&mut *s.0, &acct, folder, modseq)?;
         }
@@ -281,6 +306,7 @@ impl Ingest {
         chunks: usize,
         heard: &mut dyn FnMut(Option<Progress>),
     ) -> Result<Option<Progress>, SyncError> {
+        let flight = self.flights.fly(account);
         let acct = self.account(account)?;
         let Scan::Down(floor) = self.store.folder_state(&acct.email, folder)?.scan else { return Ok(None) };
         let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
@@ -299,7 +325,7 @@ impl Ingest {
         let mut reached = None;
         for step in sync_plan::older_steps(floor, &below, chunks) {
             let mut stored = Vec::new();
-            let Some((kept, junk, _)) = self.store_step(&mut *s.0, &acct, pass, &step, &mut stored)? else {
+            let Some((kept, junk, _)) = self.store_step(&mut *s.0, &acct, pass, &step, &mut stored, &flight)? else {
                 return Ok(None);
             };
             self.store.settle(&acct.email, folder, None, &stored, &self.now())?;
@@ -332,6 +358,7 @@ impl Ingest {
         if message_ids.iter().all(String::is_empty) {
             return Ok(0);
         }
+        let flight = self.flights.fly(account);
         let acct = self.account(account)?;
         let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
         s.0.select(folder, true)?;
@@ -348,6 +375,7 @@ impl Ingest {
         let fetched = self.fetch(&mut *s.0, &acct, &uids, pass)?;
         let mut stored = Vec::new();
         for Fetched { row, invite } in fetched {
+            going_on(&flight)?;
             let (pk, threads) = self.store.store_copy(&acct, folder, &row)?;
             if threads {
                 stored.push(pk);
@@ -455,7 +483,7 @@ impl Ingest {
 
     /// Store one step of a pass, junk kept as a badge, in one transaction with where it leaves the folder; `stored`
     /// gets what threading has yet to hear of. (not junk, junk, the highest UID), or None when the folder was read
-    /// afresh meanwhile and the step gave way.
+    /// afresh meanwhile and the step gave way. Its account removed (`flight` stopped), it stores nothing more.
     fn store_step(
         &self,
         s: &mut dyn MailServer,
@@ -463,9 +491,11 @@ impl Ingest {
         pass: Pass<'_>,
         step: &Step,
         stored: &mut Vec<i64>,
+        flight: &Flight<'_>,
     ) -> Result<Option<(usize, usize, u32)>, SyncError> {
         let filters = self.arrivals.get().filter(|_| pass.arriving);
         let fetched = self.fetch(s, acct, &step.uids, pass)?;
+        going_on(flight)?;
         let junk = fetched.iter().filter(|f| f.row.verdict.is_junk).count();
         let max_uid = fetched.iter().map(|f| f.row.uid).max().unwrap_or(0);
         let news: Vec<bool> = match filters {
