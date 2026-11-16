@@ -222,7 +222,9 @@ def _sweep_stored(accts, dry=False):
             continue
         tag = f"would trash {r['planned']}" if dry else f"moved {r['moved']}/{r['planned']}"
         strag = f"  !{len(r['stragglers'])} stragglers" if r.get("stragglers") else ""
-        print(f"{a['email']:38} {tag:>16}   (kept by rule: {r['kept_by_rule']}){strag}")
+        left = f", left starred or unread: {r['held_back']}" if r["held_back"] else ""
+        capped = "  - the newest only: sweep again for the rest" if r["capped"] else ""
+        print(f"{a['email']:38} {tag:>16}   (kept by rule: {r['kept_by_rule']}{left}){strag}{capped}")
         grand_p += r["planned"]; grand_m += r.get("moved", 0); grand_k += r["kept_by_rule"]
     print(f"\nTOTAL: planned {grand_p}" + ("" if dry else f" · moved {grand_m}") + f" · kept-by-rule {grand_k}")
 

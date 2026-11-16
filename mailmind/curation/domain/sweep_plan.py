@@ -66,7 +66,7 @@ def junk(rows: Iterable[Classified]) -> list[Classified]:
     return [r for r in rows if r["bucket"] in classifier.JUNK_BUCKETS]
 
 
-def within_cap(junk: list[Classified]) -> tuple[list[Classified], bool]:
+def within_cap[R: Read](junk: list[R]) -> tuple[list[R], bool]:
     """What a sweep takes of `junk`: the newest SWEEP_MAX by UID, in the order the INBOX holds them, and whether that leaves
     any for the next sweep."""
     if len(junk) <= SWEEP_MAX:

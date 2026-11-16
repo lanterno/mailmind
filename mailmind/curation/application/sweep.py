@@ -8,7 +8,7 @@ from typing import Any
 
 from mailmind.curation.application.ports import FilingCommands, LiveSession, Mailboxes, RuleBookRepository, SenderMail, SweepTrail
 from mailmind.curation.domain import sweep_plan
-from mailmind.curation.domain.live import READ_FIELDS, Classified, Read, held, read_from_headers
+from mailmind.curation.domain.live import READ_FIELDS, Read, held, read_from_headers
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
@@ -25,7 +25,7 @@ def fetch_headers(s: LiveSession) -> list[Read]:
     return [read_from_headers(h.uid, h.raw, h.flags) for h in s.headers(s.uids("ALL"), READ_FIELDS)]
 
 
-def undo_entry(account: str, trash: str, r: Classified) -> dict[str, Any]:
+def undo_entry(account: str, trash: str, r: Read) -> dict[str, Any]:
     """What puts a swept message back: a move from Trash to the INBOX, of the message found there by its Message-ID. An
     account's go back together, on one session (`sweep_back`), so one Undo of hundreds asks the server once."""
     return {"kind": "sweep_back", "account": account, "src_folder": "INBOX", "dest_folder": trash, "message_id": r["mid"],
@@ -120,7 +120,7 @@ class Sweeps:
         self._mail.forget_moved(acct["email"], junk_rows, stragglers)        # don't re-ghost swept mail
         return out, pushed
 
-    def _stopped(self, acct: dict[str, Any], trash: str, junk: list[Classified], group: str, out: dict[str, Any]) -> bool:
+    def _stopped(self, acct: dict[str, Any], trash: str, junk: Sequence[Read], group: str, out: dict[str, Any]) -> bool:
         """A sweep the server stopped part way: a fresh look at the INBOX says what had left it, and only that has a way
         back and its rows forgotten, so a sweep that moved nothing leaves the stack as it was. When the server can't be
         asked again, it can't be told what went: all of it has a way back, and Undo counts one still in the INBOX as
@@ -154,7 +154,7 @@ class Sweeps:
             except Exception:
                 pass
 
-    def _undo_push(self, account: str, trash: str, junk: Sequence[Classified], stragglers: Iterable[str],
+    def _undo_push(self, account: str, trash: str, junk: Sequence[Read], stragglers: Iterable[str],
                    group: str) -> bool:
         """A way back for each of `junk` that went to Trash, all of them under `group` at one write: none for a
         straggler, still in the INBOX, or a message with no Message-ID to find it by. Whether there was any."""
@@ -164,15 +164,17 @@ class Sweeps:
             self._filing.undo_push_many(back, group)
         return bool(back)
 
-    def sweep_stored(self, acct: dict[str, Any], dry: bool = False) -> dict[str, Any]:
+    def sweep_stored(self, acct: dict[str, Any], dry: bool = False, group: str | None = None) -> dict[str, Any]:
         """Trash the INBOX mail stored as is_junk=1, which is the classifier's verdict at ingest, whatever its rules say
         of the headers now. Matched to the LIVE inbox by Message-ID so UIDs are always
-        current (no UIDVALIDITY risk), minus any keep-ruled sender/domain. Move to Trash
-        (reversible), verified + audited; prune the local DB by Message-ID."""
+        current (no UIDVALIDITY risk), minus any keep-ruled sender/domain. As the account's sweep, it leaves starred and
+        unread mail where it is, takes the newest SWEEP_MAX, and moves to Trash verified + audited, with a way back for
+        each under `group` (one of its own when None); prune the local DB by Message-ID."""
+        group = group or "sweep:" + secrets.token_hex(16)
         r = self._rules.sets()
         junk_mids = self._mail.stored_junk_ids(acct["email"])
         out: dict[str, Any] = {"account": acct["email"], "planned": 0, "moved": 0, "stragglers": [],
-                               "kept_by_rule": 0, "error": None}
+                               "kept_by_rule": 0, "held_back": 0, "capped": False, "error": None}
         if not junk_mids:
             return out
         try:
@@ -181,24 +183,35 @@ class Sweeps:
             log.warning("an account failed", exc_info=e)
             out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out
+        trash: str | None = None
+        verified: tuple[int, list[str]] | None = None
+        targets: list[Read] = []
         try:                                    # single try/finally so s is ALWAYS logged out (no socket leak)
-            targets, kept = sweep_plan.stored_targets(fetch_headers(s), junk_mids, r)
-            out["planned"], out["kept_by_rule"] = len(targets), kept
+            found, kept = sweep_plan.stored_targets(fetch_headers(s), junk_mids, r)
+            # Starred or unread junk stays: a person's mark, or mail no one has seen yet, is never swept away.
+            targets, out["capped"] = sweep_plan.within_cap([t for t in found if not held(t)])
+            out["planned"], out["kept_by_rule"], out["held_back"] = len(targets), kept, sum(1 for t in found if held(t))
             if dry or not targets:
                 return out
             self._audit.swept(acct["email"], sweep_plan.stored_audited(targets))
-            moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
-                                                          self._boxes.trash_folder(acct, s))
+            trash = self._boxes.trash_folder(acct, s)   # as the server lists it: a localised or renamed Trash too
+            verified = self._boxes.move_verified(s, [t["uid"] for t in targets], trash)
         except Exception as e:
             log.warning("an account failed", exc_info=e)
             out["error"] = type(e).__name__      # what a server said stays out of the answer
-            return out
         finally:
             try:
                 s.logout()
             except Exception:
                 pass
+        if trash is None:                        # the server's folders couldn't be read: nothing was moved
+            return out
+        if verified is None:
+            self._stopped(acct, trash, targets, group, out)
+            return out
+        moved, stragglers = verified
         out["moved"], out["stragglers"] = moved, stragglers
+        self._undo_push(acct["email"], trash, targets, stragglers, group)
         self._mail.forget_moved(acct["email"], targets, stragglers)
         return out
 
