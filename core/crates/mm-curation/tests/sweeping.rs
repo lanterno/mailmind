@@ -31,6 +31,8 @@ struct Inbox {
     closed: Option<bool>,
     /// The folder playing Trash on the server, where the account's own isn't listed.
     trash_listed: Option<String>,
+    /// The connection ends as the server's folders are listed.
+    lost_listing: bool,
 }
 
 impl Inbox {
@@ -89,6 +91,9 @@ impl LiveSession for Inbox {
     }
 
     fn trash(&mut self, named: &str) -> Result<String, LiveError> {
+        if self.lost_listing {
+            return Err(LiveError::Lost("ConnectionLost"));
+        }
         Ok(self.trash_listed.clone().unwrap_or_else(|| named.to_owned()))
     }
 
@@ -629,6 +634,27 @@ fn a_sweep_moves_to_the_trash_the_server_lists_where_the_accounts_own_isnt() {
     sweeps(&world, true).run(None, false, None).expect("swept");
     let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
     assert_eq!(inbox.moves, [(vec![2, 3], "Deleted Messages".to_owned())]);
+}
+
+#[test]
+fn a_sweeps_way_back_looks_for_its_mail_in_the_trash_it_went_to() {
+    let world = world();
+    world.0.inbox.lock().expect("lock").as_mut().expect("open").trash_listed = Some("Deleted Messages".into());
+    sweeps(&world, true).run(None, false, None).expect("swept");
+    let pushed = world.0.pushed.lock().expect("lock").clone();
+    assert_eq!(pushed.len(), 2);
+    assert!(pushed.iter().all(|e| e["dest_folder"] == "Deleted Messages"), "{pushed:?}");
+}
+
+#[test]
+fn a_server_whose_folders_cant_be_read_moves_nothing_and_leaves_the_stack_as_it_was() {
+    let world = world();
+    world.0.inbox.lock().expect("lock").as_mut().expect("open").lost_listing = true;
+    let (said, notes) = stopped(&world);
+    assert_eq!(said, (json!("ConnectionLost"), json!(0), Value::Null));
+    assert_eq!(notes, Vec::<String>::new());
+    let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
+    assert_eq!((inbox.moves.len(), inbox.closed), (0, Some(true)));
 }
 
 #[test]
