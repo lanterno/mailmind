@@ -72,7 +72,7 @@ words, the breaker and the models' listing take it as one. A refused key's error
 credit or quota (Anthropic's "credit balance is too low", OpenAI's `insufficient_quota`, a Gemini quota for the day,
 or a 402) carries `no_credit`, the account billed (`providers.BILLED_BY`): it is never retried, the status says "the
 Anthropic account has no credit left" (`providers.no_credit`) rather than a rate limit, on both servers, and it stops
-background work as a refused key does. Any other error carries what the
+background work until a call goes through or an hour passes (the breaker, below). Any other error carries what the
 service said (its `error`, from the first element where the body is an array), the key taken out of the whole of it
 before it is cut to 200 characters. A
 `message.refusal` is a refusal; a reasoning model's thinking ahead of its reply (`<think>…</think>` or
@@ -199,7 +199,11 @@ keeps its plain count.
 - The breaker. A 401 or 403 stops every background and speculative call, and three permanent
   4xx in a row for one feature and model stop that pair. It stays open until the language model is
   made again, which another provider, model, URL or key does, and so does turning AI mode off and on.
-  Interactive calls still go.
+  Interactive calls still go. An account with no credit left (`no_credit`) stops every background and
+  speculative call too, but credit is added to the same key, so the model isn't made again: the next
+  call that goes through closes it (someone asking for something, which still goes), and an hour after
+  it opened (`CREDIT_RETRY_SECONDS`) background work tries again, which a Gemini quota for the day
+  needs. Both servers do the same, and the log says so once each time it opens.
 
 Background work asks `gateway().held_back(feature)` before a batch, and a call that was held
 back anyway raises `Deferred(reason)`. Nothing is counted for it, and `Status.noting` doesn't record it
