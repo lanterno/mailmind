@@ -34,6 +34,16 @@ pub trait Reverser: Send + Sync + fmt::Debug {
     fn reverses(&self, kind: &str) -> bool;
     /// Reverse `entry`, on its account's gate. An error is a reversal that may go better another time.
     fn reverse(&self, entry: &Value) -> Result<Reversed, Fault>;
+    /// Whether a group's entries of `kind` on one account go back together, at one turn of its gate
+    /// (`reverse_together`), rather than one at a time: a sweep's hundreds ask the server once, not once each.
+    fn together(&self, _kind: &str) -> bool {
+        false
+    }
+    /// Reverse `entries`, all of one kind and one account, at one turn of its gate: what each came to, in their
+    /// order. An error is a reversal of them all that may go better another time.
+    fn reverse_together(&self, entries: &[Value]) -> Result<Vec<Reversed>, Fault> {
+        entries.iter().map(|entry| self.reverse(entry)).collect()
+    }
 }
 
 fn oldest_kept(now: Moment) -> String {
@@ -46,6 +56,15 @@ fn is_group(entry: &Value) -> bool {
 
 fn children(entry: &Value) -> Vec<Value> {
     entry.get("children").and_then(Value::as_array).cloned().unwrap_or_default()
+}
+
+fn kind_of(entry: &Value) -> &str {
+    entry.get("kind").and_then(Value::as_str).unwrap_or_default()
+}
+
+/// The gate an entry's reversal runs on: its account's, or every account's when it names none.
+fn gate_of(entry: &Value) -> &str {
+    entry.get("account").and_then(Value::as_str).filter(|a| !a.is_empty()).unwrap_or(EVERY_ACCOUNT)
 }
 
 /// Put `entry` on top of the stack, or, when the top gathers `group`, add it to that group's children. Then keep
@@ -154,19 +173,57 @@ impl Undo {
         command_ports::read(&*self.store, |tx| tx.undo_entries(&oldest))
     }
 
-    /// One entry's reversal, on its account's gate.
-    fn reverse_one(&self, entry: &Value) -> Result<Reversed, Fault> {
-        let account = entry.get("account").and_then(Value::as_str).filter(|a| !a.is_empty()).unwrap_or(EVERY_ACCOUNT);
-        let kind = entry.get("kind").and_then(Value::as_str).unwrap_or_default();
-        let held = || match self.reversers.iter().find(|r| r.reverses(kind)) {
-            Some(reverser) => reverser.reverse(entry),
-            None => Ok((false, entry.get("account").and_then(Value::as_str).map(str::to_owned), None)),
-        };
-        match on_gate(&*self.gates, account, Priority::Interactive, Wait::Ever, held) {
+    fn reverser(&self, kind: &str) -> Option<&Arc<dyn Reverser>> {
+        self.reversers.iter().find(|r| r.reverses(kind))
+    }
+
+    /// `work` on `account`'s gate, as a person waits.
+    fn on_gate<T>(&self, account: &str, work: impl FnOnce() -> Result<T, Fault>) -> Result<T, Fault> {
+        match on_gate(&*self.gates, account, Priority::Interactive, Wait::Ever, work) {
             Ok(done) => done,
             Err(Refused::Busy) => Err(Fault::new("Busy")),
             Err(Refused::Nested) => Err(Fault::new("NestedGate")),
         }
+    }
+
+    /// One entry's reversal, on its account's gate.
+    fn reverse_one(&self, entry: &Value) -> Result<Reversed, Fault> {
+        let held = || match self.reverser(kind_of(entry)) {
+            Some(reverser) => reverser.reverse(entry),
+            None => Ok((false, entry.get("account").and_then(Value::as_str).map(str::to_owned), None)),
+        };
+        self.on_gate(gate_of(entry), held)
+    }
+
+    /// A group's members, newest first, each run of one kind and one account that goes back together (`together`) at
+    /// one turn of its gate and the rest one at a time: what each came to, in their order. One run's or member's
+    /// trouble never stops the rest.
+    fn reverse_members(&self, newest_first: &[Value]) -> Vec<Option<Reversed>> {
+        let mut out = Vec::with_capacity(newest_first.len());
+        let mut at = 0;
+        while let Some(first) = newest_first.get(at) {
+            let (kind, gate) = (kind_of(first), gate_of(first));
+            let Some(reverser) = self.reverser(kind).filter(|r| r.together(kind)) else {
+                out.push(self.reverse_one(first).map_err(|fault| Self::member_failed(&fault)).ok());
+                at += 1;
+                continue;
+            };
+            let run = newest_first[at..].iter().take_while(|e| kind_of(e) == kind && gate_of(e) == gate).count();
+            let members = &newest_first[at..at + run];
+            match self.on_gate(gate, || reverser.reverse_together(members)) {
+                Ok(answers) => out.extend((0..run).map(|k| answers.get(k).cloned())),
+                Err(fault) => {
+                    Self::member_failed(&fault);
+                    out.extend((0..run).map(|_| None));
+                }
+            }
+            at += run;
+        }
+        out
+    }
+
+    fn member_failed(fault: &Fault) {
+        log::warning(TAG, "a group member: %(why)s", &[(Field::Why, fault.class)], None);
     }
 
     /// Take the last thing done off the stack and reverse it, and say what went back: a group says how many of it
@@ -209,19 +266,15 @@ impl Undo {
     fn reverse_entry(&self, entry: &Value, kept: &mut bool) -> Result<Value, Failure> {
         let label = entry.get("label").cloned().unwrap_or(Value::Null);
         let (went, mut answer) = if is_group(entry) {
-            let kids = children(entry);
+            let mut kids = children(entry);
             let (mut account, mut folder) = (None, None);
             // Newest first, as they were tried.
+            kids.reverse();
             let mut left = Vec::new();
-            for child in kids.iter().rev() {
-                match self.reverse_one(child) {
-                    Ok((true, a, f)) => (account, folder) = (a, f),
-                    Ok(_) => left.push(child.clone()),
-                    Err(fault) => {
-                        // One member's trouble never stops the rest.
-                        log::warning(TAG, "a group member: %(why)s", &[(Field::Why, fault.class)], None);
-                        left.push(child.clone());
-                    }
+            for (child, answer) in kids.iter().zip(self.reverse_members(&kids)) {
+                match answer {
+                    Some((true, a, f)) => (account, folder) = (a, f),
+                    _ => left.push(child.clone()),
                 }
             }
             let done = kids.len() - left.len();
