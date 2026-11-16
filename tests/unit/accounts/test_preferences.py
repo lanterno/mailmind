@@ -141,3 +141,110 @@ def test_the_first_run_guide_is_offered_once_and_the_file_remembers(config, data
     assert config.set_preferences({"guide_offered": True})["guide_offered"] is True
     assert file_of(data_dir)["preferences"]["guide_offered"] is True
     assert Directory(config_file.ConfigFile(), secrets, lambda: None).preferences()["guide_offered"] is True
+
+
+# ── AI: on or off, its provider, model and service URL (#49) ──────────────────────────────────────────────────────────
+
+def test_ai_is_on_with_claude_and_its_own_model_and_url_to_begin_with():
+    assert {k: v for k, v in preferences.DEFAULTS.items() if k.startswith("ai_")} == {
+        "ai_enabled": True, "ai_provider": "anthropic", "ai_model": "", "ai_base_url": ""}
+    assert preferences.CHOICES["ai_provider"] == ("anthropic", "openai", "gemini", "ollama", "compatible")
+
+
+@pytest.mark.parametrize("model", ["gpt-6.1-sol", "llama3.3:70b-instruct-q4_K_M", "openai/gpt-6.1-sol", "models/gemini-4-hydrogen",
+                                   "me@example.test/finetune+v2", "a" * 200, ""])
+def test_a_model_is_up_to_two_hundred_of_its_characters_or_none(config, model):
+    assert config.set_preferences({"ai_model": model})["ai_model"] == model
+
+
+@pytest.mark.parametrize("model", ["a" * 201, "gpt 6", "gpt-6\n", "ünï", "gpt;6", "gpt-6?", 7, None, ["gpt-6"]])
+def test_a_model_of_anything_else_is_refused_in_words(config, data_dir, model):
+    before = path_of(data_dir).read_bytes()
+    with pytest.raises(Refused, match=r"^the AI model must be up to 200 letters, digits and \. _ : / @ \+ -$"):
+        config.set_preferences({"ai_model": model})
+    assert path_of(data_dir).read_bytes() == before
+
+
+@pytest.mark.parametrize("url, kept", [
+    ("https://llm.example.test/v1", "https://llm.example.test/v1"),
+    ("https://llm.example.test/v1/", "https://llm.example.test/v1"),
+    ("https://llm.example.test:8443/openai/v1", "https://llm.example.test:8443/openai/v1"),
+    ("http://127.0.0.1:11434/v1", "http://127.0.0.1:11434/v1"),
+    ("http://localhost:8080/v1/", "http://localhost:8080/v1"),
+    ("http://[::1]:11434/v1", "http://[::1]:11434/v1"),
+    ("https://llm.example.test", "https://llm.example.test"),
+    ("", ""),
+])
+def test_a_service_url_is_https_or_http_on_this_mac_kept_without_its_trailing_slash(config, data_dir, url, kept):
+    assert config.set_preferences({"ai_base_url": url})["ai_base_url"] == kept
+    assert file_of(data_dir)["preferences"]["ai_base_url"] == kept
+
+
+@pytest.mark.parametrize("url", [
+    "http://llm.example.test/v1",                     # http that leaves this Mac
+    "http://10.0.0.7:11434/v1",
+    "ftp://llm.example.test/v1",
+    "llm.example.test/v1",
+    "https:///v1",
+    "https://user:pw@llm.example.test/v1",
+    "https://user@llm.example.test/v1",
+    "https://llm.example.test/v1?key=x",
+    "https://llm.example.test/v1?",
+    "https://llm.example.test/v1#top",
+    "https://llm.example.test:99999/v1",
+    "https://llm.example.test:port/v1",
+    "https://llm.example.test/v 1",
+    "https://llm.example.test/ü",
+    "https://llm.example.test/" + "a" * 476,          # 501 characters
+    7, None,
+])
+def test_a_service_url_of_anything_else_is_refused_in_words(config, data_dir, url):
+    before = path_of(data_dir).read_bytes()
+    with pytest.raises(Refused, match="^the AI service's URL must be https, or http on this Mac, in at most 500 characters, "
+                                      "with no user, password, query or fragment$"):
+        config.set_preferences({"ai_base_url": url})
+    assert path_of(data_dir).read_bytes() == before
+
+
+def test_the_longest_url_is_five_hundred_characters():
+    longest = "https://llm.example.test/" + "a" * 475
+    assert len(longest) == preferences.AI_BASE_URL_MAX and preferences.changes({"ai_base_url": longest})["ai_base_url"] == longest
+
+
+@pytest.mark.parametrize("change", [{"ai_provider": "mistral"}, {"ai_enabled": "yes"}, {"ai_enabled": 1}])
+def test_a_provider_or_switch_none_can_be_is_refused(config, change):
+    with pytest.raises(Refused):
+        config.set_preferences(change)
+
+
+def test_choosing_another_provider_sets_its_model_and_url_back_to_its_own(config, data_dir):
+    config.set_preferences({"ai_provider": "compatible", "ai_model": "mixtral-9x", "ai_base_url": "https://llm.example.test/v1"})
+    now = config.set_preferences({"ai_provider": "openai"})
+    assert (now["ai_provider"], now["ai_model"], now["ai_base_url"]) == ("openai", "", "")
+    assert file_of(data_dir)["preferences"] == {"ai_provider": "openai", "ai_model": "", "ai_base_url": ""}
+
+
+def test_a_change_of_provider_keeps_the_model_and_url_it_names_itself(config):
+    config.set_preferences({"ai_provider": "compatible", "ai_model": "mixtral-9x", "ai_base_url": "https://llm.example.test/v1"})
+    now = config.set_preferences({"ai_provider": "ollama", "ai_model": "llama3.3"})
+    assert (now["ai_provider"], now["ai_model"], now["ai_base_url"]) == ("ollama", "llama3.3", "")
+    now = config.set_preferences({"ai_provider": "compatible", "ai_base_url": "http://127.0.0.1:8080/v1"})
+    assert (now["ai_model"], now["ai_base_url"]) == ("", "http://127.0.0.1:8080/v1")
+
+
+def test_the_same_provider_again_keeps_its_model_and_url(config):
+    config.set_preferences({"ai_provider": "ollama", "ai_model": "llama3.3", "ai_base_url": "http://127.0.0.1:11500/v1"})
+    now = config.set_preferences({"ai_provider": "ollama", "ai_enabled": False})
+    assert (now["ai_model"], now["ai_base_url"], now["ai_enabled"]) == ("llama3.3", "http://127.0.0.1:11500/v1", False)
+    assert config.set_preferences({"ai_model": "qwen3"})["ai_base_url"] == "http://127.0.0.1:11500/v1"
+
+
+@pytest.mark.parametrize("name, junk", [("ai_provider", "mistral"), ("ai_enabled", "no"), ("ai_model", "has space"),
+                                        ("ai_base_url", "http://llm.example.test/v1"), ("ai_base_url", 7)])
+def test_an_ai_preference_edited_by_hand_that_cant_be_it_is_its_default(name, junk):
+    assert preferences.read({"preferences": {name: junk}})[name] == preferences.DEFAULTS[name]
+
+
+def test_a_url_edited_by_hand_with_a_trailing_slash_reads_without_it():
+    assert preferences.read({"preferences": {"ai_base_url": "https://llm.example.test/v1/"}})["ai_base_url"] == \
+        "https://llm.example.test/v1"
