@@ -526,6 +526,12 @@ pub fn classify(from_addr: &str, subject: &str, from_name: &str, has_list_unsub:
         return verdict(Bucket::Receipts, Confidence::Med, "transactional/receipt signal");
     }
 
+    // A person's reply or forward in a list's thread (a group's, a club's, a school's) is a conversation, though the
+    // list put its headers on it: read before the list check, or every reply in a group counts as marketing.
+    if has_list_unsub && RE_FWD.is_match(&subject_i) && looks_human(Some(local)) {
+        return verdict(Bucket::Personal, Confidence::Med, "a person's reply in a list thread");
+    }
+
     // Newsletters and marketing, the leak this closes.
     if has_list_unsub {
         return verdict(Bucket::Marketing, Confidence::High, "List-Unsubscribe header");
