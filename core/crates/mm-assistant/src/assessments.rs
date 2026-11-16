@@ -4,9 +4,9 @@
 //! A backlog goes as a batch at half price (`batches`), from the same round: what a batch holds, and while one is out
 //! everything older than the newest it took, is left to it.
 //!
-//! Only mail from the last `RECENT_DAYS` is summarized in the background: older mail is summarized when it is opened,
-//! so turning AI on over a mailbox of years spends nothing on its past. Background summaries ask the provider's small
-//! model (`Calls::background_label`), and each is stored under it.
+//! Only mail from the last `RECENT_DAYS` is summarized in the background: older mail is summarized only when a person
+//! asks for a summary, so turning AI on over a mailbox of years spends nothing on its past. Background summaries ask
+//! the provider's small model (`Calls::background_label`), and each is stored under it.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -44,8 +44,8 @@ pub const IMPORTANCE_UNREADABLE: i64 = 2;
 /// How far back the background summarizes, in days.
 pub const RECENT_DAYS: i64 = 30;
 
-/// The moment the background's reach starts, `RECENT_DAYS` before `now` in whole seconds: mail from before it waits to
-/// be opened.
+/// The moment the background's reach starts, `RECENT_DAYS` before `now` in whole seconds: mail from before it waits for
+/// a person to ask for its summary.
 pub fn recent(now: i64) -> i64 {
     now - RECENT_DAYS * 86_400
 }
