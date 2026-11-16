@@ -232,7 +232,8 @@ def test_with_no_model_server_running_it_says_to_start_one_and_takes_a_url_and_a
     expect(dialog.get_by_text(none)).to_be_visible()
     steps = page.locator("#aiGetOllama li")
     expect(steps).to_have_text(["Get Ollama and open it.",
-                                "In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.",
+                                "In Ollama, download a model. A good first one is qwen3:8b, as Ollama lists it: it runs well on a Mac "
+                                "with 16 GB of memory.",
                                 "In Ollama’s settings, set Context length to 16K or more.", "Then look again."])
     get = dialog.get_by_role("link", name="Get Ollama")
     expect(get).to_have_attribute("href", "https://ollama.com")
