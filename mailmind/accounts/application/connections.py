@@ -6,6 +6,7 @@ from typing import Any
 from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.application.ports import ConnectionProbe
 from mailmind.accounts.domain.account import Entry
+from mailmind.accounts.domain import login_words, preset
 from mailmind.accounts.domain.draft import DraftRefused, throwaway_account
 from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.parsed import is_object
@@ -35,20 +36,21 @@ class Connections:
         is mailmind.accounts.domain.draft's to say): its IMAP server's login, then, once that has let it in, its outgoing
         (SMTP) server's. Errors are sanitized — never echoes the attempted password or server banner, and a Gmail account's
         refusal is said as Gmail's (`conn_error.quiet`), the outgoing server's after "SMTP ". A login that didn't work is an
-        answer (`connect: false`); an account it doesn't know raises NotFound, and a draft it may not try Refused."""
+        answer (`connect: false`): its class (`error`), and what a person is told of it and where they may go next (`says`,
+        `link`, `login_words`); an account it doesn't know raises NotFound, and a draft it may not try Refused."""
         t0 = time.time()
         if body.get("draft") and not is_object(body["draft"]):
             raise Refused()
-        kind = None
+        kind = host = None      # the account's type and IMAP host, by which a refusal is put and its provider named
         try:
             # no IMAP gate: holding it here froze all mail ops for up to 60s on a mistyped/black-holed host
             if body.get("draft"):
-                kind = body["draft"].get("type", "imap")
+                kind, host = body["draft"].get("type", "imap"), body["draft"].get("host")
                 acct = throwaway_account(body["draft"])
                 self._probe.draft(acct, timeout=PROBE_TIMEOUT)
             else:
                 acct = self._get(body["email"])
-                kind = acct["kind"]
+                kind, host = acct["kind"], acct.get("host")
                 self._probe.saved(acct, timeout=PROBE_TIMEOUT)
             try:
                 self._probe.outgoing(acct, timeout=PROBE_TIMEOUT)
@@ -62,11 +64,16 @@ class Connections:
             raise Refused(str(no)) from no
         except Exception as e:
             draft: Entry = body.get("draft") or {}
+            email = body.get("email") or draft.get("email")
             cause = e.__cause__ if isinstance(e, _Outgoing) else None
-            error = "SMTP " + self._quiet_error(cause, None) if cause is not None else self._quiet_error(e, kind)
-            return {"ok": True, "connect": False,
-                    "email": body.get("email") or draft.get("email"),
-                    "error": error}
+            if cause is not None:
+                quiet = self._quiet_error(cause, None)
+                error, said = "SMTP " + quiet, login_words.said_of(quiet, kind, host, email, outgoing=True)
+            else:
+                error = self._quiet_error(e, kind)
+                said = login_words.said_of(error, kind, host, email)
+            return {"ok": True, "connect": False, "email": email, "error": error, "says": said.says,
+                    "link": preset.link_dict(said.link)}
 
 
     def trust_cert(self, body: Mapping[str, Any]) -> dict[str, Any]:

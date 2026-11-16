@@ -121,12 +121,22 @@ class LoggedIn(Answer):
     ms: int
 
 
+class Link(Answer):
+    """A page a person is sent to (a provider's, where its app password is made), and the words of its link."""
+    url: str
+    words: str
+
+
 class CouldntLogIn(Answer):
-    """The test ran, and the login didn't work. `error` is `conn_error.quiet`'s, never what the server said."""
+    """The test ran, and the login didn't work. `error` is its class in `conn_error.quiet`'s words, never what the server
+    said, the outgoing server's after "SMTP ": the owner's, in small type. `says` is what a person is told of it and what to
+    do next, and `link` the page that helps, if one does (`login_words`)."""
     ok: Literal[True]
     connect: Literal[False]
     email: str | None
     error: str
+    says: str
+    link: Link | None
 
 
 class Saved(Answer):
@@ -146,12 +156,6 @@ class Trusted(Answer):
 
 class PresetArgs(QueryArgs):
     email: str | None = None
-
-
-class Link(Answer):
-    """A page a person is sent to (a provider's, where its app password is made), and the words of its link."""
-    url: str
-    words: str
 
 
 class PresetSettings(Answer):
