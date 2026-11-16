@@ -252,7 +252,7 @@ final class LocalFinderTests: XCTestCase {
             """)
         XCTAssertEqual(AIChoices.firstSteps, [
             "Get Ollama and open it.",
-            "In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.",
+            "In Ollama, download a model. A good first one is qwen3:8b, as Ollama lists it: it runs well on a Mac with 16 GB of memory.",
             "In Ollama’s settings, set Context length to 16K or more.",
             "Then look again.",
         ], "the steps to a model on this Mac, as the page has them")
