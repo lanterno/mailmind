@@ -197,6 +197,16 @@ def test_an_answer_for_nothing_of_ours_is_ignored(backlog):
     assert backlog.job.batch_collect() == ours
 
 
+def test_answers_are_labelled_with_the_model_the_batch_asked_whatever_is_chosen_since(backlog):
+    assert backlog.job.batch_submit() > 0
+    backlog.model.end_batch({cid: {"summary": "Lunch is on.", "importance": 3, "category": "personal"}
+                             for cid in backlog.model.batched})
+    backlog.model.model = "claude-sonnet-5-5"               # chosen in Settings while it was out
+    assert backlog.job.batch_collect() > 0
+    assert {said.model for said in backlog.triage.said.values()} == {models.DEFAULT}
+    assert backlog.job._calls.model_label() == "claude-sonnet-5-5"
+
+
 def test_nothing_is_brought_in_before_the_batch_ends(backlog):
     assert backlog.job.batch_submit() > 0
     assert backlog.job.batch_collect() == 0
