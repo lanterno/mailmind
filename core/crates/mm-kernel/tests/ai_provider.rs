@@ -38,6 +38,9 @@ fn a_base_url_is_https_or_plain_http_to_this_machine_and_keeps_no_trailing_slash
         ("http://localhost:1234/v1/", "http://localhost:1234/v1"),
         ("http://LOCALHOST/v1", "http://LOCALHOST/v1"),
         ("http://[::1]:8080/v1", "http://[::1]:8080/v1"),
+        ("http://[::1]/v1", "http://[::1]/v1"),
+        ("http://127.0.0.1:1/v1", "http://127.0.0.1:1/v1"),
+        ("https://api.example.test:65535/v1", "https://api.example.test:65535/v1"),
         ("https://10.0.0.5/v1", "https://10.0.0.5/v1"),
     ] {
         assert_eq!(base_url(given).as_deref(), Some(kept), "{given:?}");
@@ -65,7 +68,15 @@ fn a_base_url_with_a_login_a_query_a_fragment_or_plain_http_off_this_machine_is_
         "https:///v1",
         "https://:443/v1",
         "https://api.example.test:99999/v1",
+        "https://api.example.test:65536/v1",
         "https://api.example.test:port/v1",
+        // A port the HTTP client couldn't read: none after the `:`, or nought.
+        "https://api.example.test:/v1",
+        "http://127.0.0.1:/v1",
+        "http://localhost:",
+        "http://[::1]:/v1",
+        "https://api.example.test:0/v1",
+        "http://127.0.0.1:00/v1",
         "https://[not-an-address]/v1",
         "https://api.example.test/v 1",
         "https://api.example.test/v1\r\nX-Other: 1",

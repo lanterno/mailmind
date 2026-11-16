@@ -207,6 +207,10 @@ fn an_ai_setting_that_cant_be_one_refuses_the_change_in_words() {
         (json!({"ai_base_url": format!("https://llm.example.test/{}", "a".repeat(500))}), URL),
         (json!({"ai_base_url": null}), URL),
         (json!({"ai_base_url": "https://llm.example.test/caf\u{e9}"}), URL),
+        (json!({"ai_base_url": "https://llm.example.test:/v1"}), URL),
+        (json!({"ai_base_url": "http://127.0.0.1:/v1"}), URL),
+        (json!({"ai_base_url": "http://[::1]:/v1"}), URL),
+        (json!({"ai_base_url": "https://llm.example.test:0/v1"}), URL),
     ] {
         let refused = changes(&object(asked.clone())).err().map(|p| p.said);
         assert_eq!(refused.as_deref(), Some(said), "{asked}");
