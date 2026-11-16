@@ -73,10 +73,11 @@ pub fn resolve<E>(
 }
 
 /// As much of `resolve` as holds with no server to ask, as a command is accepted and its Undo written. A folder only
-/// the server can name is left for a try to find, so no folder here doesn't yet mean nowhere to go.
-pub fn known_without_server(kind: &str, archive_is_label_removal: bool, trash: Option<&str>) -> Destination {
+/// the server can name is left for a try to find, so no folder here doesn't yet mean nowhere to go: Trash among them,
+/// which a try finds among the server's folders (`session::find_trash`).
+pub fn known_without_server(kind: &str, archive_is_label_removal: bool) -> Destination {
     let provider = Provider { archive_is_label_removal, ..Provider::default() };
-    resolve::<()>(kind, None, &provider, trash, |_| Ok(None)).unwrap_or_default()
+    resolve::<()>(kind, None, &provider, None, |_| Ok(None)).unwrap_or_default()
 }
 
 /// Which way a message moves.

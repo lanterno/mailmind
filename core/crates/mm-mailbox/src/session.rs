@@ -251,6 +251,17 @@ pub fn find_role(server: &mut dyn MailServer, wanted: &[&str]) -> Result<Option<
     Ok(roles::find(&folders, wanted).map(str::to_owned))
 }
 
+/// The account's Trash on the server (`roles::trash`): `named` when the server lists it, else the folder that plays
+/// Trash there; `named` when the server refuses the LIST. A lost connection fails.
+pub fn find_trash(server: &mut dyn MailServer, named: &str) -> Result<String, ServerError> {
+    let folders: Vec<Folder> = match server.folders() {
+        Ok(folders) => folders,
+        Err(SessionError::Unreachable(class)) => return Err(ServerError::Unreachable(class)),
+        Err(SessionError::Failed(_)) => return Ok(named.to_owned()),
+    };
+    Ok(roles::trash(&folders, named).to_owned())
+}
+
 /// A read-only process's session: every folder opens read-only, and a write is refused before it is sent.
 pub struct ReadOnly(pub Box<dyn MailServer>);
 

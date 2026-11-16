@@ -156,9 +156,7 @@ impl MailCommands {
     /// Where a move goes, as far as that is known with no server: kept for an Undo before it lands.
     fn known_destination(&self, kind: &str, email: &str) -> Result<Destination, Fault> {
         Ok(match self.accounts.move_account(email)? {
-            Some(account) => {
-                destination::known_without_server(kind, account.provider.archive_is_label_removal, Some(&account.trash))
-            }
+            Some(account) => destination::known_without_server(kind, account.provider.archive_is_label_removal),
             // The account is gone, which a try finds out.
             None => Destination::default(),
         })

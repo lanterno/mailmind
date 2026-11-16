@@ -13,7 +13,7 @@ use crate::command::{self, Command, Outcome, ServerAnswer};
 use crate::command_ports::MoveAccount;
 use crate::destination::{self, Way};
 use crate::session::{
-    MailServer, MailServers, Search, ServerError, by_message_id, find_role, found_by_message_id, move_to,
+    MailServer, MailServers, Search, ServerError, by_message_id, find_role, find_trash, found_by_message_id, move_to,
 };
 use crate::sync_plan::{COLUMNS, IMAP_NAMES};
 
@@ -130,7 +130,13 @@ impl ServerOps {
                 }
                 return Ok(ServerAnswer::default());
             }
-            let trash = Some(account.trash.as_str());
+            // Trash as the server lists it, where this move goes there and no folder is named yet.
+            let trash = if kind == "trash" && row.dest.as_deref().is_none_or(str::is_empty) {
+                find_trash(&mut *s, &account.trash)?
+            } else {
+                account.trash.clone()
+            };
+            let trash = Some(trash.as_str());
             let place = destination::resolve(kind, row.dest.as_deref(), &account.provider, trash, |roles| {
                 find_role(&mut *s, roles)
             })?;

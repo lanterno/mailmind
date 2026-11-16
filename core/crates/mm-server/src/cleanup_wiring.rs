@@ -244,6 +244,10 @@ impl LiveSession for ServerSession {
         session::move_to(&mut *self.0, uids, dest).map_err(live)
     }
 
+    fn trash(&mut self, named: &str) -> Result<String, LiveError> {
+        session::find_trash(&mut *self.0, named).map_err(live)
+    }
+
     fn close(&mut self, failed: bool) {
         if failed { self.0.shutdown() } else { self.0.logout() }
     }

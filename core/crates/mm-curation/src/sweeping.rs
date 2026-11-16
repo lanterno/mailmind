@@ -321,7 +321,8 @@ impl Sweeps {
             return Err(fault);
         }
         let uids: Vec<String> = junk.iter().map(|r| r.read.uid.clone()).collect();
-        let (moved, stragglers) = match move_verified(&mut *s, &uids, trash) {
+        let moved = s.trash(trash).and_then(|trash| move_verified(&mut *s, &uids, &trash));
+        let (moved, stragglers) = match moved {
             Ok(done) => done,
             Err(e) => {
                 log::warning(TAG, "an account failed", &[(Field::Why, e.class())], None);

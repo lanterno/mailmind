@@ -108,6 +108,16 @@ pub fn role_of(folder: &Folder) -> &'static str {
     by_attribute(folder).unwrap_or_else(|| role_by_name(&folder.name, folder.delimiter.as_deref()))
 }
 
+/// The account's Trash among `folders`: `named`, the folder the account names (or its type gives it), when the server
+/// lists it; else the folder LIST marks \Trash, then one whose name says trash ("Deleted Messages", "Bin"), as `find`
+/// chooses; else `named`, for the server to take or refuse. A localised Gmail's or iCloud's Trash is found so.
+pub fn trash<'a>(folders: &'a [Folder], named: &'a str) -> &'a str {
+    if folders.iter().any(|f| f.selectable() && f.name == named) {
+        return named;
+    }
+    find(folders, &["trash"]).unwrap_or(named)
+}
+
 /// The name of the selectable folder playing the first of `roles` that one plays, or None.
 pub fn find<'a>(folders: &'a [Folder], roles: &[&str]) -> Option<&'a str> {
     for role in roles {

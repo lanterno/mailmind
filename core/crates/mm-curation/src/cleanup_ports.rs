@@ -163,6 +163,9 @@ pub trait LiveSession {
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError>;
     /// Move the UIDs to `dest`: one MOVE where the server offers it, else a checked copy, never a bulk EXPUNGE.
     fn move_to(&mut self, uids: &[u32], dest: &str) -> Result<(), LiveError>;
+    /// The account's Trash on this server: `named` (the account's, or its type's) when the server lists it, else the
+    /// folder LIST marks \Trash, then one whose name says trash; `named` when there is none.
+    fn trash(&mut self, named: &str) -> Result<String, LiveError>;
     /// Log out, or hang up where the connection failed.
     fn close(&mut self, failed: bool);
 }

@@ -181,7 +181,8 @@ impl Expiry {
             return Ok(answer(email, planned, 0, &[], Some(fault.class)));
         }
         let uids: Vec<String> = targets.iter().map(|t| t.aged.uid.clone()).collect();
-        let (moved, stragglers) = match move_verified(&mut *s, &uids, &account.trash) {
+        let moved = s.trash(&account.trash).and_then(|trash| move_verified(&mut *s, &uids, &trash));
+        let (moved, stragglers) = match moved {
             Ok(done) => done,
             Err(e) => return Ok(failed(&mut *s, email, planned, e)),
         };
