@@ -163,8 +163,9 @@ The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
   (`shells/apple/Sources/Mac/Shared/OverLimit.swift`) and sends again through the host's
   `request_over_limit`, the one header a shell can add.
 - The breaker. A 401 or 403 stops every background and speculative call, and three permanent
-  4xx in a row for one feature and model stop that pair. It stays open until the model in use
-  changes, which a new key or base URL does. Interactive calls still go.
+  4xx in a row for one feature and model stop that pair. It stays open until the language model is
+  made again, which another provider, model, URL or key does, and so does turning AI mode off and on.
+  Interactive calls still go.
 
 Background work asks `gateway().held_back(feature)` before a batch, and a call that was held
 back anyway raises `Deferred(reason)`. Nothing is counted for it, and `Status.noting` doesn't record it

@@ -289,8 +289,9 @@ Nothing is ever sent automatically.
   anything you ask the AI for asks first whether to go over, and a brief not yet written waits
   for you to ask for it. Background work waits while you
   use the AI and for 45 seconds after. Pre-drafting runs only if you've used the app in the
-  last 45 minutes. If the API keeps rejecting a request, background work stops until the key
-  or the model changes, while what you ask for still goes and shows the error.
+  last 45 minutes. If the API keeps rejecting a request, background work stops until the provider,
+  the model, the URL or the key changes, or AI mode is turned off and on, while what you ask for
+  still goes and shows the error.
 
 - **Summaries and importance scores** per message, plus a per-thread "catch me up"
   TL;DR with key points.
