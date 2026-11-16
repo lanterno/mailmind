@@ -116,3 +116,45 @@ fn waiting_jobs_go_in_priority_order_then_in_the_order_they_came() {
     }
     assert_eq!(*order.lock().unwrap(), ["click", "queued", "sync"]);
 }
+
+#[test]
+fn a_job_holds_its_accounts_gate_on_its_own_thread_only_while_it_runs() {
+    let gates = Arc::new(AccountGates::new(true));
+    assert!(!gates.holds(ADA));
+    let inside = on_gate(&*gates, ADA, Priority::Interactive, Wait::Ever, || {
+        let elsewhere = {
+            let gates = gates.clone();
+            thread::spawn(move || gates.holds(ADA)).join().unwrap()
+        };
+        (gates.holds(ADA), gates.holds(BEA), elsewhere)
+    });
+    assert_eq!(inside, Ok((true, false, false)));
+    assert!(!gates.holds(ADA));
+    // A job inside a job that won't wait holds both, and the outer one still holds its own once the inner one ends.
+    let nested = on_gate(&*gates, ADA, Priority::Interactive, Wait::Ever, || {
+        let inner = on_gate(&*gates, BEA, Priority::Interactive, Wait::Not, || (gates.holds(ADA), gates.holds(BEA)));
+        (inner, gates.holds(ADA), gates.holds(BEA))
+    });
+    assert_eq!(nested, Ok((Ok((true, true)), true, false)));
+}
+
+#[test]
+fn with_one_gate_for_every_account_a_job_holds_it_for_each() {
+    let gates = AccountGates::new(false);
+    let inside = on_gate(&gates, ADA, Priority::Interactive, Wait::Ever, || (gates.holds(ADA), gates.holds(BEA)));
+    assert_eq!(inside, Ok((true, true)));
+    let every = AccountGates::new(true);
+    let all = on_gate(&every, EVERY_ACCOUNT, Priority::Interactive, Wait::Ever, || every.holds(BEA));
+    assert_eq!(all, Ok(true));
+    assert!(!every.holds(BEA));
+}
+
+#[test]
+fn a_job_that_panics_holds_nothing_after() {
+    let gates = AccountGates::new(true);
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = on_gate(&gates, ADA, Priority::Interactive, Wait::Ever, || panic!("a bug"));
+    }));
+    assert!(panicked.is_err());
+    assert!(!gates.holds(ADA) && !gates.held(ADA));
+}
