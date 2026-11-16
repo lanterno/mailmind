@@ -209,6 +209,9 @@ def test_axe_finds_nothing_on_status_help_or_settings(page, world, every_theme):
     page.get_by_role("tab", name="Preferences").click()
     expect(page.locator("#prefsBody")).to_be_visible()
     assert found() == {}
+    page.get_by_role("tab", name="AI").click()
+    expect(page.locator("#aiBody")).to_be_visible()
+    assert found() == {}
     clean(page)
 
 
@@ -236,6 +239,15 @@ def preferences_open(page):
     page.locator("#settingsBtn").click()
     page.get_by_role("tab", name="Preferences").click()
     dialog = page.get_by_role("dialog", name="Preferences")
+    expect(dialog).to_be_visible()
+    return dialog
+
+
+def ai_open(page):
+    opened(page)
+    page.locator("#settingsBtn").click()
+    page.get_by_role("tab", name="AI").click()
+    dialog = page.get_by_role("dialog", name="AI")
     expect(dialog).to_be_visible()
     return dialog
 
@@ -382,7 +394,7 @@ def test_axe_finds_nothing_on_high_contrast(page, app, world, every_theme):
 
 
 def test_the_ai_limit_goes_in_the_file_at_its_top_level_within_its_bounds(page, world):
-    dialog = preferences_open(page)
+    dialog = ai_open(page)
     field = dialog.get_by_label("Daily limit, in US dollars")
     expect(field).to_have_value("15")
     with page.pw.expect_response(lambda r: r.url.endswith("/api/digest") and r.request.method == "GET") as digest:
@@ -399,7 +411,7 @@ def test_the_ai_limit_goes_in_the_file_at_its_top_level_within_its_bounds(page, 
 
 
 def test_the_morning_brief_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
-    dialog = preferences_open(page)
+    dialog = ai_open(page)
     held = lambda: file_of(world).get("preferences", {})
     box = dialog.get_by_label("Have today\u2019s brief ready each morning")
     expect(box).not_to_be_checked()
@@ -410,7 +422,7 @@ def test_the_morning_brief_is_off_until_it_is_ticked_and_then_it_goes_in_the_fil
 
 
 def test_last_weeks_review_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
-    dialog = preferences_open(page)
+    dialog = ai_open(page)
     held = lambda: file_of(world).get("preferences", {})
     box = dialog.get_by_label("Have last week\u2019s review ready each Monday")
     expect(box).not_to_be_checked()
@@ -421,7 +433,7 @@ def test_last_weeks_review_is_off_until_it_is_ticked_and_then_it_goes_in_the_fil
 
 
 def test_tidy_by_itself_is_off_until_it_is_ticked_and_then_it_goes_in_the_file(page, world):
-    dialog = preferences_open(page)
+    dialog = ai_open(page)
     held = lambda: file_of(world).get("preferences", {})
     box = dialog.get_by_label("File low-priority mail by itself, once a day")
     expect(box).not_to_be_checked()
