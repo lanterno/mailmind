@@ -478,6 +478,7 @@ impl InboxSync for Syncing {
             .landed
             .wait_while(self.held(), |held| held.flying.contains(account))
             .unwrap_or_else(PoisonError::into_inner);
-        held.status.get(account).is_some_and(|now| now.health == "ok")
+        // A failure that may pass leaves the account showing as it did, "ok" perhaps: its run of failures says it.
+        !held.failing.contains_key(account) && held.status.get(account).is_some_and(|now| now.health == "ok")
     }
 }
