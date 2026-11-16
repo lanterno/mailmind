@@ -79,7 +79,7 @@ class World:
     def quote(self, value):
         return f'"{value}"'
 
-    def trash_folder(self, acct):
+    def trash_folder(self, acct, session):
         return "Trash"
 
     def move_verified(self, session, uids, dest):

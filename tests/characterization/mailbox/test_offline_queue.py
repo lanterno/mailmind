@@ -7,14 +7,15 @@ from stored_rows import q, rows
 from world_helpers import LUNCH_CONFIRM, RECEIPT, acct, boxes, gone, server_boxes
 
 
-def test_hwf_a_trash_queued_offline_knows_its_trash_folder_and_undoes_after_it_ships(app, world):
+def test_hwf_a_trash_queued_offline_finds_its_trash_folder_as_it_ships_and_undoes_after(app, world):
     from mailmind.bootstrap.mailbox import commands
     world.server.drop("SELECT", user=w.ADA)
     r = app.post("/api/trash", {**world.copy(RECEIPT)}).json
     assert (r["status"], r["undoable"]) == ("queued", True)
-    assert [x["dest"] for x in rows("SELECT dest FROM mail_commands")] == ["Trash"]   # known before any IMAP
+    assert [x["dest"] for x in rows("SELECT dest FROM mail_commands")] == [None]    # the server's folders say which
     commands.drain()
     assert server_boxes(world, RECEIPT) == [(w.ADA, "Trash")]
+    assert [x["dest"] for x in rows("SELECT dest FROM mail_commands")] == ["Trash"]
     assert app.post("/api/undo", {}).json["ok"]
     assert server_boxes(world, RECEIPT) == [(w.ADA, "INBOX")]
     assert [(d["folder"]) for d in world.where(RECEIPT)["db"]] == ["INBOX"]

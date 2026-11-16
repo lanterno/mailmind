@@ -54,12 +54,12 @@ def test_a_move_naming_nothing_goes_nowhere():
     assert where("move") == Destination()
 
 
-def known(kind, *, by_label=False, trash="Trash"):
-    return known_without_server(kind, archive_is_label_removal=by_label, trash=trash)
+def known(kind, *, by_label=False):
+    return known_without_server(kind, archive_is_label_removal=by_label)
 
 
 def test_as_a_command_is_accepted_only_what_needs_no_server_is_known():
-    assert known("trash") == Destination("Trash")
+    assert known("trash") == Destination()          # found among the server's folders, as a try lists them
     assert known("archive", by_label=True) == Destination(drop_inbox_label=True)
     assert known("archive") == Destination() and known("junk") == Destination()
 
