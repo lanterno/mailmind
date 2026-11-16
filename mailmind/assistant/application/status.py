@@ -65,7 +65,7 @@ class Status:
         """Where the API key came from, or why AI is off."""
         flag = "" if engine.provider == "anthropic" else f" --provider {engine.provider}"
         if engine.off == "turned-off":
-            return "AI is turned off: turn it on in Settings, or with `uv run python -m mailmind ai on`"
+            return "AI mode is off: turn it on in Settings, or with `uv run python -m mailmind ai on`"
         if engine.off == "no-key" and engine.key_from == CONFIG:
             return f"no key, so AI is off: the {engine.provider}_api_key in mailmind.config.json can't be read"
         if engine.off == "no-key" and engine.provider == "anthropic":

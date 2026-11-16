@@ -90,15 +90,16 @@ def set_api_key(provider: AiProvider = "anthropic"):
 
 
 def turn_ai(on):
-    """`ai on` or `ai off`: the preference Settings' switch sets. Off, nothing is sent to any AI provider."""
+    """`ai on` or `ai off`: AI mode, the preference Settings' switch sets. Off, nothing is sent to any AI provider."""
     from mailmind.bootstrap import assistant
     from mailmind.bootstrap.accounts import config
     config.set_preferences({"ai_enabled": on})
     if not on:
-        print("AI is off: nothing is sent to any AI provider until it is turned on again.")
+        print("AI mode is off: nothing is sent to any AI provider until it is turned on again.")
         return 0
     off = assistant.engine().off
-    print("AI is on." if off is None else f"AI is on, but nothing is sent yet: {assistant.WHY[off].removeprefix('AI is off: ')}.")
+    print("AI mode is on." if off is None else
+          f"AI mode is on, but nothing is sent yet: {assistant.WHY[off].removeprefix('AI is off: ')}.")
     return 0
 
 

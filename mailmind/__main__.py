@@ -34,7 +34,7 @@
   ai key [--provider P]        keep an AI provider's API key (Claude's unless P names openai, gemini, local
                                or compatible) in the login Keychain and point the config at it, as
                                `accounts password` does
-  ai on | off                  turn AI on, or off: off, nothing is sent to any AI provider
+  ai on | off                  turn AI mode on, or off: off, nothing is sent to any AI provider
 """
 import argparse
 import os
@@ -99,14 +99,14 @@ def parser():
     shrink = db.add_parser("compact", help="give back the room freed in the file, with MailMind stopped")
     shrink.add_argument("--db", help="the database to compact (default: the data directory's)")
     db.add_parser("rethread", help="regroup the mail into threads, whole").add_argument("who", nargs="?", default="all", help="an account's address, or all")
-    ai = commands.add_parser("ai", help="AI: what it cost, its keys, on or off").add_subparsers(dest="ai_command", required=True)
+    ai = commands.add_parser("ai", help="AI: what it cost, its keys, AI mode on or off").add_subparsers(dest="ai_command", required=True)
     usage = ai.add_parser("usage", help="what AI cost each day, by feature")
     usage.add_argument("--days", type=int, default=7, help="how many days, today included (default 7)")
     keep = ai.add_parser("key", help="keep an AI provider's API key in the login Keychain")
     keep.add_argument("--provider", choices=AI_PROVIDERS, default=DEFAULT_PROVIDER,
                       help=f"whose key (default {DEFAULT_PROVIDER})")
-    ai.add_parser("on", help="turn AI on")
-    ai.add_parser("off", help="turn AI off: nothing is sent to any AI provider")
+    ai.add_parser("on", help="turn AI mode on")
+    ai.add_parser("off", help="turn AI mode off: nothing is sent to any AI provider")
     return top
 
 
