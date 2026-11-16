@@ -6,7 +6,8 @@ provider through the one adapter that speaks OpenAI's Chat Completions. AI off, 
 ask, the model is DisabledModel, and nothing is sent. MAILMIND_MODEL wins over the model a person chose.
 
 A provider's key is config_key() (mailmind.config.json's "anthropic_api_key", "openai_api_key" and the like, in any
-credential style, read through the Accounts context), and for Claude only then ANTHROPIC_API_KEY. A config key that won't
+credential style but the Proton Bridge's password, read through the Accounts context), and for Claude only then
+ANTHROPIC_API_KEY. A config key that won't
 resolve is no key, never a quiet switch to the environment's. Each is read at each call, so a change in Settings takes effect
 at once, and the model is made again only when what it was made for changes: the provider, model, URL or key.
 
@@ -17,7 +18,7 @@ unless it names another, domain.limits), read at each call.
 import threading
 
 from mailmind.accounts.adapters import config_file, secrets
-from mailmind.accounts.api import PREFERENCE_DEFAULTS, api_key_who
+from mailmind.accounts.api import PREFERENCE_DEFAULTS, CredentialRef, api_key_who
 from mailmind.assistant.adapters import anthropic_sdk, local_servers, openai_chat
 from mailmind.assistant.adapters import sqlite as answers
 from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
@@ -62,11 +63,13 @@ ENV = environment.ANTHROPIC_API_KEY.name
 
 def config_key(provider: AiProvider = "anthropic") -> str | None:
     """The key mailmind.config.json's top-level "<provider>_api_key" names, in any credential style but proton_bridge, or None
-    when it names none. Raises when it names one that can't be had."""
+    when it names none. Raises when it names one that can't be had, the Bridge's password among them: it is never a key."""
     who = api_key_who(provider)
     cred = config_file.FILE.read().get(who)
     if not cred:
         return None
+    if CredentialRef.parse(cred).style == "proton_bridge":
+        raise RuntimeError(f"{who} names the Proton Bridge's password, which is no API key")
     return secrets.resolve(cred, who=who).strip()
 
 
