@@ -234,13 +234,19 @@ final class CurateModel {
                 let words = result.error.map { String(localized: "Sweep: \($0)") }
                     ?? String(localized: "Swept \(result.moved ?? 0)/\(result.planned)")
                         + (unverified > 0 ? String(localized: " · \(unverified) unverified") : "")
-                // Whatever went, one Undo brings it back from the Trash.
-                notices.say(words, undoable: swept.undoGroup != nil)
+                // Whatever went, one Undo brings it back from the Trash; a sweep that moved nothing offers none.
+                notices.say(words, undoable: swept.undoGroup != nil && (result.moved ?? 0) > 0)
             }
         } catch {
             notices.say(String(localized: "Sweep failed"))
         }
         await again()
+    }
+
+    /// How many a card's Sweep button offers: the junk a sweep would move now, read and unstarred, or nil when none,
+    /// and then there is no button.
+    static func sweepOffer(_ account: API.AccountStats) -> Int? {
+        account.sweepable > 0 ? account.sweepable : nil
     }
 
     /// What a junk bucket is called before a sweep; one this app doesn't know goes by the server's name for it.

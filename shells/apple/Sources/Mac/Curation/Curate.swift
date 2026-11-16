@@ -407,8 +407,8 @@ private struct InboxRow: View {
                     Text("\(account.junk) junk · \(account.keep) keep").foregroundStyle(meadow.ink3)
                 }
                 Spacer()
-                if account.junk > 0, model.sweepArmed?.account != account.account {
-                    Button("Sweep \(account.junk)") { Task { await model.armSweep(account.account) } }
+                if let offer = CurateModel.sweepOffer(account), model.sweepArmed?.account != account.account {
+                    Button("Sweep \(offer)") { Task { await model.armSweep(account.account) } }
                         .meadowButton(small: true)
                 }
             }
