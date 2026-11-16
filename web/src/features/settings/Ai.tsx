@@ -5,7 +5,7 @@
 // with AI mode on, and again as a person acts here (chooses it, keeps a key, gives a URL, asks again), never on its own. For a
 // model on this Mac, the servers running one here are looked for in its place, as it is picked and when asked to look again,
 // and picking one of their models sets the server's URL and the model together.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input, Label, NumberField } from "react-aria-components";
 import { aiStanding, PROVIDER_LABEL, PROVIDER_NAME } from "../../lib/ai";
@@ -26,6 +26,7 @@ import { useStepBack } from "./useStepBack";
 function KeyField({ provider, kept, keptFrom, done }: { provider: AiProvider; kept: boolean; keptFrom: string; done: (kept: AiProvider[]) => void }) {
   const [field] = useState(() => createStore(""));
   const typed = field.useValue();
+  const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState("");
   const needs = NEEDS[provider];
@@ -47,6 +48,7 @@ function KeyField({ provider, kept, keptFrom, done }: { provider: AiProvider; ke
     setRefused("");
     try {
       done((await post("/api/ai/key/clear", { provider })).kept);
+      input.current?.focus();     // Remove goes with the key: the field to paste another stays
       toast(`Key removed for ${PROVIDER_NAME[provider]}`);
     } catch {
       setRefused("Couldn’t remove the key.");
@@ -63,6 +65,7 @@ function KeyField({ provider, kept, keptFrom, done }: { provider: AiProvider; ke
       )}
       <div className="ai-row">
         <input
+          ref={input}
           type="password"
           id="aiKey"
           value={typed}
@@ -88,12 +91,16 @@ function KeyField({ provider, kept, keptFrom, done }: { provider: AiProvider; ke
   );
 }
 
-// A model's name as the provider writes it, for one its list doesn't offer.
+// A model's name as the provider writes it, for one its list doesn't offer. It opens on Type a name, which goes as it does, so
+// the focus comes to the field.
 function ModelByHand({ chosen, use, back }: { chosen: string; use: (model: string) => void; back: () => void }) {
   const [typed, setTyped] = useState(chosen);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.focus(), []);
   return (
     <div className="ai-row">
       <input
+        ref={input}
         type="text"
         id="aiModel"
         value={typed}
@@ -111,9 +118,15 @@ function ModelByHand({ chosen, use, back }: { chosen: string; use: (model: strin
 }
 
 // The service's URL, filled in with the provider's own (for a model on this Mac, where Ollama answers): saved as a person
-// leaves it, "" where it is the provider's own.
+// leaves it, "" where it is the provider's own. It shows the URL saved as that changes (saved here, put back by the server,
+// or set by a model picked) and stays the same field, so the focus stays in it.
 function UrlField({ saved, prefill, save }: { saved: string; prefill: string; save: (url: string) => void }) {
   const [typed, setTyped] = useState(saved || prefill);
+  const [shown, setShown] = useState(saved);
+  if (saved !== shown) {
+    setShown(saved);
+    setTyped(saved || prefill);
+  }
   const commit = () => {
     const url = urlToSave(typed, prefill);
     if (url !== saved) save(url);
@@ -141,6 +154,14 @@ export function AiForm() {
   useStepBack();
   const provider = p.ai_provider, needs = NEEDS[provider], name = PROVIDER_NAME[provider], local = provider === "local";
   const [byHand, setByHand] = useState(false);
+  // The model menu, which the focus goes back to as a model typed is used or the list is picked from again.
+  const menuRef = useRef<HTMLSelectElement>(null);
+  const backToMenu = useRef(false);
+  useEffect(() => {
+    if (byHand || !backToMenu.current) return;
+    backToMenu.current = false;
+    menuRef.current?.focus();
+  }, [byHand]);
   // The provider and URL the server holds, which its models are asked by: a choice counts once it is saved.
   const [held, setHeld] = useState({ provider, url: p.ai_base_url });
   const keys = useQuery({ queryKey: ["aiKeys"], queryFn: () => get("/api/ai/key") });
@@ -238,10 +259,22 @@ export function AiForm() {
           </select>
           {!local && needs.key !== "none" && <KeyField key={provider} provider={provider} kept={kept} keptFrom={keptFrom} done={keysKept} />}
           <label className="lbl" htmlFor="aiModel">Model</label>
-          {byHand && <ModelByHand chosen={p.ai_model} use={chooseModel} back={() => setByHand(false)} />}
+          {byHand && (
+            <ModelByHand
+              chosen={p.ai_model}
+              use={(model) => {
+                backToMenu.current = true;
+                chooseModel(model);
+              }}
+              back={() => {
+                backToMenu.current = true;
+                setByHand(false);
+              }}
+            />
+          )}
           {!byHand && local && (
             <div className="ai-row">
-              <select id="aiModel" value={menu.value} onChange={(e) => chooseLocal(e.target.value)}>
+              <select ref={menuRef} id="aiModel" value={menu.value} onChange={(e) => chooseLocal(e.target.value)}>
                 {menu.first && <option value={menu.first.value}>{menu.first.label}</option>}
                 {menu.groups.map((g) => (
                   <optgroup key={g.url} label={g.name}>
@@ -257,7 +290,7 @@ export function AiForm() {
           )}
           {!byHand && !local && (
             <div className="ai-row">
-              <select id="aiModel" value={p.ai_model} onChange={(e) => chooseModel(e.target.value)}>
+              <select ref={menuRef} id="aiModel" value={p.ai_model} onChange={(e) => chooseModel(e.target.value)}>
                 {choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
               <button type="button" className="set-mini" aria-label="Ask the provider for its models again" title="Ask the provider for its models again" disabled={current && models.isFetching} onClick={askAgain}><Icon name="refresh" /></button>
@@ -268,7 +301,7 @@ export function AiForm() {
           {needs.url !== null && (
             <>
               <label className="lbl" htmlFor="aiUrl">{local ? "Your model server’s URL" : "The service’s URL"}</label>
-              <UrlField key={`${provider}:${p.ai_base_url}`} saved={p.ai_base_url} prefill={needs.url} save={chooseUrl} />
+              <UrlField key={provider} saved={p.ai_base_url} prefill={needs.url} save={chooseUrl} />
               <div className="set-help">
                 {local
                   ? "On this Mac only: 127.0.0.1, ::1 or localhost, up to /v1. Picking a model above fills it in."
