@@ -229,6 +229,10 @@ def python_classify(from_addr: str, subject: str | None = "", from_name: str | N
             or any(t in local for t in ("receipt", "invoice", "billing", "payment", "statement"))):
         return RECEIPT, "med", "transactional/receipt signal"
 
+    # A person's reply or forward in a list's thread is a conversation: the core reads it before the list check since (#51).
+    if has_list_unsub and RE_FWD.match(subject) and python_looks_human(local):
+        return PERSONAL, "med", "a person's reply in a list thread"
+
     # 4) newsletters / marketing: the big leak we now close
     if has_list_unsub:
         return MKT, "high", "List-Unsubscribe header"

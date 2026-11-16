@@ -56,6 +56,11 @@ CASES = [
     # --- real people & threads ---
     ("alice.smith@gmail.com", "lunch tomorrow?", False, m.PERSONAL, "human on personal mailbox"),
     ("bob.jones@randomcorp.example", "Re: our meeting notes", False, m.PERSONAL, "reply thread kept over role heuristics"),
+    ("lin.mori@studio.example", "Re: Saturday's ride", True, m.PERSONAL, "a person's reply in a list thread"),
+    ("lin.mori@studio.example", "Fwd: the minutes", True, m.PERSONAL, "a person's forward in a list thread"),
+    ("lin.mori@studio.example", "Saturday's ride", True, m.MKT, "the list's own mail"),
+    ("news@loom.example", "Re: your cart", True, m.MKT, "a reply's look on a list's role address"),
+    ("no-reply@loom.example", "Re: your order", True, m.MKT, "a reply's look from a machine"),
 
     # --- automated notifications ---
     ("no-reply@rideshare.example", "Your trip receipt is ready", False, m.RECEIPT, "transactional beats no-reply"),
