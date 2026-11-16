@@ -35,9 +35,11 @@ any other after it raises `TLSPinMismatch` (a `ConnectionError`, so a move queue
 sent. Health calls it `TLS_PIN`; `/api/accounts/trust-cert` forgets the account's pins and syncs it.
 An unsaved draft pins nothing. A new TLS connection calls `check_pin` too.
 
-A credential goes only to its own account's server. `/api/accounts/test` logs a saved account in
-at its saved endpoint, and tries a draft (an account not yet saved) only with a password typed
-into it, at the host typed with it (`domain.draft.throwaway_account`). A draft naming a stored
+A credential goes only to its own account's servers. `/api/accounts/test` logs a saved account in
+at its saved endpoints, the incoming (IMAP) one and then the outgoing (SMTP) one, each loopback
+server's certificate pinned as any connection's is. It tries a draft (an account not yet saved) only
+with a password typed into it, at the servers typed with it: the incoming host, and the outgoing
+server typed, else its type's, else the incoming host (`domain.draft.throwaway_account`). A draft naming a stored
 secret (`op`, `env`, the Bridge password) is refused, since the request names the host. A draft's typed password is
 `Typed`: held in memory for that one try, and kept nowhere.
 
