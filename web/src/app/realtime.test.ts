@@ -113,6 +113,18 @@ describe("what the stream says changed", () => {
     await open();
     await send("sync-done");
     expect(readKeys()).toEqual(["digest", "folders", "documents", "labels"]);
+    vi.mocked(qc.invalidateQueries).mockClear();
+    await send("sync-done", { account: "a@example.test", kept: 0, junk: 0 });
+    expect(readKeys()).toEqual(["digest", "folders", "documents", "labels"]);
+  });
+  it("a first sync that stored mail shows it in the lists open, though it says no new mail", async () => {
+    await open();
+    await send("sync-done", { account: "a@example.test", kept: 500, junk: 0 });
+    expect(readKeys()).toEqual(["messages", "screener", "tidy", "digest", "folders", "documents", "labels"]);
+    expect(heard.newMail).not.toHaveBeenCalled();
+    vi.mocked(qc.invalidateQueries).mockClear();
+    await send("sync-done", { account: "a@example.test", kept: 0, junk: 3 });
+    expect(readKeys()).toContain("messages");                      // junk it filed is mail a list shows too
   });
   it("the outbox and to-dos each read their own again", async () => {
     await open();
