@@ -19,7 +19,7 @@ from mailmind.mailbox.adapters.sqlite.lists import (digest, folder_conversation_
     folder_rows, inboxes_conversation_count, inboxes_conversation_rows, inboxes_count, inboxes_rows, snoozed_count,
     snoozed_rows, stats, stored_accounts, stored_folder_counts, thread_rows)
 from mailmind.mailbox.adapters.sqlite.messages import (copy_in_folder, copy_now, copy_pk, delete_by_uids,
-    delete_message, forget_gone_messages, get_message, get_message_by_key, get_message_by_msgid, has_copy_in, is_known,
+    delete_message, forget_account, forget_gone_messages, get_message, get_message_by_key, get_message_by_msgid, has_copy_in, is_known,
     is_listed_in, mark_pending_removal, mark_verified, message_pk, mint_key, names_of, newest_copy_in, pending_removal_pks,
     pk_in, reconcile, repair_keys, restore_pending, set_list_unsub, stored_uids, thread_pks_in, upsert_message)
 from mailmind.mailbox.adapters.sqlite.sync_state import (account_health, clear_sync_error, get_modseq, get_scan_state,
@@ -35,7 +35,7 @@ __all__ = [
     "command_record", "command_set_params", "conn", "conversation_rows", "copy_in_folder", "copy_now", "copy_pk",
     "delete_attachments", "delete_by_uids", "delete_message", "delta_rows", "digest", "draft_candidates",
     "flag_changes_waiting", "flag_command", "flag_rows_newest", "flag_rows_of", "folder_conversation_count",
-    "folder_conversation_rows", "folder_count", "folder_rows", "forget_gone_messages", "fts_set_body", "get_body",
+    "folder_conversation_rows", "folder_count", "folder_rows", "forget_account", "forget_gone_messages", "fts_set_body", "get_body",
     "get_message", "get_message_by_key", "get_message_by_msgid", "get_modseq", "get_scan_state", "get_uidvalidity",
     "get_watermark", "handled_since", "has_attachments", "has_copy_in", "inboxes_conversation_count",
     "inboxes_conversation_rows", "inboxes_count", "inboxes_rows", "init", "insert_attachments", "is_known", "is_listed_in",

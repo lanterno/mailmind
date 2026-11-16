@@ -7,6 +7,12 @@ from mailmind.kernel.snoozed import not_snoozed_sql
 from mailmind.kernel.when import now_iso
 
 
+def forget_account(c, email):
+    """Its follow-ups, muted threads and tasks, as its account is removed. Its snoozes go with its message keys."""
+    for table in ("followups", "muted", "tasks"):
+        c.execute(f"DELETE FROM {table} WHERE account=? COLLATE NOCASE", (email,))
+
+
 def thread_pks(c, account, thread_id):
     return [r["pk"] for r in c.execute(
         "SELECT pk FROM messages WHERE account=? AND thread_id=? AND pending_removal IS NULL",

@@ -22,7 +22,8 @@ class _Outgoing(Exception):
 class Connections:
     def __init__(self, config: Directory, get: Callable[[str], Entry], accounts: Callable[[], list[Entry]],
                  probe: ConnectionProbe, quiet_error: Callable[[BaseException, str | None], str],
-                 retry_sync: Callable[[Entry], dict[str, Any]], forget_status: Callable[[str | None], None]):
+                 retry_sync: Callable[[Entry], dict[str, Any]], forget_status: Callable[[str | None], None],
+                 forget_mail: Callable[[str], int] | None = None):
         self._config = config
         self._get = get
         self._accounts = accounts
@@ -30,6 +31,7 @@ class Connections:
         self._quiet_error = quiet_error
         self._retry_sync = retry_sync
         self._forget_status = forget_status
+        self._forget_mail = forget_mail         # what this Mac keeps of an account's mail, let go; None where none is kept
 
     def test(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Test a SAVED account ({email}), at its saved servers, or an UNSAVED draft (no disk write; what it may try
@@ -88,7 +90,8 @@ class Connections:
 
 
     def change(self, action: str, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Add, edit or delete an account. Raises NotFound for one the file doesn't hold, and Refused for any other action."""
+        """Add, edit or delete an account, and with `delete_mail` what this Mac keeps of a deleted one's mail (`mail_deleted`,
+        how many stored copies went). Raises NotFound for one the file doesn't hold, and Refused for any other action."""
         if action == "add":
             return {"ok": True, "account": self._config.add_account(body)}
         if action == "edit":
@@ -100,6 +103,8 @@ class Connections:
             em = body.get("email")
             if self._config.remove_account(em):
                 self._forget_status(em)
+                if body.get("delete_mail") and self._forget_mail is not None:     # its mail on the server is untouched
+                    return {"ok": True, "removed": em, "mail_deleted": self._forget_mail(str(em))}
                 return {"ok": True, "removed": em}
             raise NotFound("not found")
         raise Refused("unknown action")

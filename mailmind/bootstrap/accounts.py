@@ -88,6 +88,11 @@ def _forget_status(email):
     mailbox.syncing._status.pop(email, None)
 
 
+def _forget_mail(email):
+    from mailmind.bootstrap import mailbox
+    return mailbox.forget_account(email)
+
+
 def _sync_record():
     from mailmind.bootstrap import mailbox
     return mailbox.syncing.sync_record()
@@ -109,7 +114,7 @@ def assemble():
     secrets.forget()
     config = Directory(config_file.FILE, secrets, _ai_key, _key_in_environment)
     _connector = imap_connection.Connector(config)
-    connections = Connections(config, get, accounts, _Probe(), quiet_error, _retry_sync, _forget_status)
+    connections = Connections(config, get, accounts, _Probe(), quiet_error, _retry_sync, _forget_status, _forget_mail)
     health = Health(_sync_record)
     logins = Logins()
     presets = Presets(mail_hosts)

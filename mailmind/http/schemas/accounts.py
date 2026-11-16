@@ -144,9 +144,16 @@ class Saved(Answer):
     account: AccountRow
 
 
+class RemoveBody(NamesAnAccount):
+    """The account to remove, and whether this Mac lets go of what it keeps of its mail too."""
+    delete_mail: Flag | None = None
+
+
 class Removed(Answer):
+    """`mail_deleted`, with `delete_mail` asked: how many stored copies of its mail this Mac let go."""
     ok: Literal[True]
     removed: str
+    mail_deleted: int | None = None
 
 
 class Trusted(Answer):

@@ -2,6 +2,12 @@
 from mailmind.platform.db import driver
 
 
+def forget_account(c, email):
+    """Its drafts (and their journal, by the cascade) and its outbox, as its account is removed."""
+    for table in ("drafts", "outbox"):
+        c.execute(f"DELETE FROM {table} WHERE account=? COLLATE NOCASE", (email,))
+
+
 def rekey_thread(c, account, survivor, absorbed):
     """Thread `absorbed` merged into `survivor`: a queued reply's follow-up lands on the survivor, in the merge's
     transaction."""

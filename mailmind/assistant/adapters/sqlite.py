@@ -7,6 +7,13 @@ from mailmind.kernel.assessment import Assessment
 
 
 # ----------------------------------------------------------- thread summaries (AI)
+def forget_account(c, email):
+    """Its threads' summaries and its drafts made ahead, as its account is removed. What was said of each message goes with
+    its key."""
+    for table in ("thread_summaries", "draft_ahead"):
+        c.execute(f"DELETE FROM {table} WHERE account=? COLLATE NOCASE", (email,))
+
+
 def get_thread_summary(c, account, thread_id, scope="thread"):
     return c.execute("SELECT * FROM thread_summaries WHERE account=? AND thread_id=? AND scope=?",
                      (account, thread_id, scope)).fetchone()

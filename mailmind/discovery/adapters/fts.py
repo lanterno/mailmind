@@ -91,6 +91,14 @@ def index_message(c, pk):
         pass  # index not present yet (pre-migration) — safe to skip
 
 
+def forget_account(c, email):
+    """The index's rows of every stored copy of `email`'s mail, before the copies go."""
+    try:
+        c.execute("DELETE FROM msg_fts WHERE rowid IN (SELECT pk FROM messages WHERE account=? COLLATE NOCASE)", (email,))
+    except driver.OperationalError:
+        pass
+
+
 def forget_message(c, pk):
     try:
         c.execute("DELETE FROM msg_fts WHERE rowid=?", (pk,))

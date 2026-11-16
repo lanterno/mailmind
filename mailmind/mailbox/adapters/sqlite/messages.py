@@ -96,6 +96,15 @@ def forget_gone_messages(c, now_ts, days=30):
     return c.execute("DELETE FROM message_identity WHERE gone_at < ?", (now_ts - days * 86400,)).rowcount
 
 
+def forget_account(c, email):
+    """Every stored copy of `email`'s mail goes, and what hangs on it (bodies, attachments, labels, recipients, thread links,
+    by the foreign keys' cascade), its message keys and what was said of them (assessments, snoozes, batch items, so too), its
+    folders' sync state and its queued changes. How many copies went."""
+    for table in ("message_identity", "sync_state", "mail_commands"):
+        c.execute(f"DELETE FROM {table} WHERE account=? COLLATE NOCASE", (email,))
+    return c.execute("DELETE FROM messages WHERE account=? COLLATE NOCASE", (email,)).rowcount
+
+
 def mark_pending_removal(c, pk, mutation_id):
     """Leave message `pk` out of every list while the move `mutation_id` (a mail_commands id) takes it
     away. The row stays, so a move that doesn't happen can list it again."""

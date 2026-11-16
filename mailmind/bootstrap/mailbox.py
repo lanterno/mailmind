@@ -63,6 +63,17 @@ def _conversations_merged(c, merged):
 
 store.bind_merges(_conversations_merged)
 
+
+def forget_account(email):
+    """What this Mac keeps of `email`'s mail, let go as its account is removed and a person asks for it: the index's rows,
+    each context's own under its address, then the Mailbox's, in one block. Its mail on the server is untouched. How many
+    stored copies went."""
+    with UnitOfWork().write() as c:
+        fts.forget_account(c, email)
+        for forget in (attention_store.forget_account, assistant_store.forget_account, compose_store.forget_account):
+            forget(c, email)
+        return store.forget_account(c, email)
+
 KINDS = ("imaplib", "imapclient")
 _kind = "imaplib"               # every account's, but one asking for another this process offers
 _offered = {"imaplib"}

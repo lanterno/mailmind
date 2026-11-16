@@ -14,6 +14,7 @@ from mailmind.http.schemas.accounts import (
     PresetArgs,
     PresetFound,
     Removed,
+    RemoveBody,
     Saved,
     Standing,
     Trusted,
@@ -65,7 +66,7 @@ def router(accounts, mailbox):
         return change("edit", body.model_dump(exclude_unset=True))
 
     @r.post("/api/accounts/delete", responses=answers(Removed))
-    def delete(body: NamesAnAccount):
+    def delete(body: RemoveBody):
         return change("delete", body.model_dump(exclude_unset=True))
 
     return r
