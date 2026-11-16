@@ -332,7 +332,15 @@ impl Syncing {
                 if !run.shows(now) {
                     // It may pass: the account shows as it did, and the next sync says.
                     self.show_as_before(email, before);
-                    log::info(TAG, "an account's sync failed; it shows if the next fails too", &[]);
+                    // Its class, so a run that fails and works by turns still says what it met.
+                    let message = "an account's sync failed; it shows if the next fails too";
+                    log::line(&log::Line {
+                        level: log::Level::Info,
+                        tag: TAG,
+                        message,
+                        fields: &[],
+                        error: Some(class),
+                    });
                     return Ok(0);
                 }
                 self.set_status(email, "error", class.to_owned());
