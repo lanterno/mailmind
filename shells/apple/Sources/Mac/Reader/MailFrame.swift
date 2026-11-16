@@ -237,6 +237,10 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
     var told: ((FrameMessage) -> Void)?
     /// Whether the web view could be made clear: a document dressed for one that couldn't paints its own paper.
     var clear = true
+    /// A printed copy's head (`MessagePrinter`): with one, the document starts with it and a plain quote stays open.
+    var printHead: String?
+    /// Told once the document has loaded, or failed to: a printed copy waits for it.
+    var loaded: ((Bool) -> Void)?
     /// The loads still going: one the web view stopped gets nothing more.
     private var going: Set<ObjectIdentifier> = []
 
@@ -263,7 +267,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
             task.didFailWithError(URLError(.unsupportedURL))
             return
         }
-        let (core, look, html, clear) = (core, look, html, clear)
+        let (core, look, html, clear, head) = (core, look, html, clear, printHead)
         Task { @MainActor in
             let answer = await core.send("GET", target, Data())
             guard going.remove(id) != nil else { return }
@@ -271,7 +275,7 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
             for header in answer.headers where header.name.lowercased() != "content-length" {
                 fields[header.name] = header.value
             }
-            let body = Self.dressed(answer, look: look, html: html, clear: clear)
+            let body = Self.dressed(answer, look: look, html: html, clear: clear, head: head)
             let response = HTTPURLResponse(url: asked, statusCode: Int(answer.status), httpVersion: "HTTP/1.1",
                                            headerFields: fields)
             if let response { task.didReceive(response) }
@@ -281,16 +285,39 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
     }
 
     /// The document with its look, and a plain mail's quote folded. A document that isn't one (a refusal) is left as
-    /// the core wrote it. `clear`: whether the frame shows the pane's paper under the document.
-    nonisolated static func dressed(_ answer: CoreAnswer, look: MailLook, html: Bool, clear: Bool = true) -> Data {
+    /// the core wrote it. `clear`: whether the frame shows the pane's paper under the document. `head`: a printed
+    /// copy's head, put first in the body, with the quote left open, as paper can't unfold it.
+    nonisolated static func dressed(_ answer: CoreAnswer, look: MailLook, html: Bool, clear: Bool = true,
+                                    head: String? = nil) -> Data
+    {
         guard answer.contentType.hasPrefix("text/html"), let document = String(data: answer.body, encoding: .utf8) else {
             return answer.body
         }
-        return Data(look.dress(html ? document : PlainQuote.foldDocument(document), clear: clear).utf8)
+        guard let head else {
+            return Data(look.dress(html ? document : PlainQuote.foldDocument(document), clear: clear).utf8)
+        }
+        return Data(MessagePrinter.headed(look.dress(document, clear: clear), head: head).utf8)
     }
 
     func webView(_ webView: WKWebView, stop task: any WKURLSchemeTask) {
         going.remove(ObjectIdentifier(task))
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        loaded?(true)
+        loaded = nil
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+        loaded?(false)
+        loaded = nil
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
+                 withError error: any Error)
+    {
+        loaded?(false)
+        loaded = nil
     }
 
     /// Only the document asked for loads: a link clicked, a form sent or a redirect goes nowhere.

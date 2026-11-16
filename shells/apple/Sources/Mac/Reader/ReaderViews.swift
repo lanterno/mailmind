@@ -18,6 +18,20 @@ struct ReadingPrefs: Equatable {
     }
 }
 
+/// The messages whose remote images a person asked to see, for as long as MailMind is open: what the reader's frame
+/// loads them with, wherever the message shows (the pane, a conversation, its own window), and what File › Print puts
+/// on paper, so a ticket's code prints as it shows.
+@MainActor
+@Observable
+final class ShownImages {
+    static let shared = ShownImages()
+    private var shown: Set<MailCopy> = []
+
+    func contains(_ copy: MailCopy) -> Bool { shown.contains(copy) }
+
+    func show(_ copy: MailCopy) { shown.insert(copy) }
+}
+
 /// What stands under a message's head, then the body, as the page's `MailContent` and Meadow's `.msg` order them:
 /// the trust line (where it's from, that its frame is a sandbox, the remote images held back a click away), a Reply-To
 /// that would take an answer elsewhere, the invite, the body on the pane's paper, and its files. Asking for images
@@ -31,11 +45,12 @@ struct MessageContent: View {
     var minHeight: CGFloat = 400
     let prefs: ReadingPrefs
     let mine: Set<String>
-    @State private var images = false
+    var shownImages = ShownImages.shared
     @State private var height: CGFloat?
     @Environment(\.meadow) private var meadow
     @Environment(\.meadowLight) private var light
 
+    private var images: Bool { shownImages.contains(copy) }
     private var blocked: Int { images ? 0 : opened.blockedImages + opened.blockedCssUrls }
     private var senderDomain: String? {
         opened.fromAddr.flatMap { $0.split(separator: "@").last.map { String($0).lowercased() } }
@@ -45,7 +60,7 @@ struct MessageContent: View {
         VStack(alignment: .leading, spacing: 0) {
             TrustLine(from: MessageWords.from(opened.fromAddr, facts: opened.sender), blocked: blocked,
                       loadImages: blocked > 0 ? {
-                          images = true
+                          shownImages.show(copy)
                           height = nil
                       } : nil)
                 .padding(.top, 12)

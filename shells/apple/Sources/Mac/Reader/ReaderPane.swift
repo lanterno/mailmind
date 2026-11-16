@@ -95,6 +95,7 @@ struct ReaderPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .focusedSceneValue(\.mailWriting, MailWriting(replyTo: replyTo, draft: draft, current: current))
+        .focusedSceneValue(\.readerTools, tools)
         .task {
             composing.openWindow = { id in openWindow(id: ComposeWindow.scene, value: id) }
             composing.mailChanged = { [weak app] in
@@ -161,6 +162,27 @@ struct ReaderPane: View {
         }
         let needsDone = loaded && !hasMail && inInbox && app.mailbox.tab == .needs
         return PaneEmptyWords.of(needsDone: needsDone, hasMail: hasMail)
+    }
+
+    /// What the menu bar's Print acts on, while a message is open.
+    private var tools: ReaderTools? {
+        guard openCopy != nil else { return nil }
+        return ReaderTools(print: { printOpen() })
+    }
+
+    /// File › Print: the message open, or a conversation's latest, whose head is read first.
+    private func printOpen() {
+        guard let core = app.core else { return }
+        let window = NSApp.keyWindow, prefs = prefs
+        if thread != nil, let conversation, let latest = conversation.members.last {
+            Task {
+                guard case .messageOpened(let opened)? = try? await conversation.body(latest) else { return }
+                MessagePrinter.shared.print(MailCopy(latest, account: conversation.account), opened: opened,
+                                            core: core, prefs: prefs, window: window)
+            }
+        } else if let copy = openCopy, let opened = openMessage {
+            MessagePrinter.shared.print(copy, opened: opened, core: core, prefs: prefs, window: window)
+        }
     }
 
     /// Opened unread, a message is marked read after a moment on it; and a reply written ahead is looked for.

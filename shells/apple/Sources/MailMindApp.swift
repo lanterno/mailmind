@@ -25,6 +25,7 @@ struct MailMindApp: App {
             UpdateCommands()
             AcknowledgementsCommands()
             MailboxCommands()
+            ReaderCommands()
             DeskCommands()
         }
         #if os(macOS)
