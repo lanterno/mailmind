@@ -355,9 +355,10 @@ final class AIWordsTests: XCTestCase {
             platform, under Billing.
             """)
         XCTAssertEqual(API.AiProvider.gemini.billing, """
-            Billed per use by Google, separately from any ChatGPT or Claude subscription. Use a key on a billed \
-            project: on the free tier, a key stops each day at its quota.
-            """)
+            Billed per use by Google, separately from any ChatGPT or Claude subscription. Use a key on a project with \
+            billing set up: on the free tier, Google may use what is sent, your mail included, to improve its \
+            products, and a key stops each day at its quota.
+            """, "Google's terms let it use what a free key sends")
         XCTAssertEqual(API.AiProvider.anthropic.creditPage?.absoluteString, "https://console.anthropic.com/settings/billing")
         XCTAssertEqual(API.AiProvider.openai.creditPage?.absoluteString,
                        "https://platform.openai.com/settings/organization/billing")
