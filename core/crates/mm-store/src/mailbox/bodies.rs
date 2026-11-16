@@ -3,7 +3,7 @@
 
 use mm_content::mime::Attachment;
 use mm_kernel::errors::Fault;
-use mm_mailbox::fetch_ports::{KeptBodies, KeptBody};
+use mm_mailbox::fetch_ports::{KeptBodies, KeptBody, KeptText};
 use mm_mailbox::ports::{Row, StoredBodies};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -97,8 +97,26 @@ pub(crate) fn keep_body(c: &Connection, pk: i64, body: &KeptBody) -> rusqlite::R
     crate::mailbox_sync::index_message(c, pk)
 }
 
+/// Keep the text of a message whose body isn't kept, where it has none yet, and index it. The caller commits.
+pub(crate) fn keep_text(c: &Connection, pk: i64, text: &KeptText) -> rusqlite::Result<()> {
+    let changed = c
+        .prepare_cached(
+            "UPDATE messages SET body_text=?, snippet=CASE WHEN snippet IS NULL OR snippet='' THEN ? ELSE snippet END \
+             WHERE pk=? AND body_text IS NULL",
+        )?
+        .execute(params![text.body_text, text.snippet, pk])?;
+    if changed == 0 {
+        return Ok(());
+    }
+    crate::mailbox_sync::index_message(c, pk)
+}
+
 impl KeptBodies for Database {
     fn keep_body(&self, pk: i64, body: &KeptBody) -> Result<(), Fault> {
         self.write(|c| keep_body(c, pk, body))
+    }
+
+    fn keep_text(&self, pk: i64, text: &KeptText) -> Result<(), Fault> {
+        self.write(|c| keep_text(c, pk, text))
     }
 }

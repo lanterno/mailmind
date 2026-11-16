@@ -5,8 +5,13 @@
 //! A body that is stored is read without the gate: only the server is the gate's. One that isn't is looked for again
 //! once the gate is had, since the job before may have fetched it.
 //!
-//! The body backfill fetches as a prefetch does, and is told a lost connection apart from the rest (`try_body`).
+//! The body backfill fetches a folder's few messages at a time, as a prefetch gives way, and is told a lost connection
+//! apart from the rest (`try_bodies`). It asks for their openings several a FETCH, with each one's whole size: an
+//! opening that holds the whole message is kept as its body; one cut off is fetched whole, several a FETCH too, where
+//! the message is at most `WHOLE_MOST`; and a larger message keeps only its opening's text, which search indexes, so
+//! its attachments are fetched when it is opened.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use mm_kernel::errors::Fault;
@@ -15,13 +20,38 @@ use mm_kernel::when;
 use serde_json::Value;
 
 use crate::backfill_ports::{BackfillFetch, Tried};
-use crate::fetch_ports::{KeptBodies, KeptBody};
+use crate::fetch_ports::{KeptBodies, KeptBody, KeptText};
 use crate::gates::{Gates, Priority, Refused, Wait, on_gate};
 use crate::ports::{BodyFetch, Row, StoredBodies};
-use crate::session::{MailServers, ServerError};
+use crate::session::{MailServer, MailServers, ServerError};
 
 /// What a session waits for each answer (`pool.KEPT_TIMEOUT`, as a fetch opens one).
 const TIMEOUT_SECONDS: u64 = 60;
+/// The first bytes of each message the body backfill reads, as a sync reads them.
+pub const OPENING_BYTES: u32 = 65_536;
+/// The largest message the body backfill keeps whole, in bytes; a larger one waits to be opened for its attachments.
+pub const WHOLE_MOST: u32 = 262_144;
+/// About how many bytes of whole messages one FETCH asks for.
+pub const FETCH_BYTES: u32 = 2_097_152;
+
+/// The UIDs of `sized` (UID, size) in groups of at most `most` bytes, in order: one larger than that alone.
+fn by_bytes(sized: &[(u32, u32)], most: u32) -> Vec<Vec<u32>> {
+    let mut groups: Vec<Vec<u32>> = Vec::new();
+    let mut bytes = 0u32;
+    for (uid, size) in sized {
+        match groups.last_mut() {
+            Some(group) if bytes.saturating_add(*size) <= most => {
+                group.push(*uid);
+                bytes = bytes.saturating_add(*size);
+            }
+            _ => {
+                groups.push(vec![*uid]);
+                bytes = *size;
+            }
+        }
+    }
+    groups
+}
 
 #[derive(Debug)]
 pub struct Fetching {
@@ -114,6 +144,46 @@ impl Fetching {
     fn fetch_body(&self, pk: i64) -> Result<Option<Vec<u8>>, Fault> {
         self.fetch_held(pk).map_err(fault)
     }
+
+    /// `try_bodies` with the gate held, on the session its account's jobs share.
+    fn bodies_held(&self, account: &str, folder: &str, messages: &[(i64, u32)]) -> Result<(), ServerError> {
+        let mut server = self.servers.open(account, TIMEOUT_SECONDS)?;
+        let read = self.read_bodies(&mut *server, folder, messages);
+        match read {
+            Err(ServerError::Unreachable(_)) => server.shutdown(),
+            _ => server.logout(),
+        }
+        read
+    }
+
+    /// Each message's opening, then the whole of those cut off but small enough, each kept as it comes: what was
+    /// kept stays kept, however the rest goes. A folder the server won't select keeps nothing.
+    fn read_bodies(&self, s: &mut dyn MailServer, folder: &str, messages: &[(i64, u32)]) -> Result<(), ServerError> {
+        s.select(folder, true)?;
+        let pk_of: HashMap<u32, i64> = messages.iter().map(|(pk, uid)| (*uid, *pk)).collect();
+        let uids: Vec<u32> = messages.iter().map(|(_, uid)| *uid).collect();
+        let when = when::iso(self.clock.now());
+        let keep = |pk: i64, raw: Vec<u8>| self.kept.keep_body(pk, &KeptBody::of(raw, when.clone()));
+        let mut whole = Vec::new();
+        for (uid, opening) in s.openings(&uids, OPENING_BYTES)? {
+            let Some(pk) = pk_of.get(&uid).copied() else { continue };
+            if opening.is_whole(OPENING_BYTES) {
+                keep(pk, opening.raw).map_err(ServerError::Failed)?;
+            } else if let Some(size) = opening.size.filter(|size| *size <= WHOLE_MOST) {
+                whole.push((uid, size));
+            } else {
+                self.kept.keep_text(pk, &KeptText::of(&opening.raw)).map_err(ServerError::Failed)?;
+            }
+        }
+        for group in by_bytes(&whole, FETCH_BYTES) {
+            for (uid, raw) in s.bodies(&group)? {
+                if let Some(pk) = pk_of.get(&uid).copied() {
+                    keep(pk, raw).map_err(ServerError::Failed)?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl BodyFetch for Fetching {
@@ -138,10 +208,11 @@ impl BodyFetch for Fetching {
 }
 
 impl BackfillFetch for Fetching {
-    /// `gates.run(account, fetch_body, MAINTENANCE, wait=False)`: a held gate is Busy at once, and a lost connection is
-    /// told apart from everything else that can go wrong.
-    fn try_body(&self, account: &str, pk: i64) -> Tried {
-        match on_gate(&*self.gates, account, Priority::Maintenance, Wait::Not, || self.fetch_held(pk)) {
+    /// `gates.run(account, fetch_bodies, MAINTENANCE, wait=False)`: a held gate is Busy at once, and a lost connection
+    /// is told apart from everything else that can go wrong.
+    fn try_bodies(&self, account: &str, folder: &str, messages: &[(i64, u32)]) -> Tried {
+        let fetch = || self.bodies_held(account, folder, messages);
+        match on_gate(&*self.gates, account, Priority::Maintenance, Wait::Not, fetch) {
             // Busy, or a wait from inside a job, which no lane is.
             Err(_) => Tried::Busy,
             Ok(Err(ServerError::Unreachable(_))) => Tried::Unreachable,

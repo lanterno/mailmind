@@ -1,5 +1,6 @@
 //! What fetching a message's body needs of the store beyond reading one (`StoredBodies`): keeping a body fetched with
-//! what opening it records (`Ingest._keep_body`). The store (`mm-store`) implements it.
+//! what opening it records (`Ingest._keep_body`), or, for a message the body backfill leaves to be opened, the text of
+//! its opening. The store (`mm-store`) implements it.
 
 use std::fmt;
 
@@ -42,9 +43,31 @@ impl KeptBody {
     }
 }
 
+/// The text of a message too large for the body backfill to keep whole, from its opening: what search indexes and a
+/// list without a snippet shows. Its body, attachments and all, is fetched when it is opened.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeptText {
+    /// Its text for search (`body_text_of`), as far as the opening holds it.
+    pub body_text: String,
+    /// The snippet a list shows, where its sync kept none (`snippet_of`).
+    pub snippet: String,
+}
+
+impl KeptText {
+    /// The text of the message whose first bytes are `opening`.
+    pub fn of(opening: &[u8]) -> KeptText {
+        let body_text = mime::body_text_of(&mime::parse(opening));
+        let snippet = mime::snippet_of(&body_text);
+        KeptText { body_text, snippet }
+    }
+}
+
 /// Where a body fetched is kept.
 pub trait KeptBodies: Send + Sync + fmt::Debug {
     /// Keep the message's body, in one transaction: its bytes, its parts in place of any kept before, whether it has
     /// any, who it went to, and its text, which search indexes and a list without a snippet shows.
     fn keep_body(&self, pk: i64, body: &KeptBody) -> Result<(), Fault>;
+    /// Keep the text of a message whose body isn't kept, in one transaction, where none is kept yet: what search
+    /// indexes and a list without a snippet shows. Opening it still fetches its body.
+    fn keep_text(&self, pk: i64, text: &KeptText) -> Result<(), Fault>;
 }

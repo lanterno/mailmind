@@ -1,8 +1,9 @@
 //! What the body backfill reads (`mm_mailbox::backfill_ports::BodiesWanted`): the Python app's `bodies_to_fetch` and
-//! `still_without_body` (`mailbox.adapters.sqlite.contents`).
+//! `still_without_body` (`mailbox.adapters.sqlite.contents`), the first reaching back only as far as it is asked and
+//! saying where each message is.
 
 use mm_kernel::errors::Fault;
-use mm_mailbox::backfill_ports::BodiesWanted;
+use mm_mailbox::backfill_ports::{BodiesWanted, Wanted};
 use rusqlite::params;
 
 use crate::db::Database;
@@ -13,14 +14,16 @@ fn listed(pks: &[i64]) -> String {
 }
 
 impl BodiesWanted for Database {
-    fn bodies_to_fetch(&self, account: &str, skip: &[i64], limit: usize) -> Result<Vec<i64>, Fault> {
+    fn bodies_to_fetch(&self, account: &str, skip: &[i64], since: i64, limit: usize) -> Result<Vec<Wanted>, Fault> {
         let limit = i64::try_from(limit).unwrap_or(i64::MAX);
         self.read(|c| {
             c.prepare_cached(
-                "SELECT pk FROM messages WHERE account=? AND body_text IS NULL AND pending_removal IS NULL \
-                 AND pk NOT IN (SELECT value FROM json_each(?)) ORDER BY ts DESC LIMIT ?",
+                "SELECT pk, folder, uid FROM messages WHERE account=? AND body_text IS NULL AND pending_removal IS NULL \
+                 AND ts >= ? AND uid > 0 AND pk NOT IN (SELECT value FROM json_each(?)) ORDER BY ts DESC LIMIT ?",
             )?
-            .query_map(params![account, listed(skip), limit], |r| r.get(0))?
+            .query_map(params![account, since, listed(skip), limit], |r| {
+                Ok(Wanted { pk: r.get(0)?, folder: r.get(1)?, uid: r.get(2)? })
+            })?
             .collect()
         })
     }
