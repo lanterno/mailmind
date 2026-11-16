@@ -682,12 +682,12 @@ final class DeskModelTests: XCTestCase {
         XCTAssertTrue(undoable)
     }
 
+    /// The server looked at the Inbox again and found nothing had left it, so it kept no way back.
     func testASweepTheServerStoppedBeforeAnythingMovedOffersNoUndo() async {
         routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
             API.AccountSwept(account: "ada@example.test", planned: 3)]))
         routes.answer("POST", "/api/sweep", API.Swept(dryRun: false, generated: "", ok: true, results: [
-            API.AccountSwept(account: "ada@example.test", error: "abort", moved: 0, planned: 3)],
-            undoGroup: "ug-sweep"))
+            API.AccountSwept(account: "ada@example.test", error: "abort", moved: 0, planned: 3)]))
         let model = CurateModel(link: link, notices: notices)
 
         await model.armSweep("ada@example.test")
@@ -695,6 +695,27 @@ final class DeskModelTests: XCTestCase {
 
         XCTAssertEqual(said, "Couldn’t reach the mail server, so nothing was swept. Try again in a moment. (abort)")
         XCTAssertFalse(undoable, "nothing went, so there is nothing to undo")
+    }
+
+    /// A sweep stopped where the server couldn't be asked again what had left the Inbox counts none gone, but keeps a
+    /// way back for all it meant to move: it says it couldn't check how much went, not that nothing was swept, and
+    /// offers the Undo that puts back whatever did.
+    func testASweepStoppedWhereTheServerCantBeAskedAgainSaysSoAndOffersUndo() async {
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", planned: 3)]))
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: false, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", error: "ConnectionLost", moved: 0, planned: 3)],
+            undoGroup: "ug-sweep"))
+        let model = CurateModel(link: link, notices: notices)
+
+        await model.armSweep("ada@example.test")
+        await model.sweep()
+
+        XCTAssertEqual(said, """
+            Couldn’t reach the mail server, so the sweep stopped part way and MailMind couldn’t check how much went. \
+            Undo puts back whatever did; sweep again for the rest. (ConnectionLost)
+            """)
+        XCTAssertTrue(undoable, "some of it may be in the Trash, and Undo brings back whatever is")
     }
 
     /// A sweep the server stopped part way says how many went, that Undo brings them back, and to sweep again for
