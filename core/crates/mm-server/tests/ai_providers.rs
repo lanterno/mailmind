@@ -524,6 +524,13 @@ fn what_cant_be_listed_is_refused_in_words_and_a_provider_that_didnt_answer_is_u
     r.post("/api/preferences", &json!({"ai_provider": "gemini", "ai_base_url": url}));
     let refused_key = r.get("/api/ai/models?provider=gemini");
     assert_eq!((refused_key.status, refused_key.json()), (400, refused("The provider refused the key.")));
+    // Gemini's own answer to a wrong key: a 400, its error in a list.
+    let wrong_key = json!([{"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.",
+                                      "status": "INVALID_ARGUMENT", "details": [{"reason": "API_KEY_INVALID"}]}}]);
+    let (url, _) = provider(vec![(400, wrong_key)]);
+    r.post("/api/preferences", &json!({"ai_base_url": url}));
+    let not_valid = r.get("/api/ai/models?provider=gemini");
+    assert_eq!((not_valid.status, not_valid.json()), (400, refused("The provider refused the key.")));
 
     let nowhere = format!("http://127.0.0.1:{}/v1", closed_port());
     r.post("/api/preferences", &json!({"ai_base_url": nowhere}));

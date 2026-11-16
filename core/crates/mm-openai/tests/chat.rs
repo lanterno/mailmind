@@ -326,6 +326,85 @@ fn a_rejected_key_says_nothing_the_service_said_and_is_not_sent_again() {
     assert_eq!(failed.plain(), "the API key was rejected");
 }
 
+/// Gemini's answer to a wrong key: a 400, its error in a list, by its reason, its message or both.
+fn gemini_wrong_key(reason: Option<&str>, message: &str) -> String {
+    let details = reason.map_or_else(Vec::new, |reason| {
+        vec![json!({"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason,
+                    "domain": "googleapis.com"})]
+    });
+    json!([{"error": {"code": 400, "message": message, "status": "INVALID_ARGUMENT", "details": details}}]).to_string()
+}
+
+#[test]
+fn geminis_400_for_a_key_that_isnt_valid_is_a_refused_key_as_a_401_is() {
+    let not_valid = "API key not valid. Please pass a valid API key.";
+    for body in [
+        gemini_wrong_key(Some("API_KEY_INVALID"), not_valid),
+        gemini_wrong_key(Some("API_KEY_INVALID"), &format!("Bad key {KEY}")),
+        gemini_wrong_key(None, not_valid),
+        // The same, not in a list.
+        json!({"error": {"code": 400, "message": not_valid, "status": "INVALID_ARGUMENT"}}).to_string(),
+        // An error that is words is what the service said, alone or the first of a list.
+        json!({"error": not_valid}).to_string(),
+        json!([{"error": not_valid}, {"error": "second"}]).to_string(),
+    ] {
+        let (url, log) = stand_in(vec![(400, vec![], body.clone())]);
+        let failed = api(Gemini, &url, Some(KEY), Arc::new(Open::default()))
+            .complete(&prompt("gemini-4-hydrogen", None))
+            .expect_err("refused");
+        assert_eq!((failed.status, failed.permanent(), heard(&log).len()), (Some(401), true, 1), "{body}");
+        assert_eq!(
+            failed,
+            mm_assistant::ports::ModelError::new("gemini API 401: the key was refused", Some(401)),
+            "{body}"
+        );
+        assert_eq!(failed.plain(), "the API key was rejected", "{body}");
+        assert!(!format!("{failed:?}").contains("sk-proj"));
+        // The models it lists: a refused key too.
+        let (url, _) = stand_in(vec![(400, vec![], body)]);
+        let listed = api(Gemini, &url, Some(KEY), Arc::new(Open::default())).list_models().expect_err("refused");
+        assert_eq!(listed.status, Some(401));
+    }
+    // Another 400 is the request's fault, whatever its error says of a key in passing.
+    for body in [
+        gemini_wrong_key(Some("FIELD_INVALID"), "Invalid JSON payload received. Unknown name \"seed\"."),
+        gemini_wrong_key(None, "The API key not valid for this model is fine; the field isn't."),
+        error("model is required"),
+        json!({"error": " API key not valid"}).to_string(),
+        // Words that aren't what the service said: the second of a list, or beside the error.
+        json!([{"error": "bad request"}, {"error": "API key not valid"}]).to_string(),
+        json!({"message": "API key not valid", "error": "bad request"}).to_string(),
+    ] {
+        let (url, _) = stand_in(vec![(400, vec![], body.clone())]);
+        let failed = api(Gemini, &url, Some(KEY), Arc::new(Open::default()))
+            .complete(&prompt("gemini-4-hydrogen", None))
+            .expect_err("a bad request");
+        assert_eq!((failed.status, failed.plain().as_str()), (Some(400), "the API answered 400"), "{body}");
+    }
+    // A 401 or a 403 refuses the key, whatever its body is.
+    let (url, _) = stand_in(vec![(403, vec![], gemini_wrong_key(Some("API_KEY_INVALID"), not_valid))]);
+    let failed = api(Gemini, &url, Some(KEY), Arc::new(Open::default())).complete(&prompt("m", None)).expect_err("403");
+    assert_eq!(failed.status, Some(403));
+}
+
+#[test]
+fn what_a_service_said_is_read_from_the_first_of_a_list_too() {
+    use mm_openai::wire::error_text;
+    let listed = json!([{"error": {"code": 429, "message": "Resource has been exhausted."}}, {"error": "second"}]);
+    assert_eq!(error_text(listed.to_string().as_bytes()), "Resource has been exhausted.");
+    assert_eq!(error_text(br#"{"error": {"message": "slow down"}}"#), "slow down");
+    assert_eq!(error_text(br#"{"error": "model not found"}"#), "model not found");
+    assert_eq!(error_text(br#"[{"error": "model not found"}]"#), "model not found");
+    for none in [&b"[]"[..], b"[1]", b"not json", b"{}", b"[{\"message\": \"no error\"}]"] {
+        assert_eq!(error_text(none), "", "{}", String::from_utf8_lossy(none));
+    }
+    // Read, it says what a person can be told: a rate limit, for one.
+    let (url, _) =
+        stand_in(vec![(400, vec![], json!([{"error": {"message": "rate of requests too high"}}]).to_string())]);
+    let failed = api(Gemini, &url, Some(KEY), Arc::new(Open::default())).complete(&prompt("m", None)).expect_err("400");
+    assert_eq!(failed.plain(), "rate-limited for now");
+}
+
 #[test]
 fn a_rate_limit_is_sent_again_and_an_outage_that_stays_gives_up_after_two_retries() {
     let (url, log) = stand_in(vec![
