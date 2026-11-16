@@ -721,9 +721,12 @@ final class DeskModelTests: XCTestCase {
             "1 starred or unread message stays in your Inbox.",
             "The newest 500 only — sweep again for the rest.",
             "2 of them can’t be brought back with Undo."])
-        XCTAssertEqual(CurateModel.sweepNotes(API.AccountSwept(account: "ada@example.test", capped: false, heldBack: 4,
-                                                               noUndo: 0, planned: 3)),
-                       ["4 starred or unread messages stay in your Inbox."])
+        XCTAssertEqual(CurateModel.undoLine(plan), "Undo puts the rest back.", "not all of it, beside the line above")
+        let whole = API.AccountSwept(account: "ada@example.test", capped: false, heldBack: 4, noUndo: 0, planned: 3)
+        XCTAssertEqual(CurateModel.sweepNotes(whole), ["4 starred or unread messages stay in your Inbox."])
+        XCTAssertEqual(CurateModel.undoLine(whole), "Undo puts it all back.")
+        XCTAssertEqual(CurateModel.undoLine(API.AccountSwept(account: "ada@example.test", planned: 3)),
+                       "Undo puts it all back.")
         XCTAssertEqual(CurateModel.bucketWords("newsletters/marketing"), "Newsletters and marketing")
         XCTAssertEqual(CurateModel.bucketWords("something/new"), "something/new")
         XCTAssertEqual(CurateModel.sweepSenders(API.SweepBucket(bucket: "spam/scam", count: 3, senders: [
