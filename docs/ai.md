@@ -19,10 +19,27 @@ provider's own; a URL is https, or http on this Mac, with a port from 1 to 65535
 `http://127.0.0.1:/v1`, is malformed), no user or password, query or fragment, and no IPvFuture or zone in brackets,
 and a model on this Mac's is at 127.0.0.1, ::1 or localhost, or refused in those words: a server on another machine is
 `compatible`, over https). Choosing another provider without naming a model or URL sets both back to `""`.
-`MAILMIND_MODEL` is the Claude model: it wins over the model chosen while Claude is the provider, and with any other it
-is ignored. `ANTHROPIC_BASE_URL` stands in for Claude's URL when none is chosen, held to the same rules as a URL chosen
-(plain http only to 127.0.0.1, ::1 or localhost): one that breaks them leaves Claude unreachable, with nothing sent
-("Claude API unreachable: no API address"), and isn't on this Mac for pricing.
+`MAILMIND_MODEL` is the Claude model: it wins over the model chosen while Claude is the provider, background summaries'
+too, and with any other it is ignored. `ANTHROPIC_BASE_URL` stands in for Claude's URL when none is chosen, held to the
+same rules as a URL chosen (plain http only to 127.0.0.1, ::1 or localhost): one that breaks them leaves Claude
+unreachable, with nothing sent ("Claude API unreachable: no API address"), and isn't on this Mac for pricing.
+
+Background summaries (`triage`, `triage-batch`) run on every new message, so they ask the provider's small model,
+`Provider.small` (`providers.background_model`): Claude's `claude-haiku-5-5`, OpenAI's `gpt-6-luna` and Gemini's
+`gemini-3.5-flash-lite`. A model on this Mac and a compatible service have none, and ask the one chosen. Everything a
+person asks for (a thread's summary, the brief, a draft, Ask, Rewrite and the rest) goes to the model chosen. The
+status's `background_model` names the one background summaries ask ("" while AI is off), and a summary stores it beside
+what it says (`Calls.background_label`). They reach back 30 days (`Assessments.RECENT_DAYS`): the assess round and a
+backlog's batch take only mail from the last 30 days, and older mail is summarized when it is opened. The status's
+`summaries_waiting`, while AI is on, counts the messages from those 30 days with no summary yet. Settings' Spending card
+says both, on the page and in the Mac app.
+
+What AI mode sends is said before it is turned on, under its switch, in the Mac app's first run and in Help: each new
+message's sender, subject and opening text go to the provider by themselves, to be summarized; whole conversations only
+when a person asks (a summary, a draft, the brief, Ask, a search written as a sentence, Rewrite); attachments never;
+and with a model on this Mac, or a compatible service at a URL on it, nothing leaves this Mac (`lib/ai.ts`'s `aiSends`,
+`AIWords.sends`). Each paid provider's key card says it bills per use, apart from any ChatGPT or Claude subscription, and
+where credit is added; Gemini's, that a key belongs on a billed project (`BILLING`, `API.AiProvider.billing`).
 
 AI mode the file doesn't say (`accounts.domain.preferences.ai_mode_default`) is on where `mailmind.config.json` names a
 key for any provider or `ANTHROPIC_API_KEY` is set, so whoever set Claude up keeps AI, and off otherwise: a fresh install
@@ -51,7 +68,11 @@ this JSON Schema: " and the schema as compact JSON); `max_tokens` or `max_comple
 ceiling. A 400 saying the key isn't valid (a `details` entry whose reason is `API_KEY_INVALID`, or a message starting
 "API key not valid", as Gemini answers) is a refused key, as a 401 or 403 is: its error carries status 401, so its
 words, the breaker and the models' listing take it as one. A refused key's error is only
-`<provider> API <status>: the key was refused`, with none of what the service said. Any other error carries what the
+`<provider> API <status>: the key was refused`, with none of what the service said. A call refused for want of
+credit or quota (Anthropic's "credit balance is too low", OpenAI's `insufficient_quota`, a Gemini quota for the day,
+or a 402) carries `no_credit`, the account billed (`providers.BILLED_BY`): it is never retried, the status says "the
+Anthropic account has no credit left" (`providers.no_credit`) rather than a rate limit, on both servers, and it stops
+background work as a refused key does. Any other error carries what the
 service said (its `error`, from the first element where the body is an array), the key taken out of the whole of it
 before it is cut to 200 characters. A
 `message.refusal` is a refusal; a reasoning model's thinking ahead of its reply (`<think>…</think>` or
@@ -144,14 +165,22 @@ the dearer of the two models. `Gateway.ask` requires a
 pass it on, `other` when the caller names none. With AI off nothing is counted. A ledger write
 that fails is logged by class name and never fails the call.
 
-What the ledger holds is read back in three places:
+What the ledger holds is read back in four places:
 - `assistant.status.report()` carries `spent_today_micros`, which the sync menu's AI line shows.
+- `GET /api/ai/spending` (`domain.spending.report`, `mm_assistant::spending` on the Rust server) answers the last 7 days
+  and the last 31, `{ok, week, month}`, each `{calls, cost_micros, features}`: the features by what Settings calls them
+  (Summaries, Today's brief, Drafted replies, Ask, ...), a name's features summed, dearest first, with none that cost
+  nothing and made no call. Settings' Spending card shows the two, the three dearest by name and the rest summed, and
+  says that these are MailMind's count and the provider's console holds the bill.
 - `/api/debug/ai?days=N` (30 by default) lists each day by feature.
 - `uv run python -m mailmind ai usage` prints the same. It reads the ledger only and never migrates.
 
 The `Gateway` asks the cost governor (`application.governor.CostGovernor`,
 `assistant.governor()`) before every call it sends. `domain.features.kind` sorts each feature:
-`triage` is background, `draft-ahead` speculative, `brief-ahead`, `review-ahead` and `auto-tidy` scheduled (held to the background's bars, and what a person turned on), and every other feature interactive.
+`triage`, `triage-batch` and `delta` (what came in since you looked, which the page asks for on its own) are background,
+`draft-ahead` speculative, `brief-ahead`, `review-ahead` and `auto-tidy` scheduled (held to the background's bars, and what a person
+turned on), and every other feature interactive. A delta held back answers 502 `unreachable`, to try again, and the pill
+keeps its plain count.
 - Slots. Two interactive calls at a time, and two background or speculative ones beside them.
 - Yielding. Background and speculative calls don't start while an interactive one runs, or for
   45 seconds after one ends (`YIELD_SECONDS`).
@@ -229,4 +258,6 @@ and written apart:
   unprompted.
 
 A new AI route spends on a POST. The one GET that still starts a call is drafting ahead's kick,
-which needs the CSRF token.
+which needs the CSRF token. Drafting ahead is a switch, `draft_ahead` ("Draft replies ahead for important mail", in the
+Written ahead card), off until a person turns it on: off, the `draft-ahead` job drafts nothing and a message's GET only
+reads a draft kept from before, never starting one.

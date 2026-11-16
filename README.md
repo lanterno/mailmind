@@ -18,6 +18,8 @@ See [Features](#features) for what ships today and
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
   thing that leaves your machine is the text of the mail the AI works on, sent to
   the provider you chose (Claude by default), or to none with a model on this Mac or AI mode off.
+  With AI mode on, each new message's sender, subject and opening text go to be summarized by
+  themselves; whole conversations only when you ask, and attachments never.
 - **Any mailbox.** Gmail/Workspace, generic IMAP (cPanel/Dovecot/…), and Proton
   (via Bridge) — all configured in one JSON file.
 - **It learns.** A keep/block rules layer remembers your decisions so the same
@@ -248,13 +250,17 @@ and the AI provider you chose (Claude by default).
 
 Everything here runs through the AI provider you chose (Claude by default) and returns
 **schema-validated** structured output, so malformed-response errors don't reach the UI.
-Nothing is ever sent automatically.
+With AI mode on, only new mail's summaries go by themselves; everything else waits for you to ask,
+or for a switch you turned on in Settings › AI.
 
 - **The Claude API.** With an API key set, the server and every command call the Messages API
   through the official Anthropic SDK (`claude-opus-5-5` unless you choose another in Settings or
   `MAILMIND_MODEL` names one, which wins;
-  per-message triage runs at low effort, everything else at medium). Without a key, AI is off and
-  nothing is sent. A safety-classifier decline on a mail body is
+  per-message triage runs at low effort, everything else at medium). Background summaries ask the
+  provider's small model (`claude-haiku-5-5`, OpenAI's `gpt-6-luna`, Gemini's `gemini-3.5-flash-lite`;
+  a model on this Mac or a compatible service, the one chosen), and reach back only 30 days: older mail
+  is summarized when you open it. Settings' Spending card names both models and how many messages wait.
+  Without a key, AI is off and nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
   `uv run python -m mailmind ai key` keeps the key in the login Keychain and points `"anthropic_api_key"` in
   `mailmind.config.json` at it (`POST /api/ai/key` does the same from the Mac app, and `POST /api/ai/key/clear`
@@ -264,7 +270,8 @@ Nothing is ever sent automatically.
   **Or another provider.** Settings has AI mode, which turns AI off altogether, every background job
   included: it starts off on a fresh install, and on where a key for AI is already there. On, it offers
   a choice of provider: Claude (the default), OpenAI, Google Gemini, a model on this Mac (Ollama,
-  LM Studio, llama.cpp, vLLM, Jan or GPT4All, which Settings finds running and lists with their models;
+  LM Studio, llama.cpp, vLLM, Jan or GPT4All, which Settings finds running and lists with their models,
+  and with none running, links to Ollama with one model to start with and its context length to set;
   nothing leaves the machine) or any other OpenAI-compatible service at a URL you give, each with a
   model of your choosing from the list the provider offers. Each provider's key is kept in the login
   Keychain like Claude's (`ai key --provider openai`; a model on this Mac needs none); `ai on` and
@@ -275,7 +282,10 @@ Nothing is ever sent automatically.
   of Anthropic for it, so it isn't deleted there, and what it costs is still billed but never counted
   against the daily limit), and its messages wait for the provider chosen.
   The sync menu names the model, and in red the reason ("the API key was rejected",
-  "rate-limited for now") when the last call failed. With AI mode on and no key, the brief says
+  "rate-limited for now", "the Anthropic account has no credit left") when the last call failed.
+  Each paid provider's key card says it is billed per use by that provider, separately from any
+  ChatGPT or Claude subscription, and where to add credit. Settings says what AI mode sends before it
+  is on, and so do Help and the Mac app's first run. With AI mode on and no key, the brief says
   AI is off calmly and the composer drops Draft and Rewrite. The brief's card, and the sync
   menu with AI on, say where message text goes: to the provider chosen (Anthropic, OpenAI, Google or
   the service named) only when it is summarized, briefed, drafted or asked about, and nowhere off this
@@ -283,6 +293,8 @@ Nothing is ever sent automatically.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
   …) at the provider's list prices. The sync menu shows what today cost so far against the
   daily limit, and `uv run python -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
+  Settings' Spending card shows the last 7 days and this month by feature, and says the provider's
+  console holds the bill.
   A backlog (a first import, or after an outage) goes to the Message Batches API at half price,
   one batch at a time, while new mail is still triaged as it arrives, so a large import can leave
   older mail without a summary for up to a day. Anthropic holds a batch until MailMind has brought
@@ -290,7 +302,7 @@ Nothing is ever sent automatically.
   batch whose answers are in but that isn't deleted yet waits at Anthropic, holding mail, until
   Claude is the provider with AI mode on again. The sync menu says how many messages are out.
   MailMind spends at most $15 a day unless `"ai_daily_limit_usd"` in `mailmind.config.json`
-  names another amount. At the limit, triage and pre-drafting stop until the next day,
+  names another amount. At the limit, triage, pre-drafting and "since you last looked" stop until the next day,
   anything you ask the AI for asks first whether to go over, and a brief not yet written waits
   for you to ask for it. Background work waits while you
   use the AI and for 45 seconds after. Pre-drafting runs only if you've used the app in the
@@ -312,7 +324,8 @@ Nothing is ever sent automatically.
 - **Draft.** One click writes an editable reply into the composer from the whole
   thread. For mail the AI rates important or action-needed, a background pre-drafter can
   have it ready *before* you press Reply — the Reply button reads **Draft ready** — and
-  pre-drafts survive restarts. The ▾ beside Draft picks a tone (Brief, Balanced, Warm or
+  pre-drafts survive restarts. It is a switch, "Draft replies ahead for important mail" in
+  Settings › AI, off until you turn it on. The ▾ beside Draft picks a tone (Brief, Balanced, Warm or
   Formal, remembered) and takes a line of what to say ("yes, but not before 3 pm"); a draft
   over text you'd written leaves it one Undo away.
 - **Quick replies.** Under a message from a person — not a no-reply address, junk or a
