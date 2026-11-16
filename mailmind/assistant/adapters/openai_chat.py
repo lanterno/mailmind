@@ -14,7 +14,7 @@ import random
 import ssl
 import time
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from mailmind.assistant.adapters import chat_wire
@@ -27,6 +27,8 @@ RETRIES = 2                        # after the first attempt
 LONGEST_WAIT = 60                  # seconds: a retry-after past this isn't waited for
 _RETRIED = frozenset({408, 409, 429})
 _AUTH = frozenset({401, 403})
+_KEY_INVALID = "API_KEY_INVALID"   # the reason Gemini's 400 gives for a key that isn't one
+_NOT_VALID = "API key not valid"   # ...and how its message starts
 _FALLS_BACK = frozenset({"local", "compatible"})      # may not take response_format
 _NO_BATCHES = "Batches need Claude as the AI provider."
 
@@ -58,12 +60,35 @@ def _wait(headers: Mapping[str, str] | None, attempt: int) -> float:
     return min(0.5 * 2 ** attempt, 8) * random.uniform(0.75, 1)
 
 
-def _said(answer: _Answer) -> str:
-    """What a service said of an error: OpenAI's {"error": {"message"}}, or Ollama's {"error": "..."}."""
+def _error(answer: _Answer) -> Any:
+    """The error a service answered with: OpenAI's {"error": {...}}, Ollama's {"error": "..."}, or the first of Gemini's
+    [{"error": {...}}]."""
     body = answer.json()
-    err = body.get("error") if isinstance(body, dict) else None
-    said = err.get("message") if isinstance(err, dict) else err
+    if isinstance(body, list) and body:
+        body = cast(list[Any], body)[0]
+    return cast(dict[str, Any], body).get("error") if isinstance(body, dict) else None
+
+
+def _said(answer: _Answer) -> str:
+    """What a service said of an error: its message, or the error itself where it is words."""
+    err = _error(answer)
+    said = cast(dict[str, Any], err).get("message") if isinstance(err, dict) else err
     return str(said or "")[:200]
+
+
+def _key_refused(answer: _Answer) -> bool:
+    """Whether the service refused the key: a 401 or 403, or Gemini's 400 for a key that isn't one, whose error gives the
+    reason API_KEY_INVALID or says "API key not valid"."""
+    if answer.status in _AUTH:
+        return True
+    if answer.status != 400:
+        return False
+    err = _error(answer)
+    details = cast(dict[str, Any], err).get("details") if isinstance(err, dict) else None
+    if isinstance(details, list) and any(isinstance(d, dict) and cast(dict[str, Any], d).get("reason") == _KEY_INVALID
+                                         for d in cast(list[Any], details)):
+        return True
+    return _said(answer).startswith(_NOT_VALID)
 
 
 class Http:
@@ -104,9 +129,11 @@ class Http:
             conn.close()
 
     def refused(self, answer: _Answer) -> ModelError:
-        """The ModelError for an answer that isn't a 2xx, with what the service said unless it refused the key."""
-        if answer.status in _AUTH:
-            return ModelError(f"{self.provider} API {answer.status}: the key was refused", answer.status)
+        """The ModelError for an answer that isn't a 2xx, with what the service said unless it refused the key. A key
+        refused with a 400 is refused as a 401 is, so everything that reads one reads it so."""
+        if _key_refused(answer):
+            status = answer.status if answer.status in _AUTH else 401
+            return ModelError(f"{self.provider} API {status}: the key was refused", status)
         said = _said(answer)
         if self._key:
             said = said.replace(self._key, "<key>")
