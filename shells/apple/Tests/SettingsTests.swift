@@ -442,6 +442,18 @@ final class SettingsCoreTests: XCTestCase {
     }
 
     @MainActor
+    func testDraftingAheadStartsOffAndIsKeptOnceTurnedOn() async throws {
+        let (core, status) = try await opened()
+        XCTAssertEqual(status.preferences?.draftAhead, false, "off until a person turns it on")
+        await status.setPreferences(.init(draftAhead: true))?.value
+        XCTAssertEqual(status.preferences?.draftAhead, true)
+        let read = try await core.get(API.Get.Preferences.self).preferences
+        XCTAssertTrue(read.draftAhead, "the core keeps it")
+        XCTAssertFalse(AppStatus.touchesAI(.init(draftAhead: true)), "how AI stands isn't read again for it")
+        await close(core, status)
+    }
+
+    @MainActor
     func testAPreferenceTheServerRefusesComesBackAsItHoldsItWithItsWords() async throws {
         let (core, status) = try await opened()
         let was = try XCTUnwrap(status.preferences?.undoSendSeconds)
