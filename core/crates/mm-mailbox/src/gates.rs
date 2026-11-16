@@ -51,6 +51,13 @@ pub trait Gates: Send + Sync + fmt::Debug {
 
     /// Whether `account`'s gate is held now, by any job; for EVERY_ACCOUNT, whether any is.
     fn held(&self, account: &str) -> bool;
+
+    /// Whether the job running on this thread holds the gate `account`'s work passes: its own, or the one every
+    /// account shares, or all of them. No other job talks to that account's server meanwhile, so it may be lent the
+    /// connection kept for it (`kept`). Gates that keep no such record say no.
+    fn holds(&self, _account: &str) -> bool {
+        false
+    }
 }
 
 /// Run `job` with `account`'s gate held, and what it answered.

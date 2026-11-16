@@ -25,6 +25,8 @@ pub mod reversal;
 pub mod roles;
 pub mod server_ops;
 pub mod session;
+// Each account's connection, kept between the jobs that hold its gate.
+pub mod kept;
 pub mod stats;
 pub mod sync_health;
 pub mod sync_plan;
