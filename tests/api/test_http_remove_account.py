@@ -1,10 +1,19 @@
 """Removing an account over HTTP (POST /api/accounts/delete) may let go of what this Mac keeps of its mail too
 (`delete_mail`): its stored copies with their bodies, what was said of them, and each context's state under its address.
-Its mail on the server is untouched, and so is every other account's here."""
+Its mail on the server is untouched, and so is every other account's here. A sync reading its mail as it goes stops
+there and keeps nothing."""
+import json
+
+from event_stream import Stream
 from fixtures import world as w
 
 LUNCH = "ada-inbox-01-lunch.eml"          # Ada's
 CLIENT = "bea-inbox-01-client.eml"        # Bea's
+THREAD = "cy-inbox-01-thread-start.eml"   # Cy's
+
+# A message only Ada's server has yet, from a person, so a sync reads its body.
+MARKET = (b"From: Lin Mori <lin@example.test>\r\nTo: Ada Park <ada@example.test>\r\nSubject: Seen at the market\r\n"
+          b"Date: Mon, 02 Nov 2026 09:00:00 +0000\r\nMessage-ID: <market-1@example.test>\r\n\r\nThe linen stall is back.\r\n")
 
 
 def stored(account):
@@ -16,6 +25,18 @@ def stored(account):
                 for table in ("messages", "message_identity", "sync_state")}
     finally:
         c.close()
+
+
+def heard_until_mute(tab, app, world):
+    """What the tab heard, as (event, data), up to a mute set going now: a mark nothing before it is said after."""
+    app.post("/api/mute", {"account": w.CY, "thread_id": world.row(THREAD)["thread_id"]})
+    heard = []
+    while True:
+        head, data = tab.event().split("\n")[1:3]
+        event = head.removeprefix("event: ")
+        if event == "mute":
+            return heard
+        heard.append((event, json.loads(data.removeprefix("data: "))))
 
 
 def test_removing_an_account_and_its_mail_lets_go_of_what_this_mac_keeps_of_it(app, world):
@@ -42,3 +63,21 @@ def test_an_account_no_one_saved_lets_go_of_nothing(app, world):
     r = app.post("/api/accounts/delete", {"email": "zed@example.test", "delete_mail": True})
     assert r.status == 404
     assert stored(w.ADA) == kept
+
+
+def test_an_account_removed_while_its_sync_reads_keeps_nothing_that_sync_read(app, world):
+    world.server.deliver(w.ADA, "INBOX", MARKET)
+    world.server.hold("UID FETCH", user=w.ADA, when=lambda args: "BODY.PEEK[]" in str(args))
+    tab = Stream(app)
+    tab.frame()
+    app.post("/api/refresh")
+    assert world.server.held()               # Ada's sync has the new message's headers, and waits for its body
+    r = app.post("/api/accounts/delete", {"email": w.ADA, "delete_mail": True})
+    assert r.status == 200
+    world.server.let_go()
+    app.settle()
+    assert stored(w.ADA) == {"messages": 0, "message_identity": 0, "sync_state": 0}
+    heard = heard_until_mute(tab, app, world)
+    assert [data for event, data in heard if data.get("account") == w.ADA and event != "reconcile"] == []
+    assert not any(event == "new-mail" for event, _ in heard)
+    tab.close()

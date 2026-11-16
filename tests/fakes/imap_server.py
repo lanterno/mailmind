@@ -175,6 +175,7 @@ class Fault:
     drop: bool = False          # close the connection instead of answering
     after: bool = False         # run the command, then drop before the tagged reply
     stall: bool = False         # answer nothing until release_stalls(), then drop: a black hole (after: once it ran)
+    hold: bool = False          # answer nothing until let_go(), then run it: a server slow to answer, not gone
     times: int | None = 1       # how many matching commands it hits; None = every one
     when: object = None         # optional predicate on the command's arguments (a list of tokens)
     user: str | None = None     # only this account's connections
@@ -353,6 +354,10 @@ class Session:
                 continue
             self.srv._record(self, tag, cmd, args, text)
             fault = self.srv._fault_for(self, cmd, args)
+            if fault and fault.hold:
+                self.srv._holding.set()
+                self.srv._let_go.wait()
+                fault = None
             try:
                 if fault and fault.stall and not fault.after:
                     self.srv._unstalled.wait()
@@ -857,6 +862,9 @@ class FakeIMAPServer:
         self._faults = []
         self._unstalled = threading.Event()
         self._unstalled.set()
+        self._holding = threading.Event()    # a held command is waiting
+        self._let_go = threading.Event()     # and may go on
+        self._let_go.set()
         self._sessions = set()
         self._idlers = set()
         self.ca = trustme.CA()
@@ -879,6 +887,7 @@ class FakeIMAPServer:
 
     def stop(self):
         self._unstalled.set()
+        self._let_go.set()
         if self._tcp:
             self._tcp.shutdown()
             self._tcp.server_close()
@@ -989,6 +998,20 @@ class FakeIMAPServer:
         self._unstalled.clear()
         self._faults.append(Fault(command.upper(), stall=True, after=after, times=times, when=when, user=user))
 
+    def hold(self, command, *, when=None, user=None):
+        """Answer nothing to the next matching command until let_go(), then run it as it came: a server slow to answer,
+        not one that is gone. held() waits until it is being held."""
+        self._holding.clear()
+        self._let_go.clear()
+        self._faults.append(Fault(command.upper(), hold=True, when=when, user=user))
+
+    def held(self, timeout=10):
+        """Whether the command hold() named is being held, waiting up to `timeout` seconds for it to come."""
+        return self._holding.wait(timeout)
+
+    def let_go(self):
+        self._let_go.set()
+
     def release_stalls(self):
         self._faults[:] = [f for f in self._faults if not f.stall]
         self._unstalled.set()
@@ -996,6 +1019,7 @@ class FakeIMAPServer:
     def clear_faults(self):
         self._faults.clear()
         self._unstalled.set()
+        self._let_go.set()
 
     def commands_for(self, user=None, command=None):
         """The recorded commands, optionally for one account and one command name."""
