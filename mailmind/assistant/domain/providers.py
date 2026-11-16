@@ -46,8 +46,8 @@ PROVIDERS: dict[AiProvider, Provider] = {p.id: p for p in (
 )}
 LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
 
-# What a model's id holds when it can't chat: OpenAI's and Gemini's lists name these beside the ones that can.
-_NOT_CHAT = ("embedding", "tts", "whisper", "dall-e", "image", "audio", "realtime", "transcribe", "moderation", "search", "live")
+# What a model's id holds when it can't chat: every list but Claude's names these beside the ones that can (nomic-embed-text).
+_NOT_CHAT = ("embed", "tts", "whisper", "dall-e", "image", "audio", "realtime", "transcribe", "moderation", "search", "live")
 
 
 def on_loopback(url: str) -> bool:
@@ -95,8 +95,8 @@ def in_force(*, enabled: bool, provider: AiProvider, model: str, base_url: str, 
 
 def chat_models(provider: AiProvider, ids: Iterable[object]) -> list[str]:
     """The models a provider's list names, as a person picks from them: sorted, once each, without Gemini's `models/`, and
-    for OpenAI and Gemini only the ones that can chat."""
+    for every provider but Claude, whose list holds no other kind, only the ones that can chat."""
     names = {i.removeprefix("models/") for i in ids if isinstance(i, str) and i.removeprefix("models/")}
-    if provider in ("openai", "gemini"):
+    if provider != "anthropic":
         names = {n for n in names if not any(word in n for word in _NOT_CHAT)}
     return sorted(names)
