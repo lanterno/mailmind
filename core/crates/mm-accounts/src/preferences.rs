@@ -60,9 +60,11 @@ pub const AI_ENABLED: &str = "ai_enabled";
 pub const AI_PROVIDER: &str = "ai_provider";
 pub const AI_MODEL: &str = "ai_model";
 pub const AI_BASE_URL: &str = "ai_base_url";
+/// Replies drafted ahead for important mail, in the background and on viewing a message.
+pub const DRAFT_AHEAD: &str = "draft_ahead";
 
 /// Every preference the block may hold, in the order the page is told them, and what it is with nothing said.
-const DEFAULTS: [(&str, Kind); 25] = [
+const DEFAULTS: [(&str, Kind); 26] = [
     ("undo_send_seconds", Kind::Seconds(SEND_WINDOW.0)),
     ("density", Kind::Choice("comfortable", &["comfortable", "cozy", "compact"])),
     ("high_contrast", Kind::Flag(false)),
@@ -86,6 +88,8 @@ const DEFAULTS: [(&str, Kind); 25] = [
     // the week's review written ahead on Monday morning, and read all week
     ("weekly_review", Kind::Flag(false)),
     ("auto_tidy", Kind::Flag(false)),
+    // replies drafted ahead for important mail, in the background and on viewing it
+    (DRAFT_AHEAD, Kind::Flag(false)),
     // AI mode, who answers, the model asked and where the provider is (#49); AI mode the file doesn't set is on
     // where there is a key (`ai_mode_unset`)
     (AI_ENABLED, Kind::Flag(false)),

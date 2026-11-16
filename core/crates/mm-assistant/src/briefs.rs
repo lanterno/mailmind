@@ -19,7 +19,7 @@ use crate::digest::fingerprint;
 use crate::flights::SingleFlight;
 use crate::ports::{Cards, Glance, Overview, StoredCard};
 use crate::prompts;
-use crate::refusals::{AiFailure, answered, unreachable};
+use crate::refusals::{AiFailure, CallError, NotSent, answered, unreachable};
 use crate::text::{cut, length};
 
 pub const TOP_N: i64 = 40;
@@ -268,7 +268,11 @@ impl Briefs {
     fn make_delta(&self, rows: &[Glance], key: &str, since_ts: i64, fp: &str) -> Result<Value, AiFailure> {
         let lines = lines_within(rows.iter().map(|r| line(r, or(&r.category, ""), 120)), DELTA_CAP);
         let prompt = prompts::DELTA.fill(&[("count", &lines.len().to_string()), ("items", &lines.join("\n"))]);
-        let made = self.calls.call_claude_json(&prompt, &delta_schema(), None, "delta");
+        let made = match self.calls.call_claude_json(&prompt, &delta_schema(), None, "delta") {
+            // Background work held back: asked for again later, and nothing is kept.
+            Err(CallError::NotSent(NotSent::Deferred(_))) => return Err(unreachable("delta unavailable").into()),
+            made => made,
+        };
         let answer = answered(made, "delta failed", "delta unavailable")?;
         let (mut headline, mut items) = brief::clean_delta(&answer);
         let mut model = self.calls.model_label();

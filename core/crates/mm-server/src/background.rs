@@ -134,9 +134,13 @@ impl Background {
         self.assessments.round().map_err(|fault: Fault| fault.class)
     }
 
-    /// A pre-drafter's round: at most one reply drafted ahead, only when the cost governor would let it go (nobody is
-    /// using AI, someone was here lately, the day's limit isn't reached, the API isn't rejecting it).
+    /// A pre-drafter's round: at most one reply drafted ahead, only when the person turned drafting ahead on and the
+    /// cost governor would let it go (nobody is using AI, someone was here lately, the day's limit isn't reached, the
+    /// API isn't rejecting it).
     pub fn draft_ahead_round(&self) -> RoundOutcome {
+        if !self.turned_on(mm_accounts::preferences::DRAFT_AHEAD)? {
+            return Ok(None);
+        }
         let held_back = self.held_back("draft-ahead").is_some();
         let mut breaker = self.breaker.lock().unwrap_or_else(PoisonError::into_inner);
         self.drafting

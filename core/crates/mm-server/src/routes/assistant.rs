@@ -413,6 +413,10 @@ async fn draft_ahead(State(app): State<Arc<App>>, request: Request) -> Response<
         let Some(pk) = app.attention.message_pk(key, folder.as_deref(), uid)? else {
             return Ok(answer::json(200, &json!({"ok": true, "status": "none"})));
         };
+        // Turned off in Settings, nothing is drafted on viewing a message: a draft kept from before is still served.
+        let chosen = app.directory.preferences()?;
+        let wanted = chosen.get("preferences").and_then(|p| p.get(mm_accounts::preferences::DRAFT_AHEAD));
+        let kick = kick && wanted.and_then(Value::as_bool).unwrap_or(false);
         let (said, start) = app.assistant.drafting.get(pk, peek, kick)?;
         if let Some((account, pk)) = start {
             let (drafting, events) = (app.assistant.drafting.clone(), app.events.clone());
