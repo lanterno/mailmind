@@ -183,8 +183,13 @@ export function AiForm() {
       inForce();
     });
   };
-  const keysKept = (kept: AiProvider[]) => {
-    qc.setQueryData(["aiKeys"], { ok: true, kept });
+  // A key kept, replaced or removed: the provider is asked for its models again with the key it holds now, since a list or a
+  // refusal for the key before says nothing of this one. Kept or removed, the listing's own key changes, and it is asked as
+  // that does wherever it can be; replaced, its key stays the same, so it is asked again here.
+  const keysKept = (now: AiProvider[]) => {
+    const replaced = kept && now.includes(provider);
+    qc.setQueryData(["aiKeys"], { ok: true, kept: now });
+    void qc.invalidateQueries({ queryKey: ["aiModels"], refetchType: replaced ? "active" : "none" });
     inForce();
   };
   const chooseModel = (ai_model: string) => {
