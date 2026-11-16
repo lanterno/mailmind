@@ -165,6 +165,56 @@ def test_a_card_answers_snoozes_and_files_without_opening_the_message(page, app,
     clean(page)
 
 
+def ai_turned_off(page):
+    """AI mode turned off in Settings, which then closes: the page has read the digest again."""
+    page.locator("#settingsBtn").click()
+    page.get_by_role("tab", name="AI").click()
+    with page.pw.expect_response(lambda r: r.url.endswith("/api/digest") and r.request.method == "GET"):
+        page.get_by_role("dialog", name="AI").get_by_label("AI mode", exact=True).uncheck()
+    page.locator("#setClose").click()
+    expect(page.get_by_role("dialog", name="AI")).to_have_count(0)
+
+
+def test_with_ai_turned_off_a_card_and_r_open_a_plain_reply_though_one_was_written_ahead(page, app, world, ai):
+    lunch_needs_a_reply(app, world)
+    ahead = "Written ahead: Thursday works."
+
+    def reply(req):
+        wants = (req.schema or {}).get("properties") or {}
+        if "narrative" in wants:
+            return fa.answer({"narrative": BRIEF, "groups": []})
+        return fa.answer({"body": ahead}) if "body" in wants else None
+    ai.responder = reply
+    page.goto(f"/m/{w.ADA}/INBOX?key={world.key(LUNCH[1])}&folder=INBOX&uid={world.uid(LUNCH[1])}")
+    expect(page.locator(".rd-subj")).to_be_visible()
+    page.clock.run_for(1500)                            # stayed on: a reply is written ahead
+    expect(page.locator('#reader [data-ca="draftready"]')).to_be_visible()
+    page.keyboard.press("Escape")                       # back to the brief, whose card has it too
+    lunch = card(page, world, LUNCH[1])
+    expect(lunch.get_by_role("button", name="Use draft")).to_be_visible()
+
+    ai_turned_off(page)
+    asked = []
+    page.on("request", lambda r: asked.append(r.url) if "/api/ai/" in r.url else None)
+    calls = len(ai.requests)
+    lunch.get_by_role("button", name="Reply").click()   # the card's: a plain reply
+    expect(page.locator("#cmpSubject")).to_have_value(re.compile("^Re:"))
+    page.heard_all_asked()
+    expect(page.get_by_role("textbox", name="message body")).not_to_have_value(re.compile(ahead))
+    page.keyboard.press("Escape")
+    expect(page.locator("#composeModal")).to_be_hidden()
+
+    lunch.get_by_role("button", name="Read").click()
+    expect(page.locator('#reader [data-ca="reply"], #reader [data-tca="reply"]')).to_be_visible()
+    page.keyboard.press("r")                            # the key: a plain reply too
+    expect(page.locator("#cmpSubject")).to_have_value(re.compile("^Re:"))
+    page.heard_all_asked()
+    expect(page.get_by_role("textbox", name="message body")).not_to_have_value(re.compile(ahead))
+    assert asked == []
+    assert len(ai.requests) == calls
+    clean(page)
+
+
 def test_read_opens_the_message_and_escape_comes_back_to_the_brief(page, app, world, ai):
     lunch_needs_a_reply(app, world)
     brief_replies(ai)
