@@ -226,7 +226,9 @@ pub fn catch_up_due(folder: &str, running: bool, since: Option<f64>, every: f64)
 
 /// What to fetch of a folder, from the UIDVALIDITY its select said and what is stored of it: its watermark, and what
 /// its scans have read. A full sync of a folder whose first scan is still reading its older mail reads only what is
-/// new: the background reads the rest.
+/// new: the background reads the rest. A folder no scan has begun is read as a first scan, whatever its watermark: one
+/// left with a watermark by a quit part way, as before a step stored both at once, would else be read above it for
+/// good, and its first open wait on a sync each time.
 pub fn plan_folder(
     uidvalidity: Option<u32>,
     known_uidvalidity: Option<i64>,
@@ -238,7 +240,7 @@ pub fn plan_folder(
     let reset = matches!((uidvalidity, known_uidvalidity), (Some(now), Some(known)) if now != 0 && known != 0
         && i64::from(now) != known);
     let scan = if reset { Scan::Never } else { scan };
-    let whole = reset || watermark == 0 || (full && !matches!(scan, Scan::Down(_)));
+    let whole = reset || watermark == 0 || scan == Scan::Never || (full && !matches!(scan, Scan::Down(_)));
     let above = u32::try_from(watermark).unwrap_or(0);
     FolderPlan { reset, whole, above, recent, read_flags: !whole, scan }
 }
