@@ -1,6 +1,7 @@
 """What each Claude model takes: an effort setting, and the server-side refusal fallback."""
 
 DEFAULT = "claude-opus-5-5"        # every feature's model unless MAILMIND_MODEL names another
+SMALL = "claude-haiku-5-5"         # what background summaries ask, unless MAILMIND_MODEL names a model for every feature
 EFFORT = "medium"                  # sent explicitly: models differ in their default
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 

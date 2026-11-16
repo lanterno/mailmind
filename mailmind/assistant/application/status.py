@@ -80,13 +80,14 @@ class Status:
 
     def report(self) -> dict[str, Any]:
         """What the UI says about AI, with no call made: the engine ("api", or "none" while AI is off), the provider chosen and
-        why AI is off (None while it is on), the model in force, where the key came from, how the most recent call went
-        (last_ok None until one has run), and what today's calls cost so far in micro-dollars (None when the usage ledger
-        can't be read)."""
+        why AI is off (None while it is on), the model in force and the one background summaries ask, where the key came
+        from, how the most recent call went (last_ok None until one has run), and what today's calls cost so far in
+        micro-dollars (None when the usage ledger can't be read)."""
         engine = self._engine()
         on = self._gateway().on
         return {"engine": "api" if on else "none", "provider": engine.provider, "off": None if on else engine.off,
-                "model": engine.model if on else "", "key_from": engine.key_from if on else "",
+                "model": engine.model if on else "", "background_model": engine.background_model if on else "",
+                "key_from": engine.key_from if on else "",
                 "last_ok": self._last["ok"], "last_ts": self._last["ts"], "last_error": self._last["error"],
                 "spent_today_micros": self._spent_today(), "limit_micros": self._governor().limit_micros(),
                 **self._batch_note(on)}

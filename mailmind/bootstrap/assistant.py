@@ -4,7 +4,8 @@ The engine in force is read from what a person chose (#49): AI on or off, its pr
 in mailmind.config.json, and the key kept for that provider. Claude, the default, goes through the Anthropic SDK; every other
 provider through the one adapter that speaks OpenAI's Chat Completions. AI off, turned off or with no key, URL or model to
 ask, the model is DisabledModel, and nothing is sent. MAILMIND_MODEL names the Claude model: it wins over the model a person
-chose while Claude is the provider, and with any other it is ignored.
+chose while Claude is the provider, for every feature, background summaries too, and with any other it is ignored. Background
+summaries otherwise ask the provider's small model (providers.background_model).
 
 A provider's key is config_key() (mailmind.config.json's "anthropic_api_key", "openai_api_key" and the like, in any
 credential style but the Proton Bridge's password, read through the Accounts context), and for Claude only then
@@ -109,9 +110,22 @@ def engine() -> Engine:
     prefs = _preferences()
     provider: AiProvider = prefs["ai_provider"]
     api_key, source = key(provider) if prefs["ai_enabled"] else ("", "")
-    claude_model = calls.MODEL if provider == "anthropic" else None
-    return providers.in_force(enabled=prefs["ai_enabled"], provider=provider, model=claude_model or prefs["ai_model"],
-                              base_url=_base_url(provider, prefs["ai_base_url"]), key=api_key, key_from=source)
+    return providers.in_force(enabled=prefs["ai_enabled"], provider=provider, model=prefs["ai_model"],
+                              base_url=_base_url(provider, prefs["ai_base_url"]), key=api_key, key_from=source,
+                              every=_every(provider))
+
+
+def _every(provider: AiProvider) -> str | None:
+    """The model every feature asks, in place of the one chosen: MAILMIND_MODEL's, while Claude is the provider."""
+    return calls.MODEL if provider == "anthropic" else None
+
+
+def background_model() -> str:
+    """The model background summaries ask now, read with no key looked up: the provider's small model, MAILMIND_MODEL's for
+    Claude where it names one, or the one chosen for a model on this Mac or a compatible service."""
+    prefs = _preferences()
+    provider: AiProvider = prefs["ai_provider"]
+    return providers.background_model(provider, prefs["ai_model"], _every(provider))
 
 
 def _model_for(e: Engine) -> LanguageModel:
@@ -281,7 +295,7 @@ def assemble():
     GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros, reserved=lambda: LEDGER.reserved())
     GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
     status = Status(lambda: gateway(), engine, lambda: governor(), lambda: assessments.batch_status())
-    calls = Calls(lambda: gateway(), status)
+    calls = Calls(lambda: gateway(), status, background_model)
     assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail, lambda: _preferences()["ai_provider"])
     context = ContextAssembler(_mail)
     threads = ThreadDigest(calls, answers, _uow, context)

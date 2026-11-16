@@ -3,7 +3,8 @@ price, which only Claude takes. A batch out when a person chooses another provid
 messages wait for a summary again, and what it booked is free again.
 
 Only mail from the last RECENT_DAYS is summarized in the background: older mail is summarized when it is opened, so turning AI
-on over a mailbox of years spends nothing on its past."""
+on over a mailbox of years spends nothing on its past. Background summaries ask the provider's small model
+(`Calls.background_label`), and each is stored under it."""
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -96,18 +97,22 @@ class Assessments:
         self._answers.save_summary(c, pk, said.summary, said.importance, said.category, said.action, said.model, when,
                                    said.served_by, said.prompt_version, said.outcome)
 
-    def summarize_one(self, row: Row) -> tuple[Pk, Assessment | None]:
+    def summarize_one(self, row: Row, model: str | None = None) -> tuple[Pk, Assessment | None]:
+        """One message triaged by `model`, the background's unless named."""
+        model = model or self._calls.background_label()
         try:
-            reply = self._calls.reply_to(self._triage_prompt(row), self.TRIAGE_SCHEMA, effort=self.TRIAGE_EFFORT, feature="triage")
+            reply = self._calls.reply_to(self._triage_prompt(row), self.TRIAGE_SCHEMA, effort=self.TRIAGE_EFFORT,
+                                         feature="triage", model=model)
         except Exception:
             return row["pk"], None  # transient (rate-limit/timeout) -> leave for retry
-        return row["pk"], self._assessment(row, reply, prompts.TRIAGE.version)
+        return row["pk"], self._assessment(row, reply, prompts.TRIAGE.version, model)
 
     def summarize_pending(self, limit: int = 200, workers: int = WORKERS, log: Log = lambda _: None) -> int:
         """Triage up to `limit` messages from the last RECENT_DAYS that have no summary yet, `workers` at a time, and
         return how many were summarized. With AI off, or while the cost governor holds triage back, it returns 0 at once:
         not one message is tried."""
-        if self._calls.engine() == "none" or self._gateway().held_back("triage"):
+        model = self._calls.background_label()
+        if self._calls.engine() == "none" or self._gateway().held_back("triage", model):
             return 0
         recent = self._recent()
         with self._uow.read() as c:
@@ -118,7 +123,7 @@ class Assessments:
         log(f"summarizing {len(rows)} messages with {workers} workers...")
         done = 0
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = {ex.submit(self.summarize_one, r): r for r in rows}
+            futs = {ex.submit(self.summarize_one, r, model): r for r in rows}
             for f in as_completed(futs):
                 pk, said = f.result()
                 if said is None:
@@ -139,8 +144,8 @@ class Assessments:
         """When a backlog from the last RECENT_DAYS is waiting and no batch is out, send it as one, and return how many it
         took. It takes what fits in its share of today's limit, by estimate, and leaves the newest to go now."""
         at_least, keep = self.BATCH_MIN if at_least is None else at_least, self.BATCH_KEEP_NEWEST if keep is None else keep
-        gw = self._gateway()
-        if self._calls.engine() == "none" or not gw.takes_batches or gw.held_back(self.BATCH_FEATURE):
+        gw, name = self._gateway(), self._calls.background_label()
+        if self._calls.engine() == "none" or not gw.takes_batches or gw.held_back(self.BATCH_FEATURE, name):
             return 0
         with self._uow.read() as c:
             if self._answers.batch_open(c):
@@ -149,7 +154,6 @@ class Assessments:
                     if r["message_key"] is not None]
         if len(rows) < at_least:
             return 0
-        name = self._calls.model_label()
         room = gw.room()                    # None: no governor, so no limit to keep within
         requests: list[tuple[str, str]] = []
         keys: list[MessageKey] = []
@@ -292,7 +296,7 @@ class Assessments:
             assess_log.info("%(what)s", {"what": m})
 
         self.batch_collect(say)
-        why = self._gateway().held_back("triage")
+        why = self._gateway().held_back("triage", self._calls.background_label())
         if why:
             return self.ASSESS_YIELD if why == "yielding" else None
         if not environment.NO_BATCHES.on():

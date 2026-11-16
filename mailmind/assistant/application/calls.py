@@ -18,9 +18,10 @@ class Calls:
     # person chose, while Claude is the provider. A call asks the model in force, so with any other provider it is ignored.
     MODEL = environment.MODEL.value()
 
-    def __init__(self, gateway: Callable[[], Gateway], status: Status):
+    def __init__(self, gateway: Callable[[], Gateway], status: Status, background: Callable[[], str] | None = None):
         self._gateway = gateway
         self._status = status
+        self._background = background       # the model background summaries ask; the one in force where none is said
 
     def noting[T](self, make: Callable[[], T]) -> T:
         """Make a call the way these do, its outcome noted for the status."""
@@ -34,6 +35,11 @@ class Calls:
         """The model name stored beside each AI result and shown under it in the UI: the one in force."""
         return self._gateway().model
 
+    def background_label(self) -> str:
+        """The model background summaries ask, and so store beside what they say: the provider's small one, unless every
+        feature asks one model."""
+        return self._background() if self._background is not None else self.model_label()
+
     def usage(self, days: int = 30) -> list[DayCost]:
         """Each of the last `days` local days, newest first: its AI calls and their cost in
         micro-dollars, in all and by feature (the usage ledger's report)."""
@@ -43,11 +49,12 @@ class Calls:
         """Plain text result (a thread's digest). `feature` names the call in the usage ledger."""
         return self.noting(lambda: self._gateway().ask(prompt, feature=feature).text)
 
-    def reply_to(self, prompt: str, schema: dict[str, Any], effort: str | None = None, feature: str = "other") -> Reply:
-        """The whole reply to what call_claude_json asks, for a caller that keeps which model served it and whether it
-        was refused. It fails as that does."""
+    def reply_to(self, prompt: str, schema: dict[str, Any], effort: str | None = None, feature: str = "other",
+                 model: str | None = None) -> Reply:
+        """The whole reply to what call_claude_json asks, of `model` (the one in force unless named), for a caller that keeps
+        which model served it and whether it was refused. It fails as that does."""
         return self.noting(lambda: self._gateway().ask(prompt, None if environment.NO_SCHEMA.on() else schema,
-                                                       feature=feature, effort=effort))
+                                                       feature=feature, model=model, effort=effort))
 
     def call_claude_json(self, prompt: str, schema: dict[str, Any], effort: str | None = None,
                          feature: str = "other") -> dict[str, Any]:

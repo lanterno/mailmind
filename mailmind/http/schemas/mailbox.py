@@ -354,11 +354,12 @@ class SyncState(Answer):
 
 class AiStatus(Answer):
     """`Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
-    is on)."""
+    is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off."""
     engine: str
     provider: AiProvider
     off: AiOff | None
     model: str
+    background_model: str
     key_from: str
     last_ok: bool | None
     last_ts: int
