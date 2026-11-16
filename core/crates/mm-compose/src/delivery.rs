@@ -8,20 +8,23 @@
 //! is the `delivered` flag, set the instant the wire send returns: a row requeued after it only finishes its
 //! bookkeeping. A try that fails backs off (20 s doubling to 15 minutes) and gives up after MAX_ATTEMPTS; a server
 //! that refused for good gives up at once, and one that went silent once it had the whole message is left in error
-//! for a person, who is told it may go twice.
+//! for a person, who is told it may go twice. A try that panics is one that failed, judged by how far its row got:
+//! one that went out owes its bookkeeping, one whose last bytes had begun to go waits for a person, and any other
+//! backs off.
 //!
 //! Each account's sends go in a lane of their own, so one waiting on its IMAP server for a Sent copy holds up no other
-//! account's. `deliver` runs each lane on a thread of its own and waits for them all. The worker that calls it is the
-//! program's: it waits `until_due`, and a send queued, retried or brought forward wakes it (`Worker`).
+//! account's. `deliver` runs each lane on a thread of its own and waits for them all; a lane is free again however its
+//! thread ends. The worker that calls it is the program's: it waits `until_due`, and a send queued, retried or brought
+//! forward wakes it (`Worker`).
 //!
 //! What happened is said as Python's outbox says it: Sent, Failed and DraftCopyRemoved (`Events`).
 
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Duration;
 
-use mm_kernel::errors::Fault;
+use mm_kernel::errors::{Fault, PANIC, caught};
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_kernel::when::iso;
@@ -30,7 +33,7 @@ use serde_json::{Value, json};
 use crate::draft;
 use crate::draft_journal;
 use crate::events::ComposeEvent;
-use crate::outbox_item::{self, OriginalRow, SendMeta};
+use crate::outbox_item::{self, FailedTry, OriginalRow, SendMeta};
 use crate::ports::Row;
 use crate::sending_ports::{
     self, Accounts, Book, ComposeStore, Copies, DraftRow, Effects, Events, Gate, GateWait, Mark, OutboxRow, Priority,
@@ -44,6 +47,11 @@ const TAG: &str = "outbox";
 pub const LOOK_IN_SENT_WAIT: Duration = Duration::from_secs(5);
 /// The worker wakes at least this often, in seconds, to catch due retries.
 pub const POLL: i64 = 30;
+/// What a try that panicked before its send went out is stored with, as one that failed outside the SMTP
+/// conversation is.
+pub const PANICKED: &str = "send failed";
+/// What a try that panicked once its send went out is stored with: the rest is tried again.
+pub const PANICKED_AFTER: &str = "sent; finishing it failed: Panic";
 
 /// What wires the outbox.
 #[derive(Debug)]
@@ -74,6 +82,19 @@ pub struct Delivery {
 impl fmt::Debug for Delivery {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Delivery").field("writes", &self.parts.writes).finish_non_exhaustive()
+    }
+}
+
+/// An account's lane, held by one pass: free again when dropped, however the pass's thread ends, so a later pass
+/// never waits on it for good.
+struct Lane<'a> {
+    delivery: &'a Delivery,
+    lane: String,
+}
+
+impl Drop for Lane<'_> {
+    fn drop(&mut self) {
+        self.delivery.free_lane(&self.lane);
     }
 }
 
@@ -346,15 +367,22 @@ impl Delivery {
         self.parts.events.publish(ComposeEvent::Failed { outbox_id: row.id, account: row.account.clone(), gave_up });
     }
 
-    /// One try at a queued send (`send_one`).
+    /// One try at a queued send (`send_one`). A try that panics, wherever it does, fails as any try does: it never
+    /// leaves its send claimed until a restart.
     pub fn send_one(&self, id: i64) -> Result<(), Fault> {
         let Some(row) = self.write(|book| book.outbox_claim(id))? else { return Ok(()) };
+        caught(|| self.try_claimed(&row)).unwrap_or_else(|_| self.panicked(&row))
+    }
+
+    /// A try at a send this caller has claimed: `row` is it as claimed.
+    fn try_claimed(&self, row: &OutboxRow) -> Result<(), Fault> {
+        let id = row.id;
         let account = match self.parts.accounts.sending(&row.account) {
             Ok(Some(account)) => account,
             _ => {
                 let attempts = row.attempts + 1;
                 self.write(|book| book.outbox_give_up(id, attempts, "account removed"))?;
-                self.failed(&row, true);
+                self.failed(row, true);
                 return Ok(());
             }
         };
@@ -366,40 +394,13 @@ impl Delivery {
             });
             marked?;
             if let Err(failed) = sent {
-                let tried = outbox_item::failed_try(failed.unanswered, failed.permanent, failed.said);
-                let now = self.now();
-                let terminal = self.write(|book| {
-                    book.outbox_set(id, &tried.marks)?;
-                    let attempts = row.attempts + 1;
-                    if tried.give_up {
-                        book.outbox_give_up(id, attempts, tried.error)?;
-                        return Ok(true);
-                    }
-                    let terminal = attempts >= outbox_item::MAX_ATTEMPTS;
-                    book.outbox_retry_later(id, attempts, terminal, now + outbox_item::backoff(attempts), tried.error)?;
-                    Ok(terminal)
-                })?;
-                let what = if tried.unsure {
-                    "went unanswered; not sending it again"
-                } else if terminal {
-                    "failed; giving up"
-                } else {
-                    "failed; trying again later"
-                };
-                log::warning(TAG, "send", &[(Field::Id, &id.to_string()), (Field::What, what)], Some(tried.error));
-                self.failed(&row, terminal);
-                return Ok(());
+                return self
+                    .try_failed(row, &outbox_item::failed_try(failed.unanswered, failed.permanent, failed.said));
             }
             self.write(|book| book.outbox_delivered(id))?;
         }
-        match self.side_effects(id, &row, account.saves_sent) {
-            Ok(Some(owed)) => {
-                let attempts = outbox_item::attempts_since_delivery(&row) + 1;
-                let terminal = attempts >= outbox_item::MAX_ATTEMPTS;
-                let next = self.now() + outbox_item::backoff(attempts);
-                self.write(|book| book.outbox_retry_later(id, attempts, terminal, next, &owed))?;
-                log::warning(TAG, "sent; what it still owes is tried again", &[(Field::Id, &id.to_string())], None);
-            }
+        match self.side_effects(id, row, account.saves_sent) {
+            Ok(Some(owed)) => self.still_owes(row, &owed)?,
             Ok(None) => {
                 let at = self.stamp();
                 self.write(|book| book.outbox_finish(id, &at))?;
@@ -412,6 +413,59 @@ impl Delivery {
         }
         self.parts.events.publish(ComposeEvent::Sent { outbox_id: id, account: row.account.clone() });
         Ok(())
+    }
+
+    /// A try that didn't deliver `row`, as claimed: back in the queue after its back-off, or to error when it gives
+    /// up or has had its last attempt.
+    fn try_failed(&self, row: &OutboxRow, tried: &FailedTry) -> Result<(), Fault> {
+        let id = row.id;
+        let now = self.now();
+        let terminal = self.write(|book| {
+            book.outbox_set(id, &tried.marks)?;
+            let attempts = row.attempts + 1;
+            if tried.give_up {
+                book.outbox_give_up(id, attempts, tried.error)?;
+                return Ok(true);
+            }
+            let terminal = attempts >= outbox_item::MAX_ATTEMPTS;
+            book.outbox_retry_later(id, attempts, terminal, now + outbox_item::backoff(attempts), tried.error)?;
+            Ok(terminal)
+        })?;
+        let what = if tried.unsure {
+            "went unanswered; not sending it again"
+        } else if terminal {
+            "failed; giving up"
+        } else {
+            "failed; trying again later"
+        };
+        log::warning(TAG, "send", &[(Field::Id, &id.to_string()), (Field::What, what)], Some(tried.error));
+        self.failed(row, terminal);
+        Ok(())
+    }
+
+    /// `row`, as claimed, went out, and `owed` says what it still owes: that is tried again after a back-off.
+    fn still_owes(&self, row: &OutboxRow, owed: &str) -> Result<(), Fault> {
+        let attempts = outbox_item::attempts_since_delivery(row) + 1;
+        let terminal = attempts >= outbox_item::MAX_ATTEMPTS;
+        let next = self.now() + outbox_item::backoff(attempts);
+        self.write(|book| book.outbox_retry_later(row.id, attempts, terminal, next, owed))?;
+        log::warning(TAG, "sent; what it still owes is tried again", &[(Field::Id, &row.id.to_string())], None);
+        Ok(())
+    }
+
+    /// A try at `row`, as claimed, panicked. As it stands now: one that went out still owes its bookkeeping; one
+    /// whose last bytes had begun to go may have gone, so it waits for a person; any other failed as a send does.
+    /// One the try had already put back or finished is left as it is.
+    fn panicked(&self, row: &OutboxRow) -> Result<(), Fault> {
+        log::warning(TAG, "a try at a send panicked", &[(Field::Id, &row.id.to_string())], Some(PANIC.class));
+        let Some(now) = self.read(|book| book.outbox_get(row.id))? else { return Ok(()) };
+        if now.state != "sending" {
+            return Ok(());
+        }
+        if now.delivered {
+            return self.still_owes(row, PANICKED_AFTER);
+        }
+        self.try_failed(row, &outbox_item::failed_try(now.wire_begun, false, PANICKED))
     }
 
     /// One pass of the outbox (`drain`): every send due now, each account's in its lane on a thread of its own, one
@@ -428,36 +482,34 @@ impl Delivery {
         }
         std::thread::scope(|scope| {
             for (lane, ids) in lanes {
-                self.take_lane(&lane);
+                let held = self.take_lane(lane);
                 scope.spawn(move || {
+                    // Free again however this ends.
+                    let _held = held;
                     for id in ids {
-                        if let Err(fault) = self.send_one(id) {
+                        // A send that panicked is put right in send_one; this catches what panics around it.
+                        if let Err(fault) = caught(|| self.send_one(id)).and_then(|sent| sent) {
                             log::error(TAG, "send errored", &[(Field::Id, &id.to_string())], Some(fault.class));
                         }
                     }
-                    self.free_lane(&lane);
                 });
             }
         });
         Ok(())
     }
 
-    /// Wait until no other pass runs `lane`, then hold it.
-    fn take_lane(&self, lane: &str) {
-        let Ok(mut busy) = self.busy.lock() else { return };
-        while busy.contains(lane) {
-            busy = match self.freed.wait(busy) {
-                Ok(busy) => busy,
-                Err(_) => return,
-            };
+    /// Wait until no other pass runs `lane`, then hold it until what this answers is dropped.
+    fn take_lane(&self, lane: String) -> Lane<'_> {
+        let mut busy = self.busy.lock().unwrap_or_else(PoisonError::into_inner);
+        while busy.contains(&lane) {
+            busy = self.freed.wait(busy).unwrap_or_else(PoisonError::into_inner);
         }
-        busy.insert(lane.to_owned());
+        busy.insert(lane.clone());
+        Lane { delivery: self, lane }
     }
 
     fn free_lane(&self, lane: &str) {
-        if let Ok(mut busy) = self.busy.lock() {
-            busy.remove(lane);
-        }
+        self.busy.lock().unwrap_or_else(PoisonError::into_inner).remove(lane);
         self.freed.notify_all();
     }
 
