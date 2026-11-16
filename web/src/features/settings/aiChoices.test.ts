@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PostBodies } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
-import { AI_KEPT, aiParts, BILLING, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave, type LocalServer } from "./aiChoices";
+import { AI_KEPT, aiParts, BILLING, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, summariesWaiting, urlToSave, type LocalServer } from "./aiChoices";
 
 describe("the AI tab", () => {
   it("holds only AI mode's switch while it is off", () => expect(aiParts(false)).toEqual(["mode"]));
@@ -11,6 +11,24 @@ describe("the AI tab", () => {
   it("says its settings are kept on this Mac and each key in the Keychain, never that they are in a file", () => {
     expect(AI_KEPT).toBe("Kept on this Mac, with each key in your login Keychain.");
     expect(AI_KEPT).not.toContain("mailmind.config.json");
+  });
+});
+
+describe("the Spending card", () => {
+  it("says which model background summaries use and which one what a person asks for goes to", () => {
+    expect(modelsUsed({ model: "gpt-6.1-sol", background_model: "gpt-6-luna" }))
+      .toBe("Summaries made in the background use gpt-6-luna; everything you ask for uses gpt-6.1-sol.");
+    expect(modelsUsed({ model: "qwen3:8b", background_model: "qwen3:8b" }))
+      .toBe("Summaries made in the background and everything you ask for use qwen3:8b.");
+    expect(modelsUsed({ model: "", background_model: "" })).toBe("");      // AI off
+    expect(modelsUsed(undefined)).toBe("");
+  });
+  it("says how many messages from the last 30 days wait for a summary, and nothing where the digest doesn't", () => {
+    expect(summariesWaiting(1234)).toBe("1,234 messages from the last 30 days wait for a summary.");
+    expect(summariesWaiting(1)).toBe("1 message from the last 30 days waits for a summary.");
+    expect(summariesWaiting(0)).toBe("Every message from the last 30 days has its summary.");
+    expect(summariesWaiting(undefined)).toBe("");
+    expect(summariesWaiting(null)).toBe("");
   });
 });
 

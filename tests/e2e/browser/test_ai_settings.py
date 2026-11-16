@@ -125,6 +125,9 @@ def test_openai_is_chosen_its_key_kept_through_the_server_and_its_models_offered
     expect(dialog.get_by_text("A key is kept in the Keychain")).to_be_visible()
     expect(dialog.get_by_label("Model", exact=True).locator("option")).to_have_text(["Default (gpt-6.1-sol)", "gpt-6-luna"])
     expect(page.locator("#aiStanding")).to_have_text("AI is on: OpenAI · gpt-6.1-sol.")
+    expect(page.locator("#aiModelsUsed")).to_have_text("Summaries made in the background use gpt-6-luna; everything you ask "
+                                                       "for uses gpt-6.1-sol.")
+    expect(page.locator("#aiWaiting")).to_have_text(re.compile(r"^\d+ messages from the last 30 days wait for a summary\.$"))
     assert fake_keychain.items()["openai-api-key"] == fo.KEY
     assert file_of(world)["openai_api_key"] == {"keychain": "openai-api-key", "version": 1}
     assert fo.KEY not in (world.dir / "mailmind.config.json").read_text()
