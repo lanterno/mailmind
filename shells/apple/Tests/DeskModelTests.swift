@@ -682,6 +682,28 @@ final class DeskModelTests: XCTestCase {
         XCTAssertTrue(undoable)
     }
 
+    func testASweepTheServerStoppedBeforeAnythingMovedOffersNoUndo() async {
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", planned: 3)]))
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: false, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", error: "abort", moved: 0, planned: 3)],
+            undoGroup: "ug-sweep"))
+        let model = CurateModel(link: link, notices: notices)
+
+        await model.armSweep("ada@example.test")
+        await model.sweep()
+
+        XCTAssertEqual(said, "Sweep: abort")
+        XCTAssertFalse(undoable, "nothing went, so there is nothing to undo")
+    }
+
+    func testACardOffersToSweepOnlyWhatASweepWouldMove() {
+        var ada = DeskFixture.stats.accounts[0]
+        XCTAssertEqual(CurateModel.sweepOffer(ada), 20, "the junk read and unstarred, not all 36")
+        ada.sweepable = 0
+        XCTAssertNil(CurateModel.sweepOffer(ada), "no button when a sweep would move nothing")
+    }
+
     func testASweepThatLeavesEverythingSaysWhatStays() async {
         routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
             API.AccountSwept(account: "ada@example.test", heldBack: 3, planned: 0)]))

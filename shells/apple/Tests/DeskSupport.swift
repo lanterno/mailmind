@@ -319,7 +319,7 @@ enum DeskFixture {
         accounts: [API.AccountStats(account: "ada@example.test", alias: "Work",
                                     byBucket: ["personal/protected": 40, "newsletters/marketing": 30, "receipts/transactional": 12,
                                                "spam/scam": 6],
-                                    inInbox: 88, junk: 36, keep: 52, kind: "imap", topSenders: [:])],
+                                    inInbox: 88, junk: 36, keep: 52, kind: "imap", sweepable: 20, topSenders: [:])],
         buckets: [API.Bucket(isJunk: false, name: "personal/protected"), API.Bucket(isJunk: true, name: "newsletters/marketing"),
                   API.Bucket(isJunk: false, name: "receipts/transactional"), API.Bucket(isJunk: true, name: "spam/scam")],
         generated: "2026-11-15T09:00:00Z", totals: API.Totals(inInbox: 88, junk: 36, keep: 52))
