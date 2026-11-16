@@ -172,6 +172,30 @@ def test_a_sweep_says_what_goes_and_what_stays_before_it_moves_and_one_undo_brin
     clean(page)
 
 
+def test_the_sweep_button_counts_what_a_sweep_would_move_and_is_gone_when_nothing_would(page, app, world):
+    """Of Ada's three junk only the CI mail is read, so a sweep would move one; once she stars it, none, and the card
+    still says how much junk there is."""
+    mod = drawer(page).locator(f'.acctmod[data-acct="{w.ADA}"]')
+    expect(mod.get_by_role("button", name=re.compile(r"^Sweep \d+"))).to_have_text("Sweep 1")
+    app.post("/api/flag", {**world.copy("ada-inbox-04-ci.eml"), "flag": "flagged", "on": True})
+    mod = drawer(page).locator(f'.acctmod[data-acct="{w.ADA}"]')
+    expect(mod).to_contain_text("3 junk")
+    expect(mod.get_by_role("button", name=re.compile(r"^Sweep"))).to_have_count(0)
+    clean(page)
+
+
+def test_a_sweep_the_server_stops_before_anything_moved_offers_no_undo(page, world):
+    world.server_flags(NEWS, "\\Seen")
+    world.server.drop("UID MOVE", user=w.ADA)
+    mod = drawer(page).locator(f'.acctmod[data-acct="{w.ADA}"]')
+    mod.get_by_role("button", name=re.compile(r"^Sweep \d+")).click()
+    mod.get_by_role("button", name="Confirm").click()
+    expect(page.locator("#toast")).to_contain_text("Sweep: ")
+    expect(page.locator("#ufUndo")).to_be_hidden()
+    assert world.where(NEWS)["server"][0][1] == "INBOX"
+    clean(page)
+
+
 def test_the_flood_list_cleans_up_a_sender_after_two_clicks_and_undo_reverses_it(page, app, world):
     issues(world)
     d = drawer(page)
