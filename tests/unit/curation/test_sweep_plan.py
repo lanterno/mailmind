@@ -59,6 +59,15 @@ def test_a_message_is_read_from_its_headers():
                                                       "starred": False, "unread": False}
 
 
+def test_a_sweep_takes_the_newest_of_its_junk_up_to_its_cap_in_inbox_order():
+    junk = [{**read("news@loom.example.test", uid=str(uid)), "bucket": "newsletters/marketing", "conf": "high",
+             "reason": "list"}
+            for uid in (7, 3, *range(10, 10 + sweep_plan.SWEEP_MAX))]
+    taken, capped = sweep_plan.within_cap(junk)
+    assert capped and [r["uid"] for r in taken] == [str(u) for u in range(10, 10 + sweep_plan.SWEEP_MAX)]
+    assert sweep_plan.within_cap(junk[:sweep_plan.SWEEP_MAX]) == (junk[:sweep_plan.SWEEP_MAX], False)
+
+
 @pytest.mark.parametrize("flags, starred, unread", [({"\\Seen"}, False, False), ({"\\seen", "\\Answered"}, False, False),
                                                     ({"\\Seen", "\\FLAGGED"}, True, False), ({"\\Flagged"}, True, True),
                                                     (set(), False, True)])

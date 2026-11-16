@@ -14,6 +14,7 @@
       "receipts/transactional": 1,
       "spam/scam": 1
      },
+     "capped": false,
      "error": null,
      "held_back": 0,
      "moved": 0,
@@ -53,6 +54,7 @@
       "receipts/transactional": 1,
       "spam/scam": 1
      },
+     "capped": false,
      "error": null,
      "held_back": 0,
      "moved": 3,
