@@ -288,9 +288,10 @@ function Inboxes() {
     try {
       const d = await post("/api/sweep", { account, dry_run: false, undo_group: undoGroup() });
       const r = d.results[0]!;
-      toast(r.error ? sweepStopped(r.error, r.moved ?? 0) : `Swept ${r.moved}/${r.planned}${r.stragglers?.length ? ` · ${r.stragglers.length} unverified` : ""}`);
-      // Undo is offered for what went, and only when some did: a sweep the server stopped before anything moved has none.
-      if (d.undo_group && r.moved) offerUndo(`Swept ${r.moved} to Trash`);
+      toast(r.error ? sweepStopped(r.error, r.moved ?? 0, !!d.undo_group) : `Swept ${r.moved}/${r.planned}${r.stragglers?.length ? ` · ${r.stragglers.length} unverified` : ""}`);
+      // Undo is offered for what went, or may have: a sweep stopped where the server couldn't be asked again keeps a way
+      // back for all of it. One the server stopped before anything moved has none.
+      if (d.undo_group && (r.moved || r.error)) offerUndo(r.moved ? `Swept ${r.moved} to Trash` : "Sweep stopped part way");
     } catch (e) {
       toast(sweepFailed(refusalOf(e)?.detail, false));
     }
