@@ -38,6 +38,12 @@ def test_hwf_the_stored_inbox_plan_leaves_out_mail_on_its_way_out(world):
 JUNK_INBOX = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
 
 
+def read_junk(world):
+    """Ada reads her Inbox's junk in another client: a sweep takes only what someone has read."""
+    for name in JUNK_INBOX:
+        world.server_flags(name, "\\Seen")
+
+
 def audit(world):
     """The sweep trail, in the order it was written."""
     import json
@@ -45,6 +51,7 @@ def audit(world):
 
 
 def test_hwf_a_sweep_retries_a_move_the_server_said_ok_to_but_didnt_do(world):
+    read_junk(world)
     world.server.fail("UID MOVE", "OK [scripted] moved, or so it says", user=w.ADA)
     res = curation.sweeps.sweep(acct())
     assert (res["moved"], res["stragglers"], res["error"]) == (3, [], None)
@@ -53,6 +60,7 @@ def test_hwf_a_sweep_retries_a_move_the_server_said_ok_to_but_didnt_do(world):
 
 
 def test_hwf_a_sweep_reports_and_keeps_mail_that_never_moved(world):
+    read_junk(world)
     uid = str(world.uid("ada-inbox-04-ci.eml"))
     world.server.fail("UID MOVE", "OK [scripted] moved, or so it says", times=None, user=w.ADA,
                       when=lambda a: uid in str(a[0]).split(","))
@@ -65,6 +73,7 @@ def test_hwf_a_sweep_reports_and_keeps_mail_that_never_moved(world):
 def test_hwf_a_sweep_prunes_what_it_moved_by_message_id(world):
     """UIDVALIDITY changed and no sync has seen it, so a stored UID may now be another message's."""
     from mailmind.bootstrap.mailbox import store
+    read_junk(world)
     swept, kept = world.row("ada-inbox-04-ci.eml"), world.row("ada-inbox-01-lunch.eml")
     c = store.conn()
     c.execute("UPDATE messages SET uid=90001 WHERE pk=?", (swept["pk"],))
@@ -77,20 +86,38 @@ def test_hwf_a_sweep_prunes_what_it_moved_by_message_id(world):
 
 
 def test_hwf_a_sweep_prunes_a_message_with_no_message_id_by_uid(world):
+    read_junk(world)
     uid = world.deliver(w.ADA, "INBOX", b"From: News <news@loom.example.test>\r\nTo: ada@example.test\r\n"
                                         b"Subject: No id\r\nList-Unsubscribe: <https://loom.example.test/u>\r\n"
-                                        b"Date: Mon, 02 Nov 2026 10:00:00 +0000\r\n\r\nHello\r\n")
+                                        b"Date: Mon, 02 Nov 2026 10:00:00 +0000\r\n\r\nHello\r\n", flags=("\\Seen",))
     assert curation.sweeps.sweep(acct())["moved"] == 4
     assert q("SELECT pk FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid) == []
 
 
 def test_hwf_a_sweep_audits_before_it_moves(world):
+    read_junk(world)
     world.server.drop("UID MOVE", user=w.ADA)
     res = curation.sweeps.sweep(acct())
     assert res["error"] and res["moved"] == 0
     assert sorted(int(e["uid"]) for e in audit(world)) == sorted(world.uid(n) for n in JUNK_INBOX)
     for name in JUNK_INBOX:
         assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), name
+
+
+def test_a_sweep_leaves_starred_and_unread_junk_in_the_inbox(world):
+    """Ada hasn't read Loom's issue or the scam, and starred the CI mail she read: only the build she read and left
+    unstarred goes, and the plan says so first."""
+    world.server_flags("ada-inbox-04-ci.eml", "\\Seen", "\\Flagged")
+    world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-04-ci.eml", Message_ID="<build-413@ci.example.test>",
+                                            Subject="[quilt] Build #413 passed"), flags=("\\Seen",))
+    plan = curation.sweeps.sweep(acct(), dry=True)
+    assert (plan["planned"], plan["held_back"], plan["moved"]) == (1, 3, 0)
+    res = curation.sweeps.sweep(acct())
+    assert (res["planned"], res["held_back"], res["moved"], res["stragglers"]) == (1, 3, 1, [])
+    for name in JUNK_INBOX:
+        assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), name
+    assert [box for _, box, *_ in world.where_id("<build-413@ci.example.test>")] == ["Trash"]
+    assert [e["subject"] for e in audit(world)] == ["[quilt] Build #413 passed"]
 
 
 FAR = 4_000_000_000                                              # a "now" long after every corpus date
@@ -118,6 +145,7 @@ def test_hwf_expiry_prunes_the_local_row_by_message_id(world):
 
 
 def test_hwf_a_sweep_still_moves_the_junk_when_the_server_refuses_move(world):
+    read_junk(world)
     world.server.fail("UID MOVE", "BAD [CANNOT] MOVE not supported", times=None, user=w.ADA)
     assert curation.sweeps.sweep(acct())["moved"] == 3
 
@@ -125,6 +153,7 @@ def test_hwf_a_sweep_still_moves_the_junk_when_the_server_refuses_move(world):
 def test_hwf_a_sweep_and_expiry_on_a_server_without_move_copy_then_expunge_one_uid(world):
     from mailmind.bootstrap.curation import rules
     world.server.without = {"MOVE"}
+    read_junk(world)
     since = world.mark()
     assert curation.sweeps.sweep(acct())["moved"] == 3
     rules.set_expiry("thimble.example.test", 1)                 # the receipt's sender

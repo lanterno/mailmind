@@ -3,7 +3,7 @@ import pytest
 
 from mailmind.curation.domain import classifier, rulebook, sweep_plan
 from mailmind.curation.domain.classifier import BLOCKED, JUNK_BUCKETS, MKT, PERSONAL, PROTECTED
-from mailmind.curation.domain.live import READ_FIELDS, read_from_headers
+from mailmind.curation.domain.live import READ_FIELDS, held, read_from_headers
 
 NO_RULES = rulebook.as_sets(rulebook.empty())
 
@@ -13,7 +13,8 @@ def rules(**lists):
 
 
 def read(sender, mid="<a@example.test>", subject="Hello", name="", bulk=False, uid="1"):
-    return {"uid": uid, "from": sender, "name": name, "subject": subject, "mid": mid, "bulk": bulk}
+    return {"uid": uid, "from": sender, "name": name, "subject": subject, "mid": mid, "bulk": bulk, "starred": False,
+            "unread": False}
 
 
 def stored(sender, bucket=PERSONAL, subject="Hello", name="", list_unsub=""):
@@ -53,14 +54,23 @@ def test_an_empty_inbox_comes_to_nothing():
 # ── mail read live ────────────────────────────────────────────────────────────
 def test_a_message_is_read_from_its_headers():
     raw = (b"From: =?utf-8?b?QWRh?= <Ada@Example.TEST>\r\nSubject: =?utf-8?b?SGVsbG8=?=\r\nMessage-ID:  <m@example.test> \r\n\r\n")
-    assert read_from_headers(7, raw) == {"uid": "7", "from": "ada@example.test", "name": "Ada", "subject": "Hello",
-                                         "mid": "<m@example.test>", "bulk": False}
+    assert read_from_headers(7, raw, {"\\Seen"}) == {"uid": "7", "from": "ada@example.test", "name": "Ada",
+                                                      "subject": "Hello", "mid": "<m@example.test>", "bulk": False,
+                                                      "starred": False, "unread": False}
+
+
+@pytest.mark.parametrize("flags, starred, unread", [({"\\Seen"}, False, False), ({"\\seen", "\\Answered"}, False, False),
+                                                    ({"\\Seen", "\\FLAGGED"}, True, False), ({"\\Flagged"}, True, True),
+                                                    (set(), False, True)])
+def test_a_star_or_no_seen_flag_holds_a_message_back_whatever_the_case(flags, starred, unread):
+    got = read_from_headers(1, b"From: a@example.test\r\n\r\n", flags)
+    assert (got["starred"], got["unread"], held(got)) == (starred, unread, starred or unread)
 
 
 @pytest.mark.parametrize("header, bulk", [(b"List-Unsubscribe: <https://list.example.test/u>\r\n", True),
                                           (b"List-ID: <news.example.test>\r\n", True), (b"X-Other: 1\r\n", False)])
 def test_either_list_header_says_it_is_bulk(header, bulk):
-    assert read_from_headers(1, b"From: a@example.test\r\n" + header + b"\r\n")["bulk"] is bulk
+    assert read_from_headers(1, b"From: a@example.test\r\n" + header + b"\r\n", ())["bulk"] is bulk
 
 
 def test_a_sweep_asks_the_server_for_what_it_reads():
@@ -68,7 +78,7 @@ def test_a_sweep_asks_the_server_for_what_it_reads():
 
 
 def test_a_message_with_no_id_reads_as_none():
-    assert read_from_headers(1, b"From: a@example.test\r\n\r\n")["mid"] == ""
+    assert read_from_headers(1, b"From: a@example.test\r\n\r\n", ())["mid"] == ""
 
 
 def test_what_is_read_gets_the_classifiers_word():

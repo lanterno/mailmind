@@ -98,7 +98,13 @@ def test_reconcile_prunes_what_the_server_no_longer_has(app, golden, world):
     golden.record("the audit trail", app.get("/api/audit"))
 
 
+# Ada's Inbox junk: Loom's issue, the CI mail and the scam.
+JUNK = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
+
+
 def test_sweep_moves_the_junk_buckets_out_of_the_inbox(app, golden, world):
+    for name in JUNK:                                           # read in another client: a sweep takes only read mail
+        world.server_flags(name, "\\Seen")
     post(app, golden, "sweep Ada, dry run", "/api/sweep", {"account": w.ADA, "dry_run": True})
     since = world.mark()
     post(app, golden, "sweep Ada", "/api/sweep", {"account": w.ADA})
@@ -106,6 +112,20 @@ def test_sweep_moves_the_junk_buckets_out_of_the_inbox(app, golden, world):
     golden.note("Ada's INBOX on the server", sorted(
         str(m.headers()["Message-ID"]) for m in world.server.messages(w.ADA, "INBOX").values()))
     golden.record("the audit trail", app.get("/api/audit"))
+
+
+def test_a_sweep_leaves_starred_and_unread_junk_in_the_inbox(app, world):
+    """Loom's issue and the scam are unread, and Ada starred the CI mail she read: the plan says all three stay, and the
+    sweep moves none of them."""
+    world.server_flags("ada-inbox-04-ci.eml", "\\Seen", "\\Flagged")
+    [plan] = app.post("/api/sweep", {"account": w.ADA, "dry_run": True}).json["results"]
+    assert (plan["planned"], plan["held_back"], plan["error"]) == (0, 3, None)
+    since = world.mark()
+    [swept] = app.post("/api/sweep", {"account": w.ADA}).json["results"]
+    assert (swept["planned"], swept["held_back"], swept["moved"]) == (0, 3, 0)
+    assert world.writes(since) == []
+    for name in JUNK:
+        assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
 
 
 def test_sync_retry_runs_a_sync_for_that_account(app, golden, world):

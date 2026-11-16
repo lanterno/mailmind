@@ -15,6 +15,7 @@
       "spam/scam": 1
      },
      "error": null,
+     "held_back": 0,
      "moved": 0,
      "planned": 3,
      "senders": 3,
@@ -51,6 +52,7 @@
       "spam/scam": 1
      },
      "error": null,
+     "held_back": 0,
      "moved": 3,
      "planned": 3,
      "senders": 3,

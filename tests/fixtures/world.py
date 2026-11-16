@@ -221,6 +221,13 @@ class World:
             ingest.sync_folder(accounts.get(acct), folder)
         return uid
 
+    def server_flags(self, name, *flags):
+        """Another client leaves `name` with these flags alone on the server, where the corpus put it, and tells the app
+        nothing."""
+        acct, folder, uid = self.placed[name]
+        with self.server.lock:
+            self.server.mailbox(acct, folder).messages[uid].flags = set(flags)
+
     def mark(self):
         """A point in the server's command log, for writes()."""
         return len(self.server.commands)
