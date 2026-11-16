@@ -45,9 +45,11 @@ pub fn speaks_anthropic(provider: AiProvider) -> bool {
 }
 
 /// Whether a provider runs on this machine, so a model the price table doesn't know costs nothing: a model on this
-/// Mac, or any provider at a loopback address.
+/// Mac, or any provider at a loopback address a base URL may be (`ai_provider::base_url`). A URL that breaks those
+/// rules, ANTHROPIC_BASE_URL's among them, reaches nothing, and is not on this machine.
 pub fn local(provider: AiProvider, base_url: &str) -> bool {
-    provider == AiProvider::Local || ai_provider::on_this_machine(base_url)
+    provider == AiProvider::Local
+        || ai_provider::base_url(base_url).is_some_and(|url| ai_provider::on_this_machine(&url))
 }
 
 /// How long one attempt at a call waits for its answer.

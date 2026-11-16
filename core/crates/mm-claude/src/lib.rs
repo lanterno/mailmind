@@ -56,11 +56,14 @@ enum Attempt {
 }
 
 impl ClaudeApi {
-    /// The API at `base_url` (DEFAULT_URL when None or empty), called with `key`. A URL that names no HTTP endpoint
-    /// makes every call fail as unreachable.
+    /// The API at `base_url` (DEFAULT_URL when None or empty), called with `key`. A URL held to the rules a base URL a
+    /// person chooses is (`ai_provider::base_url`: https anywhere, plain http only to this machine, no user, password,
+    /// query or fragment, a port from 1 to 65535) or none: ANTHROPIC_BASE_URL is held to them too. One that breaks
+    /// them makes every call fail as unreachable, with nothing sent.
     pub fn new(key: Secret, base_url: Option<&str>, outside: Arc<dyn Outside>) -> ClaudeApi {
-        let url = base_url.filter(|u| !u.trim().is_empty()).unwrap_or(DEFAULT_URL);
-        ClaudeApi { key, endpoint: Endpoint::parse(url), outside, timeout: TIMEOUT, retries: RETRIES }
+        let url = base_url.filter(|u| !u.is_empty()).unwrap_or(DEFAULT_URL);
+        let endpoint = mm_kernel::ai_provider::base_url(url).and_then(|url| Endpoint::parse(&url));
+        ClaudeApi { key, endpoint, outside, timeout: TIMEOUT, retries: RETRIES }
     }
 
     /// The same, each attempt held to `timeout` all told, and a call sent again up to `retries` times.
