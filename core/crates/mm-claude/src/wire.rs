@@ -168,9 +168,6 @@ pub const SAID_MOST: usize = 200;
 /// What the API said of an error, as an error keeps it: `error_text` with `key` taken out of the whole of it, and only
 /// then cut to `SAID_MOST` characters, so no part of a key the cut runs through is left.
 pub fn said(body: &[u8], key: Option<&str>) -> String {
-    let mut said = error_text(body);
-    if let Some(key) = key.filter(|k| !k.is_empty()) {
-        said = said.replace(key, "<key>");
-    }
+    let said = mm_kernel::ai_provider::unkeyed(&error_text(body), key.unwrap_or_default());
     said.chars().take(SAID_MOST).collect()
 }

@@ -77,6 +77,18 @@ pub fn sendable(key: &str) -> bool {
     key.chars().all(|c| ('!'..='~').contains(&c))
 }
 
+/// `text` with `key` taken out of it, as it is and as JSON writes it in a string (`providers.unkeyed`), so what a service
+/// said, words or compact JSON, quotes no key back. A key sent is printable ASCII, whose only characters JSON escapes in a
+/// string are `"` and `\`.
+pub fn unkeyed(text: &str, key: &str) -> String {
+    if key.is_empty() {
+        return text.to_owned();
+    }
+    let escaped = key.replace('\\', "\\\\").replace('"', "\\\"");
+    let text = text.replace(&escaped, "<key>"); // the longer, escaped form first
+    if escaped == key { text } else { text.replace(key, "<key>") }
+}
+
 /// The longest base URL a person may give, in characters.
 pub const BASE_URL_MOST: usize = 500;
 
