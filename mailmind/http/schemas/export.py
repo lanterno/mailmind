@@ -18,8 +18,10 @@ class ExportGroup(Answer):
 
 
 class ExportPlan(Answer):
-    """`export.plan`: each account's folders, and how many of their messages have a body stored."""
+    """`export.plan`: each account's folders, and how many of their messages have a body stored; and how much room
+    the database takes on this disk, its file and the log of what it hasn't taken in yet, in bytes."""
     ok: Literal[True]
     total: int
     bodies: int
     groups: list[ExportGroup]
+    database_bytes: int

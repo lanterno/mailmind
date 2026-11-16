@@ -101,8 +101,20 @@ def _rows(c, account=None):
     return c.execute(sql, args).fetchall()
 
 
+def _database_bytes():
+    """The bytes the database takes on this disk: its file, and the log of what it hasn't taken in yet."""
+    total = 0
+    for path in (settings.current().db, settings.current().db + "-wal"):
+        try:
+            total += os.path.getsize(path)
+        except FileNotFoundError:
+            pass
+    return total
+
+
 def plan(account=None):
-    """Dry-run summary: per (account,folder) message + fetched-body counts. Pure SELECT."""
+    """Dry-run summary: per (account,folder) message + fetched-body counts, and the database's size on this disk.
+    Pure SELECT."""
     c = _ro_conn()
     try:
         where = " WHERE account=?" if account else ""
@@ -114,7 +126,8 @@ def plan(account=None):
         bodies = sum((r["bodies"] or 0) for r in rows)
         return {"ok": True, "total": total, "bodies": bodies,
                 "groups": [{"account": r["account"], "folder": r["folder"],
-                            "messages": r["n"], "bodies": r["bodies"] or 0} for r in rows]}
+                            "messages": r["n"], "bodies": r["bodies"] or 0} for r in rows],
+                "database_bytes": _database_bytes()}
     finally:
         c.close()
 
