@@ -13,13 +13,12 @@ describe("the AI tab", () => {
 describe("choosing another provider", () => {
   it("sets its model and URL back to its own, as the server does", () => {
     expect(providerChanges("openai")).toEqual({ ai_provider: "openai", ai_model: "", ai_base_url: "" });
-    expect(providerChanges("ollama")).toEqual({ ai_provider: "ollama", ai_model: "", ai_base_url: "" });
+    expect(providerChanges("local")).toEqual({ ai_provider: "local", ai_model: "", ai_base_url: "" });
   });
-  it("asks a key of every provider but Ollama, and a URL only of Ollama and a compatible service", () => {
-    expect(Object.entries(NEEDS).filter(([, n]) => n.key === "none").map(([p]) => p)).toEqual(["ollama"]);
-    expect(NEEDS.compatible.key).toBe("optional");
-    expect(Object.entries(NEEDS).filter(([, n]) => n.url !== null).map(([p]) => p)).toEqual(["ollama", "compatible"]);
-    expect(NEEDS.ollama.url).toBe("http://127.0.0.1:11434/v1");
+  it("needs a key of Claude, OpenAI and Gemini, takes one from the others, and asks a URL only of those", () => {
+    expect(Object.entries(NEEDS).filter(([, n]) => n.key === "optional").map(([p]) => p)).toEqual(["local", "compatible"]);
+    expect(Object.entries(NEEDS).filter(([, n]) => n.url !== null).map(([p]) => p)).toEqual(["local", "compatible"]);
+    expect(NEEDS.local.url).toBe("http://127.0.0.1:11434/v1");
     expect(NEEDS.compatible.url).toBe("");
   });
   it("says where each provider that needs a key makes one", () => {

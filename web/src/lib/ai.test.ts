@@ -10,7 +10,7 @@ const off = (why: AiStatus["off"], provider: AiStatus["provider"] = "anthropic")
 
 describe("the providers", () => {
   it("are named in the menu's words, in its order", () => {
-    expect(Object.values(PROVIDER_LABEL)).toEqual(["Claude (Anthropic)", "OpenAI", "Google Gemini", "Ollama, on this Mac", "Another OpenAI-compatible service"]);
+    expect(Object.values(PROVIDER_LABEL)).toEqual(["Claude (Anthropic)", "OpenAI", "Google Gemini", "A model on this Mac", "Another OpenAI-compatible service"]);
   });
 });
 
@@ -19,7 +19,7 @@ describe("what only AI can do", () => {
     expect(aiOffered(status())).toBe(true);
     for (const why of ["no-key", "no-model", "no-url"] as const) expect(aiOffered(off(why))).toBe(true);
   });
-  it("isn't once AI is turned off", () => expect(aiOffered(off("turned-off", "ollama"))).toBe(false));
+  it("isn't once AI is turned off", () => expect(aiOffered(off("turned-off", "local"))).toBe(false));
   it("is, before the digest has come", () => expect(aiOffered(undefined)).toBe(true));
 });
 
@@ -28,7 +28,7 @@ describe("why AI is off", () => {
   it("names the provider chosen", () => {
     expect(whyOff(off("no-key", "openai"))).toBe("there’s no key for OpenAI");
     expect(whyOff(off("no-key"))).toBe("there’s no key for Claude");
-    expect(whyOff(off("no-model", "ollama"))).toBe("no model is chosen for Ollama");
+    expect(whyOff(off("no-model", "local"))).toBe("no model is chosen for your model server");
     expect(whyOff(off("no-url", "compatible"))).toBe("the OpenAI-compatible service has no URL");
     expect(whyOff(off("turned-off", "gemini"))).toBe("it is turned off in Settings");
   });
@@ -51,16 +51,15 @@ describe("what leaves this Mac", () => {
     expect(aiPrivacy("openai", "")).toContain("goes to OpenAI only");
     expect(aiPrivacy("gemini", "")).toContain("goes to Google only");
     expect(aiPrivacy("compatible", "https://llm.example.test/v1")).toContain("goes to the OpenAI-compatible service only");
-    expect(aiPrivacy("ollama", "http://gpu.example.test:11434/v1")).toContain("goes to your Ollama server only");
   });
   it("is nothing when the provider answers on this Mac", () => {
-    expect(aiPrivacy("ollama", "")).toBe("Ollama runs on this Mac, so the text of your mail never leaves it.");
+    expect(aiPrivacy("local", "")).toBe("Your model server runs on this Mac, so the text of your mail never leaves it.");
     expect(aiPrivacy("compatible", "http://localhost:8080/v1")).toBe("The OpenAI-compatible service runs on this Mac, so the text of your mail never leaves it.");
   });
-  it("is on this Mac only at a loopback address, or Ollama at its own", () => {
+  it("is on this Mac only at a loopback address, or for a model on this Mac, which the server holds there", () => {
     for (const url of ["http://127.0.0.1:11434/v1", "http://localhost/v1", "https://[::1]:8443/v1", "HTTP://LOCALHOST:1234"]) expect(runsHere("compatible", url)).toBe(true);
     for (const url of ["", "https://127.0.0.1.example.test/v1", "http://localhost.example.test/v1", "http://10.0.0.2:11434/v1"]) expect(runsHere("compatible", url)).toBe(false);
-    expect(runsHere("ollama", "")).toBe(true);
+    expect(runsHere("local", "")).toBe(true);
     expect(runsHere("anthropic", "")).toBe(false);
   });
 });
