@@ -64,7 +64,7 @@ def parser():
     sync = commands.add_parser("sync", help="pull mail into the database")
     sync.add_argument("who", nargs="?", default="all", help="an account's address, or all")
     sync.add_argument("days", nargs="?", type=int, help="how far back")
-    assess = commands.add_parser("assess", help="triage the mail with no summary yet")
+    assess = commands.add_parser("assess", help="triage the mail of the last 30 days with no summary yet")
     assess.add_argument("limit", nargs="?", type=int, default=200, help="how many at most (default 200)")
     assess.add_argument("workers", nargs="?", type=int, help="how many at once")
     assess.add_argument("--batch", action="store_true", help="through the Message Batches API, at half price")

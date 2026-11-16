@@ -131,7 +131,8 @@ def rethread(who):
 
 
 def assess(limit, workers):
-    """Summarize up to `limit` messages with no summary yet, now, at full price."""
+    """Summarize up to `limit` messages from the last 30 days (Assessments.RECENT_DAYS) with no summary yet, now, at full
+    price. Triage asks the background's model, so that is the one whose holding back it says."""
     from mailmind.bootstrap import assistant
     from mailmind.bootstrap.mailbox import store
     store.init()
@@ -139,7 +140,7 @@ def assess(limit, workers):
     if off:
         print(f"{assistant.WHY[off]}, so nothing was summarized.")
         return
-    why = assistant.gateway().held_back("triage")
+    why = assistant.gateway().held_back("triage", assistant.calls.background_label())
     if why:
         print(f"Triage is held back ({why}), so nothing was summarized.")
         return
