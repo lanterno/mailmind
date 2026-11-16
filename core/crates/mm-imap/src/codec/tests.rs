@@ -101,6 +101,18 @@ fn a_nil_section_is_no_section() {
 }
 
 #[test]
+fn the_opening_of_a_message_is_its_section_from_where_it_starts() {
+    let opening = b"From: Lin <lin@example.test>\r\nSubject: Plans\r\n\r\nSee you at";
+    let pieces = [
+        Piece::Text(format!("* 3 FETCH (UID 9 BODY[]<0> {{{}}}", opening.len())),
+        Piece::Literal(opening.to_vec()),
+        Piece::Text(")".to_owned()),
+    ];
+    let Said::Fetch(fetched) = read(&raw(&pieces)) else { panic!("not a fetch") };
+    assert_eq!((fetched.uid, fetched.section), (Some(9), Some(opening.to_vec())));
+}
+
+#[test]
 fn gmails_thread_and_labels_are_read_as_a_person_reads_them() {
     let Said::Fetch(fetched) =
         said(&[r#"* 1 FETCH (X-GM-THRID 1278455344230334865 X-GM-LABELS (\Inbox "Caf&AOk-" "say \"hi\"") UID 3)"#])

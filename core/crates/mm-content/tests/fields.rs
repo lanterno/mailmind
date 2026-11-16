@@ -77,3 +77,20 @@ fn an_invite_is_a_calendar_part_or_an_ics_file() {
     assert!(has_invite(invite));
     assert!(!has_invite(b"Content-Type: text/plain\r\n\r\nhi\r\n"));
 }
+
+#[test]
+fn the_opening_of_a_message_cut_off_part_way_keeps_the_text_it_reached() {
+    // A sync reads a message's first 64 KiB: the text comes first, and an attachment after it is cut off.
+    let mut cut = b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\n\
+See the plans attached.\r\n--b\r\nContent-Type: application/pdf; name=plans.pdf\r\n\
+Content-Transfer-Encoding: base64\r\n\r\n"
+        .to_vec();
+    cut.extend(b"JVBERi0xLjQK".repeat(200));
+    assert_eq!(text_body(&cut), "See the plans attached.");
+    // A text longer than the opening is kept as far as it got, even part way through a word, and through base64.
+    let long = format!("Content-Type: text/plain\r\n\r\nDear Ada, {}", "the minutes go on ".repeat(400));
+    assert!(text_body(&long.as_bytes()[..2000]).starts_with("Dear Ada, the minutes go on"));
+    let encoded = b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\
+Content-Transfer-Encoding: base64\r\n\r\nRGVhciBBZGEsIHRoZSBtaW51dGVzIGdvIG9u\r\nIHRoZSBtaW51dGVzIGdvIG9u";
+    assert!(text_body(&encoded[..encoded.len() - 3]).starts_with("Dear Ada, the minutes go on"));
+}
