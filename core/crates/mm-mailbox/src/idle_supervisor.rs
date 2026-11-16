@@ -2,7 +2,7 @@
 //!
 //! A worker holds a connection open and waits on it. `reconcile` starts one for each key wanted, up to a limit,
 //! retires one whose key has gone or is now wanted differently, and leaves the rest be. A worker whose connection
-//! fails rests, longer each time, then opens another. One that finds itself no longer wanted leaves on its own, and
+//! fails, or whose work on it panics (`Panic`), rests, longer each time, then opens another. One that finds itself no longer wanted leaves on its own, and
 //! asks for a reconcile on its way out. What a connection is, and what a worker does with one, is the `Watched`'s to
 //! say; this knows nothing of what they watch.
 //!
@@ -11,6 +11,7 @@
 //! which the worker would then wait on and read from.
 
 use std::fmt;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
@@ -113,6 +114,11 @@ fn held<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
     lock.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// `work`, a panic in it failing as `Panic`: the worker rests, as after any failure, and goes on.
+fn caught<T>(work: impl FnOnce() -> Result<T, &'static str>) -> Result<T, &'static str> {
+    catch_unwind(AssertUnwindSafe(work)).unwrap_or(Err("Panic"))
+}
+
 /// Marks a worker ended as its thread leaves, however it leaves.
 struct Ending<S>(Arc<Watch<S>>);
 
@@ -171,11 +177,12 @@ impl<W: Watched> Inner<W> {
                 self.reconcile();
                 return;
             }
-            let failed = match watched.connect(&watch.spec) {
+            let failed = match caught(|| watched.connect(&watch.spec)) {
                 Err(class) => class,
                 Ok((mut conn, interrupt)) => {
                     let turn = self.turn(watch, &mut conn, interrupt);
-                    watched.close(conn);
+                    // A close that panics has nothing more to close.
+                    let _ = catch_unwind(AssertUnwindSafe(|| watched.close(conn)));
                     match turn {
                         Turn::NeverReady => return,
                         Turn::Served => continue,
@@ -194,7 +201,7 @@ impl<W: Watched> Inner<W> {
 
     /// Ready a connection and serve on it, listed to be interrupted while it serves.
     fn turn(&self, watch: &Watch<W::Spec>, conn: &mut W::Conn, interrupt: Arc<dyn Interrupt>) -> Turn {
-        match self.watched.ready(&watch.spec, conn) {
+        match caught(|| self.watched.ready(&watch.spec, conn)) {
             Err(class) => return Turn::Failed(class),
             Ok(false) => return Turn::NeverReady,
             Ok(true) => {}
@@ -203,7 +210,7 @@ impl<W: Watched> Inner<W> {
         // Set before `leaving()` is asked: a retirement sets `quit` first, then interrupts what it finds here.
         *held(&watch.conn) = Some(interrupt.clone());
         watch.set_rest(held(&self.rests).first);
-        let served = self.watched.serve(watch, conn);
+        let served = caught(|| self.watched.serve(watch, conn));
         *held(&watch.conn) = None;
         held(&self.conns).retain(|listed| !Arc::ptr_eq(listed, &interrupt));
         match served {

@@ -88,8 +88,9 @@ impl Idle {
                 break;
             }
             let todo = std::mem::take(&mut *held(&self.dirty));
-            if !todo.is_empty() {
-                self.news.inbox_changed(todo);
+            // A sync that panics is the sync's to say; the dispatcher goes on hearing changes.
+            if !todo.is_empty() && mm_kernel::errors::caught(|| self.news.inbox_changed(todo)).is_err() {
+                log::warning(TAG, "a sync IDLE asked for failed", &[], Some(mm_kernel::errors::PANIC.class));
             }
         }
     }

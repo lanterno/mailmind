@@ -80,6 +80,15 @@ impl Fault {
 /// as a route it doesn't implement.
 pub const NOT_YET: Fault = Fault::new("NotOnTheRustServerYet");
 
+/// What work that panicked comes to, as a job's last error and an account's sync error name it.
+pub const PANIC: Fault = Fault::new("Panic");
+
+/// `work`, a panic in it caught: what a background round runs in, so one that panics ends as `PANIC` and whoever ran
+/// it goes on to the next. Where it panicked is the panic hook's to log; what it said is never kept.
+pub fn caught<T>(work: impl FnOnce() -> T) -> Result<T, Fault> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).map_err(|_| PANIC)
+}
+
 /// What a use case answers when it can't do what was asked.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Failure {

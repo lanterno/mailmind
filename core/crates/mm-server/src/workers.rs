@@ -3,8 +3,8 @@
 //!
 //! A job is a name, a round, the seconds between rounds and the delay before the first. A round may say the seconds
 //! until its next, when it knows better than the interval (reconcile spreads one cycle across the accounts). One that
-//! fails is logged and counted, and the job goes on at its interval. `Jobs` is what the app holds of them: a kick that
-//! runs a job's next round now, and what each last did (`snapshot`, which `/api/debug/jobs` shows).
+//! fails, or panics, is logged and counted, and the job goes on at its interval. `Jobs` is what the app holds of
+//! them: a kick that runs a job's next round now, and what each last did (`snapshot`, which `/api/debug/jobs` shows).
 //!
 //! Only `mailmind-server` starts them (`Workers::start`). The served suites start none: their `work` line runs one
 //! pass of a job at a time, so what a suite sees depends only on what it sends.
@@ -121,7 +121,8 @@ impl Jobs {
             record.last_started = Some(self.now());
         }
         let began = Instant::now();
-        let outcome = round();
+        // A round that panics fails as `Panic`, and the job goes on at its interval.
+        let outcome = mm_kernel::errors::caught(round).unwrap_or_else(|fault| Err(fault.class));
         let mut record = job.record();
         record.runs += 1;
         record.running = false;

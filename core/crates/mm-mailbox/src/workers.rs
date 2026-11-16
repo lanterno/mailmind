@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Duration;
 
-use mm_kernel::errors::Fault;
+use mm_kernel::errors::{Fault, caught};
 use mm_kernel::log;
 
 /// Wakes a worker that waits: a kick that comes while it is busy wakes its next wait at once, so none is missed.
@@ -80,12 +80,12 @@ pub trait Queue: Send + Sync {
 }
 
 /// The worker (`DurableQueue.run_forever`): put back what a crash left running, then a pass whenever kicked, when the
-/// next row comes due (a retry's backoff ending), and at least every poll, until `stop`. A pass that fails is
-/// logged, and the next comes as it would have.
+/// next row comes due (a retry's backoff ending), and at least every poll, until `stop`. A pass that fails, or
+/// panics, is logged, and the next comes as it would have.
 pub fn run_forever(queue: &dyn Queue, stop: &Stop) {
     let kicked = queue.kicked();
     stop.wakes(kicked.clone());
-    if let Err(fault) = queue.recover() {
+    if let Err(fault) = caught(|| queue.recover()).and_then(|recovered| recovered) {
         log::error(queue.tag(), "rows left running weren't put back", &[], Some(fault.class));
     }
     // No pass has looked yet: a row already due when the worker starts is taken at once, not at the first poll.
@@ -96,7 +96,7 @@ pub fn run_forever(queue: &dyn Queue, stop: &Stop) {
             return;
         }
         looked = queue.now();
-        if let Err(fault) = queue.drain() {
+        if let Err(fault) = caught(|| queue.drain()).and_then(|drained| drained) {
             log::error(queue.tag(), "drain error", &[], Some(fault.class));
         }
     }

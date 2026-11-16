@@ -6,11 +6,14 @@
 //!
 //! Each round ends by warming folders beyond the Inbox, for the accounts asking (`warm`), inside the single flight
 //! and after the Inbox, so it never delays new mail.
+//!
+//! A round, or an account's sync in it, that panics ends as one that failed (`Panic`): the account says so, the
+//! flight comes down, and the next sync runs as it would have.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use mm_kernel::errors::{Failure, Fault, Problem};
+use mm_kernel::errors::{Failure, Fault, Problem, caught};
 use mm_kernel::events::Topic;
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
@@ -25,7 +28,6 @@ use crate::sync_ports::{AroundSync, Events, MailboxEvent};
 use crate::warm::Warming;
 
 const TAG: &str = "sync";
-const POISONED: Fault = Fault::new("PoisonedLock");
 
 /// How one account's sync stands now: its health (ok, syncing or error) and what it last said.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -116,18 +118,24 @@ impl Syncing {
         Syncing { ingest, accounts, store, folders, events, clock, around, warm, held: Mutex::new(held) }
     }
 
+    /// What is held, whole between statements: so a lock a panicking round let go is still sound, and the flight
+    /// still comes down.
+    fn held(&self) -> MutexGuard<'_, Held> {
+        self.held.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// How each account's sync stands now.
     pub fn status(&self) -> Result<BTreeMap<String, AccountSync>, Fault> {
-        Ok(self.held.lock().map_err(|_| POISONED)?.status.clone())
+        Ok(self.held().status.clone())
     }
 
     /// How the sync as a whole stands now.
     pub fn sync(&self) -> Result<SyncState, Fault> {
-        Ok(self.held.lock().map_err(|_| POISONED)?.sync.clone())
+        Ok(self.held().sync.clone())
     }
 
     fn set_status(&self, account: &str, health: &'static str, msg: String) -> Result<(), Fault> {
-        self.held.lock().map_err(|_| POISONED)?.status.insert(account.to_owned(), AccountSync { health, msg });
+        self.held().status.insert(account.to_owned(), AccountSync { health, msg });
         Ok(())
     }
 
@@ -144,7 +152,9 @@ impl Syncing {
                 continue;
             }
             self.set_status(&email, "syncing", String::new())?;
-            match self.ingest.sync_folder(&email, "INBOX", false, None) {
+            // An account whose sync panics fails as `Panic`, and the next account's goes on.
+            let synced = caught(|| self.ingest.sync_folder(&email, "INBOX", false, None));
+            match synced.unwrap_or_else(|fault| Err(SyncError::Store(fault))) {
                 Ok((kept, junk, _)) => {
                     new += kept;
                     self.set_status(&email, "ok", format!("+{kept}"))?;
@@ -176,7 +186,7 @@ impl Syncing {
     /// again as it ends.
     pub fn sync_guarded(&self, emails: Option<BTreeSet<String>>) {
         {
-            let Ok(mut held) = self.held.lock() else { return };
+            let mut held = self.held();
             if held.sync.running {
                 held.asked.push(emails);
                 return;
@@ -185,10 +195,10 @@ impl Syncing {
         }
         let mut emails = emails;
         loop {
-            if let Err(fault) = self.round(emails.as_ref()) {
+            if let Err(fault) = caught(|| self.round(emails.as_ref())).and_then(|round| round) {
                 log::error(TAG, "a sync round failed", &[], Some(fault.class));
             }
-            let Ok(mut held) = self.held.lock() else { return };
+            let mut held = self.held();
             if held.asked.is_empty() {
                 held.sync.running = false;
                 return;
@@ -208,7 +218,7 @@ impl Syncing {
             self.folders.invalidate(None)?;
             self.around.new_mail();
         }
-        let mut held = self.held.lock().map_err(|_| POISONED)?;
+        let mut held = self.held();
         held.sync.result = format!("{new} new");
         held.sync.last = Some(when::iso(self.clock.now()));
         drop(held);
