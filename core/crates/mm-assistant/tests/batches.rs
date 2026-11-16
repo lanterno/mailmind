@@ -18,7 +18,9 @@ use mm_assistant::ports::{
 };
 use mm_assistant::pricing::{batch_estimate, batch_micros, cost_micros};
 use mm_assistant::prompts::SYSTEM;
+use mm_assistant::refusals::{CallError, NotSent};
 use mm_assistant::status::Status;
+use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment};
 use mm_kernel::zone::Utc;
@@ -148,14 +150,15 @@ impl LanguageModel for Model {
     }
 }
 
+/// Claude with its key, or AI off with none; a test may choose another provider (#49).
 #[derive(Debug)]
-struct Keyed(Option<Arc<dyn LanguageModel>>);
+struct Keyed(Option<Arc<dyn LanguageModel>>, Mutex<AiProvider>);
 
 impl Engine for Keyed {
     fn in_force(&self) -> InForce {
         match &self.0 {
-            Some(model) => InForce::On { model: model.clone(), key_from: "ANTHROPIC_API_KEY" },
-            None => InForce::Off { key_from: "ANTHROPIC_API_KEY" },
+            Some(model) => InForce { provider: *lock(&self.1), ..InForce::claude(model.clone(), "ANTHROPIC_API_KEY") },
+            None => InForce::off(mm_assistant::providers::Off::NoKey, "ANTHROPIC_API_KEY"),
         }
     }
 }
@@ -347,6 +350,7 @@ fn message(n: i64) -> Pending {
 
 struct World {
     model: Arc<Model>,
+    engine: Arc<Keyed>,
     book: Arc<Book>,
     ledger: Arc<Ledger>,
     clock: Arc<Frozen>,
@@ -372,11 +376,12 @@ fn world(messages: i64, on: bool, limit_micros: Option<i64>) -> World {
     });
     let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
     let lm: Arc<dyn LanguageModel> = model.clone();
-    let gateway = Arc::new(Gateway::new(Arc::new(Keyed(on.then_some(lm))), budget, governor.clone()));
-    let status = Arc::new(Status::new(gateway.clone(), clock.clone(), DEFAULT.into()));
+    let engine = Arc::new(Keyed(on.then_some(lm), Mutex::new(AiProvider::Anthropic)));
+    let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
+    let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
     let calls = Arc::new(Calls::new(gateway, status.clone(), None, false));
     let batching = Batching::new(calls.clone(), book.clone(), book.clone(), clock.clone());
-    World { model, book, ledger, clock, governor, calls, batching, status }
+    World { model, engine, book, ledger, clock, governor, calls, batching, status }
 }
 
 impl World {
@@ -721,6 +726,28 @@ fn with_ai_off_nothing_goes_and_nothing_is_touched() {
     assert_eq!(w.collect(), 0);
     assert!(w.model.asked().is_empty() && lock(&w.model.sent).is_empty());
     assert_eq!(w.batching.status().expect("status").waiting, 2);
+}
+
+#[test]
+fn with_another_provider_no_batch_goes_the_backlog_is_triaged_at_once_and_one_out_waits_for_claude() {
+    let w = world(120, true, None);
+    assert_eq!(w.submit(), 100, "sent while Claude was the provider");
+    w.model.end_batch();
+    *lock(&w.engine.1) = AiProvider::OpenAi;
+    w.clock.shift(batches::POLL);
+    lock(&w.book.rows).extend((200..=330).map(message));
+    w.assessments(true).round().expect("a round");
+    assert_eq!(w.model.asked(), ["submit_batch"], "no batch went, and the one out wasn't asked about");
+    assert!(!lock(&w.model.sent).is_empty(), "the backlog is triaged a message at a time");
+    let asked = vec![("1".to_owned(), "Triage.".to_owned())];
+    let refused = w.calls.gateway().submit_batch(&asked, None, "triage-batch", None, None);
+    assert_eq!(refused, Err(CallError::NotSent(NotSent::NoBatches)));
+    assert_eq!(w.calls.gateway().batch_ended("msgbatch_1"), Err(CallError::NotSent(NotSent::NoBatches)));
+    assert!(w.counted("triage-batch").is_empty(), "nothing sent, so nothing counted");
+    assert_eq!(w.model.asked(), ["submit_batch"]);
+
+    *lock(&w.engine.1) = AiProvider::Anthropic;
+    assert_eq!(w.collect(), 100, "Claude again: the one out comes in");
 }
 
 #[test]

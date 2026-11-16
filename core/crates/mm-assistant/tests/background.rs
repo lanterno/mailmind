@@ -107,8 +107,8 @@ struct Keyed(Option<Arc<dyn LanguageModel>>);
 impl Engine for Keyed {
     fn in_force(&self) -> InForce {
         match &self.0 {
-            Some(model) => InForce::On { model: model.clone(), key_from: "ANTHROPIC_API_KEY" },
-            None => InForce::Off { key_from: "ANTHROPIC_API_KEY" },
+            Some(model) => InForce::claude(model.clone(), "ANTHROPIC_API_KEY"),
+            None => InForce::off(mm_assistant::providers::Off::NoKey, "ANTHROPIC_API_KEY"),
         }
     }
 }
@@ -165,7 +165,7 @@ fn world(on: bool) -> World {
     let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
     let lm: Arc<dyn LanguageModel> = model.clone();
     let gateway = Arc::new(Gateway::new(Arc::new(Keyed(on.then_some(lm))), budget, governor));
-    let status = Arc::new(mm_assistant::status::Status::new(gateway.clone(), clock.clone(), "claude-opus-5-5".into()));
+    let status = Arc::new(mm_assistant::status::Status::new(gateway.clone(), clock.clone()));
     let calls = Arc::new(Calls::new(gateway, status, None, false));
     World { model, ledger, clock, calls }
 }

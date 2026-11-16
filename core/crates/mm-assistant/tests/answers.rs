@@ -74,8 +74,8 @@ struct Keyed(Option<Arc<dyn LanguageModel>>);
 impl Engine for Keyed {
     fn in_force(&self) -> InForce {
         match &self.0 {
-            Some(model) => InForce::On { model: model.clone(), key_from: "ANTHROPIC_API_KEY" },
-            None => InForce::Off { key_from: "ANTHROPIC_API_KEY" },
+            Some(model) => InForce::claude(model.clone(), "ANTHROPIC_API_KEY"),
+            None => InForce::off(mm_assistant::providers::Off::NoKey, "ANTHROPIC_API_KEY"),
         }
     }
 }
@@ -255,7 +255,7 @@ fn world(on: bool) -> World {
     let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
     let lm: Arc<dyn LanguageModel> = model.clone();
     let gateway = Arc::new(Gateway::new(Arc::new(Keyed(on.then_some(lm))), budget, governor));
-    let status = Arc::new(Status::new(gateway.clone(), clock.clone(), "claude-opus-5-5".into()));
+    let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
     let calls = Arc::new(Calls::new(gateway, status, None, false));
     let kept = Arc::new(Kept::default());
     let context = Context::new(Arc::new(lunch()), Arc::new(Ada));
@@ -348,10 +348,10 @@ fn a_reply_that_isnt_json_keeps_a_fallback_and_an_account_not_used_is_refused() 
 fn with_ai_off_nothing_is_kept_and_the_route_is_told() {
     let w = world(false);
     let off = w.digest.asked(&Asked { pk: Some(3), ..Asked::default() });
-    assert_eq!(off, Err(AiFailure::NotSent(NotSent::AiOff)));
+    assert_eq!(off, Err(AiFailure::NotSent(NotSent::AiOff(mm_assistant::providers::Off::NoKey))));
     assert!(w.kept.summaries.lock().expect("kept").is_empty());
     let rewrite = mm_assistant::rewrite::rewrite(&w.calls, "teh", "fix", "English");
-    assert_eq!(rewrite, Err(AiFailure::NotSent(NotSent::AiOff)));
+    assert_eq!(rewrite, Err(AiFailure::NotSent(NotSent::AiOff(mm_assistant::providers::Off::NoKey))));
 }
 
 #[test]
@@ -919,7 +919,10 @@ fn a_rationale_is_written_for_each_sender_with_mail_and_none_is_asked_for_withou
     assert!(refused_as(&rationales.explain(Some(&asked)), Kind::Unreachable, "rationale unavailable"));
     let off = world(false);
     let rationales = Rationales::new(off.calls.clone(), Arc::new(Stored::default()), clock_at(NOW));
-    assert_eq!(rationales.explain(Some(&asked)), Err(AiFailure::NotSent(NotSent::AiOff)));
+    assert_eq!(
+        rationales.explain(Some(&asked)),
+        Err(AiFailure::NotSent(NotSent::AiOff(mm_assistant::providers::Off::NoKey)))
+    );
 }
 
 #[test]
@@ -950,7 +953,10 @@ fn a_screener_pass_reads_no_more_than_its_senders_and_says_only_what_it_is_sure_
     assert!(sent(&w).is_empty());
     let off = world(false);
     let screening = Screening::new(off.calls.clone(), stored);
-    assert_eq!(screening.suggest(Some(ADA), &waiting), Err(AiFailure::NotSent(NotSent::AiOff)));
+    assert_eq!(
+        screening.suggest(Some(ADA), &waiting),
+        Err(AiFailure::NotSent(NotSent::AiOff(mm_assistant::providers::Off::NoKey)))
+    );
 }
 
 #[test]
@@ -983,7 +989,10 @@ fn a_senders_summary_reads_what_is_stored_of_them_only_and_falls_back_to_the_mai
     assert!(sent(&w).is_empty());
     let off = world(false);
     let digest = SenderDigest::new(off.calls.clone(), stored);
-    assert_eq!(digest.summarize(Some("lin@example.test")), Err(AiFailure::NotSent(NotSent::AiOff)));
+    assert_eq!(
+        digest.summarize(Some("lin@example.test")),
+        Err(AiFailure::NotSent(NotSent::AiOff(mm_assistant::providers::Off::NoKey)))
+    );
 }
 
 /// No mail stored from anyone.
