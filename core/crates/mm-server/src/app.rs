@@ -262,6 +262,7 @@ impl App {
             }));
         // A folder's sync as it opens, on a thread counted as the requests being answered are.
         let work = Arc::new(Work::default());
+        let jobs = Arc::new(Jobs::new(seams.clock.clone()));
         let syncs = Arc::new(mm_mailbox::opening::FolderOpening::new(mm_mailbox::opening::OpeningParts {
             stored: database.clone(),
             sync: ingest.clone(),
@@ -271,6 +272,7 @@ impl App {
             background: Arc::new(crate::sync_wiring::WorkThreads(work.clone())),
             waits: mm_mailbox::opening::Waits::default(),
             inbox: live_sync.clone(),
+            older: jobs.clone(),
         }));
         let reading = crate::reading::Reading::assemble(
             crate::reading::Adapters {
@@ -340,7 +342,6 @@ impl App {
                 Arc::new(UnblockReverser(curation.screener.clone())),
             ],
         );
-        let jobs = Arc::new(Jobs::new(seams.clock.clone()));
         // The servers a cleanup, a sweep and expiry read and move live mail on.
         let cleanup_servers = servers.clone();
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));

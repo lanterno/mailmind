@@ -10,8 +10,8 @@
 //! start another. An Inbox no scan has begun joins the background's sync of it (`InboxSync`), which takes no gate,
 //! so a message opens while it reads.
 //!
-//! A first scan stores the folder's newest mail and leaves the rest to the background (`Syncing::read_older`), so a
-//! folder whose first scan has begun is caught up as one read before.
+//! A first scan stores the folder's newest mail and leaves the rest to the background (`Syncing::read_older`), whose
+//! round it sets going at once (`OlderMail`), so a folder whose first scan has begun is caught up as one read before.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
@@ -24,7 +24,7 @@ use serde_json::json;
 
 use crate::folders::Folders;
 use crate::gates::{Gates, Priority, Wait, on_gate};
-use crate::opening_ports::{Background, FolderSync, InboxSync};
+use crate::opening_ports::{Background, FolderSync, InboxSync, OlderMail};
 use crate::ports::{FolderSyncs, Opened, StoredLists};
 use crate::sync_plan;
 use crate::sync_ports::{Events, MailboxEvent};
@@ -91,6 +91,7 @@ struct Inner {
     background: Arc<dyn Background>,
     waits: Waits,
     inbox: Arc<dyn InboxSync>,
+    older: Arc<dyn OlderMail>,
     running: Mutex<Running>,
 }
 
@@ -113,13 +114,16 @@ pub struct OpeningParts {
     pub waits: Waits,
     /// The background's sync of each Inbox, which a first look at one joins.
     pub inbox: Arc<dyn InboxSync>,
+    /// The background's read of older mail, which a first scan that leaves some sets going.
+    pub older: Arc<dyn OlderMail>,
 }
 
 impl FolderOpening {
     pub fn new(parts: OpeningParts) -> FolderOpening {
-        let OpeningParts { stored, sync, gates, events, folders, background, waits, inbox } = parts;
+        let OpeningParts { stored, sync, gates, events, folders, background, waits, inbox, older } = parts;
         let running = Mutex::new(Running::default());
-        FolderOpening(Arc::new(Inner { stored, sync, gates, events, folders, background, waits, inbox, running }))
+        let inner = Inner { stored, sync, gates, events, folders, background, waits, inbox, older, running };
+        FolderOpening(Arc::new(inner))
     }
 
     /// Whether opening a folder read before should catch it up now.
@@ -195,7 +199,13 @@ impl Inner {
         }
         let priority = if full { Priority::Interactive } else { Priority::AfterUser };
         match on_gate(&*self.gates, account, priority, Wait::Ever, || self.sync.sync_folder(account, folder, full)) {
-            Ok(Ok((kept, junk))) => Some(kept + junk),
+            Ok(Ok(synced)) => {
+                if synced.reading.is_some() {
+                    // Its older mail is read on now, not at the background's next round.
+                    self.older.left_some();
+                }
+                Some(synced.kept + synced.junk)
+            }
             Ok(Err(error)) => {
                 log::warning(TAG, "a folder's sync as it opened failed", &[], Some(error.class()));
                 None

@@ -117,3 +117,10 @@ impl mm_mailbox::opening_ports::Background for WorkThreads {
         self.0.spawn(job);
     }
 }
+
+/// A folder's first scan as it opened left older mail: the round that reads it runs now, where this process runs one.
+impl mm_mailbox::opening_ports::OlderMail for crate::workers::Jobs {
+    fn left_some(&self) {
+        self.kick(crate::workers::OLDER_MAIL);
+    }
+}
