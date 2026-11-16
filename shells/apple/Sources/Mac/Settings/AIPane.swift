@@ -492,6 +492,11 @@ struct AIPane: View {
                     Text("\(StatusWords.dollars(spent)) of \(StatusWords.dollars(ai.limitMicros))")
                 }
             }
+            if let ai = status.digest?.ai {
+                if let models = AIWords.modelsUsed(ai) { SettingHelp(models) }
+                if let waiting = AIWords.summariesWaiting(ai.summariesWaiting) { SettingHelp(waiting) }
+            }
+            SpentLately(status: status, provider: provider)
         }
     }
 
@@ -630,6 +635,28 @@ struct AIPane: View {
 }
 
 /// A model a server on this Mac listed, to choose with a click: ticked while it is the one chosen.
+/// What AI cost over the last 7 days and this month, by feature, as the server counts it (`/api/ai/spending`), and
+/// where the bill is. Asked for as the card shows, and again as today's spending changes.
+private struct SpentLately: View {
+    let status: AppStatus
+    let provider: API.AiProvider
+    @State private var spent: API.Spending?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let spent {
+                SettingHelp(AIWords.spent(String(localized: "The last 7 days"), spent.week))
+                SettingHelp(AIWords.spent(String(localized: "This month"), spent.month))
+                SettingHelp(AIWords.billOfRecord(provider))
+            }
+        }
+        .task(id: status.digest?.ai.spentTodayMicros) {
+            guard let core = status.core else { return }
+            if let read = try? await core.get(API.Get.AiSpending.self) { spent = read }
+        }
+    }
+}
+
 private struct FoundModelRow: View {
     let model: String
     let chosen: Bool

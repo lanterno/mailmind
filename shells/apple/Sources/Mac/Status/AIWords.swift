@@ -157,6 +157,57 @@ enum AIWords {
             """)
     }
 
+    /// Which model background summaries ask, and which one what a person asks for goes to, as the digest has them in
+    /// force (the page's `modelsUsed`): the provider's small model and the one chosen, or one for everything.
+    static func modelsUsed(_ ai: API.AiStatus) -> String? {
+        guard !ai.backgroundModel.isEmpty, !ai.model.isEmpty else { return nil }
+        if ai.backgroundModel == ai.model {
+            return String(localized: "Summaries made in the background and everything you ask for use \(ai.model).")
+        }
+        return String(localized: """
+            Summaries made in the background use \(ai.backgroundModel); everything you ask for uses \(ai.model).
+            """)
+    }
+
+    /// How many messages from the last 30 days wait for a summary, as the digest counts them (the page's
+    /// `summariesWaiting`): nil where it doesn't say.
+    static func summariesWaiting(_ waiting: Int?) -> String? {
+        guard let waiting else { return nil }
+        if waiting == 0 { return String(localized: "Every message from the last 30 days has its summary.") }
+        let count = waiting.formatted(.number.locale(Locale(identifier: "en_US")))
+        return waiting == 1 ? String(localized: "1 message from the last 30 days waits for a summary.")
+            : String(localized: "\(count) messages from the last 30 days wait for a summary.")
+    }
+
+    /// What AI cost over some days, as the server counts it (`/api/ai/spending`, the page's `spentOver`): in all, then
+    /// its three dearest features by name, the rest summed.
+    static func spent(_ when: String, _ spent: API.PeriodSpent) -> String {
+        guard spent.calls > 0 else { return String(localized: "\(when): nothing.") }
+        var main = spent.features.prefix(3).map { "\($0.label) \(StatusWords.dollars($0.costMicros))" }
+        let rest = spent.features.dropFirst(3)
+        if !rest.isEmpty {
+            main.append(String(localized: "the rest \(StatusWords.dollars(rest.reduce(0) { $0 + $1.costMicros }))"))
+        }
+        let calls = spent.calls.formatted(.number.locale(Locale(identifier: "en_US")))
+        let total = StatusWords.dollars(spent.costMicros)
+        let list = main.joined(separator: ", ")
+        return spent.calls == 1 ? String(localized: "\(when): \(total), 1 call (\(list)).")
+            : String(localized: "\(when): \(total), \(calls) calls (\(list)).")
+    }
+
+    /// Where the bill is: the sums are MailMind's own count, from each call it made, and the provider holds the bill.
+    static func billOfRecord(_ provider: API.AiProvider) -> String {
+        switch provider {
+        case .anthropic: String(localized: "MailMind counts these from each call it makes; Anthropic’s console holds the bill.")
+        case .openai: String(localized: "MailMind counts these from each call it makes; OpenAI’s platform holds the bill.")
+        case .gemini: String(localized: """
+            MailMind counts these from each call it makes; Google’s billing for your project holds the bill.
+            """)
+        case .local: String(localized: "MailMind counts these from each call it makes; a model on this Mac costs nothing.")
+        case .compatible: String(localized: "MailMind counts these from each call it makes; the service holds the bill.")
+        }
+    }
+
     /// Why AI is off, in a few words: nil while it is on.
     static func why(_ ai: API.AiStatus) -> String? {
         switch ai.off {
