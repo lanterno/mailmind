@@ -680,6 +680,22 @@ struct AIKeyView: View {
                     .accessibilityLabel("Open \(place)")
                 }
             }
+            if let billing = provider.billing {
+                HStack(spacing: 8) {
+                    SettingHelp(billing)
+                    Spacer(minLength: 8)
+                    if let page = provider.creditPage {
+                        Button { NSWorkspace.shared.open(page) } label: {
+                            Text("Add Credit")
+                            MeadowIconView(.external, size: 14)
+                        }
+                        .meadowButton(small: true)
+                        .fixedSize()
+                        .help(page.absoluteString)
+                        .accessibilityLabel("Add credit at \(page.host() ?? "")")
+                    }
+                }
+            }
         }
         .task { if kept == nil { await read() } }
     }

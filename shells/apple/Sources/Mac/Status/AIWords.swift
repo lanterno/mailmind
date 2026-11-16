@@ -63,6 +63,36 @@ extension API.AiProvider {
         keyPage.map { ($0.host() ?? "") + ($0.path() == "/" ? "" : $0.path()) }
     }
 
+    /// How a key is paid for, in plain words on its card (the page's `BILLING`): per use, by the provider, apart from
+    /// any chat subscription, and where credit is added; for Gemini, the project a key belongs to is billed. Nil for a
+    /// model on this Mac, which costs nothing, and a compatible service, which says its own.
+    var billing: String? {
+        switch self {
+        case .anthropic: String(localized: """
+            Billed per use by Anthropic, separately from any ChatGPT or Claude subscription. Add credit in \
+            Anthropic’s console, under Billing.
+            """)
+        case .openai: String(localized: """
+            Billed per use by OpenAI, separately from any ChatGPT or Claude subscription. Add credit on OpenAI’s \
+            platform, under Billing.
+            """)
+        case .gemini: String(localized: """
+            Billed per use by Google, separately from any ChatGPT or Claude subscription. Use a key on a billed \
+            project: on the free tier, a key stops each day at its quota.
+            """)
+        case .local, .compatible: nil
+        }
+    }
+
+    /// Where credit is added, for the providers that have one place for it.
+    var creditPage: URL? {
+        switch self {
+        case .anthropic: URL(string: "https://console.anthropic.com/settings/billing")
+        case .openai: URL(string: "https://platform.openai.com/settings/organization/billing")
+        case .gemini, .local, .compatible: nil
+        }
+    }
+
     /// Whether Settings asks for the service's URL: a model server's on this Mac, prefilled, and a compatible
     /// service's, which has none.
     var asksForURL: Bool { self == .local || self == .compatible }
