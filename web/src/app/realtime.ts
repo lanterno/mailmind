@@ -13,7 +13,7 @@ import { currentRoute } from "./route";
 export const newBuild = createStore(false);
 const LOADED = document.querySelector<HTMLMetaElement>('meta[name="mailmind-build"]')?.content ?? "";
 
-const MAIL_CHANGED = ["new-mail", "snooze-wake", "mute", "reconcile", "flags-changed", "followup", "undo-done", "commands-changed", "resync"];
+const MAIL_CHANGED = ["new-mail", "snooze-wake", "mute", "flags-changed", "followup", "undo-done", "commands-changed", "resync"];
 
 export function useRealtime() {
   const qc = useQueryClient();
@@ -21,17 +21,28 @@ export function useRealtime() {
     const es = new EventSource("/api/events");
     // A tab nobody is looking at reads nothing: most reads count as someone here, and that lets the AI go on drafting ahead.
     // It marks what changed, and that is read when the tab comes back.
-    const again = (key: string) => void qc.invalidateQueries({ queryKey: [key], refetchType: document.hidden ? "none" : "active" });
+    // `gone`: an account removed, whose own lists the server no longer answers for, so they aren't read again.
+    const again = (key: string, gone?: string) => void qc.invalidateQueries({
+      queryKey: [key], refetchType: document.hidden ? "none" : "active", predicate: (query) => !gone || !query.queryKey.includes(gone),
+    });
     let digestSoon: ReturnType<typeof setTimeout> | undefined;
-    const mail = () => {
-      again("messages");
-      again("folders");
+    const mail = (gone?: string) => {
+      again("messages", gone);
+      again("folders", gone);
       again("screener");
       again("tidy");
       clearTimeout(digestSoon);
       digestSoon = setTimeout(() => again("digest"), 400);
     };
-    for (const topic of MAIL_CHANGED) es.addEventListener(topic, mail);
+    for (const topic of MAIL_CHANGED) es.addEventListener(topic, () => mail());
+    // Mail gone from a server, or an account removed: the digest, read at once then, takes it off the rail.
+    es.addEventListener("reconcile", (e) => {
+      const d = JSON.parse((e as MessageEvent<string>).data) as { account?: string; removed?: boolean };
+      if (!d.removed || !d.account) return mail();
+      mail(d.account);
+      clearTimeout(digestSoon);
+      again("digest");
+    });
     es.addEventListener("folder-synced", (e) => {
       const d = JSON.parse((e as MessageEvent<string>).data) as { account?: string; folder?: string; ok?: boolean };
       if (d.ok) return mail();
