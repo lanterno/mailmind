@@ -38,7 +38,7 @@ def choose(plain, data_dir, fake_keychain, openai_api):
     None), and any other preference given."""
     def choosing(provider, key=fo.KEY, **more):
         top = {}
-        if key is not None and provider != "ollama":
+        if key is not None:
             fake_keychain.add(f"{provider}-api-key", key, replace=True)
             top[f"{provider}_api_key"] = {"keychain": f"{provider}-api-key", "version": 1}
         prefs = {"ai_provider": provider, "ai_base_url": openai_api.url, **more}
@@ -78,11 +78,9 @@ def test_a_schema_that_leaves_a_property_out_goes_without_strict(choose):
 
 
 @pytest.mark.parametrize("provider, model", [("gemini", "gemini-4-hydrogen"), ("compatible", "mixtral-9x"),
-                                             ("ollama", "llama3.3")])
+                                             ("local", "llama3.3")])
 def test_the_others_ask_max_tokens_of_their_model(choose, provider, model):
     api = choose(provider, ai_model=model)
-    if provider == "ollama":
-        api.key = None
     ask()
     [req] = api.requests
     assert req.body["model"] == model and req.body["max_tokens"] == 16000 and "max_completion_tokens" not in req.body
@@ -94,15 +92,14 @@ def test_gemini_asks_its_own_model_unless_another_is_chosen(choose):
     assert api.requests[-1].body["model"] == "gemini-4-hydrogen"
 
 
-def test_ollama_is_never_sent_a_key_even_one_the_file_names(choose, data_dir, fake_keychain):
-    api = choose("ollama", ai_model="llama3.3")
+def test_a_model_on_this_mac_is_sent_its_key_only_when_one_is_kept(choose):
+    api = choose("local", key=None, ai_model="llama3.3")
     api.key = None
-    written = json.loads((data_dir / "mailmind.config.json").read_text())
-    fake_keychain.add("ollama-api-key", "sk-not-for-ollama", replace=True)
-    written["ollama_api_key"] = {"keychain": "ollama-api-key", "version": 1}
-    (data_dir / "mailmind.config.json").write_text(json.dumps(written))
     ask()
-    assert "authorization" not in api.requests[0].headers
+    assert "authorization" not in api.requests[-1].headers
+    choose("local", ai_model="llama3.3")
+    ask()
+    assert api.requests[-1].key == fo.KEY
 
 
 def test_a_compatible_service_is_sent_its_key_only_when_one_is_kept(choose):
@@ -157,7 +154,7 @@ def test_triage_stores_the_structured_reply_under_the_model_in_force(choose):
 
 # ── a service without structured output ───────────────────────────────────────
 
-@pytest.mark.parametrize("provider", ["ollama", "compatible"])
+@pytest.mark.parametrize("provider", ["local", "compatible"])
 def test_a_service_that_refuses_response_format_is_asked_once_more_without_it(choose, provider):
     api = choose(provider, key=None, ai_model="llama3.3")
     api.key, api.refuse_format = None, True
@@ -224,7 +221,7 @@ def free_port():
 
 def test_a_service_that_isnt_running_is_unreachable_and_status_says_it_couldnt_reach_it(choose, data_dir):
     from mailmind.bootstrap import assistant
-    choose("ollama", ai_model="llama3.3", ai_base_url=f"http://127.0.0.1:{free_port()}/v1")
+    choose("local", ai_model="llama3.3", ai_base_url=f"http://127.0.0.1:{free_port()}/v1")
     with pytest.raises(ModelError, match="unreachable") as e:
         ask()
     assert e.value.status is None and not e.value.permanent
@@ -232,7 +229,7 @@ def test_a_service_that_isnt_running_is_unreachable_and_status_says_it_couldnt_r
 
 
 def test_the_adapter_alone_tries_a_refused_connection_again_only_as_told():
-    model = ChatModel("ollama", f"http://127.0.0.1:{free_port()}/v1", "", "llama3.3", retries=0)
+    model = ChatModel("local", f"http://127.0.0.1:{free_port()}/v1", "", "llama3.3", retries=0)
     with pytest.raises(ModelError, match="connection refused"):
         model.complete(Prompt("Hi.", "llama3.3", 100))
 
@@ -277,7 +274,7 @@ def test_the_ledger_the_governor_and_the_status_see_these_calls_as_claudes(choos
 
 def test_an_unknown_model_on_this_mac_costs_nothing(choose):
     from mailmind.bootstrap import assistant
-    api = choose("ollama", ai_model="llama3.3")
+    api = choose("local", key=None, ai_model="llama3.3")
     api.key = None
     api.queue(fo.answer({"body": "x"}, model="llama3.3", prompt_tokens=100_000, completion_tokens=100_000))
     ask()

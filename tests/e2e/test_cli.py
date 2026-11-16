@@ -298,6 +298,7 @@ def test_ai_key_keeps_the_claude_key_in_the_keychain_and_the_assistant_reads_it(
 
 @pytest.mark.parametrize("provider, named, item", [("openai", "OpenAI API key", "openai-api-key"),
                                                    ("gemini", "Gemini API key", "gemini-api-key"),
+                                                   ("local", "key for the model on this Mac", "local-api-key"),
                                                    ("compatible", "AI service's API key", "compatible-api-key")])
 def test_ai_key_with_a_provider_keeps_that_providers_key(data_dir, monkeypatch, capsys, fake_keychain, provider, named, item):
     import json
@@ -314,7 +315,7 @@ def test_ai_key_with_a_provider_keeps_that_providers_key(data_dir, monkeypatch, 
 
 
 @pytest.mark.parametrize("provider", ["ollama", "mistral"])
-def test_ai_key_for_a_provider_that_takes_none_is_refused_by_its_choices(data_dir, capsys, provider):
+def test_ai_key_for_a_provider_there_isnt_is_refused_by_its_choices(data_dir, capsys, provider):
     with pytest.raises(SystemExit) as done:
         main(["ai", "key", "--provider", provider])
     assert done.value.code == 2 and "invalid choice" in capsys.readouterr().err

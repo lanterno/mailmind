@@ -86,16 +86,17 @@ def test_each_providers_key_is_kept_in_its_own_item_and_the_answers_name_only_th
     assert not [key for key in keys.values() for text in logged if key in text]
 
 
-def test_ollama_takes_no_key(app, world, fake_keychain):
-    before = (config(world), fake_keychain.items())
-    refused = app.post("/api/ai/key", {"provider": "ollama", "key": "sk-test-not-for-ollama"})
-    assert (refused.status, refused.json) == (400, problems.refused("Ollama takes no key."))
-    assert says_nothing_of(refused, "sk-test-not-for-ollama")
-    assert app.post("/api/ai/key/clear", {"provider": "ollama"}).json == {"ok": True, "kept": []}
-    assert (config(world), fake_keychain.items()) == before
+def test_a_model_on_this_mac_may_have_a_key_kept_too(app, world, fake_keychain):
+    kept = app.post("/api/ai/key", {"provider": "local", "key": "sk-test-for-a-local-server"})
+    assert (kept.status, kept.json) == (200, {"ok": True, "kept": ["local"]})
+    assert says_nothing_of(kept, "sk-test-for-a-local-server")
+    assert fake_keychain.items()["local-api-key"] == "sk-test-for-a-local-server"
+    assert config(world)["local_api_key"] == {"keychain": "local-api-key", "version": 1}
+    assert app.post("/api/ai/key/clear", {"provider": "local"}).json == {"ok": True, "kept": []}
+    assert "local-api-key" not in fake_keychain.items() and "local_api_key" not in config(world)
 
 
-@pytest.mark.parametrize("path, body", [("/api/ai/key", {"key": KEY}), ("/api/ai/key", {"provider": "mistral", "key": KEY}),
+@pytest.mark.parametrize("path, body", [("/api/ai/key", {"key": KEY}), ("/api/ai/key", {"provider": "ollama", "key": KEY}),
                                         ("/api/ai/key", {"provider": None, "key": KEY}), ("/api/ai/key/clear", {}),
                                         ("/api/ai/key/clear", {"provider": "Anthropic"})])
 def test_a_key_for_no_provider_there_is_is_a_bad_request(app, world, fake_keychain, path, body):

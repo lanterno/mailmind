@@ -60,9 +60,8 @@ def test_a_table_a_use_case_reads_holds_every_member_of_its_set(table, alias):
     assert list(table) == members(alias)
 
 
-def test_each_ai_provider_is_known_to_the_assistant_and_the_preferences_and_ollama_alone_takes_no_key():
+def test_each_ai_provider_is_known_to_the_assistant_and_the_preferences():
     assert list(providers.PROVIDERS) == members(ai_provider.AiProvider) == list(preferences.CHOICES["ai_provider"])
-    assert ai_provider.KEYLESS == {p for p, it in providers.PROVIDERS.items() if it.key == "none"} == {"ollama"}
 
 
 def test_the_tuples_a_use_case_checks_against_are_their_sets():

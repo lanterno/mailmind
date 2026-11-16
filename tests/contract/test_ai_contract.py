@@ -281,13 +281,13 @@ def test_the_startup_line_says_when_there_is_no_key(plain, data_dir, monkeypatch
                                 "`uv run python -m mailmind ai key --provider openai`"),
     ({"ai_provider": "compatible"}, "Another OpenAI-compatible service · no model · no URL, so AI is off: give the service's "
                                     "in Settings"),
-    ({"ai_provider": "ollama"}, "Ollama, on this Mac · no model · no model, so AI is off: choose one in Settings"),
-    ({"ai_provider": "ollama", "ai_model": "llama3.3"}, "Ollama, on this Mac · llama3.3 · no key"),
+    ({"ai_provider": "local"}, "A model on this Mac · no model · no model, so AI is off: choose one in Settings"),
+    ({"ai_provider": "local", "ai_model": "llama3.3"}, "A model on this Mac · llama3.3 · no key"),
 ])
 def test_the_startup_line_names_the_provider_and_why_ai_is_off_never_its_url(plain, data_dir, preferences, line):
     from mailmind.bootstrap import assistant
     config(data_dir, preferences={**preferences, "ai_base_url": "http://127.0.0.1:11500/private-path"}
-           if preferences.get("ai_provider") == "ollama" else preferences)
+           if preferences.get("ai_provider") == "local" else preferences)
     assert assistant.status.describe_engine() == line
 
 
@@ -348,7 +348,7 @@ def test_the_status_says_why_ai_is_off_and_which_provider_was_chosen(plain, data
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     assert (assistant.status.report()["provider"], assistant.status.report()["off"]) == ("anthropic", "no-key")
     for preferences, said in [({"ai_provider": "gemini"}, ("gemini", "no-key")), ({"ai_provider": "compatible"}, ("compatible", "no-url")),
-                              ({"ai_provider": "ollama"}, ("ollama", "no-model"))]:
+                              ({"ai_provider": "local"}, ("local", "no-model"))]:
         config(data_dir, preferences=preferences)
         st = assistant.status.report()
         assert (st["provider"], st["off"], st["engine"]) == (*said, "none")

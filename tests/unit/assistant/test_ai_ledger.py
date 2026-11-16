@@ -97,7 +97,7 @@ def test_an_unknown_model_costs_the_dearest_of_its_family_or_of_the_whole_table(
     assert price("gpt-9-galaxy") == price("o9-mini") == price("openrouter/gpt-9") == Price(30, 180, 30)
     assert price("gemini-9-neon") == price("models/gemini-9") == Price(4, 20, 0.20)
     assert price("claude-unknown-9") == Price(10, 50, 0.25)
-    assert price("llama3.3:70b") == price("mixtral-9x") == price("ollama") == DEAREST == Price(30, 180, 30)
+    assert price("llama3.3:70b") == price("mixtral-9x") == price("local") == DEAREST == Price(30, 180, 30)
 
 
 def test_an_unknown_model_on_this_mac_costs_nothing_and_a_known_one_its_price():

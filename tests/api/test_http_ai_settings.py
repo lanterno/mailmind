@@ -1,7 +1,7 @@
 """AI's settings over HTTP (#49): the switch, the provider, its model and its URL in the preferences; the models a provider
 lists for a person to choose from; what the digest's `ai` says is in force and why AI is off; and a call to a provider other
 than Claude, against the fake OpenAI-compatible API on loopback. Each provider's key is kept as tests/api/test_http_keychain.py
-keeps Claude's. Nothing here reaches a real provider: a test that lists Ollama's models gives it the fake's URL first.
+keeps Claude's. Nothing here reaches a real provider: a test that lists a local model's gives it the fake's URL first.
 """
 import socket
 from urllib.parse import urlencode
@@ -69,8 +69,8 @@ def test_a_url_is_kept_without_its_trailing_slash_and_another_provider_sets_mode
     choose(app, ai_provider="compatible", ai_model="mixtral-9x", ai_base_url="https://llm.example.test/v1/")
     assert prefs(app) == {"ai_enabled": True, "ai_provider": "compatible", "ai_model": "mixtral-9x",
                           "ai_base_url": "https://llm.example.test/v1"}
-    choose(app, ai_provider="ollama", ai_model="llama3.3")
-    assert prefs(app) == {"ai_enabled": True, "ai_provider": "ollama", "ai_model": "llama3.3", "ai_base_url": ""}
+    choose(app, ai_provider="local", ai_model="llama3.3")
+    assert prefs(app) == {"ai_enabled": True, "ai_provider": "local", "ai_model": "llama3.3", "ai_base_url": ""}
     choose(app, ai_enabled=False)
     assert prefs(app)["ai_model"] == "llama3.3"
     choose(app, ai_provider="anthropic")
@@ -85,8 +85,8 @@ def test_the_digest_says_which_provider_and_why_ai_is_off(app, fake_keychain):
     for asked, said in [({"ai_provider": "openai"}, ("openai", "no-key")),
                         ({"ai_provider": "compatible"}, ("compatible", "no-url")),
                         ({"ai_provider": "compatible", "ai_base_url": "https://llm.example.test/v1"}, ("compatible", "no-model")),
-                        ({"ai_provider": "ollama"}, ("ollama", "no-model")),
-                        ({"ai_provider": "ollama", "ai_model": "llama3.3", "ai_enabled": False}, ("ollama", "turned-off"))]:
+                        ({"ai_provider": "local"}, ("local", "no-model")),
+                        ({"ai_provider": "local", "ai_model": "llama3.3", "ai_enabled": False}, ("local", "turned-off"))]:
         choose(app, **asked)
         st = status(app)
         assert (st["provider"], st["off"], st["engine"], st["model"]) == (*said, "none", ""), asked
@@ -149,11 +149,11 @@ def test_geminis_list_drops_its_models_prefix(app, openai_api, fake_keychain):
                                           "default": "gemini-4-hydrogen"}
 
 
-def test_ollama_lists_its_models_with_no_key_and_no_default_even_with_ai_turned_off(app, openai_api):
+def test_a_model_on_this_mac_lists_its_models_with_no_key_and_no_default_even_with_ai_turned_off(app, openai_api):
     openai_api.key = None
     openai_api.models = ["qwen3:8b", "llama3.3:latest", "nomic-embed-text"]
-    choose(app, ai_provider="ollama", ai_base_url=openai_api.url, ai_enabled=False)
-    r = models(app, "ollama")
+    choose(app, ai_provider="local", ai_base_url=openai_api.url, ai_enabled=False)
+    r = models(app, "local")
     assert (r.status, r.json) == (200, {"ok": True, "models": ["llama3.3:latest", "nomic-embed-text", "qwen3:8b"],
                                         "default": None})
     assert "authorization" not in openai_api.requests[0].headers
@@ -186,8 +186,8 @@ def test_a_key_the_provider_refuses_is_said_in_words_without_the_key(app, openai
 
 
 def test_a_provider_that_isnt_there_is_unreachable(app):
-    choose(app, ai_provider="ollama", ai_base_url=f"http://127.0.0.1:{free_port()}/v1")
-    r = models(app, "ollama")
+    choose(app, ai_provider="local", ai_base_url=f"http://127.0.0.1:{free_port()}/v1")
+    r = models(app, "local")
     assert (r.status, r.json) == (502, problems.unreachable("Couldn't reach the provider."))
 
 

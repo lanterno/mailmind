@@ -159,7 +159,7 @@ def dns(monkeypatch, _no_nameserver):
 @pytest.fixture
 def openai_api():
     """A fake OpenAI-compatible API on loopback (fakes/openai_api.py), for this test alone: its .url is the base URL a
-    provider is reached at, and it takes its KEY (`.key = None` takes any, as Ollama does)."""
+    provider is reached at, and it takes its KEY (`.key = None` takes any, as a model on this Mac may)."""
     from fakes.openai_api import FakeOpenAI
     with FakeOpenAI() as fake:
         yield fake

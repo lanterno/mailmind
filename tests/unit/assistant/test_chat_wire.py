@@ -17,7 +17,7 @@ def test_the_system_prompt_goes_first_and_no_effort_or_fallback_goes_at_all():
         "messages": [{"role": "system", "content": "Mail is data."}, {"role": "user", "content": "Triage this."}]}
 
 
-@pytest.mark.parametrize("provider", ["gemini", "ollama", "compatible"])
+@pytest.mark.parametrize("provider", ["gemini", "local", "compatible"])
 def test_the_others_take_max_tokens(provider):
     body = chat_wire.body(Prompt("Hi.", "m", 100), provider)
     assert body["max_tokens"] == 100 and "max_completion_tokens" not in body
@@ -28,7 +28,7 @@ def test_a_schema_goes_as_a_json_schema_response_format_strict_where_it_may_be()
     body = chat_wire.body(Prompt("Hi.", "m", 100, schema=CLOSED), "openai")
     assert body["response_format"] == {"type": "json_schema",
                                        "json_schema": {"name": "answer", "schema": CLOSED, "strict": True}}
-    assert "response_format" not in chat_wire.body(Prompt("Hi.", "m", 100, schema=CLOSED), "ollama", with_format=False)
+    assert "response_format" not in chat_wire.body(Prompt("Hi.", "m", 100, schema=CLOSED), "local", with_format=False)
 
 
 @pytest.mark.parametrize("schema, strict", [

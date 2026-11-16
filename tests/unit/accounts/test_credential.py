@@ -105,7 +105,7 @@ def test_another_providers_key_the_file_holds_itself_is_refused_saying_how_to_mo
         secrets.resolve("sk-in-the-file", who=who)
     assert str(no.value) == (f"mailmind.config.json holds {named} in plain text, which MailMind no longer reads. Keep it "
                              f"in the login Keychain instead: `uv run python -m mailmind {how}`.")
-    found = plaintext({"accounts": [], who: "sk-in-the-file", "ollama_api_key": "not a key MailMind reads"})
+    found = plaintext({"accounts": [], who: "sk-in-the-file", "mistral_api_key": "not a key MailMind reads"})
     assert [(w, key, item) for w, _, key, item in found] == [(who, who, who.replace("_api_key", "-api-key"))]
 
 

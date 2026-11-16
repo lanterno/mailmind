@@ -19,7 +19,7 @@ def test_each_provider_is_reached_its_way_at_its_own_url_and_asks_its_own_model(
         "openai": ("OpenAI", "openai", "https://api.openai.com/v1", "needed", "gpt-6.1-sol"),
         "gemini": ("Google Gemini", "openai", "https://generativelanguage.googleapis.com/v1beta/openai", "needed",
                    "gemini-4-hydrogen"),
-        "ollama": ("Ollama, on this Mac", "openai", "http://127.0.0.1:11434/v1", "none", ""),
+        "local": ("A model on this Mac", "openai", "http://127.0.0.1:11434/v1", "optional", ""),
         "compatible": ("Another OpenAI-compatible service", "openai", "", "optional", ""),
     }
 
@@ -43,11 +43,12 @@ def test_a_provider_that_needs_a_key_is_off_without_one(provider):
     assert engine(provider, key="").off == "no-key"
 
 
-def test_ollama_needs_no_key_and_never_sends_one_but_needs_a_model():
-    e = engine("ollama")
-    assert (e.off, e.key, e.key_from, e.base_url) == ("no-model", "", "", "http://127.0.0.1:11434/v1")
-    e = engine("ollama", model="llama3.3", key="")
+def test_a_model_on_this_mac_needs_no_key_but_needs_a_model():
+    e = engine("local", key="", key_from="")
+    assert (e.off, e.key, e.base_url) == ("no-model", "", "http://127.0.0.1:11434/v1")
+    e = engine("local", model="llama3.3", key="")
     assert (e.off, e.model, e.local) == (None, "llama3.3", True)
+    assert engine("local", model="llama3.3").key == KEY
 
 
 def test_a_compatible_service_needs_its_url_then_a_model_and_a_key_only_if_it_has_one():
@@ -78,6 +79,6 @@ def test_a_list_offers_only_what_can_chat_sorted_once_each_without_gemini_s_pref
                                   "gemini-4-carbon", "models/"]) == ["gemini-4-carbon", "gemini-4-hydrogen"]
 
 
-@pytest.mark.parametrize("provider", ["anthropic", "ollama", "compatible"])
+@pytest.mark.parametrize("provider", ["anthropic", "local", "compatible"])
 def test_the_other_lists_are_offered_whole(provider):
     assert chat_models(provider, ["nomic-embed-text", "llama3.3:latest", "", 7, None]) == ["llama3.3:latest", "nomic-embed-text"]

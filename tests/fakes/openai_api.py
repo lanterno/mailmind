@@ -1,12 +1,12 @@
 """A stand-in for an OpenAI-compatible Chat Completions API on a loopback port (#49): what MailMind asks OpenAI, Gemini,
-Ollama and any other compatible service through (mailmind.assistant.adapters.openai_chat), at the base URL `url`, which ends
+a model on this Mac and any other compatible service through (mailmind.assistant.adapters.openai_chat), at the base URL `url`, which ends
 in /v1 as OpenAI's does.
 
 It keeps every request it receives (method, path, headers and JSON body), in order, so a test can check what the app sent.
 
 What it answers:
 - 401 with OpenAI's words, which quote part of the key back, unless the request carries KEY as an `Authorization: Bearer`
-  token; with `key` None (Ollama) it takes any request, with a key or without;
+  token; with `key` None (a model on this Mac) it takes any request, with a key or without;
 - the next reply a test queued with `queue`, if any, with the response headers it names;
 - a 400 naming `response_format` for a request that has one, while `refuse_format` is set, as a service without structured
   output does;
@@ -77,7 +77,7 @@ class FakeOpenAI:
     KEY = KEY
 
     def __init__(self, key=KEY):
-        self.key = key                 # None: any request goes, as Ollama takes them
+        self.key = key                 # None: any request goes, as a model on this Mac may take them
         self.requests = []
         self.models = list(MODELS)
         self.refuse_format = False

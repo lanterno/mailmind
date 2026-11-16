@@ -148,7 +148,7 @@ def test_the_first_run_guide_is_offered_once_and_the_file_remembers(config, data
 def test_ai_is_on_with_claude_and_its_own_model_and_url_to_begin_with():
     assert {k: v for k, v in preferences.DEFAULTS.items() if k.startswith("ai_")} == {
         "ai_enabled": True, "ai_provider": "anthropic", "ai_model": "", "ai_base_url": ""}
-    assert preferences.CHOICES["ai_provider"] == ("anthropic", "openai", "gemini", "ollama", "compatible")
+    assert preferences.CHOICES["ai_provider"] == ("anthropic", "openai", "gemini", "local", "compatible")
 
 
 @pytest.mark.parametrize("model", ["gpt-6.1-sol", "llama3.3:70b-instruct-q4_K_M", "openai/gpt-6.1-sol", "models/gemini-4-hydrogen",
@@ -226,15 +226,15 @@ def test_choosing_another_provider_sets_its_model_and_url_back_to_its_own(config
 
 def test_a_change_of_provider_keeps_the_model_and_url_it_names_itself(config):
     config.set_preferences({"ai_provider": "compatible", "ai_model": "mixtral-9x", "ai_base_url": "https://llm.example.test/v1"})
-    now = config.set_preferences({"ai_provider": "ollama", "ai_model": "llama3.3"})
-    assert (now["ai_provider"], now["ai_model"], now["ai_base_url"]) == ("ollama", "llama3.3", "")
+    now = config.set_preferences({"ai_provider": "local", "ai_model": "llama3.3"})
+    assert (now["ai_provider"], now["ai_model"], now["ai_base_url"]) == ("local", "llama3.3", "")
     now = config.set_preferences({"ai_provider": "compatible", "ai_base_url": "http://127.0.0.1:8080/v1"})
     assert (now["ai_model"], now["ai_base_url"]) == ("", "http://127.0.0.1:8080/v1")
 
 
 def test_the_same_provider_again_keeps_its_model_and_url(config):
-    config.set_preferences({"ai_provider": "ollama", "ai_model": "llama3.3", "ai_base_url": "http://127.0.0.1:11500/v1"})
-    now = config.set_preferences({"ai_provider": "ollama", "ai_enabled": False})
+    config.set_preferences({"ai_provider": "local", "ai_model": "llama3.3", "ai_base_url": "http://127.0.0.1:11500/v1"})
+    now = config.set_preferences({"ai_provider": "local", "ai_enabled": False})
     assert (now["ai_model"], now["ai_base_url"], now["ai_enabled"]) == ("llama3.3", "http://127.0.0.1:11500/v1", False)
     assert config.set_preferences({"ai_model": "qwen3"})["ai_base_url"] == "http://127.0.0.1:11500/v1"
 
