@@ -9,6 +9,7 @@ import { get, post, refusalOf } from "../../lib/api/client";
 import type { ArchiveFormat, GetAnswers, PostBodies } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
 import { avatarHue, relWhen, shortAddress } from "../../lib/text";
+import { prefs } from "../../lib/prefs";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
@@ -16,6 +17,7 @@ import { useDigest } from "../mailbox";
 import { syncNow } from "../status";
 import { settingsOpen, settingsSection, type SettingsSection } from "../../lib/settingsOpen";
 import { AiForm } from "./Ai";
+import { aiKept } from "./aiChoices";
 import { PreferencesForm } from "./Preferences";
 import { Seg } from "./Seg";
 import { useStepBack } from "./useStepBack";
@@ -402,15 +404,17 @@ function Connections() {
 }
 
 const SECTION_TITLE: Record<SettingsSection, string> = { connections: "Email connections", preferences: "Preferences", ai: "AI" };
+const KEPT_IN_THE_FILE = "Stored locally in mailmind.config.json · never leaves this machine";
 
 function Home() {
   const section = settingsSection.useValue();
+  const p = prefs.useValue();
   return (
     <Tabs className="set-home" selectedKey={section} onSelectionChange={(k) => settingsSection.set(k as SettingsSection)}>
       <div className="set-head">
         <div>
           <h3 id="setTitle">{SECTION_TITLE[section]}</h3>
-          <div className="set-sub">Stored locally in mailmind.config.json · never leaves this machine</div>
+          <div className="set-sub" id="setSub">{section === "ai" ? aiKept(p.ai_enabled, p.ai_provider, p.ai_base_url) : KEPT_IN_THE_FILE}</div>
         </div>
         <button className="x" id="setClose" aria-label="Close" onClick={() => settingsOpen.set(false)}>✕</button>
       </div>
