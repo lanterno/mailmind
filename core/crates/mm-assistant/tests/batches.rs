@@ -341,7 +341,10 @@ impl AiSettings for Limit {
     }
 }
 
-/// The n-th message waiting: newer the higher `n`.
+/// When the first message came: ten days ago, well within the 30 the background summarizes.
+const SINCE: i64 = NOW - 10 * 86_400;
+
+/// The n-th message waiting: newer the higher `n`, each a hundred seconds after the one before.
 fn message(n: i64) -> Pending {
     Pending {
         pk: n,
@@ -351,7 +354,7 @@ fn message(n: i64) -> Pending {
         subject: Some(format!("Note {n}")),
         date_iso: None,
         snippet: Some("On the quarterly figures.".into()),
-        ts: Some(n * 100),
+        ts: Some(SINCE + n * 100),
     }
 }
 
@@ -526,11 +529,22 @@ fn a_backlog_goes_as_a_batch_and_the_newest_stay() {
     assert_eq!(w.model.batched(), before[20..]);
     assert_eq!(w.waiting(), before[..20]);
     let [out] = w.book.in_state("running").expect("out").try_into().expect("one");
-    assert_eq!((out.remote_id.as_deref(), out.cutoff_ts, out.polled_at), (Some("msgbatch_1"), 100 * 100, NOW));
+    assert_eq!((out.remote_id.as_deref(), out.cutoff_ts, out.polled_at), (Some("msgbatch_1"), SINCE + 100 * 100, NOW));
     assert_eq!((out.feature.as_str(), out.model.as_str(), out.prompt_version), ("triage-batch", DEFAULT, Some(2)));
     let [prompt] = lock(&w.model.batches).values().next().map(|h| [h.requests[0].1.clone()]).expect("a request");
     assert_eq!((prompt.text, prompt.effort.as_deref()), (triage_prompt(&message(100)), Some("low")));
     assert!(prompt.schema.is_some() && !prompt.fallback);
+}
+
+#[test]
+fn a_backlog_takes_only_the_last_thirty_days() {
+    let w = world(120, true, None);
+    // Twenty of them from more than 30 days ago: they wait to be opened.
+    for row in lock(&w.book.rows).iter_mut().take(20) {
+        row.ts = Some(NOW - 31 * 86_400 + row.pk);
+    }
+    assert_eq!(w.batching.submit(1, 20).expect("a round"), 80);
+    assert_eq!(w.model.batched(), (21..=100).rev().collect::<Vec<i64>>());
 }
 
 #[test]

@@ -325,6 +325,18 @@ fn what_triage_keeps_names_the_model_that_served_it_and_what_stands_in_says_why(
 }
 
 #[test]
+fn a_round_summarizes_only_the_last_thirty_days() {
+    let w = world(true);
+    let queue = Arc::new(Queue::of(vec![
+        pending(1, "Lunch", NOW - 29 * 86_400),
+        pending(2, "Lunch", NOW - 30 * 86_400),
+        pending(3, "Lunch", NOW - 31 * 86_400),
+    ]));
+    assert_eq!(assessments(&w, &queue).round(), Ok(None));
+    assert_eq!(queue.said().keys().copied().collect::<Vec<i64>>(), [1]);
+}
+
+#[test]
 fn a_round_triages_whats_new_at_low_effort_and_keeps_what_each_reply_came_to() {
     let w = world(true);
     let queue = Arc::new(Queue::of(vec![
@@ -334,7 +346,7 @@ fn a_round_triages_whats_new_at_low_effort_and_keeps_what_each_reply_came_to() {
         pending(4, "broken", NOW - 4),
     ]));
     assert_eq!(assessments(&w, &queue).round(), Ok(None));
-    assert_eq!(*queue.asked.lock().expect("asked"), [(300, None)]);
+    assert_eq!(*queue.asked.lock().expect("asked"), [(300, Some(NOW - 30 * 86_400))]);
     let said = queue.said();
     let outcomes: HashMap<i64, (Option<Outcome>, &str, &str)> =
         said.iter().map(|(pk, (a, when))| (*pk, (a.outcome, a.model.as_str(), when.as_str()))).collect();
