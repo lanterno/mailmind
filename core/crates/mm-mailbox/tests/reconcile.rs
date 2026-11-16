@@ -1,13 +1,11 @@
 //! What a reconcile may take away and what a sync's failure is called (`tests/unit/mailbox/test_prune.py`'s rules,
-//! `accounts.domain.health.error_kind`), and what a sync asked again covers. Values in and values out.
-
-use std::collections::BTreeSet;
+//! `accounts.domain.health.error_kind`). Values in and values out.
 
 use mm_kernel::errors::Fault;
 use mm_mailbox::ingest::SyncError;
 use mm_mailbox::reconcile::{EVERY_AT_LEAST, Pruned, empty_search, next_round, renumbered};
 use mm_mailbox::session::ServerError;
-use mm_mailbox::syncing::{asked_again, error_kind};
+use mm_mailbox::syncing::error_kind;
 use serde_json::json;
 
 #[test]
@@ -66,11 +64,4 @@ fn a_syncs_failure_is_called_by_its_class_alone() {
     assert_eq!(error_kind(SyncError::Server(ServerError::Refused("BadMailbox"))), "IMAP");
     assert_eq!(error_kind(SyncError::Store(Fault::new("StorageError"))), "UNKNOWN");
     assert_eq!(error_kind(SyncError::UnknownAccount), "UNKNOWN");
-}
-
-#[test]
-fn a_sync_asked_again_covers_what_each_ask_named_and_every_account_wins() {
-    let named = |emails: &[&str]| Some(emails.iter().map(|e| (*e).to_owned()).collect::<BTreeSet<String>>());
-    assert_eq!(asked_again(&[named(&["a"]), named(&["b", "a"])]), named(&["a", "b"]));
-    assert_eq!(asked_again(&[named(&["a"]), None]), None);
 }

@@ -76,7 +76,7 @@ impl StoredLists for Scanned {
         Ok(Vec::new())
     }
 
-    fn scanned_whole(&self, _account: &str, folder: &str) -> Result<bool, Fault> {
+    fn scan_begun(&self, _account: &str, folder: &str) -> Result<bool, Fault> {
         Ok(self.0.lock().unwrap().contains(folder))
     }
 }

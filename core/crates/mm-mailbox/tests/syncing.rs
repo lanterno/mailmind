@@ -20,8 +20,8 @@ use mm_mailbox::ingest::{Ingest, SyncError};
 use mm_mailbox::ports::{Accounts, MailSession, MailSessions, SessionError, StoredMail, ViewCounts};
 use mm_mailbox::session::{MailServer, MailServers, ServerError};
 use mm_mailbox::sync_ports::{
-    AroundSync, Classifier, Envelope, Events, FlagRow, FolderState, Incoming, MailboxEvent, SyncAccount, SyncAccounts,
-    SyncStore, Verdict,
+    AroundSync, Classifier, Envelope, Events, FlagRow, FolderState, Incoming, MailboxEvent, Place, SyncAccount,
+    SyncAccounts, SyncStore, Verdict,
 };
 use mm_mailbox::syncing::{AccountSync, Syncing, SyncingParts};
 use mm_mailbox::warm::{Warming, WarmingParts};
@@ -87,10 +87,16 @@ impl SyncStore for World {
     fn store_copy(&self, _: &SyncAccount, _: &str, _: &Incoming) -> Result<(i64, bool), Fault> {
         unreachable!()
     }
-    fn advance(&self, _: &str, _: &str, _: u32, _: &str) -> Result<(), Fault> {
+    fn store_step(
+        &self,
+        _: &SyncAccount,
+        _: &str,
+        _: &[Incoming],
+        _: &Place,
+    ) -> Result<Option<Vec<(i64, bool)>>, Fault> {
         unreachable!()
     }
-    fn set_scan_state(&self, _: &str, _: &str, _: &str) -> Result<(), Fault> {
+    fn reading_older(&self) -> Result<Vec<(String, String, u32)>, Fault> {
         unreachable!()
     }
     fn flag_rows(
@@ -223,7 +229,7 @@ fn standing(syncing: &Syncing, account: &str) -> Option<AccountSync> {
 }
 
 fn error(class: &'static str) -> Option<AccountSync> {
-    Some(AccountSync { health: "error", msg: class.to_owned() })
+    Some(AccountSync { health: "error", msg: class.to_owned(), reading: None })
 }
 
 #[test]
