@@ -3,6 +3,7 @@
 // model menu offers and in what order, what a URL typed saves as, and how a key typed leaves the page.
 import type { AiProvider, AiStatus, GetAnswers, PostAnswers, PostBodies } from "../../lib/api/types";
 import type { Store } from "../../lib/store";
+import { usd } from "../../lib/text";
 
 type Changes = PostBodies["/api/preferences"];
 type Kept = PostAnswers["/api/ai/key"];
@@ -53,6 +54,28 @@ export function summariesWaiting(n: number | null | undefined): string {
   if (n === 0) return "Every message from the last 30 days has its summary.";
   return `${n.toLocaleString("en-US")} ${n === 1 ? "message" : "messages"} from the last 30 days ${n === 1 ? "waits" : "wait"} for a summary.`;
 }
+
+// What AI cost over some days, as the server counts it (`/api/ai/spending`): in all, then its dearest features by name, the
+// rest summed.
+export type Spent = GetAnswers["/api/ai/spending"]["week"];
+const MAIN_FEATURES = 3;
+export function spentOver(when: string, spent: Spent): string {
+  if (!spent.calls) return `${when}: nothing.`;
+  const main = spent.features.slice(0, MAIN_FEATURES).map((f) => `${f.label} ${usd(f.cost_micros)}`);
+  const rest = spent.features.slice(MAIN_FEATURES);
+  if (rest.length) main.push(`the rest ${usd(rest.reduce((sum, f) => sum + f.cost_micros, 0))}`);
+  return `${when}: ${usd(spent.cost_micros)}, ${spent.calls.toLocaleString("en-US")} ${spent.calls === 1 ? "call" : "calls"} (${main.join(", ")}).`;
+}
+
+// Where the bill is: these sums are MailMind's own count, from each call it made, and the provider's console holds the bill.
+const BILLED_IN: Record<AiProvider, string> = {
+  anthropic: "Anthropic’s console holds the bill",
+  openai: "OpenAI’s platform holds the bill",
+  gemini: "Google’s billing for your project holds the bill",
+  local: "a model on this Mac costs nothing",
+  compatible: "the service holds the bill",
+};
+export const billOfRecord = (provider: AiProvider) => `MailMind counts these from each call it makes; ${BILLED_IN[provider]}.`;
 
 // Another provider: its own model and URL until a person chooses others, as the server sets them back.
 export const providerChanges = (provider: AiProvider): Changes => ({ ai_provider: provider, ai_model: "", ai_base_url: "" });

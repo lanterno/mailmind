@@ -18,7 +18,7 @@ import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigest } from "../mailbox";
-import { aiParts, BILLING, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, summariesWaiting, urlToSave } from "./aiChoices";
+import { aiParts, BILLING, billOfRecord, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, spentOver, summariesWaiting, urlToSave } from "./aiChoices";
 import { Check } from "./Check";
 import { useStepBack } from "./useStepBack";
 
@@ -150,6 +150,25 @@ function UrlField({ saved, prefill, save }: { saved: string; prefill: string; sa
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
     />
+  );
+}
+
+// What AI cost over the last week and this month, by its main features, as the server counts it: read each time the tab opens.
+function SpentLately({ provider }: { provider: AiProvider }) {
+  const spent = useQuery({
+    queryKey: ["aiSpending"],
+    queryFn: () => get("/api/ai/spending"),
+    staleTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  if (!spent.data) return null;
+  return (
+    <div id="aiSpent">
+      <div className="set-help">{spentOver("The last 7 days", spent.data.week)}</div>
+      <div className="set-help">{spentOver("This month", spent.data.month)}</div>
+      <div className="set-help">{billOfRecord(provider)}</div>
+    </div>
   );
 }
 
@@ -345,6 +364,7 @@ export function AiForm() {
           <div className="set-help">Once a day’s AI has cost this much, background work stops and MailMind asks before spending more.</div>
           <div className="set-help" id="aiModelsUsed">{modelsUsed(ai)}</div>
           <div className="set-help" id="aiWaiting">{summariesWaiting(ai?.summaries_waiting)}</div>
+          <SpentLately provider={provider} />
         </div>
       )}
       {parts.has("ahead") && (
