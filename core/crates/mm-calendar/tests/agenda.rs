@@ -374,9 +374,19 @@ fn a_rule_it_cannot_expand_shows_its_first_date_while_ahead() {
 
 #[test]
 fn rules_that_never_come_to_a_date_cant_hold_a_list_for_long() {
-    // Two hundred of them in one message: each stops at its own budget, and the list at its own.
+    // Each such rule stops at its own budget, and the list at its own: past it, the rest cost next to nothing. So two
+    // hundred of them take about what twenty do, where with no list budget they would take ten times as long. Each
+    // size's quickest of two runs, so a busy machine slowing one run doesn't decide it.
+    let quickest = |rules| (0..2).map(|_| listing_with_never_ending(rules)).min().unwrap();
+    let (few, many) = (quickest(20), quickest(200));
+    assert!(many < few * 4, "{few:?} for 20, {many:?} for 200");
+}
+
+/// How long the list takes with `rules` that never come to a date in one message, and an invite in another that it
+/// still lists.
+fn listing_with_never_ending(rules: usize) -> std::time::Duration {
     let mut lines = vec!["BEGIN:VCALENDAR".to_owned(), "METHOD:REQUEST".into()];
-    for i in 0..200 {
+    for i in 0..rules {
         lines.extend([
             "BEGIN:VEVENT".to_owned(),
             format!("UID:s{i}"),
@@ -392,7 +402,7 @@ fn rules_that_never_come_to_a_date_cant_hold_a_list_for_long() {
     let ok = mail.msg(&ics("k", later(DAY)).text(), 1.0);
     let began = std::time::Instant::now();
     assert!(mail.keys().contains(&ok));
-    assert!(began.elapsed().as_secs() < 2, "{:?}", began.elapsed());
+    began.elapsed()
 }
 
 #[test]
