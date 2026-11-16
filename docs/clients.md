@@ -155,8 +155,9 @@ slice is built:
   `MAILMIND_LOG_LEVEL=debug` adds debug lines at the terminal, never in the file.
 - **A panic is a fault of its own, `Panic`.** The hook `mailmind-server` and `CoreHost::open` install logs the
   thread's name and the file and line, never the panic's words, which can quote mail. Every background lane's round,
-  the durable queues' passes, the sync (`sync_guarded`) and each account's flight and sync in it, each folder's read
-  of a first scan's older mail, IDLE's workers and its dispatcher run under `mm_kernel::errors::caught`, so a panic
+  the durable queues' passes, the sync (`sync_guarded`) and each account's flight and sync in it, a folder's sync as
+  it opens, each folder's read of a first scan's older mail, IDLE's workers and its dispatcher run under
+  `mm_kernel::errors::caught`, so a panic
   ends that round as a failure, is logged, comes down off its running flag, and the lane goes on. An account's flight
   is taken as a sync takes the account and lands however the sync ends, a round that panicked before it began too, so
   no account is left waiting on a sync that never ran. Within a queue's pass, each row's try is caught too, and one

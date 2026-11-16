@@ -82,7 +82,10 @@
   first open scans the folder whole, as a job of its own (`mailbox.folders._folder_sync`, one per folder at
   a time). On the Rust server a folder's first scan has begun (`StoredLists::scan_begun`) once its `scan_state` is
   `synced` or `down-to:<uid>` (`Scan::begun`): the first open stores its newest step and leaves the rest to the `older-mail`
-  lane (below), and every later open is a catch-up. The list request waits for a first scan up to `FIRST_SYNC_WAIT`
+  lane (below), which it sets going at once, and every later open is a catch-up. A folder no scan has begun is read as a
+  first scan whatever its watermark (`sync_plan::plan_folder`), so one a quit left with a watermark and `never` begins
+  its scan at its next sync, the Inbox's background sync too. A sync as a folder opens that panics ends as one that
+  failed, so the folder's next open syncs again rather than join it. The list request waits for a first scan up to `FIRST_SYNC_WAIT`
   seconds (`Waits::first_scan`). Past that it answers
   with what is stored and `syncing: true`; a scan that failed answers `sync_failed: true`.
   Opening a folder already read, other than INBOX, catches it up the same way, an incremental
