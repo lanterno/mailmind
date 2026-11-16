@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 rustls.workspace = true
 rustls-native-certs.workspace = true
+# TCP keepalive on a connection that waits in IDLE.
+socket2.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true
