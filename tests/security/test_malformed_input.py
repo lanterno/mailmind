@@ -223,7 +223,9 @@ def test_no_route_answers_junk_with_the_500_that_means_a_bug_here(app, world, ai
             "token": "lin@example.test", "verdict": "keep", "preset": "tomorrow", "from_addr": "lin@example.test",
             "action": "keep", "verb": "archive", "decision": "accepted", "rows": [copy]}
     routes = sorted(path for method, path in route_tables.paths() if method == "POST" and path not in WALK_LEAVES_OUT)
+    def broke(r):        # the 502 that says ask again later is no bug: what came in since you looked waits for the calls before it
+        return r.status >= 500 and not (r.status == 502 and r.json.get("type") == "/problems/unreachable" and r.json.get("retry"))
     bad = [(path, field, junk) for path in routes for field in WALK_FIELDS for junk in WALK_JUNK
-           if app.post(path, {**good, field: junk}).status >= 500]
+           if broke(app.post(path, {**good, field: junk}))]
     app.settle(120)
     assert not bad

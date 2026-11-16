@@ -145,6 +145,10 @@ def test_the_morning_brief_is_scheduled_work_and_a_brief_someone_opens_is_not():
     assert (features.kind("brief-ahead"), features.kind("brief")) == ("scheduled", "interactive")
 
 
+def test_what_came_in_since_you_looked_is_background_work_the_page_asks_for_on_its_own():
+    assert features.kind("delta") == "background"
+
+
 # ── the daily limit ──────────────────────────────────────────────────────────
 
 def test_at_the_limit_background_work_stops_and_an_interactive_call_needs_leave():

@@ -6,6 +6,8 @@ tests/golden/http_ai/.
 Unless a test queues replies, the fake answers each call from the call's own schema: "stub <field>"
 for strings, 1 for numbers and the first value of each enum.
 """
+import json
+from datetime import timedelta
 from urllib.parse import urlencode
 
 import pytest
@@ -196,6 +198,7 @@ def test_since_you_last_looked(app, golden, world, ai):
 
 def test_draft_ahead_generates_once_then_serves(app, golden, world, ai):
     triaged(app, ai)
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
     def ahead(name, **more):
         return "/api/ai/draft-ahead?" + urlencode({**world.copy(name), **more})
 
@@ -212,6 +215,57 @@ def test_draft_ahead_generates_once_then_serves(app, golden, world, ai):
     golden.record("a key that isn't a number", app.get("/api/ai/draft-ahead?key=x"))
     app.settle()
     golden.note("calls for those", len(ai.requests))
+
+
+def test_drafting_ahead_starts_off_and_a_view_drafts_nothing_until_a_person_turns_it_on(app, world, ai):
+    triaged(app, ai)
+    ahead = "/api/ai/draft-ahead?" + urlencode(world.copy("cy-inbox-02-thread-end.eml"))
+    assert app.get("/api/preferences").json["preferences"]["draft_ahead"] is False
+    assert app.get(ahead).json == {"ok": True, "status": "none"}
+    app.settle()
+    assert ai.requests == []
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
+    assert app.get(ahead).json["status"] == "generating"
+    app.settle()
+    assert len(ai.requests) == 1
+    assert app.post("/api/preferences", {"draft_ahead": False}).status == 200
+    assert app.get(ahead).json["status"] == "ready"          # a draft kept from before is still served
+    app.settle()
+    assert len(ai.requests) == 1
+
+
+def test_the_background_drafts_ahead_only_once_a_person_turns_it_on(app, world, ai):
+    world.deliver(w.CY, "INBOX", w.variant("cy-inbox-02-thread-end.eml", Message_ID="<venue-again@example.test>",
+                                           Date="Mon, 02 Nov 2026 11:00:00 +0000"))     # in the days it drafts ahead for
+    triaged(app, ai)
+    app.work("draft-ahead")
+    assert ai.requests == []
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
+    app.work("draft-ahead")
+    assert len(ai.requests) == 1
+
+
+def test_at_the_limit_what_came_in_since_you_looked_waits_and_asks_nothing(app, world, ai):
+    """The page asks for it on its own, so it is background work: held to the background's share of the day's limit,
+    it asks nobody to go over and says to ask again later."""
+    triaged(app, ai)
+    with app.stopped():
+        with open(world.dir / "mailmind.config.json") as f:
+            config = json.load(f)
+        config["ai_daily_limit_usd"] = 0.000001
+        with open(world.dir / "mailmind.config.json", "w") as f:
+            json.dump(config, f)
+    allow = {"X-MailMind-AI-Over-Limit": "allow"}
+    status, costly = fa.answer({"text": "the"})
+    ai.queue((status, {**costly, "usage": {"input_tokens": 1000, "output_tokens": 100}}))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}, headers=allow).status == 200
+    app.clock.shift(timedelta(seconds=46))             # past the yield to it: only the limit holds it back
+    ai.requests.clear()
+    for headers in ({}, allow):
+        r = app.post("/api/briefing/since", {"since": 0}, headers=headers)
+        assert (r.status, r.json["type"], r.json["detail"], r.json["retry"]) == (
+            502, "/problems/unreachable", "delta unavailable", True)
+    assert ai.requests == []
 
 
 def test_the_status_counts_what_waits_for_a_summary_from_the_last_30_days(app, world, ai):

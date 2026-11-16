@@ -91,6 +91,7 @@ def test_only_a_post_that_gets_past_the_guards_counts_as_someone_at_the_screen(a
     only while someone is at the screen, so whether the fake API hears of one says whether the server counted someone."""
     lunch = "ada-inbox-02-lunch-confirm.eml"
     app.work("assess")                          # the fake's verdict on each message asks for a reply
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
     ai.requests.clear()
     app.clock.shift(timedelta(seconds=PRESENCE_SECONDS + 60))     # no one has been at the screen for that long
     ahead = "/api/ai/draft-ahead?" + urlencode(world.copy(lunch))

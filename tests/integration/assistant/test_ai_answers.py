@@ -4,7 +4,7 @@ key and the folder it is in now. Here on the store: a renumber, a copy on its wa
 cap and the tables themselves. What Briefs and Reviews keep of a message and what a stored one says once the mail has moved
 on are tests/unit/assistant/test_ai_answers.py's."""
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fakes import anthropic_api as fa
 from fixtures import world as w
@@ -172,6 +172,7 @@ def test_a_waiting_item_that_named_no_message_stays(app, world, ai):
 # -- the delta -------------------------------------------------------------------------------------
 
 def delta(app, ai, headline):
+    app.clock.shift(timedelta(seconds=46))      # background work, which yields to any call just made
     ai.queue(fa.answer({"headline": headline, "items": [{"who": "Loom", "gist": "New issue", "importance": 1}]}))
     return app.post("/api/briefing/since", {"account": w.ADA, "since": 0}).json
 

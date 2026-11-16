@@ -2,6 +2,7 @@
 statuses, and what the schemas refuse and let by."""
 import json
 import time
+from datetime import timedelta
 
 import pytest
 
@@ -61,7 +62,10 @@ def spend(micros):
 
 # ── a call that was never sent ───────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("path, body", SPENDS)
+ASKED_FOR = [(path, body) for path, body in SPENDS if path != "/api/briefing/since"]      # the page asks for that one
+
+
+@pytest.mark.parametrize("path, body", ASKED_FOR)
 def test_at_the_limit_a_route_asks_and_with_leave_it_goes(app, world, ai, path, body):
     body = ready_to_call(world, body)
     spend(15_000_000)
@@ -150,8 +154,42 @@ def test_drafting_ahead_has_no_post(app, ai):
     assert app.post("/api/ai/draft-ahead", {}).status == 404
 
 
+def test_at_the_limit_what_came_in_since_you_looked_waits_for_tomorrow_and_asks_nothing(app, world, ai):
+    body = ready_to_call(world, {"since": 0})
+    spend(15_000_000)
+    for headers in ({}, {web.AI_OVER_HEADER: "allow"}):
+        r = app.post("/api/briefing/since", body, headers=headers)
+        assert (r.status, r.json) == (502, problems.unreachable("delta unavailable", retry=True))
+    assert ai.requests == []
+
+
+def test_what_came_in_since_you_looked_waits_while_someone_is_using_ai(app, world, ai):
+    body = ready_to_call(world, {"since": 0})
+    assert app.post("/api/ai/rewrite", REWRITE).status == 200
+    assert app.post("/api/briefing/since", body).status == 502
+    assert len(ai.requests) == 1
+    app.clock.shift(timedelta(seconds=46))
+    assert app.post("/api/briefing/since", body).status == 200
+
+
+def test_drafting_ahead_turned_off_starts_nothing_on_a_view_and_still_serves_a_draft_kept(app, world, ai):
+    triaged(world.pk(VENUE_END))
+    key = world.key(VENUE_END)
+    assert app.post("/api/preferences", {"draft_ahead": False}).status == 200
+    assert app.get(f"/api/ai/draft-ahead?key={key}").json == {"ok": True, "status": "none"}
+    app.settle()
+    assert ai.requests == []
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
+    assert app.get(f"/api/ai/draft-ahead?key={key}").json["status"] == "generating"
+    app.settle()
+    assert app.post("/api/preferences", {"draft_ahead": False}).status == 200
+    assert app.get(f"/api/ai/draft-ahead?key={key}").json["status"] == "ready"
+    assert len(ai.requests) == 1
+
+
 @pytest.mark.parametrize("headers", [{"X-CSRF-Token": None}, {"X-CSRF-Token": "wrong"}, {"X-CSRF-Token": ""}])
 def test_only_the_pages_token_starts_a_draft_ahead(app, world, ai, headers):
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
     triaged(world.pk(VENUE_END))
     key = world.key(VENUE_END)
     r = app.get(f"/api/ai/draft-ahead?key={key}", headers=headers)

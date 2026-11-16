@@ -92,7 +92,6 @@ LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch
     ("/api/briefing/refresh", {}),
     ("/api/review/refresh", {}),
     ("/api/briefing", {}),
-    ("/api/briefing/since", {"since": 0}),
     ("/api/review", {})])
 def test_every_ai_request_someone_makes_asks_at_the_limit(app, world, ai, path, body):
     from mailmind.bootstrap.mailbox import store

@@ -23,7 +23,8 @@ each with one line:
                         due), follow-ups (note replies and expiries), assess (triage mail AI hasn't summarized), sync
                         (one folder: ["<account>", "<folder>"]), reconcile (the ghost pruner's round over one account,
                         which yields to a user's change as it would: ["<account>"]), tidy (file the day's
-                        low-priority mail, for someone who turned Tidy by itself on), forget (what went a month ago
+                        low-priority mail, for someone who turned Tidy by itself on), draft-ahead (draft one
+                        reply ahead, for someone who turned drafting ahead on), forget (what went a month ago
                         let go), backfill (fetch the bodies of up to a dozen stored messages that have none, each
                         account in turn), warm (sync the Drafts, Archive and Sent of each account asking to be warmed,
                         those due this round)
@@ -100,7 +101,7 @@ def jobs():
             "snoozes": attention.snoozing.wake_due, "follow-ups": attention.followups.tick, "assess": assistant.assessments.round,
             "sync": lambda account, folder: ingest.sync_folder(accounts.get(account), folder),
             "reconcile": lambda account: reconciler.auto_reconcile_one(accounts.get(account)),
-            "tidy": background.tidy_round, "forget": background.forget_round,
+            "tidy": background.tidy_round, "forget": background.forget_round, "draft-ahead": assistant.drafting.rounds(),
             "backfill": syncing.backfill_round, "warm": warm.warm_tick}
 
 

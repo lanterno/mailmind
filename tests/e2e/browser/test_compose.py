@@ -857,6 +857,7 @@ def lunch_needs_a_reply(app, world):
 
 def test_a_draft_written_ahead_shows_on_the_reply_button_and_opens_for_review(page, app, world, ai):
     lunch_needs_a_reply(app, world)
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
     ai.responder = lambda req: fa.answer({"body": "Written ahead: Thursday works."})
     page.goto(f"/m/{w.ADA}/INBOX?key={world.key(LUNCH[1])}&folder=INBOX&uid={world.uid(LUNCH[1])}")
     expect(page.locator(".rd-subj")).to_be_visible()

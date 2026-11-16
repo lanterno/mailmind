@@ -71,6 +71,15 @@ def run_tick(app, monkeypatch, cycles, step=None):
         draft_ahead_round()
 
 
+@pytest.fixture(autouse=True)
+def drafting_ahead(request):
+    """Drafting ahead, which a person turns on in Settings, is on for each of these that runs the app."""
+    if "app" in request.fixturenames:
+        from mailmind.bootstrap import accounts
+        request.getfixturevalue("app")
+        accounts.config.set_preferences({"draft_ahead": True})
+
+
 @pytest.fixture
 def present(app, monkeypatch):
     """Someone is at the screen now, as far as the governor's presence gate can tell."""

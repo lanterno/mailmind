@@ -198,6 +198,7 @@ def ai_turned_off(page):
 
 def test_with_ai_turned_off_a_card_and_r_open_a_plain_reply_though_one_was_written_ahead(page, app, world, ai):
     lunch_needs_a_reply(app, world)
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
     ahead = "Written ahead: Thursday works."
 
     def reply(req):

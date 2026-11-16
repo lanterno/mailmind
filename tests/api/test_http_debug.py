@@ -158,6 +158,7 @@ def test_asking_how_the_app_is_doing_never_counts_as_someone_being_here(app, wor
                                            "category": "action-needed", "action": "Reply today"})
                                 if req.prompt.startswith("You are triaging ONE email") else None)
     app.work("assess")
+    assert app.post("/api/preferences", {"draft_ahead": True}).status == 200
     ai.requests.clear()
     ahead = "/api/ai/draft-ahead?" + urlencode(world.copy("cy-inbox-02-thread-end.eml"))
     app.clock.shift(timedelta(hours=1))
