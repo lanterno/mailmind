@@ -51,6 +51,21 @@ fn a_fetch_says_the_uid_flags_and_the_section_as_its_literal_held_it() {
 }
 
 #[test]
+fn a_fetch_says_the_whole_messages_size_beside_its_opening() {
+    let opening = b"Subject: Plans\r\n\r\nThe plans";
+    let pieces = [
+        Piece::Text(format!("* 2 FETCH (UID 5 RFC822.SIZE 409600 BODY[]<0> {{{}}}", opening.len())),
+        Piece::Literal(opening.to_vec()),
+        Piece::Text(")".to_owned()),
+    ];
+    let Said::Fetch(fetched) = read(&raw(&pieces)) else { panic!("not a fetch") };
+    assert_eq!((fetched.uid, fetched.size), (Some(5), Some(409_600)));
+    assert_eq!(fetched.section.unwrap(), opening);
+    let Said::Fetch(fetched) = said(&["* 2 FETCH (UID 5 FLAGS ())"]) else { panic!("not a fetch") };
+    assert_eq!(fetched.size, None);
+}
+
+#[test]
 fn an_internaldate_is_when_the_message_arrived_in_unix_seconds() {
     let Said::Fetch(fetched) = said(&["* 3 FETCH (UID 9 INTERNALDATE \"01-Jan-2026 12:00:00 +0000\")"]) else {
         panic!("not a fetch")
