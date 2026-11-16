@@ -1,6 +1,7 @@
 //! The secrets a person keeps in the login Keychain from Settings beside each account's own password, as
-//! tests/unit/accounts/test_kept_secrets.py holds the Python app's: the Claude API key, kept in its item and named in
-//! the file one version on, and taken out of both; the Proton Bridge's password, kept in its item, the one a login
+//! tests/unit/accounts/test_kept_secrets.py holds the Python app's: the Claude API key and each other AI provider's
+//! (#49), kept in its item and named in the file one version on, and taken out of both, and none for Ollama, which
+//! takes none; the Proton Bridge's password, kept in its item, the one a login
 //! found let go, and each account that logs in with it told it changed. A secret the Keychain can't hold is refused in
 //! its words, a Keychain that won't is `Unreachable`, and either leaves the file as it was.
 
@@ -16,6 +17,8 @@ use mm_accounts::draft::Draft;
 use mm_accounts::one_password::OpReads;
 use mm_accounts::ports::{AccountChange, AccountEvents, ConfigFile, LoginProbe, LoginTrouble, OnePassword};
 use mm_accounts::{Account, Directory};
+use mm_kernel::ai_provider::AiProvider;
+use mm_kernel::ai_provider::AiProvider::Anthropic as Claude;
 use mm_kernel::errors::{Failure, Fault, Kind, Problem};
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Secret};
 use serde_json::{Map, Value, json};
@@ -125,13 +128,13 @@ fn the_key_is_kept_in_its_item_and_the_file_names_the_item_one_version_on() {
     let file = File::holding(json!({}));
     let keychain = Arc::new(Kept::default());
     let directory = directory(&file, &keychain);
-    assert!(!directory.api_key_set().unwrap());
-    directory.set_api_key(Secret::new("sk-ant-first".to_owned())).unwrap();
+    assert!(!directory.api_keys_kept().unwrap().contains(&Claude));
+    directory.set_api_key(Claude, Secret::new("sk-ant-first".to_owned())).unwrap();
     assert_eq!(keychain.holds(), HashMap::from([(KEY_ITEM.to_owned(), "sk-ant-first".to_owned())]));
     // A file with no accounts is given an empty list first, as Python's `setdefault` does.
     assert_eq!(file.raw(), json!({"accounts": [], "anthropic_api_key": {"keychain": KEY_ITEM, "version": 1}}));
-    assert!(directory.api_key_set().unwrap());
-    directory.set_api_key(Secret::new("sk-ant-second".to_owned())).unwrap();
+    assert!(directory.api_keys_kept().unwrap().contains(&Claude));
+    directory.set_api_key(Claude, Secret::new("sk-ant-second".to_owned())).unwrap();
     assert_eq!(keychain.holds()[KEY_ITEM], "sk-ant-second");
     assert_eq!(file.raw()["anthropic_api_key"], json!({"keychain": KEY_ITEM, "version": 2}));
 }
@@ -144,7 +147,7 @@ fn a_key_kept_in_place_of_one_1password_held_lets_go_of_what_op_read() {
     let reads = Arc::new(OpReads::new(op.clone()));
     let directory = directory(&file, &keychain).reading_op(reads.clone());
     reads.read(&json!(OP_KEY), false).unwrap();
-    directory.set_api_key(Secret::new("sk-ant-kept".to_owned())).unwrap();
+    directory.set_api_key(Claude, Secret::new("sk-ant-kept".to_owned())).unwrap();
     // Named where it was, the rest of the file as it was, and the reference read afresh if it is named again.
     let raw = file.raw();
     assert_eq!(raw["anthropic_api_key"], json!({"keychain": KEY_ITEM, "version": 1}));
@@ -159,16 +162,16 @@ fn clearing_the_key_takes_its_item_and_whatever_the_file_named_out() {
     let keychain = Arc::new(Kept::default());
     keychain.items.lock().unwrap().insert(KEY_ITEM.to_owned(), "sk-ant-kept".to_owned());
     let directory = directory(&file, &keychain);
-    directory.clear_api_key().unwrap();
+    directory.clear_api_key(Claude).unwrap();
     assert!(keychain.holds().is_empty());
     assert_eq!(file.raw(), json!({"accounts": []}));
-    assert!(!directory.api_key_set().unwrap());
+    assert!(!directory.api_keys_kept().unwrap().contains(&Claude));
     // Nothing named, nothing kept: still done.
-    directory.clear_api_key().unwrap();
+    directory.clear_api_key(Claude).unwrap();
 
     // A key the file names in another style goes too.
     let file = File::holding(json!({"accounts": [], "anthropic_api_key": {"env": "MY_KEY"}}));
-    self::directory(&file, &keychain).clear_api_key().unwrap();
+    self::directory(&file, &keychain).clear_api_key(Claude).unwrap();
     assert_eq!(file.raw(), json!({"accounts": []}));
 }
 
@@ -178,7 +181,7 @@ fn a_key_the_keychain_cant_hold_is_refused_in_its_words_and_nothing_changes() {
     let keychain = Arc::new(Kept::default());
     let directory = directory(&file, &keychain);
     for typed in ["", "sk-ant-caf\u{e9}", "two\nlines"] {
-        let refused = directory.set_api_key(Secret::new(typed.to_owned())).unwrap_err();
+        let refused = directory.set_api_key(Claude, Secret::new(typed.to_owned())).unwrap_err();
         assert_eq!(refused, Problem::refused(UNPRINTABLE).into(), "{typed:?}");
     }
     assert!(keychain.holds().is_empty());
@@ -190,11 +193,84 @@ fn a_keychain_that_wont_is_unreachable_and_the_file_is_left_as_it_was() {
     let named = json!({"accounts": [], "anthropic_api_key": {"keychain": KEY_ITEM, "version": 1}});
     let file = File::holding(named.clone());
     let directory = directory(&file, &Kept::locked());
-    let kept = directory.set_api_key(Secret::new("sk-ant-new".to_owned())).unwrap_err();
+    let kept = directory.set_api_key(Claude, Secret::new("sk-ant-new".to_owned())).unwrap_err();
     assert_eq!(kept, unreachable("The Keychain didn't keep the password. Is the login keychain locked?"));
-    let cleared = directory.clear_api_key().unwrap_err();
+    let cleared = directory.clear_api_key(Claude).unwrap_err();
     assert_eq!(cleared, unreachable("The Keychain didn't let go of the key. Is the login keychain locked?"));
     assert_eq!(file.raw(), named);
+}
+
+// -- every other AI provider's key (#49) ---------------------------------------------------------------------------
+
+#[test]
+fn each_provider_that_takes_a_key_keeps_it_in_its_own_item_named_under_its_own_entry() {
+    let file = File::holding(json!({"accounts": []}));
+    let keychain = Arc::new(Kept::default());
+    let directory = directory(&file, &keychain);
+    assert_eq!(directory.api_keys_kept().unwrap(), []);
+    directory.set_api_key(AiProvider::Compatible, Secret::new("sk-compatible-fictional".to_owned())).unwrap();
+    directory.set_api_key(AiProvider::OpenAi, Secret::new("sk-openai-fictional".to_owned())).unwrap();
+    directory.set_api_key(AiProvider::Gemini, Secret::new("gemini-fictional".to_owned())).unwrap();
+    assert_eq!(
+        keychain.holds(),
+        HashMap::from([
+            ("openai-api-key".to_owned(), "sk-openai-fictional".to_owned()),
+            ("gemini-api-key".to_owned(), "gemini-fictional".to_owned()),
+            ("compatible-api-key".to_owned(), "sk-compatible-fictional".to_owned()),
+        ])
+    );
+    assert_eq!(
+        file.raw(),
+        json!({"accounts": [], "compatible_api_key": {"keychain": "compatible-api-key", "version": 1},
+               "openai_api_key": {"keychain": "openai-api-key", "version": 1},
+               "gemini_api_key": {"keychain": "gemini-api-key", "version": 1}})
+    );
+    // In the closed set's order, whatever order they were kept in.
+    assert_eq!(directory.api_keys_kept().unwrap(), [AiProvider::OpenAi, AiProvider::Gemini, AiProvider::Compatible]);
+    directory.set_api_key(AiProvider::OpenAi, Secret::new("sk-openai-again".to_owned())).unwrap();
+    assert_eq!(file.raw()["openai_api_key"], json!({"keychain": "openai-api-key", "version": 2}));
+
+    directory.clear_api_key(AiProvider::Gemini).unwrap();
+    assert!(!keychain.holds().contains_key("gemini-api-key"));
+    assert_eq!(directory.api_keys_kept().unwrap(), [AiProvider::OpenAi, AiProvider::Compatible]);
+}
+
+#[test]
+fn a_key_named_in_any_style_counts_as_kept() {
+    let file = File::holding(json!({"accounts": [], "anthropic_api_key": {"env": "FICTIONAL_KEY"},
+                                    "gemini_api_key": {"op": OP_KEY}, "openai_api_key": {},
+                                    "compatible_api_key": null}));
+    let directory = directory(&file, &Arc::new(Kept::default()));
+    assert_eq!(directory.api_keys_kept().unwrap(), [Claude, AiProvider::Gemini]);
+}
+
+#[test]
+fn ollama_takes_no_key_so_none_is_kept_for_it_and_there_is_none_to_take_out() {
+    let file = File::holding(json!({"accounts": []}));
+    let keychain = Arc::new(Kept::default());
+    let directory = directory(&file, &keychain);
+    let refused = directory.set_api_key(AiProvider::Ollama, Secret::new("sk-ollama-fictional".to_owned()));
+    assert_eq!(refused, Err(Problem::refused("Ollama takes no key.").into()));
+    assert!(!format!("{refused:?}").contains("sk-ollama"));
+    assert!(keychain.holds().is_empty());
+    assert_eq!(file.raw(), json!({"accounts": []}));
+    directory.clear_api_key(AiProvider::Ollama).unwrap();
+    assert_eq!(directory.api_keys_kept().unwrap(), []);
+}
+
+#[test]
+fn clearing_one_providers_key_leaves_the_others() {
+    let file = File::holding(json!({"accounts": [],
+                                    "anthropic_api_key": {"keychain": KEY_ITEM, "version": 1},
+                                    "openai_api_key": {"keychain": "openai-api-key", "version": 1}}));
+    let keychain = Arc::new(Kept::default());
+    keychain.items.lock().unwrap().insert(KEY_ITEM.to_owned(), "sk-ant-kept".to_owned());
+    keychain.items.lock().unwrap().insert("openai-api-key".to_owned(), "sk-openai-kept".to_owned());
+    let directory = directory(&file, &keychain);
+    directory.clear_api_key(AiProvider::OpenAi).unwrap();
+    assert_eq!(keychain.holds(), HashMap::from([(KEY_ITEM.to_owned(), "sk-ant-kept".to_owned())]));
+    assert_eq!(file.raw(), json!({"accounts": [], "anthropic_api_key": {"keychain": KEY_ITEM, "version": 1}}));
+    assert_eq!(directory.api_keys_kept().unwrap(), [Claude]);
 }
 
 // -- the Proton Bridge's password ----------------------------------------------------------------------------------
