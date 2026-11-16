@@ -197,6 +197,29 @@ def test_a_sweep_the_server_stops_before_anything_moved_offers_no_undo(page, wor
     clean(page)
 
 
+def test_a_sweep_stopped_where_the_server_cant_be_asked_again_says_so_and_offers_undo(page, world):
+    world.server_flags(NEWS, "\\Seen")
+    dropped = []
+
+    def drops(args):                                         # the move goes with its connection, unanswered
+        dropped.append(True)
+        return True
+    world.server.drop("UID MOVE", user=w.ADA, when=drops)
+    # ...and the login that would look at the Inbox again is refused: how much went can't be told.
+    world.server.fail("LOGIN", "NO [UNAVAILABLE] scripted failure", user=w.ADA, when=lambda args: bool(dropped))
+    mod = drawer(page).locator(f'.acctmod[data-acct="{w.ADA}"]')
+    mod.get_by_role("button", name=re.compile(r"^Sweep \d+")).click()
+    mod.get_by_role("button", name="Confirm").click()
+    expect(page.locator("#toast")).to_contain_text(
+        "Couldn’t reach the mail server, so the sweep stopped part way and MailMind couldn’t check how much went. Undo "
+        "puts back whatever did; sweep again for the rest. (")
+    expect(page.locator("#toast")).not_to_contain_text("nothing was swept")
+    page.locator("#ufUndo").click()                             # what never left is back already
+    expect(page.locator("#toast")).to_contain_text("undone")
+    assert world.where(NEWS)["server"][0][1] == "INBOX"
+    clean(page)
+
+
 def test_the_flood_list_cleans_up_a_sender_after_two_clicks_and_undo_reverses_it(page, app, world):
     issues(world)
     d = drawer(page)
