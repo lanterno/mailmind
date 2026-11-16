@@ -1,13 +1,14 @@
 """Which preset an address's account takes, from its domain: a provider's own domains take its preset, which the form chooses
 (`sure`), and a domain whose mail a provider's servers take (a Google Workspace or Fastmail domain's, say), as its MX records
-name them, is offered it, as an iCloud+ custom domain's is iCloud's. An offer is only that: the person chooses, and nothing is
-guessed that they can't undo. A brand's domain is its own under `.com` or a country's ending (yahoo.fr, yahoo.co.uk), but for a
-country where the brand is another company's (Yahoo Japan's yahoo.co.jp).
+name them, is offered it. An offer is only that: the person chooses, and nothing is guessed that they can't undo. A brand's
+domain is its own under `.com` or a country's ending (yahoo.fr, yahoo.co.uk), but for a country where the brand is another
+company's (Yahoo Japan's yahoo.co.jp).
 
 A preset says what the form needs of its provider: the type and servers its account takes, a line said before the password (an
 app password asked for, Proton Bridge needed), and the page where that password is made. A provider MailMind can't log in to yet
-(Microsoft's, which needs its own sign-in, #47) is named, and has no servers. The Rust core's `mm_accounts::presets` holds the
-same table.
+(Microsoft's, which needs its own sign-in, #47) is named, and has no servers; so is iCloud for an iCloud+ custom domain, since
+iCloud lets other mail apps sign in only with the @icloud.com address and an account logs in with the address typed. The Rust
+core's `mm_accounts::presets` holds the same table.
 
 A domain is looked up only when it reads as one a lookup could ask about: ASCII labels of letters, digits and hyphens, two
 or more of them, at most 253 characters. Anything else, a name in another script included, is no domain here, and offers
@@ -58,6 +59,8 @@ class Provider:
     settings: Settings | None = None                   # None: MailMind can't log in to it yet
     note: str | None = None                            # what the form says before the password
     link: Link | None = None                           # where its password for MailMind is made
+    custom_domain: str | None = None                   # said in place of `note` for a custom domain its servers take but
+                                                       # sign in by another address: no servers are offered it
 
 
 GOOGLE_APP_PASSWORDS = Link("https://myaccount.google.com/apppasswords", "Make an App Password")
@@ -71,7 +74,10 @@ PROVIDERS = (
                                "Deleted Messages"),
              note="iCloud Mail takes an app-specific password, not your Apple Account password: make one at account.apple.com, "
                   "under Sign-In and Security, then paste it here.",
-             link=Link("https://account.apple.com", "Make an app-specific password")),
+             link=Link("https://account.apple.com", "Make an app-specific password"),
+             custom_domain="This address's mail is at iCloud, through iCloud+, and iCloud lets other mail apps sign in only "
+                           "with your @icloud.com address, which MailMind can't pair with this one yet. Add your @icloud.com "
+                           "address instead: this address's mail arrives there too."),
     Provider("yahoo", "Yahoo", domains=("ymail.com", "rocketmail.com"), brands=("yahoo",), not_in=("jp",),
              settings=Settings("imap", Server("imap.mail.yahoo.com", 993, False), Server("smtp.mail.yahoo.com", 465, False)),
              note="Yahoo Mail takes an app password, not your Yahoo password: make one in your Yahoo account's security "

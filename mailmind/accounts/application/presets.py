@@ -28,7 +28,10 @@ class Presets:
 
 
 def _answer(domain: str | None, found: preset.Provider | None, sure: bool) -> dict[str, Any]:
+    elsewhere = found.custom_domain if found and not sure else None   # signed in by another address: nothing to save
+    settings = found.settings if found and not elsewhere else None
     return {"ok": True, "domain": domain, "preset": found and found.preset, "sure": sure,
-            "name": found and found.name, "supported": found is None or found.settings is not None,
-            "settings": preset.settings_dict(found.settings) if found and found.settings else None,
-            "note": found and found.note, "link": preset.link_dict(found and found.link)}
+            "name": found and found.name, "supported": found is None or settings is not None,
+            "settings": preset.settings_dict(settings) if settings else None,
+            "note": elsewhere or (found and found.note),
+            "link": preset.link_dict(found.link if found and not elsewhere else None)}
