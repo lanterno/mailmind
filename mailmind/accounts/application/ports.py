@@ -42,6 +42,11 @@ class ConnectionProbe(Protocol):
         """What the server says of what was typed says nothing of any account saved."""
         ...
 
+    def outgoing(self, acct: Entry, timeout: int) -> None:
+        """A login at the account's outgoing (SMTP) server, saved or a draft's, and a QUIT. A read-only process, which sends
+        nothing, tries none."""
+        ...
+
 
 class MailHosts(Protocol):
     """A domain's mail servers, as its MX records name them, asked of this computer's resolvers."""

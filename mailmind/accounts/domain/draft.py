@@ -1,6 +1,6 @@
 """An account not saved yet, as a test of its login tries it.
 
-A draft may only try a password typed with it, against the host typed with it. One naming a stored secret (an op
+A draft may only try a password typed with it, against the hosts typed with it. One naming a stored secret (an op
 reference, an environment variable, the Bridge password) would send that secret to whatever host the request names,
 so it is refused until the account is saved. A saved account's credential goes only to its saved server, and that's
 the use case's to see to: it never reads an endpoint out of the request.
@@ -21,27 +21,32 @@ class BadPort(ValueError):
     """A draft's port no connection could reach: a failed test, in the sentence the edit of an account says it in."""
 
 
-def _port_of(draft: Mapping[str, Any], default: int) -> int:
-    number = as_int(draft.get("port") or default)
+def _port_of(draft: Mapping[str, Any], key: str, default: int) -> int:
+    number = as_int(draft.get(key) or default)
     if number is None or not 1 <= number <= 65535:
-        raise BadPort(PORT_SAID["port"])
+        raise BadPort(PORT_SAID[key])
     return number
 
 
 def throwaway_account(draft: Mapping[str, Any]) -> Entry:
     """What a draft asks to try, as an account a connection can open, and that nothing keeps: its password is `Typed`,
-    which the Keychain never sees and no file can hold, and is tried as it would be kept (`as_kept`)."""
+    which the Keychain never sees and no file can hold, and is tried as it would be kept (`as_kept`). Its outgoing (SMTP)
+    server is the one typed, else its type's, else its IMAP host, as a saved account's is (`account.smtp_endpoint`). Its
+    port is judged first, then its host, then its outgoing server's port, then its credential."""
     ty = draft.get("type", "imap")
     td = TYPE_DEFAULTS.get(ty, TYPE_DEFAULTS["imap"])
     cs: Entry = draft.get("credential") or {}
     typed = cs.get("value")
     strip = bool(draft.get("strip_spaces", td["strip_spaces"]))
     acct: Entry = {"email": draft.get("email"), "kind": ty,
-                   "host": draft.get("host") or td["host"], "port": _port_of(draft, td["port"]),
+                   "host": draft.get("host") or td["host"], "port": _port_of(draft, "port", td["port"]),
                    "starttls": bool(draft.get("starttls", td["starttls"])), "strip_spaces": strip,
                    "trash": td["trash"], "credential": Typed(as_kept(typed, strip) if isinstance(typed, str) else "")}
     if not acct["host"]:
         raise DraftRefused("a host is required")
+    acct.update(smtp_host=draft.get("smtp_host") or td["smtp_host"] or acct["host"],
+                smtp_port=_port_of(draft, "smtp_port", td["smtp_port"]),
+                smtp_starttls=bool(draft.get("smtp_starttls", td["smtp_starttls"])))
     if cs.get("style") != "keychain" or not (isinstance(typed, str) and typed):
         raise DraftRefused("save the account to test a stored secret; before then only a typed password is tried")
     return acct

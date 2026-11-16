@@ -60,6 +60,17 @@ class _Probe:
         from mailmind.bootstrap import mailbox
         self._leave(mailbox.session_for(acct, timeout=timeout))
 
+    def outgoing(self, acct, timeout):
+        from mailmind.bootstrap import compose
+        from mailmind.platform import profile
+        if not profile.writes_allowed():
+            return                              # a read-only process sends nothing, and logs in to no SMTP server
+        s = compose.transport.connect(acct, timeout=timeout)
+        try:
+            s.quit()
+        except Exception:
+            pass
+
     def _leave(self, session):
         try:
             session.logout()

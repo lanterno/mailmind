@@ -14,6 +14,10 @@ from mailmind.kernel.parsed import is_object
 PROBE_TIMEOUT = 10      # seconds, for each step of one: a short one gives quick word of a bad host
 
 
+class _Outgoing(Exception):
+    """The outgoing (SMTP) server's login didn't work, once the IMAP server's had: its cause is why."""
+
+
 class Connections:
     def __init__(self, config: Directory, get: Callable[[str], Entry], accounts: Callable[[], list[Entry]],
                  probe: ConnectionProbe, quiet_error: Callable[[BaseException, str | None], str],
@@ -27,9 +31,10 @@ class Connections:
         self._forget_status = forget_status
 
     def test(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        """Test a SAVED account ({email}), at its saved server, or an UNSAVED draft (no disk write; what it may try
-        is mailmind.accounts.domain.draft's to say). Errors are sanitized — never echoes the attempted password or
-        server banner, and a Gmail account's refusal is said as Gmail's (`conn_error.quiet`). A login that didn't work is an
+        """Test a SAVED account ({email}), at its saved servers, or an UNSAVED draft (no disk write; what it may try
+        is mailmind.accounts.domain.draft's to say): its IMAP server's login, then, once that has let it in, its outgoing
+        (SMTP) server's. Errors are sanitized — never echoes the attempted password or server banner, and a Gmail account's
+        refusal is said as Gmail's (`conn_error.quiet`), the outgoing server's after "SMTP ". A login that didn't work is an
         answer (`connect: false`); an account it doesn't know raises NotFound, and a draft it may not try Refused."""
         t0 = time.time()
         if body.get("draft") and not is_object(body["draft"]):
@@ -45,6 +50,10 @@ class Connections:
                 acct = self._get(body["email"])
                 kind = acct["kind"]
                 self._probe.saved(acct, timeout=PROBE_TIMEOUT)
+            try:
+                self._probe.outgoing(acct, timeout=PROBE_TIMEOUT)
+            except Exception as e:
+                raise _Outgoing() from e
             return {"ok": True, "connect": True, "email": acct["email"],
                     "detail": "login ok", "ms": int((time.time() - t0) * 1000)}
         except KeyError:
@@ -53,9 +62,11 @@ class Connections:
             raise Refused(str(no)) from no
         except Exception as e:
             draft: Entry = body.get("draft") or {}
+            cause = e.__cause__ if isinstance(e, _Outgoing) else None
+            error = "SMTP " + self._quiet_error(cause, None) if cause is not None else self._quiet_error(e, kind)
             return {"ok": True, "connect": False,
                     "email": body.get("email") or draft.get("email"),
-                    "error": self._quiet_error(e, kind)}
+                    "error": error}
 
 
     def trust_cert(self, body: Mapping[str, Any]) -> dict[str, Any]:

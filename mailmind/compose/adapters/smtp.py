@@ -33,18 +33,19 @@ class SmtpTransport:
     def __init__(self, credentials):
         self._credentials = credentials
 
-    def connect(self, acct):
+    def connect(self, acct, timeout=60):
+        """A connection to the account's SMTP server, logged in: what a send goes through, and a test of the login."""
         profile.refuse_writes("SMTP")          # a read-only process sends nothing
         txguard.refuse_network("an SMTP connection")
         host, port = acct["smtp_host"], int(acct["smtp_port"])
         if acct.get("smtp_starttls", True):
-            s = txguard.guard_calls(smtplib.SMTP(host, port, timeout=60), "send", "SMTP")   # all it sends
+            s = txguard.guard_calls(smtplib.SMTP(host, port, timeout=timeout), "send", "SMTP")   # all it sends
             s.ehlo()
             s.starttls(context=self._credentials.tls_context(host))
             s.ehlo()
         else:  # implicit TLS (e.g. 465)
-            s = txguard.guard_calls(smtplib.SMTP_SSL(host, port, context=self._credentials.tls_context(host), timeout=60),
-                                    "send", "SMTP")
+            s = txguard.guard_calls(smtplib.SMTP_SSL(host, port, context=self._credentials.tls_context(host),
+                                                     timeout=timeout), "send", "SMTP")
             s.ehlo()
         try:
             self._credentials.check_pin(acct, host, port, s)

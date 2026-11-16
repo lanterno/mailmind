@@ -26,6 +26,9 @@ class AccountDraft(NamesAnAccount):
     port: Any = None                # `_port` says "port must be 1–65535"
     starttls: Flag | None = None
     strip_spaces: Flag | None = None
+    smtp_host: Any = None           # as `host`: "SMTP host must be a host name"
+    smtp_port: Any = None           # as `port`: "SMTP port must be 1–65535"
+    smtp_starttls: Flag | None = None
     # Only ever a {style, ...} mapping that works, and `credential_from` words the rest ("a credential names its style", "password
     # required"). It may hold a password, so it stays out of a repr.
     credential: Any = Field(default=None, repr=False)
@@ -38,14 +41,11 @@ class TryBody(NamesAnAccount):
 
 
 class AccountBody(AccountDraft):
-    """An account to add, or what an edit changes (`account.apply_fields`). The page sends none of `trash`, `smtp_*`,
-    `strip_spaces` and `disabled`, which the use case still reads."""
+    """An account to add, or what an edit changes (`account.apply_fields`). The page sends none of `strip_spaces` and
+    `disabled`, which the use case still reads, and `trash` only as a preset names it."""
     alias: str | None = None
     signature: str | None = None
     trash: str | None = None
-    smtp_host: Any = None           # as `host`: "SMTP host must be a host name"
-    smtp_port: Any = None           # as `port`: "SMTP port must be 1–65535"
-    smtp_starttls: Flag | None = None
     disabled: Flag | None = None
 
 
