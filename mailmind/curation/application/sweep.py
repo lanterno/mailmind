@@ -1,7 +1,7 @@
 """Sweeping an inbox: classify it, then move its junk to Trash, verified and audited. Mail is read live before
 anything moves, so a stored row can't send the wrong message anywhere. Starred and unread mail stays where it is, whatever
 it is. What a sweep moves goes on the undo stack under one group, so one Undo puts it all back from Trash, each message
-found there by its Message-ID."""
+found there by its Message-ID, an account's on one session."""
 import secrets
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
@@ -26,9 +26,9 @@ def fetch_headers(s: LiveSession) -> list[Read]:
 
 
 def undo_entry(account: str, trash: str, r: Classified) -> dict[str, Any]:
-    """What puts a swept message back: a move from Trash to the INBOX, of the message found there by its Message-ID, as a
-    person's own move is undone."""
-    return {"kind": "move", "account": account, "src_folder": "INBOX", "dest_folder": trash, "message_id": r["mid"],
+    """What puts a swept message back: a move from Trash to the INBOX, of the message found there by its Message-ID. An
+    account's go back together, on one session (`sweep_back`), so one Undo of hundreds asks the server once."""
+    return {"kind": "sweep_back", "account": account, "src_folder": "INBOX", "dest_folder": trash, "message_id": r["mid"],
             "label": UNDO_LABEL, "subject": r["subject"], "who": r["name"] or r["from"]}
 
 
