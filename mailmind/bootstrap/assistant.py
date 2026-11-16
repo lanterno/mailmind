@@ -276,7 +276,7 @@ def assemble():
     GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
     status = Status(lambda: gateway(), engine, lambda: governor(), lambda: assessments.batch_status())
     calls = Calls(lambda: gateway(), status)
-    assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail)
+    assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail, lambda: _preferences()["ai_provider"])
     context = ContextAssembler(_mail)
     threads = ThreadDigest(calls, answers, _uow, context)
     briefs = Briefs(calls, answers, _uow, _mail)

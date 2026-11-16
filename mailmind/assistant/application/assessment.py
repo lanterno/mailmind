@@ -1,5 +1,6 @@
 """Summarizing and scoring mail that isn't junk: a few calls in parallel for what's new, and a backlog as a batch at half
-price, which only Claude takes."""
+price, which only Claude takes. A batch out when a person chooses another provider is let go here, with nothing sent: its
+messages wait for a summary again, and what it booked is free again."""
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10,6 +11,7 @@ from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Mail, ModelError, NotSent, Reply
 from mailmind.assistant.domain import pricing, prompts
 from mailmind.assistant.domain.schema import object_in
+from mailmind.kernel.ai_provider import DEFAULT_PROVIDER, AiProvider
 from mailmind.kernel.assessment import ASSESSED, REFUSED, UNUSABLE, Assessment
 from mailmind.kernel.ids import MessageKey, Pk
 from mailmind.kernel.row import Connection, Row
@@ -54,12 +56,14 @@ class Assessments:
     ASSESS_BATCH = 300                        # messages triaged in one round
     ASSESS_YIELD = 45                         # seconds a round waits while the user is using AI
 
-    def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, uow: UnitOfWork, mail: Mail):
+    def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, uow: UnitOfWork, mail: Mail,
+                 provider: Callable[[], AiProvider] = lambda: DEFAULT_PROVIDER):
         self._calls = calls
         self._gateway = gateway
         self._answers = answers
         self._uow = uow
         self._mail = mail
+        self._provider = provider           # the provider a person chose, AI mode on or off
 
     def _triage_prompt(self, row: Row) -> str:
         frm = f"{row['from_name']} <{row['from_addr']}>" if row["from_name"] else row["from_addr"]
@@ -182,11 +186,28 @@ class Assessments:
             stored += 1
         return stored
 
+    def _let_go(self, log: Log) -> None:
+        """Another provider than Claude is chosen, so a batch out (being sent, or sent) is dropped here, and nothing is sent to
+        the API: its messages wait for a summary again, from the provider chosen, and what it booked no longer counts."""
+        with self._uow.read() as c:
+            out = [b["id"] for state in ("submitting", "running") for b in self._answers.batches_in_state(c, state)]
+        if not out:
+            return
+        with self._uow.write() as c:
+            for batch_id in out:
+                self._answers.batch_drop(c, batch_id)
+        log("another provider than Claude is chosen, so the batch out was let go; its messages are waiting again")
+
     def batch_collect(self, log: Log = lambda _: None) -> int:
         """Bring in the answers of a batch that has ended, and return how many it stored. Nothing here sends
-        a message, so neither the limit nor someone using AI holds it back: these answers are paid for."""
+        a message, so neither the limit nor someone using AI holds it back: these answers are paid for. With another
+        provider than Claude chosen, a batch out is let go instead; with Claude chosen and AI mode off, it waits, and is
+        brought in once AI mode is on again."""
         gw, now, stored = self._gateway(), int(time.time()), 0
-        if self._calls.engine() == "none" or not gw.takes_batches:      # one out waits for Claude to be the provider again
+        if self._provider() != "anthropic":
+            self._let_go(log)
+            return 0
+        if self._calls.engine() == "none" or not gw.takes_batches:
             return 0
         try:
             with self._uow.read() as c:             # most rounds find nothing to do, and take no lock for it
