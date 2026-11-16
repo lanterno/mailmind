@@ -10,27 +10,37 @@ output's form (`schema.structured`) and the system prompt. It sends it through a
 reply raises `ModelError` (a `RuntimeError` with `status` and `permanent`).
 
 The providers are a closed set, `kernel.ai_provider.AiProvider`, and `assistant.domain.providers.PROVIDERS` says what
-each is: `anthropic` (Claude, through the Anthropic SDK), and `openai`, `gemini`, `ollama` (on this Mac, no key) and
+each is: `anthropic` (Claude, through the Anthropic SDK), and `openai`, `gemini`, `local` (a model on this Mac: Ollama,
+LM Studio or any other model server here, at Ollama's `http://127.0.0.1:11434/v1` unless another URL is given) and
 `compatible` (any other service that speaks OpenAI's Chat Completions, at a URL a person gives), all through one
 adapter on the standard library, `adapters.openai_chat`, whose wire format is `adapters.chat_wire`. Four preferences
-choose: `ai_enabled` (the switch, on by default), `ai_provider` (`anthropic` by default), `ai_model` and
-`ai_base_url` (each `""` for the provider's own; a URL is https, or http on this Mac). Choosing another provider
-without naming a model or URL sets both back to `""`. `MAILMIND_MODEL` still wins over the model chosen, and
+choose: `ai_enabled` (AI mode), `ai_provider` (`anthropic` by default), `ai_model` and `ai_base_url` (each `""` for the
+provider's own; a URL is https, or http on this Mac, and a model on this Mac's is at 127.0.0.1, ::1 or localhost, or
+refused in those words: a server on another machine is `compatible`, over https). Choosing another provider without
+naming a model or URL sets both back to `""`. `MAILMIND_MODEL` still wins over the model chosen, and
 `ANTHROPIC_BASE_URL` stands in for Claude's URL when none is chosen.
+
+AI mode the file doesn't say (`accounts.domain.preferences.ai_mode_default`) is on where `mailmind.config.json` names a
+key for any provider or `ANTHROPIC_API_KEY` is set, so whoever set Claude up keeps AI, and off otherwise: a fresh install
+sends nothing, shows nothing only AI can do, and asks for nothing until AI mode is turned on. `GET /api/preferences`
+answers what stands, and setting it writes it to the file. `PREFERENCE_DEFAULTS` says off, as a fresh install has it.
 
 `bootstrap.assistant.engine()` reads what is in force at each call (`providers.in_force`), and the gateway makes the
 model afresh when it changes: `AnthropicModel`, `ChatModel`, or `DisabledModel` when AI is off, for the first of
-`turned-off`, `no-key`, `no-url` (a compatible service with none) or `no-model` (Ollama or a compatible service with
-none chosen). Off, `assistant.calls.engine()` is `"none"`, and every call, a background job's too, raises `AIOff`
+`turned-off`, `no-key`, `no-url` (a compatible service with none) or `no-model` (a model on this Mac or a compatible
+service with none chosen; neither needs a key, so neither is ever `no-key`). Off, `assistant.calls.engine()` is `"none"`, and every call, a background job's too, raises `AIOff`
 (from `application.ports`, in words that say why) before anything is sent. `tests/contract/test_ai_contract.py` and
 `tests/contract/test_openai_chat_contract.py` hold the two adapters to the contract against the fake APIs.
 
 Only `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and `adapters.wire` holds what it sends and
 how it reads a reply. `ChatModel` posts to `{base}/chat/completions`: the system prompt as the first message, the
 schema as a `json_schema` response format (strict only where every object is closed and needs each property),
-`max_completion_tokens` for OpenAI and `max_tokens` for the rest, and no effort or fallback. Ollama or a compatible
-service that answers a 400 naming `response_format` is asked once more without it. A `message.refusal` is a refusal;
-cached prompt tokens are cache reads, and nothing writes a cache.
+`max_completion_tokens` for OpenAI and `max_tokens` for the rest, and no effort or fallback. A model on this Mac or a
+compatible service that answers a 400 naming `response_format` is asked once more without it. A `message.refusal` is a
+refusal; a reasoning model's thinking ahead of its reply (`<think>…</think>` or `<thinking>…</thinking>`) is dropped
+before the reply is read (`chat_wire.without_thinking`); cached prompt tokens are cache reads, and nothing writes a
+cache. An attempt waits up to 120 seconds, and 300 for a model on this Mac or any URL on this Mac, where a model loads
+on its first use (`Engine.timeout`).
 
 Each provider's key is `assistant.config_key(provider)`: the top-level `"<provider>_api_key"` in
 `mailmind.config.json`, any credential style but the Bridge password. `uv run python -m mailmind ai key
@@ -38,14 +48,22 @@ Each provider's key is `assistant.config_key(provider)`: the top-level `"<provid
 `<provider>-api-key` and names that item there; `POST /api/ai/key/clear` `{provider}` takes both out. Each answers
 `{"ok": true, "kept": [...]}`, the providers whose key the file names, as `GET /api/ai/key` does. Only Claude's
 falls back to `ANTHROPIC_API_KEY`; a config key that won't resolve means no key, never a fall-through to the
-environment's. Ollama takes no key, and none is ever sent to it. `uv run python -m mailmind ai on|off` turns the
-switch as Settings does.
+environment's. A model on this Mac and a compatible service are sent a key only where one is kept (a model on this
+Mac's is `local_api_key`, in the Keychain as `local-api-key`). `uv run python -m mailmind ai on|off` turns AI mode on or
+off as Settings does.
 
 `GET /api/ai/models?provider=P` (`application.catalog`) lists the models a provider offers, for Settings: at the URL
 chosen while P is the provider in force, else P's own, with the key kept for it. It answers `{ok, models, default}`,
-sorted, with Gemini's `models/` dropped and OpenAI's and Gemini's ids that can't chat left out. It spends nothing, so it
-goes with AI turned off too; no key, no URL or a key the provider refuses is a 400 in words, and a provider that
-doesn't answer is a 502.
+sorted, with Gemini's `models/` dropped and, in every list but Claude's, the ids that can't chat left out (embeddings,
+speech, images and the like: `nomic-embed-text` goes). It spends nothing, so it goes with AI mode off too; no key, no URL
+or a key the provider refuses is a 400 in words, and a provider that doesn't answer is a 502.
+
+`GET /api/ai/local` finds the model servers on this Mac, for a person choosing a model on this Mac: it asks each that
+`providers.LOCAL_SERVERS` knows (Ollama on 11434, LM Studio on 1234, llama.cpp on 8080, vLLM on 8000, Jan on 1337 and
+GPT4All on 4891, each `http://127.0.0.1:<port>/v1`) for `GET {url}/models`, all at once and a second each at most, with
+no key, and answers `{ok, servers: [{name, url, models}]}` for those that answered a list, in that order, with the
+models that can chat. It reaches only this Mac, goes with AI mode off, and nothing answering is `servers: []`, never an
+error (`adapters.local_servers`, `Catalog.local_servers`).
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm. The three that do are opt-in and off by default: the morning's brief,
 written ahead of the first open, the week's review, written ahead on Monday morning and kept in the database, never sent as mail, and Tidy's
@@ -89,7 +107,7 @@ asked, model that served it and outcome: `ok`, `refused`, `rejected` (a permanen
 `failed`. Each row holds the calls, their tokens and `cost_micros`, whichever provider served them. `domain.pricing`
 computes the cost from each provider's list prices (one table: Claude, OpenAI and Gemini) in integers, rounded up, with
 cache writes at 1.25 times input for Claude only. A name is looked up after its last `/` (so `openai/gpt-6.1-sol` and
-Gemini's `models/...` find their rows). An unknown model is free on Ollama or at a URL on this Mac, and otherwise the
+Gemini's `models/...` find their rows). An unknown model is free on a model on this Mac or at any URL on this Mac, and otherwise the
 dearest of its family (`claude-`, `gpt-` or `o<digit>`, `gemini-`) or of the whole table; a server-side fallback costs
 the dearer of the two models. `Gateway.ask` requires a
 `feature`: `triage`, `triage-batch`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`, `extract`,
