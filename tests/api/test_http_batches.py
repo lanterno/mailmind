@@ -21,10 +21,11 @@ NOW_TS = 1_793_620_800          # conftest.NOW, as the server's clock counts it
 
 
 def note(n):
-    """The n-th message of a backlog: a plain one from a colleague, an hour after the one before."""
+    """The n-th message of a backlog: a plain one from a colleague, an hour after the one before, from 10 October on: all
+    within the 30 days the background summarizes."""
     day, hour = divmod(n, 24)
     return (f"From: Pat Lee <pat@example.test>\r\nTo: Ada Park <ada@example.test>\r\nSubject: Backlog note {n}\r\n"
-            f"Date: {day + 1:02d} Oct 2026 {hour:02d}:00:00 +0000\r\nMessage-ID: <backlog-{n}@pat.example.test>\r\n"
+            f"Date: {day + 10:02d} Oct 2026 {hour:02d}:00:00 +0000\r\nMessage-ID: <backlog-{n}@pat.example.test>\r\n"
             "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
             f"Note {n} on the quarterly figures.\r\n").encode()
 

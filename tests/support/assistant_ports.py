@@ -344,7 +344,7 @@ def message(n, **over):
             "snippet": f"What message {n} says.", **over}
 
 
-def triage_on(model, triage, ledger=None, governor=None):
-    """Assessments over `model` and `triage`, the stored mail and what was said of it."""
+def triage_on(model, triage, ledger=None, governor=None, clock=time.time):
+    """Assessments over `model` and `triage`, the stored mail and what was said of it, at `clock`'s time."""
     gateway = gateway_on(model, ledger, governor)
-    return Assessments(calls_over(gateway), lambda: gateway, triage, Uow(), triage)
+    return Assessments(calls_over(gateway), lambda: gateway, triage, Uow(), triage, clock=clock)

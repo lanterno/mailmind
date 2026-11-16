@@ -26,6 +26,15 @@ def test_with_ai_off_a_round_tries_nothing():
     assert (tried, triage.said, len(triage.needs_summary(None, 100))) == ([], {}, 5)
 
 
+def test_a_round_summarizes_only_the_last_thirty_days():
+    now = 1_800_000_000
+    old, edge, recent = (message(n, ts=now - days * 86400) for n, days in ((1, 31), (2, 30), (3, 29)))
+    model, triage = Model(), Triage([old, edge, recent])
+    assert triage_on(model, triage, clock=lambda: now).round() is None
+    assert (list(triage.said), len(model.sent)) == ([recent["message_key"]], 1)
+    assert len(triage.needs_summary(None, 100)) == 2      # older mail waits to be opened
+
+
 def test_a_round_triages_a_batch_and_comes_back_at_once_while_more_wait():
     model, triage = Model(), Triage(message(n) for n in range(1, 6))
     assessments = triage_on(model, triage)

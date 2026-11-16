@@ -171,6 +171,16 @@ def test_a_backlog_goes_as_a_batch_and_the_newest_stay(backlog):
     assert backlog.waiting() == before[:2]
 
 
+def test_a_backlog_takes_only_the_last_thirty_days():
+    now = message(8)["ts"]
+    triage = Triage([*(message(n) for n in range(3, 9)), *(message(n, ts=now - 40 * 86400) for n in (1, 2))])
+    model = Model()
+    job = triage_on(model, triage, clock=lambda: now)
+    job.BATCH_MIN, job.BATCH_KEEP_NEWEST = 3, 2
+    assert job.batch_submit() == 4
+    assert sorted(int(cid) for cid in model.batched) == [message(n)["message_key"] for n in range(3, 7)]
+
+
 def test_a_few_new_messages_are_no_backlog(backlog):
     backlog.job.BATCH_MIN = len(backlog.waiting()) + 1
     assert backlog.job.batch_submit() == 0
