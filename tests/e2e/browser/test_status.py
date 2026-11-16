@@ -89,15 +89,16 @@ def test_settings_adds_edits_tests_and_removes_a_connection(page, world):
     assert w.ADA in dialog.locator(".set-row").first.get_attribute("data-email")
 
     page.get_by_role("button", name="+ Add a connection").click()
-    expect(dialog.get_by_label("Alias (optional)")).to_be_focused()
+    expect(dialog.get_by_label("Email", exact=True)).to_be_focused()
     dialog.get_by_role("button", name="Save connection").click()
     expect(dialog.locator(".err")).to_have_text("A valid email is required.")
     dialog.get_by_label("Email", exact=True).fill("dee@example.test")
+    expect(dialog.get_by_role("button", name="Other IMAP", exact=True)).to_have_attribute("aria-pressed", "true")
+    dialog.get_by_role("button", name="Save connection").click()
+    expect(dialog.locator(".err")).to_have_text("A host is required for an Other IMAP account.")
+    dialog.get_by_label("Host", exact=True).fill("imap.example.test")
     dialog.get_by_role("button", name="Save connection").click()
     expect(dialog.locator(".err")).to_have_text("Set a password (or 1Password ref / env var).")
-    dialog.get_by_role("button", name="IMAP", exact=True).click()
-    dialog.get_by_role("button", name="Save connection").click()
-    expect(dialog.locator(".err")).to_have_text("A host is required for a generic IMAP account.")
     dialog.get_by_role("button", name="Cancel").click()
     expect(dialog.locator(".set-row")).to_have_count(3)
 
@@ -112,23 +113,28 @@ def test_settings_adds_edits_tests_and_removes_a_connection(page, world):
 
     row.get_by_role("button", name="Remove").click()
     expect(row.get_by_role("button", name="Confirm?")).to_be_visible()
+    keep = row.get_by_label("Also delete its mail from this Mac")
+    expect(keep).to_be_checked()                                    # on unless unticked
+    expect(row).to_contain_text("Its mail on the server stays as it is.")
     row.get_by_role("button", name="Confirm?").click()
     expect(row).to_have_count(0)
     clean(page)
 
 
 def test_a_password_typed_into_settings_goes_to_the_keychain_and_never_to_the_file(page, world, fake_keychain):
-    entry = world.server.add_account("dee@example.test", password="dee-password")
+    entry = world.add_account("dee@example.test", password="dee-password")       # its outgoing server's login too
     fake_keychain.delete("account:dee@example.test")      # what the fake server's own entry kept
     opened(page)
     page.locator("#settingsBtn").click()
     dialog = page.get_by_role("dialog", name="Email connections")
     page.get_by_role("button", name="+ Add a connection").click()
     dialog.get_by_label("Email", exact=True).fill("dee@example.test")
-    dialog.get_by_role("button", name="IMAP", exact=True).click()
-    dialog.get_by_label("Host").fill(entry["host"])
-    dialog.get_by_label("Port").fill(str(entry["port"]))
-    dialog.get_by_role("button", name="STARTTLS", exact=True).click()
+    expect(dialog.get_by_role("button", name="Other IMAP", exact=True)).to_have_attribute("aria-pressed", "true")
+    dialog.get_by_label("Host", exact=True).fill(entry["host"])
+    dialog.get_by_label("Port", exact=True).fill(str(entry["port"]))
+    dialog.get_by_role("group", name="Incoming server security").get_by_role("button", name="STARTTLS").click()
+    dialog.get_by_label("Outgoing host").fill(entry["smtp_host"])
+    dialog.get_by_label("Outgoing port").fill(str(entry["smtp_port"]))
     expect(dialog.get_by_text("Kept in your login Keychain, never in a file.")).to_be_visible()
     dialog.get_by_label("Password", exact=True).fill("dee-password")
     dialog.get_by_role("button", name="Save connection").click()
