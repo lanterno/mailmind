@@ -180,12 +180,29 @@ fn a_key_the_keychain_cant_hold_is_refused_in_its_words_and_nothing_changes() {
     let file = File::holding(json!({"accounts": []}));
     let keychain = Arc::new(Kept::default());
     let directory = directory(&file, &keychain);
-    for typed in ["", "sk-ant-caf\u{e9}", "two\nlines"] {
+    for typed in ["", "  \n", "sk-ant-caf\u{e9}"] {
         let refused = directory.set_api_key(Claude, Secret::new(typed.to_owned())).unwrap_err();
         assert_eq!(refused, Problem::refused(UNPRINTABLE).into(), "{typed:?}");
     }
     assert!(keychain.holds().is_empty());
     assert_eq!(file.raw(), json!({"accounts": []}));
+}
+
+#[test]
+fn a_keys_ends_are_trimmed_and_one_with_a_space_or_a_line_break_inside_is_refused() {
+    let file = File::holding(json!({"accounts": []}));
+    let keychain = Arc::new(Kept::default());
+    let directory = directory(&file, &keychain);
+    for typed in ["two\nlines", "sk-ant one", "sk-ant\tone", "sk-ant\r\n-two", "sk\u{7f}ant", "sk\u{a0}ant", "a\u{1}b"]
+    {
+        let refused = directory.set_api_key(AiProvider::OpenAi, Secret::new(format!(" {typed}\n"))).unwrap_err();
+        assert_eq!(refused, Problem::refused("An API key can't hold spaces or line breaks.").into(), "{typed:?}");
+    }
+    assert!(keychain.holds().is_empty());
+    assert_eq!(file.raw(), json!({"accounts": []}));
+    // A paste that brought a line break or a space at either end keeps the key alone.
+    directory.set_api_key(AiProvider::OpenAi, Secret::new("\t sk-openai-fictional\r\n".to_owned())).unwrap();
+    assert_eq!(keychain.holds(), HashMap::from([("openai-api-key".to_owned(), "sk-openai-fictional".to_owned())]));
 }
 
 #[test]

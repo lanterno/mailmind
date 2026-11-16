@@ -300,6 +300,14 @@ fn each_providers_key_is_kept_and_named_and_never_said() {
     assert_eq!((cleared.status, cleared.json()["detail"].clone()), (400, json!("bad request")));
     assert_eq!(r.get("/api/ai/key").json()["kept"], json!(["anthropic", "gemini", "local", "compatible"]));
 
+    // A pasted key's ends are trimmed; one with a space or a line break inside is refused in words, and none is kept.
+    let spaced = r.post("/api/ai/key", &json!({"provider": "gemini", "key": "sk-fictional\nsk-other"}));
+    assert_eq!((spaced.status, spaced.json()), (400, refused("An API key can't hold spaces or line breaks.")));
+    assert!(!spaced.text().contains("fictional"));
+    let pasted = r.post("/api/ai/key", &json!({"provider": "gemini", "key": "  sk-fictional-pasted\r\n"}));
+    assert_eq!(pasted.status, 200);
+    assert_eq!(r.keychain.items.lock().unwrap()["gemini-api-key"], "sk-fictional-pasted");
+
     let items = r.keychain.items.lock().unwrap().clone();
     let mut names: Vec<&str> = items.keys().map(String::as_str).collect();
     names.sort_unstable();
