@@ -21,6 +21,8 @@ final class AppStatus {
     private(set) var signatureDefault = ""
     /// What each account's syncs came to (`/api/account-health`).
     private(set) var health: [API.AccountStanding] = []
+    /// The background jobs whose last round failed, read as the status menu opens.
+    private(set) var failingJobs: [String] = []
     /// What a person has set, as the server holds it; nil until it has answered.
     private(set) var preferences: API.Preferences?
     private(set) var syncing = false
@@ -67,7 +69,8 @@ final class AppStatus {
 
     /// What a test or a rendering shows with no core: the answers the routes would give.
     func hold(digest: API.Digest? = nil, accounts: [API.AccountRow] = [], health: [API.AccountStanding] = [],
-              preferences: API.Preferences? = nil, upcoming: [API.UpcomingEvent] = [], now: Date = Date())
+              preferences: API.Preferences? = nil, upcoming: [API.UpcomingEvent] = [], failingJobs: [String] = [],
+              now: Date = Date())
     {
         self.digest = digest
         self.accounts = accounts
@@ -75,6 +78,7 @@ final class AppStatus {
         self.health = health
         self.preferences = preferences
         self.upcoming = upcoming
+        self.failingJobs = failingJobs
         self.now = now
     }
 
@@ -123,6 +127,13 @@ final class AppStatus {
     func readHealth() async {
         guard let core else { return }
         if let read = try? await core.get(API.Get.AccountHealth.self) { health = read.accounts }
+    }
+
+    /// The background jobs whose last round failed. `/api/debug/health` says it, and asking it never counts as someone
+    /// being here, so the background's rounds go on as they would.
+    func readJobs() async {
+        guard let core else { return }
+        if let glance = try? await core.get(API.Get.DebugHealth.self) { failingJobs = StatusWords.failing(glance.jobs) }
     }
 
     func readPreferences() async {

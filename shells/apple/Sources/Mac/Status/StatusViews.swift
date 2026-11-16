@@ -76,6 +76,7 @@ struct StatusMenu: View {
     var body: some View {
         MeadowMenu(parts: parts, width: 280, model: model, close: close, label: String(localized: "Sync status"))
             .task { notAsked = await status.newMail.allowed() == nil }
+            .task { await status.readJobs() }
     }
 
     /// How an account stands on the right of its row: can't connect, syncing, or when its mail last came in.
@@ -157,12 +158,13 @@ struct StatusMenu: View {
         }
     }
 
-    /// What a person should know before they start anything: that the run is read-only, and AI failing, in rust. The
-    /// day's spend and how AI treats mail are Settings' to say.
+    /// What a person should know before they start anything: that the run is read-only, AI failing, and background
+    /// work that isn't going through, in rust. The day's spend and how AI treats mail are Settings' to say.
     private func note(_ digest: API.Digest?) -> AnyView? {
         let readOnly = digest?.profile == "read-only"
         let ai = digest.map { StatusWords.ai($0.ai) }
-        guard readOnly || ai?.failing == true else { return nil }
+        let failing = StatusWords.failingLine(status.failingJobs)
+        guard readOnly || ai?.failing == true || failing != nil else { return nil }
         return AnyView(VStack(alignment: .leading, spacing: 4) {
             if readOnly {
                 line(String(localized: """
@@ -174,6 +176,13 @@ struct StatusMenu: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     MeadowIconView(.wind, size: 13).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
                     line(ai.text, colour: meadow.rust)
+                }
+                .foregroundStyle(meadow.rust)
+            }
+            if let failing {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    MeadowIconView(.alert, size: 13).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
+                    line(failing, colour: meadow.rust)
                 }
                 .foregroundStyle(meadow.rust)
             }

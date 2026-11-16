@@ -151,6 +151,39 @@ enum StatusWords {
         case synced(when: String, count: Int)
     }
 
+    /// The background jobs whose last round failed: a job's last error is cleared by a round that goes through.
+    static func failing(_ jobs: [API.Job]) -> [String] {
+        jobs.filter { !($0.lastError ?? "").isEmpty }.map(\.name)
+    }
+
+    /// The status menu's one line on background work that keeps failing, or nil when none is.
+    static func failingLine(_ names: [String]) -> String? {
+        guard let last = names.last else { return nil }
+        let words = names.map(jobWords)
+        let named = names.count == 1 ? words[0]
+            : words.dropLast().joined(separator: ", ") + String(localized: " and ") + jobWords(last)
+        return String(localized: "Some background work isn’t going through: \(named). Help › Copy Diagnostics says more.")
+    }
+
+    /// A background job's name, as a person would say what it does. One this build doesn't know keeps its name.
+    static func jobWords(_ name: String) -> String {
+        switch name {
+        case "sync": String(localized: "syncing")
+        case "snooze": String(localized: "snoozes and follow-ups")
+        case "reconcile": String(localized: "checking mail against the server")
+        case "draft-push": String(localized: "saving drafts to the server")
+        case "expire": String(localized: "expiry rules")
+        case "forget": String(localized: "letting go of old records")
+        case "backfill": String(localized: "fetching older messages’ text")
+        case "assess": String(localized: "summaries")
+        case "draft-ahead": String(localized: "replies drafted ahead")
+        case "brief-ahead": String(localized: "the brief")
+        case "review-ahead": String(localized: "the weekly review")
+        case "tidy": String(localized: "Tidy")
+        default: name
+        }
+    }
+
     /// What a failed sync's kind (`last_error_kind`) means, in a sentence that says what to do next. A kind this
     /// build doesn't know reads as something that went wrong.
     static func syncProblem(_ kind: String) -> String {
