@@ -8,7 +8,8 @@
 //!
 //! An Inbox's first scan stores its newest mail, which was there before, so it is no new mail: no `new-mail`, and no
 //! count in the round's result. Its older mail is read after, a few steps at a time, by the background's
-//! `read_older` rounds; until it is all read, the account's status says how far the scan has got.
+//! `read_older` rounds; until it is all read, the account's status says how far the scan has got. A read of it that
+//! met trouble that may pass goes on as soon as the account's next sync works, rather than at the next round.
 //!
 //! Each round ends by warming folders beyond the Inbox, for the accounts asking (`warm`), after their Inbox, so it
 //! never delays new mail.
@@ -86,6 +87,8 @@ struct Held {
     rounds: usize,
     /// Each account whose syncs have failed in a row, until one works.
     failing: BTreeMap<String, Failing>,
+    /// Each account whose last read of older mail met trouble that may pass: its next sync that works reads on.
+    older_failed: BTreeSet<String>,
 }
 
 /// The coarse, scrubbed kind of a sync's failure, from its class alone (`accounts.domain.health.error_kind`).
@@ -268,6 +271,7 @@ impl Syncing {
         held.status.remove(account);
         held.failing.remove(account);
         held.again.remove(account);
+        held.older_failed.remove(account);
     }
 
     /// The account was removed: each sync reading its mail stops at its next step (its flights were told), and nothing
@@ -303,6 +307,11 @@ impl Syncing {
             }
             Ok(synced) => {
                 self.held().failing.remove(email);
+                if self.held().older_failed.remove(email) {
+                    // The server answers again: the older mail its last read couldn't reach is read on now, not at
+                    // the background's next round, minutes on.
+                    self.around.older_to_read();
+                }
                 let new = if synced.afresh { 0 } else { synced.kept };
                 if synced.afresh {
                     // How far it got, said only where the rest will be read.
@@ -502,7 +511,12 @@ impl Syncing {
                     gone = true;
                     break;
                 }
-                Err(error) => log::warning(TAG, "older mail wasn't read", &[], Some(error.class())),
+                Err(error) => {
+                    log::warning(TAG, "older mail wasn't read", &[], Some(error.class()));
+                    if sync_health::may_pass(error.class(), error_kind(error)) {
+                        self.held().older_failed.insert(account.to_owned());
+                    }
+                }
             }
         }
         if gone || flight.stopped() {
