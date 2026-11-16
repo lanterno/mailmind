@@ -406,10 +406,15 @@ fn the_status_names_the_provider_why_ai_is_off_and_the_model_in_force() {
     assert_eq!(r.ai(), json!(["none", "openai", "turned-off", "", ""]));
     assert_eq!(*r.keychain.asked.lock().unwrap(), asked, "turned off, no key is looked up");
 
+    // MAILMIND_MODEL is the Claude model: it wins over the one chosen for Claude, and is no model for any other.
     let r = running(&json!({}), &[("ANTHROPIC_API_KEY", "sk-ant-fictional"), ("MAILMIND_MODEL", "claude-sonnet-5-5")]);
     assert_eq!(r.ai(), json!(["api", "anthropic", null, "claude-sonnet-5-5", "ANTHROPIC_API_KEY"]));
+    r.write_config(&json!({"preferences": {"ai_model": "claude-opus-5"}}));
+    assert_eq!(r.ai(), json!(["api", "anthropic", null, "claude-sonnet-5-5", "ANTHROPIC_API_KEY"]));
     r.write_config(&json!({"preferences": {"ai_provider": "local"}}));
-    assert_eq!(r.ai(), json!(["api", "local", null, "claude-sonnet-5-5", ""]), "MAILMIND_MODEL wins over every choice");
+    assert_eq!(r.ai(), json!(["none", "local", "no-model", "", ""]), "ignored for a model on this Mac");
+    r.write_config(&json!({"preferences": {"ai_provider": "local", "ai_model": "llama3.2:3b"}}));
+    assert_eq!(r.ai(), json!(["api", "local", null, "llama3.2:3b", ""]));
     assert!(!r.get("/api/digest").text().contains("fictional"));
 }
 
@@ -484,6 +489,18 @@ fn a_call_goes_to_the_provider_chosen_and_with_ai_turned_off_nowhere() {
         );
     }
     assert_eq!(r.outside.0.lock().unwrap().len(), reached);
+}
+
+#[test]
+fn another_provider_is_asked_its_own_model_whatever_mailmind_model_says() {
+    let (url, log) = provider(vec![(200, completion(&json!({"text": "Hi."})))]);
+    let chosen = json!({"ai_enabled": true, "ai_provider": "local", "ai_model": "llama3.2:3b", "ai_base_url": url});
+    let r = running(&json!({"preferences": chosen}), &[("MAILMIND_MODEL", "claude-sonnet-5-5")]);
+    let answered = r.post("/api/ai/rewrite", &json!({"text": "Hello there, how are you?", "op": "shorten"}));
+    assert_eq!(answered.status, 200);
+    let [asked] = heard(&log).try_into().unwrap();
+    assert_eq!(asked.body["model"], "llama3.2:3b");
+    assert_eq!(r.app.assistant.calls.model_label(), "llama3.2:3b", "and its results are labelled with it");
 }
 
 /// One message in the inbox with no summary yet, as a sync leaves it.
