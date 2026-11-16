@@ -17,7 +17,9 @@
   itself won't do. A rejected key (401 or 403) stops every background call at once, and
   TRIP_AFTER in a row for one feature and model stop that feature's. It stays open until the
   model in use changes, which a new key or base URL does. Interactive calls still go,
-  so the user sees the error.
+  so the user sees the error. An account with no credit left stops every background call too,
+  but credit can be added to the same key: the next call that goes through closes it, and
+  CREDIT_RETRY_SECONDS after it opened, background calls try again.
 
 Nothing here is durable: a restart closes the breaker and forgets the last interactive call. The
 day's spending is the ledger's, so the limit holds across a restart.
@@ -38,8 +40,9 @@ YIELD_SECONDS = 45
 PRESENCE_SECONDS = 45 * 60
 SCHEDULED_PRESENCE_SECONDS = 48 * 3600   # a day off leaves it on, and a holiday stops it
 TRIP_AFTER = 3                      # permanent rejections in a row, for one feature and model
+CREDIT_RETRY_SECONDS = 3600         # how long an account with no credit left stops background calls before one tries again
 _AUTH = frozenset({401, 403})       # the key itself was refused: no feature will do better
-_EVERY = "*"                        # the breaker's scope for a refused key
+_EVERY = "*"                        # the breaker's scope for a refused key or an account with no credit
 
 _over: contextvars.ContextVar[bool] = contextvars.ContextVar("mailmind_ai_may_go_over", default=False)
 
@@ -70,6 +73,7 @@ class CostGovernor:
         self._last_seen = clock()               # starting up counts as someone being here
         self._rejected: dict[tuple[str, str], int] = {}    # (feature, model) -> in a row
         self._open: dict[str | tuple[str, str], LanguageModel] = {}   # scope -> the model it opened under
+        self._no_credit_at: float | None = None   # when every call's scope opened for want of credit, not a refused key
 
     def limit_micros(self) -> int:
         """The daily limit, in micro-dollars."""
@@ -131,17 +135,27 @@ class CostGovernor:
 
     def heard(self, feature: str, model: str, instance: LanguageModel, error: ModelError | None) -> None:
         """How a call went: None for a reply. A reply resets the feature's count of rejections in a
-        row; a transient failure leaves it as it was."""
+        row, and closes the breaker an account with no credit left opened; a transient failure leaves
+        things as they were."""
         key = (feature, model)
         with self._lock:
             if error is None:
                 self._rejected.pop(key, None)
+                if self._no_credit_at is not None:     # a call went through: the account has credit again
+                    self._open.pop(_EVERY, None)
+                    self._no_credit_at = None
                 return
             if not error.permanent:
                 return
-            if error.status in _AUTH or error.no_credit:      # no feature will do better
+            if error.no_credit:          # no feature will do better, until credit is added to the account
+                opened = self._open.get(_EVERY) is not instance or self._no_credit_at is None
+                self._open[_EVERY] = instance
+                self._no_credit_at = self._clock()
+                scope = None
+            elif error.status in _AUTH:    # the key itself was refused: no feature will do better
                 opened = self._open.get(_EVERY) is not instance
                 self._open[_EVERY] = instance
+                self._no_credit_at = None
                 scope = "every background call"
             else:
                 n = self._rejected.get(key, 0) + 1
@@ -152,7 +166,10 @@ class CostGovernor:
                 opened = self._open.get(key) is not instance
                 self._open[key] = instance
                 scope = f"{feature} on {model}"
-        if opened:
+        if opened and scope is None:
+            log.warning("the account has no credit left: every background call stops until a call goes through or an "
+                        "hour passes (%(why)s)", {"why": error.status})
+        elif opened:
             log.warning("the API keeps rejecting requests: %(what)s stops until the key or the model changes (%(why)s)",
                         {"what": scope, "why": error.status})
 
@@ -164,6 +181,7 @@ class CostGovernor:
             self._last_seen = self._clock()
             self._rejected.clear()
             self._open.clear()
+            self._no_credit_at = None
 
     def snapshot(self) -> dict[str, Any]:
         """What /api/debug/ai shows: today's spending and limit, the calls in flight, how long since
@@ -183,9 +201,16 @@ class CostGovernor:
             under = self._open.get(scope)
             if under is None:
                 continue
+            if scope == _EVERY and self._no_credit_at is not None:
+                if self._clock() - self._no_credit_at >= CREDIT_RETRY_SECONDS:
+                    del self._open[scope]       # credit may have been added since: try again
+                    self._no_credit_at = None
+                    continue
             if under is instance:
                 return True
             del self._open[scope]               # the model changed since it opened: try again
+            if scope == _EVERY:
+                self._no_credit_at = None
         return False
 
     def _booked(self) -> int | None:
