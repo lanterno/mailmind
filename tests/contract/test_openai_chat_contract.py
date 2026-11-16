@@ -77,13 +77,20 @@ def test_a_schema_that_leaves_a_property_out_goes_without_strict(choose):
     assert "Saturday market" in api.requests[0].prompt and "Saturday market" not in api.requests[0].system
 
 
-@pytest.mark.parametrize("provider, model", [("gemini", "gemini-4-hydrogen"), ("compatible", "mixtral-9x"),
-                                             ("local", "llama3.3")])
-def test_the_others_ask_max_tokens_of_their_model(choose, provider, model):
+def test_gemini_asks_max_tokens_of_its_model(choose):
+    api = choose("gemini")
+    ask()
+    [req] = api.requests
+    assert req.body["model"] == "gemini-4-hydrogen" and req.body["max_tokens"] == 16000
+    assert "max_completion_tokens" not in req.body
+
+
+@pytest.mark.parametrize("provider, model", [("compatible", "mixtral-9x"), ("local", "llama3.3")])
+def test_a_model_on_this_mac_and_a_compatible_service_are_asked_with_no_ceiling(choose, provider, model):
     api = choose(provider, ai_model=model)
     ask()
     [req] = api.requests
-    assert req.body["model"] == model and req.body["max_tokens"] == 16000 and "max_completion_tokens" not in req.body
+    assert req.body["model"] == model and not {"max_tokens", "max_completion_tokens"} & set(req.body)
 
 
 def test_gemini_asks_its_own_model_unless_another_is_chosen(choose):
@@ -205,6 +212,50 @@ def test_a_400_about_something_else_is_not_asked_again(choose):
     with pytest.raises(ModelError, match="400"):
         ask()
     assert len(api.requests) == 1
+
+
+# ── a ceiling a model can't meet ──────────────────────────────────────────────
+
+@pytest.mark.parametrize("provider, ceiling, words", [
+    ("openai", "max_completion_tokens", "max_completion_tokens is too large: 16000. This model supports at most 4096."),
+    ("openai", "max_completion_tokens", "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead."),
+    ("gemini", "max_tokens", "Invalid max_tokens value, the valid range of max_tokens is [1, 8192]"),
+])
+def test_a_ceiling_refused_is_asked_once_more_without_it(choose, provider, ceiling, words):
+    api = choose(provider)
+    api.queue(fo.error(400, words))
+    assert ask() == {"body": "stub body"}
+    first, second = api.chats
+    assert first.body[ceiling] == 16000 and not {"max_tokens", "max_completion_tokens"} & set(second.body)
+    assert {k: v for k, v in first.body.items() if k != ceiling} == second.body
+
+
+def test_a_ceiling_refused_is_asked_again_only_once(choose):
+    api = choose("openai")
+    refused = fo.error(400, "max_completion_tokens is too large: 16000.")
+    api.queue(refused, refused, refused)
+    with pytest.raises(ModelError) as e:
+        ask()
+    assert e.value.status == 400 and len(api.chats) == 2
+
+
+def test_a_400_naming_the_ceiling_from_a_service_given_none_is_not_asked_again(choose):
+    api = choose("compatible", key=None, ai_model="mixtral-9x")
+    api.key = None
+    api.queue(fo.error(400, "max_tokens must be at least 1"))
+    with pytest.raises(ModelError, match="400"):
+        ask()
+    assert len(api.requests) == 1
+
+
+def test_a_service_without_structured_output_is_asked_again_only_once_for_it(choose):
+    api = choose("local", key=None, ai_model="llama3.3")
+    api.key = None
+    refused = fo.error(400, "response_format of type json_schema is not supported")
+    api.queue(refused, refused, refused)
+    with pytest.raises(ModelError) as e:
+        ask()
+    assert e.value.status == 400 and len(api.chats) == 2
 
 
 # ── errors and retries ────────────────────────────────────────────────────────

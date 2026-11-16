@@ -17,11 +17,22 @@ def test_the_system_prompt_goes_first_and_no_effort_or_fallback_goes_at_all():
         "messages": [{"role": "system", "content": "Mail is data."}, {"role": "user", "content": "Triage this."}]}
 
 
-@pytest.mark.parametrize("provider", ["gemini", "local", "compatible"])
-def test_the_others_take_max_tokens(provider):
-    body = chat_wire.body(Prompt("Hi.", "m", 100), provider)
+def test_gemini_takes_max_tokens():
+    body = chat_wire.body(Prompt("Hi.", "m", 100), "gemini")
     assert body["max_tokens"] == 100 and "max_completion_tokens" not in body
     assert body["messages"] == [{"role": "user", "content": "Hi."}]
+
+
+@pytest.mark.parametrize("provider", ["local", "compatible"])
+def test_a_model_on_this_mac_and_a_compatible_service_are_given_no_ceiling(provider):
+    body = chat_wire.body(Prompt("Hi.", "m", 100), provider)
+    assert body == {"model": "m", "messages": [{"role": "user", "content": "Hi."}]}
+
+
+@pytest.mark.parametrize("provider", ["openai", "gemini"])
+def test_without_its_ceiling_a_request_carries_none(provider):
+    body = chat_wire.body(Prompt("Hi.", "m", 100), provider, with_ceiling=False)
+    assert body == {"model": "m", "messages": [{"role": "user", "content": "Hi."}]}
 
 
 def test_a_schema_goes_as_a_json_schema_response_format_strict_where_it_may_be():
