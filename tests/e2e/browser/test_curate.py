@@ -149,6 +149,29 @@ def test_each_inbox_says_what_it_holds_and_a_sweep_asks_first(page, world):
     clean(page)
 
 
+def test_a_sweep_says_what_goes_and_what_stays_before_it_moves_and_one_undo_brings_it_back(page, world):
+    world.server_flags(NEWS, "\\Seen")                         # read in another client
+    world.server_flags(SCAM, "\\Seen", "\\Flagged")            # read, and starred: it stays
+    d = drawer(page)
+    mod = d.locator(f'.acctmod[data-acct="{w.ADA}"]')
+    mod.get_by_role("button", name=re.compile(r"^Sweep \d+")).click()
+    going = mod.locator(".sweep-going")
+    expect(going.locator(".sg-hd")).to_have_text([re.compile("^Newsletters and marketing"),
+                                                  re.compile("^Automatic notifications")])
+    for said in (LOOM, "This week: five new patterns", "noreply@ci.example.test", "[quilt] Build #412 passed"):
+        expect(going).to_contain_text(said)
+    expect(going).not_to_contain_text("prizes.example.test")
+    expect(going.locator(".sg-note")).to_have_text("1 starred or unread message stays in your Inbox.")
+    mod.get_by_role("button", name="Confirm").click()
+    expect(page.locator("#toast")).to_contain_text("Swept 2/2")
+    until(page, lambda: world.where(NEWS)["server"][0][1] == "Trash", "it went to the Trash")
+    assert world.where(SCAM)["server"][0][1] == "INBOX"
+    page.locator("#ufUndo").click()
+    for name in (NEWS, "ada-inbox-04-ci.eml"):
+        until(page, lambda name=name: world.where(name)["server"][0][1] == "INBOX", f"{name} came back")
+    clean(page)
+
+
 def test_the_flood_list_cleans_up_a_sender_after_two_clicks_and_undo_reverses_it(page, app, world):
     issues(world)
     d = drawer(page)
