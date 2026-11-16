@@ -12,7 +12,10 @@ const the = vi.hoisted(() => ({
 }));
 vi.mock("./route", async (real) => ({ ...(await real<typeof import("./route")>()), go: vi.fn() }));
 vi.mock("../lib/toast", () => ({ toast: the.toast }));
-vi.mock("../lib/theme", () => ({ theme: { get: () => the.theme }, setTheme: the.setTheme, THEME_LABEL: { day: "Day", dusk: "Dusk", night: "Night" } }));
+vi.mock("../lib/theme", () => ({
+  theme: { get: () => the.theme }, setTheme: the.setTheme, THEME_LABEL: { auto: "Automatic", day: "Day", dusk: "Dusk", night: "Night" },
+  themeSaid: (t: string) => (t === "auto" ? "Automatic light" : `${t} theme`),
+}));
 vi.mock("../features/assistant/Panels", () => ({ panel: { set: the.panel } }));
 vi.mock("../features/assistant/ask", () => ({ doing: { set: the.doing } }));
 vi.mock("../features/assistant/Suggestions", () => ({ findSuggestions: the.suggest }));
@@ -138,12 +141,12 @@ describe("what the commands offer", () => {
     expect(legend.commands.map((c) => c.id)).not.toContain("summarize");
     expect(legendOf(reading(), ui).commands.find((c) => c.id === "search")!.legend).toContain("?question asks your inbox");
   });
-  it("offers the two themes not in use", () => {
+  it("offers the themes not in use, Automatic among them", () => {
     the.theme = "dusk";
-    expect(ids(mailbox()).filter((id) => id.startsWith("theme:"))).toEqual(["theme:day", "theme:night"]);
-    command(mailbox(), "theme:night").run();
-    expect(the.setTheme).toHaveBeenCalledWith("night");
-    expect(the.toast).toHaveBeenCalledWith("Night theme");
+    expect(ids(mailbox()).filter((id) => id.startsWith("theme:"))).toEqual(["theme:auto", "theme:day", "theme:night"]);
+    command(mailbox(), "theme:auto").run();
+    expect(the.setTheme).toHaveBeenCalledWith("auto");
+    expect(the.toast).toHaveBeenCalledWith("Automatic light");
   });
   it("makes each saved view a command, a lane's searched in its lane", () => {
     const m = mailbox({ views: [{ id: "v1", name: "Bills", q: "bills" }, { id: "__lane_feed__", name: "Feed", q: "list:yes" }] });
