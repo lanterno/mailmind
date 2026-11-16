@@ -1,6 +1,7 @@
 """AI in Settings (#49): its own tab, with the switch first, the provider, its key, its model and the URL a service is reached
 at; the daily limit and the work written ahead shown only while AI is on; and a line saying how AI stands. A key goes to the
-server's Keychain (the tests' stand-in) and never shows again. Nothing reaches a real provider: OpenAI is the fake
+server's Keychain (the tests' stand-in) and never shows again. Turned off, nothing only AI can do is offered anywhere, and
+nothing says it is missing. Nothing reaches a real provider: OpenAI is the fake
 OpenAI-compatible API on loopback, at a URL the test gives the server first.
 """
 import json
@@ -12,6 +13,8 @@ from playwright.sync_api import expect
 from fakes import openai_api as fo
 
 pytestmark = pytest.mark.browser
+
+RECEIPT = "ada-inbox-05-receipt.eml"
 
 
 def clean(page):
@@ -139,4 +142,51 @@ def test_ollamas_url_is_filled_in_and_a_model_typed_by_hand(page, app, world, op
     expect(dialog.get_by_label("Model", exact=True)).to_have_value("llama3.3:70b")
     dialog.get_by_label("Use AI", exact=True).check()
     expect(page.locator("#aiStanding")).to_have_text("AI is on: Ollama, on this Mac · llama3.3:70b.")
+    clean(page)
+
+
+def test_with_ai_turned_off_nothing_only_ai_can_do_is_offered_and_nothing_says_why(page, world, ai):
+    asked = []
+    page.on("request", lambda r: asked.append(r.url))
+    page.goto("/")
+    search = page.locator("#search")
+    expect(search).to_have_attribute("placeholder", re.compile("^Ask a question"))
+    expect(page.locator('[data-brief="week"]')).to_be_visible()
+    expect(page.locator('[data-brief="refresh"]')).to_be_visible()
+    page.get_by_role("tab", name=re.compile("^Everything")).click()
+    page.locator('#rows .row[data-key="{key}"][data-folder="{folder}"]'.format(**world.copy(RECEIPT))).click()
+    expect(page.locator('[data-ca="summarize"]')).to_be_visible()
+    expect(page.locator('[data-ca="extract"]')).to_be_visible()
+
+    page.locator("#settingsBtn").click()
+    page.get_by_role("tab", name="AI").click()
+    with page.pw.expect_response(lambda r: r.url.endswith("/api/digest") and r.request.method == "GET"):
+        page.get_by_role("dialog", name="AI").get_by_label("Use AI", exact=True).uncheck()
+    page.locator("#setClose").click()
+    calls = len(ai.requests)
+
+    for gone in ('[data-ca="summarize"]', '[data-ca="extract"]', "#aiCard", "#sgCard"):
+        expect(page.locator(gone)).to_have_count(0)
+    expect(search).to_have_attribute("placeholder", "Search — is:unread, from:amazon")
+    page.keyboard.press("i")                            # what summarized is no key now
+    expect(page.locator("#aiCard")).to_have_count(0)
+    page.locator("#statusBtn").click()
+    menu = page.get_by_role("dialog", name="Sync status")
+    expect(menu).to_be_visible()
+    expect(menu.locator(".sm-ai")).to_have_count(0)
+    expect(menu).not_to_contain_text("summarized")
+    page.keyboard.press("Escape")
+
+    page.goto("/")                                      # the brief: its tallies and cards, nothing of AI's
+    expect(page.locator(".bf-card")).to_be_visible()
+    for gone in ('[data-brief="refresh"]', '[data-brief="week"]', ".bf-aioff", ".bf-narr", '[data-brief="tidy"]'):
+        expect(page.locator(gone)).to_have_count(0)
+    search.fill("?when is lunch")                       # a question is words to search for
+    search.press("Enter")
+    page.expect_where(r"^/search\?q=%3Fwhen")
+    expect(page.locator(".ask-wrap")).to_have_count(0)
+    expect(page.locator("body")).not_to_contain_text("AI is off")
+    page.heard_all_asked()
+    assert not [u for u in asked if "/api/ai/ask" in u or "/api/ai/do-plan" in u]
+    assert len(ai.requests) == calls
     clean(page)
