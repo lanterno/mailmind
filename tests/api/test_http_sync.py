@@ -1,12 +1,15 @@
 """What a sync keeps of new mail beyond its row, over HTTP: an Inbox message that carries an invite is stored with its
 body, as opening it would store it, so Today & next has the invite without the message ever being opened. And when a
-folder is caught up as it opens: once a minute at most, never the Inbox, and at once after MailMind put mail there."""
+folder is caught up as it opens: once a minute at most, never the Inbox, and at once after MailMind put mail there. An
+account's first sync stores what its Inbox held before, which is no new mail."""
 import pytest
 
+from event_stream import Stream
 from fixtures import world as w
 from mailmind.bootstrap.mailbox import store
 
 INVITE = "ada-inbox-06-outlook-invite.eml"
+DEE = "dee@example.test"            # not one of the world's accounts
 
 
 def rows(sql, *args):
@@ -98,3 +101,47 @@ def test_a_move_lets_its_folder_catch_up_on_its_next_open(app, world, how):
     app.work("commands")
     assert opened(app, CLIENTS)["items"]
     assert len(catch_ups(world, CLIENTS)) == 1
+
+
+# ── an account's first sync ──────────────────────────────────────────────
+
+def is_a(frame, topic):
+    return f"\nevent: {topic}\n" in f"\n{frame}\n"
+
+
+def heard_until(stream, topic):
+    """What the stream said up to the first `topic` event, that one last."""
+    said = [stream.event()]
+    while not is_a(said[-1], topic):
+        said.append(stream.event())
+    return said
+
+
+def test_an_accounts_first_sync_is_no_new_mail_and_what_comes_after_it_is(app, world):
+    entry = world.server.add_account(DEE)
+    for n in range(3):
+        world.server.deliver(DEE, "INBOX", w.variant(CONFIRM, Message_ID=f"<dee-{n}@example.test>"))
+    added = app.post("/api/accounts/add", {"email": DEE, "type": "imap", "host": entry["host"], "port": entry["port"],
+                                            "starttls": entry["starttls"],
+                                            "credential": {"style": "keychain", "value": "app-password"}})
+    assert added.status == 200, added.json
+    stream = Stream(app)
+    stream.frame()
+
+    app.post("/api/refresh", {})
+    app.settle()
+    # Muting a thread says so on the stream: everything the sync said comes before it.
+    app.post("/api/mute", {"account": w.CY, "thread_id": world.row("cy-inbox-01-thread-start.eml")["thread_id"]})
+    said = heard_until(stream, "mute")
+    assert any(is_a(f, "sync-done") and DEE in f for f in said), said
+    assert not any(is_a(f, "new-mail") for f in said), said
+    assert app.get("/api/digest").json["sync"]["result"] == "0 new"
+    assert len(rows("SELECT uid FROM messages WHERE account=? AND folder='INBOX'", DEE)) == 3
+
+    world.server.deliver(DEE, "INBOX", w.variant(CONFIRM, Message_ID="<dee-after@example.test>"))
+    app.post("/api/refresh", {})
+    app.settle()
+    arrived = heard_until(stream, "new-mail")[-1]
+    assert DEE in arrived and '"count": 1' in arrived, arrived
+    assert app.get("/api/digest").json["sync"]["result"] == "1 new"
+    stream.close()
