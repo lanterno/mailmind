@@ -3,10 +3,10 @@
 The client is given its key and base URL, so the SDK reads no credential or profile of its own
 from the environment or the disk. It retries the statuses in ports.RETRIED, twice, honouring
 retry-after, and raises typed errors, which become ModelError here, with what the API said of an
-error: its message as words, or as compact JSON where it is anything else, the key taken out of all
-of it before it is cut to SAID characters. The server-side refusal fallback is a beta, so a prompt
-that asks for it goes through client.beta.messages. A key with a blank or a control character in it
-is never sent: it is refused as a rejected key is.
+error: its message as words, or as compact JSON where it is anything else, and nothing where it
+said none, the key taken out of all of it before it is cut to SAID characters. The server-side
+refusal fallback is a beta, so a prompt that asks for it goes through client.beta.messages. A key
+with a blank or a control character in it is never sent: it is refused as a rejected key is.
 
 The SDK sends nothing itself: each of its attempts is an `exchange` with the endpoint the client was
 made for (`_Exchange`), as every other provider's are. So no proxy and no header the environment names
@@ -76,15 +76,15 @@ class _Exchange(httpx2.BaseTransport):
 
 
 def _error_text(e: anthropic.APIStatusError, key: str) -> str:
-    """What the API said of an error: its error's message, else the body's, else the SDK's words for it; words as they are
-    and anything else as compact JSON, with `key` taken out of all of it before it is cut to SAID characters, so no part of
-    a key the cut runs through is left."""
+    """What the API said of an error, read from the body it answered with and nothing else: its error's message, or the
+    body's where the error is no object; words as they are and anything else as compact JSON, and nothing ("") where that
+    is absent or empty or the body isn't JSON. Never the SDK's words for it, which quote the body as Python writes it.
+    `key` is taken out of all of it before it is cut to SAID characters, so no part of a key the cut runs through is left."""
     body = e.body if isinstance(e.body, dict) else {}
     inner = body.get("error")
-    err = inner if isinstance(inner, dict) else body
-    said = err.get("message")
+    said = (inner if isinstance(inner, dict) else body).get("message")
     if not said:
-        said = e.message or ""
+        return ""
     text = said if isinstance(said, str) else json.dumps(said, separators=(",", ":"), ensure_ascii=False)
     return (text.replace(key, "<key>") if key else text)[:SAID]
 
