@@ -79,6 +79,21 @@ fn a_change_said_ends_it_and_done_goes_before_anything_else() {
 }
 
 #[test]
+fn while_it_idles_the_system_probes_a_quiet_connection() {
+    let (mut s, server) = session(|mut peer| {
+        assert_eq!(peer.heard(), "MM1 IDLE");
+        peer.say("+ idling");
+        peer.say("* 4 EXISTS");
+        assert_eq!(peer.heard(), "DONE");
+        peer.say("MM1 OK IDLE terminated");
+    });
+    assert_eq!(s.connection.wire.stream.keep_alive_after().unwrap(), None);
+    assert_eq!(s.idle(Duration::from_secs(30)), Ok(true));
+    assert_eq!(s.connection.wire.stream.keep_alive_after().unwrap(), Some(PROBE_AFTER));
+    server.join().unwrap();
+}
+
+#[test]
 fn with_nothing_new_it_ends_when_its_time_is_up() {
     let (mut s, server) = session(|mut peer| {
         assert_eq!(peer.heard(), "MM1 IDLE");
