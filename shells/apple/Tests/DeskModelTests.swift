@@ -657,19 +657,57 @@ final class DeskModelTests: XCTestCase {
     }
 
     func testASweepIsPlannedThenRunOnConfirm() async {
+        let going = [API.SweepBucket(bucket: "newsletters/marketing", count: 12, senders: [
+            API.SweepSender(count: 9, fromAddr: "news@loom.example.test"),
+            API.SweepSender(count: 3, fromAddr: "deals@loom.example.test")], subjects: ["Issue 12", "Spring sale"])]
         routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
-            API.AccountSwept(account: "ada@example.test", planned: 12)]))
+            API.AccountSwept(account: "ada@example.test", going: going, heldBack: 2, planned: 12)]))
         routes.answer("POST", "/api/sweep", API.Swept(dryRun: false, generated: "", ok: true, results: [
-            API.AccountSwept(account: "ada@example.test", moved: 11, planned: 12, stragglers: ["k-9"])]))
+            API.AccountSwept(account: "ada@example.test", moved: 11, planned: 12, stragglers: ["k-9"])],
+            undoGroup: "ug-sweep"))
         let model = CurateModel(link: link, notices: notices)
 
         await model.armSweep("ada@example.test")
         XCTAssertEqual(model.sweepArmed?.planned, 12)
+        XCTAssertEqual(model.sweepArmed?.going, going, "what goes is shown before Confirm")
         await model.sweep()
 
-        XCTAssertEqual(routes.sent("POST", "/api/sweep").map { $0["dry_run"] }, [.bool(true), .bool(false)])
+        let sent = routes.sent("POST", "/api/sweep")
+        XCTAssertEqual(sent.map { $0["dry_run"] }, [.bool(true), .bool(false)])
+        XCTAssertNil(sent.first?["undo_group"], "a plan moves nothing, so it has nothing to undo")
+        guard case .string(let group)? = sent.last?["undo_group"] else { return XCTFail("the sweep names its undo group") }
+        XCTAssertTrue(group.hasPrefix("ug-"))
         XCTAssertNil(model.sweepArmed)
         XCTAssertEqual(said, "Swept 11/12 · 1 unverified")
+        XCTAssertTrue(undoable)
+    }
+
+    func testASweepThatLeavesEverythingSaysWhatStays() async {
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", heldBack: 3, planned: 0)]))
+        let model = CurateModel(link: link, notices: notices)
+
+        await model.armSweep("ada@example.test")
+
+        XCTAssertNil(model.sweepArmed)
+        XCTAssertEqual(said, "Nothing to sweep: 3 starred or unread stay")
+    }
+
+    func testASweepsPlanSaysWhatStaysWhatWaitsAndWhatUndoCantBringBack() {
+        let plan = API.AccountSwept(account: "ada@example.test", capped: true, heldBack: 1, noUndo: 2, planned: 500)
+        XCTAssertEqual(CurateModel.sweepNotes(plan), [
+            "1 starred or unread message stays in your Inbox.",
+            "The newest 500 only — sweep again for the rest.",
+            "2 of them can’t be brought back with Undo."])
+        XCTAssertEqual(CurateModel.sweepNotes(API.AccountSwept(account: "ada@example.test", capped: false, heldBack: 4,
+                                                               noUndo: 0, planned: 3)),
+                       ["4 starred or unread messages stay in your Inbox."])
+        XCTAssertEqual(CurateModel.bucketWords("newsletters/marketing"), "Newsletters and marketing")
+        XCTAssertEqual(CurateModel.bucketWords("something/new"), "something/new")
+        XCTAssertEqual(CurateModel.sweepSenders(API.SweepBucket(bucket: "spam/scam", count: 3, senders: [
+            API.SweepSender(count: 2, fromAddr: "win@prizes.example.test"),
+            API.SweepSender(count: 1, fromAddr: "lotto@prizes.example.test")], subjects: [])),
+                       "win@prizes.example.test (2), lotto@prizes.example.test")
     }
 
     func testARuleChangedReadsTheRulesTheServerSends() async {
