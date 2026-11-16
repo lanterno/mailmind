@@ -83,6 +83,23 @@ def test_content_in_parts_is_joined_and_cached_tokens_never_pass_the_prompt():
     assert (reply.text, reply.usage) == ("Lunch moved.", Usage(0, 0, 0, 10))
 
 
+@pytest.mark.parametrize("tag", ["think", "thinking"])
+def test_a_reasoning_models_thinking_ahead_of_its_reply_is_dropped(tag):
+    content = f'\n<{tag}>The guest asked about {{"table": true}}.\nSaturday works.</{tag}>\n\n{{"body": "Yes."}}'
+    reply = chat_wire.reply({"choices": [{"message": {"content": content}}]}, "qwen3:8b")
+    assert reply.text == '{"body": "Yes."}'
+
+
+@pytest.mark.parametrize(("text", "kept"), [
+    ('{"body": "<think>a</think>"}', '{"body": "<think>a</think>"}'),            # not ahead of the reply
+    ("<think>unfinished", "<think>unfinished"),                                 # never closed
+    ("<think>a</thinking> b", "<think>a</thinking> b"),                          # closed as another
+    ("<think>a</think><think>b</think> c", "<think>b</think> c"),                # only the first block
+])
+def test_only_a_whole_block_ahead_of_the_reply_is_dropped(text, kept):
+    assert chat_wire.without_thinking(text) == kept
+
+
 def test_a_list_of_models_reads_its_ids():
     assert chat_wire.model_ids({"data": [{"id": "a"}, {"id": ""}, {"name": "b"}, "c", {"id": "d"}]}) == ["a", "d"]
     assert chat_wire.model_ids({"models": []}) == [] == chat_wire.model_ids(None) == chat_wire.model_ids({"data": "x"})

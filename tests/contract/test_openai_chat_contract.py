@@ -166,6 +166,14 @@ def test_a_service_that_refuses_response_format_is_asked_once_more_without_it(ch
     assert second.body["messages"] == first.body["messages"]
 
 
+def test_a_reasoning_models_thinking_is_dropped_before_its_reply_is_read(choose):
+    api = choose("local", key=None, ai_model="qwen3:8b")
+    api.key, api.refuse_format = None, True
+    api.queue(fo.error(400, "response_format of type json_schema is not supported"),
+              fo.answer('<think>They want {"body": ...}, so a short yes.</think>\n{"body": "See you Saturday."}'))
+    assert ask() == {"body": "See you Saturday."}
+
+
 def test_openai_is_not_asked_again_without_it(choose):
     api = choose("openai")
     api.queue(fo.error(400, "Invalid schema for response_format 'answer'"))
