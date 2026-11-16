@@ -73,6 +73,7 @@ fn message(uid: u32) -> Incoming {
             is_junk: false,
         },
         snippet: format!("Note {uid}"),
+        body_text: None,
     }
 }
 
@@ -152,4 +153,41 @@ fn a_folder_opens_as_one_read_before_once_its_first_scan_has_begun() {
     assert!(database.scan_begun(ADA, "INBOX").unwrap());
     database.store_step(&ada(), "Archive", &[], &place(0, Some(Scan::Whole), None)).unwrap();
     assert!(database.scan_begun(ADA, "Archive").unwrap());
+}
+
+/// A message's UID, its text, and whether its whole body is kept.
+type Text = (u32, Option<String>, i64);
+
+/// Each of Ada's Inbox messages' text, whether its whole body is kept, and the messages search finds for `word`.
+fn texts(database: &Database, word: &str) -> (Vec<Text>, Vec<u32>) {
+    database
+        .read(|c| {
+            let mut rows = c.prepare(
+                "SELECT uid, body_text, body_fetched FROM messages WHERE account=? AND folder='INBOX' ORDER BY uid",
+            )?;
+            let texts = rows.query_map([ADA], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<Result<_, _>>()?;
+            let mut found = c.prepare(
+                "SELECT m.uid FROM msg_fts JOIN messages m ON m.pk=msg_fts.rowid WHERE msg_fts MATCH ? ORDER BY m.uid",
+            )?;
+            let found = found.query_map([word], |r| r.get(0))?.collect::<Result<_, _>>()?;
+            Ok((texts, found))
+        })
+        .unwrap()
+}
+
+#[test]
+fn the_text_of_an_opening_a_sync_read_is_kept_for_search_and_a_later_sync_leaves_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path());
+    let mut read = message(11);
+    read.body_text = Some("A log cabin by the lake".to_owned());
+    database.store_step(&ada(), "INBOX", &[read, message(12)], &place(12, None, None)).unwrap();
+    let cabin = Some("A log cabin by the lake".to_owned());
+    assert_eq!(texts(&database, "cabin"), (vec![(11, cabin.clone(), 0), (12, None, 0)], vec![11]));
+    // Synced again, its opening read again or not, it keeps the text it has.
+    let mut again = message(11);
+    again.body_text = Some("Something else".to_owned());
+    database.store_step(&ada(), "INBOX", &[again, message(12)], &place(12, None, None)).unwrap();
+    database.store_step(&ada(), "INBOX", &[message(11)], &place(12, None, None)).unwrap();
+    assert_eq!(texts(&database, "cabin"), (vec![(11, cabin, 0), (12, None, 0)], vec![11]));
 }

@@ -82,6 +82,7 @@ fn stored(database: &Database, uid: u32, flags: [i64; 5]) -> i64 {
             is_junk: false,
         },
         snippet: "Shall we say noon?".to_owned(),
+        body_text: None,
     };
     database.store_copy(&ada(), "INBOX", &incoming).unwrap().0
 }
