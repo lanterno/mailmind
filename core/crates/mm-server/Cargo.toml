@@ -40,6 +40,8 @@ mm-attention.workspace = true
 mm-smtp.workspace = true
 # What is asked of Claude, over the Claude API.
 mm-claude.workspace = true
+# What is asked of any other AI provider (#49), over OpenAI's Chat Completions.
+mm-openai.workspace = true
 # RFC 8058's one-click unsubscribe POST.
 mm-oneclick.workspace = true
 # An answer's JSON in the order its fields were written, as Python's dicts keep theirs.

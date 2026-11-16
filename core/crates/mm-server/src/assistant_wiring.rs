@@ -1,14 +1,21 @@
 //! The Assistant's wiring (`mailmind.bootstrap.assistant`): the language model the process talks to, and with which
 //! key, the cost governor and the gateway every call goes through, and every AI use case.
 //!
-//! The key is the config file's `anthropic_api_key` (a Keychain item, a 1Password reference, or a variable it names,
-//! a 1Password read kept for the process as an account's password is), and only then
-//! ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet switch to the environment's. Both are
-//! read at each call, so a new key takes effect at once, and the model is made again only when the key changes.
+//! The engine in force is read from what a person chose (#49): AI on or off, its provider, model and URL, which are
+//! preferences in mailmind.config.json, and the key kept for that provider. Claude, the default, goes through
+//! mm-claude; every other provider through mm-openai's Chat Completions. AI off, turned off or with no key, URL or
+//! model to ask, nothing is sent. MAILMIND_MODEL wins over the model a person chose, and ANTHROPIC_BASE_URL stands in
+//! for Claude's own URL where none was chosen.
+//!
+//! A provider's key is the config file's `anthropic_api_key`, `openai_api_key` and the like (a Keychain item, a
+//! 1Password reference, or a variable it names, a 1Password read kept for the process as an account's password is),
+//! and for Claude only then ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet switch to the
+//! environment's. Each is read at each call, so a change in Settings takes effect at once, and the language model is
+//! made again only when what it was made for changes: the provider, its URL or its key.
 
 use std::sync::{Arc, Mutex};
 
-use mm_accounts::credential::{CredentialRef, Style};
+use mm_accounts::credential::{CredentialRef, Style, api_key_who};
 use mm_accounts::one_password::OpReads;
 use mm_accounts::ports::ConfigFile;
 use mm_assistant::ask::Asker;
@@ -25,6 +32,7 @@ use mm_assistant::ports::{
     Stamp,
 };
 use mm_assistant::prepared_replies::PreparedReplies;
+use mm_assistant::providers::{self, default_base_url, default_model, speaks_anthropic};
 use mm_assistant::rationale::Rationales;
 use mm_assistant::reply_draft::ReplyDrafts;
 use mm_assistant::reviews::Reviews;
@@ -34,6 +42,7 @@ use mm_assistant::status::Status;
 use mm_assistant::thread_digest::ThreadDigest;
 use mm_calendar::agenda::Agenda;
 use mm_discovery::query::QuerySpec;
+use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Keychain, Outside, Secret};
 use mm_kernel::zone::Zone;
@@ -48,17 +57,31 @@ use serde_json::{Value, json};
 use crate::environment::Environment;
 use crate::wiring::AiConfig;
 
-const CONFIG: &str = "mailmind.config.json";
+const CONFIG: &str = providers::CONFIG;
 const ENVIRONMENT: &str = "ANTHROPIC_API_KEY";
 
-/// The Claude API for the key in force, made once for each key.
+/// What a language model was made for: the provider, the URL it is reached at, and its key.
+struct MadeFor {
+    provider: AiProvider,
+    base_url: String,
+    key: Secret,
+}
+
+impl MadeFor {
+    fn same(&self, other: &MadeFor) -> bool {
+        self.provider == other.provider && self.base_url == other.base_url && self.key.expose() == other.key.expose()
+    }
+}
+
+/// The language model of the provider and key in force, made once for each provider, URL and key; and the models a
+/// provider lists.
 pub(crate) struct ApiEngine {
     file: Arc<dyn ConfigFile>,
     keychain: Arc<dyn Keychain>,
     op: Arc<OpReads>,
     outside: Arc<dyn Outside>,
     environment: Environment,
-    made: Mutex<Option<(Secret, Arc<dyn LanguageModel>)>>,
+    made: Mutex<Option<(MadeFor, Arc<dyn LanguageModel>)>>,
 }
 
 impl std::fmt::Debug for ApiEngine {
@@ -68,11 +91,12 @@ impl std::fmt::Debug for ApiEngine {
 }
 
 impl ApiEngine {
-    /// The key the config file names, in any credential style but a plain one or the Bridge's: None when it names
-    /// none, and an empty key when it names one that can't be had.
-    fn config_key(&self) -> Result<Option<Secret>, Fault> {
+    /// The key the config file names for `provider`, in any credential style but a plain one or the Bridge's: None
+    /// when it names none, and an empty key when it names one that can't be had.
+    fn config_key(&self, provider: AiProvider) -> Result<Option<Secret>, Fault> {
+        let Some(who) = api_key_who(provider) else { return Ok(None) };
         let raw = self.file.read()?;
-        let Some(named) = raw.get("anthropic_api_key").filter(|c| mm_accounts::account::truthy(c)) else {
+        let Some(named) = raw.get(who).filter(|c| mm_accounts::account::truthy(c)) else {
             return Ok(None);
         };
         let credential = CredentialRef::parse(Some(named));
@@ -94,43 +118,76 @@ impl ApiEngine {
         Ok(Some(Secret::new(key)))
     }
 
-    /// The API key and where it came from, the key empty when there is none. The config file wins, so a MailMind-only
-    /// key isn't shadowed by one the shell exports for other tools.
-    fn key(&self) -> (Secret, &'static str) {
-        match self.config_key() {
-            Err(_) => (Secret::new(String::new()), CONFIG),
-            Ok(Some(key)) => (key, CONFIG),
-            Ok(None) => (self.environment.anthropic_key().unwrap_or_else(|| Secret::new(String::new())), ENVIRONMENT),
+    /// `provider`'s API key and where it was looked for, the key empty when there is none. The config file wins, so a
+    /// MailMind-only key isn't shadowed by one the shell exports for other tools; only Claude's has the environment
+    /// after it. A provider that takes no key has none, from nowhere.
+    fn key(&self, provider: AiProvider) -> (Secret, &'static str) {
+        let none = || Secret::new(String::new());
+        if !provider.takes_key() {
+            return (none(), "");
         }
+        match self.config_key(provider) {
+            Err(_) => (none(), CONFIG),
+            Ok(Some(key)) => (key, CONFIG),
+            Ok(None) if provider == AiProvider::Anthropic => {
+                (self.environment.anthropic_key().unwrap_or_else(none), ENVIRONMENT)
+            }
+            Ok(None) => (none(), ""),
+        }
+    }
+
+    /// The preferences as they stand; their defaults when the file can't be read.
+    fn preferences(&self) -> (serde_json::Map<String, Value>, AiProvider) {
+        let raw = self.file.read().unwrap_or_default();
+        (mm_accounts::preferences::read(&raw), mm_accounts::preferences::provider(&raw))
+    }
+
+    /// Where `provider` is reached as chosen: the URL a person chose for it, else for Claude ANTHROPIC_BASE_URL's,
+    /// else "" for its own.
+    fn chosen_url(&self, provider: AiProvider, chosen: &str) -> String {
+        if !chosen.is_empty() || provider != AiProvider::Anthropic {
+            return chosen.to_owned();
+        }
+        self.environment.anthropic_base_url().unwrap_or_default()
+    }
+
+    /// The language model for `made_for`, made again only when it changed.
+    fn model_for(&self, made_for: MadeFor) -> Arc<dyn LanguageModel> {
+        let mut made = self.made.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((was_for, model)) = made.as_ref()
+            && was_for.same(&made_for)
+        {
+            return model.clone();
+        }
+        let key = Secret::new(made_for.key.expose().to_owned());
+        let model: Arc<dyn LanguageModel> = if speaks_anthropic(made_for.provider) {
+            Arc::new(mm_claude::ClaudeApi::new(key, Some(&made_for.base_url), self.outside.clone()))
+        } else {
+            Arc::new(mm_openai::ChatApi::new(made_for.provider, &made_for.base_url, Some(key), self.outside.clone()))
+        };
+        *made = Some((made_for, model.clone()));
+        model
     }
 }
 
 impl Engine for ApiEngine {
     fn in_force(&self) -> InForce {
-        let (key, key_from) = self.key();
-        if key.expose().is_empty() {
-            return InForce::off(mm_assistant::providers::Off::NoKey, key_from);
-        }
-        let named = |mut force: InForce| {
-            if let Some(model) = self.environment.model() {
-                force.model = model;
-            }
-            force
+        let (chosen, provider) = self.preferences();
+        let said = |name: &str| chosen.get(name).and_then(Value::as_str).unwrap_or_default().to_owned();
+        let enabled = chosen.get(mm_accounts::preferences::AI_ENABLED).and_then(Value::as_bool).unwrap_or(true);
+        let model = self.environment.model().unwrap_or_else(|| said(mm_accounts::preferences::AI_MODEL));
+        let model = if model.is_empty() { default_model(provider).to_owned() } else { model };
+        let base_url = self.chosen_url(provider, &said(mm_accounts::preferences::AI_BASE_URL));
+        let base_url = if base_url.is_empty() { default_base_url(provider).to_owned() } else { base_url };
+        // Turned off, nothing is looked up: not even the Keychain.
+        let (key, key_from) = if enabled { self.key(provider) } else { (Secret::new(String::new()), "") };
+        let local = providers::local(provider, &base_url);
+        let off = providers::off(enabled, provider, !key.expose().is_empty(), &base_url, &model);
+        let lm = match off {
+            Some(why) => Err(why),
+            None => Ok(self.model_for(MadeFor { provider, base_url, key })),
         };
-        let mut made = self.made.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some((for_key, model)) = made.as_ref()
-            && for_key.expose() == key.expose()
-        {
-            return named(InForce::claude(model.clone(), key_from));
-        }
-        let base_url = self.environment.anthropic_base_url();
-        let model: Arc<dyn LanguageModel> = Arc::new(mm_claude::ClaudeApi::new(
-            Secret::new(key.expose().to_owned()),
-            base_url.as_deref(),
-            self.outside.clone(),
-        ));
-        *made = Some((key, model.clone()));
-        named(InForce::claude(model, key_from))
+        InForce { provider, model, key_from, local, lm }
     }
 }
 
