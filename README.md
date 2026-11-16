@@ -379,7 +379,8 @@ or for a switch you turned on in Settings › AI.
   writing another message by then, it is saved to Drafts before the undone one takes its
   place, and if that save fails it stays open while the undone one waits behind Edit.
 - **Scheduled send** — pick a preset or an exact time; its row in the outbox says when,
-  with **Send now** and **Cancel**.
+  with **Send now** and **Cancel**. It goes while MailMind is open, and in the Mac app Send later and the outbox
+  say so.
 - **Send-time checks.** Send, ⌘/Ctrl+Enter and the Later presets first look the message
   over. A gold strip holds the send when there's no subject, when you wrote "attached" (or
   *ci-joint*, *te adjunto*, *em anexo*, *anbei*, *in allegato*, *bijgevoegd*, *مرفق*: eight
@@ -641,6 +642,19 @@ on Apple silicon or Intel:
    Privacy & Security**, scroll down to **Security**, click **Open Anyway** beside *"MailMind" was blocked to protect
    your Mac*, then **Open Anyway** again, and enter your password.
 3. From then on it updates itself: it asks before its first check, and **MailMind › Check for Updates…** checks at once.
+
+It sends and syncs only while it is open. **Settings › General › Open at login** opens it as you log in, and
+quitting sends a message still in its Undo window first, and asks before leaving one scheduled for later. Its window
+closed and opened again from the Dock shows the mail already open, and when the Mac wakes or its network changes the
+mail syncs at once.
+
+When something goes wrong, **Help › Copy Diagnostics** copies what the owner needs to see why: the version, this Mac,
+how each account is set up, what failed lately and the log's last lines, with no address, subject, name or password
+in it. **Help › Report a Problem…** copies the same and opens a new issue on GitHub; send it to whoever gave you
+MailMind. A sync that fails says why in **Settings › Accounts**, with what to do next, and background work that keeps
+failing says so in the sync menu. If MailMind can't open its copy of your mail, its window says why, with **Copy
+Details**, **Show in Finder** and **Start Fresh…**, which moves that copy into `backups/` and reads your mail from its
+servers again.
 
 How a release is made is in [docs/releasing.md](docs/releasing.md).
 

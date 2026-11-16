@@ -49,7 +49,9 @@ The database's code is `mailmind.platform.db`; `store.conn()` and `store.init()`
   sets its version, after the same backup (`mm_store::backup`). Each `Migration` declares the tables it retires,
   rebuilds and fills and the rows it trims, which `mailmind-server db check-upgrade` (`mm_store::upgrade_check`) reads
   as `check.py` reads `RETIRED`, `REBUILT`, `FILLED` and `TRIMMED`, in the same report. A database older than 51 still
-  takes a start of the Python app, and over one newer than its last migration the core says it is behind.
+  takes a start of the Python app, and over one newer than its last migration the core says it is behind. The core
+  says both in a person's words, since the Mac app's window shows them as they are: an older one was left as it is,
+  and a newer one needs the newest MailMind (`database_version::said`).
 - Until the Python app goes, a schema change is a migration in both: the Python app's N, which renames the golden
   schema, and a `Migration` of the same number at the end of `MIGRATIONS` that leaves the same schema, with the Rust
   server's reads brought along. `mm-store`'s `tests/version.rs` and `tests/make.rs` fail until the core has it.
