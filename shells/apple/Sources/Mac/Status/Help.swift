@@ -268,9 +268,10 @@ struct KeysLegend: View {
         work either way.
         """)
 
-    /// The groups in their three columns: the fourth, Go to, under Write.
-    static var columns: [[Group]] {
-        [[read], [triage], [write, goTo]]
+    /// The groups in their three columns: the fourth, Go to, under Write. With AI turned off in Settings, no key that only
+    /// AI serves is listed, as the window offers none.
+    static func columns(aiTurnedOff: Bool = false) -> [[Group]] {
+        [[read], [aiTurnedOff ? triageWithoutAI : triage], [write, goTo]]
     }
 
     static let read = Group(title: String(localized: "Read"), keys: [
@@ -290,6 +291,9 @@ struct KeysLegend: View {
         Key("U", String(localized: "Mark unread")), Key("I", String(localized: "Summarize")),
         Key("V", String(localized: "Save search as view")), Key("Z", String(localized: "Undo")),
     ])
+
+    /// Triage with AI turned off: Summarize, which only AI serves, left out.
+    static let triageWithoutAI = Group(title: triage.title, keys: triage.keys.filter { $0.keys != ["I"] })
 
     static let write = Group(title: String(localized: "Write"), keys: [
         Key("R", String(localized: "Reply")), Key("A", String(localized: "Reply all")),
@@ -325,7 +329,7 @@ struct KeysLegend: View {
                 .font(.meadow(.ui, 14))
                 .foregroundStyle(meadow.ink3)
             HStack(alignment: .top, spacing: 18) {
-                ForEach(Array(Self.columns.enumerated()), id: \.offset) { _, groups in
+                ForEach(Array(Self.columns(aiTurnedOff: status.digest?.ai.isTurnedOff ?? false).enumerated()), id: \.offset) { _, groups in
                     VStack(alignment: .leading, spacing: 18) {
                         ForEach(groups, id: \.self) { KeysLegendGroup(group: $0) }
                     }
