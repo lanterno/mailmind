@@ -363,4 +363,55 @@ final class AITurnedOffTests: XCTestCase {
         XCTAssertEqual(app.mailbox.submitted("?what did Grace say"), .question("what did Grace say"),
                        "the assistant says why it can't answer")
     }
+
+    /// The composers over routes that open message 7 for a reply, with `digest` saying how AI stands.
+    private func replying(_ digest: API.Digest) throws -> (Composing, FakeRoutes) {
+        let composing = Composing()
+        let routes = FakeRoutes()
+        routes.answer(API.Get.MessageBody.path, String(decoding: try JSONEncoder().encode(opened(key: 7)), as: UTF8.self))
+        composing.use(routes, digest: digest)
+        composing.openWindow = { _ in }
+        return (composing, routes)
+    }
+
+    /// With AI turned off, Reply is a plain reply: no reply written ahead is asked for, offered or put in it.
+    func testReplyIsPlainWithAITurnedOff() async throws {
+        let (composing, routes) = try replying(Fixture.digest(ai: false, off: .turnedOff))
+        let copy = MailCopy(Fixture.row(7))
+        composing.viewing(copy, wanted: true, skip: false)
+        composing.draftReady(7)
+        await composing.answer(copy)
+        XCTAssertTrue(routes.calls(to: API.Get.AiDraftAhead.path).isEmpty)
+        XCTAssertTrue(routes.calls(to: API.Post.AiDraftReply.path).isEmpty)
+        let composer = try XCTUnwrap(composing.composers.values.first, "a plain reply")
+        XCTAssertFalse(composer.body.contains("Thursday works."))
+        composer.close(force: true)
+    }
+
+    /// A reply written ahead, offered while AI was on, goes as AI is turned off; a draft that finishes after is never
+    /// read, and Reply is a plain reply.
+    func testAReplyWrittenAheadGoesAsAIIsTurnedOff() async throws {
+        let (composing, routes) = try replying(Fixture.digest())
+        routes.answer(API.Get.AiDraftAhead.path, #"{"ok": true, "status": "ready", "body": "Thursday works."}"#)
+        let copy = MailCopy(Fixture.row(7))
+        composing.viewing(copy, wanted: false, skip: false)
+        await eventually("the reply written ahead to be offered") { composing.chips[7] == .ready }
+        let asked = routes.calls(to: API.Get.AiDraftAhead.path).count
+
+        routes.answer(API.Get.Digest.path, String(decoding: try JSONEncoder().encode(
+            Fixture.digest(ai: false, off: .turnedOff)), as: UTF8.self))
+        await composing.readDigest()
+        XCTAssertTrue(composing.aiTurnedOff)
+        XCTAssertTrue(composing.chips.isEmpty, "no Draft Ready")
+
+        composing.draftReady(7)
+        composing.viewing(copy, wanted: true, skip: false)
+        await composing.answer(copy)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(routes.calls(to: API.Get.AiDraftAhead.path).count, asked, "nothing more is asked")
+        XCTAssertTrue(composing.chips.isEmpty)
+        let composer = try XCTUnwrap(composing.composers.values.first, "a plain reply")
+        XCTAssertFalse(composer.body.contains("Thursday works."))
+        composer.close(force: true)
+    }
 }
