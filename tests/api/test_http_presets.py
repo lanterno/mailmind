@@ -96,6 +96,14 @@ def test_a_provider_that_sends_over_tls_from_the_first_byte_says_so(app, dns, em
     assert "app password" in r.json["note"]
 
 
+def test_yahoo_japan_is_no_yahoo_address_and_is_looked_up_as_any_other(app, dns):
+    """Yahoo Japan is another company's, with servers of its own: its domain takes no preset of its own, and its MX
+    records name no provider's servers MailMind knows."""
+    dns.mx("yahoo.co.jp", ["mx.mail.yahoo.co.jp"])
+    assert preset(app, "ada@yahoo.co.jp").json == answer("yahoo.co.jp", None, False) | NOTHING
+    assert dns.asked == [("yahoo.co.jp", 15)]
+
+
 @pytest.mark.parametrize("email", ["ada@outlook.com", "ada@hotmail.fr", "ada@live.com"])
 def test_microsofts_addresses_are_named_with_nothing_to_save(app, dns, email):
     r = preset(app, email)
@@ -109,9 +117,9 @@ def test_proton_says_bridge_is_needed_and_where_it_is_got(app, dns):
     assert r.json["link"] == {"url": "https://proton.me/mail/bridge", "words": "Get Proton Bridge"}
 
 
-@pytest.mark.parametrize("mx, found", [("in1-smtp.messagingengine.com", "fastmail"),
+@pytest.mark.parametrize("mx, found", [("in1-smtp.messagingengine.com", "fastmail"), ("mx01.mail.icloud.com", "icloud"),
                                        ("acme-example-test.mail.protection.outlook.com", "microsoft")],
-                         ids=["fastmail", "microsoft-365"])
+                         ids=["fastmail", "icloud-custom-domain", "microsoft-365"])
 def test_a_domain_whose_mail_another_providers_servers_take_is_offered_its_preset(app, dns, mx, found):
     dns.mx(ACME, [mx])
     assert which(preset(app, f"ada@{ACME}")) == answer(ACME, found, False)

@@ -102,8 +102,9 @@ def test_no_address_at_all_is_a_bad_request(email):
 
 @pytest.mark.parametrize("email, found", [
     ("ada@icloud.com", "icloud"), ("ada@me.com", "icloud"), ("ada@mac.com", "icloud"),
-    ("ada@yahoo.com", "yahoo"), ("ada@yahoo.co.uk", "yahoo"), ("ada@yahoo.fr", "yahoo"), ("ada@ymail.com", "yahoo"),
-    ("ada@aol.com", "aol"), ("ada@fastmail.com", "fastmail"), ("ada@fastmail.fm", "fastmail"),
+    ("ada@yahoo.com", "yahoo"), ("ada@yahoo.co.uk", "yahoo"), ("ada@yahoo.fr", "yahoo"), ("ada@yahoo.com.au", "yahoo"),
+    ("ada@yahoo.co.in", "yahoo"), ("ada@ymail.com", "yahoo"),
+    ("ada@aol.com", "aol"), ("ada@aol.de", "aol"), ("ada@fastmail.com", "fastmail"), ("ada@fastmail.fm", "fastmail"),
     ("ada@outlook.com", "microsoft"), ("ada@hotmail.com", "microsoft"), ("ada@hotmail.co.uk", "microsoft"),
     ("ada@live.com", "microsoft"), ("ada@live.fr", "microsoft"), ("ada@msn.com", "microsoft"),
     ("ada@proton.me", "proton"), ("ada@protonmail.com", "proton"), ("ada@pm.me", "proton"),
@@ -115,9 +116,19 @@ def test_a_providers_own_domains_take_its_preset_with_no_lookup(email, found):
     assert hosts.asked == []
 
 
-@pytest.mark.parametrize("email", ["ada@live.example.test", "ada@yahoo.example.test", "ada@mail.yahoo.com", "ada@notyahoo.com"])
+@pytest.mark.parametrize("email", ["ada@live.example.test", "ada@yahoo.example.test", "ada@mail.yahoo.com", "ada@notyahoo.com",
+                                   "ada@aol.org", "ada@live.net", "ada@yahoo.co.u2", "ada@outlook.com.example"])
 def test_a_brand_under_a_domain_that_isnt_a_countrys_ending_is_no_providers(email):
     assert preset_of(email)["preset"] is None
+
+
+@pytest.mark.parametrize("email", ["ada@yahoo.co.jp", "ada@yahoo.ne.jp", "ada@yahoo.jp"])
+def test_yahoo_japan_is_another_companys_with_servers_of_its_own(email):
+    hosts = Hosts({})
+    said = Presets(hosts).preset(email)
+    assert (said["preset"], said["sure"]) == (None, False)
+    assert len(hosts.asked) == 1                    # looked up as any other domain
+    assert preset_of("ada@hotmail.co.jp")["preset"] == "microsoft"
 
 
 def test_icloud_says_its_servers_its_trash_and_where_its_app_specific_password_is_made():
@@ -159,8 +170,8 @@ def test_microsoft_is_named_and_unsupported_with_nothing_to_save():
 
 
 @pytest.mark.parametrize("mx, found", [
-    ("in1-smtp.messagingengine.com", "fastmail"), ("acme-example-test.mail.protection.outlook.com", "microsoft"),
-    ("mail.protonmail.ch", "proton"), ("ASPMX.L.GOOGLE.COM.", "gmail"),
+    ("in1-smtp.messagingengine.com", "fastmail"), ("mx01.mail.icloud.com", "icloud"),
+    ("acme-example-test.mail.protection.outlook.com", "microsoft"), ("mail.protonmail.ch", "proton"), ("ASPMX.L.GOOGLE.COM.", "gmail"),
 ])
 def test_a_domain_whose_mail_a_providers_servers_take_is_offered_its_preset(mx, found):
     hosts = Hosts({"acme.example.test": ["mx.example.test", mx]})
