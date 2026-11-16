@@ -356,6 +356,29 @@ final class AIWordsTests: XCTestCase {
             .contains("With a model on this Mac, nothing leaves this Mac."))
     }
 
+    /// A paid key's card says it is billed per use by its provider, apart from any chat subscription, and where credit
+    /// is added; Gemini's, that its project is billed. A model on this Mac and a compatible service say nothing of it.
+    func testEachKeyCardSaysHowItIsBilled() {
+        XCTAssertEqual(API.AiProvider.anthropic.billing, """
+            Billed per use by Anthropic, separately from any ChatGPT or Claude subscription. Add credit in \
+            Anthropic’s console, under Billing.
+            """)
+        XCTAssertEqual(API.AiProvider.openai.billing, """
+            Billed per use by OpenAI, separately from any ChatGPT or Claude subscription. Add credit on OpenAI’s \
+            platform, under Billing.
+            """)
+        XCTAssertEqual(API.AiProvider.gemini.billing, """
+            Billed per use by Google, separately from any ChatGPT or Claude subscription. Use a key on a billed \
+            project: on the free tier, a key stops each day at its quota.
+            """)
+        XCTAssertEqual(API.AiProvider.anthropic.creditPage?.absoluteString, "https://console.anthropic.com/settings/billing")
+        XCTAssertEqual(API.AiProvider.openai.creditPage?.absoluteString,
+                       "https://platform.openai.com/settings/organization/billing")
+        for provider in [API.AiProvider.gemini, .local, .compatible] { XCTAssertNil(provider.creditPage, "\(provider)") }
+        XCTAssertNil(API.AiProvider.local.billing)
+        XCTAssertNil(API.AiProvider.compatible.billing)
+    }
+
     /// On this Mac is http or https at 127.0.0.1, ::1 or localhost, as the core holds a model on this Mac to.
     func testWhatIsOnThisMac() {
         for url in ["http://127.0.0.1:11434/v1", "https://localhost:1234/v1", "http://[::1]:8080/v1",
