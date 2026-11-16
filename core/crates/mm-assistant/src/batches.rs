@@ -17,7 +17,7 @@ use mm_kernel::errors::Fault;
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 
-use crate::assessments::{EFFORT, assessment_with, triage_prompt, triage_schema};
+use crate::assessments::{EFFORT, assessment_with, recent, triage_prompt, triage_schema};
 use crate::background_ports::{Batch, BatchBook, Begun, FinishedBatches, Pending, Triage};
 use crate::calls::Calls;
 use crate::ports::{BatchResult, Reply};
@@ -96,8 +96,8 @@ impl Batching {
         self.clock.now().whole_seconds()
     }
 
-    /// When a backlog of `at_least` is waiting and no batch is out, send it as one, leaving the `keep` newest to go
-    /// now, and say how many it took: what fits in its share of today's limit, by estimate. With AI off, with a
+    /// When a backlog of `at_least` from the last `RECENT_DAYS` is waiting and no batch is out, send it as one, leaving
+    /// the `keep` newest to go now, and say how many it took: what fits in its share of today's limit, by estimate. With AI off, with a
     /// provider other than Claude (only Claude takes a batch), or while the cost governor holds a batch back, nothing
     /// goes. A batch that wasn't sent gives its messages back, and the next round tries again.
     pub fn submit(&self, at_least: usize, keep: usize) -> Result<usize, Fault> {
@@ -113,8 +113,12 @@ impl Batching {
             return Ok(0);
         }
         let wanted = i64::try_from(keep.saturating_add(MAX)).unwrap_or(i64::MAX);
-        let rows: Vec<Pending> =
-            self.triage.needs_summary(wanted, None)?.into_iter().filter(|r| r.message_key.is_some()).collect();
+        let rows: Vec<Pending> = self
+            .triage
+            .needs_summary(wanted, Some(recent(self.now())))?
+            .into_iter()
+            .filter(|r| r.message_key.is_some())
+            .collect();
         if rows.len() < at_least {
             return Ok(0);
         }

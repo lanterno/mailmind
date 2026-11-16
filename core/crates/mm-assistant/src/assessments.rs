@@ -3,6 +3,9 @@
 //!
 //! A backlog goes as a batch at half price (`batches`), from the same round: what a batch holds, and while one is out
 //! everything older than the newest it took, is left to it.
+//!
+//! Only mail from the last `RECENT_DAYS` is summarized in the background: older mail is summarized when it is opened,
+//! so turning AI on over a mailbox of years spends nothing on its past.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -37,6 +40,14 @@ const ACTION_MAX: usize = 200;
 const BODY_MAX: usize = 1800;
 /// An importance that won't read as a number.
 pub const IMPORTANCE_UNREADABLE: i64 = 2;
+/// How far back the background summarizes, in days.
+pub const RECENT_DAYS: i64 = 30;
+
+/// The moment the background's reach starts, `RECENT_DAYS` before `now` in whole seconds: mail from before it waits to
+/// be opened.
+pub fn recent(now: i64) -> i64 {
+    now - RECENT_DAYS * 86_400
+}
 
 /// Structured output returns an object that matches it, so a triage reply needs no scraping.
 pub fn triage_schema() -> Value {
@@ -165,15 +176,17 @@ impl Assessments {
         Some(assessment_of(row, &reply, &self.calls.model_label(), prompts::TRIAGE.version))
     }
 
-    /// Triage up to `limit` messages that have no summary yet, `workers` at a time, and say how many were summarized.
-    /// With AI off, or while the cost governor holds triage back, not one message is tried. A message whose call
-    /// failed waits for the next round; one that can't be kept stops the rest, and the round fails.
+    /// Triage up to `limit` messages from the last `RECENT_DAYS` that have no summary yet, `workers` at a time, and say
+    /// how many were summarized. With AI off, or while the cost governor holds triage back, not one message is tried.
+    /// A message whose call failed waits for the next round; one that can't be kept stops the rest, and the round
+    /// fails.
     pub fn summarize_pending(&self, limit: usize, workers: usize) -> Result<usize, Fault> {
         if self.calls.engine() == "none" || self.held_back().is_some() {
             return Ok(0);
         }
-        let newer_than = self.triage.batch_cutoff()?;
-        let rows = self.triage.needs_summary(i64::try_from(limit).unwrap_or(i64::MAX), newer_than)?;
+        let recent = recent(self.clock.now().whole_seconds());
+        let newer_than = self.triage.batch_cutoff()?.map_or(recent, |cutoff| cutoff.max(recent));
+        let rows = self.triage.needs_summary(i64::try_from(limit).unwrap_or(i64::MAX), Some(newer_than))?;
         if rows.is_empty() {
             return Ok(0);
         }
