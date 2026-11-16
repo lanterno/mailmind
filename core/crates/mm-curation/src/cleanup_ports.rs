@@ -157,6 +157,8 @@ pub trait LiveSession {
     fn uids_from(&mut self, text: &str) -> Result<Vec<u32>, LiveError>;
     /// These header fields of each message, in UID order: (uid, the fields as the server sent them).
     fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError>;
+    /// Each message's flags, as the server says them; one it doesn't say is left out.
+    fn flags(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError>;
     /// When each message arrived, as the server says (INTERNALDATE), in Unix seconds; one it doesn't say is left out.
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError>;
     /// Move the UIDs to `dest`: one MOVE where the server offers it, else a checked copy, never a bulk EXPUNGE.

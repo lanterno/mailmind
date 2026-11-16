@@ -232,6 +232,10 @@ impl LiveSession for ServerSession {
         Ok(self.0.headers(uids, fields, false).map_err(live)?.into_iter().map(|h| (h.uid, h.raw)).collect())
     }
 
+    fn flags(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError> {
+        self.0.flags(uids).map_err(live)
+    }
+
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
         self.0.arrivals(uids).map_err(live)
     }

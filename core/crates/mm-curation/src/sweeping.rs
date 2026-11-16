@@ -1,6 +1,7 @@
 //! Sweeping an inbox (`mailmind.curation.application.sweep`, `domain.live` and `mailbox.application.bulk_moves`):
 //! classify it as the server shows it now, then move its junk to Trash, verified and audited. Mail is read live before
-//! anything moves, so a stored row can't send the wrong message anywhere. Each account's work is on its own gate.
+//! anything moves, so a stored row can't send the wrong message anywhere. Starred and unread mail stays where it is,
+//! whatever it is. Each account's work is on its own gate.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -36,11 +37,28 @@ pub struct Read {
     pub subject: String,
     pub mid: String,
     pub bulk: bool,
+    /// Flagged \Flagged: a person marked it.
+    pub starred: bool,
+    /// Not \Seen, or the server didn't say: no one has read it yet.
+    pub unread: bool,
 }
 
-/// A message as a sweep reads it, from its `READ_FIELDS`.
-pub fn read_from_headers(uid: u32, raw: &[u8]) -> Read {
+impl Read {
+    /// Whether a sweep leaves it where it is: a person starred it, or hasn't read it yet.
+    pub fn held(&self) -> bool {
+        self.starred || self.unread
+    }
+}
+
+/// Whether `flags` hold `flag`, as IMAP compares them: whatever the case.
+fn holds(flags: &[String], flag: &str) -> bool {
+    flags.iter().any(|f| f.eq_ignore_ascii_case(flag))
+}
+
+/// A message as a sweep reads it, from its `READ_FIELDS` and its flags, None where the server didn't say them.
+pub fn read_from_headers(uid: u32, raw: &[u8], flags: Option<&[String]>) -> Read {
     let fields = mm_content::mime::fields(raw);
+    let flags = flags.unwrap_or_default();
     Read {
         uid: uid.to_string(),
         from: fields.from_addr,
@@ -48,6 +66,8 @@ pub fn read_from_headers(uid: u32, raw: &[u8]) -> Read {
         subject: fields.subject,
         mid: fields.message_id,
         bulk: fields.has_list_unsub,
+        starred: holds(flags, "\\Flagged"),
+        unread: !holds(flags, "\\Seen"),
     }
 }
 
@@ -68,13 +88,17 @@ pub fn classified(rows: Vec<Read>, rules: &RuleSets) -> Vec<Classified> {
         .collect()
 }
 
-/// The INBOX as `s` shows it now: every message's `READ_FIELDS`, in UID order.
+/// The INBOX as `s` shows it now: every message's `READ_FIELDS` and flags, in UID order.
 fn fetch_headers(s: &mut dyn LiveSession) -> Result<Vec<Read>, LiveError> {
     s.select("INBOX", true)?;
     let uids = s.uids()?;
     let mut out = Vec::with_capacity(uids.len());
     for batch in uids.chunks(HEADER_BATCH) {
-        out.extend(s.headers(batch, &READ_FIELDS)?.into_iter().map(|(uid, raw)| read_from_headers(uid, &raw)));
+        let flags = s.flags(batch)?;
+        let heads = s.headers(batch, &READ_FIELDS)?;
+        out.extend(
+            heads.into_iter().map(|(uid, raw)| read_from_headers(uid, &raw, flags.get(&uid).map(Vec::as_slice))),
+        );
     }
     Ok(out)
 }
@@ -181,13 +205,16 @@ impl Sweeps {
         };
         let rows = classified(read, rules);
         let plan = tally(rows.iter().map(|r| (r.bucket, r.read.from.clone())));
-        let junk: Vec<&Classified> = rows.iter().filter(|r| r.bucket.is_junk()).collect();
+        // Starred or unread junk stays: a person's mark, or mail no one has seen yet, is never swept away.
+        let (held, junk): (Vec<&Classified>, Vec<&Classified>) =
+            rows.iter().filter(|r| r.bucket.is_junk()).partition(|r| r.read.held());
         let senders: HashSet<&str> = junk.iter().map(|r| r.read.from.as_str()).collect();
         let mut out = Map::new();
         out.insert("account".into(), json!(account));
         out.insert("planned".into(), json!(junk.len()));
         out.insert("by_bucket".into(), plan.get("by_bucket").cloned().unwrap_or_else(|| json!({})));
         out.insert("senders".into(), json!(senders.len()));
+        out.insert("held_back".into(), json!(held.len()));
         out.insert("moved".into(), json!(0));
         out.insert("stragglers".into(), json!([]));
         out.insert("error".into(), Value::Null);
