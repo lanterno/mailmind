@@ -66,7 +66,7 @@ fn changed(body: &Map<String, Value>) -> Result<Map<String, Value>, Problem> {
             Kind::Seconds(_) => schema::optional(body, name, schema::number, &mut dumped)?,
             Kind::Choice(_, words) => schema::optional(body, name, |v| schema::choice(v, words), &mut dumped)?,
             Kind::Flag(_) => schema::optional(body, name, schema::flag, &mut dumped)?,
-            Kind::Time(_) => schema::optional(body, name, schema::text, &mut dumped)?,
+            Kind::Time(_) | Kind::Model | Kind::BaseUrl => schema::optional(body, name, schema::text, &mut dumped)?,
             Kind::Dollars => schema::optional(body, name, schema::dollars, &mut dumped)?,
         }
     }

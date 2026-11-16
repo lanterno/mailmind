@@ -8,7 +8,12 @@
 //!
 //! A value is JSON as it parsed, read as Python reads it: an integer is a number written without a fraction or an
 //! exponent, and true is never a number.
+//!
+//! AI's switch and its provider are preferences too (#49): whether AI is on, which provider answers, the model asked
+//! (none: the provider's own) and where the provider is (none: its usual address). A change to another provider that
+//! names no model or address of its own clears those, so one provider's never go to another.
 
+use mm_kernel::ai_provider::{self, AiProvider};
 use mm_kernel::errors::Problem;
 use serde_json::{Map, Number, Value};
 
@@ -34,10 +39,22 @@ pub enum Kind {
     Time(&'static str),
     /// Dollars, as the AI's daily limit is: no default here, since the Assistant has its own.
     Dollars,
+    /// A model's name, or "" for the provider's own: up to `MODEL_MOST` of `A-Za-z0-9._:/@+-`.
+    Model,
+    /// Where an AI provider is, or "" for its usual address: a URL `ai_provider::base_url` takes.
+    BaseUrl,
 }
 
+/// The longest model name a person may give, in characters.
+pub const MODEL_MOST: usize = 200;
+/// The preferences that say whether AI answers, who does, and how.
+pub const AI_ENABLED: &str = "ai_enabled";
+pub const AI_PROVIDER: &str = "ai_provider";
+pub const AI_MODEL: &str = "ai_model";
+pub const AI_BASE_URL: &str = "ai_base_url";
+
 /// Every preference the block may hold, in the order the page is told them, and what it is with nothing said.
-const DEFAULTS: [(&str, Kind); 21] = [
+const DEFAULTS: [(&str, Kind); 25] = [
     ("undo_send_seconds", Kind::Seconds(SEND_WINDOW.0)),
     ("density", Kind::Choice("comfortable", &["comfortable", "cozy", "compact"])),
     ("high_contrast", Kind::Flag(false)),
@@ -61,6 +78,11 @@ const DEFAULTS: [(&str, Kind); 21] = [
     // the week's review written ahead on Monday morning, and read all week
     ("weekly_review", Kind::Flag(false)),
     ("auto_tidy", Kind::Flag(false)),
+    // AI on or off, who answers, the model asked and where the provider is (#49)
+    (AI_ENABLED, Kind::Flag(true)),
+    (AI_PROVIDER, Kind::Choice("anthropic", &AiProvider::IDS)),
+    (AI_MODEL, Kind::Model),
+    (AI_BASE_URL, Kind::BaseUrl),
 ];
 
 /// The names a change may name and what each is, in the order a request's schema declares them: every preference,
@@ -82,6 +104,11 @@ fn refusal(name: &str) -> String {
         AI_DAILY_LIMIT => format!("the AI daily limit must be more than $0 and at most ${AI_DAILY_LIMIT_MAX:.0}"),
         "quiet_from" => "quiet hours need a time such as 22:00".to_owned(),
         "quiet_until" => "quiet hours need a time such as 07:00".to_owned(),
+        AI_MODEL => format!("a model's name is at most {MODEL_MOST} letters, digits and . _ : / @ + -"),
+        AI_BASE_URL => {
+            "the AI provider's address is an https URL, or http on this Mac, with no login, query or fragment"
+                .to_owned()
+        }
         _ => format!("{name} can't be that"),
     }
 }
@@ -104,6 +131,11 @@ fn is_clock(text: &str) -> bool {
         && b[4].is_ascii_digit()
 }
 
+/// A model's name as a person may give one, "" for the provider's own.
+fn is_model(text: &str) -> bool {
+    text.chars().count() <= MODEL_MOST && text.bytes().all(|b| b.is_ascii_alphanumeric() || b"._:/@+-".contains(&b))
+}
+
 /// Whether `value` can be the preference `name`, as a request or a file edited by hand may say it.
 fn takes(name: &str, value: &Value) -> bool {
     if name == AI_DAILY_LIMIT {
@@ -117,6 +149,8 @@ fn takes(name: &str, value: &Value) -> bool {
         Some(Kind::Choice(_, choices)) => value.as_str().is_some_and(|v| choices.contains(&v)),
         Some(Kind::Time(_)) => value.as_str().is_some_and(is_clock),
         Some(Kind::Flag(_)) => value.is_boolean(),
+        Some(Kind::Model) => value.as_str().is_some_and(is_model),
+        Some(Kind::BaseUrl) => value.as_str().is_some_and(|v| v.is_empty() || ai_provider::base_url(v).is_some()),
         Some(Kind::Dollars) | None => false,
     }
 }
@@ -139,6 +173,7 @@ pub fn read(raw: &Map<String, Value>) -> Map<String, Value> {
                 Kind::Seconds(seconds) => Value::from(*seconds),
                 Kind::Choice(word, _) | Kind::Time(word) => Value::from(*word),
                 Kind::Flag(flag) => Value::Bool(*flag),
+                Kind::Model | Kind::BaseUrl => Value::from(""),
                 Kind::Dollars => Value::Null,
             });
             ((*name).to_owned(), value)
@@ -158,9 +193,30 @@ pub fn changes(asked: &Map<String, Value>) -> Result<Map<String, Value>, Problem
         if !takes(name, value) {
             return Err(Problem::refused(refusal(name)));
         }
-        wanted.insert(name.clone(), value.clone());
+        let kept = match (default_of(name), value.as_str()) {
+            (Some(Kind::BaseUrl), Some(url)) if !url.is_empty() => Value::from(ai_provider::base_url(url)),
+            _ => value.clone(),
+        };
+        wanted.insert(name.clone(), kept);
     }
     Ok(wanted)
+}
+
+/// The provider the file chooses now: what it says, where that can be one, else Claude.
+pub fn provider(raw: &Map<String, Value>) -> AiProvider {
+    said(raw, AI_PROVIDER).and_then(Value::as_str).and_then(AiProvider::parse).unwrap_or(AiProvider::DEFAULT)
+}
+
+/// `wanted`, where it changes the provider to another than the file chooses, with the model and the address it
+/// doesn't name itself cleared, so one provider's model and address never go to another.
+pub fn switching(mut wanted: Map<String, Value>, raw: &Map<String, Value>) -> Map<String, Value> {
+    let to = wanted.get(AI_PROVIDER).and_then(Value::as_str).and_then(AiProvider::parse);
+    if to.is_some_and(|to| to != provider(raw)) {
+        for name in [AI_MODEL, AI_BASE_URL] {
+            wanted.entry(name).or_insert_with(|| Value::from(""));
+        }
+    }
+    wanted
 }
 
 /// Of what a browser held under its old keys, what can be a preference and isn't one yet. What the file already
