@@ -21,8 +21,8 @@ extension API {
         }
     }
 
-    /// An account to add, or what an edit changes (`account.apply_fields`). The page sends none of `trash`, `smtp_*`,
-    /// `strip_spaces` and `disabled`, which the use case still reads.
+    /// An account to add, or what an edit changes (`account.apply_fields`). The page sends none of `strip_spaces` and
+    /// `disabled`, which the use case still reads, and `trash` only as a preset names it.
     public struct AccountBody: Codable, Hashable, Sendable {
         public var alias: String?
         public var credential: JSONValue?
@@ -81,15 +81,21 @@ extension API {
         public var email: String?
         public var host: JSONValue?
         public var port: JSONValue?
+        public var smtpHost: JSONValue?
+        public var smtpPort: JSONValue?
+        public var smtpStarttls: Bool?
         public var starttls: Bool?
         public var stripSpaces: Bool?
         public var type: JSONValue?
 
-        public init(credential: JSONValue? = nil, email: String? = nil, host: JSONValue? = nil, port: JSONValue? = nil, starttls: Bool? = nil, stripSpaces: Bool? = nil, type: JSONValue? = nil) {
+        public init(credential: JSONValue? = nil, email: String? = nil, host: JSONValue? = nil, port: JSONValue? = nil, smtpHost: JSONValue? = nil, smtpPort: JSONValue? = nil, smtpStarttls: Bool? = nil, starttls: Bool? = nil, stripSpaces: Bool? = nil, type: JSONValue? = nil) {
             self.credential = credential
             self.email = email
             self.host = host
             self.port = port
+            self.smtpHost = smtpHost
+            self.smtpPort = smtpPort
+            self.smtpStarttls = smtpStarttls
             self.starttls = starttls
             self.stripSpaces = stripSpaces
             self.type = type
@@ -100,13 +106,16 @@ extension API {
             case email
             case host
             case port
+            case smtpHost = "smtp_host"
+            case smtpPort = "smtp_port"
+            case smtpStarttls = "smtp_starttls"
             case starttls
             case stripSpaces = "strip_spaces"
             case type
         }
 
         /// The keys it names, and those it requires, which a union's decoding goes by.
-        static let named: Set<String> = ["credential", "email", "host", "port", "starttls", "strip_spaces", "type"]
+        static let named: Set<String> = ["credential", "email", "host", "port", "smtp_host", "smtp_port", "smtp_starttls", "starttls", "strip_spaces", "type"]
         static let required: Set<String> = []
     }
 
@@ -299,12 +308,16 @@ extension API {
     }
 
     public struct AccountSync: Codable, Hashable, Sendable {
+        public var done: Int?
         public var health: String
         public var msg: String
+        public var total: Int?
 
-        public init(health: String, msg: String) {
+        public init(done: Int? = nil, health: String, msg: String, total: Int? = nil) {
+            self.done = done
             self.health = health
             self.msg = msg
+            self.total = total
         }
     }
 
@@ -1078,23 +1091,29 @@ extension API {
         }
     }
 
-    /// The test ran, and the login didn't work. `error` is `conn_error.quiet`'s, never what the server said.
+    /// The test ran, and the login didn't work. `error` is its class in `conn_error.quiet`'s words, never what the server
+    /// said, the outgoing server's after "SMTP ": the owner's, in small type. `says` is what a person is told of it and what to
+    /// do next, and `link` the page that helps, if one does (`login_words`).
     public struct CouldntLogIn: Codable, Hashable, Sendable {
         public var connect: Bool
         public var email: String?
         public var error: String
+        public var link: Link?
         public var ok: Bool
+        public var says: String
 
-        public init(connect: Bool, email: String? = nil, error: String, ok: Bool) {
+        public init(connect: Bool, email: String? = nil, error: String, link: Link? = nil, ok: Bool, says: String) {
             self.connect = connect
             self.email = email
             self.error = error
+            self.link = link
             self.ok = ok
+            self.says = says
         }
 
         /// The keys it names, and those it requires, which a union's decoding goes by.
-        static let named: Set<String> = ["connect", "email", "error", "ok"]
-        static let required: Set<String> = ["connect", "email", "error", "ok"]
+        static let named: Set<String> = ["connect", "email", "error", "link", "ok", "says"]
+        static let required: Set<String> = ["connect", "email", "error", "link", "ok", "says"]
     }
 
     /// `CredentialRef.masked`: its style, whether it's set, and at most a pointer to it, a Keychain item's name, an op reference
@@ -2655,6 +2674,21 @@ extension API {
         }
     }
 
+    /// A page a person is sent to (a provider's, where its app password is made), and the words of its link.
+    public struct Link: Codable, Hashable, Sendable {
+        public var url: String
+        public var words: String
+
+        public init(url: String, words: String) {
+            self.url = url
+            self.words = words
+        }
+
+        /// The keys it names, and those it requires, which a union's decoding goes by.
+        static let named: Set<String> = ["url", "words"]
+        static let required: Set<String> = ["url", "words"]
+    }
+
     public struct Listed: Codable, Hashable, Sendable {
         public var accounts: [AccountRow]
         public var generated: String
@@ -3806,23 +3840,80 @@ extension API {
 
     public enum Preset: String, Codable, Hashable, Sendable, CaseIterable {
         case gmail
+        case icloud
+        case yahoo
+        case aol
+        case fastmail
+        case microsoft
+        case proton
     }
 
-    /// `Presets.preset`: Gmail's preset for an address at one of Google's own domains, `sure`, which the form chooses; for
-    /// one whose domain's mail servers are Google's, offered (`sure` false); none for any other. `domain` is the address's,
-    /// in lower case, or None when it names none a lookup could ask about.
+    /// `Presets.preset`: a provider's preset for an address at one of its own domains, `sure`, which the form chooses; for
+    /// one whose domain's mail servers are a provider's, offered (`sure` false); none for any other. `domain` is the
+    /// address's, in lower case, or None when it names none a lookup could ask about. `name` is the provider's; `settings`
+    /// what its account is saved as, None where MailMind can't log in to it yet (`supported` false); `note` what the form
+    /// says before the password, and `link` where that password is made.
     public struct PresetFound: Codable, Hashable, Sendable {
         public var domain: String?
+        public var link: Link?
+        public var name: String?
+        public var note: String?
         public var ok: Bool
         public var preset: Preset?
+        public var settings: PresetSettings?
+        public var supported: Bool
         public var sure: Bool
 
-        public init(domain: String? = nil, ok: Bool, preset: Preset? = nil, sure: Bool) {
+        public init(domain: String? = nil, link: Link? = nil, name: String? = nil, note: String? = nil, ok: Bool, preset: Preset? = nil, settings: PresetSettings? = nil, supported: Bool, sure: Bool) {
             self.domain = domain
+            self.link = link
+            self.name = name
+            self.note = note
             self.ok = ok
             self.preset = preset
+            self.settings = settings
+            self.supported = supported
             self.sure = sure
         }
+    }
+
+    /// What an account of a preset is saved as, in `AccountBody`'s fields: its type, and a generic IMAP account's servers
+    /// and Trash. A field its type gives is None.
+    public struct PresetSettings: Codable, Hashable, Sendable {
+        public var host: String?
+        public var port: Int?
+        public var smtpHost: String?
+        public var smtpPort: Int?
+        public var smtpStarttls: Bool?
+        public var starttls: Bool?
+        public var trash: String?
+        public var type: String
+
+        public init(host: String? = nil, port: Int? = nil, smtpHost: String? = nil, smtpPort: Int? = nil, smtpStarttls: Bool? = nil, starttls: Bool? = nil, trash: String? = nil, type: String) {
+            self.host = host
+            self.port = port
+            self.smtpHost = smtpHost
+            self.smtpPort = smtpPort
+            self.smtpStarttls = smtpStarttls
+            self.starttls = starttls
+            self.trash = trash
+            self.type = type
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case host
+            case port
+            case smtpHost = "smtp_host"
+            case smtpPort = "smtp_port"
+            case smtpStarttls = "smtp_starttls"
+            case starttls
+            case trash
+            case type
+        }
+
+        /// The keys it names, and those it requires, which a union's decoding goes by.
+        static let named: Set<String> = ["host", "port", "smtp_host", "smtp_port", "smtp_starttls", "starttls", "trash", "type"]
+        static let required: Set<String> = ["host", "port", "smtp_host", "smtp_port", "smtp_starttls", "starttls", "trash", "type"]
     }
 
     public struct Preview: Codable, Hashable, Sendable {
@@ -4043,13 +4134,38 @@ extension API {
         }
     }
 
+    /// The account to remove, and whether this Mac lets go of what it keeps of its mail too.
+    public struct RemoveBody: Codable, Hashable, Sendable {
+        public var deleteMail: Bool?
+        public var email: String?
+
+        public init(deleteMail: Bool? = nil, email: String? = nil) {
+            self.deleteMail = deleteMail
+            self.email = email
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case deleteMail = "delete_mail"
+            case email
+        }
+    }
+
+    /// `mail_deleted`, with `delete_mail` asked: how many stored copies of its mail this Mac let go.
     public struct Removed: Codable, Hashable, Sendable {
+        public var mailDeleted: Int?
         public var ok: Bool
         public var removed: String
 
-        public init(ok: Bool, removed: String) {
+        public init(mailDeleted: Int? = nil, ok: Bool, removed: String) {
+            self.mailDeleted = mailDeleted
             self.ok = ok
             self.removed = removed
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mailDeleted = "mail_deleted"
+            case ok
+            case removed
         }
     }
 
@@ -7345,7 +7461,7 @@ extension API.Post.AccountsBridgePasswordClear: PostRoute {
 extension API.Post.AccountsDelete: PostRoute {
     public static let path = "/api/accounts/delete"
     public typealias Answer = API.Removed
-    public typealias Body = API.NamesAnAccount
+    public typealias Body = API.RemoveBody
 }
 
 extension API.Post.AccountsEdit: PostRoute {
