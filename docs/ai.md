@@ -38,7 +38,10 @@ all: no Keychain read, no `op` run. `tests/contract/test_ai_contract.py` and
 `tests/contract/test_openai_chat_contract.py` hold the two adapters to the contract against the fake APIs.
 
 Only `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and `adapters.wire` holds what it sends and
-how it reads a reply. `ChatModel` posts to `{base}/chat/completions`: the system prompt as the first message, the
+how it reads a reply. It also alone imports `httpx2`, the SDK's HTTP library, to hand the SDK a client each of whose
+attempts is an `adapters.exchange` attempt, as `ChatModel`'s are: so a Claude call, on both servers, takes no proxy and
+no header the environment names, follows no redirect, has its time limit as a deadline for the whole attempt and reads
+an answer to 32 MiB at most. `ChatModel` posts to `{base}/chat/completions`: the system prompt as the first message, the
 schema as a `json_schema` response format (strict only where every object is closed and needs each property), the
 16000-token ceiling only for OpenAI (`max_completion_tokens`) and Gemini (`max_tokens`), none for a model on this Mac or
 a compatible service, and no effort or fallback. A 400 naming what a service won't take has the call asked once more
