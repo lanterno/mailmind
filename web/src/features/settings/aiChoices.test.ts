@@ -111,7 +111,8 @@ describe("choosing another provider", () => {
     expect([BILLING.anthropic?.creditAt, BILLING.openai?.creditAt]).toEqual(
       ["https://console.anthropic.com/settings/billing", "https://platform.openai.com/settings/organization/billing"]);
     expect(BILLING.gemini?.words).toContain("Billed per use by Google, separately from any ChatGPT or Claude subscription.");
-    expect(BILLING.gemini?.words).toContain("Use a key on a billed project");
+    expect(BILLING.gemini?.words).toContain("Use a key on a project with billing set up: on the free tier, Google may use what is sent, "
+      + "your mail included, to improve its products");
     expect(Object.keys(BILLING)).toEqual(["anthropic", "openai", "gemini"]);    // a model on this Mac costs nothing
   });
 });
