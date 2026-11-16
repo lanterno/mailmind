@@ -9,6 +9,8 @@
 #![cfg(unix)]
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt;
@@ -23,9 +25,7 @@ use mm_server::environment::{Environment, Settings};
 use mm_server::one_password::OpCli;
 use mm_server::workers::Workers;
 use mm_server::{App, Seams};
-use rcgen::{CertificateParams, KeyPair};
-use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
-use rustls::{ServerConfig, ServerConnection, StreamOwned};
+use rustls::{ServerConnection, StreamOwned};
 use serde_json::{Map, Value, json};
 
 /// `op read <reference>`, answering by the reference; each command line it was given, in argv beside it, and how many
@@ -240,18 +240,7 @@ struct Imap {
 
 impl Imap {
     fn start() -> Imap {
-        let key = KeyPair::generate().unwrap();
-        let cert = CertificateParams::new(vec!["127.0.0.1".to_owned()]).unwrap().self_signed(&key).unwrap();
-        let config = ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-            .with_safe_default_protocol_versions()
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(
-                vec![cert.der().clone()],
-                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der())),
-            )
-            .unwrap();
-        let config = Arc::new(config);
+        let config = common::tls();
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let imap = Imap { port: listener.local_addr().unwrap().port(), logins: Arc::default() };
         let logins = imap.logins.clone();
@@ -350,9 +339,10 @@ fn world(config: Value, more: &[(&str, &str)]) -> World {
     World { app: Arc::new(app), _home: home }
 }
 
+/// Ada's account on the IMAP server at `port`, sending through an SMTP server that lets her in.
 fn ada_at(port: u16, credential: Value) -> Value {
     json!({"email": ADA, "type": "imap", "host": "127.0.0.1", "port": port, "starttls": false,
-           "credential": credential})
+           "smtp_host": "127.0.0.1", "smtp_port": common::smtp(), "smtp_starttls": false, "credential": credential})
 }
 
 fn object(value: Value) -> Map<String, Value> {
@@ -394,7 +384,12 @@ fn a_1password_read_that_fails_is_a_refused_login_to_the_person() {
     let imap = Imap::start();
     let w = world(json!({"accounts": [ada_at(imap.port, json!({"op": "op://Tests/Missing/password"}))]}), &[]);
     let tested = w.app.connections.test(&object(json!({"email": ADA}))).unwrap();
-    assert_eq!(tested, json!({"ok": true, "connect": false, "email": ADA, "error": "AUTHENTICATIONFAILED"}));
+    let says = "The server didn't accept that address and password. Check them; if your provider offers app passwords, \
+                make one and paste it here.";
+    assert_eq!(
+        tested,
+        json!({"ok": true, "connect": false, "email": ADA, "error": "AUTHENTICATIONFAILED", "says": says, "link": null})
+    );
     assert!(imap.logins().is_empty());
 }
 

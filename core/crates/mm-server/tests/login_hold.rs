@@ -6,6 +6,8 @@
 
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -13,14 +15,13 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use common::{smtp, tls};
 use mm_accounts::Account;
 use mm_accounts::login_hold::FIRST;
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret, Tripped};
 use mm_server::environment::{Environment, Settings};
 use mm_server::{App, Seams};
-use rcgen::{CertificateParams, KeyPair};
-use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
-use rustls::{ServerConfig, ServerConnection, StreamOwned};
+use rustls::{ServerConnection, StreamOwned};
 use serde_json::{Map, Value, json};
 
 const ADA: &str = "ada@example.test";
@@ -36,59 +37,6 @@ struct Imap {
     connections: Arc<AtomicUsize>,
     logins: Arc<AtomicUsize>,
     answers: Arc<Mutex<VecDeque<&'static str>>>,
-}
-
-/// A loopback server's TLS: a certificate of its own for 127.0.0.1.
-fn tls() -> Arc<ServerConfig> {
-    let key = KeyPair::generate().unwrap();
-    let cert = CertificateParams::new(vec!["127.0.0.1".to_owned()]).unwrap().self_signed(&key).unwrap();
-    let config = ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-        .with_safe_default_protocol_versions()
-        .unwrap()
-        .with_no_client_auth()
-        .with_single_cert(vec![cert.der().clone()], PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der())))
-        .unwrap();
-    Arc::new(config)
-}
-
-/// An SMTP server on loopback, over TLS from the first byte, that lets any login in: where a test of the account logs
-/// in once its IMAP server has.
-fn smtp() -> u16 {
-    let config = tls();
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    std::thread::spawn(move || {
-        for tcp in listener.incoming() {
-            let Ok(tcp) = tcp else { return };
-            let tls = StreamOwned::new(ServerConnection::new(config.clone()).unwrap(), tcp);
-            std::thread::spawn(move || {
-                let _ = let_in(BufReader::new(tls));
-            });
-        }
-    });
-    port
-}
-
-fn let_in(mut stream: BufReader<StreamOwned<ServerConnection, std::net::TcpStream>>) -> std::io::Result<()> {
-    stream.get_mut().write_all(b"220 ready\r\n")?;
-    stream.get_mut().flush()?;
-    let mut line = String::new();
-    while stream.read_line(&mut line)? > 0 {
-        let command = line.split_whitespace().next().unwrap_or("").to_uppercase();
-        let said: &[u8] = match command.as_str() {
-            "EHLO" => b"250-fake\r\n250 AUTH PLAIN LOGIN\r\n",
-            "AUTH" => b"235 ok\r\n",
-            "QUIT" => b"221 bye\r\n",
-            _ => b"502 not here\r\n",
-        };
-        stream.get_mut().write_all(said)?;
-        stream.get_mut().flush()?;
-        if command == "QUIT" {
-            return Ok(());
-        }
-        line.clear();
-    }
-    Ok(())
 }
 
 impl Imap {
