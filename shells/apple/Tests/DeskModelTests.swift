@@ -361,6 +361,77 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(model.brief, DeskFixture.brief)
     }
 
+    /// Turned on again with the brief open, the brief AI-off left unwritten is written, once.
+    func testTurningAIOnWritesTheBriefAIOffLeftUnwritten() async {
+        scriptTheBrief(ai: "none", off: .turnedOff, briefing: Self.missing)
+        routes.answer("GET", "/api/digest", DeskFixture.digest())
+        routes.answer("POST", "/api/briefing", DeskFixture.brief)
+        let model = briefModel()
+        await model.load()
+        XCTAssertTrue(routes.sent("POST", "/api/briefing").isEmpty)
+
+        await model.aiChanged().value
+
+        XCTAssertEqual(model.aiOn, true)
+        XCTAssertEqual(routes.sent("POST", "/api/briefing").count, 1)
+        XCTAssertEqual(model.brief, DeskFixture.brief)
+        XCTAssertFalse(model.missing)
+        await model.aiChanged().value
+        XCTAssertEqual(routes.sent("POST", "/api/briefing").count, 1, "written, it isn't asked for again")
+    }
+
+    func testTurningAIOnWithTheBriefClosedWritesNone() async {
+        scriptTheBrief(ai: "none", off: .turnedOff, briefing: Self.missing)
+        routes.answer("GET", "/api/digest", DeskFixture.digest())
+        routes.answer("POST", "/api/briefing", DeskFixture.brief)
+        let model = briefModel()
+        await model.load()
+        model.close()
+
+        await model.aiChanged().value
+
+        XCTAssertTrue(routes.sent("POST", "/api/briefing").isEmpty, "opening it writes it")
+    }
+
+    /// Only arrived at by the arrow keys, the brief AI-off left unwritten stays unwritten as AI is turned on: it offers
+    /// to write it, and opening it on purpose writes it.
+    func testTurningAIOnWithTheBriefOnlyArrivedAtWritesNone() async {
+        scriptTheBrief(ai: "none", off: .turnedOff, briefing: Self.missing)
+        routes.answer("GET", "/api/digest", DeskFixture.digest())
+        routes.answer("POST", "/api/briefing", DeskFixture.brief)
+        let model = briefModel()
+        model.glance()
+        await model.load()
+
+        await model.aiChanged().value
+
+        XCTAssertEqual(model.aiOn, true)
+        XCTAssertTrue(routes.sent("POST", "/api/briefing").isEmpty, "the arrow keys passing over it write nothing")
+        XCTAssertTrue(model.missing, "it offers to write today's")
+
+        await model.load()
+        XCTAssertEqual(routes.sent("POST", "/api/briefing").count, 1, "opened on purpose, today's is written")
+        XCTAssertEqual(model.brief, DeskFixture.brief)
+    }
+
+    /// Another provider, model, URL, limit or key with AI on already isn't AI turned on: the brief its writing failed
+    /// is asked for again only by Try Again.
+    func testAnotherAISettingWithAIOnAlreadyWritesNone() async {
+        scriptTheBrief(briefing: Self.missing)
+        overLimit("POST", "/api/briefing")
+        let model = briefModel()
+        await model.load()
+        XCTAssertEqual(routes.sent("POST", "/api/briefing").count, 1)
+        XCTAssertEqual(model.trouble, .limit)
+
+        await model.aiChanged().value
+
+        XCTAssertEqual(model.aiOn, true)
+        XCTAssertEqual(routes.sent("POST", "/api/briefing").count, 1, "a setting changed with AI on asks nothing")
+        XCTAssertNil(model.brief)
+        XCTAssertEqual(model.trouble, .limit)
+    }
+
     func testTheRailsTalliesAreReadOnceTheCoreIsReachedWhenTheRailAskedFirst() async {
         scriptTheBrief(briefing: .brief(DeskFixture.brief))
         let desk = Desk()
