@@ -1,6 +1,6 @@
 //! The AI providers' closed set, and the base URL a person may give one at (#49).
 
-use mm_kernel::ai_provider::{AiProvider, BASE_URL_MOST, base_url, on_this_machine};
+use mm_kernel::ai_provider::{AiProvider, BASE_URL_MOST, base_url, key_spaced, on_this_machine, sendable};
 
 #[test]
 fn the_set_is_named_in_its_order_and_claude_is_the_default() {
@@ -25,6 +25,18 @@ fn the_set_is_named_in_its_order_and_claude_is_the_default() {
 fn a_model_on_this_mac_and_a_compatible_service_do_without_a_key() {
     let needs: Vec<bool> = AiProvider::ALL.iter().map(|p| p.needs_key()).collect();
     assert_eq!(needs, [true, true, true, false, false]);
+}
+
+#[test]
+fn a_key_is_sent_only_in_printable_ascii_without_a_space() {
+    for sent in ["sk-ant-api03-AbC_d-9", "AIzaSyFictional0123456789", "!~", ""] {
+        assert!(sendable(sent), "{sent:?}");
+    }
+    for refused in ["sk one", "sk\tone", "sk\none", "sk\u{0}", "sk\u{7f}", "sk\u{a0}", "sk-t\u{e9}st", "sk\u{200b}"] {
+        assert!(!sendable(refused), "{refused:?}");
+    }
+    // Settings refuses a space or a control character in words, and leaves the rest to the Keychain's own rules.
+    assert!(key_spaced("sk one") && key_spaced("sk\u{7f}") && !key_spaced("sk-t\u{e9}st") && !key_spaced("sk\u{200b}"));
 }
 
 #[test]

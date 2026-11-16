@@ -266,6 +266,32 @@ fn the_key_goes_in_the_clear_only_to_this_machine() {
 }
 
 #[test]
+fn a_key_with_a_space_or_a_line_break_in_it_is_a_refused_key_and_never_sent() {
+    // Nor any character outside ASCII: none can go in a header.
+    let outside_ascii = ["sk-ant-t\u{e9}st", "sk-ant\u{200b}", "\u{feff}sk-ant", "sk-ant-\u{2026}"];
+    for spaced in
+        ["sk-ant-one\nsk-ant-two", "sk-ant one", "sk-ant\tone", "sk-ant\u{0}"].into_iter().chain(outside_ascii)
+    {
+        let (url, log) = stand_in(vec![(200, vec![], answer("never"))]);
+        let outside = Arc::new(Open::default());
+        let api = ClaudeApi::new(Secret::new(spaced.into()), Some(&url), outside.clone());
+        let failed = api.complete(&prompt("claude-opus-5-5", true)).expect_err("refused");
+        assert_eq!(
+            (failed.status, failed.permanent(), failed.plain().as_str()),
+            (Some(401), true, "the API key was rejected")
+        );
+        assert_eq!(
+            failed,
+            mm_assistant::ports::ModelError::new("Claude API 401: the key was refused", Some(401)),
+            "{spaced:?}"
+        );
+        assert_eq!(api.list_models().expect_err("refused").status, Some(401), "{spaced:?}");
+        assert!(heard(&log).is_empty() && outside.reached.lock().expect("hosts").is_empty(), "{spaced:?}");
+        assert!(!format!("{failed:?}").contains("sk-ant"));
+    }
+}
+
+#[test]
 fn a_host_the_tripwire_refuses_is_never_reached() {
     let (url, log) = stand_in(vec![(200, vec![], answer("never"))]);
     let failed = api(&url, Arc::new(Closed)).complete(&prompt("claude-opus-5-5", true)).expect_err("refused");

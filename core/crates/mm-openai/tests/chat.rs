@@ -435,6 +435,36 @@ fn a_rejected_key_says_nothing_the_service_said_and_is_not_sent_again() {
     assert_eq!(failed.plain(), "the API key was rejected");
 }
 
+#[test]
+fn a_key_with_a_space_or_a_line_break_in_it_is_a_refused_key_and_never_sent() {
+    for (provider, spaced) in [
+        (OpenAi, "sk-proj-one\nsk-proj-two"),
+        (Gemini, "gemini key"),
+        (Local, "sk-local\r\n"),
+        (Compatible, "sk\u{7f}compatible"),
+        (Compatible, "sk\u{a0}compatible"),
+        // Nor any character outside ASCII: none can go in a header.
+        (OpenAi, "sk-proj-t\u{e9}st"),
+        (Gemini, "sk-gemini\u{200b}"),
+        (Local, "\u{feff}sk-local"),
+        (Compatible, "sk-\u{201c}compatible\u{201d}"),
+    ] {
+        let (url, log) = stand_in(vec![(200, vec![], answer("never", "m"))]);
+        let outside = Arc::new(Open::default());
+        let client = api(provider, &url, Some(spaced), outside.clone());
+        let failed = client.complete(&prompt("m", None)).expect_err("refused");
+        assert_eq!((failed.status, failed.permanent()), (Some(401), true), "{provider:?}");
+        assert_eq!(
+            failed,
+            mm_assistant::ports::ModelError::new(format!("{} API 401: the key was refused", provider.id()), Some(401))
+        );
+        assert_eq!(failed.plain(), "the API key was rejected");
+        assert_eq!(client.list_models().expect_err("refused").status, Some(401), "{provider:?}");
+        assert!(heard(&log).is_empty() && outside.reached.lock().expect("hosts").is_empty(), "{provider:?}");
+        assert!(!format!("{failed:?}").contains("sk"));
+    }
+}
+
 /// Gemini's answer to a wrong key: a 400, its error in a list, by its reason, its message or both.
 fn gemini_wrong_key(reason: Option<&str>, message: &str) -> String {
     let details = reason.map_or_else(Vec::new, |reason| {

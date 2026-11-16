@@ -551,6 +551,32 @@ fn what_cant_be_listed_is_refused_in_words_and_a_provider_that_didnt_answer_is_u
     assert!(!unreached.text().contains("fictional") && !refused_key.text().contains("fictional"));
 }
 
+#[test]
+fn a_key_with_a_line_break_in_it_from_anywhere_but_settings_is_refused_and_never_sent() {
+    // A line break, or any character outside printable ASCII: no key holds one, and no header carries it.
+    for key in ["sk-fictional-one\nsk-fictional-two", "sk-fictional-t\u{e9}st", "sk-fictional\u{200b}"] {
+        let (url, log) = provider(vec![(200, json!({"data": [{"id": "gpt-6.1-sol"}]}))]);
+        let config = json!({"openai_api_key": {"env": "OPENAI_FICTIONAL_KEY"},
+                            "preferences": {"ai_enabled": true, "ai_provider": "openai", "ai_base_url": url}});
+        let r = running(&config, &[("OPENAI_FICTIONAL_KEY", key)]);
+        let listed = r.get("/api/ai/models?provider=openai");
+        assert_eq!((listed.status, listed.json()), (400, refused("The provider refused the key.")), "{key:?}");
+        let rewrite = r.post("/api/ai/rewrite", &json!({"text": "Hello there, how are you?", "op": "shorten"}));
+        assert_ne!(rewrite.status, 200);
+        assert!(!rewrite.text().contains("fictional") && !r.get("/api/digest").text().contains("fictional"));
+        assert!(heard(&log).is_empty(), "{key:?}: nothing was sent");
+        assert!(r.outside.0.lock().unwrap().is_empty(), "{key:?}: nor anything reached");
+    }
+    // Claude's from the environment, alike.
+    let (claude, log) = provider(vec![(200, json!({"data": [{"id": "claude-opus-5-5"}]}))]);
+    let pairs =
+        [("ANTHROPIC_API_KEY", "sk-ant-fictional-t\u{e9}st"), ("ANTHROPIC_BASE_URL", claude.trim_end_matches("/v1"))];
+    let r = running(&json!({"preferences": {"ai_enabled": true}}), &pairs);
+    let listed = r.get("/api/ai/models?provider=anthropic");
+    assert_eq!((listed.status, listed.json()), (400, refused("The provider refused the key.")));
+    assert!(heard(&log).is_empty() && r.outside.0.lock().unwrap().is_empty(), "nothing was sent");
+}
+
 // -- the model servers on this Mac ---------------------------------------------------------------
 
 /// A server on loopback that takes each connection and answers nothing, for `hold` each.
