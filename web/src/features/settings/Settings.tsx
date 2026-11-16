@@ -206,9 +206,12 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
     ? { host: host.trim(), port: Number(port) || 993, starttls: security === "starttls",
         ...(smtpHost.trim() ? { smtp_host: smtpHost.trim() } : {}), smtp_port: Number(smtpPort) || 587, smtp_starttls: smtpSecurity === "starttls" }
     : {});
+  // A Proton account logs in with the Bridge's password, which only a saved account is tested with.
+  const testsOnceAdded = !row && kind === "proton";
   const test = () => {
     const c = credential();
-    if (c) void testConnection({ draft: { email: row ? row.email : email.trim(), type: kind, ...imapBits(), credential: c } }, setTested);
+    if (kind === "proton") { if (row) void testConnection({ email: row.email }, setTested); }
+    else if (c) void testConnection({ draft: { email: row ? row.email : email.trim(), type: kind, ...imapBits(), credential: c } }, setTested);
     else if (row) void testConnection({ email: row.email }, setTested);
     else setTested({ kind: "err", text: "enter a password to test" });
   };
@@ -256,6 +259,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
           <>
             <Seg label="Credential" value="proton_bridge" options={[["proton_bridge", "Proton Bridge"]]} onChange={() => {}} />
             <div className="set-help">Uses the password Proton Bridge shows for this address, kept in your login Keychain.</div>
+            {testsOnceAdded && <div className="set-help">Add the account, then test it.</div>}
             {link && <a className="set-mini set-next" href={link.url} target="_blank" rel="noopener noreferrer">{link.words} <Icon name="external" /></a>}
           </>
         )
@@ -293,7 +297,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
       <textarea id="setSig" rows={3} className="set-sig" value={signature} placeholder={`Appended to new mail and above quoted replies${signatureDefault ? " — blank uses the global default" : ""}`} onChange={(e) => setSignature(e.target.value)} />
       <div className="err" role="alert">{error}</div>
       <div className="formbar">
-        <button className="set-mini" disabled={unsupported} onClick={test}>Test connection</button>
+        <button className="set-mini" disabled={unsupported || testsOnceAdded} title={testsOnceAdded ? "Add the account, then test it." : undefined} onClick={test}>Test connection</button>
         <button className="abtn" style={{ marginLeft: "auto" }} onClick={cancel}>Cancel</button>
         <button className="abtn prim" disabled={saving || unsupported} onClick={() => void save()}>{saving ? "Saving…" : "Save connection"}</button>
       </div>
