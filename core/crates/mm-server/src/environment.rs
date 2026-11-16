@@ -22,7 +22,10 @@ pub const VARIABLES: [(&str, &str); 18] = [
         "MAILMIND_WORKERS",
         "A gate for each account's IMAP work, unless one (or global): one gate for every account (gates).",
     ),
-    ("MAILMIND_POOL", "Keep an IMAP connection for each account named, for reads (mailbox.pool)."),
+    (
+        "MAILMIND_POOL",
+        "Keep an IMAP connection for each account named, for reads (mailbox.pool); this server keeps every account's.",
+    ),
     ("MAILMIND_WARM_FOLDERS", "Sync each named account's Drafts, Archive and Sent with its INBOX."),
     ("MAILMIND_LOG_LEVEL", "debug shows debug lines and each error's text at the terminal, never in the file."),
     ("MAILMIND_RECONCILE_SECS", "About how long reconcile takes to go round every account."),

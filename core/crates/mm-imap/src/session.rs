@@ -291,6 +291,17 @@ impl Session {
         &self.connection.capabilities
     }
 
+    /// Have the system probe the connection once it has been quiet a minute, as IDLE's is: a connection kept between
+    /// jobs sits quiet, and one a sleep or a change of network left dead is then known within about two minutes,
+    /// rather than when the next command waits out its limit. A connection the system won't probe still works.
+    pub fn keep_alive(&self) {
+        let _ = self.connection.wire.stream.keep_alive(
+            crate::idle::PROBE_AFTER,
+            crate::idle::PROBE_EVERY,
+            crate::idle::PROBES,
+        );
+    }
+
     fn list(&mut self) -> Result<Vec<Folder>, Error> {
         let answer = self.connection.command(b"LIST \"\" \"*\"")?;
         if answer.status != "OK" {

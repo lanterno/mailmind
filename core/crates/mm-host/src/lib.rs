@@ -184,6 +184,8 @@ impl Host {
         if self.closing.load(Ordering::SeqCst) {
             return;
         }
+        // Each connection kept is likely dead after a sleep or a change of network: the next job opens a new one.
+        self.app.kept.woke();
         self.app.syncing.woke();
         self.app.realtime.renew();
         self.app.jobs.kick("sync");
@@ -272,6 +274,8 @@ impl Host {
             workers.stop();
         }
         self.app.work.settle(GRACE);
+        // Each account's kept connection logs out, and one a job still has as it gives it back.
+        self.app.kept.close();
         let runtime = self.runtime.write().unwrap_or_else(PoisonError::into_inner).take();
         if let Some(runtime) = runtime {
             // A runtime can't wait for itself on one of its own threads, where the last reference may drop.

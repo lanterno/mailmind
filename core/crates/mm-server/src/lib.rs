@@ -64,6 +64,8 @@ pub mod db_command;
 mod login_wiring;
 // IDLE's workers bound: the accounts, their sessions, and their news syncing those accounts.
 mod idle_wiring;
+// Each account's connection kept between the jobs on its gate.
+pub mod kept_wiring;
 // A person's filters, as a sync stores new mail.
 mod arrival_wiring;
 

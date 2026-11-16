@@ -17,7 +17,8 @@ use serde_json::Value;
 use crate::login_wiring::ImapLogin;
 
 /// Sessions on each account's server (`open_session`), logged in as `login` logs in, which a login its server refused
-/// waits out. In a read-only process each opens folders read-only and sends no write.
+/// waits out. In a read-only process each opens folders read-only and sends no write. Each is probed once it has been
+/// quiet a minute, since the one kept for an account's jobs sits quiet between them (`mm_mailbox::kept`).
 #[derive(Debug)]
 pub(crate) struct ImapServers {
     pub(crate) login: Arc<ImapLogin>,
@@ -29,6 +30,7 @@ impl MailServers for ImapServers {
         let failed = ServerError::Failed;
         let account = self.login.directory.get(account).map_err(failed)?.ok_or(failed(Fault::new("UnknownAccount")))?;
         let session = self.login.open(&account, Duration::from_secs(timeout_seconds))?;
+        session.keep_alive();
         let session: Box<dyn MailServer> = Box::new(session);
         Ok(if self.read_only { Box::new(ReadOnly(session)) } else { session })
     }

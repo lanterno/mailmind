@@ -74,6 +74,8 @@ pub struct App {
     pub ingest: Arc<Ingest>,
     /// Each account's IMAP gate, which every job that talks to its server holds.
     pub gates: Arc<dyn Gates>,
+    /// Each account's connection, kept between the jobs that hold its gate: closed on a wake and logged out on a quit.
+    pub kept: Arc<mm_mailbox::kept::KeptServers>,
     /// The change queue: a change to the mail on a server, and `work commands`.
     pub commands: Arc<MailCommands>,
     pub undo: Undo,
@@ -187,7 +189,9 @@ impl App {
         });
         // IDLE's workers hear an account added, changed or removed once its logins have (`realtime.reconcile`).
         let idle_heard = crate::idle_wiring::IdleHeard::over(account_events);
-        let account_events: Arc<dyn mm_accounts::ports::AccountEvents> = idle_heard.clone();
+        // And then each account's kept connection, closed when it changes or goes.
+        let kept_heard = crate::kept_wiring::KeptHeard::over(idle_heard.clone());
+        let account_events: Arc<dyn mm_accounts::ports::AccountEvents> = kept_heard.clone();
         let login = Arc::new(crate::login_wiring::ImapLogin {
             directory: directory.clone(),
             outside: seams.outside.clone(),
@@ -199,12 +203,21 @@ impl App {
         // Discovery's, Curation's and Attention's, in the person's own zone.
         let zone = mm_store::zone_file::person_zone(environment.zone(), &*seams.outside);
         let gates: Arc<dyn Gates> = Arc::new(AccountGates::new(environment.gate_per_account()));
+        // Every session on a mail server but the sync's, IDLE's and the folder rail's: each account's connection is kept
+        // for the jobs that hold its gate, and every other session logs in and out as it always did.
+        let kept = Arc::new(mm_mailbox::kept::KeptServers::new(mm_mailbox::kept::KeptParts {
+            opener: Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() }),
+            gates: gates.clone(),
+            accounts: Arc::new(crate::kept_wiring::DirectoryKeeping(directory.clone())),
+            clock: seams.clock.clone(),
+        }));
+        kept_heard.tell(&kept);
         // The Assistant's: every AI call, and how AI stands, which the digest says.
         let assistant = crate::assistant_wiring::Assistant::assemble(
             crate::assistant_wiring::Parts {
                 database: database.clone(),
                 accounts: Arc::new(KnownAccounts(directory.clone())),
-                servers: Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() }),
+                servers: kept.clone(),
                 gates: gates.clone(),
                 config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
                 keychain: keychain_reads,
@@ -227,8 +240,7 @@ impl App {
             database.clone(),
             seams.clock.clone(),
         ));
-        let servers: Arc<dyn MailServers> =
-            Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() });
+        let servers: Arc<dyn MailServers> = kept.clone();
         // The page's own state, and what the app says of itself.
         let places = Places::new(database.clone(), seams.clock.clone());
         let events = Arc::new(Hub::new().map_err(|_| "the system's random source failed")?);
@@ -405,7 +417,7 @@ impl App {
             config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
             outside: seams.outside.clone(),
             // Its copies' sessions log in as every other does, so a refused login is held back here too.
-            servers: Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() }),
+            servers: kept.clone(),
             gates: gates.clone(),
             folders: folders.clone(),
             events: events.clone(),
@@ -460,6 +472,7 @@ impl App {
             folders,
             ingest,
             gates,
+            kept,
             commands,
             undo,
             filing,

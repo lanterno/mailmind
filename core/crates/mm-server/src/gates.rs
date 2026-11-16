@@ -6,7 +6,7 @@
 //! until no gate is held, and holds them all; while it waits, a job that would come after it waits too, so it is
 //! never starved. A job runs on its caller's own thread, and a thread already holding a gate may not wait for one.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Instant;
@@ -16,6 +16,8 @@ use mm_mailbox::gates::{EVERY_ACCOUNT, Gates, Priority, Refused, Wait};
 thread_local! {
     /// How many gates this thread holds: a job may not wait inside a job.
     static HOLDING: Cell<usize> = const { Cell::new(0) };
+    /// Which gates this thread's jobs hold, innermost last: what `holds` asks.
+    static HELD_HERE: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 #[derive(Debug, Default)]
@@ -131,6 +133,12 @@ struct Held<'a> {
 impl Drop for Held<'_> {
     fn drop(&mut self) {
         HOLDING.with(|h| h.set(h.get().saturating_sub(1)));
+        HELD_HERE.with(|held| {
+            let mut held = held.borrow_mut();
+            if let Some(at) = held.iter().rposition(|gate| gate == self.gate) {
+                held.remove(at);
+            }
+        });
         self.gates.give_back(self.gate);
     }
 }
@@ -145,6 +153,7 @@ impl Gates for AccountGates {
             return Err(Refused::Busy);
         }
         HOLDING.with(|h| h.set(h.get() + 1));
+        HELD_HERE.with(|held| held.borrow_mut().push(gate.to_owned()));
         let _held = Held { gates: self, gate };
         job();
         Ok(())
@@ -153,5 +162,10 @@ impl Gates for AccountGates {
     fn held(&self, account: &str) -> bool {
         let state = self.state();
         if account == EVERY_ACCOUNT || !self.per_account { !state.held.is_empty() } else { !state.free(account) }
+    }
+
+    fn holds(&self, account: &str) -> bool {
+        let gate = self.gate_of(account);
+        HELD_HERE.with(|held| held.borrow().iter().any(|g| g == gate || g == EVERY_ACCOUNT))
     }
 }

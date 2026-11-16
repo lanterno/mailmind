@@ -67,17 +67,26 @@ async fn health(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respon
     .await
 }
 
-/// How the IMAP connection pool stands (`mailbox.pool.stats`). The Rust server keeps no connection between requests
-/// yet, whatever `MAILMIND_POOL` or an account's `"pool"` asks: each read opens one and logs out. So the pool is off,
-/// with nothing counted and no connection kept.
+/// How the IMAP connections kept stand (`mailbox.pool.stats`). The Rust server keeps every account's, whatever
+/// `MAILMIND_POOL` or an account's `"pool"` asks (`mm_mailbox::kept`): on, for all, with what it has counted and how
+/// each connection stands, no account named.
 async fn pool(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
-    super::run(&app, &method, &uri, |_| {
+    super::run(&app, &method, &uri, |app| {
+        let stats = app.kept.stats();
+        let counts = stats.counts;
+        let slots: Vec<_> =
+            stats.slots.iter().map(|slot| json!({"open": slot.open, "uses": slot.lendings, "age": slot.age})).collect();
         Ok(json!({
             "ok": true,
-            "enabled": false,
-            "target": "",
-            "counters": {"created": 0, "reused": 0, "validate_fail": 0, "discard_dirty": 0},
-            "slots": [],
+            "enabled": true,
+            "target": "all",
+            "counters": {
+                "created": counts.created,
+                "reused": counts.reused,
+                "validate_fail": counts.validate_fail,
+                "discard_dirty": counts.discard_dirty,
+            },
+            "slots": slots,
         }))
     })
     .await

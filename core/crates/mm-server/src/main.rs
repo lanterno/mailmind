@@ -64,7 +64,8 @@ async fn serve(port: u16) -> Result<(), String> {
     eprintln!("MailMind (Rust server) at http://127.0.0.1:{port}");
     // Nothing stops it but the process ending.
     let (_stop, stopped) = tokio::sync::watch::channel(false);
-    server.run(app, stopped, Duration::from_secs(3)).await;
+    server.run(app.clone(), stopped, Duration::from_secs(3)).await;
     workers.stop();
+    app.kept.close();
     Ok(())
 }
