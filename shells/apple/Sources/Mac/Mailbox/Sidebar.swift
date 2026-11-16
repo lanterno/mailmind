@@ -73,6 +73,12 @@ struct MailboxSidebar: View {
                 if let view = item.removable {
                     Button("Remove View", role: .destructive) { mailbox.removeView(view) }
                 }
+                if let (account, folder) = mailbox.changeableFolder(item.place) {
+                    Button("Rename Folder…") { mailbox.folderAsk = .rename(account: account, folder: folder) }
+                    Button("Delete Folder…", role: .destructive) {
+                        mailbox.folderAsk = .delete(account: account, folder: folder)
+                    }
+                }
             }
             .modifier(RailDrop(mailbox: mailbox, place: item.place, id: entry.id, on: $dropOn))
         case .head(let title):
