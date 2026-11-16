@@ -11,7 +11,8 @@
 //!
 //! AI's switch and its provider are preferences too (#49): whether AI is on, which provider answers, the model asked
 //! (none: the provider's own) and where the provider is (none: its usual address). A change to another provider that
-//! names no model or address of its own clears those, so one provider's never go to another.
+//! names no model or address of its own clears those, so one provider's never go to another. A model on this Mac
+//! (`local`) is at an address on this Mac, or at its usual one: a server elsewhere is `compatible`, over https.
 
 use mm_kernel::ai_provider::{self, AiProvider};
 use mm_kernel::errors::Problem;
@@ -47,6 +48,8 @@ pub enum Kind {
 
 /// The longest model name a person may give, in characters.
 pub const MODEL_MOST: usize = 200;
+/// What a model on this Mac at an address off it is told.
+pub const LOCAL_ELSEWHERE: &str = "A model on this Mac must be at 127.0.0.1, ::1 or localhost.";
 /// The preferences that say whether AI answers, who does, and how.
 pub const AI_ENABLED: &str = "ai_enabled";
 pub const AI_PROVIDER: &str = "ai_provider";
@@ -173,9 +176,10 @@ fn kept(kind: Kind, value: &Value) -> Value {
     }
 }
 
-/// Every preference as it stands: what the file says where that can be it, and else the default. It never fails.
+/// Every preference as it stands: what the file says where that can be it, and else the default. It never fails. A
+/// model on this Mac at an address off it (a hand edit) is at its usual address.
 pub fn read(raw: &Map<String, Value>) -> Map<String, Value> {
-    DEFAULTS
+    let mut read: Map<String, Value> = DEFAULTS
         .iter()
         .map(|(name, default)| {
             let value = said(raw, name).map(|v| kept(*default, v)).unwrap_or_else(|| match default {
@@ -187,7 +191,13 @@ pub fn read(raw: &Map<String, Value>) -> Map<String, Value> {
             });
             ((*name).to_owned(), value)
         })
-        .collect()
+        .collect();
+    let local = read.get(AI_PROVIDER).and_then(Value::as_str) == Some(AiProvider::Local.id());
+    let url = read.get(AI_BASE_URL).and_then(Value::as_str).unwrap_or_default();
+    if local && !url.is_empty() && !ai_provider::on_this_machine(url) {
+        read.insert(AI_BASE_URL.to_owned(), Value::from(""));
+    }
+    read
 }
 
 /// Of what a person asked, what is a preference, or why not: one value no preference can be refuses the whole
@@ -223,6 +233,24 @@ pub fn switching(mut wanted: Map<String, Value>, raw: &Map<String, Value>) -> Ma
         }
     }
     wanted
+}
+
+/// `wanted`, unless it leaves a model on this Mac at an address off it, which is refused in words. What doesn't
+/// name the provider or the address changes neither, and is never refused for them.
+pub fn on_this_mac(wanted: Map<String, Value>, raw: &Map<String, Value>) -> Result<Map<String, Value>, Problem> {
+    if !wanted.contains_key(AI_PROVIDER) && !wanted.contains_key(AI_BASE_URL) {
+        return Ok(wanted);
+    }
+    let local = wanted.get(AI_PROVIDER).and_then(Value::as_str).and_then(AiProvider::parse).unwrap_or(provider(raw))
+        == AiProvider::Local;
+    let url = match wanted.get(AI_BASE_URL) {
+        Some(url) => url.as_str().unwrap_or_default().to_owned(),
+        None => read(raw).get(AI_BASE_URL).and_then(Value::as_str).unwrap_or_default().to_owned(),
+    };
+    if local && !url.is_empty() && !ai_provider::on_this_machine(&url) {
+        return Err(Problem::refused(LOCAL_ELSEWHERE));
+    }
+    Ok(wanted)
 }
 
 /// Of what a browser held under its old keys, what can be a preference and isn't one yet. What the file already

@@ -269,11 +269,12 @@ impl Directory {
 
     /// Keep what `asked` changes (named in the order `preferences::changeable` gives), and leave every other key in
     /// the file as it was. A value none can be, refused whole, writes nothing. A change to another AI provider clears
-    /// the model and the address it doesn't name. The answer is each preference as it stands now.
+    /// the model and the address it doesn't name; one that leaves a model on this Mac at an address off it is refused.
+    /// The answer is each preference as it stands now.
     pub fn set_preferences(&self, asked: &Map<String, Value>) -> Result<Value, Failure> {
         self.change_preferences(|raw| {
             let wanted = preferences::changes(asked).map_err(Failure::Problem)?;
-            Ok(preferences::switching(wanted, raw))
+            preferences::on_this_mac(preferences::switching(wanted, raw), raw).map_err(Failure::Problem)
         })
     }
 
