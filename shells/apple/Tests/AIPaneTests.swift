@@ -197,6 +197,24 @@ final class AIChoicesTests: XCTestCase {
         XCTAssertFalse(AIChoices.canList(.gemini, kept: nil, preferences: nil, sources: none), "not read yet")
     }
 
+    /// A provider chosen while another's models are on their way is asked at once, and only its answer is kept.
+    func testTheLatestAskForTheModelsStands() {
+        var asking = AIChoices.Asking()
+        let openai = asking.begin(.openai)
+        XCTAssertEqual(asking.provider, .openai)
+        let gemini = asking.begin(.gemini)
+        XCTAssertEqual(asking.provider, .gemini, "the menu says Gemini is being asked, as it is")
+        XCTAssertFalse(asking.end(openai), "OpenAI's answer, come late, is let go")
+        XCTAssertEqual(asking.provider, .gemini, "Gemini is still being asked")
+        XCTAssertTrue(asking.end(gemini))
+        XCTAssertNil(asking.provider)
+
+        let before = asking.begin(.compatible)
+        asking.drop()
+        XCTAssertNil(asking.provider)
+        XCTAssertFalse(asking.end(before), "a refusal foreseen lets go of what was asked before it")
+    }
+
     /// A model on this Mac's URL is shown filled in, Ollama's; kept as typed, that one is "", so it goes on
     /// following the provider's default.
     func testTheServicesURL() {
