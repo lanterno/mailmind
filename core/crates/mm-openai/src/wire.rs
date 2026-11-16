@@ -176,11 +176,30 @@ pub fn model_list(response: &Value) -> Option<Vec<String>> {
     })
 }
 
-/// What a service said of an error, at most 200 characters: OpenAI's `{"error": {"message"}}`, or Ollama's
-/// `{"error": "..."}`.
+/// The error a service answered with: the body's `error`, or the first element's where the body is a list, as
+/// Gemini's is (`[{"error": {...}}]`).
+fn error_of(parsed: &Value) -> Option<&Value> {
+    match parsed {
+        Value::Array(items) => items.first()?.get("error"),
+        other => other.get("error"),
+    }
+}
+
+/// Whether an error body says the key isn't valid, as Gemini answers a wrong key with a 400 rather than a 401: its
+/// error has a detail whose reason is `API_KEY_INVALID`, or what the service said (`error_text`: the error's message,
+/// or the error itself where it is words) starts "API key not valid".
+pub fn key_invalid(body: &[u8]) -> bool {
+    let parsed: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+    let details = error_of(&parsed).and_then(|error| error.get("details")).and_then(Value::as_array);
+    let reason = details.is_some_and(|d| d.iter().any(|e| e.get("reason") == Some(&json!("API_KEY_INVALID"))));
+    reason || error_text(body).starts_with("API key not valid")
+}
+
+/// What a service said of an error, at most 200 characters: OpenAI's `{"error": {"message"}}`, Ollama's
+/// `{"error": "..."}`, or Gemini's either in a list.
 pub fn error_text(body: &[u8]) -> String {
     let parsed: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
-    let error = parsed.get("error");
+    let error = error_of(&parsed);
     let said = match error {
         Some(Value::Object(inner)) => inner.get("message"),
         other => other,

@@ -16,7 +16,7 @@ use crate::providers::{chat_models, default_base_url, default_model};
 pub const NO_URL: &str = "Give the service's URL first.";
 /// A provider that needs a key, with none kept.
 pub const NO_KEY: &str = "Keep a key for this provider first.";
-/// A 401 or a 403.
+/// A 401 or a 403, as the adapter gives it: Gemini's 400 saying the key isn't valid comes as a 401.
 pub const KEY_REFUSED: &str = "The provider refused the key.";
 /// Anything else: no answer, or one that isn't a list.
 pub const UNREACHABLE: &str = "Couldn't reach the provider.";

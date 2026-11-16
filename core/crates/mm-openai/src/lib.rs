@@ -10,8 +10,9 @@
 //! again, twice, after a status a retry can help (408, 409, 429, 5xx) or a lost connection, waiting what
 //! `retry-after` says or else a little longer each time. A model on this Mac and a compatible service may not take
 //! structured output: a 400 that names `response_format` is asked once more without it, and the reply read as
-//! free-form JSON. A rejected key's error holds none of what the service said, which can quote part of the key back,
-//! and no error ever holds the key. It takes no batch: only Claude's API does.
+//! free-form JSON. A rejected key (a 401 or a 403, or Gemini's 400 saying the key isn't valid, read as a 401) has an
+//! error that holds none of what the service said, which can quote part of the key back, and no error ever holds the
+//! key. It takes no batch: only Claude's API does.
 
 pub mod wire;
 
@@ -163,12 +164,16 @@ impl ChatApi {
     }
 
     /// The ModelError for an answer that isn't a 2xx, with what the service said unless it refused the key, and
-    /// never the key.
+    /// never the key. A 400 that says the key isn't valid (Gemini's answer to a wrong key) is a refused key, as a 401
+    /// is.
     fn refused(&self, response: &http::Response) -> ModelError {
         let provider = self.provider.id();
         let status = response.status;
         if matches!(status, 401 | 403) {
             return ModelError::new(format!("{provider} API {status}: the key was refused"), Some(status));
+        }
+        if status == 400 && wire::key_invalid(&response.body) {
+            return ModelError::new(format!("{provider} API 401: the key was refused"), Some(401));
         }
         let mut said = wire::error_text(&response.body);
         if let Some(key) = self.key.as_ref().map(Secret::expose).filter(|k| !k.is_empty()) {
