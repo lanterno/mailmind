@@ -19,6 +19,11 @@ tokio.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# A loopback IMAP server for the tests of each account's kept connection: its certificate, and the TLS it serves;
+# and the gate a job holds there, which the app's Mailbox names.
+mm-mailbox.workspace = true
+rcgen.workspace = true
+rustls.workspace = true
 
 [lints]
 workspace = true
