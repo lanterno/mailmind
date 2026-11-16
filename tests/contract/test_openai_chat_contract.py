@@ -280,6 +280,16 @@ def test_the_ledger_the_governor_and_the_status_see_these_calls_as_claudes(choos
     assert assistant.calls.usage(1)[0]["features"]["draft"] == {"calls": 1, "cost_micros": 7000}
 
 
+def test_a_gemini_models_thinking_past_its_completion_is_priced_as_output(choose):
+    from mailmind.bootstrap import assistant
+    api = choose("gemini")
+    api.queue(fo.answer({"body": "x"}, model="gemini-4-hydrogen", prompt_tokens=3000, completion_tokens=200,
+                        total_tokens=4800))
+    ask()
+    # gemini-4-hydrogen's list price, $1.50 in and $7.50 out a million, on 3,000 in and 1,800 out
+    assert assistant.status.report()["spent_today_micros"] == 4_500 + 13_500
+
+
 def test_an_unknown_model_on_this_mac_costs_nothing(choose):
     from mailmind.bootstrap import assistant
     api = choose("local", key=None, ai_model="llama3.3")

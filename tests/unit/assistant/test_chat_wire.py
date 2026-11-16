@@ -62,6 +62,20 @@ def test_a_reply_reads_its_text_the_model_that_served_it_and_its_usage():
         '{"summary": "x"}', "gpt-6.1-sol-2026-10-01", Usage(200, 80, 0, 1000), "stop", False)
 
 
+@pytest.mark.parametrize("usage, output", [
+    ({"prompt_tokens": 3000, "completion_tokens": 200, "total_tokens": 4800}, 1800),    # Gemini's thinking, left out
+    ({"prompt_tokens": 3000, "completion_tokens": 200, "total_tokens": 3200}, 200),
+    ({"prompt_tokens": 3000, "completion_tokens": 200, "total_tokens": 3100}, 200),     # a total short of both: the larger
+    ({"prompt_tokens": 3000, "completion_tokens": 200}, 200),                           # no total
+    ({"prompt_tokens": 3000, "completion_tokens": 200, "total_tokens": "lots"}, 200),
+    ({"prompt_tokens": 1200, "total_tokens": 1500, "prompt_tokens_details": {"cached_tokens": 1000}}, 300),
+])
+def test_the_output_is_the_completion_or_all_the_total_holds_past_the_prompt_whichever_is_more(usage, output):
+    reply = chat_wire.reply({"choices": [{"message": {"content": "x"}}], "usage": usage}, "gemini-4-hydrogen")
+    assert reply.usage.output_tokens == output
+    assert reply.usage.input_tokens + reply.usage.cache_read_tokens == usage["prompt_tokens"]
+
+
 def test_a_refusal_reads_as_an_empty_refused_reply():
     reply = chat_wire.reply({"model": "gpt-6.1-sol", "choices": [{"finish_reason": "stop", "message": {
         "role": "assistant", "content": None, "refusal": "I can't help with that."}}],
