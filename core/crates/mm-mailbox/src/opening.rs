@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Duration;
 
-use mm_kernel::errors::Fault;
+use mm_kernel::errors::{Fault, caught};
 use mm_kernel::events::Topic;
 use mm_kernel::log;
 use serde_json::json;
@@ -158,27 +158,15 @@ impl Inner {
         Ok(done)
     }
 
-    /// The sync itself, on its own thread: then what it ended in, told. The Inbox's is the background's, joined.
+    /// The sync itself, on its own thread: then what it ended in, told. The Inbox's is the background's, joined. One
+    /// that panics, as a malformed answer could make it, ends as one that failed: else the folder's opens would join a
+    /// sync that never ends, and wait on it each time.
     fn run(&self, key: Key, full: bool, done: &Done) {
         let (account, folder) = (key.0.as_str(), key.1.as_str());
-        let priority = if full { Priority::Interactive } else { Priority::AfterUser };
-        let new = if sync_plan::reads_bodies(folder) {
-            // What it stored, the background's sync tells, and lets the rail's counts go for; it logs a failure.
-            self.inbox.sync_inbox(account).then_some(0)
-        } else {
-            match on_gate(&*self.gates, account, priority, Wait::Ever, || self.sync.sync_folder(account, folder, full))
-            {
-                Ok(Ok((kept, junk))) => Some(kept + junk),
-                Ok(Err(error)) => {
-                    log::warning(TAG, "a folder's sync as it opened failed", &[], Some(error.class()));
-                    None
-                }
-                Err(_) => {
-                    log::warning(TAG, "a folder's sync as it opened didn't get its gate", &[], None);
-                    None
-                }
-            }
-        };
+        let new = caught(|| self.sync(account, folder, full)).unwrap_or_else(|fault| {
+            log::warning(TAG, "a folder's sync as it opened failed", &[], Some(fault.class));
+            None
+        });
         {
             let mut running = self.running.lock().unwrap_or_else(PoisonError::into_inner);
             match new {
@@ -197,6 +185,26 @@ impl Inner {
         }
         let data = json!({"account": account, "folder": folder, "ok": ok, "new": new});
         self.events.publish(MailboxEvent::Page { topic: Topic::FolderSynced, data });
+    }
+
+    /// How many messages a sync as the folder opens stored, or None where it failed.
+    fn sync(&self, account: &str, folder: &str, full: bool) -> Option<usize> {
+        if sync_plan::reads_bodies(folder) {
+            // What it stored, the background's sync tells, and lets the rail's counts go for; it logs a failure.
+            return self.inbox.sync_inbox(account).then_some(0);
+        }
+        let priority = if full { Priority::Interactive } else { Priority::AfterUser };
+        match on_gate(&*self.gates, account, priority, Wait::Ever, || self.sync.sync_folder(account, folder, full)) {
+            Ok(Ok((kept, junk))) => Some(kept + junk),
+            Ok(Err(error)) => {
+                log::warning(TAG, "a folder's sync as it opened failed", &[], Some(error.class()));
+                None
+            }
+            Err(_) => {
+                log::warning(TAG, "a folder's sync as it opened didn't get its gate", &[], None);
+                None
+            }
+        }
     }
 }
 
