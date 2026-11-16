@@ -153,6 +153,14 @@ def test_a_stored_rows_subject_counts():
 
 
 # ── a sweep of stored junk ───────────────────────────────────────────────────────────────
+def test_only_stored_junk_someone_read_and_no_one_starred_is_sweepable():
+    """As the Rust server counts it (core/crates/mm-curation/tests/sweep_plan.rs)."""
+    rows = [{"seen": 1, "flagged": 0}, {"seen": 1, "flagged": 0}, {"seen": 0, "flagged": 0}, {"seen": 1, "flagged": 1},
+            {"seen": 1, "flagged": 0}]
+    judged = [(MKT, "news@loom.example.test")] * 4 + [(PERSONAL, "lin@example.test")]
+    assert sweep_plan.sweepable(rows, judged) == 2
+
+
 def test_an_ai_sweep_takes_what_was_called_junk_by_message_id():
     called, other = read("a@example.test", mid="<j@example.test>"), read("a@example.test", mid="<k@example.test>")
     assert sweep_plan.stored_targets([called, other], {"<j@example.test>"}, NO_RULES) == ([called], 0)

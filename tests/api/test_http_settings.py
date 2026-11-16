@@ -128,6 +128,17 @@ def test_a_sweep_leaves_starred_and_unread_junk_in_the_inbox(app, world):
         assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
 
 
+def test_the_stats_count_only_the_junk_a_sweep_would_move_now(app, world):
+    """The Curate card's Sweep button says how many a sweep would take: Ada's junk that someone read and no one starred.
+    Of her corpus junk only the CI mail is read; of three more newsletters, one read, one read and starred and one
+    unread, only the first is one more."""
+    for n, flags in enumerate([("\\Seen",), ("\\Seen", "\\Flagged"), ()]):
+        world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-03-newsletter.eml", Subject=f"Loom issue {300 + n}",
+                                                Message_ID=f"<issue-{300 + n}@loom.example.test>"), flags=flags)
+    [ada] = [a for a in app.get("/api/stats").json["accounts"] if a["account"] == w.ADA]
+    assert (ada["junk"], ada["sweepable"]) == (6, 2)
+
+
 def test_one_undo_takes_back_all_a_sweep_moved(app, world):
     """The page names the sweep's undo group, and Undo puts each message back in the Inbox, read as it was."""
     for name in JUNK:

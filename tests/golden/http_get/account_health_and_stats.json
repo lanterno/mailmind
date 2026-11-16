@@ -67,6 +67,7 @@
      "junk": 3,
      "keep": 9,
      "kind": "imap",
+     "sweepable": 1,
      "top_senders": {
       "automated-notifications": [
        "noreply@ci.example.test"
@@ -101,6 +102,7 @@
      "junk": 0,
      "keep": 2,
      "kind": "proton",
+     "sweepable": 0,
      "top_senders": {
       "automated-notifications": [],
       "blocked": [],
@@ -126,6 +128,7 @@
      "junk": 0,
      "keep": 3,
      "kind": "gmail",
+     "sweepable": 0,
      "top_senders": {
       "automated-notifications": [],
       "blocked": [],
