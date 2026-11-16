@@ -265,6 +265,46 @@ def test_a_crash_while_sending_gives_its_messages_back_in_time(backlog):
     assert backlog.job.batch_status()["waiting"] == 0
 
 
+# -- another provider chosen ------------------------------------------------------
+
+def chosen(backlog, provider):
+    backlog.job._provider = lambda: provider
+
+
+@pytest.mark.parametrize("provider", ["openai", "gemini", "local", "compatible"])
+def test_with_another_provider_chosen_a_batch_out_is_let_go_and_nothing_is_asked_of_the_api(backlog, provider):
+    sent = backlog.job.batch_submit()
+    assert sent > 0 and backlog.job.batch_status()["waiting"] == sent
+    backlog.model.end_batch()                               # its answers are there: still nothing is brought in
+    backlog.model.asked.clear()
+    chosen(backlog, provider)
+    said = []
+    assert backlog.job.batch_collect(said.append) == 0
+    assert backlog.model.asked == [] and backlog.model.discarded == []
+    assert (backlog.triage.batches, backlog.job.batch_status()) == ({}, {"waiting": 0, "state": None, "estimate_micros": 0})
+    assert len(backlog.waiting()) == 8 and len(said) == 1
+    assert backlog.job.batch_collect(said.append) == 0 and len(said) == 1         # once
+
+
+def test_with_another_provider_chosen_one_still_being_sent_is_let_go_at_once(backlog):
+    backlog.triage.batch_begin(None, "triage-batch", models.DEFAULT, backlog.waiting()[:2], 10, 0, int(time.time()))
+    chosen(backlog, "openai")
+    backlog.job.batch_collect()
+    assert (backlog.triage.batches, backlog.job.batch_status()["waiting"], backlog.model.asked) == ({}, 0, [])
+
+
+def test_with_claude_chosen_and_ai_off_a_batch_out_waits_and_comes_in_once_ai_is_on(backlog):
+    sent = backlog.job.batch_submit()
+    backlog.model.end_batch()
+    backlog.model.asked.clear()
+    backlog.model.enabled = False
+    assert backlog.job.batch_collect() == 0
+    assert (backlog.model.asked, backlog.job.batch_status()["waiting"]) == ([], sent)
+    backlog.model.enabled = True
+    assert backlog.job.batch_collect() == sent
+    assert backlog.job.batch_status()["waiting"] == 0
+
+
 # -- within the daily limit ------------------------------------------------------
 
 def limited(micros, spent=0):

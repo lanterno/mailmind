@@ -1,6 +1,7 @@
 """AI's switch and its choice of provider, through the app (#49): turned off in Settings, nothing is sent anywhere, by a route
 or by any background job, whatever key there is; turned on again it is sent at once. Chosen, another provider is asked in
-Claude's place by the same jobs, and a backlog never goes as a batch, which only Claude takes."""
+Claude's place by the same jobs, and a backlog never goes as a batch, which only Claude takes: one out to Claude is let go,
+and its mail goes to the provider chosen."""
 import pytest
 
 import problems
@@ -72,14 +73,42 @@ def test_a_backlog_never_goes_as_a_batch_to_another_provider(app, openai, ai, mo
     assert not [r for r in ai.requests if r.path.startswith(fa.BATCHES)]
 
 
-def test_a_batch_sent_to_claude_waits_while_another_provider_is_chosen(app, world, ai, openai_api, fake_keychain, monkeypatch):
+@pytest.fixture
+def batch_out(app, world, ai, monkeypatch):
+    """The world's mail out in a batch to Claude, which has ended there."""
     monkeypatch.setattr(assistant.calls, "MODEL", None)
     monkeypatch.setattr(assistant.assessments, "BATCH_POLL", 0)
     sent = assistant.assessments.batch_submit(at_least=1, keep=0)
-    assert sent > 0
+    assert sent > 0 and assistant.governor().snapshot()["reserved_micros"] > 0
     ai.end_batch()
+    ai.requests.clear()
+    return sent
+
+
+def test_a_batch_sent_to_claude_is_let_go_once_another_provider_is_chosen_and_its_mail_goes_to_that_one(
+        app, batch_out, ai, openai_api, fake_keychain):
     assert app.post("/api/preferences", {"ai_provider": "openai", "ai_base_url": openai_api.url}).status == 200
     assert app.post("/api/ai/key", {"provider": "openai", "key": fo.KEY}).status == 200
-    assert assistant.assessments.batch_collect() == 0
+    assistant.assessments.round()
+    assert ai.requests == []                                       # nothing brought in, nothing removed or cancelled there
+    assert len(openai_api.chats) == batch_out                      # every message it held, summarized by the one chosen
+    assert assistant.governor().snapshot()["reserved_micros"] == 0
+    assert "batch_waiting" not in app.get("/api/digest").json["ai"]
     assert app.post("/api/preferences", {"ai_provider": "anthropic"}).status == 200
-    assert assistant.assessments.batch_collect() == sent
+    assert assistant.assessments.batch_collect() == 0 and ai.requests == []
+
+
+def test_a_batch_sent_to_claude_is_let_go_with_another_provider_chosen_and_ai_off(app, batch_out, ai, openai_api):
+    assert app.post("/api/preferences", {"ai_provider": "openai", "ai_base_url": openai_api.url,
+                                         "ai_enabled": False}).status == 200
+    assert assistant.assessments.round() is None
+    assert (ai.requests, openai_api.requests) == ([], [])
+    assert assistant.assessments.batch_status() == {"waiting": 0, "state": None, "estimate_micros": 0}
+
+
+def test_a_batch_sent_to_claude_waits_while_ai_is_off_and_comes_in_once_it_is_on(app, batch_out, ai):
+    assert app.post("/api/preferences", {"ai_enabled": False}).status == 200
+    assert assistant.assessments.batch_collect() == 0
+    assert ai.requests == [] and assistant.assessments.batch_status()["waiting"] == batch_out
+    assert app.post("/api/preferences", {"ai_enabled": True}).status == 200
+    assert assistant.assessments.batch_collect() == batch_out
