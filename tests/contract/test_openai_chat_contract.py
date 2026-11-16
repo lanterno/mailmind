@@ -376,6 +376,36 @@ def test_the_adapter_alone_tries_a_refused_connection_again_only_as_told():
         model.complete(Prompt("Hi.", "llama3.3", 100))
 
 
+BROKEN_KEYS = [f"{fo.KEY}\n{fo.KEY}", f"{fo.KEY}\r\nX-Other: 1", f"sk-test {fo.KEY}", f"{fo.KEY}\t", f"{fo.KEY}\x00"]
+
+
+@pytest.mark.parametrize("key", BROKEN_KEYS)
+def test_a_key_with_a_blank_or_a_control_character_in_it_is_refused_unsent_and_never_tried_again(openai_api, key,
+                                                                                               monkeypatch):
+    import time
+    monkeypatch.setattr(time, "sleep", lambda s: pytest.fail("waited to try a key that can't be sent again"))
+    model = ChatModel("openai", openai_api.url, key, "gpt-6.1-sol")
+    with pytest.raises(ModelError) as e:
+        model.complete(Prompt("Hi.", "gpt-6.1-sol", 100))
+    assert (str(e.value), e.value.status, e.value.permanent) == ("openai API 401: the key was refused", 401, True)
+    with pytest.raises(ModelError) as listed:
+        list_models("openai", openai_api.url, key)
+    assert (str(listed.value), listed.value.status) == ("openai API 401: the key was refused", 401)
+    assert openai_api.requests == []
+
+
+def test_a_key_that_breaks_its_header_is_never_in_the_error(openai_api, monkeypatch):
+    import http.client
+
+    def refusing(self, *args, **kwargs):
+        raise ValueError(f"Invalid header value b'Bearer {fo.KEY}'")
+    monkeypatch.setattr(http.client.HTTPConnection, "request", refusing)
+    model = ChatModel("openai", openai_api.url, fo.KEY, "gpt-6.1-sol", retries=0)
+    with pytest.raises(ModelError) as e:
+        model.complete(Prompt("Hi.", "gpt-6.1-sol", 100))
+    assert str(e.value) == "openai unreachable: ValueError" and fo.KEY[:6] not in str(e.value)
+
+
 def test_a_batch_is_never_sent_to_another_provider():
     model = ChatModel("openai", "https://api.example.test/v1", fo.KEY, "gpt-6.1-sol")
     assert model.takes_batches is False

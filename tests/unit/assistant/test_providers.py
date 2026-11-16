@@ -2,7 +2,7 @@
 and the models a provider's list offers a person to choose."""
 import pytest
 
-from mailmind.assistant.domain.providers import PROVIDERS, chat_models, in_force, on_loopback
+from mailmind.assistant.domain.providers import PROVIDERS, chat_models, in_force, on_loopback, sendable
 from mailmind.kernel.ai_provider import AI_PROVIDERS
 
 KEY = "sk-test-not-a-real-key"
@@ -95,3 +95,14 @@ def test_a_list_from_a_model_on_this_mac_or_a_compatible_service_drops_what_cant
 
 def test_claudes_list_is_offered_whole():
     assert chat_models("anthropic", ["claude-embed-7", "claude-opus-9", "", 7, None]) == ["claude-embed-7", "claude-opus-9"]
+
+
+@pytest.mark.parametrize("key", ["", KEY, "sk-ant-api03-AbC_dEf-123", "AIzaSyD-fictional_key0123456789", "a!~"])
+def test_a_key_of_printable_ascii_with_no_blank_can_be_sent(key):
+    assert sendable(key)
+
+
+@pytest.mark.parametrize("key", ["sk-test one", "sk-test\none", "sk-test\r\n", " sk-test", "sk-test\t", "sk-\x00test",
+                                 "sk-\x7ftest", "sk-\x1btest", "sk- test", "sk- test", "sk-tést", "sk-test​"])
+def test_a_key_with_a_blank_a_line_break_or_another_control_character_in_it_cant(key):
+    assert not sendable(key)

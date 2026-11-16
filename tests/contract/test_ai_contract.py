@@ -378,6 +378,22 @@ def test_the_models_are_listed_with_the_key_through_the_sdk(api):
     assert req.headers["anthropic-version"] == "2026-10-21"
 
 
+@pytest.mark.parametrize("key", [f"{fa.KEY}\n{fa.KEY}", f"sk-ant {fa.KEY}", f"{fa.KEY}\x00"])
+def test_a_key_with_a_blank_or_a_control_character_in_it_is_refused_unsent(api, key):
+    import os
+
+    from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel, list_models
+    from mailmind.assistant.application.ports import ModelError, Prompt
+    model = AnthropicModel(key, os.environ["ANTHROPIC_BASE_URL"])
+    for call in (lambda: model.complete(Prompt("Hi.", "claude-opus-5-5", 100)), lambda: model.batch_ended("msgbatch_1"),
+                 lambda: model.submit_batch([("1", Prompt("Hi.", "claude-opus-5-5", 100))]),
+                 lambda: list_models(key, os.environ["ANTHROPIC_BASE_URL"])):
+        with pytest.raises(ModelError) as e:
+            call()
+        assert (str(e.value), e.value.status, e.value.permanent) == ("Claude API 401: the key was refused", 401, True)
+    assert api.requests == []
+
+
 # ── what the app talks through ────────────────────────────────────────────────
 
 def test_a_process_talks_through_the_sdk_without_front_build(api):
