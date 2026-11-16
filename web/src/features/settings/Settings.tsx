@@ -10,7 +10,7 @@ import { EMPTY } from "../../lib/emptyWords";
 import { get, post, refusalOf } from "../../lib/api/client";
 import type { ArchiveFormat, GetAnswers, PostBodies } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
-import { avatarHue, relWhen, shortAddress } from "../../lib/text";
+import { avatarHue, fileSize, relWhen, shortAddress } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useFocusFirst } from "../../lib/ui/menuKeys";
@@ -434,7 +434,7 @@ function Backup() {
     <div className="set-form" id="exportBlock">
       <div className="lbl">Backup &amp; Export</div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
-        <span id="exportPlan" className="set-help" style={{ margin: 0 }}>{data ? `${data.total.toLocaleString()} messages · ${data.bodies.toLocaleString()} with full bodies · ${data.groups.length} folders` : "Counting…"}</span>
+        <span id="exportPlan" className="set-help" style={{ margin: 0 }}>{data ? `${data.total.toLocaleString()} messages · ${data.bodies.toLocaleString()} with full bodies · ${data.groups.length} folders · ${fileSize(data.database_bytes)} on this Mac` : "Counting…"}</span>
         <a className="set-mini" href="/api/export" download title="Download a full local snapshot of your synced mail, encrypted as the database is: it opens with the key in this Mac's Keychain"><Icon name="download" /> Backup (.db)</a>
       </div>
       <div className="pref-line">

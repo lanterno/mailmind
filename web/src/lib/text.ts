@@ -20,7 +20,8 @@ export function fileSize(n: number | null | undefined): string {
   if (!n) return "";
   if (n < 1024) return `${n} B`;
   if (n < 1048576) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1048576).toFixed(1)} MB`;
+  if (n < 1073741824) return `${(n / 1048576).toFixed(1)} MB`;
+  return `${(n / 1073741824).toFixed(1)} GB`;
 }
 
 // The list's section for a message's time (epoch seconds), by local calendar day.
