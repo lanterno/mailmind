@@ -5,7 +5,7 @@ import ssl
 
 import pytest
 
-from mailmind.accounts.adapters.imap_connection import LoginUnreachable
+from mailmind.accounts.adapters.imap_connection import LoginUnreachable, may_pass
 from mailmind.accounts.domain import health, tls_pin
 from mailmind.mailbox.adapters.imap.imap_names import BadMailbox
 
@@ -48,6 +48,22 @@ def test_imaplibs_own_errors_and_a_subclass_count_by_what_they_are(error, kind):
 def test_what_an_error_says_counts_for_nothing():
     """It can hold a password or a host, and it can't move an error to another kind either."""
     assert health.error_kind(ValueError("LOGIN timed out: AUTHENTICATIONFAILED")) == "UNKNOWN"
+
+
+@pytest.mark.parametrize("error, passes", [
+    (ConnectionResetError(), True),
+    (ConnectionRefusedError(), True),
+    (socket.gaierror(), True),
+    (TimeoutError(), True),
+    (imaplib.IMAP4.abort("socket error"), True),
+    (LoginUnreachable("NO [UNAVAILABLE] busy"), True),
+    (LoginUnreachable("NO [AUTHENTICATIONFAILED] no", refused=True), False),
+    (tls_pin.TLSPinMismatch(), False),
+    (ImapTrouble(), False),
+    (ValueError(), False),
+], ids=lambda v: v if isinstance(v, bool) else type(v).__qualname__)
+def test_trouble_that_may_pass_is_a_connection_or_a_server_busy_for_now_and_never_a_refusal(error, passes):
+    assert may_pass(error) is passes
 
 
 SYNCED = {"account": "ada@example.test", "last_ok_ts": "2026-11-02T12:00:00Z", "last_error_ts": None,
