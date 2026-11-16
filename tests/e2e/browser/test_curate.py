@@ -78,6 +78,23 @@ def test_marking_senders_cleans_them_up_as_one_and_one_undo_takes_it_back(page, 
     clean(page)
 
 
+def test_with_ai_off_cleaning_up_senders_asks_nothing_of_why_each_is_there(page, app, world):
+    issues(world, 3)                                                                    # a fresh install: AI mode off
+    asked = []
+    page.on("request", lambda r: asked.append(r.url) if "/api/cleanup/rationale" in r.url else None)
+    body = drawer(page)
+    body.locator(f'.flood-row[data-flood="{LOOM}"]').get_by_role("checkbox").check()
+    page.locator(".flood-bar").get_by_role("button", name="Clean up 1").click()
+    panel = page.get_by_role("dialog", name="Clean up these senders")
+    expect(panel.locator(f'[data-batch-sender="{LOOM}"]')).to_contain_text("4 to Trash")
+    expect(panel.locator(".do-scope")).to_have_text(re.compile(r"^\d+ inbox messages? go to Trash$"))
+    expect(panel.locator(".batch-why")).to_have_count(0)
+    page.heard_all_asked()
+    assert asked == []
+    expect(panel).not_to_contain_text("Writing why")
+    clean(page)
+
+
 def test_the_status_menu_opens_the_drawer_and_esc_closes_it(page, world):
     d = drawer(page)
     expect(d.get_by_role("heading", name="Learned rules")).to_be_visible()
