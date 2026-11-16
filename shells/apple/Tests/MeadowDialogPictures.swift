@@ -317,6 +317,14 @@ final class MeadowDialogPictures: XCTestCase {
         }
     }
 
+    /// The window when MailMind didn't open: the core's words, that the mail is safe, and the ways on.
+    func testTheWindowWhenMailMindDidntOpen() throws {
+        try draw("launch-failure", CGSize(width: 1000, height: 640)) { _ in
+            LaunchFailure(why: "the database key doesn't open the database",
+                          folder: URL(filePath: "/private/tmp/mailmind-picture", directoryHint: .isDirectory)) {}
+        }
+    }
+
     /// Help as the mockup's design notes, to lay beside reference/1440-*-notes.png.
     func testHelpAsTheMockupsNotes() throws {
         try draw("help", HelpWindow.size) { _ in HelpWindow(status: status(), lights: false) }

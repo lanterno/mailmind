@@ -48,6 +48,15 @@ final class OneCoreTests: XCTestCase {
         XCTAssertEqual(still, 1, "a window opened again shows the core already open")
         await app.core?.close()
     }
+
+    func testACoreThatDidntOpenSaysTheCoresOwnWords() async {
+        let app = MailApp(home: { self.home }, open: { _ in
+            throw HostProblem.NotOpened(why: "the database key doesn't open the database")
+        })
+        await app.start()
+        XCTAssertEqual(app.stage, .failed("the database key doesn't open the database"),
+                       "the core's words, never the name of a Swift type")
+    }
 }
 
 private actor Opened {
