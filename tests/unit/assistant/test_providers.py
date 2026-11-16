@@ -66,6 +66,19 @@ def test_a_service_on_this_mac_is_local_and_one_elsewhere_is_not():
     assert on_loopback("http://[::1]:11434/v1") and not on_loopback("https://llm.example.test") and not on_loopback("http://[")
 
 
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1:/v1", "http://localhost:0/v1", "http://[::1]:65536/v1", "http://localhost:port/v1",   # its port
+    "http://user@127.0.0.1:8080/v1", "http://localhost:8080/v1?x=1", "http://localhost:8080/v1#top",
+    "http://[::1%25lo0]:8080/v1", "http://localhost:8080/v 1", "ftp://127.0.0.1/v1", "127.0.0.1:8080/v1",
+])
+def test_a_url_at_this_mac_a_person_couldnt_give_is_not_on_this_mac_so_it_is_priced_and_waited_for_as_one_elsewhere(url):
+    from mailmind.assistant.domain import pricing
+    assert not on_loopback(url)
+    e = engine("anthropic", model="claude-test", base_url=url)
+    assert (e.local, e.timeout) == (False, 120)
+    assert pricing.price(e.model, local=e.local) == pricing.DEAREST_OF["claude"] != pricing.FREE
+
+
 def test_a_call_on_this_mac_waits_five_minutes_as_its_model_may_be_loading_and_one_elsewhere_two():
     assert engine("local", model="llama3.3").timeout == 300
     assert engine("compatible", base_url="http://localhost:8080/v1", model="m").timeout == 300
