@@ -152,6 +152,35 @@ enum AIChoices {
         return parts
     }
 
+    /// The asks for a provider's models, the latest standing: an answer to an ask made before another is let go, so a
+    /// provider chosen while another's list is on its way is asked at once, and its list is the one kept.
+    struct Asking: Equatable {
+        /// Counts the asks, so an answer knows whether another was made after it.
+        private(set) var turn = 0
+        /// The provider the latest ask went to, while its answer is on its way.
+        private(set) var provider: API.AiProvider?
+
+        /// A new ask, to `provider`: its turn, which its answer brings back to `end`.
+        mutating func begin(_ provider: API.AiProvider) -> Int {
+            turn += 1
+            self.provider = provider
+            return turn
+        }
+
+        /// No ask after all, a refusal being foreseen: what one made before brings is let go too.
+        mutating func drop() {
+            turn += 1
+            provider = nil
+        }
+
+        /// The answer to the ask of `turn` came: whether it stands, no other having been made since.
+        mutating func end(_ turn: Int) -> Bool {
+            guard turn == self.turn else { return false }
+            provider = nil
+            return true
+        }
+    }
+
     /// What the model menu's button says: the model chosen, else the default, else that one is wanted.
     static func title(_ provider: API.AiProvider, chosen: String, defaultModel: String?) -> String {
         if !chosen.isEmpty { return chosen }
@@ -234,7 +263,7 @@ struct AIPane: View {
     let status: AppStatus
     @State private var kept: Set<API.AiProvider>?
     @State private var listed: AIChoices.Listed?
-    @State private var listing = false
+    @State private var asking = AIChoices.Asking()
     /// What looking for model servers on this Mac came to, once asked.
     @State private var look: AIChoices.Look?
     /// A model being typed by hand, while its field is open.
@@ -329,15 +358,20 @@ struct AIPane: View {
             HStack(spacing: 6) {
                 SettingChoice(label: String(localized: "Model"),
                               title: AIChoices.title(provider, chosen: chosen, defaultModel: defaultModel), width: 320,
-                              opened: { if listed?.provider != provider { Task { await list(provider) } } }) {
+                              opened: {
+                                  if listed?.provider != provider, asking.provider != provider {
+                                      Task { await list(provider) }
+                                  }
+                              }) {
                     AIChoices.modelMenu(provider, chosen: chosen, defaultModel: defaultModel, listed: listed,
-                                        asking: listing, choose: { chooseModel($0) }, type: { typedModel = chosen })
+                                        asking: asking.provider == provider, choose: { chooseModel($0) },
+                                        type: { typedModel = chosen })
                 }
                 Button { Task { await list(provider) } } label: { MeadowIconView(.refresh, size: 15) }
                     .meadowButton(.quiet, small: true, icon: true)
                     .help("Ask \(provider.name) for its models again")
                     .accessibilityLabel("Ask \(provider.name) for its models again")
-                    .disabled(listing)
+                    .disabled(asking.provider == provider)
             }
         }
         if let typed = typedModel {
@@ -575,20 +609,27 @@ struct AIPane: View {
     }
 
     /// Ask the provider which models it offers. `unlessForeseen`: not where the server would refuse for want of a
-    /// key or a URL, which the key's card and the URL's line already say.
+    /// key or a URL, which the key's card and the URL's line already say. An ask made while another is on its way
+    /// goes at once, a provider chosen or a key or URL kept meanwhile being what the pane shows now, and only the
+    /// latest ask's answer is kept.
     private func list(_ asked: API.AiProvider, unlessForeseen: Bool = false) async {
-        guard let core = status.core, !listing else { return }
+        guard let core = status.core else { return }
         if unlessForeseen,
-           !AIChoices.canList(asked, kept: kept, preferences: preferences, sources: .ofThisProcess) { return }
-        listing = true
-        defer { listing = false }
+           !AIChoices.canList(asked, kept: kept, preferences: preferences, sources: .ofThisProcess)
+        {
+            asking.drop()
+            return
+        }
+        let turn = asking.begin(asked)
+        let answer: AIChoices.Listed
         do {
-            let list = try await core.get(API.Get.AiModels.self, ["provider": asked.rawValue])
-            listed = AIChoices.Listed(provider: asked, list: list)
+            answer = AIChoices.Listed(provider: asked,
+                                      list: try await core.get(API.Get.AiModels.self, ["provider": asked.rawValue]))
         } catch {
-            listed = AIChoices.Listed(provider: asked, problem: (error as? Problem)?.detail
+            answer = AIChoices.Listed(provider: asked, problem: (error as? Problem)?.detail
                                       ?? String(localized: "Couldn’t ask for the models."))
         }
+        if asking.end(turn) { listed = answer }
     }
 }
 
