@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mm_kernel::errors::{Fault, caught};
+use mm_kernel::errors::{Failure, Fault, Kind, Problem, caught};
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_kernel::when;
@@ -27,12 +27,15 @@ use crate::command_ports::{self, CommandStore, MoveAccounts, NewCommand, Tokens,
 use crate::destination::{self, Destination};
 use crate::gates::{Gates, Priority, Refused, Wait, on_gate};
 use crate::server_ops::ServerOps;
-use crate::session::ServerError;
+use crate::session::{MailServer, ServerError};
 use crate::sync_ports::{Events, MailboxEvent};
 use crate::undo;
 use crate::workers::{Kick, Queue};
 
 const TAG: &str = "commands";
+
+/// What a read-only process answers a change it may not make and nothing queues: a folder's (`profile.ReadOnlyError`).
+pub const READ_ONLY: Fault = Fault::new("ReadOnlyError");
 
 /// Why a try at a command didn't come to an outcome.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,6 +109,8 @@ impl MailCommands {
     const BACKOFF_CAP: i64 = 900;
     /// The longest the worker waits between drains, in seconds, kicked or not.
     pub const POLL: i64 = 30;
+    /// How long a folder's change waits for the account's gate: no worker takes one over, so a person hears.
+    pub const FOLDER_WAIT: Duration = Duration::from_secs(10);
 
     pub fn new(parts: CommandParts) -> MailCommands {
         let CommandParts { store, accounts, server, gates, clock, events, tokens, read_only } = parts;
@@ -398,6 +403,27 @@ impl MailCommands {
             command_ports::write(&*self.store, |tx| self.forget(tx, row))?;
         }
         Ok(outcome)
+    }
+
+    /// `change` on a session of `account`'s server, as a job on its gate a person waits for: a folder made, renamed or
+    /// deleted. It never queues, since a change made later could meet a folder changed since. In a read-only process it
+    /// is refused before anything is asked, and with the gate held past FOLDER_WAIT it is busy and never ran.
+    pub fn change_folder<T>(
+        &self,
+        account: &str,
+        change: impl FnOnce(&mut dyn MailServer) -> Result<T, ServerError>,
+    ) -> Result<Result<T, ServerError>, Failure> {
+        if self.read_only {
+            return Err(READ_ONLY.into());
+        }
+        let ran = on_gate(&*self.gates, account, Priority::Interactive, Wait::For(Self::FOLDER_WAIT), || {
+            self.server.on_server(account, Some(Self::TRY_TIMEOUT), change)
+        });
+        match ran {
+            Ok(answer) => Ok(answer),
+            Err(Refused::Busy) => Err(Problem::new(Kind::Busy, "").into()),
+            Err(Refused::Nested) => Err(Fault::new("NestedGate").into()),
+        }
     }
 
     /// No one waits for a try at this one, as a click on many gives up in the end: the worker has it.

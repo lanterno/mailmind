@@ -12,6 +12,7 @@ use mm_kernel::errors::{Failure, Fault, Problem};
 use mm_kernel::log;
 use mm_kernel::seams::Clock;
 
+use crate::folder_change;
 use crate::ports::{Accounts, MailSession, MailSessions, SessionError, StoredMail, ViewCounts};
 use crate::roles::{self, RailFolder};
 
@@ -198,11 +199,19 @@ impl Folders {
         Ok(folders)
     }
 
-    /// The live LIST, with each selectable folder's STATUS (0 and 0 where it fails), over a session of its own,
-    /// logged out after.
+    /// The live LIST, with each selectable folder's STATUS (0 and 0 where it fails) and whether a person may change
+    /// it, over a session of its own, logged out after.
     fn live(&self, account: &str) -> Result<Vec<RailFolder>, SessionError> {
+        let trash = self.accounts.trash(account).map_err(SessionError::Failed)?;
         let mut session = self.sessions.open(account)?;
-        let rail = session.folders().map(|folders| roles::live_rail(&folders, |name| status(&mut *session, name)));
+        let rail = session.folders().map(|folders| {
+            let changeable = folder_change::changeable_names(&folders, trash.as_deref());
+            let mut rail = roles::live_rail(&folders, |name| status(&mut *session, name));
+            for folder in &mut rail {
+                folder.changeable = changeable.contains(&folder.name);
+            }
+            rail
+        });
         session.logout();
         rail
     }

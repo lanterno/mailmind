@@ -125,6 +125,7 @@ impl MailServer for Session {
     fn search(&mut self, criteria: Search<'_>) -> Result<Vec<u32>, ServerError> {
         let criteria = match criteria {
             Search::All => "ALL".to_owned(),
+            Search::Undeleted => "UNDELETED".to_owned(),
             Search::Above(uid) => format!("UID {}:*", u64::from(uid) + 1),
             Search::Below(uid) if uid <= 1 => return Ok(Vec::new()),
             Search::Below(uid) => format!("UID 1:{}", uid - 1),
@@ -295,5 +296,20 @@ impl MailServer for Session {
 
     fn shutdown(&mut self) {
         let _ = self.connection.wire.stream.shutdown();
+    }
+
+    fn create_folder(&mut self, name: &str) -> Result<(), ServerError> {
+        self.send(&format!("CREATE {}", folder(name)?))?;
+        Ok(())
+    }
+
+    fn rename_folder(&mut self, name: &str, to: &str) -> Result<(), ServerError> {
+        self.send(&format!("RENAME {} {}", folder(name)?, folder(to)?))?;
+        Ok(())
+    }
+
+    fn delete_folder(&mut self, name: &str) -> Result<(), ServerError> {
+        self.send(&format!("DELETE {}", folder(name)?))?;
+        Ok(())
     }
 }

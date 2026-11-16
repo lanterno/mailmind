@@ -87,7 +87,7 @@ impl ServerOps {
     }
 
     /// Open a session on `account`'s server, run `work`, and log out; `timeout` is seconds for each step.
-    fn on_server<T>(
+    pub(crate) fn on_server<T>(
         &self,
         account: &str,
         timeout: Option<u64>,

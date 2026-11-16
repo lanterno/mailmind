@@ -23,6 +23,10 @@ impl Accounts for KnownAccounts {
     fn known(&self, account: &str) -> Result<bool, Fault> {
         Ok(self.0.get(account)?.is_some())
     }
+
+    fn trash(&self, account: &str) -> Result<Option<String>, Fault> {
+        Ok(self.0.get(account)?.map(|a| a.trash))
+    }
 }
 
 /// The accounts the Mailbox's lists read over: those the Directory may use; and what the page names each by.

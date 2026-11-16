@@ -11,6 +11,12 @@ use crate::roles::Folder;
 pub trait Accounts: Send + Sync + fmt::Debug {
     /// Whether an account the app may use is saved under exactly `account`.
     fn known(&self, account: &str) -> Result<bool, Fault>;
+
+    /// The account's Trash, as its entry names it: one folder the rail never offers to rename or delete. None where
+    /// no entry says, and then the folder that plays Trash is the only one.
+    fn trash(&self, _account: &str) -> Result<Option<String>, Fault> {
+        Ok(None)
+    }
 }
 
 /// How many rows each view that isn't a folder holds.

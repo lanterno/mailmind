@@ -66,6 +66,82 @@ impl Folder {
     }
 }
 
+/// What a run of modified UTF-7 between `&` and `-` says: base64 of UTF-16 with `,` for `/`, or None for one that
+/// doesn't read as one.
+fn unshifted(run: &str) -> Option<String> {
+    let mut bytes = Vec::with_capacity(run.len() * 3 / 4);
+    let (mut bits, mut held) = (0u32, 0u32);
+    for c in run.bytes() {
+        let value = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b',' => 63,
+            _ => return None,
+        };
+        bits = (bits << 6) | u32::from(value);
+        held += 6;
+        if held >= 8 {
+            held -= 8;
+            bytes.push(((bits >> held) & 0xff) as u8);
+        }
+    }
+    if bytes.len() % 2 != 0 {
+        return None;
+    }
+    let units: Vec<u16> = bytes.chunks(2).map(|pair| u16::from_be_bytes([pair[0], pair[1]])).collect();
+    String::from_utf16(&units).ok()
+}
+
+/// What a name in IMAP's modified UTF-7 says (RFC 3501 5.1.3): `&-` as `&`, and a run between `&` and `-` as base64
+/// of UTF-16 with `,` for `/`. A run that doesn't read as one stays as it is.
+pub fn from_modified_utf7(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 1..];
+        match after.find('-') {
+            Some(0) => {
+                out.push('&');
+                rest = &after[1..];
+            }
+            Some(end) => match unshifted(&after[..end]) {
+                Some(read) => {
+                    out.push_str(&read);
+                    rest = &after[end + 1..];
+                }
+                None => {
+                    out.push('&');
+                    rest = after;
+                }
+            },
+            None => {
+                out.push('&');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// A folder's own name as a person reads it, from its name as LIST gives it: its last part by the server's separator
+/// (all of it with none), a quoted string's escapes undone, and its modified UTF-7 read.
+pub fn own_name(name: &str, delimiter: Option<&str>) -> String {
+    let last = match delimiter.filter(|d| !d.is_empty()) {
+        Some(d) => name.rsplit(d).next().unwrap_or(name),
+        None => name,
+    };
+    let mut unescaped = String::with_capacity(last.len());
+    let mut chars = last.chars();
+    while let Some(c) = chars.next() {
+        unescaped.push(if c == '\\' { chars.next().unwrap_or(c) } else { c });
+    }
+    from_modified_utf7(&unescaped)
+}
+
 fn last_segment(name: &str, delimiter: Option<&str>) -> String {
     let name = name.replace("\\\"", "\"").replace("\\\\", "\\");
     let last = match delimiter {
@@ -142,13 +218,16 @@ fn plays(playing: &[(String, &'static str)], name: &str) -> &'static str {
     playing.iter().rev().find(|(n, _)| n == name).map_or("custom", |(_, role)| role)
 }
 
-/// A folder on the rail: its name, its role, and its unread and total counts.
+/// A folder on the rail: its name, its role, its unread and total counts, its own name as a person reads it
+/// (`own_name`), and whether a person may rename or delete it (`folder_change::changeable`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RailFolder {
     pub name: String,
     pub role: &'static str,
     pub unseen: i64,
     pub total: i64,
+    pub own_name: String,
+    pub changeable: bool,
 }
 
 fn rail_place(role: &str) -> u8 {
@@ -170,7 +249,8 @@ pub fn rail_order(mut folders: Vec<RailFolder>) -> Vec<RailFolder> {
     folders
 }
 
-/// The rail of folders a live LIST gave, with each one's counts from `status`.
+/// The rail of folders a live LIST gave, with each one's counts from `status`. None is changeable yet: what the
+/// account's Trash is decides that (`folder_change::changeable_names`).
 pub fn live_rail(folders: &[Folder], mut status: impl FnMut(&str) -> (i64, i64)) -> Vec<RailFolder> {
     let selectable: Vec<Folder> = folders.iter().filter(|f| f.selectable()).cloned().collect();
     let playing = playing(&selectable);
@@ -178,7 +258,14 @@ pub fn live_rail(folders: &[Folder], mut status: impl FnMut(&str) -> (i64, i64))
         .iter()
         .map(|f| {
             let (unseen, total) = status(&f.name);
-            RailFolder { name: f.name.clone(), role: plays(&playing, &f.name), unseen, total }
+            RailFolder {
+                name: f.name.clone(),
+                role: plays(&playing, &f.name),
+                unseen,
+                total,
+                own_name: own_name(&f.name, f.delimiter.as_deref()),
+                changeable: false,
+            }
         })
         .collect();
     rail_order(rail)
@@ -200,9 +287,11 @@ pub fn stored_rail(counts: &[(String, Option<i64>, i64)]) -> Vec<RailFolder> {
         held.into_iter()
             .map(|(name, unseen, total)| RailFolder {
                 role: plays(&playing, &name),
+                own_name: own_name(&name, None),
                 name,
                 unseen: unseen.unwrap_or(0),
                 total,
+                changeable: false,
             })
             .collect(),
     )

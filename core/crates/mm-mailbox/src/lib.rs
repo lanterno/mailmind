@@ -12,6 +12,9 @@ pub mod commands;
 pub mod destination;
 pub mod filing;
 pub mod flights;
+// A folder a person makes, renames or deletes.
+pub mod folder_change;
+pub mod folder_changes;
 pub mod folders;
 pub mod gates;
 pub mod ingest;

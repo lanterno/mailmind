@@ -41,6 +41,8 @@ mod key;
 mod labels;
 mod mailbox;
 mod mailbox_commands;
+// A folder renamed or deleted on the server, as the store follows it.
+mod mailbox_folders;
 // What the forget round lets go of: keys with no copy left, and finished changes.
 mod mailbox_forget;
 // What this Mac keeps of an account's mail, let go as the account is removed.

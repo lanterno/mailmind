@@ -78,6 +78,8 @@ pub struct App {
     pub commands: Arc<MailCommands>,
     pub undo: Undo,
     pub filing: Arc<Filing>,
+    /// A folder a person makes, renames or deletes, on the server and then here.
+    pub folder_changes: mm_mailbox::folder_changes::FolderChanges,
     /// A plan a bulk command's preview froze, carried out (`/api/ai/do-confirm`).
     pub plans: mm_mailbox::plans::Plans,
     /// Each account's INBOX synced, one round at a time (`/api/refresh`).
@@ -345,6 +347,14 @@ impl App {
         // The servers a cleanup, a sweep and expiry read and move live mail on.
         let cleanup_servers = servers.clone();
         let move_accounts = Arc::new(DirectoryMoveAccounts(directory.clone()));
+        let folder_changes =
+            mm_mailbox::folder_changes::FolderChanges::new(mm_mailbox::folder_changes::FolderChangeParts {
+                commands: commands.clone(),
+                accounts: move_accounts.clone(),
+                store: database.clone(),
+                folders: folders.clone(),
+                clock: seams.clock.clone(),
+            });
         // Folders beyond the Inbox, warmed as each sync round ends for the accounts asking; and the body backfill.
         let warming = crate::backfill_wiring::warming(&directory, &servers, &ingest, environment);
         let backfill = crate::backfill_wiring::backfill(&directory, &database, &servers, &gates, &seams.clock);
@@ -453,6 +463,7 @@ impl App {
             commands,
             undo,
             filing,
+            folder_changes,
             plans,
             syncing,
             realtime,

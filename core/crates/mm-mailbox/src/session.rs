@@ -90,6 +90,8 @@ pub struct Headers {
 pub enum Search<'a> {
     /// Every message.
     All,
+    /// Every message not flagged \Deleted.
+    Undeleted,
     /// Every UID above this one (`UID n+1:*`, which always matches the last UID, even one below it).
     Above(u32),
     /// Every UID below this one (`UID 1:n-1`); none below 1.
@@ -183,6 +185,19 @@ pub trait MailServer: MailSession {
     ) -> Result<Option<u32>, ServerError>;
     /// Close without a LOGOUT, when the server won't answer one.
     fn shutdown(&mut self);
+
+    // A folder itself, as a person makes, renames or deletes one: each name in LIST's form, as the rest. A session
+    // that can't says so as a refusal.
+    fn create_folder(&mut self, _name: &str) -> Result<(), ServerError> {
+        Err(ServerError::Refused("Unsupported"))
+    }
+    fn rename_folder(&mut self, _name: &str, _to: &str) -> Result<(), ServerError> {
+        Err(ServerError::Refused("Unsupported"))
+    }
+    /// The caller selects another folder first: a server may refuse to delete the selected one.
+    fn delete_folder(&mut self, _name: &str) -> Result<(), ServerError> {
+        Err(ServerError::Refused("Unsupported"))
+    }
 }
 
 /// Where servers' sessions come from.
@@ -350,5 +365,17 @@ impl MailServer for ReadOnly {
 
     fn shutdown(&mut self) {
         self.0.shutdown();
+    }
+
+    fn create_folder(&mut self, _: &str) -> Result<(), ServerError> {
+        Err(READ_ONLY)
+    }
+
+    fn rename_folder(&mut self, _: &str, _: &str) -> Result<(), ServerError> {
+        Err(READ_ONLY)
+    }
+
+    fn delete_folder(&mut self, _: &str) -> Result<(), ServerError> {
+        Err(READ_ONLY)
     }
 }
