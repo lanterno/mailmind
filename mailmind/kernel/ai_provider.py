@@ -17,7 +17,8 @@ LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})     # the hosts that nam
 
 def _host(url: str) -> tuple[bool, str] | None:
     """(whether it is https, its host) for a URL in printable ASCII whose scheme is https or http, with no user or password,
-    query or fragment, and a port from 1 to 65535 where it names one. None for any other URL, or text that is none."""
+    query or fragment, a port from 1 to 65535 where it names one, and in brackets only a plain IPv6 address: no IPvFuture
+    (`[v1.x]`) and no zone (`[fe80::1%25en0]`), which no client here reaches. None for any other URL, or text that is none."""
     if any(not "!" <= ch <= "~" for ch in url) or "?" in url or "#" in url:
         return None
     try:
@@ -25,10 +26,13 @@ def _host(url: str) -> tuple[bool, str] | None:
         port = parts.port                               # a port that is no number, or past 65535, raises
     except ValueError:
         return None
-    if parts.scheme not in ("http", "https") or "@" in parts.netloc or not parts.hostname \
+    host = parts.hostname
+    if parts.scheme not in ("http", "https") or "@" in parts.netloc or not host \
             or parts.netloc.endswith(":") or port == 0:     # "host:" names no port
         return None
-    return parts.scheme == "https", parts.hostname
+    if parts.netloc.startswith("[") and (host.startswith("v") or "%" in host):     # urlsplit takes both in brackets
+        return None
+    return parts.scheme == "https", host
 
 
 def base_url(given: str) -> str | None:
