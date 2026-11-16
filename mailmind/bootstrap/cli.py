@@ -139,7 +139,7 @@ def assess(limit, workers):
     if off:
         print(f"{assistant.WHY[off]}, so nothing was summarized.")
         return
-    why = assistant.gateway().held_back("triage", assistant.calls.MODEL)
+    why = assistant.gateway().held_back("triage")
     if why:
         print(f"Triage is held back ({why}), so nothing was summarized.")
         return

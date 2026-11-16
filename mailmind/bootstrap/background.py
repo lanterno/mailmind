@@ -39,7 +39,7 @@ def review_ahead_round():
 def tidy_round():
     """Tidy on its own, for someone who turned it on: it reads what the AI said, so not with AI off or held back."""
     if accounts.config.preferences()["auto_tidy"] and assistant.calls.engine() != "none" \
-            and not assistant.gateway().held_back("auto-tidy", assistant.calls.MODEL):
+            and not assistant.gateway().held_back("auto-tidy"):
         mailbox.tidying.round()
 
 

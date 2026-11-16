@@ -3,7 +3,8 @@
 The engine in force is read from what a person chose (#49): AI on or off, its provider, model and URL, which are preferences
 in mailmind.config.json, and the key kept for that provider. Claude, the default, goes through the Anthropic SDK; every other
 provider through the one adapter that speaks OpenAI's Chat Completions. AI off, turned off or with no key, URL or model to
-ask, the model is DisabledModel, and nothing is sent. MAILMIND_MODEL wins over the model a person chose.
+ask, the model is DisabledModel, and nothing is sent. MAILMIND_MODEL names the Claude model: it wins over the model a person
+chose while Claude is the provider, and with any other it is ignored.
 
 A provider's key is config_key() (mailmind.config.json's "anthropic_api_key", "openai_api_key" and the like, in any
 credential style but the Proton Bridge's password, read through the Accounts context), and for Claude only then
@@ -108,7 +109,8 @@ def engine() -> Engine:
     prefs = _preferences()
     provider: AiProvider = prefs["ai_provider"]
     api_key, source = key(provider) if prefs["ai_enabled"] else ("", "")
-    return providers.in_force(enabled=prefs["ai_enabled"], provider=provider, model=calls.MODEL or prefs["ai_model"],
+    claude_model = calls.MODEL if provider == "anthropic" else None
+    return providers.in_force(enabled=prefs["ai_enabled"], provider=provider, model=claude_model or prefs["ai_model"],
                               base_url=_base_url(provider, prefs["ai_base_url"]), key=api_key, key_from=source)
 
 

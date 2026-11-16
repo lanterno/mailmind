@@ -97,7 +97,7 @@ class Assessments:
         """Triage up to `limit` messages that have no summary yet, `workers` at a time, and return how
         many were summarized. With AI off, or while the cost governor holds triage back, it returns 0
         at once: not one message is tried."""
-        if self._calls.engine() == "none" or self._gateway().held_back("triage", self._calls.MODEL):
+        if self._calls.engine() == "none" or self._gateway().held_back("triage"):
             return 0
         with self._uow.read() as c:
             out = self._answers.batch_open(c)
@@ -129,7 +129,7 @@ class Assessments:
         takes what fits in its share of today's limit, by estimate, and leaves the newest to go now."""
         at_least, keep = self.BATCH_MIN if at_least is None else at_least, self.BATCH_KEEP_NEWEST if keep is None else keep
         gw = self._gateway()
-        if self._calls.engine() == "none" or not gw.takes_batches or gw.held_back(self.BATCH_FEATURE, self._calls.MODEL):
+        if self._calls.engine() == "none" or not gw.takes_batches or gw.held_back(self.BATCH_FEATURE):
             return 0
         with self._uow.read() as c:
             if self._answers.batch_open(c):
@@ -280,7 +280,7 @@ class Assessments:
             assess_log.info("%(what)s", {"what": m})
 
         self.batch_collect(say)
-        why = self._gateway().held_back("triage", self._calls.MODEL)
+        why = self._gateway().held_back("triage")
         if why:
             return self.ASSESS_YIELD if why == "yielding" else None
         if not environment.NO_BATCHES.on():

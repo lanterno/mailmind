@@ -214,7 +214,7 @@ class PreparedReplies:
         def draft_ahead_round() -> None:
             if breaker.is_open(time.time()):
                 pass                                                 # circuit breaker open (an outage)
-            elif self._gateway().held_back("draft-ahead", self._calls.MODEL):
+            elif self._gateway().held_back("draft-ahead"):
                 pass                                                 # yielding, away, at the limit, rejected
             else:
                 cand = self._pick_draft_candidate()

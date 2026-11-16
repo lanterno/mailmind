@@ -14,7 +14,9 @@ from mailmind.platform import environment
 
 
 class Calls:
-    MODEL = environment.MODEL.value()  # optional, e.g. claude-haiku-5-5: wins over the model a person chose
+    # Optional, e.g. claude-haiku-5-5: the Claude model, which the wiring makes the model in force, in place of the one a
+    # person chose, while Claude is the provider. A call asks the model in force, so with any other provider it is ignored.
+    MODEL = environment.MODEL.value()
 
     def __init__(self, gateway: Callable[[], Gateway], status: Status):
         self._gateway = gateway
@@ -30,7 +32,7 @@ class Calls:
 
     def model_label(self) -> str:
         """The model name stored beside each AI result and shown under it in the UI: the one in force."""
-        return self.MODEL or self._gateway().model
+        return self._gateway().model
 
     def usage(self, days: int = 30) -> list[DayCost]:
         """Each of the last `days` local days, newest first: its AI calls and their cost in
@@ -39,13 +41,13 @@ class Calls:
 
     def call_claude(self, prompt: str, feature: str = "other") -> str:
         """Plain text result (a thread's digest). `feature` names the call in the usage ledger."""
-        return self.noting(lambda: self._gateway().ask(prompt, feature=feature, model=self.MODEL).text)
+        return self.noting(lambda: self._gateway().ask(prompt, feature=feature).text)
 
     def reply_to(self, prompt: str, schema: dict[str, Any], effort: str | None = None, feature: str = "other") -> Reply:
         """The whole reply to what call_claude_json asks, for a caller that keeps which model served it and whether it
         was refused. It fails as that does."""
         return self.noting(lambda: self._gateway().ask(prompt, None if environment.NO_SCHEMA.on() else schema,
-                                                       feature=feature, model=self.MODEL, effort=effort))
+                                                       feature=feature, effort=effort))
 
     def call_claude_json(self, prompt: str, schema: dict[str, Any], effort: str | None = None,
                          feature: str = "other") -> dict[str, Any]:
