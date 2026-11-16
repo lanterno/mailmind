@@ -8,7 +8,7 @@
 //! `openai/gpt-6.1-sol`, Gemini's `models/gemini-…`). Still unknown, it costs nothing on this machine (Ollama, or any
 //! provider at a loopback address); anywhere else it is priced as the dearest of its family (`claude-`, `gpt-` or
 //! `o<digit>`, `gemini-`), or of the whole table for a name of no known family, so a spending limit errs toward
-//! stopping early.
+//! stopping early. Every price is the Python app's, to the nano-dollar.
 
 /// Nano-dollars per token (thousandths of a dollar per million tokens): input, output and cache read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,19 +19,16 @@ pub struct Price {
 }
 
 impl Price {
-    /// Nano-dollars per token: input, output, cache write (1.25 × input, rounded up where that isn't whole, which
-    /// only prices no provider reports cache writes for are) and cache read.
+    /// Nano-dollars per token: input, output, cache write (1.25 × input, a half rounded to even as Python's `round`
+    /// does, which only prices no provider reports cache writes for need) and cache read.
     fn nanos(self) -> (i64, i64, i64, i64) {
-        (self.input, self.output, (self.input * 5 + 3) / 4, self.cache_read)
-    }
-
-    /// The dearer of two in each of its parts.
-    const fn dearer(self, other: Price) -> Price {
-        Price {
-            input: if other.input > self.input { other.input } else { self.input },
-            output: if other.output > self.output { other.output } else { self.output },
-            cache_read: if other.cache_read > self.cache_read { other.cache_read } else { self.cache_read },
-        }
+        let (whole, quarters) = ((self.input * 5).div_euclid(4), (self.input * 5).rem_euclid(4));
+        let write = match quarters {
+            0 | 1 => whole,
+            2 if whole % 2 == 0 => whole,
+            _ => whole + 1,
+        };
+        (self.input, self.output, write, self.cache_read)
     }
 }
 
@@ -131,13 +128,15 @@ fn family(name: &str) -> Option<Family> {
     }
 }
 
-/// The dearest price of the models of `of` (every model, for None), in each of its parts: never cheaper than any of
-/// them for any mix of tokens.
+/// The dearest price of the models of `of` (every model, for None), as the Python app picks it: the highest output
+/// price, then input, and the first in the table of those alike.
 fn dearest(of: Option<Family>) -> Price {
-    let ours = |name: &str| of.is_none() || family(name) == of;
-    let listed = PRICES.iter().filter(|(name, _)| ours(name)).map(|(_, p)| *p);
-    let long = LONG_PROMPTS.iter().filter(|(name, _, _)| ours(name)).map(|(_, _, p)| *p);
-    listed.chain(long).fold(FREE, Price::dearer)
+    let ours = PRICES.iter().filter(|(name, _)| of.is_none() || family(name) == of).map(|(_, p)| *p);
+    ours.fold(None, |dearest: Option<Price>, p| match dearest {
+        Some(d) if (d.output, d.input) >= (p.output, p.input) => Some(d),
+        _ => Some(p),
+    })
+    .unwrap_or(FREE)
 }
 
 /// The price the table lists for `model`, a bare name or one with a date after it, for a prompt of `prompt_tokens`;
