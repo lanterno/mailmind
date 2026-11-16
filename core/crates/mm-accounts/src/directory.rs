@@ -7,13 +7,14 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use mm_kernel::ai_provider::{self, AiProvider};
 use mm_kernel::errors::{Failure, Fault, Kind, Problem};
 use mm_kernel::log;
-use mm_kernel::seams::{Clock, Keychain, Secret, keepable_name, keepable_secret};
+use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Secret, keepable_name, keepable_secret};
 use mm_kernel::when;
 use serde_json::{Map, Value, json};
 
 use crate::account::{self, Account, truthy};
 use crate::bridge::{self, Bridge, BridgeGiven};
 use crate::credential::{self, Asked, CredentialRef, Style, credential_from};
+use crate::keychain_reads::KeychainReads;
 use crate::one_password::OpReads;
 use crate::ports::{ConfigFile, Variables};
 use crate::preferences;
@@ -76,6 +77,9 @@ pub struct Directory {
     write: Mutex<()>,
     /// What 1Password gave this process, and the way to ask it for more: none until `reading_op` gives it.
     op: Option<Arc<OpReads>>,
+    /// What the Keychain gave this process, which a keep or a removal here forgets: none until `reading_keychain`
+    /// gives it.
+    keychain_reads: Option<Arc<KeychainReads>>,
     /// The process's environment, for a credential that names a variable: none until `reading_variables` gives it.
     variables: Option<Arc<dyn Variables>>,
     /// The Proton Bridge's password, once found, and what the environment says of it: nothing until `reading_bridge`
@@ -85,12 +89,34 @@ pub struct Directory {
 
 impl Directory {
     pub fn new(file: Arc<dyn ConfigFile>, keychain: Arc<dyn Keychain>, clock: Arc<dyn Clock>) -> Directory {
-        Directory { file, keychain, clock, write: Mutex::new(()), op: None, variables: None, bridge: Bridge::default() }
+        Directory {
+            file,
+            keychain,
+            clock,
+            write: Mutex::new(()),
+            op: None,
+            keychain_reads: None,
+            variables: None,
+            bridge: Bridge::default(),
+        }
     }
 
     /// The Directory, reading a 1Password credential through `op`, which the Assistant's key shares.
     pub fn reading_op(self, op: Arc<OpReads>) -> Directory {
         Directory { op: Some(op), ..self }
+    }
+
+    /// The Directory, forgetting what `reads` (the Assistant's, for its key) read of an item as it keeps the item
+    /// again or takes it out, or a credential that named it is replaced.
+    pub fn reading_keychain(self, reads: Arc<KeychainReads>) -> Directory {
+        Directory { keychain_reads: Some(reads), ..self }
+    }
+
+    /// Forget what was read of the Keychain's `item` (`secrets._drop`).
+    fn forget_read(&self, item: &str) {
+        if let Some(reads) = &self.keychain_reads {
+            reads.forget(item);
+        }
     }
 
     /// The Directory, reading a credential that names a variable from `variables`.
@@ -103,11 +129,15 @@ impl Directory {
         Directory { bridge: Bridge::new(given), ..self }
     }
 
-    /// Forget what was read of `credential`'s 1Password references, once it is replaced or its account removed
-    /// (`secrets.evict`).
+    /// Forget what was read of `credential`'s 1Password references, or of its Keychain item, once it is replaced or
+    /// its account removed (`secrets.evict`).
     fn evict(&self, credential: Option<&Value>) {
-        if let (Some(op), Some(refs)) = (&self.op, CredentialRef::parse(credential).op_refs()) {
+        let named = CredentialRef::parse(credential);
+        if let (Some(op), Some(refs)) = (&self.op, named.op_refs()) {
             op.evict(refs);
+        }
+        if let Some(item) = named.item() {
+            self.forget_read(item);
         }
     }
 
@@ -355,10 +385,28 @@ impl Directory {
         if !keepable_secret(typed.expose()) {
             return Err(Problem::refused(UNPRINTABLE).into());
         }
-        self.keychain.put(item, &typed).map_err(|_| {
+        self.keep(item, &typed).map_err(|_| {
             Problem::new(Kind::Unreachable, "The Keychain didn't keep the password. Is the login keychain locked?")
         })?;
         Ok(credential::keychain_credential(item, before))
+    }
+
+    /// Keep `secret` in the Keychain as `item`, forgetting what was read of it before and after (`keep`), so a read
+    /// that ran meanwhile isn't kept.
+    fn keep(&self, item: &str, secret: &Secret) -> Result<(), KeychainProblem> {
+        self.forget_read(item);
+        let put = self.keychain.put(item, secret);
+        self.forget_read(item);
+        put
+    }
+
+    /// Take the Keychain's `item` out, forgetting what was read of it before and after (`discard`): false when it held
+    /// none.
+    fn discard(&self, item: &str) -> Result<bool, KeychainProblem> {
+        self.forget_read(item);
+        let deleted = self.keychain.delete(item);
+        self.forget_read(item);
+        deleted
     }
 
     /// Take the account's own Keychain item out, if it has one (`_let_go`). An address no item could be named for
@@ -368,7 +416,7 @@ impl Directory {
         if !keepable_name(&item) {
             return Ok(());
         }
-        match self.keychain.delete(&item) {
+        match self.discard(&item) {
             Ok(_) => Ok(()),
             Err(_) => Err(Problem::new(
                 Kind::Unreachable,
@@ -520,7 +568,7 @@ impl Directory {
         let (item, who) = (credential::api_key_item(provider), credential::api_key_who(provider));
         let _writing = writing(&self.write)?;
         let mut raw = self.file.read()?;
-        self.keychain.delete(item).map_err(|_| {
+        self.discard(item).map_err(|_| {
             Problem::new(Kind::Unreachable, "The Keychain didn't let go of the key. Is the login keychain locked?")
         })?;
         if let Some(old) = raw.shift_remove(who) {
@@ -545,7 +593,7 @@ impl Directory {
         if !keepable_secret(typed.expose()) {
             return Err(Problem::refused(UNPRINTABLE).into());
         }
-        self.keychain.put(bridge::ITEM, &typed).map_err(|_| {
+        self.keep(bridge::ITEM, &typed).map_err(|_| {
             Problem::new(Kind::Unreachable, "The Keychain didn't keep the password. Is the login keychain locked?")
         })?;
         self.bridge.forget();
@@ -555,7 +603,7 @@ impl Directory {
     /// Take the Bridge's password out of the Keychain, and let go of the one this process found. A Keychain that
     /// won't is `Unreachable`.
     pub fn clear_bridge_password(&self) -> Result<(), Failure> {
-        self.keychain.delete(bridge::ITEM).map_err(|_| {
+        self.discard(bridge::ITEM).map_err(|_| {
             Problem::new(Kind::Unreachable, "The Keychain didn't let go of the password. Is the login keychain locked?")
         })?;
         self.bridge.forget();

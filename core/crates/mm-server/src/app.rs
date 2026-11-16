@@ -157,9 +157,13 @@ impl App {
             environment,
             seams.outside.clone(),
         ))));
+        // What the Keychain gives the Assistant for its key, once for each version the config names, which the
+        // Directory forgets as it keeps a key again or takes one out.
+        let keychain_reads = Arc::new(mm_accounts::keychain_reads::KeychainReads::new(seams.keychain.clone()));
         let directory = Arc::new(
             Directory::new(config, seams.keychain.clone(), seams.clock.clone())
                 .reading_op(op.clone())
+                .reading_keychain(keychain_reads.clone())
                 .reading_variables(Arc::new(environment.clone()))
                 .reading_bridge(environment.bridge()),
         );
@@ -193,7 +197,7 @@ impl App {
                 servers: Arc::new(ImapServers { login: login.clone(), read_only: environment.read_only() }),
                 gates: gates.clone(),
                 config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
-                keychain: seams.keychain.clone(),
+                keychain: keychain_reads,
                 op,
                 outside: seams.outside.clone(),
                 clock: seams.clock.clone(),

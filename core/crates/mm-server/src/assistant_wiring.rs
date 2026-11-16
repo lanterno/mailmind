@@ -9,14 +9,17 @@
 //! was chosen.
 //!
 //! A provider's key is the config file's `anthropic_api_key`, `openai_api_key` and the like (a Keychain item, a
-//! 1Password reference, or a variable it names, a 1Password read kept for the process as an account's password is),
-//! and for Claude only then ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet switch to the
-//! environment's. Each is read at each call, so a change in Settings takes effect at once, and the language model is
-//! made again only when what it was made for changes: the provider, its URL or its key.
+//! 1Password reference, or a variable it names), and for Claude only then ANTHROPIC_API_KEY. A config key that won't
+//! resolve is no key, never a quiet switch to the environment's. The file is read at each call, so a change in
+//! Settings takes effect at once; a 1Password read is kept for the process as an account's password is, and a Keychain
+//! read for each version of the item the file names, forgotten as Settings keeps the key again or takes it out, as the
+//! Python app keeps them. The language model is made again only when what it was made for changes: the provider, its
+//! URL or its key.
 
 use std::sync::{Arc, Mutex};
 
 use mm_accounts::credential::{CredentialRef, Style, api_key_who};
+use mm_accounts::keychain_reads::KeychainReads;
 use mm_accounts::one_password::OpReads;
 use mm_accounts::ports::ConfigFile;
 use mm_assistant::ask::Asker;
@@ -47,7 +50,7 @@ use mm_calendar::agenda::Agenda;
 use mm_discovery::query::QuerySpec;
 use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::errors::Fault;
-use mm_kernel::seams::{Clock, Keychain, Outside, Secret};
+use mm_kernel::seams::{Clock, Outside, Secret};
 use mm_kernel::zone::Zone;
 use mm_mailbox::fetching::{Fetching, FetchingParts};
 use mm_mailbox::gates::Gates;
@@ -86,7 +89,7 @@ impl MadeFor {
 /// after AI was off; and the models a provider lists.
 pub(crate) struct ApiEngine {
     file: Arc<dyn ConfigFile>,
-    keychain: Arc<dyn Keychain>,
+    keychain: Arc<KeychainReads>,
     op: Arc<OpReads>,
     outside: Arc<dyn Outside>,
     environment: Environment,
@@ -109,8 +112,9 @@ impl ApiEngine {
         };
         let credential = CredentialRef::parse(Some(named));
         let found = match credential.style {
+            // Read once for each version the file names, as the Python app reads it.
             Some(Style::Keychain) => match credential.item().filter(|i| !mm_kernel::text::strip(i).is_empty()) {
-                Some(item) => self.keychain.find(item).ok().flatten(),
+                Some(item) => self.keychain.read(item, credential.version()).ok().flatten(),
                 None => None,
             },
             Some(Style::Env) => named
@@ -250,7 +254,8 @@ pub(crate) struct Parts {
     pub(crate) servers: Arc<dyn MailServers>,
     pub(crate) gates: Arc<dyn Gates>,
     pub(crate) config: Arc<dyn ConfigFile>,
-    pub(crate) keychain: Arc<dyn Keychain>,
+    /// What the Keychain gave this process, which the Directory forgets as it keeps a key again or takes one out.
+    pub(crate) keychain: Arc<KeychainReads>,
     /// What 1Password gave this process, which the Directory shares.
     pub(crate) op: Arc<OpReads>,
     pub(crate) outside: Arc<dyn Outside>,
