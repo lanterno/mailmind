@@ -376,6 +376,8 @@ export function AiForm() {
           <div className="set-help">Written on Monday morning, within the daily limit, and only if you’ve used MailMind in the last two days. Your week shows it until the next Monday, and ↻ there writes a new one.</div>
           <Check checked={p.auto_tidy} onChange={(auto_tidy) => setPrefs({ auto_tidy })}>File low-priority mail by itself, once a day</Check>
           <div className="set-help">Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.</div>
+          <Check checked={p.draft_ahead} onChange={(draft_ahead) => setPrefs({ draft_ahead })}>Draft replies ahead for important mail</Check>
+          <div className="set-help">Written while you’re using MailMind, within the daily limit, so a reply is ready when you open the message. Off, a reply is drafted only when you ask for one.</div>
         </div>
       )}
     </div>
