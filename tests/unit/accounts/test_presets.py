@@ -178,6 +178,16 @@ def test_a_domain_whose_mail_a_providers_servers_take_is_offered_its_preset(mx, 
     assert which(Presets(hosts).preset("ada@acme.example.test")) == answer("acme.example.test", found, False)
 
 
+def test_an_icloud_plus_domain_is_named_with_nothing_to_save_and_told_to_add_its_icloud_address():
+    """iCloud lets other mail apps sign in only with the @icloud.com address, and an account logs in with the address
+    typed: an iCloud+ custom domain is named, with no servers to offer, and told what to add instead."""
+    said = Presets(Hosts({"acme.example.test": ["mx01.mail.icloud.com", "mx02.mail.icloud.com"]})).preset("ada@acme.example.test")
+    assert which(said) == answer("acme.example.test", "icloud", False)
+    assert (said["name"], said["supported"], said["settings"], said["link"]) == ("iCloud", False, None, None)
+    assert "iCloud+" in said["note"] and "Add your @icloud.com address" in said["note"]
+    assert preset_of("ada@me.com")["settings"]["host"] == "imap.mail.me.com"      # iCloud's own domains still take its servers
+
+
 def test_a_presets_imap_host_names_its_provider():
     assert provider_of_host("IMAP.mail.me.com").preset == "icloud"
     assert provider_of_host("imap.fastmail.com").preset == "fastmail"

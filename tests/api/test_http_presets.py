@@ -123,3 +123,13 @@ def test_proton_says_bridge_is_needed_and_where_it_is_got(app, dns):
 def test_a_domain_whose_mail_another_providers_servers_take_is_offered_its_preset(app, dns, mx, found):
     dns.mx(ACME, [mx])
     assert which(preset(app, f"ada@{ACME}")) == answer(ACME, found, False)
+
+
+def test_an_icloud_plus_domain_is_named_with_nothing_to_save_and_told_to_add_its_icloud_address(app, dns):
+    """iCloud lets other mail apps sign in only with the @icloud.com address, and an account logs in with the address
+    typed: the form says so, and asks no password."""
+    dns.mx(ACME, ["mx01.mail.icloud.com", "mx02.mail.icloud.com"])
+    r = preset(app, f"ada@{ACME}")
+    assert (r.status, which(r)) == (200, answer(ACME, "icloud", False))
+    assert (r.json["name"], r.json["supported"], r.json["settings"], r.json["link"]) == ("iCloud", False, None, None)
+    assert "iCloud+" in r.json["note"] and "Add your @icloud.com address" in r.json["note"]
