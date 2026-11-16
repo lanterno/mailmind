@@ -2,9 +2,9 @@
 price, which only Claude takes. A batch out when a person chooses another provider is let go here, with nothing sent: its
 messages wait for a summary again, and what it booked is free again.
 
-Only mail from the last RECENT_DAYS is summarized in the background: older mail is summarized when it is opened, so turning AI
-on over a mailbox of years spends nothing on its past. Background summaries ask the provider's small model
-(`Calls.background_label`), and each is stored under it."""
+Only mail from the last RECENT_DAYS is summarized in the background: older mail is summarized only when a person asks for a
+summary, so turning AI on over a mailbox of years spends nothing on its past. Background summaries ask the provider's small
+model (`Calls.background_label`), and each is stored under it."""
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,7 +28,7 @@ assess_log = get_logger("assess")
 type Log = Callable[[str], None]
 
 WORKERS = 4
-RECENT_DAYS = 30           # how far back the background summarizes; older mail is summarized when it is opened
+RECENT_DAYS = 30           # how far back the background summarizes; older mail only when a person asks for a summary
 
 # --- triage schema: structured output returns an object that matches it, so a triage reply needs
 #     no regex scrape (the old parse-error class).
