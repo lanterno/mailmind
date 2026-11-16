@@ -8,7 +8,8 @@
 //!
 //! A message's text comes from its first `HEAD_BYTES` (`BODY.PEEK[]<0.65536>`), so no attachment is downloaded for a
 //! snippet. The whole message is fetched only for an invite: an Inbox message that carries one keeps its body as it
-//! is stored, as opening it would, so Today & next finds it.
+//! is stored, as opening it would, so Today & next finds it. A message whose opening the server won't send costs only
+//! its own text; a connection lost part way stores nothing of the step, which is read again.
 //!
 //! Mail new to the Inbox that MailMind has never seen before is judged by the person's filters as it is stored, and
 //! what they ask is queued for the server (`arrival_flags`).
@@ -353,37 +354,37 @@ impl Ingest {
         let wanted: Vec<u32> = fetched.iter().filter(|f| !f.row.verdict.is_junk).map(|f| f.row.uid).collect();
         let mut heads = match s.heads(&wanted, HEAD_BYTES) {
             Ok(heads) => heads,
+            // A connection lost part way stores nothing of the step, which is read again, rather than its mail with
+            // no text.
+            Err(e) if e.is_unreachable() => return Err(e.into()),
             Err(e) => {
-                if !e.is_unreachable() {
-                    log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
-                }
+                log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
                 BTreeMap::new()
             }
         };
         for f in &mut fetched {
             let Some(head) = heads.remove(&f.row.uid) else { continue };
             f.row.snippet = mime::text_body(&head);
-            f.invite = self.invite_of(s, f.row.uid, head);
+            f.invite = self.invite_of(s, f.row.uid, head)?;
         }
         Ok(fetched)
     }
 
     /// The whole message to keep for the invite it carries, or None. An opening that was cut off is fetched whole
     /// only where it names a calendar part.
-    fn invite_of(&self, s: &mut dyn MailServer, uid: u32, head: Vec<u8>) -> Option<Vec<u8>> {
+    fn invite_of(&self, s: &mut dyn MailServer, uid: u32, head: Vec<u8>) -> Result<Option<Vec<u8>>, SyncError> {
         if head.len() < usize::try_from(HEAD_BYTES).unwrap_or(usize::MAX) {
-            return mime::has_invite(&head).then_some(head);
+            return Ok(mime::has_invite(&head).then_some(head));
         }
         if !(mime::has_invite(&head) || may_hold_invite(&head)) {
-            return None;
+            return Ok(None);
         }
         match s.body(uid) {
-            Ok(raw) => raw.filter(|raw| mime::has_invite(raw)),
+            Ok(raw) => Ok(raw.filter(|raw| mime::has_invite(raw))),
+            Err(e) if e.is_unreachable() => Err(e.into()),
             Err(e) => {
-                if !e.is_unreachable() {
-                    log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
-                }
-                None
+                log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
+                Ok(None)
             }
         }
     }

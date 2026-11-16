@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use mm_kernel::when::civil;
 use mm_mailbox::session::{HEAD_BATCH, HEADER_BATCH, Headers, MailServer, Search, Selected, ServerError};
 
-use crate::codec::{Code, Said};
+use crate::codec::{Code, Fetched, Said};
 use crate::list::mailbox_arg;
 use crate::names::{gmail_labels, imap_quote};
 use crate::session::{Answer, Error, Session};
@@ -77,17 +77,28 @@ impl Session {
         Ok(self.connection.command(command.as_bytes())?.done(REFUSED)?)
     }
 
-    fn fetched(&mut self, command: &str) -> Result<Vec<crate::codec::Fetched>, ServerError> {
-        let answer = self.send(command)?;
-        Ok(answer
-            .said()
-            .into_iter()
-            .filter_map(|said| match said {
-                Said::Fetch(fetched) => Some(fetched),
-                _ => None,
-            })
-            .collect())
+    fn fetched(&mut self, command: &str) -> Result<Vec<Fetched>, ServerError> {
+        Ok(fetches(&self.send(command)?))
     }
+
+    /// What a FETCH sent, and whether the server did all of it: one that can't send a message of several says NO
+    /// once it has sent the rest (Gmail's "Some messages could not be FETCHed"). Only a lost connection fails it.
+    fn fetched_in_part(&mut self, command: &str) -> Result<(Vec<Fetched>, bool), ServerError> {
+        let answer = self.connection.command(command.as_bytes())?;
+        Ok((fetches(&answer), answer.status == "OK"))
+    }
+}
+
+/// The messages an answer to a FETCH holds.
+fn fetches(answer: &Answer) -> Vec<Fetched> {
+    answer
+        .said()
+        .into_iter()
+        .filter_map(|said| match said {
+            Said::Fetch(fetched) => Some(fetched),
+            _ => None,
+        })
+        .collect()
 }
 
 impl MailServer for Session {
@@ -187,14 +198,29 @@ impl MailServer for Session {
     }
 
     fn heads(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
-        let mut out = BTreeMap::new();
-        for batch in uids.chunks(HEAD_BATCH) {
-            for fetched in self.fetched(&format!("UID FETCH {} (UID BODY.PEEK[]<0.{bytes}>)", uid_set(batch)))? {
+        let ask = |uids: &[u32]| format!("UID FETCH {} (UID BODY.PEEK[]<0.{bytes}>)", uid_set(uids));
+        let keep = |out: &mut BTreeMap<u32, Vec<u8>>, fetched: Vec<Fetched>| {
+            for fetched in fetched {
                 if let (Some(uid), Some(mut raw)) = (fetched.uid, fetched.section) {
                     // A server that sent more than was asked for is held to it.
                     raw.truncate(usize::try_from(bytes).unwrap_or(usize::MAX));
                     out.insert(uid, raw);
                 }
+            }
+        };
+        let mut out = BTreeMap::new();
+        for batch in uids.chunks(HEAD_BATCH) {
+            let (fetched, whole) = self.fetched_in_part(&ask(batch))?;
+            keep(&mut out, fetched);
+            if whole {
+                continue;
+            }
+            // A message the server can't send refuses the FETCH that names it: each of the batch it didn't send is
+            // asked alone, and one still refused is left out, so it costs only its own preview.
+            let unsent: Vec<u32> = batch.iter().copied().filter(|uid| !out.contains_key(uid)).collect();
+            for uid in unsent {
+                let (fetched, _) = self.fetched_in_part(&ask(&[uid]))?;
+                keep(&mut out, fetched);
             }
         }
         Ok(out)

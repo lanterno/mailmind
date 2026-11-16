@@ -146,13 +146,18 @@ pub trait MailServer: MailSession {
     fn body(&mut self, uid: u32) -> Result<Option<Vec<u8>>, ServerError>;
     /// The first `bytes` of each message, read without marking it read (`BODY.PEEK[]<0.bytes>`), by UID: a message
     /// no longer than that whole, and one the server sent nothing of left out. A server that can't send part of one
-    /// sends it whole, cut here.
+    /// sends it whole, cut here. One the server refuses to send is left out too, and the others kept: only a lost
+    /// connection fails it.
     fn heads(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
         let mut out = BTreeMap::new();
         for uid in uids {
-            if let Some(mut raw) = self.body(*uid)? {
-                raw.truncate(usize::try_from(bytes).unwrap_or(usize::MAX));
-                out.insert(*uid, raw);
+            match self.body(*uid) {
+                Ok(Some(mut raw)) => {
+                    raw.truncate(usize::try_from(bytes).unwrap_or(usize::MAX));
+                    out.insert(*uid, raw);
+                }
+                Err(e) if e.is_unreachable() => return Err(e),
+                Ok(None) | Err(_) => {}
             }
         }
         Ok(out)
