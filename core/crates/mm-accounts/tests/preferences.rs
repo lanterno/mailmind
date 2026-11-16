@@ -24,7 +24,7 @@ fn a_file_with_no_block_reads_as_the_defaults() {
     assert_eq!(read.len(), 26);
     assert_eq!(read["draft_ahead"], json!(false), "drafting ahead starts off");
     assert_eq!(read["undo_send_seconds"], json!(10));
-    assert_eq!(read["theme"], json!("day"));
+    assert_eq!(read["theme"], json!("auto"));
     assert_eq!(read["single_keys"], json!(true));
     assert_eq!(read["quiet_until"], json!("07:00"));
     assert_eq!(read.keys().next().map(String::as_str), Some("undo_send_seconds"));
@@ -36,10 +36,18 @@ fn what_a_hand_edit_left_that_cant_be_one_is_the_default() {
                                             "quiet_from": "24:00", "density": "cozy"}}));
     let read = read(&raw, false);
     assert_eq!(read["undo_send_seconds"], json!(10));
-    assert_eq!(read["theme"], json!("day"));
+    assert_eq!(read["theme"], json!("auto"));
     assert_eq!(read["single_keys"], json!(true));
     assert_eq!(read["quiet_from"], json!("22:00"));
     assert_eq!(read["density"], json!("cozy"));
+}
+
+#[test]
+fn a_fresh_install_follows_the_system_and_the_clock_and_a_theme_the_file_holds_stands() {
+    assert_eq!(read(&object(json!({"accounts": []})), false)["theme"], json!("auto"));
+    assert_eq!(read(&object(json!({"preferences": {"theme": "day"}})), false)["theme"], json!("day"));
+    let wanted = changes(&object(json!({"theme": "auto"}))).unwrap_or_default();
+    assert_eq!(wanted.get("theme"), Some(&json!("auto")));
 }
 
 #[test]
