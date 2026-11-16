@@ -56,6 +56,22 @@ def push(c: Connection, entry: Entry, group: str | None, keep: int) -> None:
               (keep,))
 
 
+def push_many(c: Connection, entries: list[Entry], group: str, keep: int) -> None:
+    """Put `entries` on the stack as `group`'s children at one write: what `push` of each in turn leaves, the group's
+    entry written once rather than once a child."""
+    if not entries:
+        return
+    push(c, entries[0], group, keep)
+    if len(entries) == 1 or not group:
+        for entry in entries[1:]:
+            push(c, entry, group, keep)
+        return
+    held = c.execute("SELECT id, entry FROM undo_entries WHERE grp=? ORDER BY id DESC LIMIT 1", (group,)).fetchone()
+    entry = json.loads(held["entry"])
+    entry["children"].extend(entries[1:])
+    c.execute("UPDATE undo_entries SET entry=? WHERE id=?", (json.dumps(entry), held["id"]))
+
+
 def put_back(c: Connection, entry: Entry) -> None:
     """Put an entry taken off the stack back on top: it, or what's left of its group, can be tried
     again."""
@@ -137,6 +153,11 @@ class Undo:
         if not desc:
             return
         self._undo_db(lambda c: push(c, desc, group, self.UNDO_MAX))
+
+
+    def push_many(self, descs: list[Entry], group: str) -> None:
+        """Push several under one group at one write, as push of each in turn would: a sweep's reversals."""
+        self._undo_db(lambda c: push_many(c, descs, group, self.UNDO_MAX))
 
 
     def push_within(self, c: Connection, desc: Entry, group: str | None = None) -> None:

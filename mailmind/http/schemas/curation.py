@@ -40,6 +40,7 @@ class BatchCleanupBody(BatchSendersBody):
 class SweepBody(RequestBody):
     account: str | None = "all"
     dry_run: Flag | None = None
+    undo_group: str | None = None
 
 
 class AuditArgs(QueryArgs):
@@ -230,6 +231,7 @@ class AccountSwept(Answer):
     by_bucket: dict[str, int] | None = None
     senders: int | None = None
     held_back: int | None = None            # junk left where it is: starred, or not read yet
+    no_undo: int | None = None              # of what goes, how much has no Message-ID for Undo to find it by
     moved: int | None = None
     stragglers: list[str] | None = None
 
@@ -238,4 +240,5 @@ class Swept(Answer):
     ok: Literal[True]
     dry_run: bool
     results: list[AccountSwept]
+    undo_group: str | None = None           # what one Undo of all the sweep moved takes back; none if nothing went
     generated: str

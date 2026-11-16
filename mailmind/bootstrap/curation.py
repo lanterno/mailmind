@@ -76,6 +76,9 @@ class _Filing:
     def undo_push(self, descriptor, group):
         mailbox.undo.push(descriptor, group)
 
+    def undo_push_many(self, descriptors, group):
+        mailbox.undo.push_many(descriptors, group)
+
     def reclassify(self, token):
         from mailmind.bootstrap.mailbox import ingest
         return ingest.reclassify(token)

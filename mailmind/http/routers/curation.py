@@ -90,6 +90,6 @@ def router(curation, mailbox):
 
     @r.post("/api/sweep", responses=answers(Swept))
     def sweep(body: SweepBody):
-        return curation.sweeps.run(body.account, bool(body.dry_run))
+        return curation.sweeps.run(body.account, bool(body.dry_run), body.undo_group)
 
     return r
