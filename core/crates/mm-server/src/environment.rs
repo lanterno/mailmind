@@ -18,7 +18,10 @@ pub const VARIABLES: [(&str, &str); 18] = [
     (HOME, "The data directory (settings). Unset, the repo root. It must exist."),
     ("MAILMIND_PROFILE", "How the process runs (profile): full, or read-only, which writes nothing outside."),
     ("MAILMIND_NOSYNC", "The older switch for the read-only profile, which wins over MAILMIND_PROFILE."),
-    ("MAILMIND_WORKERS", "One gate for every account's IMAP work (global), or one each (account) (gates)."),
+    (
+        "MAILMIND_WORKERS",
+        "A gate for each account's IMAP work, unless one (or global): one gate for every account (gates).",
+    ),
     ("MAILMIND_POOL", "Keep an IMAP connection for each account named, for reads (mailbox.pool)."),
     ("MAILMIND_WARM_FOLDERS", "Sync each named account's Drafts, Archive and Sent with its INBOX."),
     ("MAILMIND_LOG_LEVEL", "debug shows debug lines and each error's text at the terminal, never in the file."),
@@ -204,10 +207,12 @@ impl Environment {
         given.and_then(|v| v.parse().ok()).unwrap_or(3600)
     }
 
-    /// Whether each account's IMAP work passes a gate of its own (MAILMIND_WORKERS `account`, in any case, with
-    /// spaces around); unset, or any other value, one gate is every account's.
+    /// Whether each account's IMAP work passes a gate of its own, so one slow server holds up no other account: unless
+    /// MAILMIND_WORKERS is `one`, or the Python app's `global` (in any case, with spaces around), which keeps one gate
+    /// for every account.
     pub fn gate_per_account(&self) -> bool {
-        self.raw("MAILMIND_WORKERS").unwrap_or_default().trim().eq_ignore_ascii_case("account")
+        let said = self.raw("MAILMIND_WORKERS").unwrap_or_default().trim().to_ascii_lowercase();
+        !matches!(said.as_str(), "one" | "global")
     }
 
     // The Assistant's.
