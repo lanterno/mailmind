@@ -83,7 +83,8 @@ def test_a_fresh_install_starts_with_ai_mode_off_and_turned_on_says_how_ai_stand
 
 
 AI_ONLY = ("Provider", "API key", "Model", "Daily limit, in US dollars", "Have today’s brief ready each morning",
-           "Have last week’s review ready each Monday", "File low-priority mail by itself, once a day")
+           "Have last week’s review ready each Monday", "File low-priority mail by itself, once a day",
+           "Draft replies ahead for important mail")
 
 
 def test_with_ai_mode_off_the_tab_holds_only_its_switch_and_the_file_holds_it(page, app, world):
@@ -104,6 +105,17 @@ def test_with_ai_mode_off_the_tab_holds_only_its_switch_and_the_file_holds_it(pa
         expect(dialog.get_by_label(shown, exact=True)).to_be_visible()
     expect(page.locator("#aiStanding")).to_have_text("AI is off: there’s no key for Claude.")
     until(page, lambda: file_of(world).get("preferences", {}).get("ai_enabled") is not False, "the switch is on again")
+    clean(page)
+
+
+def test_drafting_ahead_starts_off_and_its_switch_is_kept_in_the_file(page, app, world):
+    dialog = ai_open(page, app)
+    ahead = dialog.get_by_label("Draft replies ahead for important mail", exact=True)
+    expect(ahead).not_to_be_checked()
+    ahead.check()
+    until(page, lambda: file_of(world).get("preferences", {}).get("draft_ahead") is True, "the file holds the switch")
+    ahead.uncheck()
+    until(page, lambda: file_of(world).get("preferences", {}).get("draft_ahead") is False, "the file holds it off")
     clean(page)
 
 
