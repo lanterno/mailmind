@@ -131,8 +131,7 @@ final class Composing: ComposeHost {
     func readDigest() async {
         guard let core else { return }
         if let read = try? await core.get(API.Get.Digest.self, [:]) { digest = read }
-        // Turned off, no reply written ahead is offered: Reply is a plain reply again.
-        if aiTurnedOff { chips.removeAll() }
+        if aiTurnedOff { forgetAhead() }
         if let waiting = waitingMail, canWrite {
             waitingMail = nil
             write(waiting)
@@ -525,12 +524,24 @@ final class Composing: ComposeHost {
         shownCopy?.key == key && composers.isEmpty
     }
 
+    /// AI turned off: no reply written ahead is offered, waited on or asked for, so Reply is a plain reply again. An
+    /// answer still on its way finds nothing on screen to give it to.
+    private func forgetAhead() {
+        dwell?.cancel()
+        dwell = nil
+        shownCopy = nil
+        chips.removeAll()
+    }
+
     private func query(_ copy: MailCopy, peek: Bool) -> KeyValuePairs<String, String?> {
         ["key": String(copy.key), "folder": copy.folder, "uid": String(copy.uid), "peek": peek ? "1" : nil]
     }
 
     private func peek(_ copy: MailCopy) async {
-        guard let core, let read = try? await core.get(API.Get.AiDraftAhead.self, query(copy, peek: true)) else { return }
+        guard !aiTurnedOff, let core,
+              let read = try? await core.get(API.Get.AiDraftAhead.self, query(copy, peek: true)) else { return }
+        // Turned off while it was asked: what it says isn't offered.
+        guard !aiTurnedOff else { return }
         switch read {
         case .draftAheadReady(let ready) where ready.status == "ready": chips[copy.key] = .ready
         case .draftAheadStatus(let status) where status.status == "ready": chips[copy.key] = .ready
@@ -544,11 +555,16 @@ final class Composing: ComposeHost {
     private func check(_ copy: MailCopy, tries: Int) async {
         let key = copy.key
         if chips[key] == .ready { return }
-        guard onScreen(key) else {   // moved off: never strand "Drafting…"
+        guard onScreen(key), !aiTurnedOff else {   // moved off or turned off: never strand "Drafting…"
             chips.removeValue(forKey: key)
             return
         }
         guard let core, let read = try? await core.get(API.Get.AiDraftAhead.self, query(copy, peek: false)) else { return }
+        // Turned off while it was asked: a draft that finished anyway isn't offered.
+        guard !aiTurnedOff else {
+            chips.removeValue(forKey: key)
+            return
+        }
         switch read {
         case .draftAheadReady(let ready) where ready.status == "ready" && !ready.body.isEmpty:
             let first = chips[key] != .ready
@@ -567,9 +583,10 @@ final class Composing: ComposeHost {
         }
     }
 
-    /// The event stream's "draft-ready", by the key of the message it answers: read again, never trusted.
-    private func draftReady(_ key: Int) {
-        guard let viewing = shownCopy else { return }
+    /// The event stream's "draft-ready", by the key of the message it answers: read again, never trusted. A draft
+    /// asked for before AI was turned off can finish after: with AI turned off it is never read.
+    func draftReady(_ key: Int) {
+        guard !aiTurnedOff, let viewing = shownCopy else { return }
         if viewing.key == key {
             Task { await check(viewing, tries: Self.liveTries) }
         } else if composers.isEmpty && chips[viewing.key] == nil {
@@ -577,14 +594,15 @@ final class Composing: ComposeHost {
         }
     }
 
-    /// Reply, and r: the reply written ahead if there is one, else a plain reply.
+    /// Reply, and r: the reply written ahead if there is one, else a plain reply. With AI turned off it is always a
+    /// plain reply: none written ahead, and none asked for.
     func answer(_ copy: MailCopy) async {
         // A reply already being written in the box keeps its words: the keys go back to it.
         if let open = inline, open.copy == copy, inlineSlot == copy, !open.composer.closed, open.composer.dirty {
             open.composer.focusRequest = .body
             return
         }
-        guard chips[copy.key] == .ready else {
+        guard !aiTurnedOff, chips[copy.key] == .ready else {
             await reply(copy)
             return
         }
@@ -599,7 +617,8 @@ final class Composing: ComposeHost {
         {
             written = ready.body
         }
-        guard !composer.closed else { return }
+        // Turned off while it was asked: the plain reply stands, with nothing of the AI's in it.
+        guard !composer.closed, !aiTurnedOff else { return }
         if let written {
             composer.place(written)
             if inline?.composer === composer { inline?.drafted = true }
