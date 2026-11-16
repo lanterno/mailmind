@@ -92,6 +92,42 @@ final class AccountDraftTests: XCTestCase {
         XCTAssertNil(draft.body.host)
     }
 
+    /// An Other IMAP account whose file holds no outgoing server: an edit shows no host (the incoming one is its
+    /// prompt) and sends none of it unless a person changes it, so it goes on following the incoming host.
+    func testAnEditLeavesAnOutgoingServerNeverSavedFollowingTheIncomingOne() {
+        var row = F.account("dee@example.test")
+        row.smtpHost = row.host
+        row.smtpPort = 587
+        row.smtpStarttls = true
+        row.defaultsApplied.smtpHost = true
+        row.defaultsApplied.smtpPort = true
+        row.defaultsApplied.smtpStarttls = true
+        var draft = AccountDraft(editing: row)
+        XCTAssertEqual([draft.smtpHost, draft.smtpPort], ["", "587"])
+        XCTAssertEqual(draft.smtpSecurity, .starttls)
+        draft.alias = "Dee"
+        let left = draft.body
+        XCTAssertEqual(left.host, .string("imap.example.test"))
+        XCTAssertNil(left.smtpHost, "the incoming host isn't written in as the outgoing one")
+        XCTAssertNil(left.smtpPort, "a port the file doesn't hold stays the type's")
+        XCTAssertNil(left.smtpStarttls)
+
+        draft.smtpPort = "465"
+        draft.smtpSecurity = .tls
+        draft.smtpHost = "smtp.example.test"
+        let changed = draft.body
+        XCTAssertEqual(changed.smtpHost, .string("smtp.example.test"), "what a person changes is sent")
+        XCTAssertEqual(changed.smtpPort, .number(465))
+        XCTAssertEqual(changed.smtpStarttls, false)
+
+        var gmail = row
+        gmail.type = "gmail"
+        var becomes = AccountDraft(editing: gmail)
+        becomes.pick(.imap)
+        XCTAssertEqual(becomes.body.smtpPort, .number(587), "one becoming Other IMAP sends what the form shows")
+        XCTAssertEqual(becomes.body.smtpStarttls, true)
+    }
+
     func testAnEditKeepsTheAddressAndThePasswordItHasUnlessOneIsTyped() {
         var draft = AccountDraft(editing: F.account("ada@example.test", alias: "Ada", signature: "Ada"))
         XCTAssertEqual(draft.kind, .imap)
