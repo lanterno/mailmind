@@ -46,9 +46,13 @@ from mailmind.mailbox.application.session import MailSession, ReadOnlySession
 from mailmind.platform import bus, profile
 from mailmind.platform.db import txguard
 from mailmind.platform.db.uow import UnitOfWork
+from mailmind.platform.logging import get_logger
 from mailmind.platform.undo import Undo
+from mailmind.platform.workers import gates
 
 from mailmind.bootstrap import accounts         # the connection's TLS, pin, login and credential, until they move into Accounts
+
+log = get_logger("mailbox")
 
 store.bind_index(fts)
 
@@ -64,15 +68,42 @@ def _conversations_merged(c, merged):
 store.bind_merges(_conversations_merged)
 
 
+FORGET_WAIT = 30        # seconds a removed account's mail waits for what holds its gate, then goes anyway
+
+
 def forget_account(email):
     """What this Mac keeps of `email`'s mail, let go as its account is removed and a person asks for it: the index's rows,
     each context's own under its address, then the Mailbox's, in one block. Its mail on the server is untouched. How many
-    stored copies went."""
+    stored copies went.
+
+    It goes on the account's gate, once what holds the gate (opening a body, a move, reconcile) has ended, or after
+    FORGET_WAIT anyway, as the account is already gone; and again as each sync that was reading its mail lands, so what one
+    stored after the removal goes too."""
+    try:
+        forgotten = gates.run(email, lambda: _forget_account(email), priority=gates.Priority.INTERACTIVE,
+                              deadline=FORGET_WAIT)
+    except gates.Busy:
+        log.warning("a removed account's gate stayed held: its mail goes anyway")
+        forgotten = _forget_account(email)
+    ingest.flights.after(email, lambda: _forget_again(email))
+    return forgotten
+
+
+def _forget_account(email):
     with UnitOfWork().write() as c:
         fts.forget_account(c, email)
         for forget in (attention_store.forget_account, assistant_store.forget_account, compose_store.forget_account):
             forget(c, email)
         return store.forget_account(c, email)
+
+
+def _forget_again(email):
+    """What a sync that was reading a removed account's mail stored, as it lands."""
+    try:
+        _forget_account(email)
+    except Exception as e:
+        log.warning("what a removed account's sync read couldn't go", exc_info=e)
+
 
 KINDS = ("imaplib", "imapclient")
 _kind = "imaplib"               # every account's, but one asking for another this process offers

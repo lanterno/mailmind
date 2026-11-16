@@ -1,5 +1,7 @@
 """Mail into SQLite, whole or incrementally by UID watermark: fetch the headers, classify, pull the body text of what
-isn't junk. A body read on demand is here too."""
+isn't junk. A body read on demand is here too.
+
+Each sync of an account is a flight (`flights`): one whose account is removed stops at its next message."""
 import email
 import imaplib
 from collections.abc import Sequence
@@ -13,6 +15,7 @@ from mailmind.content.text import body_text_of, text_body
 from mailmind.kernel.ids import INBOX, AccountId, FolderName
 from mailmind.kernel.row import Connection, Row
 from mailmind.kernel.when import now_iso
+from mailmind.mailbox.application.flights import AccountGone, Flight, Flights
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import (Account, Accounts, Attention, Classifier, Index, OpenSession, Stored,
                                                 StoredMail)
@@ -45,6 +48,12 @@ class Ingest:
         self._curation = curation
         self._attention = attention
         self._index = index
+        self.flights = Flights()        # each account's syncs now, which its removal stops
+
+    def _still_held(self, acct: Account) -> None:
+        """Raise AccountGone for an account the file no longer holds: a sync that starts after its removal reads nothing."""
+        if acct["email"].lower() not in {a["email"].lower() for a in self._accounts.accounts()}:
+            raise AccountGone()
 
     def _flag_rows(self, c: Connection, email: AccountId, folder: FolderName, uids: Sequence[int] | None) -> list[Row]:
         """The stored rows to compare with the server's flags: those of `uids`, or with None the newest."""
@@ -106,14 +115,16 @@ class Ingest:
 
 
     def _process(self, session: MailSession, acct: Account, uids: Sequence[int], folder: FolderName = INBOX,
-                 with_body: bool = False, advance: bool = True, stored: list[int] | None = None, arriving: bool = False) -> Stored:
+                 with_body: bool = False, advance: bool = True, stored: list[int] | None = None, arriving: bool = False,
+                 flight: Flight | None = None) -> Stored:
         """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
         has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);
         other folders get headers+flags only (fast) and fetch the body lazily on open.
         advance=False stores them without touching the folder's watermark: only a sync that has
         seen every UID up to a point may say the folder is synced to there.
         `stored` gets the pks of what threading has yet to hear of.
-        arriving=True says this mail is new to the folder, so the person's filters speak for what MailMind has never seen before."""
+        arriving=True says this mail is new to the folder, so the person's filters speak for what MailMind has never seen before.
+        Its account removed (`flight` stopped), it raises AccountGone before the next message is stored."""
         rows: list[dict[str, Any]] = []
         max_uid, kept, junk = 0, 0, 0
         gmail = self._accounts.profile(acct).gmail_threads            # only Gmail understands X-GM-THRID and X-GM-LABELS
@@ -160,6 +171,8 @@ class Ingest:
                     invite = raw if mime.has_invite(msg) else None
                 except Exception:
                     snippet = ""
+            if flight is not None:
+                flight.going_on()
             with self._uow.write() as c:
                 news = arriving and not self._store.is_known(c, acct["email"], r["message_id"], r["from_addr"], r["date_iso"], r["subject"])
                 pk = self._store.upsert_message(c, {
@@ -188,6 +201,8 @@ class Ingest:
                         log.warning("keep invite %(account)s uid %(id)s", {"account": acct["email"], "id": r["uid"]}, exc_info=e)
         if queued:
             self._curation.flags_queued()
+        if flight is not None:
+            flight.going_on()
         if advance:
             with self._uow.write() as c:
                 self._store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)
@@ -240,7 +255,14 @@ class Ingest:
         are already watermark-bounded and ignore it.
         The folder's scan_state says what the scans so far have read: a whole scan makes it
         'synced', one cut to the newest N 'recent', and an incremental sync keeps it as it was.
-        A scan that fails leaves it as it was too, so a first open that failed scans again."""
+        A scan that fails leaves it as it was too, so a first open that failed scans again.
+        Its account removed before or while it reads, it raises AccountGone."""
+        with self.flights.fly(acct["email"]) as flight:
+            self._still_held(acct)
+            return self._sync_folder(acct, folder, full, recent, flight)
+
+
+    def _sync_folder(self, acct: Account, folder: FolderName, full: bool, recent: int | None, flight: Flight) -> Stored:
         s = self._open_session(acct)
         try:
             condstore = s.enable_condstore()
@@ -260,7 +282,8 @@ class Ingest:
             uids, scan = plan.to_fetch(s.uids(*plan.search))    # scan: the scan_state this sync leaves
             stored: list[int] = []
             result = self._process(s, acct, uids, folder, with_body=sync_plan.reads_bodies(folder), stored=stored,
-                                   arriving=plan.arrives_in(folder))
+                                   arriving=plan.arrives_in(folder), flight=flight)
+            flight.going_on()
             if scan:
                 with self._uow.write() as c:
                     self._store.set_scan_state(c, acct["email"], folder, scan)
@@ -297,6 +320,12 @@ class Ingest:
         wanted = [m for m in message_ids if m]
         if not wanted:
             return 0
+        with self.flights.fly(acct["email"]) as flight:
+            self._still_held(acct)
+            return self._ingest_messages(acct, folder, wanted, flight)
+
+
+    def _ingest_messages(self, acct: Account, folder: FolderName, wanted: Sequence[str], flight: Flight) -> int:
         s = self._open_session(acct)
         try:
             s.select(folder)
@@ -314,7 +343,7 @@ class Ingest:
                 return 0
             stored: list[int] = []
             self._process(s, acct, sorted(uids), folder, with_body=sync_plan.reads_bodies(folder), advance=False,
-                          stored=stored)
+                          stored=stored, flight=flight)
             with self._uow.write() as c:
                 self._store.thread_stored(c, acct["email"], stored)
                 self._attention.on_ingest(c, acct["email"])
@@ -334,6 +363,12 @@ class Ingest:
 
 
     def ingest_account(self, acct: Account, days: int = CUTOFF_DAYS) -> Stored:
+        with self.flights.fly(acct["email"]) as flight:
+            self._still_held(acct)
+            return self._ingest_account(acct, days, flight)
+
+
+    def _ingest_account(self, acct: Account, days: int, flight: Flight) -> Stored:
         s = self._open_session(acct)
         try:
             s.select("INBOX")
@@ -341,7 +376,7 @@ class Ingest:
                 uids = s.uids("ALL")
             else:
                 uids = s.uids("SINCE", (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y"))
-            result = self._process(s, acct, uids, INBOX, with_body=True)
+            result = self._process(s, acct, uids, INBOX, with_body=True, flight=flight)
             with self._uow.write() as c:                 # the owner chose how far back: INBOX counts as read
                 self._store.set_scan_state(c, acct["email"], INBOX, sync_plan.WHOLE)
             return result

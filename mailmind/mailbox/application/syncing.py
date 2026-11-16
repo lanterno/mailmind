@@ -13,6 +13,7 @@ from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import INBOX
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.server_ops import UNREACHABLE
+from mailmind.mailbox.application.flights import AccountGone
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.sync import Ingest
@@ -70,39 +71,49 @@ class Syncing:
         for a in self._accounts.accounts():
             if emails is not None and a["email"] not in emails:
                 continue
-            before = self._status.get(a["email"])
-            self._status[a["email"]] = {"health": "syncing", "msg": ""}
-            try:
-                with self._uow.read() as c:
-                    first = self._store.get_watermark(c, a["email"], INBOX) == 0
-                first = first and not self._ingest.folder_synced(a["email"], INBOX)
-                kept, junk, _ = self._ingest.sync_new(a)
-                arrived = 0 if first else kept
-                new += arrived
-                self._failing.pop(a["email"], None)
-                self._status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
-                with self._uow.write() as c:
-                    self._store.record_sync_result(c, a["email"], True)
-                sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
-                if arrived > 0:
-                    sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": arrived})
-                elif kept or junk:
-                    self._folders.invalidate(a["email"])   # what the first scan stored changes the rail's counts
-            except Exception as e:
-                kind, now = self._accounts.error_kind(e), time.time()
-                run = sync_health.and_one_more(self._failing.get(a["email"]), type(e).__name__, self._accounts.may_pass(e), now)
-                self._failing[a["email"]] = run
-                if not run.shows(now):     # it may pass: the account shows as it did, and the next sync says
-                    if before is None:
+            # While it reads, a removal stops it at its next message; then nothing more is said or kept of the account,
+            # and a sync that finds it gone already has nothing to say either.
+            with self._ingest.flights.fly(a["email"]) as flight:
+                before = self._status.get(a["email"])
+                self._status[a["email"]] = {"health": "syncing", "msg": ""}
+                try:
+                    with self._uow.read() as c:
+                        first = self._store.get_watermark(c, a["email"], INBOX) == 0
+                    first = first and not self._ingest.folder_synced(a["email"], INBOX)
+                    kept, junk, _ = self._ingest.sync_new(a)
+                    flight.going_on()
+                    arrived = 0 if first else kept
+                    new += arrived
+                    self._failing.pop(a["email"], None)
+                    self._status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
+                    with self._uow.write() as c:
+                        self._store.record_sync_result(c, a["email"], True)
+                    sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
+                    if arrived > 0:
+                        sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": arrived})
+                    elif kept or junk:
+                        self._folders.invalidate(a["email"])   # what the first scan stored changes the rail's counts
+                except AccountGone:
+                    self._status.pop(a["email"], None)
+                except Exception as e:
+                    if flight.stopped:
                         self._status.pop(a["email"], None)
-                    else:
-                        self._status[a["email"]] = before
-                    log.info("an account's sync failed; it shows if the next fails too", exc_info=e)
-                    continue
-                self._status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
-                with self._uow.write() as c:
-                    self._store.record_sync_result(c, a["email"], False, type(e).__name__, kind)
-                log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
+                        continue
+                    kind, now = self._accounts.error_kind(e), time.time()
+                    run = sync_health.and_one_more(self._failing.get(a["email"]), type(e).__name__,
+                                                   self._accounts.may_pass(e), now)
+                    self._failing[a["email"]] = run
+                    if not run.shows(now):     # it may pass: the account shows as it did, and the next sync says
+                        if before is None:
+                            self._status.pop(a["email"], None)
+                        else:
+                            self._status[a["email"]] = before
+                        log.info("an account's sync failed; it shows if the next fails too", exc_info=e)
+                        continue
+                    self._status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
+                    with self._uow.write() as c:
+                        self._store.record_sync_result(c, a["email"], False, type(e).__name__, kind)
+                    log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
         return new
 
 

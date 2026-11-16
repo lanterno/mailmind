@@ -42,6 +42,11 @@ def _after_draft_removed(gone):
     mailbox.folders.list_changed(gone.account, gone.folder)
 
 
+def _after_removal(removed):
+    """AccountRemoved: each sync reading its mail stops at its next message."""
+    mailbox.ingest.flights.stop(removed.email)
+
+
 def _after_idle(changed):
     """InboxChanged: IDLE saw these accounts' INBOX change."""
     mailbox.syncing.sync_guarded(set(changed.accounts))
@@ -115,6 +120,7 @@ def wire():
                    bus.subscribe(TasksChanged, _after_tasks_changed)])
     _wired.extend(bus.subscribe(topic, accounts.logins.changed) for topic in     # ahead of what starts a new worker
                   (AccountChanged, AccountRemoved))
+    _wired.append(bus.subscribe(AccountRemoved, _after_removal))
     _wired.extend(bus.subscribe(topic, mailbox.realtime.reconcile) for topic in
                   (AccountAdded, AccountChanged, AccountRemoved))
 
