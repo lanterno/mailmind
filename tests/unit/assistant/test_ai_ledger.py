@@ -77,6 +77,13 @@ def test_the_other_providers_models_are_priced_from_their_own_lists():
     assert cost_micros("gpt-6.1-sol", "gpt-6.1-sol", input_tokens=1000, output_tokens=500, cache_read_tokens=2000) == 7_200
 
 
+def test_the_dearer_gpt_4o_snapshot_is_priced_as_itself_and_the_others_as_gpt_4o():
+    from mailmind.assistant.domain.pricing import Price, cost_micros, price
+    assert price("gpt-4o-2024-05-13") == price("openai/gpt-4o-2024-05-13") == Price(5, 15, 5)
+    assert price("gpt-4o-2024-08-06") == price("gpt-4o") == Price(2.50, 10, 1.25)
+    assert cost_micros("gpt-4o-2024-05-13", "gpt-4o-2024-05-13", input_tokens=10_000, output_tokens=1_000) == 65_000
+
+
 def test_a_gemini_pro_costs_more_past_two_hundred_thousand_prompt_tokens():
     from mailmind.assistant.domain.pricing import Price, price
     assert price("gemini-3.1-pro-preview", 200_000) == Price(2, 12, 0.20)
