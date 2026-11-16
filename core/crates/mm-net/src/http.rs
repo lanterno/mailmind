@@ -19,16 +19,19 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    /// An `http://` or `https://` URL as an endpoint, or None for anything else: a URL with a blank or a control
+    /// An `http://` or `https://` URL (its scheme in any case) as an endpoint, or None for anything else: a URL with a blank or a control
     /// character inside it among those, as one would carry a line of its own into the request.
     pub fn parse(url: &str) -> Option<Endpoint> {
         let url = url.trim();
         if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
             return None;
         }
-        let (tls, rest) = match url.strip_prefix("https://") {
-            Some(rest) => (true, rest),
-            None => (false, url.strip_prefix("http://")?),
+        // The scheme in any case, as a URL's is.
+        let (scheme, rest) = url.split_once("://")?;
+        let tls = match scheme.to_ascii_lowercase().as_str() {
+            "https" => true,
+            "http" => false,
+            _ => return None,
         };
         let (authority, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
         if authority.is_empty() || authority.contains('@') {
