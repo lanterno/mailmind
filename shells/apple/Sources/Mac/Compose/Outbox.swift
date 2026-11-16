@@ -70,6 +70,17 @@ final class OutboxTray {
         item.scheduled ? "scheduled" : item.retrying ? "retrying" : item.unsure ? "unsure" : item.state
     }
 
+    /// Said of a send that waits for its time: MailMind sends only while it is open.
+    static let whileOpen = String(localized: "goes while MailMind is open")
+
+    /// A send's line under its subject: who it is to, when a scheduled one goes and that it goes only while MailMind
+    /// is open, and what went wrong.
+    static func detail(_ item: API.OutboxItem) -> String {
+        let to = item.to.joined(separator: ", ") + (item.bccCount > 0 ? " +\(item.bccCount) bcc" : "")
+        let when = item.scheduled ? " · \(SendTimes.words(item.nextAttemptAt)) · \(whileOpen)" : ""
+        return "to \(to)\(when)\(item.error.map { " · \($0)" } ?? "")"
+    }
+
     func act(_ what: String, _ id: Int) async {
         do {
             if what == "retry" {
@@ -211,10 +222,8 @@ struct OutboxList: View {
                         .padding(.vertical, 8)
                 }
                 ForEach(tray.items) { item in
-                    let to = item.to.joined(separator: ", ") + (item.bccCount > 0 ? " +\(item.bccCount) bcc" : "")
-                    let when = item.scheduled ? " · \(SendTimes.words(item.nextAttemptAt))" : ""
                     OutboxRow(state: OutboxTray.label(item), failed: item.state == "error", title: item.subject,
-                              detail: "to \(to)\(when)\(item.error.map { " · \($0)" } ?? "")") {
+                              detail: OutboxTray.detail(item)) {
                         if item.scheduled || item.retrying {
                             act(item.retrying ? "Try Now" : "Send Now") { await tray.sendNow(item.id) }
                             act("Cancel") { await tray.cancel(item.id) }

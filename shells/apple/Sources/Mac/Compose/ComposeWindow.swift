@@ -992,9 +992,21 @@ struct LaterChoices: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
+            Text(Self.whileOpen)
+                .font(.meadow(.ui, 12))
+                .foregroundStyle(meadow.ink3)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10)
+                .padding(.top, 2)
+                .padding(.bottom, 6)
         }
         .frame(minWidth: 300)
     }
+
+    /// MailMind sends only while it is open, so a message for later needs it open then.
+    static let whileOpen = String(localized: """
+        It goes while MailMind is open: keep it open then, or turn on Open at Login in Settings › General.
+        """)
 
     private func pick(_ when: Int) {
         composer.laterOpen = false
