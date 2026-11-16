@@ -46,14 +46,23 @@ fn strict_node(node: &Map<String, Value>) -> bool {
     })
 }
 
+/// What a request without `response_format` says its schema in: the prompt, after a blank line, then this and the
+/// schema as compact JSON, so a service that refused structured output is still told the shape of the answer.
+pub const SCHEMA_STATED: &str = "Reply with only a JSON object that matches this JSON Schema: ";
+
 /// The body of a `POST {base}/chat/completions` for `prompt`, with its schema as `response_format` unless
-/// `with_format` is false (a service that refused it).
+/// `with_format` is false (a service that refused it), when the schema is stated after the prompt instead.
 pub fn body(prompt: &Prompt, provider: AiProvider, with_format: bool) -> Value {
     let mut messages = Vec::new();
     if let Some(system) = prompt.system.filter(|s| !s.is_empty()) {
         messages.push(json!({"role": "system", "content": system}));
     }
-    messages.push(json!({"role": "user", "content": prompt.text}));
+    let text = match prompt.schema.as_ref().filter(|_| !with_format) {
+        // Compact, its keys in the schema's own order.
+        Some(schema) => format!("{}\n\n{SCHEMA_STATED}{schema}", prompt.text),
+        None => prompt.text.clone(),
+    };
+    messages.push(json!({"role": "user", "content": text}));
     let mut out = Map::new();
     out.insert("model".into(), json!(prompt.model));
     out.insert("messages".into(), Value::Array(messages));

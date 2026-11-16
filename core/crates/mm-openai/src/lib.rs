@@ -9,10 +9,10 @@
 //! goes in the clear to anything off it. The host is asked of `Outside` before a connection is made. A call is sent
 //! again, twice, after a status a retry can help (408, 409, 429, 5xx) or a lost connection, waiting what
 //! `retry-after` says or else a little longer each time. A model on this Mac and a compatible service may not take
-//! structured output: a 400 that names `response_format` is asked once more without it, and the reply read as
-//! free-form JSON. A rejected key (a 401 or a 403, or Gemini's 400 saying the key isn't valid, read as a 401) has an
-//! error that holds none of what the service said, which can quote part of the key back, and no error ever holds the
-//! key. It takes no batch: only Claude's API does.
+//! structured output: a 400 that names `response_format` is asked once more without it, the schema stated after the
+//! prompt instead, and the reply read as free-form JSON. A rejected key (a 401 or a 403, or Gemini's 400 saying the
+//! key isn't valid, read as a 401) has an error that holds none of what the service said, which can quote part of the
+//! key back, and no error ever holds the key. It takes no batch: only Claude's API does.
 
 pub mod wire;
 
