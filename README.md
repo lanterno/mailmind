@@ -23,7 +23,7 @@ See [Features](#features) for what ships today and
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
-> **Heads-up:** summaries and the other AI features need a Claude API key, kept in your login Keychain with `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`, unless you choose another provider in Settings; calls are billed per token to that key's organization. Without one AI mode starts off: MailMind still ingests and curates mail, sends nothing to any AI provider and offers nothing only AI can do, until AI mode is turned on in Settings. On without a key, the brief says AI is off and how to set it up.
+> **Heads-up:** summaries and the other AI features need a Claude API key, kept in your login Keychain with `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`, unless you choose another provider in Settings; calls are billed per token to that key's organization. With no key in `ANTHROPIC_API_KEY` and none for any provider named in `mailmind.config.json`, AI mode starts off: MailMind still ingests and curates mail, sends nothing to any AI provider and offers nothing only AI can do, until AI mode is turned on in Settings. On without a key, the brief says AI is off and how to set it up.
 
 ---
 
@@ -615,7 +615,8 @@ How a release is made is in [docs/releasing.md](docs/releasing.md).
 - **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
   builds it first.
 - **A Claude API key**, for summaries and the other AI features, kept in the Keychain with
-  `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`. Without one, AI mode starts off. Set `MAILMIND_MODEL` to pick a cheaper/faster Claude model.
+  `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`. Without one, and with no other provider's key named in
+  `mailmind.config.json`, AI mode starts off. Set `MAILMIND_MODEL` to pick a cheaper/faster Claude model.
 - **Optional:** [`just`](https://just.systems), which wraps the commands below. Without it, build
   the app with `cd web && npm ci && npx vite build`, then run `uv run python -m mailmind serve`.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
@@ -770,7 +771,7 @@ uv run python -m mailmind assess --batch         # what has no summary yet, as a
 | `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves, flag changes and a draft's copy on the server wait for a full run, sweeps and one-click unsubscribes are refused, and nothing syncs in the background. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS=account` | Give each account its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) no longer holds up the others. Unset, all accounts share one, as before. Being tried out before it becomes the default. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |
-| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. Either set, AI mode starts on; neither, it starts off. |
+| `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature while Claude is the provider, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. AI mode starts on where it is set or `mailmind.config.json` names a key for any provider (`"anthropic_api_key"`, `"openai_api_key"` and the rest), and off otherwise. |
 | `MAILMIND_LOG_LEVEL=DEBUG` | Show debug lines and each error's text and traceback on the terminal, for chasing a fault. They can hold addresses and subjects. `mailmind.log` never does. |
 | `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5`, over the one chosen in Settings. Ignored while another AI provider is chosen. |
 | `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). |
