@@ -78,22 +78,22 @@ struct AccountsPane: View {
                 }
             }
         }
-        .confirmationDialog(removing.map { "Remove \($0.alias.flatMap { $0.isEmpty ? nil : $0 } ?? $0.email ?? "")?" } ?? "",
-                            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-                            presenting: removing) { row in
-            Button("Remove", role: .destructive) {
-                Task { await remove(row) }
+        .sheet(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            if let row = removing {
+                RemoveAccount(row: row) { deleteMail in
+                    removing = nil
+                    if let deleteMail { Task { await remove(row, deleteMail: deleteMail) } }
+                }
             }
-        } message: { row in
-            Text("MailMind stops reading \(row.email ?? "") and lets go of its password. Nothing changes on its server.")
         }
     }
 
-    private func remove(_ row: API.AccountRow) async {
+    private func remove(_ row: API.AccountRow, deleteMail: Bool) async {
         guard let core = status.core, let email = row.email else { return }
         do {
-            _ = try await core.post(API.Post.AccountsDelete.self, API.RemoveBody(email: email))
-            status.say(String(localized: "Removed \(StatusWords.short(email))"))
+            _ = try await core.post(API.Post.AccountsDelete.self, API.RemoveBody(deleteMail: deleteMail, email: email))
+            status.say(deleteMail ? String(localized: "Removed \(StatusWords.short(email)) and its mail on this Mac")
+                                  : String(localized: "Removed \(StatusWords.short(email))"))
             if chosen == email { chosen = nil }
         } catch let problem as Problem where problem.status == 404 {
             status.say(problem.detail ?? String(localized: "Couldn’t remove"))
@@ -103,6 +103,50 @@ struct AccountsPane: View {
         await status.readAccounts()
         await status.readDigest()
         if chosen == nil { chosen = status.accounts.first?.email }
+    }
+}
+
+/// Removing an account, as Meadow's dialog: MailMind stops reading it and lets go of its password, and, unless
+/// unticked, of the mail it keeps of it on this Mac. Its mail on the server stays as it is.
+struct RemoveAccount: View {
+    let row: API.AccountRow
+    /// Done: whether its mail here goes too, or nil when the removal was cancelled.
+    let done: (Bool?) -> Void
+    @State private var deleteMail = true
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        let email = row.email ?? ""
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Remove \(row.alias.flatMap { $0.isEmpty ? nil : $0 } ?? email)?")
+                .font(.meadow(.display, 18, .bold))
+                .foregroundStyle(meadow.ink)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Text("MailMind stops reading \(email) and lets go of its password.")
+                .font(.meadow(.ui, 13.5))
+                .foregroundStyle(meadow.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            Toggle("Also delete its mail from this Mac", isOn: $deleteMail)
+                .toggleStyle(.checkbox)
+                .font(.meadow(.ui, 13.5, .semibold))
+                .foregroundStyle(meadow.ink)
+            SettingHelp(String(localized: "Its mail on the server stays as it is."))
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Cancel") { done(nil) }
+                    .meadowButton()
+                    .keyboardShortcut(.cancelAction)
+                Button("Remove") { done(deleteMail) }
+                    .meadowButton(.danger)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, 4)
+        }
+        .padding(20)
+        .frame(width: 420)
+        .background { ComposePaper() }
+        .presentationBackground { ComposePaper() }
     }
 }
 
