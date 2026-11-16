@@ -57,7 +57,19 @@ enum StatusWords {
         return health.compactMap { $0.lastOkTs.flatMap(Moment.parse) }.max()
     }
 
-    /// The pill's words (`pillLabel`): what can't connect, then what is running, then when mail was last synced.
+    /// How far the Inboxes' first syncs have got, over the accounts whose older mail is still being read: how many
+    /// messages they have read of how many, and how many Inboxes. Nil when none is.
+    static func reading(_ digest: API.Digest) -> (done: Int, total: Int, inboxes: Int)? {
+        let reading = digest.accounts.compactMap { account -> (Int, Int)? in
+            guard let said = digest.status[account], let done = said.done, let total = said.total else { return nil }
+            return (done, total)
+        }
+        guard !reading.isEmpty else { return nil }
+        return (reading.map(\.0).reduce(0, +), reading.map(\.1).reduce(0, +), reading.count)
+    }
+
+    /// The pill's words (`pillLabel`): what can't connect, then how far a first sync has got, then what is running,
+    /// then when mail was last synced.
     static func pill(digest: API.Digest?, health: [API.AccountStanding], syncing: Bool, reconciling: Bool,
                      now: Date, calendar: Calendar = .current, locale: Locale = .current) -> Pill
     {
@@ -67,6 +79,12 @@ enum StatusWords {
             return Pill(dot: .error, text: bad.count == 1
                 ? String(localized: "\(name(first, aliases: digest.aliases)) can’t connect")
                 : String(localized: "\(bad.count) accounts can’t connect"))
+        }
+        if let read = reading(digest) {
+            let done = read.done.formatted(.number.locale(locale)), total = read.total.formatted(.number.locale(locale))
+            return Pill(dot: .busy, text: read.inboxes == 1
+                ? String(localized: "Reading your inbox: \(done) of \(total)")
+                : String(localized: "Reading your inboxes: \(done) of \(total)"))
         }
         if reconciling { return Pill(dot: .busy, text: String(localized: "Reconciling…")) }
         let anySyncing = digest.accounts.contains { standing(of: $0, digest: digest, health: health) == .syncing }
