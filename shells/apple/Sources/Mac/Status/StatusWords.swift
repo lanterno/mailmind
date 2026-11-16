@@ -105,7 +105,7 @@ enum StatusWords {
     static func ai(_ ai: API.AiStatus) -> (text: String, failing: Bool) {
         guard ai.isOn else {
             let off = switch ai.off {
-            case .turnedOff?: String(localized: "AI is off")
+            case .turnedOff?: String(localized: "AI mode is off")
             case .noUrl?: String(localized: "AI is off · no URL for the service")
             case .noModel?: String(localized: "AI is off · no model chosen")
             case .noKey?: String(localized: "AI is off · no \(ai.provider.name) API key")

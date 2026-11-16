@@ -19,6 +19,29 @@ enum AIChoices {
         let title: String
     }
 
+    /// The AI pane's parts, in their order.
+    enum Part: Hashable {
+        /// AI mode's switch.
+        case mode
+        /// The provider.
+        case connection
+        /// The provider's key, for those that take one.
+        case key
+        /// The model, and the service's URL where the provider asks for one.
+        case model
+        /// How AI stands, and what goes where.
+        case standing
+        case spending
+        case writtenAhead
+    }
+
+    /// What the pane shows: with AI mode off, only its switch, as nothing is sent then; on, the connection by provider
+    /// and how it stands, then what AI may spend and write ahead.
+    static func parts(aiMode: Bool, provider: API.AiProvider) -> [Part] {
+        guard aiMode else { return [.mode] }
+        return [.mode, .connection] + (provider.takesKey ? [.key] : []) + [.model, .standing, .spending, .writtenAhead]
+    }
+
     /// What choosing a provider sends: the provider alone, so its model and URL start again from its own.
     static func choose(_ provider: API.AiProvider) -> API.ChangedPreferences {
         API.ChangedPreferences(aiProvider: provider)
@@ -113,10 +136,11 @@ enum AIChoices {
     }
 }
 
-/// The AI pane, as the page's AI settings (#49): the switch, the provider and its key, the model and the service's
-/// URL, then what AI may spend and write ahead while it is on, and how it stands. Each control saves on its own. The
-/// models a provider offers are asked of it only as a person acts here (picks a provider, keeps a key, gives a URL,
-/// opens the menu, presses refresh) or as the pane opens with AI on, never in the background.
+/// The AI pane, as the page's AI settings (#49): AI mode's switch, and only while it is on, the connection (the
+/// provider and its key, the model and the service's URL, and how AI stands), then what AI may spend and write ahead.
+/// Each control saves on its own. The models a provider offers are asked of it only as a person acts here (turns AI
+/// mode on, picks a provider, keeps a key, gives a URL, opens the menu, presses refresh) or as the pane opens with AI
+/// mode on, never in the background.
 struct AIPane: View {
     let status: AppStatus
     @State private var kept: Set<API.AiProvider>?
@@ -136,47 +160,62 @@ struct AIPane: View {
 
     private var preferences: API.Preferences? { status.preferences }
     private var provider: API.AiProvider { preferences?.aiProvider ?? .anthropic }
-    private var enabled: Bool { preferences?.aiEnabled ?? true }
+    /// AI mode, off until a person turns it on.
+    private var enabled: Bool { preferences?.aiEnabled ?? false }
 
     var body: some View {
         SettingsPage(tab: .ai) {
             PreferencesRead(status: status) {
-                DeskSideCard(title: String(localized: "AI"), icon: .wind) {
-                    SettingSwitch(String(localized: "Use AI"), help: String(localized: """
-                        Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.
-                        """), isOn: status.preference(\.aiEnabled) { .init(aiEnabled: $0) })
-                    SettingLine(String(localized: "Provider")) {
-                        SettingChoice(label: String(localized: "Provider"), title: provider.label, width: 300) {
-                            [.title(String(localized: "Provider"))] + API.AiProvider.allCases.map {
-                                choice -> MeadowMenu.Part in
-                                .item(MeadowMenuItem(id: choice.rawValue, title: choice.label,
-                                                     check: choice == provider) { choose(choice) })
-                            }
+                ForEach(AIChoices.parts(aiMode: enabled, provider: provider), id: \.self) { part($0) }
+            }
+        }
+        .task(id: preferences == nil) { await opened() }
+        .onChange(of: enabled) { _, on in
+            if on { Task { await list(provider, unlessForeseen: true) } }
+        }
+    }
+
+    @ViewBuilder private func part(_ part: AIChoices.Part) -> some View {
+        switch part {
+        case .mode:
+            DeskSideCard(title: String(localized: "AI"), icon: .wind) {
+                SettingSwitch(String(localized: "AI mode"), help: String(localized: """
+                    Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.
+                    """), isOn: status.preference(\.aiEnabled) { .init(aiEnabled: $0) })
+            }
+        case .connection:
+            DeskSideCard(title: String(localized: "Connection"), icon: .link) {
+                SettingLine(String(localized: "Provider")) {
+                    SettingChoice(label: String(localized: "Provider"), title: provider.label, width: 300) {
+                        [.title(String(localized: "Provider"))] + API.AiProvider.allCases.map {
+                            choice -> MeadowMenu.Part in
+                            .item(MeadowMenuItem(id: choice.rawValue, title: choice.label,
+                                                 check: choice == provider) { choose(choice) })
                         }
                     }
                 }
-                if provider.takesKey {
-                    DeskSideCard(title: AIChoices.keyLabel(provider), icon: .key) {
-                        AIKeyView(status: status, provider: provider, kept: $kept) {
-                            Task { await list(provider, unlessForeseen: true) }
-                        }
-                    }
+            }
+        case .key:
+            DeskSideCard(title: AIChoices.keyLabel(provider), icon: .key) {
+                AIKeyView(status: status, provider: provider, kept: $kept) {
+                    Task { await list(provider, unlessForeseen: true) }
                 }
-                DeskSideCard(title: provider.asksForURL ? String(localized: "Model and service")
-                                                        : String(localized: "Model"), icon: .sliders) {
-                    modelLine
-                    if provider.asksForURL { urlLine }
-                }
-                if enabled {
-                    spending
-                    writtenAhead
-                }
+            }
+        case .model:
+            DeskSideCard(title: provider.asksForURL ? String(localized: "Model and service")
+                                                    : String(localized: "Model"), icon: .sliders) {
+                modelLine
+                if provider.asksForURL { urlLine }
+            }
+        case .standing:
+            VStack(alignment: .leading, spacing: 10) {
                 standing
                 SettingHelp(AIWords.privacy(provider))
                     .padding(.horizontal, 4)
             }
+        case .spending: spending
+        case .writtenAhead: writtenAhead
         }
-        .task(id: preferences == nil) { await opened() }
     }
 
     // MARK: The model and the URL

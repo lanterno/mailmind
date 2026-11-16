@@ -100,7 +100,7 @@ enum AIWords {
     /// Why AI is off, in a few words: nil while it is on.
     static func why(_ ai: API.AiStatus) -> String? {
         switch ai.off {
-        case .turnedOff?: String(localized: "it is turned off in Settings")
+        case .turnedOff?: String(localized: "AI mode is off in Settings")
         case .noKey?: String(localized: "there is no \(ai.provider.name) API key")
         case .noUrl?: String(localized: "the service has no URL")
         case .noModel?: String(localized: "no model is chosen")
@@ -113,7 +113,7 @@ enum AIWords {
     static func standing(_ ai: API.AiStatus) -> (text: String, failing: Bool) {
         guard ai.isOn else {
             if ai.isTurnedOff {
-                return (String(localized: "AI is off. MailMind sends nothing to any AI service."), false)
+                return (String(localized: "AI mode is off. MailMind sends nothing to any AI service."), false)
             }
             return (String(localized: "AI is off: \(why(ai) ?? "")."), false)
         }

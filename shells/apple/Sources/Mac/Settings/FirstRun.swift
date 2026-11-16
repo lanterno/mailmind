@@ -4,8 +4,8 @@ import SwiftUI
 
 /// The first run: no account yet. A welcome in the brief's manner (#44): the painted meadow across the top with the
 /// greeting on it, a card in the brief's hand saying what MailMind will do, and the two steps as cards: connect an
-/// account (the page's `firstrun`), and what AI needs, a key for the provider chosen (Claude unless another was), or
-/// nothing, and AI stays off.
+/// account (the page's `firstrun`), and AI, if you want it: off, the way to Settings › AI to turn AI mode on; on, as
+/// it stays for whoever kept a key, the key for the provider chosen.
 struct Welcome: View {
     let status: AppStatus
     /// Whether the window's traffic lights stand over the scene's top left; a test's picture has none.
@@ -13,6 +13,7 @@ struct Welcome: View {
     @State private var adding = false
     @State private var kept: Set<API.AiProvider>?
     @Environment(\.meadow) private var meadow
+    @Environment(\.openSettings) private var openSettings
 
     init(status: AppStatus, kept: Set<API.AiProvider>? = nil, lights: Bool = true) {
         self.status = status
@@ -21,6 +22,8 @@ struct Welcome: View {
     }
 
     private var provider: API.AiProvider { status.preferences?.aiProvider ?? .anthropic }
+    /// AI mode, which a fresh home starts with off.
+    private var aiMode: Bool { status.preferences?.aiEnabled ?? false }
 
     var body: some View {
         ScrollView {
@@ -45,15 +48,22 @@ struct Welcome: View {
                             .meadowButton(.primary)
                             .keyboardShortcut(.defaultAction)
                         }
-                        WelcomeStep(number: 2, title: String(localized: "AI, if you want it"), text: Self.ai) {
+                        WelcomeStep(number: 2, title: String(localized: "AI, if you want it"),
+                                    text: aiMode ? Self.aiOn : Self.aiOff) {
                             VStack(alignment: .leading, spacing: 10) {
-                                if provider.takesKey {
+                                // AI mode on already, as it stays for whoever kept a key: that key, here.
+                                if aiMode, provider.takesKey {
                                     AIKeyView(status: status, provider: provider, kept: $kept)
                                 }
-                                SettingHelp(String(localized: """
-                                    Another provider, or Ollama on this Mac, is chosen in Settings › AI.
-                                    """))
-                                SettingHelp(AIWords.privacy(provider))
+                                Button {
+                                    status.settingsTab = .ai
+                                    openSettings()
+                                } label: {
+                                    MeadowIconView(.wind, size: 15)
+                                    Text(aiMode ? "Open AI Settings…" : "Turn On AI Mode in Settings…")
+                                }
+                                .meadowButton(aiMode ? .quiet : .ai)
+                                if aiMode { SettingHelp(AIWords.privacy(provider)) }
                             }
                         }
                     }
@@ -82,10 +92,17 @@ struct Welcome: View {
         in a file.
         """)
 
-    private static let ai = String(localized: """
+    private static let aiOff = String(localized: """
         Summaries, the morning brief, drafted replies and asking your mail are written by the AI service you \
-        choose: Claude, OpenAI or Gemini with an API key of yours, or a model running on this Mac. Without one, AI \
-        is off and nothing is sent: everything else works as it does with it.
+        choose: Claude, OpenAI or Gemini with an API key of yours, or a model running on this Mac. AI mode is off \
+        until you turn it on in Settings › AI. While it is off nothing is sent, and everything else works as it does \
+        with it.
+        """)
+
+    private static let aiOn = String(localized: """
+        Summaries, the morning brief, drafted replies and asking your mail are written by the AI service you \
+        choose: Claude, OpenAI or Gemini with an API key of yours, or a model running on this Mac. AI mode is on; \
+        Settings › AI chooses the service, and turns it off.
         """)
 
     /// The scene across the top (`.bhero`), with the greeting on its sky. It covers the whole window, so with the
