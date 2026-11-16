@@ -128,6 +128,32 @@ def test_openai_is_chosen_its_key_kept_through_the_server_and_its_models_offered
     clean(page)
 
 
+def test_a_key_kept_in_place_of_a_refused_one_has_the_provider_asked_for_its_models_again(page, app, world, openai_api, fake_keychain):
+    mistyped = "sk-test-mistyped-openai-key-9876543210"         # fictional, and not the one the fake takes
+    dialog = ai_open(page, app)
+    with page.pw.expect_response(lambda r: r.url.endswith("/api/preferences") and r.request.method == "POST"):
+        dialog.get_by_label("Provider", exact=True).select_option("openai")
+    assert app.post("/api/preferences", {"ai_base_url": openai_api.url}).status == 200     # the fake in OpenAI's place
+    field = dialog.get_by_label("API key", exact=True)
+    model = dialog.get_by_label("Model", exact=True)
+
+    field.fill(mistyped)
+    dialog.get_by_role("button", name="Keep key").click()
+    expect(dialog.get_by_text("The provider refused the key.")).to_be_visible()
+    expect(model.locator("option")).to_have_text(["Default"])
+
+    field.fill(fo.KEY)                                          # a key in place of the one kept
+    with page.pw.expect_response(lambda r: "/api/ai/models" in r.url and r.status == 200):
+        dialog.get_by_role("button", name="Keep key").click()
+    expect(model.locator("option")).to_have_text(["Default (gpt-6.1-sol)", "gpt-6-luna"])
+    expect(dialog.get_by_text("The provider refused the key.")).to_have_count(0)
+    expect(page.locator("#aiStanding")).to_have_text("AI is on: OpenAI · gpt-6.1-sol.")
+    assert [(r.path, r.key) for r in openai_api.requests] == [("/models", mistyped), ("/models", fo.KEY)]
+    assert all("status of 400" in p for p in page.problems), page.problems     # the refusal of the first key
+    page.problems.clear()
+    clean(page)
+
+
 def local_found(page):
     return page.pw.expect_response(lambda r: r.url.endswith("/api/ai/local") and r.request.method == "GET")
 
