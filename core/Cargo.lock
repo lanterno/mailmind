@@ -1056,6 +1056,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mm-openai"
+version = "0.1.0"
+dependencies = [
+ "mm-assistant",
+ "mm-kernel",
+ "mm-net",
+ "serde_json",
+]
+
+[[package]]
 name = "mm-py"
 version = "0.1.0"
 dependencies = [
