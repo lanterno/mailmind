@@ -151,7 +151,7 @@ The app lives in `mailmind/`.
 - `mailmind.platform.keychain` is the one reader and writer of the login Keychain: generic passwords under the service
   `mailmind`, through `/usr/bin/security`. A secret goes to it on standard input (`security -i`, the secret in hex), never
   on a command line, and no message or log line holds one. `add` never replaces an item (the database's key), `put` does
-  (an account's password, the Claude API key), and each reads back what it kept. A secret is printable ASCII, as
+  (an account's password, an AI provider's API key), and each reads back what it kept. A secret is printable ASCII, as
   `security` prints any other in hex. `use(backend)` puts another backend in `Security`'s place, as the tests' tripwire
   does. It is standard library only.
 - `mailmind.platform.private` opens a file an export writes, its owner's alone. It is standard library only.

@@ -43,11 +43,11 @@ secret (`op`, `env`, the Bridge password) is refused, since the request names th
 
 A secret MailMind is given, a password typed into Settings, `accounts password`, `ai key` or what `accounts materialize`
 moves, goes to the login Keychain (`platform.keychain`) before the file is written, and `mailmind.config.json` names the
-item and a version, never the secret: `{"keychain": "account:<address>", "version": n}`, `anthropic-api-key` for the
-Claude key. A new version tells IDLE to log in afresh and another process to read the item again. Removing an account,
-or moving it to another style, removes its item. A config that holds a secret itself, `{"plain": …}` or a bare string,
-is refused (`PlaintextSecret`): the app won't start, and `check` says which entry, never the secret. No credential may
-name the database's key.
+item and a version, never the secret: `{"keychain": "account:<address>", "version": n}`, `<provider>-api-key` for an
+AI provider's key (`anthropic-api-key` for Claude's). A new version tells IDLE to log in afresh and another process
+to read the item again. Removing an account, or moving it to another style, removes its item. A config that holds a
+secret itself, `{"plain": …}` or a bare string, is refused (`PlaintextSecret`): the app won't start, and `check` says
+which entry, never the secret. No credential may name the database's key.
 
 The Mac app's Settings keep each AI provider's key and the Proton Bridge's password the same way, through routes both
 servers answer: `POST /api/ai/key` (`{provider, key}`) keeps the key in `<provider>-api-key` and names it in the config's

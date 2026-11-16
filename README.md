@@ -675,10 +675,12 @@ Credential styles: `{"keychain": "account:you@x"}` (the login Keychain, which Se
 `{"proton_bridge": true}`. `uv run python -m mailmind accounts materialize` moves what an `op` or `env` credential
 names into the Keychain.
 
-Top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` says where the Claude API key is, in any
-of those styles (`ai key` keeps it in the Keychain as `anthropic-api-key`), and `"openai_api_key"`, `"gemini_api_key"`
-and `"compatible_api_key"` where another provider's is (`ai key --provider openai`, and so on). `"ai_daily_limit_usd"` is the most MailMind spends on it in a day,
-in US dollars: `15` unless you set another positive number.
+Top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` says where the Claude API key is
+(`ai key` keeps it in the Keychain as `anthropic-api-key`), and `"openai_api_key"`, `"gemini_api_key"`,
+`"local_api_key"` (for a model server on this Mac that asks for one) and `"compatible_api_key"` where another
+provider's is (`ai key --provider openai`, and so on), each in any of those styles but `{"proton_bridge": true}`,
+which there means no key: Claude's then doesn't turn to `ANTHROPIC_API_KEY` either. `"ai_daily_limit_usd"` is the
+most MailMind spends on it in a day, in US dollars: `15` unless you set another positive number.
 
 An account may say `"pool": true` to keep a connection open between reads, and `"warm_folders": true` to sync its
 Drafts, Archive and Sent beside the Inbox. A set `MAILMIND_POOL` or `MAILMIND_WARM_FOLDERS` decides over either.
@@ -805,8 +807,8 @@ In the repo folder, or in the directory `MAILMIND_HOME` names:
   readable by you only.
 
 The login Keychain's items under the service `mailmind` hold the rest: `database-key`, each account's password
-(`account:<address>`), the Claude API key (`anthropic-api-key`) and the Proton Bridge's password
-(`proton-bridge-password`).
+(`account:<address>`), each AI provider's API key (`anthropic-api-key`, `openai-api-key`, `gemini-api-key`,
+`local-api-key` and `compatible-api-key`) and the Proton Bridge's password (`proton-bridge-password`).
 
 All of the above are in `.gitignore`, and a `MAILMIND_HOME` outside the repo keeps them out of
 it altogether. **Nothing personal is committed.**
