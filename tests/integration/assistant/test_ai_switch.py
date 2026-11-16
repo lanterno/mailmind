@@ -2,14 +2,19 @@
 or by any background job, whatever key there is; turned on again it is sent at once. Chosen, another provider is asked in
 Claude's place by the same jobs, and a backlog never goes as a batch, which only Claude takes: one out to Claude is let go,
 and its mail goes to the provider chosen."""
+from datetime import datetime, timezone
+
 import pytest
 
 import problems
 from fakes import anthropic_api as fa
 from fakes import openai_api as fo
 from mailmind.bootstrap import assistant, background
+from mailmind.bootstrap.mailbox import store
 
 LUNCH = "ada-inbox-02-lunch-confirm.eml"
+MONDAY = datetime(2026, 11, 9, 7, 0, tzinfo=timezone.utc)          # a weekday morning, and the week's first
+NEXT_MONDAY = datetime(2026, 11, 16, 7, 0, tzinfo=timezone.utc)
 SPENDS = [("/api/ai/summarize", lambda world: world.copy(LUNCH)), ("/api/ai/rewrite", lambda world: {"op": "shorten", "text": "hi"}),
           ("/api/ai/ask", lambda world: {"question": "When is lunch with Lin?"}),
           ("/api/ai/draft-reply", lambda world: {**world.copy(LUNCH), "tone": "warm"})]
@@ -30,16 +35,59 @@ def test_turned_off_a_route_says_ai_is_off_and_sends_nothing(off, world, ai, pat
     assert ai.requests == []
 
 
-def test_turned_off_no_background_job_sends_anything(off, ai):
-    assert assistant.assessments.round() is None
-    assert assistant.assessments.batch_submit(at_least=1, keep=0) == 0
+@pytest.fixture
+def caught_up(app, world, ai):
+    """Every message triaged, so nothing waits for a summary, and every job that asks on its own turned on: on a Monday
+    morning, with AI on, the brief and the week's review are each written ahead."""
+    ai.responder = lambda req: fa.answer({"summary": "Wants an answer.", "importance": 4, "category": "personal"})
+    assert assistant.assessments.summarize_pending(limit=100, workers=1) > 0
+    ai.responder = None
+    ai.requests.clear()
+    assert app.post("/api/preferences", {"morning_brief": True, "weekly_review": True, "auto_tidy": True}).status == 200
+    return app
+
+
+def written_ahead():
+    """The morning's brief and the week's review written ahead, as on a Monday morning: how many calls each made today."""
     background.brief_ahead_round()
     background.review_ahead_round()
+    features = assistant.calls.usage(1)[0]["features"]
+    return [features.get(f, {"calls": 0})["calls"] for f in ("brief-ahead", "review-ahead")]
+
+
+def waits_again(world, name):
+    """What the AI said of `name` forgotten, so it waits for a summary again: it came more than a day ago, so it holds back
+    no brief or review written ahead."""
+    c = store.conn()
+    try:
+        c.execute("DELETE FROM assessments WHERE message_key = (SELECT message_key FROM messages WHERE pk = ?)",
+                  (world.pk(name),))
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_turned_off_no_background_job_sends_anything(caught_up, world, ai):
+    caught_up.clock.move_to(MONDAY)
+    assert caught_up.post("/api/preferences", {"ai_enabled": True}).status == 200     # with AI on, both are written ahead
+    assert written_ahead() == [1, 1] and len(ai.requests) == 2
+
+    caught_up.clock.move_to(NEXT_MONDAY)                                              # a new day and a new week
+    assert caught_up.post("/api/preferences", {"ai_enabled": False}).status == 200
+    waits_again(world, LUNCH)                       # mail waiting for a summary is no reason to send either
+    ai.requests.clear()
+    assert assistant.assessments.round() is None
+    assert assistant.assessments.batch_submit(at_least=1, keep=0) == 0
+    assert written_ahead() == [0, 0]
     background.tidy_round()
     assistant.drafting.rounds()()
     assert ai.requests == []
-    st = off.get("/api/digest").json["ai"]
+    st = caught_up.get("/api/digest").json["ai"]
     assert (st["engine"], st["provider"], st["off"]) == ("none", "anthropic", "turned-off")
+
+    assert caught_up.post("/api/preferences", {"ai_enabled": True}).status == 200     # the same morning, on again
+    assert written_ahead() == [1, 1] and len(ai.requests) == 2
+    assert assistant.assessments.summarize_pending(limit=10, workers=1) == 1           # and what waited is asked
 
 
 def test_turned_off_no_key_is_looked_up_anywhere(off, ai, monkeypatch):
