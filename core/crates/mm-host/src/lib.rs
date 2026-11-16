@@ -173,6 +173,18 @@ impl Host {
         })
     }
 
+    /// The computer woke from sleep, or its network changed: a connection may be dead without a word, and mail may
+    /// have come while nothing listened. IDLE's workers let their connections go and open fresh ones at once, and
+    /// every account is synced now rather than at the next round. A host that only reads, or has closed, does
+    /// nothing, as its background sync does.
+    pub fn woke(&self) {
+        if self.closing.load(Ordering::SeqCst) {
+            return;
+        }
+        self.app.realtime.renew();
+        self.app.jobs.kick("sync");
+    }
+
     /// The app itself, for what is asked of it directly rather than through a route.
     pub fn app(&self) -> &App {
         &self.app

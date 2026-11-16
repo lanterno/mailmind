@@ -256,6 +256,12 @@ impl Realtime {
         self.supervisor.reconcile()
     }
 
+    /// Every worker lets its connection go and opens another now, as one may be dead without a word after the
+    /// computer slept or its network changed. Before `start` and after `stop` it does nothing.
+    pub fn renew(&self) {
+        self.supervisor.renew();
+    }
+
     /// The accounts with a worker, each with whether it still runs: one whose server has no IDLE has ended.
     pub fn watching(&self) -> Vec<(String, bool)> {
         self.supervisor.watching()

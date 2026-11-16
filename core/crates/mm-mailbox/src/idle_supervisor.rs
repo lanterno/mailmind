@@ -2,7 +2,9 @@
 //!
 //! A worker holds a connection open and waits on it. `reconcile` starts one for each key wanted, up to a limit,
 //! retires one whose key has gone or is now wanted differently, and leaves the rest be. A worker whose connection
-//! fails, or whose work on it panics (`Panic`), rests, longer each time, then opens another. One that finds itself no longer wanted leaves on its own, and
+//! fails, or whose work on it panics (`Panic`), rests, longer each time, then opens another. `renew` has every worker
+//! let its connection go and open another at once, as a connection may have died without a word when the computer
+//! slept or its network changed. One that finds itself no longer wanted leaves on its own, and
 //! asks for a reconcile on its way out. What a connection is, and what a worker does with one, is the `Watched`'s to
 //! say; this knows nothing of what they watch.
 //!
@@ -91,6 +93,8 @@ pub struct Watch<S> {
     conn: Mutex<Option<Arc<dyn Interrupt>>>,
     /// What it rests if its connection fails now.
     rest: Mutex<Duration>,
+    /// Asked to let its connection go and open another at once (`renew`).
+    renewing: AtomicBool,
     /// Its thread has ended.
     ended: AtomicBool,
 }
@@ -106,6 +110,11 @@ impl<S> Watch<S> {
 
     fn set_rest(&self, rest: Duration) {
         *held(&self.rest) = rest;
+    }
+
+    /// Whether a renewal was asked since it last looked, which it now has.
+    fn renewed(&self) -> bool {
+        self.renewing.swap(false, Ordering::SeqCst)
     }
 }
 
@@ -142,7 +151,7 @@ struct Inner<W: Watched> {
     rests: Mutex<Rests>,
     /// The workers' connections' interrupters, to interrupt on `stop`.
     conns: Mutex<Vec<Arc<dyn Interrupt>>>,
-    /// A worker resting waits here; a stop and a retirement wake it.
+    /// A worker resting waits here; a stop, a retirement and a renewal wake it.
     wake: Mutex<()>,
     woken: Condvar,
     table: Mutex<Table<W::Spec>>,
@@ -163,8 +172,8 @@ enum Turn {
 impl<W: Watched> Inner<W> {
     fn rest(&self, watch: &Watch<W::Spec>, rest: Duration) {
         let waiting = held(&self.wake);
-        let _ =
-            self.woken.wait_timeout_while(waiting, rest, |_| !watch.leaving()).unwrap_or_else(PoisonError::into_inner);
+        let resting = |_: &mut ()| !watch.leaving() && !watch.renewing.load(Ordering::SeqCst);
+        let _ = self.woken.wait_timeout_while(waiting, rest, resting).unwrap_or_else(PoisonError::into_inner);
     }
 
     fn worker(self: &Arc<Self>, watch: &Arc<Watch<W::Spec>>) {
@@ -190,12 +199,21 @@ impl<W: Watched> Inner<W> {
                     }
                 }
             };
+            // A renewal ended it, or came as it failed: the next connection opens now, and nothing failed.
+            if watch.renewed() {
+                watch.set_rest(held(&self.rests).first);
+                continue;
+            }
             let rest = watch.rest();
             if !watch.leaving() {
                 watched.say_failed(&watch.spec, failed, rest);
             }
             self.rest(watch, rest);
-            watch.set_rest((rest * 2).min(held(&self.rests).longest));
+            if watch.renewed() {
+                watch.set_rest(held(&self.rests).first);
+            } else {
+                watch.set_rest((rest * 2).min(held(&self.rests).longest));
+            }
         }
     }
 
@@ -207,10 +225,11 @@ impl<W: Watched> Inner<W> {
             Ok(true) => {}
         }
         held(&self.conns).push(interrupt.clone());
-        // Set before `leaving()` is asked: a retirement sets `quit` first, then interrupts what it finds here.
+        // Set before `leaving()` is asked: a retirement sets `quit` first, then interrupts what it finds here. A
+        // renewal does the same, so one asked before the connection was listed is found here, and it goes unserved.
         *held(&watch.conn) = Some(interrupt.clone());
         watch.set_rest(held(&self.rests).first);
-        let served = caught(|| self.watched.serve(watch, conn));
+        let served = if watch.renewed() { Ok(()) } else { caught(|| self.watched.serve(watch, conn)) };
         *held(&watch.conn) = None;
         held(&self.conns).retain(|listed| !Arc::ptr_eq(listed, &interrupt));
         match served {
@@ -226,6 +245,7 @@ impl<W: Watched> Inner<W> {
             stopping: self.stop.clone(),
             conn: Mutex::new(None),
             rest: Mutex::new(held(&self.rests).first),
+            renewing: AtomicBool::new(false),
             ended: AtomicBool::new(false),
         });
         let (inner, working) = (self.clone(), watch.clone());
@@ -247,6 +267,20 @@ impl<W: Watched> Inner<W> {
         {
             let _waking = held(&self.wake);
             watch.quit.store(true, Ordering::SeqCst);
+            self.woken.notify_all();
+        }
+        let conn = held(&watch.conn).clone();
+        if let Some(conn) = conn {
+            conn.interrupt();
+        }
+    }
+
+    /// Have a worker let its connection go and open another at once: wake it from a rest, and interrupt the
+    /// connection it serves on, which it then closes.
+    fn renew(&self, watch: &Watch<W::Spec>) {
+        {
+            let _waking = held(&self.wake);
+            watch.renewing.store(true, Ordering::SeqCst);
             self.woken.notify_all();
         }
         let conn = held(&watch.conn).clone();
@@ -317,6 +351,19 @@ impl<W: Watched> Supervisor<W> {
     /// Returns how many keys are wanted.
     pub fn reconcile(&self) -> usize {
         self.inner.reconcile()
+    }
+
+    /// Have every worker let its connection go and open another now, its rests starting over, saying nothing failed:
+    /// what a wake from sleep or a change of network asks, when a connection may be dead without a word. Before
+    /// `begin` and after `stop` it does nothing.
+    pub fn renew(&self) {
+        let table = held(&self.inner.table);
+        if !table.running || self.inner.stop.load(Ordering::SeqCst) {
+            return;
+        }
+        for (_, watch) in &table.watchers {
+            self.inner.renew(watch);
+        }
     }
 
     /// The keys with a worker, each with whether it still runs (one may have ended on a connection that will never

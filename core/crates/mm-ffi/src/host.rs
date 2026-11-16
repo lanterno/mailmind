@@ -139,6 +139,12 @@ impl CoreHost {
         Ok(Arc::new(EventSubscription { inner }))
     }
 
+    /// The computer woke from sleep, or its network changed: IDLE's connections are opened afresh and every account
+    /// is synced now. It returns at once; the work runs in the background.
+    pub fn woke(&self) {
+        self.inner.woke();
+    }
+
     /// End every stream, stop the background work once each round returns, and wait for the work requests set
     /// going. A request from then on is answered 503.
     pub fn close(&self) {
