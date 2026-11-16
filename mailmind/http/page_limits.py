@@ -5,7 +5,7 @@ fails when that file no longer matches, so the page keeps no copy of one: a limi
 `just gen-api`. Nothing serves them: they are fixed for a build, as the API's types are, and a tab of another build offers a
 reload. A limit the page doesn't hold anyone to stays out.
 """
-from mailmind.accounts.api import AI_DAILY_LIMIT_MAX, PREFERENCE_DEFAULTS
+from mailmind.accounts.api import AI_BASE_URL_MAX, AI_DAILY_LIMIT_MAX, AI_MODEL_MAX, PREFERENCE_DEFAULTS
 from mailmind.assistant.api import DEFAULT_DAILY_LIMIT_USD, INSTRUCTION_MAX
 from mailmind.attention.api import BULK_CAP
 from mailmind.compose.api import MAX_ATTACH_BYTES
@@ -14,7 +14,9 @@ from mailmind.mailbox.api import BULK_MAX
 from mailmind.platform.db import places
 
 PAGE_LIMITS: dict[str, int] = {
+    "ai_base_url_chars": AI_BASE_URL_MAX,    # the longest an AI service's URL may be
     "ai_daily_limit_usd": AI_DAILY_LIMIT_MAX, # the most a person may set the AI's daily limit to, in dollars
+    "ai_model_chars": AI_MODEL_MAX,          # the longest an AI model's name may be
     "attach_bytes": MAX_ATTACH_BYTES,        # what one message's files may come to, decoded
     "bulk_rows": BULK_MAX,                   # the rows one /api/bulk/file may name: the page sends more as more requests
     "instruction_chars": INSTRUCTION_MAX,    # what is read of a person's word on what a drafted reply should say

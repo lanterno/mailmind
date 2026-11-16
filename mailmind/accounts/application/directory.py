@@ -148,7 +148,7 @@ class Directory:
     def set_preferences(self, asked: Mapping[str, Any]) -> dict[str, Any]:
         """Keep what `asked` changes, and leave every other key in the file as it was. A value none can be, refused whole
         (`Refused`), writes nothing. The answer is each preference as it stands now."""
-        return self._change_preferences(lambda raw: preferences.changes(asked))
+        return self._change_preferences(lambda raw: preferences.changes(asked, raw))
 
     def import_preferences(self, held: Mapping[str, Any]) -> dict[str, Any]:
         """What a browser held under its old keys, once, for what the file doesn't say yet. When there is nothing to take, nothing

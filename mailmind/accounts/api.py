@@ -4,9 +4,9 @@ mailmind.bootstrap.accounts."""
 from mailmind.accounts.domain.credential import CredentialRef, PlaintextSecret, api_key_who
 from mailmind.accounts.domain.events import AccountAdded, AccountChanged, AccountRemoved, CredentialsRejected
 from mailmind.accounts.domain.login_hold import login_id
-from mailmind.accounts.domain.preferences import AI_DAILY_LIMIT_MAX, DEFAULTS as PREFERENCE_DEFAULTS, Density, MailColors, ReadFont, ReadSize, ReadWidth, SearchScope, Theme
+from mailmind.accounts.domain.preferences import AI_BASE_URL_MAX, AI_DAILY_LIMIT_MAX, AI_MODEL_MAX, DEFAULTS as PREFERENCE_DEFAULTS, Density, MailColors, ReadFont, ReadSize, ReadWidth, SearchScope, Theme
 from mailmind.accounts.domain.preset import Preset
 from mailmind.accounts.domain.provider import resolve as provider_of
 from mailmind.accounts.domain.tls_pin import TLSPinMismatch
 
-__all__ = ["AI_DAILY_LIMIT_MAX", "AccountAdded", "AccountChanged", "AccountRemoved", "CredentialRef", "CredentialsRejected", "Density", "MailColors", "PREFERENCE_DEFAULTS", "PlaintextSecret", "Preset", "ReadFont", "ReadSize", "ReadWidth", "SearchScope", "TLSPinMismatch", "Theme", "api_key_who", "login_id", "provider_of"]
+__all__ = ["AI_BASE_URL_MAX", "AI_DAILY_LIMIT_MAX", "AI_MODEL_MAX", "AccountAdded", "AccountChanged", "AccountRemoved", "CredentialRef", "CredentialsRejected", "Density", "MailColors", "PREFERENCE_DEFAULTS", "PlaintextSecret", "Preset", "ReadFont", "ReadSize", "ReadWidth", "SearchScope", "TLSPinMismatch", "Theme", "api_key_who", "login_id", "provider_of"]

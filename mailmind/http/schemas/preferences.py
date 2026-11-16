@@ -6,6 +6,7 @@ from pydantic import BeforeValidator
 from mailmind.accounts.api import Density, MailColors, ReadFont, ReadSize, ReadWidth, SearchScope, Theme
 from mailmind.assistant.api import DraftTone
 from mailmind.http.schemas.common import Answer, Flag, Number, RequestBody
+from mailmind.kernel.ai_provider import AiProvider
 
 
 def _dollars(given):
@@ -41,6 +42,10 @@ class ChangedPreferences(RequestBody):
     morning_brief: Flag | None = None
     weekly_review: Flag | None = None
     auto_tidy: Flag | None = None
+    ai_enabled: Flag | None = None
+    ai_provider: AiProvider | None = None
+    ai_model: str | None = None
+    ai_base_url: str | None = None
     ai_daily_limit_usd: Dollars | None = None
 
 
@@ -73,6 +78,10 @@ class Preferences(Answer):
     morning_brief: bool
     weekly_review: bool
     auto_tidy: bool
+    ai_enabled: bool
+    ai_provider: AiProvider
+    ai_model: str               # "" for the provider's own
+    ai_base_url: str            # "" for the provider's own
     ai_daily_limit_usd: float
 
 
