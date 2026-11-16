@@ -147,6 +147,16 @@ impl LiveError {
     }
 }
 
+/// One message's header fields as the server sent them, with its flags.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LiveHeaders {
+    pub uid: u32,
+    /// The fields asked for, as the server sent them.
+    pub raw: Vec<u8>,
+    /// Its flags as the server says them, none where it says none.
+    pub flags: Vec<String>,
+}
+
 /// A logged-in connection to an account's server, as far as a sweep reads and moves its INBOX through it.
 pub trait LiveSession {
     /// Select a folder, read-only or to change it.
@@ -155,10 +165,8 @@ pub trait LiveSession {
     fn uids(&mut self) -> Result<Vec<u32>, LiveError>;
     /// The UIDs in the selected folder whose From holds `text`, as the server matches it: a coarse filter.
     fn uids_from(&mut self, text: &str) -> Result<Vec<u32>, LiveError>;
-    /// These header fields of each message, in UID order: (uid, the fields as the server sent them).
-    fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError>;
-    /// Each message's flags, as the server says them; one it doesn't say is left out.
-    fn flags(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError>;
+    /// These header fields of each message, with its flags, in UID order. One FETCH brings both, so they agree.
+    fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<LiveHeaders>, LiveError>;
     /// When each message arrived, as the server says (INTERNALDATE), in Unix seconds; one it doesn't say is left out.
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError>;
     /// Move the UIDs to `dest`: one MOVE where the server offers it, else a checked copy, never a bulk EXPUNGE.

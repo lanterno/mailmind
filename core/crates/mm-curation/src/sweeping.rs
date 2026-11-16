@@ -152,17 +152,14 @@ pub fn classified(rows: Vec<Read>, rules: &RuleSets) -> Vec<Classified> {
         .collect()
 }
 
-/// The INBOX as `s` shows it now: every message's `READ_FIELDS` and flags, in UID order.
+/// The INBOX as `s` shows it now: every message's `READ_FIELDS` and flags, read in one FETCH, in UID order.
 fn fetch_headers(s: &mut dyn LiveSession) -> Result<Vec<Read>, LiveError> {
     s.select("INBOX", true)?;
     let uids = s.uids()?;
     let mut out = Vec::with_capacity(uids.len());
     for batch in uids.chunks(HEADER_BATCH) {
-        let flags = s.flags(batch)?;
         let heads = s.headers(batch, &READ_FIELDS)?;
-        out.extend(
-            heads.into_iter().map(|(uid, raw)| read_from_headers(uid, &raw, flags.get(&uid).map(Vec::as_slice))),
-        );
+        out.extend(heads.into_iter().map(|h| read_from_headers(h.uid, &h.raw, Some(&h.flags))));
     }
     Ok(out)
 }

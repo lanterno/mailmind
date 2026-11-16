@@ -17,7 +17,8 @@ use mm_compose::sending::{Mint, Outgoing};
 use mm_compose::spec::Built;
 use mm_curation::cleaning::{Cleaning, CleaningParts};
 use mm_curation::cleanup_ports::{
-    ConfirmTokens, Ids, ListHeaders, LiveError, LiveInboxes, LiveSession, SafeHttp, SweptAccount, SystemSend, UnsubRow,
+    ConfirmTokens, Ids, ListHeaders, LiveError, LiveHeaders, LiveInboxes, LiveSession, SafeHttp, SweptAccount,
+    SystemSend, UnsubRow,
 };
 use mm_curation::expiry::{Expiry, ExpiryParts};
 use mm_curation::sweeping::{Sweeps, SweepsParts};
@@ -228,12 +229,9 @@ impl LiveSession for ServerSession {
         self.0.search(Search::From(text)).map_err(live)
     }
 
-    fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
-        Ok(self.0.headers(uids, fields, false).map_err(live)?.into_iter().map(|h| (h.uid, h.raw)).collect())
-    }
-
-    fn flags(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError> {
-        self.0.flags(uids).map_err(live)
+    fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<LiveHeaders>, LiveError> {
+        let fetched = self.0.headers(uids, fields, false).map_err(live)?;
+        Ok(fetched.into_iter().map(|h| LiveHeaders { uid: h.uid, raw: h.raw, flags: h.flags }).collect())
     }
 
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {

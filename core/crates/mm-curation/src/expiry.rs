@@ -127,7 +127,7 @@ fn expired(s: &mut dyn LiveSession, expire: &[(String, i64)], now: f64) -> Resul
     let uids: Vec<u32> = uids.into_iter().collect();
     let arrivals = s.arrivals(&uids)?;
     let rows = s.headers(&uids, &AGE_FIELDS)?;
-    let rows = rows.into_iter().map(|(uid, raw)| aged_from_headers(uid, &raw, arrivals.get(&uid).copied()));
+    let rows = rows.into_iter().map(|h| aged_from_headers(h.uid, &h.raw, arrivals.get(&h.uid).copied()));
     Ok(select_expired(rows.collect(), expire, now))
 }
 
