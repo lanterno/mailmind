@@ -223,6 +223,20 @@ class BatchCleanedUp(Answer):
     reversible: Reversible
 
 
+class SweepSender(Answer):
+    """One of the senders with the most of a bucket a sweep would move."""
+    from_addr: str
+    count: int
+
+
+class SweepBucket(Answer):
+    """A junk bucket a sweep would move: how much of it, the senders with the most and the newest subjects, a few of each."""
+    bucket: str
+    count: int
+    senders: list[SweepSender]
+    subjects: list[str]
+
+
 class AccountSwept(Answer):
     """One account's sweep. One that failed on the way in says only how far it got."""
     account: str
@@ -230,6 +244,7 @@ class AccountSwept(Answer):
     error: str | None
     by_bucket: dict[str, int] | None = None
     senders: int | None = None
+    going: list[SweepBucket] | None = None   # what goes, bucket by bucket
     held_back: int | None = None            # junk left where it is: starred, or not read yet
     capped: bool | None = None              # more junk than one sweep moves: the next takes the rest
     no_undo: int | None = None              # of what goes, how much has no Message-ID for Undo to find it by

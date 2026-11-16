@@ -2,7 +2,7 @@
 a sweep of what's stored as junk may reach. Moving it, verified and audited, is the use case's."""
 from collections import Counter, defaultdict
 from collections.abc import Collection, Iterable
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from mailmind.curation.domain import classifier
 from mailmind.curation.domain.classifier import RuleSets
@@ -12,6 +12,8 @@ from mailmind.kernel.row import Row
 
 TOP_SENDERS = 4
 SWEEP_MAX = 500     # the most of an account's junk one sweep moves: Undo puts each back on its own, and a click waits on it
+LISTED = 5          # how many of a bucket's senders, and of its subjects, a sweep's plan names before it asks
+JUNK_ORDER = (classifier.SPAM, classifier.BLOCKED, classifier.MKT, classifier.NOTIF)    # the junk buckets, as Curate lists them
 
 
 class Tally(TypedDict):
@@ -64,6 +66,29 @@ def within_cap(junk: list[Classified]) -> tuple[list[Classified], bool]:
         return junk, False
     newest = sorted(junk, key=lambda r: int(r["uid"]), reverse=True)[:SWEEP_MAX]
     return sorted(newest, key=lambda r: int(r["uid"])), True
+
+
+def going(junk: Iterable[Classified]) -> list[dict[str, Any]]:
+    """What goes, a junk bucket at a time in JUNK_ORDER, each that holds any: how many, the LISTED senders with the most of
+    it (then by address) and how many each, and its newest LISTED subjects, none twice."""
+    by: defaultdict[str, list[Classified]] = defaultdict(list)
+    for r in junk:
+        by[r["bucket"]].append(r)
+    out: list[dict[str, Any]] = []
+    for bucket in JUNK_ORDER:
+        if not (mail := by.get(bucket)):
+            continue
+        counts = Counter(r["from"] for r in mail)
+        senders = sorted(counts.items(), key=lambda s: (-s[1], s[0]))[:LISTED]
+        subjects: list[str] = []
+        for r in sorted(mail, key=lambda r: int(r["uid"]), reverse=True):
+            if len(subjects) == LISTED:
+                break
+            if r["subject"] not in subjects:
+                subjects.append(r["subject"])
+        out.append({"bucket": bucket, "count": len(mail),
+                    "senders": [{"from_addr": addr, "count": n} for addr, n in senders], "subjects": subjects})
+    return out
 
 
 def stored_targets(live: Iterable[Read], junk_ids: Collection[str], rules: RuleSets) -> tuple[list[Read], int]:
