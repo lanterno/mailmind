@@ -23,7 +23,7 @@ from mailmind.kernel.errors import Refused
 from mailmind.kernel.parsed import is_object
 
 type Density = Literal["comfortable", "cozy", "compact"]
-type Theme = Literal["day", "dusk", "night"]
+type Theme = Literal["auto", "day", "dusk", "night"]   # auto: Night while the system is dark, else by the clock
 type ReadWidth = Literal["narrow", "medium", "wide"]
 type ReadSize = Literal["s", "m", "l", "xl"]
 type ReadFont = Literal["sans", "serif", "mono"]
@@ -46,7 +46,7 @@ DEFAULTS: Mapping[str, Any] = {
     "undo_send_seconds": send_window.DEFAULT,
     "density": "comfortable",
     "high_contrast": False,
-    "theme": "day",
+    "theme": "auto",                       # a fresh install follows the system and the clock; a choice the file holds stands
     "read_width": "medium",
     "read_size": "m",
     "read_font": "sans",
