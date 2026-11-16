@@ -24,6 +24,21 @@ fn a_folder_never_read_or_renumbered_is_read_whole() {
 }
 
 #[test]
+fn a_folder_no_scan_has_begun_is_read_as_a_first_scan_though_it_has_a_watermark() {
+    // A quit part way through a first scan, as before a step stored the watermark and the scan_state at once.
+    let left = plan_folder(Some(7), Some(7), 40, Scan::Never, false, None);
+    assert!(left.whole && !left.reset && !left.read_flags);
+    assert_eq!(left.search(), Search::All);
+    assert!(!left.arrives_in("INBOX"), "what was there is no new mail");
+    // It stores the newest now and leaves the rest to the background, as any first scan does, so it has begun.
+    let [step] = left.steps(uids(1, CHUNK as u32 + 10)).try_into().unwrap();
+    assert_eq!(step.leaves, Some(Scan::Down(11)));
+    assert!(step.leaves.unwrap().begun());
+    // A scan cut to the newest N has begun none of that, and still reads above its watermark.
+    assert!(!plan_folder(Some(7), Some(7), 40, Scan::Cut, false, None).whole);
+}
+
+#[test]
 fn a_folder_read_before_is_read_above_its_watermark() {
     let plan = plan_folder(Some(7), Some(7), 40, Scan::Whole, false, None);
     assert!(!plan.whole && plan.read_flags);
