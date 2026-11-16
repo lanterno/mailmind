@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 use mm_host::{Answer, Event, Home, Host, Subscriber};
 use mm_kernel::events::{Events, Topic};
 use mm_server::environment::{Environment, Settings};
+use mm_server::workers::OLDER_MAIL;
 use mm_server::{App, Seams, Server};
 use serde_json::{Value, json};
 
@@ -386,11 +387,16 @@ fn a_home_that_isnt_there_says_so() {
     assert!(!said.contains(KEY), "an error names no secret");
 }
 
-/// How many rounds the sync job has run, as `/api/debug/jobs` says.
-fn sync_runs(host: &Host) -> i64 {
+/// How many rounds the job has run, as `/api/debug/jobs` says.
+fn runs(host: &Host, name: &str) -> i64 {
     let jobs = json_of(&host.request("GET", "/api/debug/jobs", &[]));
-    let sync = jobs["jobs"].as_array().expect("jobs").iter().find(|job| job["name"] == "sync").cloned();
-    sync.and_then(|job| job["runs"].as_i64()).unwrap_or(0)
+    let job = jobs["jobs"].as_array().expect("jobs").iter().find(|job| job["name"] == name).cloned();
+    job.and_then(|job| job["runs"].as_i64()).unwrap_or(0)
+}
+
+/// How many rounds the sync job has run.
+fn sync_runs(host: &Host) -> i64 {
+    runs(host, "sync")
 }
 
 fn until(what: impl Fn() -> bool) {
@@ -423,4 +429,19 @@ fn a_host_that_only_reads_syncs_nothing_on_a_wake() {
     host.woke();
     std::thread::sleep(Duration::from_millis(100));
     assert_eq!(sync_runs(&host), 0);
+}
+
+#[test]
+fn a_wake_reads_on_a_first_scans_older_mail_now_in_a_host_that_only_reads_too() {
+    for profile in ["full", "read-only"] {
+        let folder = tempfile::tempdir().expect("a home");
+        let mut given = home(folder.path());
+        given.variables.push(("MAILMIND_PROFILE".into(), profile.into()));
+        let host = Host::open(given).expect("the host opens a fictional home");
+        // Its first round comes fifteen seconds after the host opens, and the next not for ten minutes.
+        assert_eq!(runs(&host, OLDER_MAIL), 0, "{profile}");
+        host.woke();
+        until(|| runs(&host, OLDER_MAIL) == 1);
+        host.close();
+    }
 }
