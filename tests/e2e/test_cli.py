@@ -96,6 +96,24 @@ def test_assess_says_ai_is_off_and_tries_nothing(data_dir, anthropic_api, monkey
     assert anthropic_api.requests == []
 
 
+def test_assess_says_triage_is_held_back_on_the_model_it_asks(data_dir, ai, capsys):
+    """Triage asks the provider's small model, so it is triage on that model the breaker holds back, and the command
+    says so rather than summarize nothing without a word."""
+    from fakes.anthropic_api import error
+    from mailmind.assistant.application.governor import TRIP_AFTER
+    from mailmind.assistant.application.ports import ModelError
+    from mailmind.bootstrap import assistant
+    small = assistant.calls.background_label()
+    assert small != assistant.calls.model_label()
+    ai.queue(*[error(400, "invalid_request_error", "bad request")] * TRIP_AFTER)
+    for _ in range(TRIP_AFTER):
+        with pytest.raises(ModelError):
+            assistant.calls.reply_to("Summarize this.", {"type": "object"}, feature="triage", model=small)
+    capsys.readouterr()
+    main(["assess", "10", "1"])
+    assert capsys.readouterr().out == "Triage is held back (breaker), so nothing was summarized.\n"
+
+
 @pytest.mark.parametrize("command", ["status", "inventory", "plan"])
 def test_a_command_over_the_mailboxes_reads_them(world, capsys, command):
     before = world.mark()
