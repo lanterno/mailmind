@@ -257,8 +257,11 @@ struct AccountDraft: Equatable {
     }
 
     /// What `/api/accounts/test` is asked: the form as it stands when it gives a credential; the account as it is
-    /// saved when editing without one; nil, with nothing to test, when adding without one.
+    /// saved when editing without one; nil, with nothing to test, when adding without one. A Proton account logs in with
+    /// the Bridge's password, which only a saved account is tested with: the one edited, and a new one not until it is
+    /// added (`testsOnceAdded`).
     var test: API.TryBody? {
+        if type == .proton { return editing.map { API.TryBody(email: $0) } }
         if let credential {
             let s = servers
             return API.TryBody(draft: API.AccountDraft(credential: credential, email: address, host: s.host, port: s.port,
@@ -267,6 +270,11 @@ struct AccountDraft: Equatable {
                                                        type: .string(type.rawValue)))
         }
         return editing.map { API.TryBody(email: $0) }
+    }
+
+    /// Why Test can't run yet, said where it would: a new Proton account is tested once it is added.
+    var testsOnceAdded: String? {
+        editing == nil && type == .proton ? String(localized: "Add the account, then test it.") : nil
     }
 
     /// Let go of what was typed.

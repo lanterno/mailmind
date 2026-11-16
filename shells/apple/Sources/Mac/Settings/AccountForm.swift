@@ -6,7 +6,8 @@ import SwiftUI
 /// after. A password typed here goes straight to the route and the field is emptied once it is saved. As a new address
 /// rests, the server is asked which preset it takes, and its settings go in the form, or are offered where they fit.
 /// From the first run, the login is tested before the account is saved, and the sheet stays open with what to do when
-/// the test fails.
+/// the test fails. A Proton account logs in with the Bridge's password, which only a saved account is tested with: the
+/// first run adds it, then tests it, and keeps the sheet open with what to do until Done when the test fails.
 struct AccountForm: View {
     let status: AppStatus
     @State var draft: AccountDraft
@@ -18,6 +19,8 @@ struct AccountForm: View {
     @State private var problem = ""
     @State private var saving = false
     @State private var tested: Tested?
+    /// The account added from the first run whose test then failed: the sheet stays open on it until Done.
+    @State private var added: String?
     @Environment(\.meadow) private var meadow
 
     /// How long the address rests before the server is asked which preset it takes.
@@ -65,6 +68,7 @@ struct AccountForm: View {
                                         "Proton accounts log in through Proton Bridge, with the Bridge’s password."))
                                     BridgePasswordView(status: status)
                                     if let link = draft.link { LinkButton(link: link) }
+                                    if added == nil, let later = draft.testsOnceAdded { SettingHelp(later) }
                                 } else {
                                     credential
                                 }
@@ -110,20 +114,26 @@ struct AccountForm: View {
             HStack(spacing: 8) {
                 Button("Test Connection") { Task { await test() } }
                     .meadowButton(small: true)
-                    .disabled(tested == .running || draft.unsupported)
+                    .disabled(tested == .running || draft.unsupported || (added == nil && draft.testsOnceAdded != nil))
                 Spacer()
-                Button("Cancel") {
-                    draft.forgetPassword()
-                    done(nil)
+                if let added {
+                    Button("Done") { finish(added, adding: true) }
+                        .meadowButton(.primary)
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Cancel") {
+                        draft.forgetPassword()
+                        done(nil)
+                    }
+                    .meadowButton()
+                    .keyboardShortcut(.cancelAction)
+                    Button(saving ? (testsFirst ? "Testing…" : "Saving…") : (draft.editing == nil ? "Add Account" : "Save")) {
+                        Task { await save() }
+                    }
+                    .meadowButton(.primary)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(saving || draft.unsupported)
                 }
-                .meadowButton()
-                .keyboardShortcut(.cancelAction)
-                Button(saving ? (testsFirst ? "Testing…" : "Saving…") : (draft.editing == nil ? "Add Account" : "Save")) {
-                    Task { await save() }
-                }
-                .meadowButton(.primary)
-                .keyboardShortcut(.defaultAction)
-                .disabled(saving || draft.unsupported)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -248,7 +258,7 @@ struct AccountForm: View {
 
     private func test() async {
         guard let core = status.core else { return }
-        guard let body = draft.test else {
+        guard let body = added.map({ API.TryBody(email: $0) }) ?? draft.test else {
             tested = .failed(String(localized: "Type the password, then test."))
             return
         }
@@ -272,7 +282,8 @@ struct AccountForm: View {
         let address = draft.address
         let body = draft.body
         // Tested first: a login that doesn't work keeps the sheet open, with the password still typed, to fix. A Proton
-        // account logs in with the Bridge's password, which only a saved account may be tested with.
+        // account logs in with the Bridge's password, which only a saved account may be tested with: it is tested once
+        // added, below.
         if adding, testsFirst, draft.type != .proton, let trial = draft.test {
             tested = .running
             do {
@@ -302,8 +313,28 @@ struct AccountForm: View {
                           : String(localized: "Updated \(StatusWords.short(address))"))
         await status.readAccounts()
         await status.readDigest()
+        // A Proton account from the first run, tested now it is saved: one whose Bridge doesn't let it in keeps the
+        // sheet open with what to do, and a Test to try again, until Done.
+        if adding, testsFirst, draft.type == .proton {
+            tested = .running
+            do {
+                tested = .of(try await SecretPost.post(core, API.Post.AccountsTest.self, API.TryBody(email: address)))
+            } catch {
+                tested = .of(error)
+            }
+            guard tested == .connected else {
+                added = address
+                saving = false
+                return
+            }
+        }
+        finish(address, adding: adding)
+    }
+
+    /// The sheet is done with `address`, saved. A new connection has no mail yet: it is pulled now, not at the next
+    /// sync.
+    private func finish(_ address: String, adding: Bool) {
         done(address)
-        // A new connection has no mail yet: pull it now, not at the next sync.
         if adding { Task { await status.syncNow() } }
     }
 }
