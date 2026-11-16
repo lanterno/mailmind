@@ -79,6 +79,13 @@ public final class Core: Sendable {
         return stream
     }
 
+    /// The Mac woke from sleep, or its network changed: the core opens IDLE's connections afresh and syncs every
+    /// account now. It returns at once, the work going on in the background.
+    public func woke() {
+        let host = host
+        Self.queue.async { host.woke() }
+    }
+
     /// End the streams, stop the background work and wait for the work requests set going. Every request from then
     /// on is answered 503.
     public func close() async {

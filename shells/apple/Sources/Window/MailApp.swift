@@ -56,6 +56,8 @@ final class MailApp {
     #if os(macOS)
     /// The sidebar's places and counts, every place's list, the rows chosen and the verbs on them (Mac/Mailbox).
     @ObservationIgnored private(set) lazy var mailbox = Mailbox(app: self)
+    /// Tells the core of a wake from sleep and of a network that changed.
+    @ObservationIgnored private var waking: Waking?
     #endif
 
     /// `home` picks the data folder and `open` opens a core over it: this process's and the host's, unless a test
@@ -80,6 +82,11 @@ final class MailApp {
             stage = .open
             openList()
             #if os(macOS)
+            // A wake or a network that changed: IDLE's connections may be dead without a word, so the core opens them
+            // afresh and syncs now.
+            let waking = Waking { [weak core] in core?.woke() }
+            waking.start()
+            self.waking = waking
             await mailbox.refresh()
             #endif
             listen(to: core)
