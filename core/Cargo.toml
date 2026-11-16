@@ -106,3 +106,9 @@ debug = "line-tables-only"
 opt-level = "s"
 lto = "fat"
 codegen-units = 1
+# Line tables, so a crash report's frames name the core's file and line once symbolicated (docs/releasing.md,
+# "Symbols"). They stay beside what ships, never in it: a Mac binary never holds DWARF, and Xcode's dsymutil gathers
+# the core's from its library into MailMind.app.dSYM as it links; `packed` puts a program's in its own .dSYM (a .dwp
+# elsewhere); wasm-bindgen leaves them out of the web's wasm.
+debug = "line-tables-only"
+split-debuginfo = "packed"
