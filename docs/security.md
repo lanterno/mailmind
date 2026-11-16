@@ -57,11 +57,18 @@ item and what the config named out. `POST /api/accounts/bridge-password`
 out. Each is a POST behind the perimeter like every other, and each answer, the GETs' too, says only which providers
 have a key (`{"ok": true, "kept": [...]}`) or whether the Bridge's is set (`{"ok": true, "set": …}`): never the secret,
 its length or any part of it. A key goes to the provider it was kept for and nowhere else, never into a log line or an
-error; a URL a person gives for an AI service is theirs, so it isn't logged either. A
-secret the Keychain can't hold is refused in its words. Keeping one writes nothing to a mail server, so a read-only
-process keeps it too. The Bridge's password is found in the first of `MAILMIND_PROTON_BRIDGE_PASS`, 1Password's
-`op://Private/<MAILMIND_PROTON_OP_ITEM>/password`, that Keychain item and, on the Python app only, the file below; it is
-kept for the process until Settings keeps another or takes it out, when each account on the Bridge hears it changed.
+error: what any provider's service says in an error, Claude's included, has the key taken out of the whole of it before
+it is cut to 200 characters. A key is sent only if every character in it is printable ASCII without a space (`!` to
+`~`): any other, wherever it came from, a kept one too, is taken as refused and never sent, its error
+`<provider> API 401: the key was refused` ("Claude API 401: the key was refused" for Claude's) and no more. One with
+whitespace or a control character inside it is refused where it is kept as well. On the Chat Completions wire a key the
+service refuses (a 401 or 403, or a 400 saying it isn't valid, taken as a 401) gets those words too, with its status
+and none of what the service said; Claude's 401 keeps what the API said, the key taken out. A URL a person gives for
+an AI service is theirs, so it isn't logged either. A secret the Keychain can't hold is refused in its words. Keeping
+one writes nothing to a mail server, so a read-only process keeps it too. The Bridge's password is found in the first
+of `MAILMIND_PROTON_BRIDGE_PASS`, 1Password's `op://Private/<MAILMIND_PROTON_OP_ITEM>/password`, that Keychain item
+and, on the Python app only, the file below; it is kept for the process until Settings keeps another or takes it out,
+when each account on the Bridge hears it changed.
 
 A 1Password credential, `{"op": "op://Vault/Item/Field"}` or a list of references tried in turn, is read with
 `op read <reference>`: the reference alone goes on the command line, since it names an item and holds no secret, and

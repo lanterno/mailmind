@@ -31,7 +31,8 @@ answers what stands, and setting it writes it to the file. `PREFERENCE_DEFAULTS`
 model afresh when it changes: `AnthropicModel`, `ChatModel`, or `DisabledModel` when AI is off, for the first of
 `turned-off`, `no-key`, `no-url` (a compatible service with none) or `no-model` (a model on this Mac or a compatible
 service with none chosen; neither needs a key, so neither is ever `no-key`). Off, `assistant.calls.engine()` is `"none"`, and every call, a background job's too, raises `AIOff`
-(from `application.ports`, in words that say why) before anything is sent. `tests/contract/test_ai_contract.py` and
+(from `application.ports`, in words that say why) before anything is sent. Turned off, the engine looks up no key at
+all: no Keychain read, no `op` run. `tests/contract/test_ai_contract.py` and
 `tests/contract/test_openai_chat_contract.py` hold the two adapters to the contract against the fake APIs.
 
 Only `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and `adapters.wire` holds what it sends and
@@ -57,14 +58,18 @@ On this wire, on both servers, that limit is a deadline for the whole attempt, c
 whole answer, and an answer is read to 32 MiB at most.
 
 Each provider's key is `assistant.config_key(provider)`: the top-level `"<provider>_api_key"` in
-`mailmind.config.json`, any credential style but the Bridge password. `uv run python -m mailmind ai key
-[--provider P]`, or `POST /api/ai/key` `{provider, key}` from Settings, keeps it in the login Keychain as
-`<provider>-api-key` and names that item there; `POST /api/ai/key/clear` `{provider}` takes both out. Each answers
-`{"ok": true, "kept": [...]}`, the providers whose key the file names, as `GET /api/ai/key` does. Only Claude's
-falls back to `ANTHROPIC_API_KEY`; a config key that won't resolve means no key, never a fall-through to the
-environment's. A model on this Mac and a compatible service are sent a key only where one is kept (a model on this
-Mac's is `local_api_key`, in the Keychain as `local-api-key`). `uv run python -m mailmind ai on|off` turns AI mode on or
-off as Settings does.
+`mailmind.config.json`, any credential style but the Bridge password, which there means no key. `uv run python -m
+mailmind ai key [--provider P]`, or `POST /api/ai/key` `{provider, key}` from Settings, keeps it in the login Keychain
+as `<provider>-api-key` and names that item there; `POST /api/ai/key/clear` `{provider}` takes both out. Each answers
+`{"ok": true, "kept": [...]}`, the providers whose key the file names, as `GET /api/ai/key` does. `ai key` and
+`POST /api/ai/key` trim a key's ends and refuse one with whitespace or a control character inside it: "An API key
+can't hold spaces or line breaks.", a 400 from the route; any other key they keep. A key is sent only if every
+character in it is printable ASCII without a space (`!` to `~`). Any other key, wherever it came from, a kept one too,
+is a refused key: never sent, its error `<provider> API 401: the key was refused` ("Claude API 401: the key was refused")
+with status 401, and its text is in no error. Only Claude's falls back to `ANTHROPIC_API_KEY`; a config key that won't
+resolve means no key, never a fall-through to the environment's. A model on this Mac and a compatible service are
+sent a key only where one is kept (a model on this Mac's is `local_api_key`, in the Keychain as `local-api-key`).
+`uv run python -m mailmind ai on|off` turns AI mode on or off as Settings does.
 
 `GET /api/ai/models?provider=P` (`application.catalog`) lists the models a provider offers, for Settings: at the URL
 chosen while P is the provider in force, else P's own, with the key kept for it. It answers `{ok, models, default}`,
@@ -100,7 +105,8 @@ that change raise the version (all of them, for `SYSTEM`), and `tests/unit/assis
 `maxLength`) and closes every object, so callers must keep clamping what they read. The
 adapter sends `fallbacks: "default"` with its beta on the models that accept it, reads a
 refusal as an empty reply, and retries 408/409/429/5xx twice. It sends the key as
-`Authorization: Bearer`; the fake API takes that or `x-api-key`, as the real one does.
+`Authorization: Bearer`; the fake API takes that or `x-api-key`, as the real one does. An error carries what the API
+said with the key taken out of the whole of it before it is cut to 200 characters, as on the Chat Completions wire.
 
 One contract: a failed call raises `RuntimeError` (the caller retries
 later, nothing is cached); a successful but unusable reply returns `{}` (the caller
