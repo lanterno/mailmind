@@ -201,7 +201,8 @@ enum ReadOnlyRun {
     }
 }
 
-/// Backup & Export: the database as a snapshot, or the mail as a zip any mail program reads (the page's `Backup`).
+/// Backup & Export: what is kept here and the room it takes on this Mac, then the database as a snapshot, or the mail
+/// as a zip any mail program reads (the page's `Backup`).
 struct BackupSection: View {
     let status: AppStatus
     @State private var plan: API.ExportPlan?
@@ -215,6 +216,11 @@ struct BackupSection: View {
                  ?? String(localized: "Counting…"))
                 .font(.meadow(.ui, 13))
                 .foregroundStyle(meadow.ink2)
+            SettingLine(String(localized: "Space on this Mac")) {
+                Text(plan.map { Self.size($0.databaseBytes) } ?? "…")
+                    .font(.meadow(.ui, 13))
+                    .foregroundStyle(meadow.ink2)
+            }
             SettingLine(String(localized: "Backup")) {
                 Button("Back Up…") { Task { await save(backup: true) } }
                     .meadowButton(small: true)
@@ -239,6 +245,11 @@ struct BackupSection: View {
                 """))
         }
         .task { plan = try? await status.core?.get(API.Get.ExportPlan.self) }
+    }
+
+    /// The room the mail kept here takes on this Mac, said as Finder says a file's size.
+    static func size(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     /// Ask where, then write what the route answers there.
