@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use mm_assistant::ports::{FeatureDay, UsageDays};
+use mm_assistant::ports::{FeatureDay, Spend, Usage, UsageDays, UsageLedger};
 use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
 use mm_store::{Database, DbKey};
 
@@ -74,4 +74,61 @@ fn each_day_from_the_one_asked_adds_up_its_features_newest_day_first() {
     );
     assert_eq!(database.days("2026-11-04").unwrap(), vec![]);
     assert_eq!(database.days("2026-10-30").unwrap().last(), Some(&day("2026-10-30", "thread", 5, 15000)));
+}
+
+fn spend(feature: &str, tokens: i64, cost_micros: i64) -> Spend {
+    Spend {
+        day: "2026-11-04".into(),
+        feature: feature.into(),
+        model: "gpt-6.1-sol".into(),
+        served: "gpt-6.1-sol".into(),
+        outcome: "ok",
+        usage: Usage {
+            input_tokens: tokens,
+            output_tokens: tokens,
+            cache_write_tokens: tokens,
+            cache_read_tokens: tokens,
+        },
+        cost_micros,
+        ts: 2,
+        calls: 1,
+    }
+}
+
+#[test]
+fn a_call_added_past_the_most_a_row_holds_is_held_there_a_whole_number_still_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path());
+    let most = i64::MAX;
+    for (tokens, cost) in [(most, most), (1, 1), (most, most)] {
+        database.record(&spend("triage", tokens, cost)).unwrap();
+    }
+    let row = database
+        .read(|c| {
+            c.query_row(
+                "SELECT calls, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, cost_micros, \
+                 typeof(input_tokens) || typeof(output_tokens) || typeof(cache_write_tokens) \
+                 || typeof(cache_read_tokens) || typeof(cost_micros) FROM ai_usage WHERE day = '2026-11-04'",
+                [],
+                |r| Ok(((0..6).map(|i| r.get(i)).collect::<rusqlite::Result<Vec<i64>>>()?, r.get::<_, String>(6)?)),
+            )
+        })
+        .unwrap();
+    assert_eq!(row, (vec![3, most, most, most, most, most], "integer".repeat(5)));
+    // The day's spending and its report read it, so the limit still holds.
+    assert_eq!(database.spent("2026-11-04"), Ok(most));
+    assert_eq!(database.days("2026-11-04").unwrap(), vec![day("2026-11-04", "triage", 3, most)]);
+    // Below the most, a sum is the sum.
+    database.record(&spend("ask", most - 5, most - 5)).unwrap();
+    database.record(&spend("ask", 4, 4)).unwrap();
+    assert_eq!(database.days("2026-11-04").unwrap()[0], day("2026-11-04", "ask", 2, most - 1));
+    // Two features, and one of them under two models, each near or at the most: the day and each feature are held
+    // there too, not refused as SQLite's SUM refuses whole numbers past it.
+    let other = Spend { model: "gpt-6.1-luna".into(), ..spend("triage", 1, most) };
+    database.record(&other).unwrap();
+    assert_eq!(database.spent("2026-11-04"), Ok(most));
+    assert_eq!(
+        database.days("2026-11-04").unwrap(),
+        vec![day("2026-11-04", "ask", 2, most - 1), day("2026-11-04", "triage", 4, most)]
+    );
 }

@@ -107,6 +107,20 @@ fn an_unknown_model_on_this_machine_costs_nothing() {
 }
 
 #[test]
+fn an_absurd_count_of_tokens_costs_the_most_a_cost_holds_and_never_wraps_round() {
+    let most = i64::MAX;
+    // Priced at the dearest of the table: far past what an i64 holds, worked out whole.
+    assert_eq!(cost_micros("llama3.2:3b", "", most, 5, 0, 0), most);
+    assert_eq!(cost_micros_on(false, "gpt-6.1-sol", "", (most, most, most, most)), most);
+    // Just past where i64 arithmetic in nano-dollars would have wrapped below nought.
+    let wrapped = most / 180_000 + 1;
+    assert_eq!(cost_micros("gpt-5.5-pro", "", 0, wrapped, 0, 0), wrapped * 180);
+    // Half of it through a batch, rounded up, with nothing wrapping either.
+    assert_eq!(mm_assistant::pricing::batch_micros(most), most / 2 + 1);
+    assert_eq!(mm_assistant::pricing::batch_micros(i64::MIN), i64::MIN / 2);
+}
+
+#[test]
 fn a_cache_write_costs_a_quarter_more_than_input_and_only_anthropic_reports_one() {
     assert_eq!(cost_micros("claude-opus-5-5", "", 0, 0, 1_000_000, 0), 5_000_000);
     // A quarter more that isn't whole rounds a half to even, as Python's `round` does.

@@ -475,6 +475,25 @@ fn a_request_with_no_answer_costs_nothing_but_is_counted_and_a_failed_send_is_a_
 }
 
 #[test]
+fn answers_whose_usage_is_absurd_are_counted_together_at_the_most_a_cost_holds() {
+    let w = world(0, true, None);
+    let gateway = w.calls.gateway();
+    let id = gateway
+        .submit_batch(&[("1".into(), "x".into()), ("2".into(), "y".into())], None, "triage-batch", None, None)
+        .expect("sent");
+    let absurd = |id: &str| BatchResult {
+        custom_id: id.into(),
+        reply: Some(reply("{}", "end_turn", usage(i64::MAX, i64::MAX))),
+        permanent: false,
+    };
+    lock(&w.model.results).extend([("1".to_owned(), absurd("1")), ("2".to_owned(), absurd("2"))]);
+    w.model.end_batch();
+    gateway.batch_results(&id, "triage-batch", None).expect("its answers");
+    assert_eq!(w.counted("triage-batch"), [(DEFAULT.to_owned(), "ok", 2, i64::MAX)]);
+    assert_eq!(lock(&w.ledger.spends)[0].usage, usage(i64::MAX, i64::MAX));
+}
+
+#[test]
 fn requests_a_batch_keeps_rejecting_trip_the_breaker_for_batches_alone() {
     let w = world(0, true, None);
     let gateway = w.calls.gateway();

@@ -164,6 +164,23 @@ fn the_snapshot_shows_the_day_and_nothing_going_on() {
 }
 
 #[test]
+fn a_days_total_and_the_room_left_are_held_however_much_the_ledger_holds() {
+    let most = i64::MAX;
+    let (report, _, _) =
+        reporting(vec![row("2026-11-02", "ask", 1, 4_000), row("2026-11-02", "triage", most, most)], Arc::new(Utc));
+    let [today] = report.days(1).expect("a report").try_into().expect("one day");
+    assert_eq!((today["calls"].clone(), today["cost_micros"].clone()), (json!(most), json!(most)));
+    assert_eq!(today["features"]["triage"], json!({"calls": most, "cost_micros": most}));
+    // Spent past the limit, or booked past it, leaves no room for background work: never a wrap round to plenty.
+    for (spent, reserved) in [(most, most), (most, 1), (0, most), (-1, most), (14_000_000, most)] {
+        let (governor, _) = governor(Day { spent: Ok(spent), reserved: Ok(reserved) });
+        assert_eq!(governor.room(), 0, "{spent} {reserved}");
+    }
+    let (governor, _) = governor(Day { spent: Ok(4_000_000), reserved: Ok(1_000_000) });
+    assert_eq!(governor.room(), 10_000_000);
+}
+
+#[test]
 fn a_ledger_that_cant_be_read_shows_as_no_spending_known() {
     let (governor, _) = governor(Day { spent: Err(Fault::new("Storage")), reserved: Err(Fault::new("Storage")) });
     let snapshot = governor.snapshot();
