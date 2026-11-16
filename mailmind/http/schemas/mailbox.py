@@ -344,6 +344,8 @@ class DigestStats(Answer):
 class AccountSync(Answer):
     health: str
     msg: str
+    done: int | None = None                 # while the Inbox's first scan still reads older mail: how many of
+    total: int | None = None                # the Inbox's messages it has read, of how many
 
 
 class SyncState(Answer):
