@@ -1,7 +1,8 @@
 //! Sweeping an inbox (`mailmind.curation.application.sweep`, `domain.live` and `mailbox.application.bulk_moves`):
 //! classify it as the server shows it now, then move its junk to Trash, verified and audited. Mail is read live before
 //! anything moves, so a stored row can't send the wrong message anywhere. Starred and unread mail stays where it is,
-//! whatever it is. Each account's work is on its own gate.
+//! whatever it is. What a sweep moves goes on the undo stack under one group, so one Undo puts it all back from Trash,
+//! each message found there by its Message-ID. Each account's work is on its own gate.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use mm_kernel::seams::Clock;
 use serde_json::{Map, Value, json};
 
 use crate::classifier::{self, Bucket};
-use crate::cleanup_ports::{Audited, LiveError, LiveInboxes, LiveSession, SweepTrail, SweptRows};
+use crate::cleanup_ports::{Audited, Ids, LiveError, LiveInboxes, LiveSession, SweepTrail, SweptRows};
 use crate::ports::{Filing, RuleBook};
 use crate::rules::RuleSets;
 use crate::sweep_plan::tally;
@@ -26,6 +27,8 @@ const HEADER_BATCH: usize = 300;
 pub const MOVE_BATCH: usize = 200;
 /// What a read-only process answers a sweep that would move mail: it never runs.
 pub const READ_ONLY: Fault = Fault::new("ReadOnlyError");
+/// What Undo says it takes back.
+const UNDO_LABEL: &str = "Swept junk";
 
 /// A message of the INBOX as the server shows it now, with what the classifier wants of its headers. Either List
 /// header says it's bulk.
@@ -154,6 +157,14 @@ fn failed(account: &str, class: &str) -> Value {
     json!({"account": account, "error": class, "planned": 0})
 }
 
+/// What puts a swept message back: a move from Trash to the INBOX, of the message found there by its Message-ID, as
+/// a person's own move is undone.
+fn undo_entry(account: &str, trash: &str, r: &Classified) -> Value {
+    let who = if r.read.name.is_empty() { &r.read.from } else { &r.read.name };
+    json!({"kind": "move", "account": account, "src_folder": "INBOX", "dest_folder": trash,
+           "message_id": r.read.mid, "label": UNDO_LABEL, "subject": r.read.subject, "who": who})
+}
+
 /// What the parts of a sweep are.
 #[derive(Debug)]
 pub struct SweepsParts {
@@ -162,6 +173,8 @@ pub struct SweepsParts {
     pub audit: Arc<dyn SweepTrail>,
     pub rows: Arc<dyn SweptRows>,
     pub filing: Arc<dyn Filing>,
+    /// Where an undo group's name comes from, when the request names none.
+    pub ids: Arc<dyn Ids>,
     pub clock: Arc<dyn Clock>,
     /// False in a read-only process, which moves nothing.
     pub writes_allowed: bool,
@@ -174,25 +187,29 @@ pub struct Sweeps {
     audit: Arc<dyn SweepTrail>,
     rows: Arc<dyn SweptRows>,
     filing: Arc<dyn Filing>,
+    ids: Arc<dyn Ids>,
     clock: Arc<dyn Clock>,
     writes_allowed: bool,
 }
 
+/// What one account's sweep came to: its answer, and whether it put anything on the undo stack.
+type Swept = (Value, bool);
+
 impl Sweeps {
     pub fn new(parts: SweepsParts) -> Sweeps {
-        let SweepsParts { rules, boxes, audit, rows, filing, clock, writes_allowed } = parts;
-        Sweeps { rules, boxes, audit, rows, filing, clock, writes_allowed }
+        let SweepsParts { rules, boxes, audit, rows, filing, ids, clock, writes_allowed } = parts;
+        Sweeps { rules, boxes, audit, rows, filing, ids, clock, writes_allowed }
     }
 
     /// A dry run's plan, or a verified move of an account's junk buckets to Trash, with the stored rows of what moved
-    /// forgotten. What went wrong with the account is in its answer, as the class alone; a sweep trail that can't be
-    /// written fails it before anything moves.
-    fn sweep(&self, account: &str, trash: &str, dry: bool, rules: &RuleSets) -> Result<Value, Fault> {
+    /// forgotten and a way back for each under `group`. What went wrong with the account is in its answer, as the
+    /// class alone; a sweep trail that can't be written fails it before anything moves.
+    fn sweep(&self, account: &str, trash: &str, dry: bool, rules: &RuleSets, group: &str) -> Result<Swept, Fault> {
         let mut s = match self.boxes.open(account) {
             Ok(s) => s,
             Err(class) => {
                 log::warning(TAG, "an account failed", &[(Field::Why, class)], None);
-                return Ok(failed(account, class));
+                return Ok((failed(account, class), false));
             }
         };
         let read = match fetch_headers(&mut *s) {
@@ -200,7 +217,7 @@ impl Sweeps {
             Err(e) => {
                 log::warning(TAG, "an account failed", &[(Field::Why, e.class())], None);
                 s.close(matches!(e, LiveError::Lost(_)));
-                return Ok(failed(account, e.class()));
+                return Ok((failed(account, e.class()), false));
             }
         };
         let rows = classified(read, rules);
@@ -215,12 +232,14 @@ impl Sweeps {
         out.insert("by_bucket".into(), plan.get("by_bucket").cloned().unwrap_or_else(|| json!({})));
         out.insert("senders".into(), json!(senders.len()));
         out.insert("held_back".into(), json!(held.len()));
+        // Undo finds a message in Trash by its Message-ID: one with none goes, but can't come back.
+        out.insert("no_undo".into(), json!(junk.iter().filter(|r| r.read.mid.is_empty()).count()));
         out.insert("moved".into(), json!(0));
         out.insert("stragglers".into(), json!([]));
         out.insert("error".into(), Value::Null);
         if dry || junk.is_empty() {
             s.close(false);
-            return Ok(Value::Object(out));
+            return Ok((Value::Object(out), false));
         }
         let audited: Vec<Audited> = junk
             .iter()
@@ -244,21 +263,47 @@ impl Sweeps {
                 log::warning(TAG, "an account failed", &[(Field::Why, e.class())], None);
                 s.close(matches!(e, LiveError::Lost(_)));
                 out.insert("error".into(), json!(e.class()));
-                return Ok(Value::Object(out));
+                // Some of it may have gone before the server went: a way back for all of it, and Undo brings back
+                // what it finds in Trash.
+                let pushed = self.undo_push(account, trash, &junk, &[], group)?;
+                return Ok((Value::Object(out), pushed));
             }
         };
         s.close(false);
         out.insert("moved".into(), json!(moved));
         out.insert("stragglers".into(), json!(stragglers));
+        let pushed = self.undo_push(account, trash, &junk, &stragglers, group)?;
         // Swept mail isn't a ghost for the next reconcile to find.
         let gone: Vec<(String, String)> = junk.iter().map(|r| (r.read.uid.clone(), r.read.mid.clone())).collect();
         self.rows.forget_moved(account, &gone, &stragglers)?;
-        Ok(Value::Object(out))
+        Ok((Value::Object(out), pushed))
+    }
+
+    /// A way back for each of `junk` that went to Trash, all of them under `group` at one write: none for a straggler,
+    /// still in the INBOX, or a message with no Message-ID to find it by. Whether there was any.
+    fn undo_push(
+        &self,
+        account: &str,
+        trash: &str,
+        junk: &[&Classified],
+        stragglers: &[String],
+        group: &str,
+    ) -> Result<bool, Fault> {
+        let back: Vec<Value> = junk
+            .iter()
+            .filter(|r| !r.read.mid.is_empty() && !stragglers.contains(&r.read.uid))
+            .map(|r| undo_entry(account, trash, r))
+            .collect();
+        if !back.is_empty() {
+            self.filing.undo_push_many(&back, group)?;
+        }
+        Ok(!back.is_empty())
     }
 
     /// `POST /api/sweep`: a sweep a person asked for, of the account named or of every one (`all`, or none named), each
-    /// on its own account's gate alone: one account's slow server holds up only its own turn.
-    pub fn run(&self, account: Option<&str>, dry_run: bool) -> Result<Value, Failure> {
+    /// on its own account's gate alone: one account's slow server holds up only its own turn. What it moves, in every
+    /// account, goes under one undo group, the request's or one of its own, which the answer names.
+    pub fn run(&self, account: Option<&str>, dry_run: bool, undo_group: Option<&str>) -> Result<Value, Failure> {
         if !dry_run && !self.writes_allowed {
             // It moves mail, and its moves can't wait in a queue.
             return Err(READ_ONLY.into());
@@ -271,15 +316,24 @@ impl Sweeps {
             None => accounts,
         };
         let rules = self.rules.load()?.sets();
+        let group = match undo_group {
+            Some(group) if !group.is_empty() => group.to_owned(),
+            _ => format!("sweep:{}", self.ids.hex(16)),
+        };
         let mut results = Vec::with_capacity(named.len());
+        let mut pushed = false;
         for each in &named {
-            let mut job = || self.sweep(&each.email, &each.trash, dry_run, &rules);
+            let mut job = || {
+                let (answer, went) = self.sweep(&each.email, &each.trash, dry_run, &rules, &group)?;
+                pushed |= went;
+                Ok(answer)
+            };
             results.push(self.boxes.on_gate(&each.email, &mut job)?);
         }
         if !dry_run {
             self.filing.stats_changed();
         }
-        Ok(json!({"ok": true, "dry_run": dry_run, "results": results,
+        Ok(json!({"ok": true, "dry_run": dry_run, "results": results, "undo_group": pushed.then_some(group),
                   "generated": mm_kernel::when::iso(self.clock.now())}))
     }
 }

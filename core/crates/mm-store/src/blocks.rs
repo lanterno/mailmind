@@ -78,6 +78,35 @@ pub fn push_undo(
     Ok(())
 }
 
+/// Put `entries` on the undo stack as `group`'s children at one write (`platform.undo.push_many`): what `push_undo`
+/// of each in turn leaves, the group's entry written once rather than once a child.
+pub fn push_undo_many(
+    c: &Connection,
+    entries: &[Value],
+    group: &str,
+    now: i64,
+    iso: impl Fn(i64) -> String,
+) -> rusqlite::Result<()> {
+    let Some((first, rest)) = entries.split_first() else { return Ok(()) };
+    push_undo(c, first, Some(group), now, &iso)?;
+    if rest.is_empty() || group.is_empty() {
+        for entry in rest {
+            push_undo(c, entry, Some(group), now, &iso)?;
+        }
+        return Ok(());
+    }
+    let (id, held): (i64, String) =
+        c.query_row("SELECT id, entry FROM undo_entries WHERE grp=? ORDER BY id DESC LIMIT 1", [group], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })?;
+    let mut held: Value = serde_json::from_str(&held).unwrap_or(Value::Null);
+    if let Some(children) = held.get_mut("children").and_then(Value::as_array_mut) {
+        children.extend(rest.iter().cloned());
+    }
+    c.execute("UPDATE undo_entries SET entry=? WHERE id=?", rusqlite::params![held.to_string(), id])?;
+    Ok(())
+}
+
 /// The undo stack, oldest first, none older than a day (`platform.undo.entries`).
 pub fn undo_entries(c: &Connection, oldest_kept_iso: &str) -> rusqlite::Result<Vec<Value>> {
     c.prepare_cached("SELECT entry FROM undo_entries WHERE created_at >= ? ORDER BY id")?

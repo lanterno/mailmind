@@ -361,7 +361,7 @@ impl Cleanups {
                 filing: filing.clone(),
                 audit: store.clone(),
                 tokens: Arc::new(RunTokens { secret }),
-                ids,
+                ids: ids.clone(),
                 clock: clock.clone(),
             }),
             sweeps: Sweeps::new(SweepsParts {
@@ -370,6 +370,7 @@ impl Cleanups {
                 audit: store.clone(),
                 rows: store,
                 filing,
+                ids,
                 clock,
                 writes_allowed: !read_only,
             }),

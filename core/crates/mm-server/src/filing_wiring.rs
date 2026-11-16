@@ -64,6 +64,10 @@ impl mm_curation::ports::Filing for CurationFiling {
         self.store.push_undo(entry, group)
     }
 
+    fn undo_push_many(&self, entries: &[Value], group: &str) -> Result<(), Fault> {
+        self.store.push_undo_many(entries, group)
+    }
+
     fn stats_changed(&self) {
         self.stats.invalidate();
     }

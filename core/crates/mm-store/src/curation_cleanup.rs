@@ -59,6 +59,14 @@ impl CurationStore {
         let iso = |s: i64| mm_kernel::when::iso(Moment::from_micros(now.micros() + (s - seconds) * 1_000_000));
         self.db.write(|c| blocks::push_undo(c, entry, Some(group), seconds, iso))
     }
+
+    /// Put `entries` on the undo stack as `group`'s children, at one write: a sweep's reversals.
+    pub fn push_undo_many(&self, entries: &[Value], group: &str) -> Result<(), Fault> {
+        let now = self.clock.now();
+        let seconds = now.whole_seconds();
+        let iso = |s: i64| mm_kernel::when::iso(Moment::from_micros(now.micros() + (s - seconds) * 1_000_000));
+        self.db.write(|c| blocks::push_undo_many(c, entries, group, seconds, iso))
+    }
 }
 
 impl CleanupMail for CurationStore {

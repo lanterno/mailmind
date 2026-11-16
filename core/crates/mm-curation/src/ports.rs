@@ -94,6 +94,10 @@ pub trait Filing: Send + Sync + fmt::Debug {
     fn trash_many(&self, rows: &[NamedCopy], group: &str) -> Result<Value, Failure>;
     /// Put `entry` on the undo stack under `group`.
     fn undo_push(&self, entry: &Value, group: &str) -> Result<(), Fault>;
+    /// Put `entries` on the undo stack under `group`, as `undo_push` of each in turn would.
+    fn undo_push_many(&self, entries: &[Value], group: &str) -> Result<(), Fault> {
+        entries.iter().try_for_each(|entry| self.undo_push(entry, group))
+    }
     /// What is stored was classified again: the counts the page shows have moved.
     fn stats_changed(&self);
     /// `moved` messages left the account's INBOX on its server behind the store's back: the counts and the rail move,

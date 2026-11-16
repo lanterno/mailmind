@@ -148,14 +148,22 @@ async fn cleanup_batch(State(app): State<Arc<App>>, request: Request<Body>) -> R
     .await
 }
 
-/// A sweep of the account named, or of every one: a dry run's plan, or its junk moved to Trash.
+/// A sweep of the account named, or of every one: a dry run's plan, or its junk moved to Trash under one undo group.
 async fn sweep(State(app): State<Arc<App>>, request: Request<Body>) -> Response<Body> {
     posted(
         app,
         request,
         Worded::RequestFailed,
-        |fields| Ok((fields.text("account")?.map(str::to_owned), fields.flag("dry_run")? == Some(true))),
-        |app, (account, dry_run)| app.cleanups.sweeps.run(Some(account.as_deref().unwrap_or("all")), dry_run),
+        |fields| {
+            Ok((
+                fields.text("account")?.map(str::to_owned),
+                fields.flag("dry_run")? == Some(true),
+                fields.text("undo_group")?.map(str::to_owned),
+            ))
+        },
+        |app, (account, dry_run, group)| {
+            app.cleanups.sweeps.run(Some(account.as_deref().unwrap_or("all")), dry_run, group.as_deref())
+        },
     )
     .await
 }
