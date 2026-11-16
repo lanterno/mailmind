@@ -95,7 +95,24 @@ final class MailApp {
             #endif
             listen(to: core)
         } catch {
-            stage = .failed((error as? Problem)?.description ?? String(describing: error))
+            stage = .failed(Self.words(error))
+        }
+    }
+
+    /// Open again after a failure, as Start Fresh does once the database has moved aside.
+    func startAgain() async {
+        guard case .failed = stage else { return }
+        stage = .opening
+        await start()
+    }
+
+    /// What a person is told of a core that didn't open: the core's own words, never a Swift type's name.
+    static func words(_ error: any Error) -> String {
+        switch error {
+        case HostProblem.NotOpened(let why): why
+        case let problem as Problem: problem.description
+        case let named as NoHomeNamed: named.description
+        default: error.localizedDescription
         }
     }
 

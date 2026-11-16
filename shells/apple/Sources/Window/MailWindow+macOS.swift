@@ -30,8 +30,8 @@ struct MailWindow: View {
             ProgressView("Opening MailMind")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let why):
-            ContentUnavailableView("MailMind didn't open", systemImage: "exclamationmark.triangle",
-                                   description: Text(why))
+            // Its words can be copied, and it offers a way on: the details, the folder, or a fresh start.
+            LaunchFailure(why: why, folder: app.folder) { await app.startAgain() }
         case .open:
             // The rail, the list and the top bar are the mailbox's (Mac/Mailbox); the reader and writing are
             // Mac/Reader's and Mac/Compose's.
