@@ -286,10 +286,11 @@ or for a switch you turned on in Settings › AI.
   Each paid provider's key card says it is billed per use by that provider, separately from any
   ChatGPT or Claude subscription, and where to add credit. Settings says what AI mode sends before it
   is on, and so do Help and the Mac app's first run. With AI mode on and no key, the brief says
-  AI is off calmly and the composer drops Draft and Rewrite. The brief's card, and the sync
-  menu with AI on, say where message text goes: to the provider chosen (Anthropic, OpenAI, Google or
-  the service named) only when it is summarized, briefed, drafted or asked about, and nowhere off this
-  Mac with a model on this Mac or a service at a URL on it.
+  AI is off calmly and the composer drops Draft and Rewrite. The brief's card says what AI mode sends
+  as Settings does, and the sync menu with AI on says it in short: each new message's sender, subject
+  and opening text go to the provider chosen (Anthropic, OpenAI, Google or the service named)
+  automatically, more goes when you ask for something, and attachments never leave this Mac; with a
+  model on this Mac or a service at a URL on it, nothing does.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
   …) at the provider's list prices. The sync menu shows what today cost so far against the
   daily limit, and `uv run python -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
