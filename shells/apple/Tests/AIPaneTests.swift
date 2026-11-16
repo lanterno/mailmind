@@ -62,8 +62,8 @@ final class AIChoicesTests: XCTestCase {
         XCTAssertEqual(AIChoices.parts(aiMode: true, provider: .compatible),
                        [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead])
         XCTAssertEqual(AIChoices.parts(aiMode: true, provider: .local),
-                       [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead],
-                       "a model on this Mac takes a key too, if its server asks for one")
+                       [.mode, .connection, .found, .model, .key, .standing, .spending, .writtenAhead],
+                       "what runs on this Mac first, and the key, which only some servers ask for, after the model")
     }
 
     func testChoosingAProviderSendsItAlone() {
@@ -159,6 +159,80 @@ final class AIChoicesTests: XCTestCase {
         XCTAssertEqual(AIChoices.url(typed: "http://localhost:9999/v1", provider: .local), "http://localhost:9999/v1")
         XCTAssertEqual(AIChoices.url(typed: "https://ai.example.test/v1\n", provider: .compatible),
                        "https://ai.example.test/v1")
+    }
+}
+
+/// Finding a model on this Mac (#49): what looking came to, what the card says of it, and what choosing a model a
+/// server listed sends.
+@MainActor
+final class LocalFinderTests: XCTestCase {
+    static let ollama = API.LocalServer(models: ["llama-fictional", "qwen-fictional"], name: "Ollama",
+                                        url: "http://127.0.0.1:11434/v1")
+    static let studio = API.LocalServer(models: ["mistral-fictional"], name: "LM Studio", url: "http://127.0.0.1:1234/v1")
+
+    func testFoundSeveral() async {
+        let look = await AIChoices.look { API.LocalServers(ok: true, servers: [Self.ollama, Self.studio]) }
+        XCTAssertEqual(look, .found([Self.ollama, Self.studio]), "in the core's order")
+        XCTAssertNil(AIChoices.lookLine(look), "the card lists them, and says nothing over them")
+    }
+
+    func testFoundNone() async {
+        let look = await AIChoices.look { API.LocalServers(ok: true, servers: []) }
+        XCTAssertEqual(look, .found([]))
+        XCTAssertEqual(AIChoices.lookLine(look), """
+            No model server is running on this Mac. Start one, Ollama or LM Studio for example, and look again.
+            """)
+    }
+
+    func testLooking() {
+        XCTAssertEqual(AIChoices.lookLine(.looking), "Looking for model servers on this Mac…")
+    }
+
+    func testTheAskingFailed() async {
+        let refused = await AIChoices.look {
+            throw Problem(CoreAnswer(status: 503, contentType: "application/problem+json", headers: [], body: Data(#"""
+                {"type": "about:blank", "title": "Unavailable", "status": 503, "detail": "The core is starting."}
+                """#.utf8)))
+        }
+        XCTAssertEqual(refused, .failed("The core is starting."))
+        XCTAssertEqual(AIChoices.lookLine(refused), "The core is starting.")
+        let broken = await AIChoices.look { throw URLError(.cannotConnectToHost) }
+        XCTAssertEqual(broken, .failed("Couldn’t look for model servers."))
+    }
+
+    /// The server's URL and the model go in one change: Ollama's URL as "", the provider's own, any other's as it is.
+    func testChoosingAFoundModelSendsItsServerAndTheModelAtOnce() {
+        let atOllama = AIChoices.choose("qwen-fictional", on: Self.ollama)
+        XCTAssertEqual(atOllama.aiBaseUrl, "", "Ollama's URL is the provider's own")
+        XCTAssertEqual(atOllama.aiModel, "qwen-fictional")
+        XCTAssertNil(atOllama.aiProvider, "a model on this Mac is the provider already")
+        XCTAssertNil(atOllama.aiEnabled)
+        XCTAssertTrue(AppStatus.touchesAI(atOllama), "how AI stands is read again")
+        let atStudio = AIChoices.choose("mistral-fictional", on: Self.studio)
+        XCTAssertEqual(atStudio.aiBaseUrl, "http://127.0.0.1:1234/v1")
+        XCTAssertEqual(atStudio.aiModel, "mistral-fictional")
+        let held = F.preferences(provider: "local", model: "llama-fictional")
+        let merged = try? XCTUnwrap(AppStatus.merged(held, atStudio))
+        XCTAssertEqual(merged?.aiBaseUrl, "http://127.0.0.1:1234/v1")
+        XCTAssertEqual(merged?.aiModel, "mistral-fictional")
+        XCTAssertEqual(merged?.aiProvider, .local)
+    }
+
+    /// The one ticked is the model chosen at the server it was found at.
+    func testTheModelChosenIsTicked() {
+        let atOllama = F.preferences(provider: "local", model: "llama-fictional")
+        XCTAssertTrue(AIChoices.isChosen("llama-fictional", on: Self.ollama, preferences: atOllama),
+                      "\"\" is Ollama's URL")
+        XCTAssertFalse(AIChoices.isChosen("qwen-fictional", on: Self.ollama, preferences: atOllama))
+        let sameName = API.LocalServer(models: ["llama-fictional"], name: "LM Studio", url: Self.studio.url)
+        XCTAssertFalse(AIChoices.isChosen("llama-fictional", on: sameName, preferences: atOllama),
+                       "the same name at another server isn't the one chosen")
+        let atStudio = F.preferences(provider: "local", model: "mistral-fictional",
+                                     baseURL: "http://127.0.0.1:1234/v1/")
+        XCTAssertTrue(AIChoices.isChosen("mistral-fictional", on: Self.studio, preferences: atStudio))
+        let elsewhere = F.preferences(provider: "compatible", model: "llama-fictional")
+        XCTAssertFalse(AIChoices.isChosen("llama-fictional", on: Self.ollama, preferences: elsewhere))
+        XCTAssertFalse(AIChoices.isChosen("llama-fictional", on: Self.ollama, preferences: nil))
     }
 }
 

@@ -302,6 +302,37 @@ final class SettingsCoreTests: XCTestCase {
         await close(core, status)
     }
 
+    /// A model on this Mac: the core finds no model server in a test's home (it asks none), even with AI mode off;
+    /// a model found is chosen with its server's URL in one change; and a URL off this Mac is refused, in words a
+    /// person reads.
+    @MainActor
+    func testAModelOnThisMac() async throws {
+        let (core, status) = try await opened()
+        await status.setPreferences(.init(aiEnabled: false, aiProvider: .local))?.value
+        let found = try await core.get(API.Get.AiLocal.self)
+        XCTAssertEqual(found.servers, [], "nothing found is no servers, not an error")
+        let look = await AIChoices.look { try await core.get(API.Get.AiLocal.self) }
+        XCTAssertEqual(look, .found([]))
+        // A port nothing listens on: the digest says how AI stands without asking, and nothing here asks a model.
+        let server = API.LocalServer(models: ["llama-fictional"], name: "LM Studio", url: "http://127.0.0.1:9/v1")
+        await status.setPreferences(AIChoices.choose("llama-fictional", on: server))?.value
+        XCTAssertEqual(status.preferences?.aiBaseUrl, "http://127.0.0.1:9/v1")
+        XCTAssertEqual(status.preferences?.aiModel, "llama-fictional")
+        XCTAssertTrue(AIChoices.isChosen("llama-fictional", on: server, preferences: status.preferences))
+        XCTAssertEqual(status.digest?.ai.provider, .local)
+        XCTAssertEqual(status.digest?.ai.off, .turnedOff, "AI mode is still off")
+        do {
+            _ = try await core.post(API.Post.Preferences.self, .init(aiBaseUrl: "https://ai.example.test/v1"))
+            XCTFail("a model on this Mac is on this Mac")
+        } catch let problem as Problem {
+            XCTAssertTrue(problem.isRefusal)
+            XCTAssertEqual(problem.detail, "A model on this Mac must be at 127.0.0.1, ::1 or localhost.")
+        }
+        let held = try await core.get(API.Get.Preferences.self).preferences
+        XCTAssertEqual(held.aiBaseUrl, "http://127.0.0.1:9/v1", "the refused URL isn't kept")
+        await close(core, status)
+    }
+
     /// Asking a provider for its models is refused, in words a person reads, where it can't be asked; nothing here
     /// reaches a real provider.
     @MainActor
