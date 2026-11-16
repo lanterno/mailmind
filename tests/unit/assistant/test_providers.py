@@ -79,6 +79,11 @@ def test_a_list_offers_only_what_can_chat_sorted_once_each_without_gemini_s_pref
                                   "gemini-4-carbon", "models/"]) == ["gemini-4-carbon", "gemini-4-hydrogen"]
 
 
-@pytest.mark.parametrize("provider", ["anthropic", "local", "compatible"])
-def test_the_other_lists_are_offered_whole(provider):
-    assert chat_models(provider, ["nomic-embed-text", "llama3.3:latest", "", 7, None]) == ["llama3.3:latest", "nomic-embed-text"]
+@pytest.mark.parametrize("provider", ["local", "compatible"])
+def test_a_list_from_a_model_on_this_mac_or_a_compatible_service_drops_what_cant_chat_too(provider):
+    ids = ["nomic-embed-text", "qwen3:8b", "llama3.3:latest", "whisper-large-v3", "", 7, None]
+    assert chat_models(provider, ids) == ["llama3.3:latest", "qwen3:8b"]
+
+
+def test_claudes_list_is_offered_whole():
+    assert chat_models("anthropic", ["claude-embed-7", "claude-opus-9", "", 7, None]) == ["claude-embed-7", "claude-opus-9"]

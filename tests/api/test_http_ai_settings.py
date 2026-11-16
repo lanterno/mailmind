@@ -176,8 +176,7 @@ def test_a_model_on_this_mac_lists_its_models_with_no_key_and_no_default_even_wi
     openai_api.models = ["qwen3:8b", "llama3.3:latest", "nomic-embed-text"]
     choose(app, ai_provider="local", ai_base_url=openai_api.url, ai_enabled=False)
     r = models(app, "local")
-    assert (r.status, r.json) == (200, {"ok": True, "models": ["llama3.3:latest", "nomic-embed-text", "qwen3:8b"],
-                                        "default": None})
+    assert (r.status, r.json) == (200, {"ok": True, "models": ["llama3.3:latest", "qwen3:8b"], "default": None})
     assert "authorization" not in openai_api.requests[0].headers
 
 
