@@ -113,6 +113,20 @@ enum AIWords {
             """)
     }
 
+    /// What AI mode sends, to whom and when, said before it is turned on as after: under its switch, in the first
+    /// run's AI step and in Help. A model on this Mac, or a compatible service answering here, sends nothing off it.
+    static func sends(_ provider: API.AiProvider, url: String = "") -> String {
+        guard let recipient = provider.recipient, !(provider == .compatible && onThisMac(url)) else {
+            return provider == .local ? String(localized: "With a model on this Mac, nothing leaves this Mac.")
+                : String(localized: "With the service on this Mac, nothing leaves this Mac.")
+        }
+        return String(localized: """
+            With AI mode on, each new message’s sender, subject and opening text go to \(recipient) to be summarized, \
+            automatically. Whole conversations go when you ask for a summary, a draft or the brief, with what you type \
+            into Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac.
+            """)
+    }
+
     /// Why AI is off, in a few words: nil while it is on.
     static func why(_ ai: API.AiStatus) -> String? {
         switch ai.off {

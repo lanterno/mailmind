@@ -305,6 +305,7 @@ struct AIPane: View {
                 SettingSwitch(String(localized: "AI mode"), help: String(localized: """
                     Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.
                     """), isOn: status.preference(\.aiEnabled) { .init(aiEnabled: $0) })
+                SettingHelp(AIWords.sends(provider, url: preferences?.aiBaseUrl ?? ""))
             }
         case .connection:
             DeskSideCard(title: String(localized: "Connection"), icon: .link) {
@@ -335,12 +336,7 @@ struct AIPane: View {
                 modelLine
                 if provider.asksForURL { urlLine }
             }
-        case .standing:
-            VStack(alignment: .leading, spacing: 10) {
-                standing
-                SettingHelp(AIWords.privacy(provider, url: preferences?.aiBaseUrl ?? ""))
-                    .padding(.horizontal, 4)
-            }
+        case .standing: standing
         case .spending: spending
         case .writtenAhead: writtenAhead
         }

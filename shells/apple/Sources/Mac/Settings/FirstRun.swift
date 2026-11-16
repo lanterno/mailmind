@@ -63,9 +63,8 @@ struct Welcome: View {
                                     Text(aiMode ? "Open AI Settings…" : "Turn On AI Mode in Settings…")
                                 }
                                 .meadowButton(aiMode ? .quiet : .ai)
-                                if aiMode {
-                                    SettingHelp(AIWords.privacy(provider, url: status.preferences?.aiBaseUrl ?? ""))
-                                }
+                                // What would go, and to whom, said before AI mode is turned on.
+                                SettingHelp(AIWords.sends(provider, url: status.preferences?.aiBaseUrl ?? ""))
                             }
                         }
                     }

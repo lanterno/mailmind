@@ -135,7 +135,8 @@ struct HelpWindow: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
-            paragraph(Self.howAI)
+            paragraph(Self.howAI(sends: AIWords.sends(status.preferences?.aiProvider ?? .anthropic,
+                                                      url: status.preferences?.aiBaseUrl ?? "")))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 18)
@@ -149,14 +150,17 @@ struct HelpWindow: View {
         }
     }
 
-    static let howAI = String(localized: """
-        Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox are written by the AI service \
-        you choose in Settings › AI: Claude, OpenAI or Gemini with an API key of yours, or a model on this Mac, in a \
-        model server such as Ollama or LM Studio. With AI mode off, or without what it needs, AI is off and nothing \
-        is sent. Only the text of the mail being summarized, drafted or asked about goes to that service, and with a \
-        model on this Mac it never leaves this Mac; your mailbox itself stays in a database on this Mac. Email bodies \
-        show inside a locked sandbox that can't run code or phone home.
-        """)
+    /// How MailMind uses AI, with `sends`, what AI mode sends to the provider chosen (`AIWords.sends`), said whether
+    /// it is on or off.
+    static func howAI(sends: String) -> String {
+        String(localized: """
+            Summaries, importance scores, the daily briefing, drafts, and ask-your-inbox are written by the AI service \
+            you choose in Settings › AI: Claude, OpenAI or Gemini with an API key of yours, or a model on this Mac, in \
+            a model server such as Ollama or LM Studio. With AI mode off, or without what it needs, AI is off and \
+            nothing is sent. \(sends) Your mailbox itself stays in a database on this Mac. Email bodies show inside a \
+            locked sandbox that can't run code or phone home.
+            """)
+    }
 }
 
 /// The first-run guide's steps and when it is offered (status/guideSteps.ts). The Mac has no coach-marks to place:
