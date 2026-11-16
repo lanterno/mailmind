@@ -1,7 +1,7 @@
 // The AI tab's rules, with no DOM (#49): what it shows with AI mode off and on, what each provider asks of a person, the
 // models found on this Mac and what picking one changes, what choosing another provider changes, what the
 // model menu offers and in what order, what a URL typed saves as, and how a key typed leaves the page.
-import type { AiProvider, GetAnswers, PostAnswers, PostBodies } from "../../lib/api/types";
+import type { AiProvider, AiStatus, GetAnswers, PostAnswers, PostBodies } from "../../lib/api/types";
 import type { Store } from "../../lib/store";
 
 type Changes = PostBodies["/api/preferences"];
@@ -38,6 +38,21 @@ export const BILLING: Partial<Record<AiProvider, Billing>> = {
   openai: { words: `Billed per use by OpenAI, ${APART} Add credit on OpenAI’s platform, under Billing.`, creditAt: "https://platform.openai.com/settings/organization/billing" },
   gemini: { words: `Billed per use by Google, ${APART} Use a key on a billed project: on the free tier, a key stops each day at its quota.` },
 };
+
+// Which model background summaries ask, and which one what a person asks for goes to, as the digest has them in force: the
+// provider's small model and the one chosen, or one for everything. Nothing while AI is off.
+export function modelsUsed(ai: Pick<AiStatus, "model" | "background_model"> | null | undefined): string {
+  if (!ai?.background_model || !ai.model) return "";
+  if (ai.background_model === ai.model) return `Summaries made in the background and everything you ask for use ${ai.model}.`;
+  return `Summaries made in the background use ${ai.background_model}; everything you ask for uses ${ai.model}.`;
+}
+
+// How many messages from the last 30 days wait for a summary, as the digest counts them: nothing where it doesn't say.
+export function summariesWaiting(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "";
+  if (n === 0) return "Every message from the last 30 days has its summary.";
+  return `${n.toLocaleString("en-US")} ${n === 1 ? "message" : "messages"} from the last 30 days ${n === 1 ? "waits" : "wait"} for a summary.`;
+}
 
 // Another provider: its own model and URL until a person chooses others, as the server sets them back.
 export const providerChanges = (provider: AiProvider): Changes => ({ ai_provider: provider, ai_model: "", ai_base_url: "" });

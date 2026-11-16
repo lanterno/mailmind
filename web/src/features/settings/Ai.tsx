@@ -18,7 +18,7 @@ import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigest } from "../mailbox";
-import { aiParts, BILLING, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
+import { aiParts, BILLING, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, summariesWaiting, urlToSave } from "./aiChoices";
 import { Check } from "./Check";
 import { useStepBack } from "./useStepBack";
 
@@ -343,6 +343,8 @@ export function AiForm() {
             <Input className="pref-num" id="prefAiLimit" />
           </NumberField>
           <div className="set-help">Once a day’s AI has cost this much, background work stops and MailMind asks before spending more.</div>
+          <div className="set-help" id="aiModelsUsed">{modelsUsed(ai)}</div>
+          <div className="set-help" id="aiWaiting">{summariesWaiting(ai?.summaries_waiting)}</div>
         </div>
       )}
       {parts.has("ahead") && (
