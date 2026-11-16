@@ -54,8 +54,12 @@ def test_a_fresh_install_starts_with_ai_mode_off_and_turned_on_says_how_ai_stand
     switch = dialog.get_by_label("AI mode", exact=True)
     expect(switch).not_to_be_checked()
     expect(dialog.get_by_text("Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.")).to_be_visible()
+    expect(page.locator("#setSub")).to_have_text("Kept on this Mac, with each key in your login Keychain.")
     expect(page.locator("#aiConnection")).to_have_count(0)
     switch.check()
+    expect(page.locator("#setSub")).to_have_text("Kept on this Mac, with each key in your login Keychain. With AI on, the text of a "
+                                                  "message goes to Anthropic only when it is summarized, briefed, drafted or asked "
+                                                  "about; nothing else leaves this machine.")
     expect(dialog.get_by_label("Provider", exact=True)).to_have_value("anthropic")
     expect(dialog.get_by_label("Provider", exact=True).locator("option")).to_have_text(
         ["Claude (Anthropic)", "OpenAI", "Google Gemini", "A model on this Mac", "Another OpenAI-compatible service"])
@@ -64,6 +68,8 @@ def test_a_fresh_install_starts_with_ai_mode_off_and_turned_on_says_how_ai_stand
     expect(link).to_have_attribute("rel", "noopener noreferrer")
     expect(dialog.get_by_text("Keep a key for Claude, and its models are listed here.")).to_be_visible()
     expect(page.locator("#aiStanding")).to_have_text("AI is off: there’s no key for Claude.")
+    page.get_by_role("tab", name="Preferences").click()           # what the file holds: not the AI tab's words
+    expect(page.locator("#setSub")).to_have_text("Stored locally in mailmind.config.json · never leaves this machine")
     clean(page)
 
 
@@ -173,6 +179,8 @@ def test_a_model_on_this_mac_is_picked_from_the_servers_found_with_its_url(local
     expect(dialog.get_by_text("Only if your server asks for one.", exact=False)).to_be_visible()
     expect(dialog.get_by_text("give the model a context of at least 16K tokens", exact=False)).to_be_visible()
     expect(page.locator("#aiStanding")).to_have_text("AI is off: no model on this Mac is chosen.")
+    expect(page.locator("#setSub")).to_have_text("Kept on this Mac, with each key in your login Keychain. With a model on this "
+                                                  "Mac, the text of a message never leaves this Mac.")
 
     model.select_option(label="mistral-small")                 # LM Studio's: its URL and the model, in one change
     held = lambda: file_of(world).get("preferences", {})
