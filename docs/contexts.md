@@ -51,8 +51,15 @@ See [Architecture](architecture.md) for the layers around them.
   yet. A test of a login (`application.connections`) logs in at the outgoing (SMTP) server too, once the incoming one let
   it in, and a failure says in `domain.login_words`' words what went wrong and what to do next, with the page that
   helps, by the class `conn_error.quiet` named, which stays in the answer's `error` (the Rust core's
-  `mm_accounts::login_words` says the same). Removing an account with `delete_mail` lets go of what this Mac keeps of its
-  mail too: `mailmind.bootstrap.mailbox.forget_account` runs each context's `forget_account` in one write.
+  `mm_accounts::login_words` says the same). A Proton account logs in with the Bridge's password, which only a saved
+  account is tested with (`domain.draft`), so the forms test a new one once it is added. Removing an account with
+  `delete_mail` lets go of what this Mac keeps of its mail too: `mailmind.bootstrap.mailbox.forget_account` runs each
+  context's `forget_account` in one write, with Undo's (`platform.undo`), the audit trails' (`platform.db.audit`), the
+  Curation's ways out of a list and the AI's cards, on the account's gate. `AccountRemoved` is published first: it stops
+  each of the account's syncs in flight at its next message (`mailbox.application.flights`), and the forget runs again
+  as the last of them lands, so nothing a sync read after it stays. The open tabs then hear `reconcile` with the
+  account and `pruned`, how many copies went. The Rust core does the same (`mm_mailbox::flights`,
+  `mm_store::account_mail`).
   An account is still a dict, as the file holds it or as `domain.account.normalized` fills it in, and the whole app reads `acct["host"]`. `Endpoint` (`imap_endpoint`, `smtp_endpoint`) works out a server's host, port and TLS from an entry and its type,
   and an SMTP host left out is the IMAP host, so an account with one endpoint has both. `add_account` refuses an address already there. Both it and `update_account` refuse a credential no login could read, and an endpoint no connection could reach, the last only for what the
   write changes (`refuse_bad_endpoints`): what the file already held is the owner's, and an entry is read however it stands. `validate_new` still judges a whole entry, as it did: an edit of one with an unknown type, a port out of range or a generic account's host gone says so. `domain.draft` says what an unsaved account may try (see [Security model](security.md)).

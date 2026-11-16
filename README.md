@@ -512,7 +512,8 @@ or for a switch you turned on in Settings › AI.
   Google shows it, spaces and all. Any other address is Other IMAP, with its incoming and outgoing (SMTP) servers
   typed. Microsoft's accounts are recognised, and told they can't be added until MailMind can sign in to Microsoft
   ([#47](https://github.com/lanterno/mailmind/issues/47)). A test of an account logs in at its outgoing server too, and
-  a connection is tested as soon as it is saved; the Mac app's first run tests it before saving.
+  a connection is tested as soon as it is saved; the Mac app's first run tests it before saving. A Proton account logs
+  in with the Bridge's password, which only a saved account is tested with, so a new one is tested once it is added.
 - **A failed login says what to do next.** In plain words, by what went wrong: a password refused (with the provider's
   app-password page), a server that didn't answer, a certificate not trusted, Proton Bridge not running, or an outgoing
   server that refused what the incoming one took. What kind of failure it was stays beside it in small type.
@@ -520,7 +521,10 @@ or for a switch you turned on in Settings › AI.
   lists it, else in the folder the server marks as Trash (`\Trash`), else in one named like one, so a Gmail in another
   language and iCloud's "Deleted Messages" work as they are.
 - **Removing an account can take its mail off this Mac.** Settings asks, ticked unless you untick it, whether the mail
-  MailMind keeps of the account goes too. Its mail on the server stays as it is.
+  MailMind keeps of the account goes too: its messages with their bodies and attachments, what was said of them, its
+  Undo entries, the sweep and reconcile records of it, and the AI's cards made for it. A sync reading the account stops
+  at its next message and keeps nothing, and every open window drops the account at once. Its mail on the server stays
+  as it is.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect.
