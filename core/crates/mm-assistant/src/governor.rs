@@ -22,7 +22,7 @@ use std::fmt;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use mm_kernel::errors::Fault;
-use mm_kernel::log;
+use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use serde_json::{Value, json};
 
@@ -258,7 +258,7 @@ impl CostGovernor {
     }
 
     /// How a call went: None for a reply. A reply resets the feature's count of rejections in a row; a transient
-    /// failure leaves it as it was.
+    /// failure leaves it as it was. The breaker opening says so in the log, naming what stops and the status.
     pub fn heard(&self, feature: &str, model: &str, instance: &Arc<dyn LanguageModel>, error: Option<&ModelError>) {
         let key = (feature.to_owned(), model.to_owned());
         let mut state = self.state();
@@ -269,8 +269,9 @@ impl CostGovernor {
         if !error.permanent() {
             return;
         }
-        let scope = if matches!(error.status, Some(401 | 403)) {
-            Scope::Every
+        // What stops, as the log names it.
+        let (scope, what) = if matches!(error.status, Some(401 | 403)) {
+            (Scope::Every, "every background call".to_owned())
         } else {
             let n = state.rejected.get(&key).copied().unwrap_or(0) + 1;
             if n < TRIP_AFTER {
@@ -278,16 +279,17 @@ impl CostGovernor {
                 return;
             }
             state.rejected.remove(&key);
-            Scope::Feature(feature.to_owned(), model.to_owned())
+            (Scope::Feature(feature.to_owned(), model.to_owned()), format!("{feature} on {model}"))
         };
         let opened = !state.open.get(&scope).is_some_and(|under| same(under, instance));
         state.open.insert(scope, instance.clone());
         drop(state);
         if opened {
+            let why = error.status.map(|status| status.to_string()).unwrap_or_default();
             log::warning(
                 "ai",
-                "the API keeps rejecting requests: a scope stops until the key or the model changes",
-                &[],
+                "the API keeps rejecting requests: %(what)s stops until the key or the model changes (%(why)s)",
+                &[(Field::What, &what), (Field::Why, &why)],
                 None,
             );
         }
