@@ -632,6 +632,9 @@ class Session:
                 else:
                     raise _No(f"unsupported section {section}", "BAD")
                 name = "BODY[" + section + "]" if kind in ("BODY", "BODY.PEEK") else kind
+                if m.group(4):                       # <start.length>: that much from there, named by where it starts
+                    start, length = (int(n) for n in m.group(4)[1:-1].split("."))
+                    data, name = data[start:start + length], f"{name}<{start}>"
                 literal = (name, data)
                 if kind in ("BODY", "RFC822", "RFC822.TEXT") and not self.readonly:
                     set_seen = True

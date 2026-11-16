@@ -136,6 +136,19 @@ def test_a_peek_leaves_mail_unread_and_a_plain_body_fetch_marks_it_read(srv, app
     M.logout()
 
 
+def test_a_partial_fetch_sends_that_much_from_where_it_starts_and_names_it_so(srv, app):
+    # What the Rust server's sync asks for a message's text: its first 64 KiB, here its first 20 bytes.
+    uid = srv.deliver(ADA, "INBOX", _mail(1))
+    M = _connect(app)
+    M.select('"INBOX"', readonly=True)
+    data = M.uid("FETCH", str(uid), "(UID BODY.PEEK[]<0.20>)")[1]
+    assert data[0][0].endswith(b"BODY[]<0> {20}")
+    assert data[0][1] == _mail(1)[:20]
+    later = M.uid("FETCH", str(uid), "(BODY.PEEK[]<6.5>)")[1]
+    assert later[0][0].endswith(b"BODY[]<6> {5}") and later[0][1] == b"Grace"
+    M.logout()
+
+
 # ── writing ─────────────────────────────────────────────────────────────────────────────────────
 
 def test_move_lands_the_message_in_the_destination(srv, app):
