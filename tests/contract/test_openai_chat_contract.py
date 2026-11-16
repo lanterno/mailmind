@@ -397,6 +397,32 @@ def test_a_rate_limit_is_tried_again(choose):
     assert len(api.requests) == 2
 
 
+@pytest.mark.parametrize("provider, refusal, account", [
+    ("openai", fo.no_quota(), "OpenAI"),
+    ("gemini", fo.gemini_error(429, "You exceeded your current quota, please check your plan and billing details.",
+                               kind="RESOURCE_EXHAUSTED", quota="GenerateRequestsPerDayPerProjectPerModel-FreeTier"),
+     "Gemini"),
+    ("compatible", fo.error(402, "Insufficient credits", kind="payment_required"), "AI service"),
+])
+def test_an_account_with_no_credit_left_is_asked_once_and_the_status_names_it(choose, provider, refusal, account):
+    from mailmind.bootstrap import assistant
+    api = choose(provider, ai_model="llama3.3")         # a compatible service has no model of its own
+    api.queue(refusal, refusal, refusal)
+    with pytest.raises(ModelError) as e:
+        ask()
+    assert (e.value.no_credit, e.value.permanent, len(api.requests)) == (account, True, 1)
+    assert assistant.status.report()["last_error"] == f"the {account} account has no credit left"
+
+
+def test_a_quota_of_geminis_by_the_minute_is_a_rate_limit_and_tried_again(choose):
+    from mailmind.bootstrap import assistant
+    api = choose("gemini")
+    api.queue(fo.gemini_error(429, "You exceeded your current quota, please check your plan and billing details.",
+                              kind="RESOURCE_EXHAUSTED", quota="GenerateRequestsPerMinutePerProjectPerModel-FreeTier"))
+    assert ask() == {"body": "stub body"}
+    assert len(api.requests) == 2 and assistant.status.report()["last_error"] == ""
+
+
 def test_a_persistent_outage_gives_up_after_two_retries(choose):
     from mailmind.bootstrap import assistant
     api = choose("openai")

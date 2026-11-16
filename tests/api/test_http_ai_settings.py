@@ -151,6 +151,25 @@ def test_another_provider_is_asked_in_claudes_place(app, world, ai, openai_api, 
     assert status(app)["last_ok"] is True
 
 
+NO_CREDIT = [
+    ("openai", fo.no_quota(), "OpenAI"),
+    ("gemini", fo.gemini_error(429, "You exceeded your current quota, please check your plan and billing details.",
+                               kind="RESOURCE_EXHAUSTED", quota="GenerateRequestsPerDayPerProjectPerModel-FreeTier"),
+     "Gemini"),
+]
+
+
+@pytest.mark.parametrize("provider, refusal, account", NO_CREDIT, ids=[p for p, _, _ in NO_CREDIT])
+def test_a_provider_that_refuses_for_want_of_credit_is_asked_once_and_the_status_names_the_account(
+        app, world, openai_api, fake_keychain, provider, refusal, account):
+    choose(app, ai_enabled=True, ai_provider=provider, ai_base_url=openai_api.url)
+    keep(app, provider)
+    openai_api.queue(refusal, refusal, refusal)
+    r = app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"})
+    assert r.status == 502 and len(openai_api.chats) == 1
+    assert (status(app)["last_ok"], status(app)["last_error"]) == (False, f"the {account} account has no credit left")
+
+
 def test_the_bridges_password_is_never_an_ai_key(app, world, openai_api, fake_keychain):
     """A hand edit may name it for a provider's key: it is no key, never sent, wherever it would go."""
     bridge = "bridge-password-not-a-key"

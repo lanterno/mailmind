@@ -128,6 +128,16 @@ def test_without_schemas_no_format_goes_out_and_loose_json_is_read(api, monkeypa
     assert "format" not in api.requests[0].body["output_config"]
 
 
+def test_an_account_with_no_credit_left_is_named_and_not_a_bad_request(api):
+    from mailmind.bootstrap import assistant
+    api.queue(fa.error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. "
+                                                     "Please go to Plans & Billing to upgrade or purchase credits."))
+    with pytest.raises(ModelError) as e:
+        assistant.calls.call_claude_json("Triage this.", assistant.assessments.TRIAGE_SCHEMA, feature="thread")
+    assert (e.value.no_credit, e.value.permanent, len(api.requests)) == ("Anthropic", True, 1)
+    assert assistant.status.report()["last_error"] == "the Anthropic account has no credit left"
+
+
 # ── how replies come back ─────────────────────────────────────────────────────
 
 def test_triage_stores_the_structured_reply(api):

@@ -233,6 +233,13 @@ def test_the_status_counts_what_waits_for_a_summary_from_the_last_30_days(app, w
     assert waiting() is None
 
 
+def test_a_call_refused_for_want_of_credit_names_the_account_to_top_up(app, world, ai):
+    ai.queue(fa.error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. "
+                                                    "Please go to Plans & Billing to upgrade or purchase credits."))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 502
+    assert app.get("/api/digest").json["ai"]["last_error"] == "the Anthropic account has no credit left"
+
+
 def test_status_after_calls(app, golden, world, ai):
     golden.record("the digest's AI status before any call", app.get("/api/digest"))
     app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"})

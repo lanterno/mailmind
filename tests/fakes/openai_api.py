@@ -75,14 +75,23 @@ def error(status, message, headers=None, kind="invalid_request_error"):
     return out + (headers,) if headers else out
 
 
-def gemini_error(status, message, reason=None, kind="INVALID_ARGUMENT"):
+def gemini_error(status, message, reason=None, kind="INVALID_ARGUMENT", quota=None):
     """A refusal in the form Gemini's OpenAI-compatible endpoint gives it: the error inside a list, with an ErrorInfo detail
-    giving `reason` where there is one."""
+    giving `reason` where there is one, and a QuotaFailure naming the quota `quota` where there is one."""
     err = {"code": status, "message": message, "status": kind}
     if reason:
         err["details"] = [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason,
                            "domain": "googleapis.com", "metadata": {"service": "generativelanguage.googleapis.com"}}]
+    if quota:
+        err["details"] = [{"@type": "type.googleapis.com/google.rpc.QuotaFailure", "violations": [
+            {"quotaMetric": "generativelanguage.googleapis.com/generate_content_requests", "quotaId": quota}]}]
     return status, [{"error": err}]
+
+
+def no_quota():
+    """OpenAI's refusal for an account with no credit left: a 429 whose code is insufficient_quota."""
+    return 429, {"error": {"message": "You exceeded your current quota, please check your plan and billing details.",
+                           "type": "insufficient_quota", "param": None, "code": "insufficient_quota"}}
 
 
 class FakeOpenAI:

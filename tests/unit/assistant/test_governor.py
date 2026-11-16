@@ -191,6 +191,13 @@ def test_a_refused_key_stops_every_background_call_until_the_model_changes(capsy
     assert capsys.readouterr().out.count("keeps rejecting") == 1
 
 
+def test_an_account_with_no_credit_left_stops_every_background_call_at_once():
+    gov, _, _ = governor()
+    gov.heard("triage", "m", MODEL, ModelError("OpenAI API 429: no quota", 429, "OpenAI"))
+    assert gov.held_back("background", "triage", "m", MODEL) == "breaker"
+    assert gov.held_back("scheduled", "brief-ahead", "other-model", MODEL) == "breaker"
+
+
 def test_three_rejections_in_a_row_stop_that_feature_on_that_model_only():
     gov, _, _ = governor()
     bad = ModelError("Claude API 400: bad request", 400)
