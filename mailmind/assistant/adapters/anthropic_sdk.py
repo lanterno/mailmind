@@ -27,7 +27,7 @@ from mailmind.assistant.adapters import exchange, wire
 from mailmind.assistant.application.ports import BatchResult, ModelError, Prompt, Reply
 from mailmind.assistant.domain import models
 from mailmind.assistant.domain.models import FALLBACK_BETA
-from mailmind.assistant.domain.providers import TIMEOUT, sendable, unkeyed
+from mailmind.assistant.domain.providers import BILLED_BY, TIMEOUT, sendable, unkeyed
 from mailmind.kernel import ai_provider
 from mailmind.platform.db import txguard
 
@@ -38,6 +38,7 @@ MODELS_PAGE = 1000                 # the most the API lists at once
 KEY_REFUSED = "Claude API 401: the key was refused"     # for a key that can't be one, never sent
 UNREACHABLE = "Claude API unreachable: no API address"  # for a URL that names no API, where nothing is sent
 SAID = 200                         # characters of what the API said an error keeps
+_NO_CREDIT = "credit balance"      # in what the API says of an account with too little: "Your credit balance is too low…"
 _JSON, _BINARY = "application/json", "application/binary"     # what a request accepts: a batch's results are the latter
 
 
@@ -100,7 +101,9 @@ def _calling[T](call: Callable[[anthropic.Anthropic], T], client: anthropic.Anth
     try:
         return call(client)
     except anthropic.APIStatusError as e:
-        raise ModelError(f"Claude API {e.status_code}: {_error_text(e, key)}", e.status_code) from None
+        said = _error_text(e, key)
+        raise ModelError(f"Claude API {e.status_code}: {said}", e.status_code,
+                         BILLED_BY["anthropic"] if _NO_CREDIT in said.lower() else None) from None
     except anthropic.APIConnectionError as e:
         raise ModelError(f"Claude API unreachable: {e.message}") from None
     except anthropic.AnthropicError as e:

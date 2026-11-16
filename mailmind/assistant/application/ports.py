@@ -73,17 +73,20 @@ class BatchResult:
 
 
 class ModelError(RuntimeError):
-    """No reply: the API rejected the call with `status`, or nothing answered (status None)."""
+    """No reply: the API rejected the call with `status`, or nothing answered (status None). `no_credit` names the account
+    a call was refused for want of credit or quota on ("Anthropic"), and is None for any other refusal."""
 
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None, no_credit: str | None = None):
         super().__init__(message)
         self.status = status
+        self.no_credit = no_credit
 
     @property
     def permanent(self) -> bool:
         """A rejection that sending the same thing again won't change: a bad request, key or
-        model, not a rate limit or an outage."""
-        return self.status is not None and 400 <= self.status < 500 and self.status not in RETRIED
+        model, or an account with no credit left, not a rate limit or an outage."""
+        return self.no_credit is not None or (
+            self.status is not None and 400 <= self.status < 500 and self.status not in RETRIED)
 
 
 class NotSent(ModelError):

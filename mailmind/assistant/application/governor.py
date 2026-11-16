@@ -139,7 +139,7 @@ class CostGovernor:
                 return
             if not error.permanent:
                 return
-            if error.status in _AUTH:
+            if error.status in _AUTH or error.no_credit:      # no feature will do better
                 opened = self._open.get(_EVERY) is not instance
                 self._open[_EVERY] = instance
                 scope = "every background call"

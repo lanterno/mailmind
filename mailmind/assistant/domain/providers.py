@@ -87,6 +87,16 @@ def unkeyed(text: str, key: str) -> str:
     return text
 
 
+# Whose account a call is billed to, as "the ... account has no credit left" names it.
+BILLED_BY: dict[AiProvider, str] = {"anthropic": "Anthropic", "openai": "OpenAI", "gemini": "Gemini",
+                                    "local": "model server", "compatible": "AI service"}
+
+
+def no_credit(account: str) -> str:
+    """What the status says of a call refused for want of credit or quota: the account to top up, not a wait."""
+    return f"the {account} account has no credit left"
+
+
 def background_model(provider: AiProvider, model: str, every: str | None = None) -> str:
     """The model background summaries ask: the one `every` feature asks where one is named (MAILMIND_MODEL, for Claude),
     else the provider's small model, else (a model on this Mac, a compatible service) the one chosen, `model`."""

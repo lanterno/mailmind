@@ -9,7 +9,7 @@ from typing import Any
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor
 from mailmind.assistant.application.ports import BatchStatus, NotSent
-from mailmind.assistant.domain.providers import CONFIG, Engine
+from mailmind.assistant.domain.providers import CONFIG, Engine, no_credit
 from mailmind.platform.logging import get_logger
 
 log = get_logger("ai")
@@ -17,6 +17,9 @@ log = get_logger("ai")
 
 def _plain(e: Exception) -> str:
     """A failed call's reason in words the setup card can show (never the prompt)."""
+    account = getattr(e, "no_credit", None)
+    if account:
+        return no_credit(account)
     s = str(e)
     if " 401" in s or "authentication" in s.lower() or "invalid x-api-key" in s.lower():
         return "the API key was rejected"

@@ -5,7 +5,8 @@ URL, its key (or none) and its model. What goes on the wire and how a reply read
 It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when there is a key, each attempt an `exchange`:
 no proxy, the request going to the host the URL names, its time limit a deadline for all of it, and an answer of 32 MiB at
 most. It tries the statuses a retry can help (408, 409, 429 and 5xx), and a connection that failed, twice more, honouring
-retry-after, as the Anthropic SDK does. A model on this Mac and a compatible service may not take structured output: a 400
+retry-after, as the Anthropic SDK does; never an account with no credit left (OpenAI's `insufficient_quota`, a quota of
+Gemini's for the day, a 402), which waiting doesn't change. A model on this Mac and a compatible service may not take structured output: a 400
 that names `response_format` is asked once more without it, the schema stated in the prompt instead, and the reply read as
 free-form JSON. OpenAI and Gemini are given a ceiling on a reply's tokens that a model may be unable to meet: a 400 whose
 error names `max_tokens` or `max_completion_tokens` is asked once more without it. A rejected key's error holds none of
@@ -21,7 +22,7 @@ from typing import Any, cast
 from mailmind.assistant.adapters import chat_wire, exchange
 from mailmind.assistant.adapters.exchange import Answer as _Answer
 from mailmind.assistant.application.ports import BatchResult, ModelError, NoBatches, Prompt, Reply
-from mailmind.assistant.domain.providers import TIMEOUT, sendable, unkeyed
+from mailmind.assistant.domain.providers import BILLED_BY, TIMEOUT, sendable, unkeyed
 from mailmind.kernel.ai_provider import AiProvider
 from mailmind.platform.db import txguard
 
@@ -33,6 +34,8 @@ _AUTH = frozenset({401, 403})
 _KEY_INVALID = "API_KEY_INVALID"   # the reason Gemini's 400 gives for a key that isn't one
 _NOT_VALID = "API key not valid"   # ...and how its message starts
 _FALLS_BACK = frozenset({"local", "compatible"})      # may not take response_format
+_INSUFFICIENT = "insufficient_quota"                  # OpenAI's error code (and type) for an account with no credit
+_PER_DAY = "PerDay"                                   # in the quotaId of a Gemini quota that lasts the day
 _CEILING_WORDS = ("max_tokens", "max_completion_tokens")         # in what a 400 says of a ceiling a model can't meet
 _NO_BATCHES = "Batches need Claude as the AI provider."
 
@@ -70,6 +73,26 @@ def _said(answer: _Answer) -> str:
     if not said:
         return ""
     return said if isinstance(said, str) else json.dumps(said, separators=(",", ":"), ensure_ascii=False)
+
+
+def _no_credit(answer: _Answer) -> bool:
+    """Whether the service refused the call for want of credit or quota, which waiting won't change: a 402, OpenAI's
+    insufficient_quota, or Gemini's RESOURCE_EXHAUSTED for a quota of the day's."""
+    if answer.status == 402:
+        return True
+    if answer.status != 429:
+        return False
+    err = _error(answer)
+    if not isinstance(err, dict):
+        return False
+    err = cast(dict[str, Any], err)
+    if _INSUFFICIENT in (err.get("code"), err.get("type")):
+        return True
+    details = err.get("details")
+    return err.get("status") == "RESOURCE_EXHAUSTED" and isinstance(details, list) and any(
+        _PER_DAY in str(cast(dict[str, Any], v).get("quotaId", ""))
+        for d in cast(list[Any], details) if isinstance(d, dict)
+        for v in cast(list[Any], cast(dict[str, Any], d).get("violations") or []) if isinstance(v, dict))
 
 
 def _key_refused(answer: _Answer) -> bool:
@@ -125,7 +148,8 @@ class Http:
         if _key_refused(answer):
             return self._refused_key(answer.status if answer.status in _AUTH else 401)
         said = unkeyed(_said(answer), self._key or "")      # before it is cut, which could leave part of the key
-        return ModelError(f"{self.provider} API {answer.status}: {said[:SAID]}", answer.status)
+        return ModelError(f"{self.provider} API {answer.status}: {said[:SAID]}", answer.status,
+                          BILLED_BY[self.provider] if _no_credit(answer) else None)
 
 
 class ChatModel:
@@ -149,7 +173,7 @@ class ChatModel:
                     raise
                 headers = None
             else:
-                if not _retried(answer.status) or attempt >= self._retries:
+                if not _retried(answer.status) or _no_credit(answer) or attempt >= self._retries:
                     return answer
                 headers = answer.headers
             time.sleep(_wait(headers, attempt))
