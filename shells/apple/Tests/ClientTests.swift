@@ -96,10 +96,22 @@ final class CoreHomeTests: XCTestCase {
     /// Settings' read-only switch reaches the core as the profile a read-only run names, unless the environment names
     /// one of its own.
     func testTheReadOnlySwitchRunsTheCoreReadOnly() throws {
-        let home = try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home"], readOnly: true)
-        XCTAssertEqual(home.variables, ["MAILMIND_PROFILE": "read-only"])
-        XCTAssertEqual(try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home"], readOnly: false).variables, [:])
+        XCTAssertEqual(CoreHome.variables(["HOME": "/Users/ada"], readOnly: true),
+                       ["HOME": "/Users/ada", "MAILMIND_PROFILE": "read-only"])
+        XCTAssertEqual(CoreHome.variables(["HOME": "/Users/ada"], readOnly: false), ["HOME": "/Users/ada"])
         XCTAssertEqual(CoreHome.variables(["MAILMIND_PROFILE": "dev"], readOnly: true), ["MAILMIND_PROFILE": "dev"])
+    }
+
+    /// The switch is the person's own MailMind's: a demo or test run shares the app's defaults, so with the switch on
+    /// it still runs only as it was started.
+    func testTheReadOnlySwitchNeverReachesADemoOrTestRun() throws {
+        XCTAssertEqual(try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home"], readOnly: true).variables, [:])
+        let started = try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home", "MAILMIND_PROFILE": "read-only"],
+                                                 readOnly: false)
+        XCTAssertEqual(started.variables, ["MAILMIND_PROFILE": "read-only"], "a run started read only stays so")
+        for variable in CoreHome.notAPersonsRun {
+            XCTAssertNil(CoreHome.variables([variable: "1"], readOnly: true)["MAILMIND_PROFILE"], variable)
+        }
     }
 
     /// Only a person's run opens itself again: another names a home of its own, or is a measure, demo or test run.
