@@ -152,8 +152,11 @@ fn a_providers_own_domains_take_its_preset_with_no_lookup() {
         ("ada@yahoo.com", "yahoo"),
         ("ada@yahoo.co.uk", "yahoo"),
         ("ada@yahoo.fr", "yahoo"),
+        ("ada@yahoo.com.au", "yahoo"),
+        ("ada@yahoo.co.in", "yahoo"),
         ("ada@ymail.com", "yahoo"),
         ("ada@aol.com", "aol"),
+        ("ada@aol.de", "aol"),
         ("ada@fastmail.com", "fastmail"),
         ("ada@fastmail.fm", "fastmail"),
         ("ada@outlook.com", "microsoft"),
@@ -175,9 +178,29 @@ fn a_providers_own_domains_take_its_preset_with_no_lookup() {
 
 #[test]
 fn a_brand_under_a_domain_that_isnt_a_countrys_ending_is_no_providers() {
-    for email in ["ada@live.example.test", "ada@yahoo.example.test", "ada@mail.yahoo.com", "ada@notyahoo.com"] {
+    for email in [
+        "ada@live.example.test",
+        "ada@yahoo.example.test",
+        "ada@mail.yahoo.com",
+        "ada@notyahoo.com",
+        "ada@aol.org",
+        "ada@live.net",
+        "ada@yahoo.co.u2",
+        "ada@outlook.com.example",
+    ] {
         assert_eq!(preset_of(email)["preset"], Value::Null, "{email}");
     }
+}
+
+#[test]
+fn yahoo_japan_is_another_companys_with_servers_of_its_own() {
+    for email in ["ada@yahoo.co.jp", "ada@yahoo.ne.jp", "ada@yahoo.jp"] {
+        let found = Arc::new(Hosts::default());
+        let said = Presets::new(found.clone()).preset(Some(email)).unwrap();
+        assert_eq!((said["preset"].clone(), said["sure"].as_bool()), (Value::Null, Some(false)), "{email}");
+        assert_eq!(found.asked.lock().unwrap().len(), 1, "{email}: looked up as any other domain");
+    }
+    assert_eq!(preset_of("ada@hotmail.co.jp")["preset"], "microsoft");
 }
 
 #[test]
@@ -240,6 +263,7 @@ fn microsoft_is_named_and_unsupported_with_nothing_to_save() {
 fn a_domain_whose_mail_a_providers_servers_take_is_offered_its_preset() {
     for (mx, preset) in [
         ("in1-smtp.messagingengine.com", "fastmail"),
+        ("mx01.mail.icloud.com", "icloud"),
         ("acme-example-test.mail.protection.outlook.com", "microsoft"),
         ("mail.protonmail.ch", "proton"),
         ("ASPMX.L.GOOGLE.COM.", "gmail"),
