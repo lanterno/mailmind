@@ -340,6 +340,32 @@ fn an_answer_that_cant_be_read_is_a_failure() {
 }
 
 #[test]
+fn a_reasoning_models_leading_thinking_is_dropped_before_the_reply_is_read() {
+    let thought = "<think>\nThe person wants it short. {\"text\": \"no\"}\n</think>\n\n{\"text\": \"Hi.\"}";
+    let thinking = "  <thinking>Short, then.</thinking>{\"text\": \"Hello.\"}";
+    let (url, _) = stand_in(vec![(200, vec![], answer(thought, "qwen3:8b")), (200, vec![], answer(thinking, "m"))]);
+    for (provider, said) in [(Local, "{\"text\": \"Hi.\"}"), (Compatible, "{\"text\": \"Hello.\"}")] {
+        let reply = api(provider, &url, None, Arc::new(Open::default()))
+            .complete(&prompt("qwen3:8b", Some(closed())))
+            .expect("a reply");
+        assert_eq!(reply.text, said, "{provider:?}");
+    }
+}
+
+#[test]
+fn only_a_leading_closed_thinking_block_is_dropped() {
+    use mm_openai::wire::without_thinking;
+    assert_eq!(without_thinking("<think>a</think>b"), "b");
+    assert_eq!(without_thinking("\n <thinking>\na\n</thinking> b"), " b");
+    assert_eq!(without_thinking("<think>a</think>b<think>c</think>"), "b<think>c</think>", "the first block only");
+    assert_eq!(without_thinking("b <think>a</think>"), "b <think>a</think>", "not first");
+    assert_eq!(without_thinking("<think>never closed"), "<think>never closed");
+    assert_eq!(without_thinking("<think>a</thinking>b"), "<think>a</thinking>b", "a block closes as it opened");
+    assert_eq!(without_thinking("<THINK>a</THINK>b"), "<THINK>a</THINK>b");
+    assert_eq!(without_thinking("{\"text\": \"Hi.\"}"), "{\"text\": \"Hi.\"}");
+}
+
+#[test]
 fn a_services_models_are_listed_once_with_its_key() {
     let listed = json!({"object": "list", "data": [{"id": "gpt-6.1-sol", "object": "model"}, {"id": "whisper-1"},
                         {"object": "model"}]})
