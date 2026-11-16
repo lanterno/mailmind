@@ -126,6 +126,18 @@ describe("what the commands offer", () => {
     command(m, `fold:${A}:Lists`).run();
     expect(go).toHaveBeenCalledWith({ source: { kind: "folder", account: A, folder: "Lists" }, opened: null });
   });
+  it("offers nothing only AI can do once AI is turned off, and names none of it in the legend", () => {
+    const AI = ["summarize", "extract", "do", "review"];
+    const turnedOff = { ai: { off: "turned-off", provider: "anthropic" } };
+    expect(ids(reading())).toEqual(expect.arrayContaining(AI));
+    expect(ids(reading({ digest: { ai: { off: "no-key", provider: "openai" } } }))).toEqual(expect.arrayContaining(AI));
+    expect(ids(reading({ digest: turnedOff })).filter((id) => AI.includes(id))).toEqual([]);
+    expect(pressed(reading({ digest: turnedOff }), "i")).toBeUndefined();
+    const legend = legendOf(reading({ digest: turnedOff }), ui);
+    expect(legend.commands.find((c) => c.id === "search")!.legend).toBe("Search");
+    expect(legend.commands.map((c) => c.id)).not.toContain("summarize");
+    expect(legendOf(reading(), ui).commands.find((c) => c.id === "search")!.legend).toContain("?question asks your inbox");
+  });
   it("offers the two themes not in use", () => {
     the.theme = "dusk";
     expect(ids(mailbox()).filter((id) => id.startsWith("theme:"))).toEqual(["theme:day", "theme:night"]);

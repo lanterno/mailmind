@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiStanding, PROVIDER_LABEL, whyOff } from "./ai";
+import { aiOffered, aiStanding, PROVIDER_LABEL, whyOff } from "./ai";
 import type { AiStatus } from "./api/types";
 
 const status = (over: Partial<AiStatus> = {}): AiStatus => ({
@@ -12,6 +12,15 @@ describe("the providers", () => {
   it("are named in the menu's words, in its order", () => {
     expect(Object.values(PROVIDER_LABEL)).toEqual(["Claude (Anthropic)", "OpenAI", "Google Gemini", "Ollama, on this Mac", "Another OpenAI-compatible service"]);
   });
+});
+
+describe("what only AI can do", () => {
+  it("is offered while AI is on, and off for want of a key, a model or a URL", () => {
+    expect(aiOffered(status())).toBe(true);
+    for (const why of ["no-key", "no-model", "no-url"] as const) expect(aiOffered(off(why))).toBe(true);
+  });
+  it("isn't once AI is turned off", () => expect(aiOffered(off("turned-off", "ollama"))).toBe(false));
+  it("is, before the digest has come", () => expect(aiOffered(undefined)).toBe(true));
 });
 
 describe("why AI is off", () => {

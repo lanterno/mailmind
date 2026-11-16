@@ -40,6 +40,7 @@ function setup(over: Partial<Env> = {}) {
     mine: () => new Set([FROM]),
     signature: () => "",
     tone: () => "balanced",
+    ai: () => true,
     limits: LIMITS,
     focusHere: () => null,
     focusBack: (_w, fallback) => void focused.push(fallback),
@@ -922,6 +923,14 @@ describe("the AI's words", () => {
     gate.resolve({ ok: true, body: "AI words" });
     await flush();
     expect(m.view.get()!.body).toBe("Yes, but later.");
+  });
+
+  it("a quick reply with AI off is its line alone, and asks AI for nothing", async () => {
+    const { m, posted } = setup({ ai: () => false, get: async () => ({ ok: true, account: FROM, from_addr: "bea@example.test", subject: "x", text: "" }) });
+    await m.quickReply({ key: 4, folder: "INBOX", uid: 1 }, "yes");
+    await flush();
+    expect(m.view.get()!.body).toBe("Yes, that works for me.");
+    expect(posted("/api/ai/draft-reply")).toEqual([]);
   });
 
   it("offers a draft only on a reply that still has the original to read", () => {

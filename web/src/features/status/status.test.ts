@@ -61,6 +61,11 @@ describe("the first-run guide", () => {
     expect(ids(true)).toEqual(["brief", "rail", "palette", "ask", "screener"]);
     expect(ids(false)).toEqual(["brief", "rail", "palette", "screener"]);
   });
+  it("says the brief holds what's safe to file only where an AI that's on rates it", () => {
+    const brief = (ai: boolean) => guideSteps({ ai, singleKeys: true }).find((s) => s.id === "brief")!.text;
+    expect(brief(true)).toContain("what’s safe to file");
+    expect(brief(false)).toBe("Your Inbox opens on this page: what needs you, and what’s coming up.");
+  });
   it("doesn't teach a key that is switched off", () => {
     const rail = (singleKeys: boolean) => guideSteps({ ai: false, singleKeys }).find((s) => s.id === "rail")!.text;
     expect(rail(true)).toContain("↵");

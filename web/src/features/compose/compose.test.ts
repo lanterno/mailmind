@@ -66,6 +66,13 @@ describe("sending from", () => {
     expect(env().tone()).toBe("formal");
   });
   it("holds a person to the server's own limits", () => expect(env().limits).toEqual(LIMITS));
+  it("asks AI to write only while the digest says it is on, and before the digest has come", () => {
+    expect(env().ai()).toBe(true);
+    client.setQueryData(["digest"], { accounts: [A], ai: { engine: "none", off: "turned-off" } });
+    expect(env().ai()).toBe(false);
+    client.setQueryData(["digest"], { accounts: [A], ai: { engine: "api", off: null } });
+    expect(env().ai()).toBe(true);
+  });
 });
 
 describe("asking the server", () => {
