@@ -1,5 +1,6 @@
 //! What the Assistant's use cases need of the world (`mailmind.assistant.application.ports`): a language model for the
-//! provider and key in force, the settings that bound what it spends, and the ledger of what calls cost.
+//! provider and key in force, the settings that bound what it spends, the ledger of what calls cost, and a provider's
+//! list of models.
 //!
 //! A `LanguageModel` sends a `Prompt` as one user turn and gives back the `Reply`. When no reply comes it fails with a
 //! `ModelError`: the API rejected the call (`status` says how), or nothing answered (`status` is None).
@@ -9,6 +10,7 @@ use std::sync::Arc;
 
 use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::errors::Fault;
+use mm_kernel::seams::Secret;
 use serde_json::Value;
 
 use crate::providers::{Off, speaks_anthropic};
@@ -198,6 +200,19 @@ impl InForce {
 /// be had is no key.
 pub trait Engine: Send + Sync + fmt::Debug {
     fn in_force(&self) -> InForce;
+}
+
+/// What a provider's models are listed with (#49): the key kept for it and the URL chosen for it, asked once, since a
+/// person is waiting. It sends no mail and spends nothing.
+pub trait ModelLists: Send + Sync + fmt::Debug {
+    /// The key kept for `provider`, None where none resolves or it takes none.
+    fn key(&self, provider: AiProvider) -> Option<Secret>;
+    /// The URL a person chose for `provider` while it is the one chosen (for Claude, else ANTHROPIC_BASE_URL's), ""
+    /// for the provider's own.
+    fn base_url(&self, provider: AiProvider) -> String;
+    /// The ids the provider's list of models names: `GET {base}/v1/models` for Claude, `GET {base}/models` for the
+    /// rest, with `key` where there is one.
+    fn list(&self, provider: AiProvider, base_url: &str, key: Option<&Secret>) -> Result<Vec<String>, ModelError>;
 }
 
 /// Where AI's settings are: the config file's `anthropic_api_key` and `ai_daily_limit_usd`, and the environment's

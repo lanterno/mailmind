@@ -1,6 +1,6 @@
 //! Everything asked of the AI (`mailmind.assistant`): Claude by default, or the provider a person chose (#49). The
 //! gateway every call goes through, the cost governor that decides whether it may go now, the ledger of what each
-//! cost, and how AI stands with no call made.
+//! cost, how AI stands with no call made, and the models a provider offers.
 //!
 //! What it needs of the world is in `ports`, which the store, the providers' crates (`mm-claude`, `mm-openai`) and the
 //! program implement; nothing here reads the disk, the network or the clock.
@@ -12,6 +12,7 @@ pub mod brief;
 pub mod briefs;
 pub mod bulk;
 pub mod calls;
+pub mod catalog;
 pub mod context;
 pub mod digest;
 pub mod extract;
