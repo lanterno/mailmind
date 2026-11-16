@@ -608,8 +608,10 @@ ask, or for a switch you turned on in Settings › AI.
   Gmail-style `g`+letter folder chords, and a `?` legend reachable from every state.
 - **A ⌘K command palette** that fuzzy-matches every account, every folder across every
   account, saved views, the actions available on the selected message, and app commands.
-- **Three themes in the Meadow palette** — a cream **Day** (the default), a warm
-  **Dusk** and a deep-blue **Night**, cycled by the sun button in the top bar (or
+- **Three themes in the Meadow palette, and Automatic** — a cream **Day**, a warm
+  **Dusk** and a deep-blue **Night**, or **Automatic** (the default on a fresh install): Night
+  while your computer is in dark mode, else the time of day's, Day from 6, Dusk from 17 and
+  Night from 21. A theme you chose before stays chosen. They're cycled by the sun button in the top bar (or
   chosen in the `?` legend and ⌘K), with the panels laid on a sky that follows the theme.
   Indigo marks actions and selection, gold means only "needs you", moss means only "the
   AI said this", and rust is for delete.
@@ -640,7 +642,7 @@ ask, or for a switch you turned on in Settings › AI.
 MailMind has a native Mac app over the Rust core (`shells/apple`). It runs the whole of MailMind in its own process,
 with no port open: the mailbox and search, reading and writing, Settings and the first run, and the assistant,
 curation, attention and the calendar, as the page has them, with the menu bar's commands and a Mac's keys. It wears
-the page's Meadow look: paper panels on a painted sky in Day, Dusk or Night, the page's typefaces and icons, a rail
+the page's Meadow look: paper panels on a painted sky in Day, Dusk, Night or Automatic, the page's typefaces and icons, a rail
 that folds to icons, the summary note and a reply under the message, the brief beside the Inbox. It can be
 your Mac's mail app (**Mail › Settings › General › Default email reader**), so a mailto: link opens its composer. It
 is a .dmg on this repo's [Releases](https://github.com/lanterno/mailmind/releases/latest) page, for macOS 26 or later
