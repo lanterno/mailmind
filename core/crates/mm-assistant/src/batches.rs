@@ -7,8 +7,9 @@
 //! its share of what today's limit leaves, by an estimate that errs high, and books that against background work while
 //! it is out. Its row is committed as `submitting` before it is sent, and sending is never retried. Its answers are
 //! brought in once it has ended, whatever holds the rest back, since they are paid for; then the API is asked to let
-//! it go, as it holds mail. Its answers are labelled with the model it asked. A batch the Python app sent is in the
-//! same rows, and is brought in the same way.
+//! it go, as it holds mail. Its answers are labelled with the model it asked. With another provider chosen, one out is
+//! let go here, the API told nothing, and its messages wait again. A batch the Python app sent is in the same rows,
+//! and is brought in the same way.
 
 use std::sync::Arc;
 
@@ -22,6 +23,7 @@ use crate::calls::Calls;
 use crate::ports::{BatchResult, Reply};
 use crate::pricing;
 use crate::prompts::{SYSTEM, TRIAGE};
+use crate::providers::speaks_anthropic;
 use crate::refusals::CallError;
 
 const TAG: &str = "assess";
@@ -175,10 +177,21 @@ impl Batching {
     /// stored. Nothing here sends a message, so neither the limit nor someone using AI holds it back: these answers
     /// are paid for. A batch cut off while it was being sent gives its messages back, as one the API no longer has
     /// does; one that couldn't be read is asked about again later. A batch whose answers are in is removed from the
-    /// API, tried again each round until it goes. One out waits while AI is off, or for Claude to be the provider
-    /// again.
+    /// API, tried again each round until it goes. With another provider chosen, one out (being sent or running) is let
+    /// go here, nothing said to the API, so its messages wait again for the provider in force and its estimate is no
+    /// longer booked; with Claude chosen and AI off, it waits for AI to be back on.
     pub fn collect(&self) -> Result<usize, Fault> {
-        if self.calls.engine() == "none" || !self.calls.gateway().takes_batches() {
+        let force = self.calls.gateway().in_force();
+        if !speaks_anthropic(force.provider) {
+            for state in ["submitting", "running"] {
+                for out in self.book.in_state(state)? {
+                    self.book.drop_batch(out.id)?;
+                    log::info(TAG, "a batch was let go for another provider; its messages are waiting again", &[]);
+                }
+            }
+            return Ok(0);
+        }
+        if !force.takes_batches() {
             return Ok(0);
         }
         let gateway = self.calls.gateway();
