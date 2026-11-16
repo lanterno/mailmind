@@ -71,6 +71,8 @@ struct MeadowFrame<Pane: View>: View {
         .focusedSceneValue(\.meadowShell, shell)
         .navigationTitle(mailbox.title)
         .onAppear(perform: joinMailbox)
+        // Another window let go of the mailbox's hooks as it closed: this one's hang theirs again.
+        .onChange(of: mailbox.joinRound) { joinMailbox() }
         .onChange(of: app.place) { _, place in
             shell.drawerOpen = false
             if place?.spansTheWindow == true { shell.focus = false }

@@ -88,19 +88,22 @@ final class Desk {
         brief.paperTrailQuery = { [weak self] in self?.paperTrail?.search?.q }
     }
 
-    /// Reach the window's core once it is open, and hear what changes.
+    /// Reach the window's core once it is open, and hear what changes; and hang the desk's hooks on the mailbox, again
+    /// when another window let go of them as it closed.
     func attach(_ app: MailApp) {
-        guard self.app == nil, let core = app.core else { return }
-        self.app = app
-        connect(core)
-        listening = Task { [weak self] in
-            guard let events = try? await core.events() else { return }
-            for await event in events {
-                guard let self else { return }
-                await self.heard(event)
+        guard let core = app.core else { return }
+        if self.app == nil {
+            self.app = app
+            connect(core)
+            listening = Task { [weak self] in
+                guard let events = try? await core.events() else { return }
+                for await event in events {
+                    guard let self else { return }
+                    await self.heard(event)
+                }
             }
+            Task { await readScreeners() }
         }
-        Task { await readScreeners() }
         join(app.mailbox)
     }
 
@@ -387,6 +390,10 @@ struct DeskSurfaces: ViewModifier {
                 DeskSheetView(sheet: sheet, desk: desk)
             }
             .task(id: app.stage) {
+                if app.stage == .open { desk.attach(app) }
+            }
+            // Another window let go of the mailbox's hooks as it closed: this one's desk hangs its own again.
+            .onChange(of: app.mailbox.joinRound) {
                 if app.stage == .open { desk.attach(app) }
             }
             // An Inbox opened, or the app come back to with one on screen, is a look; away, a line not yet written is.

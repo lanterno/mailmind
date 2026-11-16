@@ -100,17 +100,40 @@ final class Mailbox {
     /// The sentence being turned into a search now, if one is; and the search left before its translation came.
     @ObservationIgnored var translating: (@MainActor () -> String?)?
     @ObservationIgnored var stopsTranslating: (() -> Void)?
-    /// The areas that have hung their hooks here, each once however often its view appears.
+    /// The areas that have hung their hooks here, each once a window however often its view appears.
     @ObservationIgnored private var joined: Set<String> = []
+    /// Counted up each time the hooks are let go (`leave`): an area's view that is still on screen joins again when
+    /// it changes.
+    private(set) var joinRound = 0
 
     init(app: MailApp? = nil) {
         self.app = app
     }
 
-    /// Let an area hang its hooks (`asks`, `keys`, `more`, `rowMenu` and the rest) on the mailbox, once.
+    /// Let an area hang its hooks (`asks`, `keys`, `more`, `rowMenu` and the rest) on the mailbox, once a window.
     func join(_ area: String, _ hooks: (Mailbox) -> Void) {
         guard joined.insert(area).inserted else { return }
         hooks(self)
+    }
+
+    /// Let go of every area's hooks, as the window whose views hung them closes: they reach that window's desk, shell
+    /// and pane, which go with it. The process's one mailbox outlives its windows, so the window opened again from
+    /// the Dock hangs its own, and the areas of a window still open hang theirs again (`joinRound`).
+    func leave() {
+        joined = []
+        asks = nil
+        plans = nil
+        composeTo = nil
+        more = []
+        keys = [:]
+        rowMenu = []
+        opensBrief = nil
+        snoozes = nil
+        translates = nil
+        keepsLiteral = nil
+        translating = nil
+        stopsTranslating = nil
+        joinRound += 1
     }
 
     /// The routes: the test's, else the app's core's once it is open.

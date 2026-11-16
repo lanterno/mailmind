@@ -19,7 +19,8 @@ struct ReaderPane: View {
     }
 
     /// Writing in the mailbox: a sender's card writes to them, the list's r, a, f and c reply, reply to all, forward
-    /// and write, and the palette lists them, as the page's commands do.
+    /// and write, and the palette lists them, as the page's commands do. They read this pane as it is on screen (its
+    /// state is the window's own), and the window lets them go as it closes (`Mailbox.leave`).
     private func joinMailbox() {
         let pane = self
         app.mailbox.join("compose") { mailbox in
@@ -103,6 +104,8 @@ struct ReaderPane: View {
             if let core = app.core { composing.attach(core) }
             joinMailbox()
         }
+        // Another window let go of the mailbox's hooks as it closed: this one's hang theirs again.
+        .onChange(of: app.mailbox.joinRound) { joinMailbox() }
         .task(id: thread) {
             guard let thread, let core = app.core else {
                 conversation = nil

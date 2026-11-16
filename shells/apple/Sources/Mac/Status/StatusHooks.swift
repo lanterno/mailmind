@@ -31,6 +31,8 @@ struct StatusHooks: ViewModifier {
                 if let core { await status.attach(core) }
             }
             .onAppear { joinMailbox() }
+            // Another window let go of the mailbox's hooks as it closed: this one's hang theirs again.
+            .onChange(of: mailbox?.joinRound) { joinMailbox() }
             // AI turned on or off in Settings: the mailbox reads how it stands again, for what it offers of it.
             .onReceive(NotificationCenter.default.publisher(for: .mailmindAIChanged)) { _ in
                 Task { await mailbox?.readDigest() }
