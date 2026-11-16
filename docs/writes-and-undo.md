@@ -93,7 +93,9 @@
   every `CATCH_UP_EVERY` seconds unless `mailbox.folders.touched` says MailMind put mail in it.
   Each sync ends by publishing `folder-synced` with how many it stored.
 - An Inbox's first scan stores mail that was there before, so on both servers it is no new mail: the sync counts
-  none ("0 new") and publishes no `new-mail`, so no badge or notification follows, only `sync-done`.
+  none ("0 new") and publishes no `new-mail`, so no badge or notification follows, only `sync-done`. So a list open as
+  it runs doesn't wait for `new-mail`: the page reads its lists again on a `sync-done` that stored any mail (`kept`
+  or `junk`), and the Mac app on every `sync-done`; both on each `folder-synced` that read its folder.
 - On the Rust server a first scan reads newest first, in steps of `sync_plan::CHUNK` (500). The sync stores the newest
   step and leaves `scan_state` at `down-to:<uid>`, the lowest UID it stored; the `older-mail` lane reads on below it
   (`Ingest::read_older`), a step at a time, each step's messages, its watermark and its new `scan_state` committed in

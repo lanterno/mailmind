@@ -42,7 +42,8 @@ day's brief are written from, when the page or the Mac app asks for one that isn
 when a person asks (a thread's summary, a draft, Ask, a search written as a sentence, Rewrite); attachments never; and
 with a model on this Mac, or a compatible service at a URL on it, nothing leaves this Mac. Each paid provider's key card
 says it bills per use, apart from any ChatGPT or Claude subscription, and where credit is added; Gemini's, that a key
-belongs on a billed project (`BILLING`, `API.AiProvider.billing`).
+belongs on a project with billing set up, since on the free tier Google may use what is sent, mail included, to improve
+its products (`BILLING`, `API.AiProvider.billing`).
 
 AI mode the file doesn't say (`accounts.domain.preferences.ai_mode_default`) is on where `mailmind.config.json` names a
 key for any provider or `ANTHROPIC_API_KEY` is set, so whoever set Claude up keeps AI, and off otherwise: a fresh install

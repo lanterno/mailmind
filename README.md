@@ -208,8 +208,9 @@ and the AI provider you chose (Claude by default).
 - **Sweep an inbox's junk, with a look first.** Curate's **Sweep** reads the Inbox on the server and lists what
   would go before you confirm: each junk bucket with its count, the senders with the most of it and its newest
   subjects. Starred and unread mail always stays, and the plan says how much; the button counts only what would go. A
-  sweep takes the newest 500 at a time (sweep again for the rest), and one `z` puts all of it back from the Trash, an
-  account's at once.
+  sweep takes the newest 500 at a time (sweep again for the rest), and one `z` puts it back from the Trash, an
+  account's at once (the plan says how much of it, if any, has no Message-ID to find it by and can't come back). A
+  sweep the server stops says so in plain words: try again, or, if some went first, Undo brings that back.
 - **Unsubscribe & sender cleanup.** A ranked "senders flooding you" lane where one
   confirm blocks the sender, sweeps their INBOX copies to Trash (one `z` reverses
   both) and fires one standards-compliant unsubscribe: RFC 8058's one-click POST where the
@@ -486,7 +487,8 @@ ask, or for a switch you turned on in Settings › AI.
   sends, moves, read marks and stars wait in their queues for a normal run, and what can't wait
   is refused. The sync pill says Read-only, and a move says it waits.
   The Mac app has it as a switch in Settings › General ("Read only: MailMind changes nothing on your mail servers"),
-  which it applies the next time it opens, offering to open it again; its welcome screen mentions it.
+  which it applies the next time it opens, offering to open it again; its welcome screen mentions it. Only your own
+  run reads the switch: a demo or test run (one that names its own data folder) runs as it was started.
 - **Filing never loses mail.** A move the server refuses leaves the message where it was
   and says so. On a server without MOVE, MailMind copies the one message, checks the
   copy landed, then removes only that message, never expunging the rest of the folder. A star
@@ -517,7 +519,8 @@ ask, or for a switch you turned on in Settings › AI.
   address's domain, or by the mail servers its domain names, and fills in their servers, with the page where the
   provider's app password is made beside the password. Gmail shows the three steps to an App Password and takes it as
   Google shows it, spaces and all. Any other address is Other IMAP, with its incoming and outgoing (SMTP) servers
-  typed. Microsoft's accounts are recognised, and told they can't be added until MailMind can sign in to Microsoft
+  typed; editing one leaves an outgoing server it never saved following its incoming host. Microsoft's accounts are
+  recognised, and told they can't be added until MailMind can sign in to Microsoft
   ([#47](https://github.com/lanterno/mailmind/issues/47)). A test of an account logs in at its outgoing server too, and
   a connection is tested as soon as it is saved; the Mac app's first run tests it before saving. A Proton account logs
   in with the Bridge's password, which only a saved account is tested with, so a new one is tested once it is added.
