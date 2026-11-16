@@ -30,14 +30,14 @@ export const NEEDS: Record<AiProvider, Needs> = {
 };
 
 // How a provider whose key is paid for bills it, in plain words on its key's card: per use, by the provider, apart from any
-// chat subscription, and where credit is added (for Gemini, the project a key belongs to is billed). A model on this Mac costs
-// nothing, and a compatible service says its own.
+// chat subscription, and where credit is added (for Gemini, the project a key belongs to is billed, since Google's terms let it
+// use what its free tier is sent). A model on this Mac costs nothing, and a compatible service says its own.
 const APART = "separately from any ChatGPT or Claude subscription.";
 export interface Billing { words: string; creditAt?: string }
 export const BILLING: Partial<Record<AiProvider, Billing>> = {
   anthropic: { words: `Billed per use by Anthropic, ${APART} Add credit in Anthropic’s console, under Billing.`, creditAt: "https://console.anthropic.com/settings/billing" },
   openai: { words: `Billed per use by OpenAI, ${APART} Add credit on OpenAI’s platform, under Billing.`, creditAt: "https://platform.openai.com/settings/organization/billing" },
-  gemini: { words: `Billed per use by Google, ${APART} Use a key on a billed project: on the free tier, a key stops each day at its quota.` },
+  gemini: { words: `Billed per use by Google, ${APART} Use a key on a project with billing set up: on the free tier, Google may use what is sent, your mail included, to improve its products, and a key stops each day at its quota.` },
 };
 
 // Which model background summaries ask, and which one what a person asks for goes to, as the digest has them in force: the
