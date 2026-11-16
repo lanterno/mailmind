@@ -491,13 +491,15 @@ final class Composing: ComposeHost {
         }
     }
 
-    /// A quick reply: the reply with its line, then the AI asked, quietly, for a line or two in its place.
+    /// A quick reply: the reply with its line, then, with AI on, the AI asked, quietly, for a line or two in its place.
+    /// With AI off nothing is asked of it, as the page asks nothing, and the line stays.
     func quickReply(_ copy: MailCopy, _ quick: QuickReply) async {
         guard let composer = await reply(copy) else { return }
         composer.startWith(quick.line)
+        guard aiOn else { return }
         let start = composer.body
         await composer.draftReply(tone: .brief, instruction: "\(quick.ask) One or two sentences.", unless: start,
-                                  quiet: true)   // no AI: the line stays, silently
+                                  quiet: true)   // refused or failed: the line stays, silently
     }
 
     // MARK: Replies written ahead (draftAhead.ts)
