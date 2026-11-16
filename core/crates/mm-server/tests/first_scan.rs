@@ -7,7 +7,7 @@
 //!
 //! A process that only reads reads the older mail too. A message whose opening the server won't send costs only its
 //! own text, one whose headers it won't send is left out of the older mail, and a connection lost part way stores
-//! nothing of its step.
+//! nothing of its step. A sync that fails while older mail is still being read keeps saying how far it got.
 
 #![allow(clippy::unwrap_used)]
 
@@ -97,6 +97,8 @@ struct State {
     sends_the_rest: bool,
     /// A FETCH of openings naming this message ends the connection unanswered, once.
     cut_at: Option<u32>,
+    /// The accounts whose LOGIN the server can't take for now ([UNAVAILABLE]).
+    unavailable: BTreeSet<String>,
 }
 
 /// An IMAP server on loopback, over TLS from the first byte, with an INBOX for each account. It answers what a sync
@@ -181,6 +183,16 @@ impl Imap {
         self.held().cut_at = Some(uid);
     }
 
+    /// The server can't take the account's login for now, or can again.
+    fn unavailable(&self, email: &str, unavailable: bool) {
+        let mut state = self.held();
+        if unavailable {
+            state.unavailable.insert(email.to_owned());
+        } else {
+            state.unavailable.remove(email);
+        }
+    }
+
     /// What `user` was sent that starts with `start`, in order.
     fn sent(&self, user: &str, start: &str) -> Vec<String> {
         let state = self.held();
@@ -249,7 +261,9 @@ impl Connection {
         if verb == "LOGIN" {
             let quoted: Vec<&str> = command.split('"').collect();
             let (user, password) = (quoted.get(1).copied().unwrap_or(""), quoted.get(3).copied().unwrap_or(""));
-            if self.held().passwords.get(user).is_some_and(|p| p == password) {
+            if self.held().unavailable.contains(user) {
+                self.say(format!("{tag} NO [UNAVAILABLE] try again later\r\n").as_bytes())?;
+            } else if self.held().passwords.get(user).is_some_and(|p| p == password) {
                 self.user = user.to_owned();
                 self.say(format!("{tag} OK [CAPABILITY IMAP4rev1] logged in\r\n").as_bytes())?;
             } else {
@@ -734,4 +748,31 @@ fn a_step_of_older_mail_none_of_which_the_server_sends_stores_nothing_and_the_sc
     assert_eq!(w.stored(ADA), range(701, 1200));
     let said = w.said(ADA);
     assert_eq!((said["done"].clone(), said["total"].clone()), (json!(500), json!(1200)));
+}
+
+#[test]
+fn a_sync_that_fails_while_a_first_scan_reads_older_mail_keeps_saying_how_far_it_got() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 1200));
+    let w = world(imap, &[ADA]);
+    w.reads_older();
+    w.app.syncing.sync_once();
+    let standing = |said: Value| (said["health"].clone(), said["done"].clone(), said["total"].clone());
+    assert_eq!(standing(w.said(ADA)), (json!("ok"), json!(500), json!(1200)));
+    // The server can't take a login for now, which may pass: the account shows as it did, how far it got with it.
+    w.imap.unavailable(ADA, true);
+    w.app.syncing.sync_once();
+    assert_eq!(standing(w.said(ADA)), (json!("ok"), json!(500), json!(1200)));
+    // A second in a row shows, and still says how far the scan got.
+    w.app.syncing.sync_once();
+    assert_eq!(standing(w.said(ADA)), (json!("error"), json!(500), json!(1200)));
+    assert_eq!(w.said(ADA)["msg"], "LoginUnavailable");
+    // Once the server takes it again, the older mail is read to the oldest and the next sync works.
+    w.imap.unavailable(ADA, false);
+    assert!(!w.app.syncing.read_older().unwrap());
+    assert_eq!(w.stored(ADA), range(1, 1200));
+    w.app.syncing.sync_once();
+    let said = w.said(ADA);
+    assert_eq!(said["health"], "ok");
+    assert!(said.get("done").is_none() && said.get("total").is_none(), "{said}");
 }

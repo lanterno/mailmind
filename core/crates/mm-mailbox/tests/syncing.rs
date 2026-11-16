@@ -1,4 +1,4 @@
-//! `syncing`: each account's INBOX synced through the single flight, and how each account's sync stands. A world of
+//! `syncing`: each account's INBOX synced through its own flight, and how each account's sync stands. A world of
 //! stand-ins: a server that never answers as it was asked to, a store that keeps nothing, and a clock the test moves.
 //! The served suites hold what a sync stores; these hold what the flight and an account's standing do when a sync
 //! goes wrong. Every address is fictional.
@@ -326,4 +326,32 @@ fn a_wake_starts_trouble_that_may_pass_afresh_so_a_failure_from_before_the_sleep
     // A refused password showed at once, and a wake doesn't hide it.
     syncing.woke();
     assert_eq!(standing(&syncing, BEA), error("LoginRefused"));
+}
+
+#[test]
+fn an_account_whose_sync_panics_on_its_own_thread_leaves_the_others_syncing_and_every_flight_lands() {
+    let world = World::with(&[PANICS, ADA]);
+    let syncing = syncing(&world);
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, PANICS), error("Panic"));
+    assert_eq!(world.opened.load(Ordering::SeqCst), 2, "the other account's sync went too");
+    assert!(!syncing.sync().unwrap().running);
+    // Both flights landed: the next sync runs each again.
+    syncing.sync_guarded(None);
+    assert_eq!(world.opened.load(Ordering::SeqCst), 4);
+}
+
+#[test]
+fn a_round_that_panics_before_its_accounts_sync_lands_their_flights_so_the_next_sync_runs_them() {
+    let world = World::with(&[ADA, BEA]);
+    world.panic_waking.store(1, Ordering::SeqCst);
+    let syncing = syncing(&world);
+    syncing.sync_guarded(None);
+    assert_eq!(world.opened.load(Ordering::SeqCst), 0, "the round ended before its accounts' syncs");
+    assert!(!syncing.sync().unwrap().running);
+    // Neither account is left taken by a flight that never flew.
+    syncing.sync_guarded(Some(BTreeSet::from([ADA.to_owned()])));
+    assert_eq!(world.opened.load(Ordering::SeqCst), 1);
+    syncing.sync_guarded(None);
+    assert_eq!(world.opened.load(Ordering::SeqCst), 3);
 }
