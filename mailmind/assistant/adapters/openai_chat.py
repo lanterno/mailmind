@@ -2,30 +2,24 @@
 Gemini through Google's OpenAI-compatible endpoint, a model on this Mac and any other compatible service, each given its base
 URL, its key (or none) and its model. What goes on the wire and how a reply reads is `chat_wire`'s.
 
-It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when there is a key, and no proxy: the request
-goes to the host the URL names. It tries the statuses a retry can help (408, 409, 429 and 5xx), and a connection that
-failed, twice more, honouring retry-after, as the Anthropic SDK does. An attempt's time limit is a deadline for all of it,
-and an answer runs to 32 MiB at most. A model on this Mac and a compatible service may not take structured output: a 400
+It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when there is a key, each attempt an `exchange`:
+no proxy, the request going to the host the URL names, its time limit a deadline for all of it, and an answer of 32 MiB at
+most. It tries the statuses a retry can help (408, 409, 429 and 5xx), and a connection that failed, twice more, honouring
+retry-after, as the Anthropic SDK does. A model on this Mac and a compatible service may not take structured output: a 400
 that names `response_format` is asked once more without it, the schema stated in the prompt instead, and the reply read as
 free-form JSON. OpenAI and Gemini are given a ceiling on a reply's tokens that a model may be unable to meet: a 400 whose
 error names `max_tokens` or `max_completion_tokens` is asked once more without it. A rejected key's error holds none of what the
 service said, which can quote part of the key back, and a key with a blank or a control character in it is never sent: it
 is refused as a rejected key is. It takes no batch.
 """
-import http.client
 import json
 import random
-import socket
-import ssl
-import threading
 import time
-import unicodedata
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Any, cast
-from urllib.parse import urlsplit
 
-from mailmind.assistant.adapters import chat_wire
+from mailmind.assistant.adapters import chat_wire, exchange
+from mailmind.assistant.adapters.exchange import Answer as _Answer
 from mailmind.assistant.application.ports import BatchResult, ModelError, NoBatches, Prompt, Reply
 from mailmind.assistant.domain.providers import TIMEOUT, sendable
 from mailmind.kernel.ai_provider import AiProvider
@@ -34,8 +28,6 @@ from mailmind.platform.db import txguard
 RETRIES = 2                        # after the first attempt
 LONGEST_WAIT = 60                  # seconds: a retry-after past this isn't waited for
 SAID = 200                         # characters of what a service said an error kept
-MOST = 32 << 20                    # bytes: the most an answer may run to, as the Rust server reads one
-_PIECE = 64 << 10                  # bytes read at a time, at most
 _RETRIED = frozenset({408, 409, 429})
 _AUTH = frozenset({401, 403})
 _KEY_INVALID = "API_KEY_INVALID"   # the reason Gemini's 400 gives for a key that isn't one
@@ -43,17 +35,6 @@ _NOT_VALID = "API key not valid"   # ...and how its message starts
 _FALLS_BACK = frozenset({"local", "compatible"})      # may not take response_format
 _CEILING_WORDS = ("max_tokens", "max_completion_tokens")         # in what a 400 says of a ceiling a model can't meet
 _NO_BATCHES = "Batches need Claude as the AI provider."
-
-
-class _Answer:
-    def __init__(self, status: int, body: bytes, headers: Mapping[str, str]):
-        self.status, self.body, self.headers = status, body, headers
-
-    def json(self) -> Any:
-        try:
-            return json.loads(self.body or b"null")
-        except ValueError:
-            return None
 
 
 def _retried(status: int) -> bool:
@@ -106,81 +87,18 @@ def _key_refused(answer: _Answer) -> bool:
     return _said(answer).startswith(_NOT_VALID)
 
 
-@dataclass(frozen=True)
-class Endpoint:
-    """Where an API is: over TLS or not, its host (an IPv6 address without its brackets), its port, and the path its routes
-    hang from, without a trailing /."""
-    tls: bool
-    host: str
-    port: int
-    base: str
-
-
-def endpoint(url: str) -> Endpoint | None:
-    """An http or https URL as where its API is, at the scheme's port where it names none, or None for one that names no
-    API: another scheme, no host, a user, a blank or a control character, or a port that is empty, no number, or outside 1
-    to 65535."""
-    url = url.strip()
-    if any(ch.isspace() or unicodedata.category(ch) == "Cc" for ch in url):
-        return None
-    try:
-        parts = urlsplit(url)
-        port = parts.port
-    except ValueError:
-        return None
-    if parts.scheme not in ("http", "https") or not parts.hostname or "@" in parts.netloc or parts.netloc.endswith(":"):
-        return None
-    tls = parts.scheme == "https"
-    port = (443 if tls else 80) if port is None else port
-    if not 1 <= port <= 65535:
-        return None
-    return Endpoint(tls, parts.hostname, port, parts.path.rstrip("/"))
-
-
-class ResponseTooLarge(http.client.HTTPException):
-    """An answer longer than MOST."""
-
-
-def _whole(resp: http.client.HTTPResponse) -> bytes:
-    """All of a response's body, read as it comes: ResponseTooLarge once it is longer than MOST, and IncompleteRead where it
-    ends short of the length it said."""
-    if resp.length is not None and resp.length > MOST:
-        raise ResponseTooLarge
-    body = bytearray()
-    while piece := resp.read1(_PIECE):
-        body += piece
-        if len(body) > MOST:
-            raise ResponseTooLarge
-    if resp.length:
-        raise http.client.IncompleteRead(b"", resp.length)
-    return bytes(body)
-
-
-def _cut(conn: http.client.HTTPConnection, held: list[socket.socket], expired: threading.Event) -> None:
-    """At an attempt's deadline: say so, and end its connection under whatever waits on it (the socket's own, not TLS's,
-    so a read in progress fails rather than finds its TLS gone). A response that ends its connection (HTTP/1.0, `Connection:
-    close`, or no length) takes the socket from `conn`, so the one `held` since connecting is ended then."""
-    expired.set()
-    sock = conn.sock or (held[0] if held else None)
-    if sock is not None:
-        try:
-            socket.socket.shutdown(sock, socket.SHUT_RDWR)
-        except OSError:
-            pass
-
-
 class Http:
     """One service's HTTP: requests to `base_url` with `key`, each attempt its own connection."""
 
     def __init__(self, provider: AiProvider, base_url: str, key: str, timeout: float = TIMEOUT):
         self.provider: AiProvider = provider
         self._key, self._timeout = key, timeout
-        self._endpoint = endpoint(base_url)
+        self._endpoint = exchange.endpoint(base_url)
 
     def send(self, method: str, path: str, body: dict[str, Any] | None = None) -> _Answer:
-        """One attempt, which the timeout limits all told: connecting, asking and reading the whole answer, of MOST bytes at
-        most. Raises ModelError when nothing answered, or nothing whole in time, and as a refused key, unsent, for a key that
-        can't be one."""
+        """One attempt, which the timeout limits all told: connecting, asking and reading the whole answer, of exchange.MOST
+        bytes at most. Raises ModelError when nothing answered, or nothing whole in time, and as a refused key, unsent, for a
+        key that can't be one."""
         end = self._endpoint
         if end is None:
             raise ModelError(f"{self.provider} unreachable: no API address")
@@ -193,38 +111,10 @@ class Http:
         if body is not None:
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
-        conn: http.client.HTTPConnection
-        if end.tls:
-            conn = http.client.HTTPSConnection(end.host, end.port, timeout=self._timeout,
-                                               context=ssl.create_default_context())
-        else:
-            conn = http.client.HTTPConnection(end.host, end.port, timeout=self._timeout)
-        expired = threading.Event()
-        held: list[socket.socket] = []           # the connection's socket, which a response that ends it takes from conn
-        resp: http.client.HTTPResponse | None = None
-        deadline = threading.Timer(self._timeout, _cut, (conn, held, expired))
-        deadline.daemon = True
-        deadline.start()
         try:
-            conn.connect()
-            held.append(conn.sock)
-            if expired.is_set():                 # it ran out while connecting, before there was a socket to end
-                raise TimeoutError
-            conn.request(method, end.base + path, body=data, headers=headers)
-            resp = conn.getresponse()
-            answer = _Answer(resp.status, _whole(resp), {k.lower(): v for k, v in resp.getheaders()})
-            if expired.is_set():                 # ended under it, which can look like a body that ended
-                raise TimeoutError
-            return answer
-        except (OSError, http.client.HTTPException, ValueError) as e:     # never its words, which can quote a header
-            why = ("timed out" if expired.is_set() or isinstance(e, TimeoutError) else
-                   "connection refused" if isinstance(e, ConnectionRefusedError) else type(e).__name__)
-            raise ModelError(f"{self.provider} unreachable: {why}") from None
-        finally:
-            deadline.cancel()
-            if resp is not None:                 # holds the socket where it ends the connection
-                resp.close()
-            conn.close()
+            return exchange.attempt(end, method, end.base + path, headers, data, self._timeout)
+        except exchange.Unanswered as e:
+            raise ModelError(f"{self.provider} unreachable: {e.why}") from None
 
     def _refused_key(self, status: int) -> ModelError:
         return ModelError(f"{self.provider} API {status}: the key was refused", status)
