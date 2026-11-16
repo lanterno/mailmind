@@ -307,9 +307,9 @@ fn the_ai_preferences_change_through_the_route_and_another_provider_clears_its_m
         let said = r.get("/api/preferences").json()["preferences"].clone();
         json!([said["ai_enabled"], said["ai_provider"], said["ai_model"], said["ai_base_url"]])
     };
-    assert_eq!(ai(&r), json!([true, "anthropic", "", ""]));
-    let asked =
-        json!({"ai_provider": "compatible", "ai_model": "mixtral-8x7b", "ai_base_url": "https://llm.example.test/v1/"});
+    assert_eq!(ai(&r), json!([false, "anthropic", "", ""]), "a fresh install");
+    let asked = json!({"ai_enabled": true, "ai_provider": "compatible", "ai_model": "mixtral-8x7b",
+                       "ai_base_url": "https://llm.example.test/v1/"});
     assert_eq!(r.post("/api/preferences", &asked).status, 200);
     assert_eq!(ai(&r), json!([true, "compatible", "mixtral-8x7b", "https://llm.example.test/v1"]));
     assert_eq!(r.post("/api/preferences", &json!({"ai_provider": "local", "ai_enabled": false})).status, 200);
@@ -333,19 +333,48 @@ fn the_ai_preferences_change_through_the_route_and_another_provider_clears_its_m
 // -- what the status says ------------------------------------------------------------------
 
 #[test]
+fn ai_mode_is_off_on_a_fresh_install_and_on_where_there_is_a_key_until_it_is_set() {
+    let r = running(&json!({}), &[]);
+    let mode = |r: &Running| r.get("/api/preferences").json()["preferences"]["ai_enabled"].clone();
+    assert_eq!((mode(&r), r.ai()), (json!(false), json!(["none", "anthropic", "turned-off", "", ""])));
+    r.post("/api/ai/key", &json!({"provider": "anthropic", "key": "sk-ant-fictional"}));
+    assert_eq!(mode(&r), json!(true), "a key kept turns it on, unset");
+    assert_eq!(r.ai(), json!(["api", "anthropic", null, "claude-opus-5-5", "mailmind.config.json"]));
+    assert_eq!(r.post("/api/preferences", &json!({"ai_enabled": false})).json()["preferences"]["ai_enabled"], false);
+    assert_eq!((mode(&r), r.ai()[2].clone()), (json!(false), json!("turned-off")), "set, it stands");
+    let config: Value = serde_json::from_slice(&std::fs::read(r.config()).unwrap()).unwrap();
+    assert_eq!(config["preferences"]["ai_enabled"], false);
+    r.post("/api/ai/key/clear", &json!({"provider": "anthropic"}));
+    r.post("/api/preferences", &json!({"ai_enabled": true}));
+    assert_eq!((mode(&r), r.ai()[2].clone()), (json!(true), json!("no-key")));
+
+    let r = running(&json!({}), &[("ANTHROPIC_API_KEY", "sk-ant-fictional")]);
+    assert_eq!((mode(&r), r.ai()[0].clone()), (json!(true), json!("api")), "Claude's key in the environment");
+    let r = running(&json!({"local_api_key": {"keychain": "local-api-key"}}), &[]);
+    assert_eq!(mode(&r), json!(true), "any provider's key the file names");
+}
+
+#[test]
 fn the_status_names_the_provider_why_ai_is_off_and_the_model_in_force() {
     let r = running(&json!({}), &[]);
-    assert_eq!(r.ai(), json!(["none", "anthropic", "no-key", "", ""]));
-    r.write_config(&json!({"preferences": {"ai_enabled": false}}));
     assert_eq!(r.ai(), json!(["none", "anthropic", "turned-off", "", ""]));
-    r.write_config(&json!({"preferences": {"ai_provider": "local"}}));
-    assert_eq!(r.ai(), json!(["none", "local", "no-model", "", ""]));
-    r.write_config(&json!({"preferences": {"ai_provider": "compatible", "ai_model": "mixtral"}}));
-    assert_eq!(r.ai(), json!(["none", "compatible", "no-url", "", ""]));
-    r.write_config(&json!({"preferences": {"ai_provider": "gemini"}}));
-    assert_eq!(r.ai(), json!(["none", "gemini", "no-key", "", ""]));
-    r.write_config(&json!({"preferences": {"ai_provider": "local", "ai_model": "llama3.2:3b"}}));
-    assert_eq!(r.ai(), json!(["api", "local", null, "llama3.2:3b", ""]));
+    let on = |more: Value| {
+        let mut chosen = json!({"ai_enabled": true});
+        chosen.as_object_mut().unwrap().extend(more.as_object().unwrap().clone());
+        r.write_config(&json!({"preferences": chosen}));
+        r.ai()
+    };
+    assert_eq!(on(json!({})), json!(["none", "anthropic", "no-key", "", ""]));
+    assert_eq!(on(json!({"ai_provider": "local"})), json!(["none", "local", "no-model", "", ""]));
+    assert_eq!(
+        on(json!({"ai_provider": "compatible", "ai_model": "mixtral"})),
+        json!(["none", "compatible", "no-url", "", ""])
+    );
+    assert_eq!(on(json!({"ai_provider": "gemini"})), json!(["none", "gemini", "no-key", "", ""]));
+    assert_eq!(
+        on(json!({"ai_provider": "local", "ai_model": "llama3.2:3b"})),
+        json!(["api", "local", null, "llama3.2:3b", ""])
+    );
 
     r.post("/api/ai/key", &json!({"provider": "openai", "key": "sk-fictional"}));
     let mut config: Value = serde_json::from_slice(&std::fs::read(r.config()).unwrap()).unwrap();
@@ -371,6 +400,12 @@ fn the_startup_line_says_the_ai_in_force_and_never_its_url_or_key() {
     let line = || r.app.assistant.describe_engine();
     assert_eq!(
         line(),
+        "Claude (Anthropic) · claude-opus-5-5 · AI is turned off: turn it on in Settings, or with `uv run python -m \
+         mailmind ai on`"
+    );
+    r.post("/api/preferences", &json!({"ai_enabled": true}));
+    assert_eq!(
+        line(),
         "Claude (Anthropic) · claude-opus-5-5 · no key, so AI is off: keep one with `uv run python -m mailmind ai \
          key`, or set ANTHROPIC_API_KEY"
     );
@@ -388,8 +423,8 @@ fn the_startup_line_says_the_ai_in_force_and_never_its_url_or_key() {
 #[test]
 fn a_call_goes_to_the_provider_chosen_and_with_ai_turned_off_nowhere() {
     let (url, log) = provider(vec![(200, completion(&json!({"text": "Hi."})))]);
-    let r =
-        running(&json!({"preferences": {"ai_provider": "local", "ai_model": "llama3.2:3b", "ai_base_url": url}}), &[]);
+    let chosen = json!({"ai_enabled": true, "ai_provider": "local", "ai_model": "llama3.2:3b", "ai_base_url": url});
+    let r = running(&json!({"preferences": chosen}), &[]);
     let rewrite = json!({"text": "Hello there, how are you?", "op": "shorten"});
     let answered = r.post("/api/ai/rewrite", &rewrite);
     assert_eq!((answered.status, answered.json()), (200, json!({"ok": true, "text": "Hi.", "op": "shorten"})));

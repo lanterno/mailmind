@@ -20,7 +20,7 @@ fn object(value: Value) -> Map<String, Value> {
 
 #[test]
 fn a_file_with_no_block_reads_as_the_defaults() {
-    let read = read(&object(json!({"accounts": []})));
+    let read = read(&object(json!({"accounts": []})), false);
     assert_eq!(read.len(), 25);
     assert_eq!(read["undo_send_seconds"], json!(10));
     assert_eq!(read["theme"], json!("day"));
@@ -33,7 +33,7 @@ fn a_file_with_no_block_reads_as_the_defaults() {
 fn what_a_hand_edit_left_that_cant_be_one_is_the_default() {
     let raw = object(json!({"preferences": {"undo_send_seconds": 10.0, "theme": "teal", "single_keys": 0,
                                             "quiet_from": "24:00", "density": "cozy"}}));
-    let read = read(&raw);
+    let read = read(&raw, false);
     assert_eq!(read["undo_send_seconds"], json!(10));
     assert_eq!(read["theme"], json!("day"));
     assert_eq!(read["single_keys"], json!(true));
@@ -85,11 +85,11 @@ fn the_daily_limit_reads_as_python_reads_it() {
 // -- AI's switch, its provider, model and address (#49) ------------------------------------------------------------
 
 #[test]
-fn ai_is_on_with_claude_its_own_model_and_its_usual_address_when_the_file_says_nothing() {
-    let read = read(&object(json!({"accounts": []})));
+fn a_fresh_file_has_ai_mode_off_with_claude_its_own_model_and_its_usual_address() {
+    let read = read(&object(json!({"accounts": []})), false);
     assert_eq!(
         (&read["ai_enabled"], &read["ai_provider"], &read["ai_model"], &read["ai_base_url"]),
-        (&json!(true), &json!("anthropic"), &json!(""), &json!(""))
+        (&json!(false), &json!("anthropic"), &json!(""), &json!(""))
     );
     let names: Vec<&str> = read.keys().map(String::as_str).collect();
     assert_eq!(names[21..], ["ai_enabled", "ai_provider", "ai_model", "ai_base_url"]);
@@ -97,10 +97,64 @@ fn ai_is_on_with_claude_its_own_model_and_its_usual_address_when_the_file_says_n
 }
 
 #[test]
+fn ai_mode_the_file_doesnt_set_is_on_where_there_is_a_key_to_ask_with() {
+    let mode = |raw: Value, key_in_environment: bool| read(&object(raw), key_in_environment)["ai_enabled"].clone();
+    assert_eq!(mode(json!({}), true), json!(true), "ANTHROPIC_API_KEY set");
+    assert_eq!(mode(json!({"anthropic_api_key": {"keychain": "anthropic-api-key", "version": 1}}), false), json!(true));
+    assert_eq!(mode(json!({"local_api_key": {"keychain": "local-api-key"}}), false), json!(true), "any provider's");
+    assert_eq!(mode(json!({"gemini_api_key": {"op": "op://Private/Gemini/credential"}}), false), json!(true));
+    assert_eq!(mode(json!({"openai_api_key": {}, "compatible_api_key": null}), false), json!(false), "naming none");
+    assert_eq!(mode(json!({"other_api_key": {"keychain": "x"}}), false), json!(false), "no provider's");
+    // What the file sets stands, either way.
+    let off = json!({"anthropic_api_key": {"keychain": "anthropic-api-key"}, "preferences": {"ai_enabled": false}});
+    assert_eq!(mode(off, true), json!(false));
+    assert_eq!(mode(json!({"preferences": {"ai_enabled": true}}), false), json!(true));
+    // A value that can't be one is no setting.
+    assert_eq!(mode(json!({"preferences": {"ai_enabled": "yes"}}), false), json!(false));
+    assert_eq!(mode(json!({"preferences": {"ai_enabled": 1}}), true), json!(true));
+}
+
+#[test]
+fn settings_answer_ai_mode_in_force_and_keep_it_once_set() {
+    let file = Arc::new(File(Mutex::new(object(json!({"accounts": []})))));
+    let directory = Directory::new(file.clone(), Arc::new(NoKeychain), Arc::new(At));
+    let mode = |answer: Value| answer["preferences"]["ai_enabled"].clone();
+    assert_eq!(mode(directory.preferences().expect("read")), json!(false), "a fresh install");
+    file.write(&object(json!({"accounts": [], "openai_api_key": {"keychain": "openai-api-key"}}))).expect("written");
+    assert_eq!(mode(directory.preferences().expect("read")), json!(true), "a key is named");
+    assert_eq!(mode(directory.set_preferences(&object(json!({"ai_enabled": false}))).expect("kept")), json!(false));
+    assert_eq!(file.read().expect("the file")["preferences"], json!({"ai_enabled": false}));
+    assert_eq!(mode(directory.preferences().expect("read")), json!(false));
+}
+
+#[test]
+fn settings_count_claudes_key_in_the_environment_toward_ai_mode() {
+    let file = Arc::new(File(Mutex::new(object(json!({"accounts": []})))));
+    let with = |given: Option<&str>| {
+        let variables = Arc::new(Given(given.map(str::to_owned)));
+        let directory = Directory::new(file.clone(), Arc::new(NoKeychain), Arc::new(At)).reading_variables(variables);
+        directory.preferences().expect("read")["preferences"]["ai_enabled"].clone()
+    };
+    assert_eq!(with(Some("sk-ant-fictional")), json!(true));
+    assert_eq!(with(Some("  ")), json!(false), "blank is none");
+    assert_eq!(with(None), json!(false));
+}
+
+/// The environment, giving `ANTHROPIC_API_KEY` alone.
+#[derive(Debug)]
+struct Given(Option<String>);
+
+impl mm_accounts::ports::Variables for Given {
+    fn variable(&self, name: &str) -> Option<Secret> {
+        self.0.clone().filter(|_| name == "ANTHROPIC_API_KEY").map(Secret::new)
+    }
+}
+
+#[test]
 fn an_ai_setting_a_hand_edit_left_that_cant_be_one_is_its_default() {
     let raw = object(json!({"preferences": {"ai_enabled": "no", "ai_provider": "claude",
                                             "ai_model": "gpt 6", "ai_base_url": "http://api.example.test/v1"}}));
-    let said = read(&raw);
+    let said = read(&raw, true);
     assert_eq!(
         (&said["ai_enabled"], &said["ai_provider"], &said["ai_model"], &said["ai_base_url"]),
         (&json!(true), &json!("anthropic"), &json!(""), &json!(""))
@@ -109,7 +163,7 @@ fn an_ai_setting_a_hand_edit_left_that_cant_be_one_is_its_default() {
 
     let raw = object(json!({"preferences": {"ai_enabled": false, "ai_provider": "local",
                                             "ai_model": "llama3.2:3b", "ai_base_url": "http://localhost:11434/v1/"}}));
-    let read = read(&raw);
+    let read = read(&raw, true);
     assert_eq!(
         (&read["ai_enabled"], &read["ai_provider"], &read["ai_model"], &read["ai_base_url"]),
         (&json!(false), &json!("local"), &json!("llama3.2:3b"), &json!("http://localhost:11434/v1"))
@@ -234,7 +288,7 @@ fn settings_keep_a_switch_of_provider_without_the_last_ones_model_and_address() 
     let said = &answer["preferences"];
     assert_eq!(
         (&said["ai_provider"], &said["ai_model"], &said["ai_base_url"], &said["ai_enabled"]),
-        (&json!("openai"), &json!(""), &json!(""), &json!(true))
+        (&json!("openai"), &json!(""), &json!(""), &json!(false))
     );
     let raw = file.read().expect("the file");
     assert_eq!(raw["preferences"], json!({"ai_provider": "openai", "ai_model": "", "ai_base_url": ""}));
@@ -280,10 +334,10 @@ fn a_model_on_this_mac_is_at_an_address_on_this_mac_or_refused_in_words() {
 fn a_model_on_this_mac_a_hand_edit_left_elsewhere_reads_at_its_usual_address_and_other_changes_go_on() {
     let elsewhere =
         json!({"accounts": [], "preferences": {"ai_provider": "local", "ai_base_url": "https://llm.example.test/v1"}});
-    assert_eq!(read(&object(elsewhere.clone()))["ai_base_url"], json!(""));
+    assert_eq!(read(&object(elsewhere.clone()), false)["ai_base_url"], json!(""));
     let compatible =
         object(json!({"preferences": {"ai_provider": "compatible", "ai_base_url": "https://llm.example.test/v1"}}));
-    assert_eq!(read(&compatible)["ai_base_url"], json!("https://llm.example.test/v1"));
+    assert_eq!(read(&compatible, false)["ai_base_url"], json!("https://llm.example.test/v1"));
 
     let file = Arc::new(File(Mutex::new(object(elsewhere))));
     let directory = Directory::new(file.clone(), Arc::new(NoKeychain), Arc::new(At));
