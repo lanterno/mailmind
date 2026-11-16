@@ -79,7 +79,7 @@ final class CoreHomeTests: XCTestCase {
         let home = try CoreHome.ofThisProcess([
             "MAILMIND_HOME": "/private/tmp/home", "MAILMIND_TEST_KEYCHAIN": "/private/tmp/home/keychain.json",
             "MAILMIND_DB_KEY": "fixture", "NOT_MAILMINDS": "left out",
-        ])
+        ], readOnly: false)
         XCTAssertEqual(home.folder, "/private/tmp/home")
         XCTAssertEqual(home.standIn, "/private/tmp/home/keychain.json")
         XCTAssertEqual(home.variables, ["MAILMIND_DB_KEY": "fixture"], "only what MailMind reads reaches the core")
@@ -87,9 +87,28 @@ final class CoreHomeTests: XCTestCase {
 
     func testAMeasureDemoOrTestRunWithNoHomeOpensNothing() {
         for variable in CoreHome.notAPersonsRun {
-            XCTAssertThrowsError(try CoreHome.ofThisProcess([variable: "1", "MAILMIND_HOME": ""])) {
+            XCTAssertThrowsError(try CoreHome.ofThisProcess([variable: "1", "MAILMIND_HOME": ""], readOnly: false)) {
                 XCTAssertEqual($0 as? NoHomeNamed, NoHomeNamed(variable: variable))
             }
+        }
+    }
+
+    /// Settings' read-only switch reaches the core as the profile a read-only run names, unless the environment names
+    /// one of its own.
+    func testTheReadOnlySwitchRunsTheCoreReadOnly() throws {
+        let home = try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home"], readOnly: true)
+        XCTAssertEqual(home.variables, ["MAILMIND_PROFILE": "read-only"])
+        XCTAssertEqual(try CoreHome.ofThisProcess(["MAILMIND_HOME": "/private/tmp/home"], readOnly: false).variables, [:])
+        XCTAssertEqual(CoreHome.variables(["MAILMIND_PROFILE": "dev"], readOnly: true), ["MAILMIND_PROFILE": "dev"])
+    }
+
+    /// Only a person's run opens itself again: another names a home of its own, or is a measure, demo or test run.
+    func testOnlyAPersonsRunIsOne() {
+        XCTAssertTrue(CoreHome.isAPersonsRun(["HOME": "/Users/ada"]))
+        XCTAssertTrue(CoreHome.isAPersonsRun(["MAILMIND_HOME": ""]))
+        XCTAssertFalse(CoreHome.isAPersonsRun(["MAILMIND_HOME": "/private/tmp/home"]))
+        for variable in CoreHome.notAPersonsRun {
+            XCTAssertFalse(CoreHome.isAPersonsRun([variable: "1"]), variable)
         }
     }
 }

@@ -232,6 +232,18 @@ final class AccountDraftTests: XCTestCase {
     }
 }
 
+/// The read-only switch: what it says while it and the run disagree.
+final class ReadOnlyRunTests: XCTestCase {
+    func testTheSwitchSaysItTakesEffectWhenMailMindOpensAgain() {
+        XCTAssertNil(ReadOnlyRun.pending(chosen: true, running: nil), "nothing until the core has said how it runs")
+        XCTAssertNil(ReadOnlyRun.pending(chosen: true, running: "read-only"))
+        XCTAssertNil(ReadOnlyRun.pending(chosen: false, running: "full"))
+        XCTAssertEqual(ReadOnlyRun.pending(chosen: true, running: "full"), "Read only starts the next time MailMind opens.")
+        XCTAssertEqual(ReadOnlyRun.pending(chosen: false, running: "read-only"),
+                       "MailMind changes mail on your servers again the next time it opens.")
+    }
+}
+
 /// What Settings says of the Claude API key and the Bridge's password: whether one is kept, and what wins over it.
 final class SecretStandingTests: XCTestCase {
     func testOnlyTheVariablesThisAppHandsTheCoreCountAndOnlyWhetherTheyAreSet() {
