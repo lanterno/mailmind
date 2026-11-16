@@ -20,6 +20,7 @@ import { settingsOpen, settingsSection, type SettingsSection } from "../../lib/s
 import { AiForm } from "./Ai";
 import { AI_KEPT } from "./aiChoices";
 import { PreferencesForm } from "./Preferences";
+import { outgoingBits, outgoingOf, type Security } from "./outgoing";
 import { Seg } from "./Seg";
 import { useStepBack } from "./useStepBack";
 import { useLayer } from "../../lib/backTrap";
@@ -32,7 +33,6 @@ type Cred = "keychain" | "op" | "env" | "proton_bridge";
 type Link = { url: string; words: string };
 type Tested = { kind: "run" | "ok" | "err"; text: string; detail?: string; link?: Link | null } | null;
 type Found = GetAnswers["/api/accounts/preset"];
-type Security = "tls" | "starttls";
 
 // Where a Google Account makes an App Password, which Gmail's IMAP takes in place of the account's own password.
 const APP_PASSWORDS = "https://myaccount.google.com/apppasswords";
@@ -136,9 +136,10 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
   const [host, setHost] = useState(row?.host ?? "");
   const [port, setPort] = useState(String(row?.port ?? 993));
   const [security, setSecurity] = useState<Security>(row?.starttls ? "starttls" : "tls");
-  const [smtpHost, setSmtpHost] = useState(row?.smtp_host ?? "");
-  const [smtpPort, setSmtpPort] = useState(String(row?.smtp_port ?? 587));
-  const [smtpSecurity, setSmtpSecurity] = useState<Security>(row?.smtp_starttls === false ? "tls" : "starttls");
+  const outgoing = outgoingOf(row);
+  const [smtpHost, setSmtpHost] = useState(outgoing.host);
+  const [smtpPort, setSmtpPort] = useState(outgoing.port);
+  const [smtpSecurity, setSmtpSecurity] = useState<Security>(outgoing.security);
   const [trash, setTrash] = useState<string | null>(null);
   const [applied, setApplied] = useState<string | null>(null);   // the preset whose settings are in the form
   const [style, setStyle] = useState<Exclude<Cred, "proton_bridge">>(was?.style === "op" || was?.style === "env" ? was.style : "keychain");
@@ -204,7 +205,7 @@ function ConnectionForm({ row, signatureDefault, done, cancel }: { row: Connecti
   const kind: Kind = type ?? "imap";
   const imapBits = () => (kind === "imap"
     ? { host: host.trim(), port: Number(port) || 993, starttls: security === "starttls",
-        ...(smtpHost.trim() ? { smtp_host: smtpHost.trim() } : {}), smtp_port: Number(smtpPort) || 587, smtp_starttls: smtpSecurity === "starttls" }
+        ...outgoingBits({ host: smtpHost, port: smtpPort, security: smtpSecurity }, row) }
     : {});
   // A Proton account logs in with the Bridge's password, which only a saved account is tested with.
   const testsOnceAdded = !row && kind === "proton";
