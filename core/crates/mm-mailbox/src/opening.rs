@@ -7,7 +7,8 @@
 //!
 //! Only INBOX is synced in the background, so another folder is caught up as it opens, at most once a minute, unless
 //! MailMind put mail there since (`Folders::touched`). An open while a sync of that folder runs joins it, rather than
-//! start another.
+//! start another. An Inbox no scan has begun joins the background's sync of it (`InboxSync`), which takes no gate,
+//! so a message opens while it reads.
 //!
 //! A first scan stores the folder's newest mail and leaves the rest to the background (`Syncing::read_older`), so a
 //! folder whose first scan has begun is caught up as one read before.
@@ -23,7 +24,7 @@ use serde_json::json;
 
 use crate::folders::Folders;
 use crate::gates::{Gates, Priority, Wait, on_gate};
-use crate::opening_ports::{Background, FolderSync};
+use crate::opening_ports::{Background, FolderSync, InboxSync};
 use crate::ports::{FolderSyncs, Opened, StoredLists};
 use crate::sync_plan;
 use crate::sync_ports::{Events, MailboxEvent};
@@ -89,6 +90,7 @@ struct Inner {
     folders: Arc<Folders>,
     background: Arc<dyn Background>,
     waits: Waits,
+    inbox: Arc<dyn InboxSync>,
     running: Mutex<Running>,
 }
 
@@ -109,13 +111,15 @@ pub struct OpeningParts {
     pub folders: Arc<Folders>,
     pub background: Arc<dyn Background>,
     pub waits: Waits,
+    /// The background's sync of each Inbox, which a first look at one joins.
+    pub inbox: Arc<dyn InboxSync>,
 }
 
 impl FolderOpening {
     pub fn new(parts: OpeningParts) -> FolderOpening {
-        let OpeningParts { stored, sync, gates, events, folders, background, waits } = parts;
+        let OpeningParts { stored, sync, gates, events, folders, background, waits, inbox } = parts;
         let running = Mutex::new(Running::default());
-        FolderOpening(Arc::new(Inner { stored, sync, gates, events, folders, background, waits, running }))
+        FolderOpening(Arc::new(Inner { stored, sync, gates, events, folders, background, waits, inbox, running }))
     }
 
     /// Whether opening a folder read before should catch it up now.
@@ -154,21 +158,25 @@ impl Inner {
         Ok(done)
     }
 
-    /// The sync itself, on its own thread: then what it ended in, told.
+    /// The sync itself, on its own thread: then what it ended in, told. The Inbox's is the background's, joined.
     fn run(&self, key: Key, full: bool, done: &Done) {
         let (account, folder) = (key.0.as_str(), key.1.as_str());
         let priority = if full { Priority::Interactive } else { Priority::AfterUser };
-        let synced =
-            on_gate(&*self.gates, account, priority, Wait::Ever, || self.sync.sync_folder(account, folder, full));
-        let new = match synced {
-            Ok(Ok((kept, junk))) => Some(kept + junk),
-            Ok(Err(error)) => {
-                log::warning(TAG, "a folder's sync as it opened failed", &[], Some(error.class()));
-                None
-            }
-            Err(_) => {
-                log::warning(TAG, "a folder's sync as it opened didn't get its gate", &[], None);
-                None
+        let new = if sync_plan::reads_bodies(folder) {
+            // What it stored, the background's sync tells, and lets the rail's counts go for; it logs a failure.
+            self.inbox.sync_inbox(account).then_some(0)
+        } else {
+            match on_gate(&*self.gates, account, priority, Wait::Ever, || self.sync.sync_folder(account, folder, full))
+            {
+                Ok(Ok((kept, junk))) => Some(kept + junk),
+                Ok(Err(error)) => {
+                    log::warning(TAG, "a folder's sync as it opened failed", &[], Some(error.class()));
+                    None
+                }
+                Err(_) => {
+                    log::warning(TAG, "a folder's sync as it opened didn't get its gate", &[], None);
+                    None
+                }
             }
         };
         {

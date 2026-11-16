@@ -7,6 +7,7 @@ use std::time::Duration;
 use mm_accounts::Directory;
 use mm_kernel::errors::Fault;
 use mm_mailbox::digest::NotSyncing;
+use mm_mailbox::opening_ports::InboxSync;
 use mm_mailbox::ports::{Accounts, MailSession, MailSessions, SessionError};
 use mm_mailbox::syncing::{AccountSync, Syncing};
 use serde_json::{Value, json};
@@ -138,6 +139,13 @@ impl LiveSync {
     fn health(&self, account: &str) -> &'static str {
         let status = self.0.get().and_then(|syncing| syncing.status().ok());
         status.and_then(|status| status.get(account).map(|a| a.health)).unwrap_or("")
+    }
+}
+
+/// A first look at an Inbox joins the sync of it, once there is one.
+impl InboxSync for LiveSync {
+    fn sync_inbox(&self, account: &str) -> bool {
+        self.0.get().is_some_and(|syncing| syncing.sync_inbox(account))
     }
 }
 

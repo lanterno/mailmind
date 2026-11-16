@@ -17,6 +17,13 @@ impl FolderSync for Ingest {
     }
 }
 
+/// The Inbox's sync, which the background keeps (`Syncing`): a first look at an Inbox never read joins it, rather
+/// than read the Inbox a second time beside it.
+pub trait InboxSync: Send + Sync + fmt::Debug {
+    /// The account's sync, now: the one running, waited for, or one started here. Whether it ended well.
+    fn sync_inbox(&self, account: &str) -> bool;
+}
+
 /// Work a request sets going and answers before it is done, on a thread of its own.
 pub trait Background: Send + Sync + fmt::Debug {
     fn spawn(&self, job: Box<dyn FnOnce() + Send>);

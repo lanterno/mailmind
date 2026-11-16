@@ -22,7 +22,7 @@
 //! run again (`woke`).
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 
 use mm_kernel::errors::{Failure, Fault, Problem, caught};
 use mm_kernel::events::Topic;
@@ -34,6 +34,7 @@ use serde_json::json;
 use crate::command_ports::{self, CommandStore, MoveAccounts};
 use crate::folders::Folders;
 use crate::ingest::{Ingest, Progress, SyncError};
+use crate::opening_ports::InboxSync;
 use crate::session::ServerError;
 use crate::sync_health::{self, Failing};
 use crate::sync_ports::{AroundSync, Events, MailboxEvent};
@@ -114,6 +115,8 @@ pub struct Syncing {
     around: Arc<dyn AroundSync>,
     warm: Arc<Warming>,
     held: Mutex<Held>,
+    /// Told whenever an account's sync ends, for those waiting on it.
+    landed: Condvar,
     /// One warming round at a time.
     warming: Mutex<()>,
 }
@@ -147,6 +150,8 @@ impl Drop for Flight<'_> {
             let mut held = self.syncing.held();
             held.flying.remove(self.account);
             held.again.remove(self.account);
+            drop(held);
+            self.syncing.landed.notify_all();
         }
     }
 }
@@ -176,6 +181,7 @@ impl Syncing {
             around,
             warm,
             held: Mutex::new(held),
+            landed: Condvar::new(),
             warming: Mutex::new(()),
         }
     }
@@ -321,6 +327,8 @@ impl Syncing {
             // It lands as it sees no ask waiting, so an ask that comes after starts a flight of its own.
             held.flying.remove(email);
             flight.landed = true;
+            drop(held);
+            self.landed.notify_all();
             return new;
         }
     }
@@ -455,5 +463,21 @@ impl Syncing {
         }
         command_ports::write(&*self.store, |tx| tx.clear_sync_error(account))?;
         Ok(account.to_owned())
+    }
+}
+
+impl InboxSync for Syncing {
+    /// Waits for the account's sync running now, or runs one here: a first look at an Inbox joins the sync that
+    /// reads it rather than read it a second time beside it.
+    fn sync_inbox(&self, account: &str) -> bool {
+        if !self.held().flying.contains(account) {
+            // Run here, or, if one started meanwhile, have it go round once more.
+            self.sync_guarded(Some(BTreeSet::from([account.to_owned()])));
+        }
+        let held = self
+            .landed
+            .wait_while(self.held(), |held| held.flying.contains(account))
+            .unwrap_or_else(PoisonError::into_inner);
+        held.status.get(account).is_some_and(|now| now.health == "ok")
     }
 }

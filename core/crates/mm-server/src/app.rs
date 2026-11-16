@@ -261,6 +261,7 @@ impl App {
             folders: folders.clone(),
             background: Arc::new(crate::sync_wiring::WorkThreads(work.clone())),
             waits: mm_mailbox::opening::Waits::default(),
+            inbox: live_sync.clone(),
         }));
         let reading = crate::reading::Reading::assemble(
             crate::reading::Adapters {
