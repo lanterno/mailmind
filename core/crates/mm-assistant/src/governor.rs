@@ -12,7 +12,9 @@
 //!   go over (`allowing_over`).
 //! - The breaker. A rejected key (401 or 403) stops every background call at once, and `TRIP_AFTER` permanent
 //!   rejections in a row for one feature and model stop that feature's, until the model in use changes. Interactive
-//!   calls still go, so the person sees the error.
+//!   calls still go, so the person sees the error. An account with no credit left stops every background call too,
+//!   but credit can be added to the same key: the next call that goes through closes it, and
+//!   `CREDIT_RETRY_SECONDS` after it opened, background calls try again.
 //!
 //! Nothing here is durable: a restart closes the breaker. The day's spending is the ledger's, so the limit holds.
 
@@ -36,6 +38,8 @@ pub const PRESENCE_SECONDS: f64 = 45.0 * 60.0;
 pub const SCHEDULED_PRESENCE_SECONDS: f64 = 48.0 * 3600.0;
 /// Permanent rejections in a row, for one feature and model.
 pub const TRIP_AFTER: u32 = 3;
+/// How long an account with no credit left stops background calls before they try again.
+pub const CREDIT_RETRY_SECONDS: f64 = 3600.0;
 
 thread_local! {
     static OVER: Cell<bool> = const { Cell::new(false) };
@@ -124,6 +128,8 @@ struct State {
     rejected: HashMap<(String, String), u32>,
     /// Scope -> the model it opened under.
     open: HashMap<Scope, Arc<dyn LanguageModel>>,
+    /// When every call's scope opened for want of credit, not for a refused key.
+    no_credit_at: Option<f64>,
 }
 
 #[derive(Debug)]
@@ -154,6 +160,7 @@ impl CostGovernor {
                 last_seen: now,
                 rejected: HashMap::new(),
                 open: HashMap::new(),
+                no_credit_at: None,
             }),
         }
     }
@@ -201,7 +208,7 @@ impl CostGovernor {
             if kind == Kind::Scheduled && now - state.last_seen > SCHEDULED_PRESENCE_SECONDS {
                 return Some("away");
             }
-            if is_open(&mut state, feature, model, instance) {
+            if is_open(&mut state, now, feature, model, instance) {
                 return Some("breaker");
             }
         }
@@ -257,21 +264,47 @@ impl CostGovernor {
         Ok(work())
     }
 
-    /// How a call went: None for a reply. A reply resets the feature's count of rejections in a row; a transient
-    /// failure leaves it as it was. The breaker opening says so in the log, naming what stops and the status.
+    /// How a call went: None for a reply. A reply resets the feature's count of rejections in a row, and closes the
+    /// breaker an account with no credit left opened; a transient failure leaves things as they were. The breaker
+    /// opening says so in the log, naming what stops and the status.
     pub fn heard(&self, feature: &str, model: &str, instance: &Arc<dyn LanguageModel>, error: Option<&ModelError>) {
         let key = (feature.to_owned(), model.to_owned());
+        let now = self.now();
         let mut state = self.state();
         let Some(error) = error else {
             state.rejected.remove(&key);
+            // A call went through: the account has credit again.
+            if state.no_credit_at.take().is_some() {
+                state.open.remove(&Scope::Every);
+            }
             return;
         };
         if !error.permanent() {
             return;
         }
+        let why = error.status.map(|status| status.to_string()).unwrap_or_default();
+        // No feature will do better, until credit is added to the account.
+        if error.no_credit().is_some() {
+            let opened = state.no_credit_at.is_none()
+                || !state.open.get(&Scope::Every).is_some_and(|under| same(under, instance));
+            state.open.insert(Scope::Every, instance.clone());
+            state.no_credit_at = Some(now);
+            drop(state);
+            if opened {
+                log::warning(
+                    "ai",
+                    "the account has no credit left: every background call stops until a call goes through or an hour \
+                     passes (%(why)s)",
+                    &[(Field::Why, &why)],
+                    None,
+                );
+            }
+            return;
+        }
         // What stops, as the log names it.
-        // A refused key, or an account with no credit left: no feature will do better.
-        let (scope, what) = if matches!(error.status, Some(401 | 403)) || error.no_credit().is_some() {
+        // A refused key: no feature will do better.
+        let (scope, what) = if matches!(error.status, Some(401 | 403)) {
+            state.no_credit_at = None;
             (Scope::Every, "every background call".to_owned())
         } else {
             let n = state.rejected.get(&key).copied().unwrap_or(0) + 1;
@@ -286,7 +319,6 @@ impl CostGovernor {
         state.open.insert(scope, instance.clone());
         drop(state);
         if opened {
-            let why = error.status.map(|status| status.to_string()).unwrap_or_default();
             log::warning(
                 "ai",
                 "the API keeps rejecting requests: %(what)s stops until the key or the model changes (%(why)s)",
@@ -304,6 +336,7 @@ impl CostGovernor {
         state.last_seen = now;
         state.rejected.clear();
         state.open.clear();
+        state.no_credit_at = None;
     }
 
     /// What `/api/debug/ai` shows (`snapshot`): today's spending and the limit, what batches still out may cost, the
@@ -350,14 +383,23 @@ impl CostGovernor {
     }
 }
 
-fn is_open(state: &mut State, feature: &str, model: &str, instance: &Arc<dyn LanguageModel>) -> bool {
+fn is_open(state: &mut State, now: f64, feature: &str, model: &str, instance: &Arc<dyn LanguageModel>) -> bool {
     for scope in [Scope::Every, Scope::Feature(feature.to_owned(), model.to_owned())] {
         let Some(under) = state.open.get(&scope) else { continue };
+        if scope == Scope::Every && state.no_credit_at.is_some_and(|at| now - at >= CREDIT_RETRY_SECONDS) {
+            // Credit may have been added since: try again.
+            state.open.remove(&scope);
+            state.no_credit_at = None;
+            continue;
+        }
         if same(under, instance) {
             return true;
         }
         // The model changed since it opened: try again.
         state.open.remove(&scope);
+        if scope == Scope::Every {
+            state.no_credit_at = None;
+        }
     }
     false
 }
