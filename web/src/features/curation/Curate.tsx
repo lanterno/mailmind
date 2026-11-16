@@ -96,9 +96,10 @@ async function runBatch(qc: QueryClient, senders: string[]) {
   again(qc);
 }
 
-// Why each is worth cleaning up. An extra: the preview stands without it, so this makes no fuss at the limit or with AI off.
-const useRationales = (senders: string[]) =>
-  useQuery({ queryKey: ["rationales", [...senders].sort()], queryFn: () => post("/api/cleanup/rationale", { senders }), enabled: senders.length > 0, staleTime: Infinity, retry: false });
+// Why each is worth cleaning up. An extra: the preview stands without it, so this makes no fuss at the limit, and with AI off,
+// for any reason, nothing is asked and nothing says it is being written.
+const useRationales = (senders: string[], ai: boolean) =>
+  useQuery({ queryKey: ["rationales", [...senders].sort()], queryFn: () => post("/api/cleanup/rationale", { senders }), enabled: ai && senders.length > 0, staleTime: Infinity, retry: false });
 
 function BatchRow({ s, why }: { s: Batching["d"]["senders"][number]; why: string | undefined }) {
   return (
@@ -117,7 +118,9 @@ export function BatchPanel() {
   const p = batching.useValue();
   useLayer(p !== null, () => batching.set(null));
   const senders = p?.d.senders.map((s) => s.from_addr) ?? [];
-  const { data, isFetching } = useRationales(senders);
+  const { data: digest } = useDigest();
+  const ai = digest !== undefined && digest.ai.engine !== "none";
+  const { data, isFetching } = useRationales(senders, ai);
   return (
     <ModalOverlay className="do-overlay show" isOpen={p !== null} isDismissable onOpenChange={(open) => { if (!open) batching.set(null); }}>
       <Modal className="modal-through">
@@ -126,7 +129,7 @@ export function BatchPanel() {
             <div className="do-plan do-plan-danger">
               <div className="do-hd">Clean up <b>{p.d.senders.length} senders</b>?</div>
               <div className="do-scope">{isFetching ? "Writing why each one is here…" : `${p.d.sweep_count} inbox message${p.d.sweep_count === 1 ? "" : "s"} go to Trash`}</div>
-              <div className="batch-list">{p.d.senders.map((s) => <BatchRow key={s.from_addr} s={s} why={data?.rationales[s.from_addr]} />)}</div>
+              <div className="batch-list">{p.d.senders.map((s) => <BatchRow key={s.from_addr} s={s} why={ai ? data?.rationales[s.from_addr] : undefined} />)}</div>
               {p.d.sweep_capped && <div className="do-cap"><Icon name="alert" /> Sweeps the most recent {p.d.sweep_count} — run again for the rest.</div>}
               <div className="do-danger-note">Each one is blocked and swept, and one <b>z</b> takes it all back. This doesn’t unsubscribe: do that one sender at a time.</div>
               <div className="do-foot">
