@@ -102,8 +102,8 @@ class MailCommands:
         """Where a move goes, as far as that is known with no server: kept for an Undo before it lands."""
         try:
             acct = self._accounts.get(email)
-            return destination.known_without_server(kind, trash=self._accounts.trash_folder(acct),
-                                                    archive_is_label_removal=self._accounts.profile(acct).archive_is_label_removal)
+            return destination.known_without_server(
+                kind, archive_is_label_removal=self._accounts.profile(acct).archive_is_label_removal)
         except KeyError:                             # the account is gone, which a try finds out
             return destination.Destination()
 

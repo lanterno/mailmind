@@ -111,6 +111,18 @@ def find_role(session: MailSession, *wanted: str) -> str | None:
     return roles.find(folders, *wanted)
 
 
+def find_trash(session: MailSession, named: str) -> str:
+    """The account's Trash on the session's server (mailmind.mailbox.domain.roles.trash): `named` when the server lists it,
+    else the folder that plays Trash there; `named` when the server refuses the LIST. A lost connection raises."""
+    try:
+        folders = session.folders()
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        return named
+    return roles.trash(folders, named)
+
+
 class ReadOnlySession:
     """A read-only process's session: every folder opens read-only, and a write raises
     profile.ReadOnlyError before it is sent. Everything else is the session's own."""

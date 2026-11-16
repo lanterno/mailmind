@@ -16,6 +16,7 @@ from mailmind.curation.application.sweep import Sweeps
 from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import classifier
 from mailmind.mailbox.application import bulk_moves
+from mailmind.mailbox.application import session as mail_session
 from mailmind.platform import perimeter, sse
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
@@ -155,9 +156,9 @@ class _Mailboxes:
         from mailmind.bootstrap.mailbox import pool
         return pool.borrow(acct)
 
-    def trash_folder(self, acct):
+    def trash_folder(self, acct, session):
         from mailmind.bootstrap import accounts
-        return accounts.trash_folder(acct)
+        return mail_session.find_trash(session, accounts.trash_folder(acct))
 
     def quote(self, value):
         from mailmind.bootstrap import accounts

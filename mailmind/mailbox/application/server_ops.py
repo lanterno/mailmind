@@ -154,6 +154,8 @@ class ServerOps:
                         (s.add_flags if v else s.remove_flags)([uid], [mail_flags.IMAP_NAME[k]])
                 return command.ServerAnswer()
             trash = self._accounts.trash_folder(acct)
+            if kind == "trash" and not row["dest"]:  # Trash as the server lists it, where no folder is named yet
+                trash = mail_session.find_trash(s, trash)
             where = destination.resolve(kind, named=row["dest"], archive_is_label_removal=server.archive_is_label_removal,
                                         trash=trash, junk_fallback=server.junk_fallback,
                                         find=lambda *roles: mail_session.find_role(s, *roles))

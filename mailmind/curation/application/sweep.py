@@ -92,14 +92,15 @@ class Sweeps:
             return out, False
         self._audit.swept(acct["email"], junk_rows)  # log BEFORE moving so a crash still records intent
         try:
-            trash = self._boxes.trash_folder(acct)
             s = self._boxes.open_session(acct)
         except Exception as e:
             log.warning("an account failed", exc_info=e)
             out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out, False
+        trash: str | None = None
         verified: tuple[int, list[str]] | None = None
         try:
+            trash = self._boxes.trash_folder(acct, s)   # as the server lists it: a localised or renamed Trash too
             verified = self._boxes.move_verified(s, [r["uid"] for r in junk_rows], trash)
         except Exception as e:
             log.warning("an account failed", exc_info=e)
@@ -109,6 +110,8 @@ class Sweeps:
                 s.logout()
             except Exception:
                 pass
+        if trash is None:                        # the server's folders couldn't be read: nothing was moved
+            return out, False
         if verified is None:
             return out, self._stopped(acct, trash, junk_rows, group, out)
         moved, stragglers = verified
@@ -185,7 +188,7 @@ class Sweeps:
                 return out
             self._audit.swept(acct["email"], sweep_plan.stored_audited(targets))
             moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
-                                                          self._boxes.trash_folder(acct))
+                                                          self._boxes.trash_folder(acct, s))
         except Exception as e:
             log.warning("an account failed", exc_info=e)
             out["error"] = type(e).__name__      # what a server said stays out of the answer

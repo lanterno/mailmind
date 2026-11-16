@@ -49,7 +49,7 @@ class Expiry:
                 return out
             self._audit.swept(acct["email"], audited(targets))   # log BEFORE moving so a crash still records intent
             moved, stragglers = self._boxes.move_verified(s, [t["uid"] for t in targets],
-                                                          self._boxes.trash_folder(acct))
+                                                          self._boxes.trash_folder(acct, s))
         except Exception as e:
             log.warning("an account failed", exc_info=e)
             out["error"] = type(e).__name__      # what a server said stays out of the answer

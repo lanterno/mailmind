@@ -101,6 +101,15 @@ def role_of(folder: Folder) -> str:
     return _by_attribute(folder) or role_by_name(folder.name, folder.delimiter)
 
 
+def trash(folders: Collection[Folder], named: str) -> str:
+    """The account's Trash among `folders`: `named`, the folder the account names (or its type gives it), when the server
+    lists it; else the folder LIST marks \\Trash, then one whose name says trash ("Deleted Messages", "Bin"), as `find`
+    chooses; else `named`, for the server to take or refuse. A localised Gmail's or iCloud's Trash is found so."""
+    if any(f.selectable and f.name == named for f in folders):
+        return named
+    return find(folders, "trash") or named
+
+
 def find(folders: Collection[Folder], *roles: str) -> str | None:
     """The name of the selectable folder playing the first of `roles` that one plays, or None."""
     for role in roles:
