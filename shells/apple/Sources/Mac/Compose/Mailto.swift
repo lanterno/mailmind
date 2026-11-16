@@ -62,6 +62,11 @@ struct Mailto: Equatable {
 /// And for quitting, which waits for mail in its Undo window to go (Mac/Shared/Quitting.swift).
 @MainActor
 final class MailMindDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // The Automatic light follows Dark Mode as macOS sets it (Mac/Meadow/Light.swift).
+        AppStatus.shared.followSystemAppearance()
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             if let mail = Mailto.parse(url.absoluteString) { Composing.shared.write(mail) }

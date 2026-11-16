@@ -31,8 +31,12 @@ final class AppStatus {
     private(set) var notice: Notice?
     /// The meetings coming up (`/api/upcoming`), read each minute.
     private(set) var upcoming: [API.UpcomingEvent] = []
-    /// The minute it is, for the words that count down.
+    /// The minute it is, for the words that count down, and the hour Automatic's light goes by.
     private(set) var now = Date()
+    /// Whether macOS is in Dark Mode, which makes Automatic Night: the app's status follows it from launch
+    /// (`followSystemAppearance`); a test sets it.
+    var systemDark = false
+    @ObservationIgnored var appearanceChanged: (any NSObjectProtocol)?
     /// The accounts whose alert across the top a person closed.
     var alertsClosed: Set<String> = []
     /// The meetings whose reminder a person closed.

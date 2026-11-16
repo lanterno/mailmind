@@ -50,10 +50,11 @@ struct GeneralPane: View {
             PreferencesRead(status: status) {
                 DeskSideCard(title: String(localized: "Appearance"), icon: .sun) {
                     SettingLine(String(localized: "Light"), help: String(localized: """
-                        The sky and the paper MailMind is drawn on. The top bar’s button goes round them too.
+                        The sky and the paper MailMind is drawn on. Automatic is Night while your Mac is in Dark Mode, \
+                        and else follows the time of day. The top bar’s button goes round them too.
                         """)) {
-                        MeadowSegmentedChoice(label: String(localized: "Light"), selection: light,
-                                              options: MeadowLight.allCases.map { ($0, $0.name) }, fills: false)
+                        MeadowSegmentedChoice(label: String(localized: "Light"), selection: theme,
+                                              options: API.Theme.round.map { ($0, $0.name) }, fills: false)
                     }
                     SettingLine(String(localized: "Rows")) {
                         MeadowSegmentedChoice(label: String(localized: "Rows"), selection: density, options: [
@@ -92,9 +93,9 @@ struct GeneralPane: View {
         }
     }
 
-    /// The light the window is in, kept as the `theme` preference the top bar's button keeps.
-    private var light: Binding<MeadowLight> {
-        Binding(get: { status.light }, set: { status.setPreferences(API.ChangedPreferences(theme: $0.theme)) })
+    /// The light chosen, Automatic or one of the three, kept as the `theme` preference the top bar's button keeps.
+    private var theme: Binding<API.Theme> {
+        Binding(get: { status.theme }, set: { status.setPreferences(API.ChangedPreferences(theme: $0)) })
     }
 
     private var density: Binding<API.Density> {

@@ -14,7 +14,7 @@ struct ReadingSettings: View {
     private static let sizes: [API.ReadSize] = [.s, .m, .l, .xl]
     private static let faces: [API.ReadFont] = [.sans, .serif, .mono]
     private static let widths: [API.ReadWidth] = [.narrow, .medium, .wide]
-    private static let lights: [MeadowLight] = [.day, .dusk, .night]
+    private static let themes = API.Theme.round
     private static let colours: [API.MailColors] = [.auto, .dark, .original]
 
     var body: some View {
@@ -44,10 +44,12 @@ struct ReadingSettings: View {
                 .init(value: .medium, label: "Medium"),
                 .init(value: .wide, label: "Wide"),
             ], chosen: prefs.width, ringed: keys.ringed(2)) { change(API.ChangedPreferences(readWidth: $0)) }
-            ReadingSet(label: String(localized: "Light"), options: Self.lights.map { light in
-                ReadingSet<MeadowLight>.Option(value: light, label: light.name)
-            }, chosen: status.light, ringed: keys.ringed(3)) { light in
-                status.setPreferences(API.ChangedPreferences(theme: light.theme))
+            ReadingSet(label: String(localized: "Light"), options: Self.themes.map { theme in
+                // Auto, as Mail colours says it, so four fit across the menu; VoiceOver says the whole name.
+                ReadingSet<API.Theme>.Option(value: theme, label: theme == .auto ? String(localized: "Auto") : theme.name,
+                                             name: theme.name)
+            }, chosen: status.theme, ringed: keys.ringed(3)) { theme in
+                status.setPreferences(API.ChangedPreferences(theme: theme))
             }
             .disabled(status.core == nil)
             ReadingSet(label: String(localized: "Mail colours"), options: [
@@ -84,8 +86,8 @@ struct ReadingSettings: View {
         case 2:
             if let width = Self.next(prefs.width, in: Self.widths, by: by) { change(.init(readWidth: width)) }
         case 3:
-            if status.core != nil, let light = Self.next(status.light, in: Self.lights, by: by) {
-                status.setPreferences(.init(theme: light.theme))
+            if status.core != nil, let theme = Self.next(status.theme, in: Self.themes, by: by) {
+                status.setPreferences(.init(theme: theme))
             }
         default:
             if let colours = Self.next(prefs.look.colors, in: Self.colours, by: by) {

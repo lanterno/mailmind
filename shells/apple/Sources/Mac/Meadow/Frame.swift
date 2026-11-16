@@ -303,16 +303,16 @@ struct MeadowCommands: Commands {
     }
 }
 
-/// Day, Dusk or Night, as the top bar's button and Settings choose it.
+/// Automatic, Day, Dusk or Night, as the top bar's button and Settings choose it.
 private struct MeadowLightPicker: View {
     let status: AppStatus
 
     var body: some View {
-        Picker("Light", selection: Binding(get: { status.light }, set: { light in
-            status.setPreferences(API.ChangedPreferences(theme: light.theme))
+        Picker("Light", selection: Binding(get: { status.theme }, set: { theme in
+            status.setPreferences(API.ChangedPreferences(theme: theme))
         })) {
-            ForEach([MeadowLight.day, .dusk, .night], id: \.self) { light in
-                Text(light.name).tag(light)
+            ForEach(API.Theme.round, id: \.self) { theme in
+                Text(theme.name).tag(theme)
             }
         }
         .disabled(status.core == nil)

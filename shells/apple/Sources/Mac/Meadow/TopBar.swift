@@ -56,8 +56,8 @@ struct MeadowTopBar: View {
     private var themeButton: some View {
         Button { status.nextLight() } label: { MeadowIconView(light.icon) }
             .meadowButton(icon: true)
-            .help("Day, Dusk or Night")
-            .accessibilityLabel("Light: \(light.name) — switch to \(light.next.name)")
+            .help("Automatic, Day, Dusk or Night")
+            .accessibilityLabel("Light: \(status.theme.name) — switch to \(status.theme.next.name)")
     }
 
     private var keysButton: some View {
