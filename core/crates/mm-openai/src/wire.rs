@@ -4,7 +4,8 @@
 //! The system prompt goes as a `system` message ahead of the user's. Structured output is `response_format`'s
 //! `json_schema`, strict only where the schema keeps strict mode's rules (every object closed, and every property in it
 //! required), since a strict schema that breaks them is refused. OpenAI takes `max_completion_tokens`, and the others
-//! `max_tokens`. No effort and no server-side fallback go out: neither is theirs.
+//! `max_tokens`. No effort and no server-side fallback go out: neither is theirs. A reasoning model's thinking, put
+//! first as `<think>…</think>` (or `<thinking>…</thinking>`), is dropped before the reply is read.
 
 use mm_assistant::ports::{Prompt, Reply, Usage};
 use mm_kernel::ai_provider::AiProvider;
@@ -92,6 +93,20 @@ fn text(content: Option<&Value>) -> String {
     }
 }
 
+/// `text` without the thinking a reasoning model puts first: a leading `<think>…</think>` or `<thinking>…</thinking>`
+/// block, after any blank. Text with none, or whose block never closes, is as it was.
+pub fn without_thinking(text: &str) -> &str {
+    let rest = text.trim_start();
+    for (open, close) in [("<think>", "</think>"), ("<thinking>", "</thinking>")] {
+        if let Some(inner) = rest.strip_prefix(open)
+            && let Some(end) = inner.find(close)
+        {
+            return &inner[end + close.len()..];
+        }
+    }
+    text
+}
+
 /// Whether a value says something, as Python's truth does.
 fn truthy(value: Option<&Value>) -> bool {
     match value {
@@ -133,7 +148,7 @@ pub fn reply(response: &Map<String, Value>, asked: &str) -> Reply {
         _ => String::new(),
     };
     Reply {
-        text: text(message.and_then(|m| m.get("content"))).trim().to_owned(),
+        text: without_thinking(&text(message.and_then(|m| m.get("content")))).trim().to_owned(),
         model: served,
         usage: spent,
         stop_reason,
