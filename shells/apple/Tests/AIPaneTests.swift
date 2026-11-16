@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 
@@ -88,6 +89,56 @@ final class AIChoicesTests: XCTestCase {
                            .map(\.id), ["", "gpt-fictional-mini", "gpt-fictional-nano"], "a listed one isn't twice")
         XCTAssertEqual(AIChoices.title(.openai, chosen: "", defaultModel: model), "Default (gpt-fictional)")
         XCTAssertEqual(AIChoices.title(.openai, chosen: "gpt-fictional-nano", defaultModel: model), "gpt-fictional-nano")
+    }
+
+    private func isScroll(_ part: MeadowMenu.Part) -> Bool {
+        if case .scroll = part { true } else { false }
+    }
+
+    private func key(_ code: UInt16) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                         characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)!
+    }
+
+    /// A provider listing many (OpenAI and Gemini list dozens): they scroll, every one a line the keys go over, and
+    /// choosing one, by Return or a click, closes the menu.
+    @MainActor func testALongModelListIsChosenFromTheKeysAndClosesTheMenu() {
+        let models = (1...30).map { "gpt-fictional-\($0)" }
+        var chosen: [String] = []
+        let parts = AIChoices.modelMenu(.openai, chosen: "", defaultModel: "gpt-fictional-1",
+                                        listed: listed(.openai, default: "gpt-fictional-1", models), asking: false,
+                                        choose: { chosen.append($0) }, type: {})
+        XCTAssertEqual(parts.filter(isScroll).count, 1)
+        let items = MeadowMenu.items(parts)
+        XCTAssertEqual(items.map(\.id), ["model-"] + models.dropFirst().map { "model-\($0)" } + ["type"])
+
+        let menu = MeadowMenuModel()
+        var closed = 0
+        menu.close = { closed += 1 }
+        menu.items = items
+        for _ in 0..<12 { XCTAssertTrue(menu.key(key(125))) }
+        XCTAssertTrue(menu.key(key(36)))
+        XCTAssertEqual(chosen, ["gpt-fictional-13"])
+        XCTAssertEqual(closed, 1)
+        menu.run(items[20])
+        XCTAssertEqual(chosen.last, "gpt-fictional-21")
+        XCTAssertEqual(closed, 2, "a click closes it too")
+    }
+
+    /// A few models are lines of their own; while the provider is being asked, the menu says so, as no line to choose.
+    @MainActor func testAFewModelsAreLinesOfTheirOwnAndTheMenuSaysWhileItAsks() {
+        let list = listed(.openai, default: "gpt-fictional", ["gpt-fictional-mini", "gpt-fictional"])
+        func menu(asking: Bool) -> [MeadowMenu.Part] {
+            AIChoices.modelMenu(.openai, chosen: "", defaultModel: "gpt-fictional", listed: list, asking: asking,
+                                choose: { _ in }, type: {})
+        }
+        func says(_ parts: [MeadowMenu.Part]) -> Bool {
+            parts.contains { if case .item(let item) = $0 { item.id == "listing" && item.disabled } else { false } }
+        }
+        XCTAssertTrue(menu(asking: false).filter(isScroll).isEmpty)
+        XCTAssertEqual(MeadowMenu.items(menu(asking: true)).map(\.id), ["model-", "model-gpt-fictional-mini", "type"])
+        XCTAssertTrue(says(menu(asking: true)))
+        XCTAssertFalse(says(menu(asking: false)))
     }
 
     func testAnotherProvidersListIsntThisOnes() {

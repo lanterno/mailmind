@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 
 /// Meadow's overlays' building blocks, by their rules: where a dialog and a popover stand, a key hint's caps, and a
@@ -68,6 +69,17 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         XCTAssertTrue(model.key(key(126)))
         XCTAssertEqual(model.at, 1)
         XCTAssertFalse(model.key(key(0, "e")), "other keys go on to the window")
+    }
+
+    /// Items in a scroll of their own are items the keys go over, in their place among the rest.
+    func testAMenusScrolledItemsAreAmongTheItemsTheKeysGoOver() {
+        let scrolled = ["s1", "s2", "s3"].map { id in MeadowMenuItem(id: id, title: id) {} }
+            + [MeadowMenuItem(id: "off", title: "Off", disabled: true) {}]
+        let parts: [MeadowMenu.Part] = [
+            .title("Model"), .item(MeadowMenuItem(id: "a", title: "A") {}), .scroll(scrolled, maxHeight: 100), .rule,
+            .item(MeadowMenuItem(id: "b", title: "B") {}), .view(AnyView(EmptyView())),
+        ]
+        XCTAssertEqual(MeadowMenu.items(parts).map(\.id), ["a", "s1", "s2", "s3", "b"])
     }
 
     private func window() -> NSWindow {
