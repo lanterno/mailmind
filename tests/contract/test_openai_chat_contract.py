@@ -454,6 +454,16 @@ def test_a_gemini_models_thinking_past_its_completion_is_priced_as_output(choose
     assert assistant.status.report()["spent_today_micros"] == 4_500 + 13_500
 
 
+def test_an_absurd_usage_is_recorded_at_the_most_the_ledger_holds(choose):
+    from mailmind.bootstrap import assistant
+    api = choose("compatible", key=None, ai_model="gpt-6.1-sol")
+    api.key = None
+    api.queue(fo.answer({"body": "x"}, model="gpt-6.1-sol", prompt_tokens=10**20, completion_tokens=5))
+    ask()
+    assert assistant.status.report()["spent_today_micros"] == 2**63 - 1
+    assert assistant.calls.usage(1)[0]["features"]["draft"] == {"calls": 1, "cost_micros": 2**63 - 1}
+
+
 def test_an_unknown_model_on_this_mac_costs_nothing(choose):
     from mailmind.bootstrap import assistant
     api = choose("local", key=None, ai_model="llama3.3")

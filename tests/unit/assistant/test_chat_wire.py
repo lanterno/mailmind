@@ -105,6 +105,13 @@ def test_the_output_is_the_completion_or_all_the_total_holds_past_the_prompt_whi
     assert reply.usage.input_tokens + reply.usage.cache_read_tokens == usage["prompt_tokens"]
 
 
+@pytest.mark.parametrize("said, read", [(1e20, 2**63 - 1), (10**30, 2**63 - 1), (2**63 - 1, 2**63 - 1), (2**63, 2**63 - 1),
+                                        (-5, 0), (12.7, 12), ("40", 40), (float("inf"), 0), (float("nan"), 0), ([3], 0)])
+def test_a_count_of_tokens_is_held_from_nought_to_the_most_the_ledger_holds(said, read):
+    reply = chat_wire.reply({"choices": [{"message": {"content": "x"}}], "usage": {"prompt_tokens": said}}, "m")
+    assert reply.usage.input_tokens == read
+
+
 def test_a_refusal_reads_as_an_empty_refused_reply():
     reply = chat_wire.reply({"model": "gpt-6.1-sol", "choices": [{"finish_reason": "stop", "message": {
         "role": "assistant", "content": None, "refusal": "I can't help with that."}}],

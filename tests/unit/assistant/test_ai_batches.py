@@ -100,6 +100,15 @@ def test_a_batch_costs_half_what_the_same_calls_do(gw, ai):
     assert pricing.batch_micros(full) * 2 in (full, full + 1)
 
 
+def test_a_batchs_absurd_answers_are_tallied_at_the_most_the_ledger_holds(gw, ai):
+    batch_id = gw.submit_batch([(str(i), "x") for i in range(3)], feature="triage-batch")
+    absurd = fa.succeeded({"summary": "s"}, input_tokens=2**62, output_tokens=2**62)
+    ai.end_batch(batch_id, {str(i): absurd for i in range(3)})
+    gw.batch_results(batch_id, feature="triage-batch")
+    assert gw.usage(1)[0]["features"]["triage-batch"] == {"calls": 3, "cost_micros": pricing.MOST}
+    assert gw.spent_today() == pricing.MOST
+
+
 def test_half_a_micro_dollar_rounds_up():
     from mailmind.assistant.domain import pricing
     assert (pricing.batch_micros(3), pricing.batch_micros(4), pricing.batch_micros(0)) == (2, 2, 0)

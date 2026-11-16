@@ -84,6 +84,14 @@ def test_the_dearer_gpt_4o_snapshot_is_priced_as_itself_and_the_others_as_gpt_4o
     assert cost_micros("gpt-4o-2024-05-13", "gpt-4o-2024-05-13", input_tokens=10_000, output_tokens=1_000) == 65_000
 
 
+def test_a_cost_past_what_the_ledger_holds_is_held_at_its_most_and_is_never_negative():
+    from mailmind.assistant.domain.pricing import MOST, cost_micros
+    assert MOST == 2**63 - 1
+    assert cost_micros("gpt-9-galaxy", "gpt-9-galaxy", input_tokens=MOST) == MOST
+    assert cost_micros("gpt-6.1-sol", "", MOST, MOST, MOST, MOST) == MOST
+    assert cost_micros("gpt-6.1-sol", "", input_tokens=MOST // 2000) == MOST // 2000 * 2      # under it, exact
+
+
 def test_a_gemini_pro_costs_more_past_two_hundred_thousand_prompt_tokens():
     from mailmind.assistant.domain.pricing import Price, price
     assert price("gemini-3.1-pro-preview", 200_000) == Price(2, 12, 0.20)
@@ -208,6 +216,53 @@ def test_spent_today_and_the_days_report_add_up_the_features(gateway, ai, clock)
                                                                           ("2026-11-02", 3, 26_000)]
     assert report[1]["features"] == {"draft": {"calls": 1, "cost_micros": 18_000},
                                      "triage": {"calls": 2, "cost_micros": 8_000}}
+
+
+MOST = 2**63 - 1
+
+
+@pytest.mark.parametrize("said", [10**20, 10**30, 2**63])
+def test_a_claude_answers_absurd_counts_are_recorded_at_the_most_the_ledger_holds(gateway, ai, said):
+    ai.queue(answer("a", said, said, said, said))
+    gateway.ask("Catch me up.", feature="thread")
+    [row] = rows()
+    assert [row[k] for k in ("input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens",
+                             "cost_micros")] == [MOST] * 5
+    assert gateway.spent_today() == MOST
+
+
+def test_a_row_added_to_past_the_most_it_holds_stays_a_whole_number_at_the_most(gateway, ai):
+    from mailmind.assistant.application.governor import allowing_over
+    from mailmind.bootstrap.mailbox import store
+    ai.queue(answer("a", 10**20, 10**20), answer("b", 10**20, 10**20))
+    gateway.ask("one", feature="thread")
+    with allowing_over():                               # the first spent the day's limit
+        gateway.ask("two", feature="thread")
+    [row] = rows()
+    assert (row["calls"], row["input_tokens"], row["output_tokens"], row["cost_micros"]) == (2, MOST, MOST, MOST)
+    c = store.conn()
+    try:
+        kinds = c.execute("SELECT typeof(input_tokens), typeof(output_tokens), typeof(cost_micros) FROM ai_usage").fetchone()
+    finally:
+        c.close()
+    assert tuple(kinds) == ("integer", "integer", "integer")
+    assert gateway.spent_today() == MOST
+
+
+def test_a_days_spending_across_its_features_is_held_at_the_most_the_ledger_holds(gateway, ai):
+    from mailmind.assistant.application.governor import allowing_over
+    from mailmind.assistant.application.ports import OverLimit
+    ai.queue(answer("t", 10**20), answer("d", 10**20))
+    gateway.ask("one", feature="triage")
+    with allowing_over():                               # the first spent the day's limit
+        gateway.ask("two", feature="draft")
+    assert gateway.spent_today() == MOST
+    [day] = gateway.usage(days=1)
+    assert (day["calls"], day["cost_micros"]) == (2, MOST)
+    assert day["features"] == {"draft": {"calls": 1, "cost_micros": MOST}, "triage": {"calls": 1, "cost_micros": MOST}}
+    with pytest.raises(OverLimit):                      # the day is over its limit, and an interactive call is held
+        gateway.ask("three", feature="ask")
+    assert gateway.room() == 0
 
 
 def test_a_ledger_that_fails_never_fails_the_call(gateway, ai, monkeypatch, capsys):
