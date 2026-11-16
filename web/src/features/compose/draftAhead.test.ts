@@ -181,19 +181,28 @@ describe("the brief's cards", () => {
 
 describe("r", () => {
   it("opens the reply written ahead when there is one, and a plain reply when not", async () => {
-    draftAhead.answer(K);
+    draftAhead.answer(K, true);
     expect(the.reply).toHaveBeenCalledWith(K);
     server.peek = "ready";
     await draftAhead.peekCards([K]);
-    draftAhead.answer(K);
+    draftAhead.answer(K, true);
     expect(the.openDraftAhead).toHaveBeenCalledWith(K, expect.any(Function));
   });
   it("doesn't offer it again once the reply has gone", async () => {
     server.peek = "ready";
     await draftAhead.peekCards([K]);
     the.forgetOnSend!(K.key);
-    draftAhead.answer(K);
+    draftAhead.answer(K, true);
     expect(the.openDraftAhead).not.toHaveBeenCalled();
     expect(the.reply).toHaveBeenCalledWith(K);
+  });
+  it("opens a plain reply with AI turned off, though one was written ahead before then", async () => {
+    server.peek = "ready";
+    await draftAhead.peekCards([K]);
+    const asked = the.get.mock.calls.length;
+    draftAhead.answer(K, false);
+    expect(the.reply).toHaveBeenCalledWith(K);
+    expect(the.openDraftAhead).not.toHaveBeenCalled();
+    expect(the.get.mock.calls.length).toBe(asked);
   });
 });

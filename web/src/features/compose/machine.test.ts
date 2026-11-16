@@ -952,6 +952,17 @@ describe("the AI's words", () => {
     expect(toasts[0]).toMatch(/moved on/);
     expect(m.view.get()!.body).toBe("fresh");
   });
+
+  it("a stale draft ahead with AI off leaves a plain reply, and asks AI for nothing", async () => {
+    const forget = vi.fn();
+    const { m, toasts, posted } = setup({ ai: () => false, get: async (p: string) => (p.includes("draft-ahead") ? { ok: true, status: "none" } : { ok: true, account: FROM, from_addr: "bea@example.test", subject: "x", text: "" }) });
+    await m.openDraftAhead({ key: 4, folder: "INBOX", uid: 6 }, forget);
+    await flush();
+    expect(forget).toHaveBeenCalled();
+    expect(toasts).toEqual([]);
+    expect(posted("/api/ai/draft-reply")).toEqual([]);
+    expect(m.view.get()!.mode).toBe("reply");
+  });
 });
 
 describe("write and preview", () => {

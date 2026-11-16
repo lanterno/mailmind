@@ -198,7 +198,11 @@ describe("filing", () => {
 describe("with a message open", () => {
   it("r answers it, with the reply written ahead if there is one", () => {
     pressed(reading(), "r")!.run();
-    expect(the.answer).toHaveBeenCalledWith(open);
+    expect(the.answer).toHaveBeenCalledWith(open, true);
+  });
+  it("r answers it with a plain reply while AI is turned off", () => {
+    pressed(reading({ digest: { ai: { off: "turned-off", provider: "anthropic" } } }), "r")!.run();
+    expect(the.answer).toHaveBeenCalledWith(open, false);
   });
   it("a and f reply to all and forward", () => {
     pressed(reading(), "a")!.run();
