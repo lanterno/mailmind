@@ -73,7 +73,10 @@ final class LaunchFailureTests: XCTestCase {
         let app = MailApp(home: { other }, open: { try await Core.open($0) })
         await app.start()
         guard case .failed(let why) = app.stage else { return XCTFail("it opened: \(app.stage)") }
-        XCTAssertEqual(why, "the database key doesn't open the database")
+        XCTAssertEqual(why, """
+            MailMind's key doesn't open this Mac's copy of your mail, so the copy can't be read. Start Fresh makes a \
+            new copy from your mail's servers.
+            """)
         try StartFresh.move(in: try XCTUnwrap(app.folder))
         await app.startAgain()
         XCTAssertEqual(app.stage, .open, "a new database, under the key there is")

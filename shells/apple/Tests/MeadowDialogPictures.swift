@@ -342,7 +342,10 @@ final class MeadowDialogPictures: XCTestCase {
     /// The window when MailMind didn't open: the core's words, that the mail is safe, and the ways on.
     func testTheWindowWhenMailMindDidntOpen() throws {
         try draw("launch-failure", CGSize(width: 1000, height: 640)) { _ in
-            LaunchFailure(why: "the database key doesn't open the database",
+            LaunchFailure(why: """
+                MailMind's key doesn't open this Mac's copy of your mail, so the copy can't be read. Start Fresh \
+                makes a new copy from your mail's servers.
+                """,
                           folder: URL(filePath: "/private/tmp/mailmind-picture", directoryHint: .isDirectory)) {}
         }
     }
