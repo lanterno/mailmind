@@ -164,16 +164,24 @@ fn a_keychain_that_doesnt_answer_gets_no_key_made_in_it() {
     assert!(!home.path().join("mailmind.db").exists());
 }
 
-#[test]
-fn over_an_older_database_it_says_to_upgrade_it_with_the_python_app() {
-    let home = tempfile::tempdir().unwrap();
-    database(home.path(), [0x5e; 32], VERSION - 1);
-    let said = start(home.path()).unwrap_err();
-    assert!(said.contains(&format!("version {}", VERSION - 1)) && said.contains("to upgrade it"), "{said}");
+/// Words the Mac app's window shows as they are: they name no developer's program or command.
+fn for_a_person(said: &str) {
+    for developers in ["Python", "just run", "`", "server"] {
+        assert!(!said.contains(developers), "{developers:?} in {said:?}");
+    }
 }
 
 #[test]
-fn over_a_database_the_python_app_never_upgraded_it_says_to_upgrade_it() {
+fn over_an_older_database_it_says_it_left_it_as_it_is() {
+    let home = tempfile::tempdir().unwrap();
+    database(home.path(), [0x5e; 32], VERSION - 1);
+    let said = start(home.path()).unwrap_err();
+    assert!(said.contains(&format!("version {}", VERSION - 1)) && said.contains("was left as it is"), "{said}");
+    for_a_person(&said);
+}
+
+#[test]
+fn over_a_database_never_upgraded_it_says_it_left_it_as_it_is() {
     // A file with tables but no version, as a fixture made outside the migrations is.
     let home = tempfile::tempdir().unwrap();
     Store::open(&home.path().join("mailmind.db"), &DbKey::from_bytes([0x5e; 32]))
@@ -181,15 +189,18 @@ fn over_a_database_the_python_app_never_upgraded_it_says_to_upgrade_it() {
         .create_list_tables()
         .unwrap();
     let said = start(home.path()).unwrap_err();
-    assert!(said.contains("version 0") && said.contains("to upgrade it"), "{said}");
+    assert!(said.contains("version 0") && said.contains("was left as it is"), "{said}");
+    for_a_person(&said);
 }
 
 #[test]
-fn over_a_newer_database_it_says_it_is_behind_and_opens_nothing() {
+fn over_a_newer_database_it_says_to_install_the_newest_mailmind_and_opens_nothing() {
     let home = tempfile::tempdir().unwrap();
     database(home.path(), [0x5e; 32], VERSION + 1);
     let said = start(home.path()).unwrap_err();
-    assert!(said.contains(&format!("version {}", VERSION + 1)) && said.contains("must catch up"), "{said}");
+    assert!(said.contains(&format!("version {}", VERSION + 1)), "{said}");
+    assert!(said.contains("install the newest MailMind"), "{said}");
+    for_a_person(&said);
 }
 
 #[test]
