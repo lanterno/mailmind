@@ -49,5 +49,6 @@ pub mod assessments;
 pub mod background_ports;
 pub mod batches;
 
-// What AI cost each day, for the debug routes.
+// What AI cost each day, for the debug routes, and over the week and the month, for the Spending card.
+pub mod spending;
 pub mod usage;

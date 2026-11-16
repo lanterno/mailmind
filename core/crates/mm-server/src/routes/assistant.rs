@@ -39,6 +39,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/ai/draft-ahead", get(draft_ahead))
         .route("/api/ai/models", get(ai_models))
         .route("/api/ai/local", get(ai_local))
+        .route("/api/ai/spending", get(ai_spending))
         .route("/api/ai/ask", post(ask))
         .route("/api/ai/do-plan", post(do_plan))
         .route("/api/ai/do-confirm", post(do_confirm))
@@ -442,6 +443,16 @@ async fn ai_models(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Res
 /// AI mode may be off.
 async fn ai_local(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
     super::run(&app, &method, &uri, |app| Ok(app.assistant.finder.find())).await
+}
+
+/// What AI cost over the last week and this month, by feature (`Spending`), from the usage ledger: it reads what is
+/// stored, so AI mode may be off.
+async fn ai_spending(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    super::run(&app, &method, &uri, |app| {
+        let days = app.assistant.usage.days(mm_assistant::spending::MONTH_DAYS)?;
+        Ok(mm_assistant::spending::report(&days))
+    })
+    .await
 }
 
 /// Why each sender a cleanup names is worth cleaning up, in a sentence; it does nothing.
