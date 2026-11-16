@@ -231,7 +231,7 @@ tests/e2e/browser/test_compose.py::test_a_paste_with_nothing_to_clean_is_left_to
 tests/e2e/browser/test_compose.py::test_a_pasted_link_goes_in_without_its_tracking
 tests/e2e/browser/test_compose.py::test_a_picture_goes_into_the_text_shows_in_the_preview_and_goes_out_inline
 tests/e2e/browser/test_compose.py::test_a_picture_pasted_goes_into_the_text
-tests/e2e/browser/test_compose.py::test_a_quick_reply_starts_as_its_line
+tests/e2e/browser/test_compose.py::test_a_quick_reply_starts_as_its_line_and_with_ai_off_asks_it_for_nothing
 tests/e2e/browser/test_compose.py::test_a_quoted_message_folds_and_opens
 tests/e2e/browser/test_compose.py::test_a_reply_answers_the_sender_and_threads
 tests/e2e/browser/test_compose.py::test_a_reply_saved_once_goes_out_after_its_originals_row_went
