@@ -152,12 +152,15 @@ final class MeadowDialogPictures: XCTestCase {
 
     private let now = F.at("2026-11-14T15:00:00Z")
 
-    private func status(failing: Bool = false, firstRun: Bool = false) -> AppStatus {
+    /// `firstRun` is a fresh home, AI mode off; `aiMode` keeps it on, as it stays for whoever kept a key.
+    private func status(failing: Bool = false, firstRun: Bool = false, aiMode: Bool = false) -> AppStatus {
         let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
                                                       badge: { _ in }, announce: { _ in }))
         if firstRun {
-            status.hold(digest: F.digest(accounts: [], aliases: [:], engine: "none", keyFrom: ""),
-                        preferences: F.preferences(), now: now)
+            status.hold(digest: aiMode ? F.digest(accounts: [], aliases: [:])
+                                       : F.digest(accounts: [], aliases: [:], engine: "none", keyFrom: "",
+                                                  off: "turned-off"),
+                        preferences: F.preferences(aiEnabled: aiMode), now: now)
             return status
         }
         let accounts = [
@@ -246,6 +249,9 @@ final class MeadowDialogPictures: XCTestCase {
     func testTheFirstRunInTheBriefsManner() throws {
         try draw("first-run", CGSize(width: 1000, height: 760)) { _ in
             Welcome(status: status(firstRun: true), kept: [], lights: false)
+        }
+        try draw("first-run-ai-mode", CGSize(width: 1000, height: 900)) { _ in
+            Welcome(status: status(firstRun: true, aiMode: true), kept: [.anthropic], lights: false)
         }
     }
 

@@ -28,6 +28,20 @@ final class AIChoicesTests: XCTestCase {
         XCTAssertEqual(AIChoices.keyLabel(.compatible), "API key")
     }
 
+    /// AI mode off, the pane is its switch alone; on, the connection by provider, how it stands, then spending and
+    /// writing ahead.
+    func testThePanesPartsFollowAIMode() {
+        for provider in API.AiProvider.allCases {
+            XCTAssertEqual(AIChoices.parts(aiMode: false, provider: provider), [.mode], "\(provider)")
+        }
+        XCTAssertEqual(AIChoices.parts(aiMode: true, provider: .anthropic),
+                       [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead])
+        XCTAssertEqual(AIChoices.parts(aiMode: true, provider: .compatible),
+                       [.mode, .connection, .key, .model, .standing, .spending, .writtenAhead])
+        XCTAssertEqual(AIChoices.parts(aiMode: true, provider: .ollama),
+                       [.mode, .connection, .model, .standing, .spending, .writtenAhead], "Ollama takes no key")
+    }
+
     func testChoosingAProviderSendsItAlone() {
         let sent = AIChoices.choose(.gemini)
         XCTAssertEqual(sent.aiProvider, .gemini)
@@ -147,7 +161,7 @@ final class AIWordsTests: XCTestCase {
         XCTAssertEqual(failing.text, "AI is on: Gemini, gemini-fictional. The last call failed: the key was refused")
         XCTAssertTrue(failing.failing)
         XCTAssertEqual(AIWords.standing(F.digest(engine: "none", off: "turned-off").ai).text,
-                       "AI is off. MailMind sends nothing to any AI service.")
+                       "AI mode is off. MailMind sends nothing to any AI service.")
         XCTAssertEqual(AIWords.standing(F.digest(engine: "none", provider: "openai").ai).text,
                        "AI is off: there is no OpenAI API key.")
         XCTAssertEqual(AIWords.standing(F.digest(engine: "none", provider: "compatible", off: "no-url").ai).text,

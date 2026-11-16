@@ -17,8 +17,8 @@ final class StatusScreenTests: XCTestCase {
         let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
                                                       badge: { _ in }, announce: { _ in }))
         if firstRun {
-            status.hold(digest: F.digest(accounts: [], aliases: [:], engine: "none", keyFrom: ""),
-                        preferences: F.preferences(), now: now)
+            status.hold(digest: F.digest(accounts: [], aliases: [:], engine: "none", keyFrom: "", off: "turned-off"),
+                        preferences: F.preferences(aiEnabled: false), now: now)
             return status
         }
         let accounts = [

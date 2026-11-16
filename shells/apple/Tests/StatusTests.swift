@@ -77,7 +77,7 @@ final class StatusWordsTests: XCTestCase {
                        "Ollama · llama-fictional")
         XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "gemini").ai).text,
                        "AI is off · no Gemini API key")
-        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", off: "turned-off").ai).text, "AI is off")
+        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", off: "turned-off").ai).text, "AI mode is off")
         XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "compatible", off: "no-url").ai).text,
                        "AI is off · no URL for the service")
         XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "ollama", off: "no-model").ai).text,
