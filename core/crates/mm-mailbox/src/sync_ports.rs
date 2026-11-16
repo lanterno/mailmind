@@ -181,8 +181,8 @@ pub trait AroundSync: Send + Sync + fmt::Debug {
     fn wake_due(&self);
     /// The round brought new mail: the job that triages it runs its next round now.
     fn new_mail(&self);
-    /// A first scan left older mail to read: the round that reads it runs now. Whether anything here reads it: a
-    /// process that only reads runs no rounds.
+    /// A first scan left older mail to read: the round that reads it runs now. Whether anything here reads it: the
+    /// served suites start no rounds.
     fn older_to_read(&self) -> bool {
         false
     }

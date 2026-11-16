@@ -132,8 +132,8 @@ impl std::fmt::Debug for Host {
 
 impl Host {
     /// Open `home`: the database made or upgraded, the app assembled over it and its background workers started (all
-    /// but the minute's round left out when the profile only reads, as `Workers::start` leaves them). It fails saying
-    /// why in words a person can act on, naming no secret.
+    /// but the minute's round and the reading of a first scan's older mail left out when the profile only reads, as
+    /// `Workers::start` leaves them). It fails saying why in words a person can act on, naming no secret.
     pub fn open(home: Home) -> Result<Host, String> {
         let pairs = home.variables.iter().filter(|(name, _)| name != mm_server::environment::HOME);
         let environment = Environment::from_pairs(pairs.map(|(name, value)| (name.as_str(), value.as_str())));

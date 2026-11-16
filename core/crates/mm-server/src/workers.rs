@@ -225,10 +225,11 @@ pub fn expire_timing(interval: i64) -> Option<(i64, i64)> {
 }
 
 impl Workers {
-    /// Start the background work (`wiring.start`): the minute's round always, since it needs no mail server; and,
-    /// unless the process only reads, each durable queue's worker (the change queue's), the sync, reconcile, the
-    /// expiry rules and IDLE's workers. `reconcile_secs` is about how long reconcile takes to go round every account, and `expire_secs`
-    /// the seconds between the expiry rules' rounds, each 0 for never.
+    /// Start the background work (`wiring.start`): the minute's round always, since it needs no mail server, and the
+    /// reading of a first scan's older mail, which changes nothing there; and, unless the process only reads, each
+    /// durable queue's worker (the change queue's), the sync, reconcile, the expiry rules and IDLE's workers.
+    /// `reconcile_secs` is about how long reconcile takes to go round every account, and `expire_secs` the seconds
+    /// between the expiry rules' rounds, each 0 for never.
     pub fn start(app: &Arc<App>, read_only: bool, reconcile_secs: i64, expire_secs: i64) -> Workers {
         let stop = Arc::new(Stop::default());
         let mut lanes: Vec<(Arc<Job>, Round)> = Vec::new();
@@ -239,6 +240,15 @@ impl Workers {
                 mm_attention::followups::clocked_round(&clocked.attention.snoozing, &clocked.attention.follow_ups);
                 Ok(None)
             }),
+        ));
+        // A first scan's older mail, a few steps of each folder a round, newest first. A first scan that leaves
+        // some kicks it, a round that leaves more runs the next at once, and after a quit it goes on where the last
+        // step stored left it. It only reads the server, and writes only this Mac's database, as opening a folder
+        // does, so a process that only reads reads it too: a folder it opened first fills to its oldest message.
+        let reading = app.syncing.clone();
+        lanes.push((
+            app.jobs.add(OLDER_MAIL, mm_mailbox::syncing::OLDER_EVERY, mm_mailbox::syncing::OLDER_FIRST),
+            Box::new(move || reading.read_older().map(|more| more.then_some(1)).map_err(|fault| fault.class)),
         ));
         let mut queues: Vec<Arc<dyn Queue>> = Vec::new();
         if !read_only {
@@ -253,14 +263,6 @@ impl Workers {
                     syncing.sync_once();
                     Ok(None)
                 }),
-            ));
-            // A first scan's older mail, a few steps of each folder a round, newest first. A first scan that leaves
-            // some kicks it, a round that leaves more runs the next at once, and after a quit it goes on where the
-            // last step stored left it.
-            let reading = app.syncing.clone();
-            lanes.push((
-                app.jobs.add(OLDER_MAIL, mm_mailbox::syncing::OLDER_EVERY, mm_mailbox::syncing::OLDER_FIRST),
-                Box::new(move || reading.read_older().map(|more| more.then_some(1)).map_err(|fault| fault.class)),
             ));
             if let Some((every, first)) = reconcile_timing(reconcile_secs) {
                 let reconciling = app.clone();
