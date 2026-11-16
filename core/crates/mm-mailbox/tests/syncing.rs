@@ -1,7 +1,7 @@
 //! `syncing`: each account's INBOX synced through its own flight, and how each account's sync stands. A world of
 //! stand-ins: a server that never answers as it was asked to, a store that keeps nothing, and a clock the test moves.
 //! The served suites hold what a sync stores; these hold what the flight, an account's standing and a round of
-//! older mail do when a sync goes wrong. Every address is fictional.
+//! older mail do when a sync goes wrong, or its account is removed. Every address is fictional.
 
 #![allow(clippy::unwrap_used)]
 
@@ -15,6 +15,7 @@ use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::command_ports::{CommandStore, MoveAccount, MoveAccounts, Tx};
 use mm_mailbox::fetch_ports::KeptBody;
+use mm_mailbox::flights::Flights;
 use mm_mailbox::folders::Folders;
 use mm_mailbox::ingest::{Ingest, SyncError};
 use mm_mailbox::ports::{Accounts, MailSession, MailSessions, SessionError, StoredMail, ViewCounts};
@@ -46,6 +47,10 @@ struct World {
     older: Mutex<Vec<(String, String)>>,
     /// The clock, in microseconds.
     now: AtomicI64,
+    /// Each account's syncs now, which a removal stops.
+    flights: Arc<Flights>,
+    /// The accounts removed as their server is opened: their flights are stopped then.
+    removing: Mutex<HashSet<String>>,
 }
 
 impl World {
@@ -72,6 +77,9 @@ impl MailServers for World {
     fn open(&self, account: &str, _timeout_seconds: u64) -> Result<Box<dyn MailServer>, ServerError> {
         self.opened.fetch_add(1, Ordering::SeqCst);
         assert_ne!(account, PANICS, "a server whose answer panics");
+        if self.removing.lock().unwrap().contains(account) {
+            self.flights.stop(account);
+        }
         Err(self.fails.lock().unwrap().get(account).copied().unwrap_or(ServerError::Unreachable("ConnectionRefused")))
     }
 }
@@ -209,7 +217,8 @@ impl AroundSync for World {
 }
 
 fn syncing(world: &Arc<World>) -> Syncing {
-    let ingest = Ingest::new(world.clone(), world.clone(), world.clone(), world.clone(), world.clone(), world.clone());
+    let ingest = Ingest::new(world.clone(), world.clone(), world.clone(), world.clone(), world.clone(), world.clone())
+        .flying_in(world.flights.clone());
     Syncing::new(SyncingParts {
         ingest: Arc::new(ingest),
         accounts: world.clone(),
@@ -371,4 +380,51 @@ fn a_read_of_older_mail_that_panics_ends_only_its_folders_read_and_the_next_roun
     assert_eq!(world.opened.load(Ordering::SeqCst), 3);
     assert!(!syncing.read_older().unwrap());
     assert_eq!(world.opened.load(Ordering::SeqCst), 6);
+}
+
+fn removing(world: &World, account: &str) {
+    world.removing.lock().unwrap().insert(account.to_owned());
+}
+
+#[test]
+fn a_removed_accounts_run_of_failures_goes_with_it_so_added_again_it_starts_afresh() {
+    let world = World::with(&[ADA]);
+    let syncing = Arc::new(syncing(&world));
+    syncing.sync_guarded(None);
+    pass(&world, 3600);
+    assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"), "it shows by its age");
+    syncing.removed(ADA);
+    assert_eq!(standing(&syncing, ADA), None);
+    // Added again, its first failure is the first of a new run: nothing shows, an hour on or not.
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), None);
+}
+
+#[test]
+fn a_sync_whose_account_is_removed_as_it_reads_says_and_keeps_nothing_of_it() {
+    let world = World::with(&[ADA, BEA]);
+    let syncing = syncing(&world);
+    // A failure that may pass, which a run would show by its age.
+    syncing.sync_guarded(None);
+    let recorded = world.recorded.load(Ordering::SeqCst);
+    removing(&world, ADA);
+    syncing.sync_guarded(None);
+    pass(&world, 3600);
+    assert_eq!(standing(&syncing, ADA), None, "neither the sync's failure nor the run before it");
+    assert_eq!(standing(&syncing, BEA), error("ConnectionRefused"), "the other account's run goes on");
+    assert_eq!(world.recorded.load(Ordering::SeqCst), recorded + 1, "only the other account's failure is kept");
+    assert!(!syncing.sync().unwrap().running);
+}
+
+#[test]
+fn a_read_of_older_mail_whose_account_is_removed_stops_and_says_nothing_more_of_it() {
+    let world = World::with(&[ADA, BEA]);
+    let older = [(ADA, "INBOX"), (ADA, "Archive"), (BEA, "INBOX")];
+    *world.older.lock().unwrap() = older.iter().map(|(a, f)| ((*a).to_owned(), (*f).to_owned())).collect();
+    removing(&world, ADA);
+    let syncing = syncing(&world);
+    assert!(!syncing.read_older().unwrap());
+    // Ada's Inbox's read was the last of hers; Bea's went on.
+    assert_eq!(world.opened.load(Ordering::SeqCst), 2);
+    assert_eq!(standing(&syncing, ADA), None);
 }
