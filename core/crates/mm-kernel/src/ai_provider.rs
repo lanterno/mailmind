@@ -60,6 +60,15 @@ impl AiProvider {
     }
 }
 
+/// What a key typed or pasted with a space or a line break inside it is told: no provider's key holds one.
+pub const KEY_SPACED: &str = "An API key can't hold spaces or line breaks.";
+
+/// Whether a key holds what no provider's key does, and no request header can carry: a space (any `str.isspace`
+/// one) or a control character. Such a key is no key to send.
+pub fn key_spaced(key: &str) -> bool {
+    key.chars().any(|c| crate::text::is_space(c) || c.is_control())
+}
+
 /// The longest base URL a person may give, in characters.
 pub const BASE_URL_MOST: usize = 500;
 

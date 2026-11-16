@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use mm_kernel::ai_provider::AiProvider;
+use mm_kernel::ai_provider::{self, AiProvider};
 use mm_kernel::errors::{Failure, Fault, Kind, Problem};
 use mm_kernel::log;
 use mm_kernel::seams::{Clock, Keychain, Secret, keepable_name, keepable_secret};
@@ -493,9 +493,14 @@ impl Directory {
     }
 
     /// Keep `typed` as `provider`'s API key, in its own Keychain item, and name the item in the file, one version past
-    /// what it named before, whatever that was (`set_api_key`). A secret the Keychain can't hold is refused. A Keychain
+    /// what it named before, whatever that was (`set_api_key`). Its ends are trimmed, as a paste can bring a line break
+    /// with it; one with a space or a line break inside is refused, as is a secret the Keychain can't hold. A Keychain
     /// that won't keep it is `Unreachable`, the file left as it was.
     pub fn set_api_key(&self, provider: AiProvider, typed: Secret) -> Result<(), Failure> {
+        let typed = Secret::new(mm_kernel::text::strip(typed.expose()).to_owned());
+        if ai_provider::key_spaced(typed.expose()) {
+            return Err(Problem::refused(ai_provider::KEY_SPACED).into());
+        }
         let (item, who) = (credential::api_key_item(provider), credential::api_key_who(provider));
         let _writing = writing(&self.write)?;
         let mut raw = self.file.read()?;
