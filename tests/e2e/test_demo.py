@@ -1,4 +1,5 @@
-"""`just demo` as a program: the app comes up on the fictional world and on nothing else, and takes its data with it."""
+"""`just demo` as a program: the app comes up on the fictional world and on nothing else, not even a model server running
+on this machine, and takes its data with it."""
 import http.client
 import json
 import os
@@ -53,6 +54,7 @@ def test_the_demo_runs_on_the_fictional_world_and_leaves_nothing(tmp_path):
         assert all(i["account"].endswith("@example.test") for i in items)
         assert all(i["from_addr"].endswith((".test", ".example")) or "example" in i["from_addr"] for i in items)
         assert json.loads(get(port, "/api/digest")[1])["send_accounts"]
+        assert json.loads(get(port, "/api/ai/local")[1]) == {"ok": True, "servers": []}   # and none asked: see below
         assert [p.name for p in tmp_path.iterdir()][0].startswith("mailmind-demo-")
         proc.send_signal(signal.SIGINT)
         assert proc.wait(timeout=20) in (0, -signal.SIGINT, 130)
@@ -62,5 +64,6 @@ def test_the_demo_runs_on_the_fictional_world_and_leaves_nothing(tmp_path):
             proc.wait()
     out = proc.stdout.read() if proc.stdout else ""
     assert re.search(rf"MailMind → http://127\.0\.0\.1:{port}", out)
+    # The demo's server says each refusal, swallowed or not: a model server's port asked would answer [] above all the same.
     assert "Traceback" not in out and "Tripwire" not in out, out
     assert list(tmp_path.iterdir()) == []

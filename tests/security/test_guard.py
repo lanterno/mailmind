@@ -91,6 +91,18 @@ def test_a_swallowed_refusal_is_still_recorded(refused):
     assert refused == [f"open {os.path.join(ROOT, 'mailmind_views.json')!r}"]
 
 
+def test_a_program_started_with_a_loud_guard_says_a_swallowed_refusal_as_it_happens():
+    """As the server the demo starts installs it: no test reads its record, so what it prints must hold it."""
+    code = (f"import socket, sys; sys.path[:0] = [{os.path.join(ROOT, 'tests', 'support')!r}, {ROOT!r}]; import guard; "
+            "guard.install(loud=True)\n"
+            "try: socket.socket().connect(('127.0.0.1', 11434))\n"
+            "except OSError: pass\n"
+            "print(guard.violations)")
+    done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=60)
+    assert (done.returncode, done.stderr) == (0, "Tripwire: connect to ('127.0.0.1', 11434)\n"), done.stderr
+    assert done.stdout == "[\"connect to ('127.0.0.1', 11434)\"]\n"
+
+
 def test_a_module_path_left_pointing_at_the_repo_is_caught(refused):
     from mailmind.bootstrap.mailbox import store
     with pytest.raises(guard.Tripwire):                               # no data_dir here; refused whether
