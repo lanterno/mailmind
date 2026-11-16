@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiOffered, aiPrivacy, aiStanding, offLine, PROVIDER_LABEL, runsHere, whyOff } from "./ai";
+import { aiOffered, aiPrivacy, aiStanding, offLine, PROVIDER_LABEL, PROVIDER_NAME, runsHere, whyOff } from "./ai";
 import type { AiStatus } from "./api/types";
 
 const status = (over: Partial<AiStatus> = {}): AiStatus => ({
@@ -11,6 +11,14 @@ const off = (why: AiStatus["off"], provider: AiStatus["provider"] = "anthropic")
 describe("the providers", () => {
   it("are named in the menu's words, in its order", () => {
     expect(Object.values(PROVIDER_LABEL)).toEqual(["Claude (Anthropic)", "OpenAI", "Google Gemini", "A model on this Mac", "Another OpenAI-compatible service"]);
+  });
+});
+
+describe("a model on this Mac", () => {
+  it("is named as no one's, and Ollama nowhere", () => {
+    expect(PROVIDER_LABEL.local).toBe("A model on this Mac");
+    expect(PROVIDER_NAME.local).toBe("a model on this Mac");
+    expect(JSON.stringify([PROVIDER_LABEL, PROVIDER_NAME])).not.toMatch(/ollama/i);
   });
 });
 
@@ -28,7 +36,8 @@ describe("why AI is off", () => {
   it("names the provider chosen", () => {
     expect(whyOff(off("no-key", "openai"))).toBe("there’s no key for OpenAI");
     expect(whyOff(off("no-key"))).toBe("there’s no key for Claude");
-    expect(whyOff(off("no-model", "local"))).toBe("no model is chosen for your model server");
+    expect(whyOff(off("no-model", "local"))).toBe("no model on this Mac is chosen");
+    expect(whyOff(off("no-model", "compatible"))).toBe("no model is chosen for the OpenAI-compatible service");
     expect(whyOff(off("no-url", "compatible"))).toBe("the OpenAI-compatible service has no URL");
     expect(whyOff(off("turned-off", "gemini"))).toBe("it is turned off in Settings");
   });
@@ -53,8 +62,9 @@ describe("what leaves this Mac", () => {
     expect(aiPrivacy("compatible", "https://llm.example.test/v1")).toContain("goes to the OpenAI-compatible service only");
   });
   it("is nothing when the provider answers on this Mac", () => {
-    expect(aiPrivacy("local", "")).toBe("Your model server runs on this Mac, so the text of your mail never leaves it.");
-    expect(aiPrivacy("compatible", "http://localhost:8080/v1")).toBe("The OpenAI-compatible service runs on this Mac, so the text of your mail never leaves it.");
+    expect(aiPrivacy("local", "")).toBe("With a model on this Mac, the text of a message never leaves this Mac.");
+    expect(aiPrivacy("local", "http://localhost:1234/v1")).toBe("With a model on this Mac, the text of a message never leaves this Mac.");
+    expect(aiPrivacy("compatible", "http://localhost:8080/v1")).toBe("With the OpenAI-compatible service on this Mac, the text of a message never leaves this Mac.");
   });
   it("is on this Mac only at a loopback address, or for a model on this Mac, which the server holds there", () => {
     for (const url of ["http://127.0.0.1:11434/v1", "http://localhost/v1", "https://[::1]:8443/v1", "HTTP://LOCALHOST:1234"]) expect(runsHere("compatible", url)).toBe(true);
@@ -67,11 +77,13 @@ describe("what leaves this Mac", () => {
 describe("how AI stands", () => {
   it("says the provider and model on, and the last call's failure", () => {
     expect(aiStanding(status())).toBe("AI is on: Claude (Anthropic) · claude-opus-5-5.");
+    expect(aiStanding(status({ provider: "local", model: "qwen3:8b" }))).toBe("AI is on: A model on this Mac · qwen3:8b.");
     expect(aiStanding(status({ provider: "openai", model: "gpt-6.1-sol", last_ok: false, last_error: "the API key was rejected" })))
       .toBe("AI is on: OpenAI · gpt-6.1-sol. The last call failed: the API key was rejected.");
   });
   it("says why it is off", () => {
     expect(aiStanding(off("turned-off"))).toBe("AI is turned off.");
+    expect(aiStanding(off("no-model", "local"))).toBe("AI is off: no model on this Mac is chosen.");
     expect(aiStanding(off("no-key", "gemini"))).toBe("AI is off: there’s no key for Gemini.");
   });
   it("says nothing before the digest has come", () => expect(aiStanding(undefined)).toBe(""));
