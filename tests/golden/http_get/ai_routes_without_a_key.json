@@ -86,7 +86,7 @@
  {
   "body": {
    "ai_off": true,
-   "detail": "AI is off: MailMind has no Claude API key",
+   "detail": "AI is off: there is no API key",
    "status": 409,
    "title": "AI is off",
    "type": "/problems/ai-off"
@@ -107,7 +107,7 @@
  {
   "body": {
    "ai_off": true,
-   "detail": "AI is off: MailMind has no Claude API key",
+   "detail": "AI is off: there is no API key",
    "status": 409,
    "title": "AI is off",
    "type": "/problems/ai-off"

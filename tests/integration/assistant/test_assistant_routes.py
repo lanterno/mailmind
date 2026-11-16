@@ -17,7 +17,7 @@ from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Conflict, NotFound, Refused, Unreachable
 
 BAD_REQUEST = problems.BAD_REQUEST
-AI_OFF = problems.ai_off()
+AI_OFF = problems.ai_off("no-key")
 LUNCH = "ada-inbox-02-lunch-confirm.eml"        # Lin's last word in Ada's lunch thread
 VENUE_END = "cy-inbox-02-thread-end.eml"        # Mae's last word in the venue thread
 REWRITE = {"op": "shorten", "text": "see you thursday"}

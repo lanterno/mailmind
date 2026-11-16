@@ -99,7 +99,7 @@ def test_with_claudes_key_it_is_on_until_turned_off_and_then_a_route_sends_nothi
     choose(app, ai_enabled=False)
     assert (status(app)["engine"], status(app)["off"]) == ("none", "turned-off")
     r = app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"})
-    assert (r.status, r.json) == (409, problems.ai_off())
+    assert (r.status, r.json) == (409, problems.ai_off("turned-off"))
     app.work("assess")
     assert ai.requests == []
     choose(app, ai_enabled=True)

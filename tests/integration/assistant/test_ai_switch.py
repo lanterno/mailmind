@@ -25,7 +25,7 @@ def off(app, world, ai):
 @pytest.mark.parametrize("path, body", SPENDS, ids=[p for p, _ in SPENDS])
 def test_turned_off_a_route_says_ai_is_off_and_sends_nothing(off, world, ai, path, body):
     r = off.post(path, body(world))
-    assert (r.status, r.json) == (409, problems.ai_off())
+    assert (r.status, r.json) == (409, problems.ai_off("turned-off"))
     assert ai.requests == []
 
 

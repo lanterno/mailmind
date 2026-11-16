@@ -41,8 +41,14 @@ def unreadable(detail=None, **more):
     return _doc("unreadable", "Unreadable", 422, detail, more)
 
 
-def ai_off():
-    return _doc("ai-off", "AI is off", 409, "AI is off: MailMind has no Claude API key", {"ai_off": True})
+AI_OFF_WORDS = {None: "AI is off", "turned-off": "AI is off: it is turned off in Settings",
+                "no-key": "AI is off: there is no API key", "no-url": "AI is off: the service has no URL",
+                "no-model": "AI is off: no model is chosen"}
+
+
+def ai_off(off=None):
+    """The 409 with AI off: its detail says why, from the closed set, or only that it is off when nothing said why."""
+    return _doc("ai-off", "AI is off", 409, AI_OFF_WORDS[off], {"ai_off": True})
 
 
 def read_only():
