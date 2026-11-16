@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiOffered, aiPrivacy, aiSends, aiStanding, offLine, PROVIDER_LABEL, PROVIDER_NAME, runsHere, whyOff } from "./ai";
+import { aiOffered, aiSends, aiSendsInShort, aiStanding, offLine, PROVIDER_LABEL, PROVIDER_NAME, runsHere, whyOff } from "./ai";
 import type { AiStatus } from "./api/types";
 
 const status = (over: Partial<AiStatus> = {}): AiStatus => ({
@@ -55,16 +55,17 @@ describe("AI off, where something needs it", () => {
 });
 
 describe("what leaves this Mac", () => {
-  it("goes to the company behind the provider chosen, and to no one else", () => {
-    expect(aiPrivacy("anthropic", "")).toBe("With AI on, the text of a message goes to Anthropic only when it is summarized, briefed, drafted or asked about; nothing else leaves this machine.");
-    expect(aiPrivacy("openai", "")).toContain("goes to OpenAI only");
-    expect(aiPrivacy("gemini", "")).toContain("goes to Google only");
-    expect(aiPrivacy("compatible", "https://llm.example.test/v1")).toContain("goes to the OpenAI-compatible service only");
+  it("says in short, for the sync menu, that new mail goes on its own and attachments never", () => {
+    expect(aiSendsInShort("anthropic", "")).toBe("Each new message’s sender, subject and opening text go to Anthropic automatically, "
+      + "and more when you ask for something. Attachments never leave this Mac.");
+    expect(aiSendsInShort("openai", "")).toContain(" go to OpenAI automatically");
+    expect(aiSendsInShort("gemini", "")).toContain(" go to Google automatically");
+    expect(aiSendsInShort("compatible", "https://llm.example.test/v1")).toContain(" go to the OpenAI-compatible service automatically");
   });
-  it("is nothing when the provider answers on this Mac", () => {
-    expect(aiPrivacy("local", "")).toBe("With a model on this Mac, the text of a message never leaves this Mac.");
-    expect(aiPrivacy("local", "http://localhost:1234/v1")).toBe("With a model on this Mac, the text of a message never leaves this Mac.");
-    expect(aiPrivacy("compatible", "http://localhost:8080/v1")).toBe("With the OpenAI-compatible service on this Mac, the text of a message never leaves this Mac.");
+  it("says in short that nothing leaves this Mac when the provider answers here", () => {
+    expect(aiSendsInShort("local", "")).toBe("With a model on this Mac, nothing leaves this Mac.");
+    expect(aiSendsInShort("local", "http://localhost:1234/v1")).toBe("With a model on this Mac, nothing leaves this Mac.");
+    expect(aiSendsInShort("compatible", "http://localhost:8080/v1")).toBe("With the OpenAI-compatible service on this Mac, nothing leaves this Mac.");
   });
   it("says before AI mode is on what goes to the company behind the provider, when, and that attachments never do", () => {
     expect(aiSends("anthropic", "")).toBe("With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be "
