@@ -40,6 +40,11 @@ class Accounts(Protocol):
 
     def error_kind(self, e: BaseException) -> str: ...
 
+    def may_pass(self, e: BaseException) -> bool:
+        """Whether a sync's failure is trouble that may pass (a connection lost, a server busy for now), which shows
+        only if it lasts (domain.sync_health); a refusal never is."""
+        ...
+
     def try_login_again(self, email: str) -> None:
         """Someone asked: a login its server refused needn't wait out its hold."""
         ...

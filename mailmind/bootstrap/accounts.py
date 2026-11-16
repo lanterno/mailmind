@@ -1,7 +1,7 @@
 """Binds Accounts. Legacy modules, the other contexts' wiring and the tests reach it through this module:
 `config`, the file's directory, and the rest by name, as `accounts.get(email)`."""
 from mailmind.accounts.adapters import config_file, imap_connection, mail_hosts, secrets
-from mailmind.accounts.adapters.imap_connection import LoginUnreachable, ReadOnlyIMAP, login_failed, tls_context
+from mailmind.accounts.adapters.imap_connection import LoginUnreachable, ReadOnlyIMAP, login_failed, may_pass, tls_context
 from mailmind.accounts.application.connections import Connections
 from mailmind.accounts.application.directory import Directory
 from mailmind.accounts.application.health import Health
@@ -12,7 +12,7 @@ from mailmind.accounts.domain.health import error_kind
 from mailmind.mailbox.adapters.imap.imap_names import BadMailbox, imap_quote, mailbox_arg
 from mailmind.platform import environment
 
-__all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_pin", "config", "connections", "error_kind", "health", "login_failed", "logins", "quiet_error", "connect", "get",
+__all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_pin", "config", "connections", "error_kind", "health", "login_failed", "logins", "may_pass", "quiet_error", "connect", "get",
            "imap_quote", "mailbox_arg", "preload_creds", "presets", "tls_context", "trash_folder"]
 
 

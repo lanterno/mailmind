@@ -113,7 +113,7 @@ def open_session(acct, timeout=60) -> MailSession:
     """A logged-in MailSession for the account `acct` (an accounts.config.accounts() entry). A login its server refused waits out
     its hold (accounts.logins): nothing is sent, and it raises as the refusal did, so each caller does as it did then."""
     if accounts.logins.held(acct):
-        raise accounts.LoginUnreachable("a login its server refused is held back")
+        raise accounts.LoginUnreachable("a login its server refused is held back", refused=True)
     return try_login(acct, timeout)
 
 
@@ -194,6 +194,9 @@ class _Accounts:
 
     def error_kind(self, e):
         return accounts.error_kind(e)
+
+    def may_pass(self, e):
+        return accounts.may_pass(e)
 
     def try_login_again(self, email):
         accounts.logins.forget(email)

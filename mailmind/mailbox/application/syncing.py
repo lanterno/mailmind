@@ -1,5 +1,9 @@
 """The background sync of each account, and the body backfill: what brings the database up to what the servers hold, one
-job at a time, with what each account's last try came to."""
+job at a time, with what each account's last try came to.
+
+An account shows as failing only as domain.sync_health says: trouble that may pass (a lost connection, a timeout, a
+server that can't take a login for now) once a second sync in a row has failed too, or three minutes on. Until then it shows as it did before, and its record keeps no
+error."""
 import threading
 import time
 from collections.abc import Callable, Collection, Mapping
@@ -12,7 +16,7 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, Attention, Result, StoredMail
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.application.warm import Warming
-from mailmind.mailbox.domain import body_backfill, sync_plan
+from mailmind.mailbox.domain import body_backfill, sync_health, sync_plan
 from mailmind.platform import sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
@@ -35,6 +39,7 @@ class Syncing:
         self._kick = kick
         self._sync: dict[str, Any] = {"running": False, "last": None, "result": "idle"}
         self._status: dict[str, dict[str, str]] = {}   # email -> {"health": ok|syncing|error, "msg": str}
+        self._failing: dict[str, sync_health.Failing] = {}   # email -> its syncs failed in a row, until one works
         self._sync_lock = threading.Lock()
         self._sync_asked: list[frozenset[str] | None] = []   # syncs asked for while one ran: each its accounts, or None for all
         self._backfill_missed: dict[int, body_backfill.SetAside] = {}   # pk -> when backfill may ask for its body again
@@ -42,8 +47,13 @@ class Syncing:
 
     @property
     def status(self) -> dict[str, dict[str, str]]:
-        """How each account's sync stands now."""
-        return self._status
+        """How each account's sync stands now: one whose failures in a row now show, three minutes on, as failing."""
+        now = time.time()
+        shown = dict(self._status)
+        for email, run in list(self._failing.items()):
+            if run.shows(now) and shown.get(email, {}).get("health") != "syncing":
+                shown[email] = {"health": "error", "msg": run.error}
+        return shown
 
     @property
     def sync(self) -> dict[str, Any]:
@@ -57,10 +67,12 @@ class Syncing:
         for a in self._accounts.accounts():
             if emails is not None and a["email"] not in emails:
                 continue
+            before = self._status.get(a["email"])
             self._status[a["email"]] = {"health": "syncing", "msg": ""}
             try:
                 kept, junk, _ = self._ingest.sync_new(a)
                 new += kept
+                self._failing.pop(a["email"], None)
                 self._status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
                 with self._uow.write() as c:
                     self._store.record_sync_result(c, a["email"], True)
@@ -68,9 +80,19 @@ class Syncing:
                 if kept > 0:
                     sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": kept})
             except Exception as e:
+                kind, now = self._accounts.error_kind(e), time.time()
+                run = sync_health.and_one_more(self._failing.get(a["email"]), type(e).__name__, self._accounts.may_pass(e), now)
+                self._failing[a["email"]] = run
+                if not run.shows(now):     # it may pass: the account shows as it did, and the next sync says
+                    if before is None:
+                        self._status.pop(a["email"], None)
+                    else:
+                        self._status[a["email"]] = before
+                    log.info("an account's sync failed; it shows if the next fails too", exc_info=e)
+                    continue
                 self._status[a["email"]] = {"health": "error", "msg": f"{type(e).__name__}"}
                 with self._uow.write() as c:
-                    self._store.record_sync_result(c, a["email"], False, type(e).__name__, self._accounts.error_kind(e))
+                    self._store.record_sync_result(c, a["email"], False, type(e).__name__, kind)
                 log.warning("%(account)s: sync failed", {"account": a["email"]}, exc_info=e)
         return new
 
@@ -80,9 +102,10 @@ class Syncing:
         stands now, for Accounts to read as its health. Pure read; no IMAP, no IMAP gate."""
         with self._uow.read() as c:
             rows = self._store.account_health(c)
+        live = self.status
         return [{"account": r["account"], "last_ok_ts": r["last_ok_ts"], "last_error_ts": r["last_error_ts"],
                  "last_error_kind": r["last_error_kind"], "last_error": r["last_error"], "sync_count": r["sync_count"],
-                 "live": self._status.get(r["account"], {}).get("health", "")}
+                 "live": live.get(r["account"], {}).get("health", "")}
                 for r in rows if (r["folder"] or "INBOX") == "INBOX"]
 
 

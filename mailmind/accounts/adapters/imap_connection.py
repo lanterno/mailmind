@@ -5,6 +5,7 @@ import re
 import ssl
 
 from mailmind.accounts.domain import login_hold, tls_pin
+from mailmind.accounts.domain.health import error_kind
 from mailmind.platform import profile
 from mailmind.platform.db import txguard
 
@@ -32,6 +33,18 @@ def _connection_lost(e):
 def login_failed(e):
     """What an IMAP4.error during LOGIN comes to, through either adapter."""
     return LoginUnreachable(str(e), refused=not _connection_lost(e) and login_hold.refuses(str(e)))
+
+
+PASSING = frozenset({"NETWORK", "TIMEOUT"})   # the kinds of trouble that may pass
+
+
+def may_pass(e: BaseException) -> bool:
+    """Whether a failure is trouble that may pass, as a sleep or a change of network leaves for a moment: a connection
+    lost, refused or too slow, a name not found, or a login its server couldn't take for now or lost on the way. A
+    login its server refused never is, nor one held back after it was (mailbox.domain.sync_health)."""
+    if isinstance(e, LoginUnreachable):
+        return not e.refused
+    return error_kind(e) in PASSING
 
 
 _UNSENDABLE = re.compile(r"[\r\n\x00]")
