@@ -42,6 +42,7 @@ from mailmind.http.schemas.assistant import (
     ScreenerSuggestions,
     SenderSummary,
     SenderSummaryBody,
+    Spending,
     SummarizeBody,
     Summary,
     Unavailable,
@@ -101,6 +102,11 @@ def router(assistant, mailbox):
     @r.get("/api/ai/models", responses=answers(ModelList))
     def ai_models(args: Annotated[ModelsArgs, Query()]):
         return assistant.catalog.models(args.provider)
+
+    # what AI cost over the last week and this month, by feature, from the usage ledger: it reads what is stored, so AI may be off
+    @r.get("/api/ai/spending", responses=answers(Spending))
+    def ai_spending():
+        return assistant.calls.spending()
 
     # the model servers on this Mac and their models, for a person choosing a model on this Mac: AI may be off here too
     @r.get("/api/ai/local", responses=answers(LocalServers))

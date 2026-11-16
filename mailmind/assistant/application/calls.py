@@ -9,6 +9,7 @@ from typing import Any
 from mailmind.assistant.application.gateway import DayCost, Gateway
 from mailmind.assistant.application.ports import Reply
 from mailmind.assistant.application.status import Status
+from mailmind.assistant.domain import spending
 from mailmind.assistant.domain.schema import object_in
 from mailmind.platform import environment
 
@@ -44,6 +45,10 @@ class Calls:
         """Each of the last `days` local days, newest first: its AI calls and their cost in
         micro-dollars, in all and by feature (the usage ledger's report)."""
         return self._gateway().usage(days)
+
+    def spending(self) -> dict[str, Any]:
+        """What AI cost over the last week and this month, by feature, as the Spending card shows it."""
+        return {"ok": True, **spending.report(self.usage(spending.MONTH_DAYS))}
 
     def call_claude(self, prompt: str, feature: str = "other") -> str:
         """Plain text result (a thread's digest). `feature` names the call in the usage ledger."""

@@ -359,6 +359,27 @@ class PlanCarriedOut(Answer):
     undoable: bool
 
 
+class FeatureSpent(Answer):
+    """What one feature's calls cost, by the name a person knows it by (`spending.label`)."""
+    label: str
+    calls: int
+    cost_micros: int
+
+
+class PeriodSpent(Answer):
+    """What AI cost over some days, in micro-dollars: in all, and by feature, the dearest first."""
+    calls: int
+    cost_micros: int
+    features: list[FeatureSpent]
+
+
+class Spending(Answer):
+    """`Calls.spending`: what AI cost over the last seven days, today's among them, and this month so far."""
+    ok: Literal[True]
+    week: PeriodSpent
+    month: PeriodSpent
+
+
 class ModelsArgs(QueryArgs):
     """The AI provider whose models a person is choosing among (#49)."""
     provider: AiProvider
