@@ -150,14 +150,18 @@ impl LanguageModel for Model {
     }
 }
 
-/// Claude with its key, or AI off with none; a test may choose another provider (#49).
+/// Claude with its key, or AI off with none; a test may choose another provider (#49) or another model.
 #[derive(Debug)]
-struct Keyed(Option<Arc<dyn LanguageModel>>, Mutex<AiProvider>);
+struct Keyed(Option<Arc<dyn LanguageModel>>, Mutex<AiProvider>, Arc<Mutex<String>>);
 
 impl Engine for Keyed {
     fn in_force(&self) -> InForce {
         match &self.0 {
-            Some(model) => InForce { provider: *lock(&self.1), ..InForce::claude(model.clone(), "ANTHROPIC_API_KEY") },
+            Some(lm) => InForce {
+                provider: *lock(&self.1),
+                model: lock(&self.2).clone(),
+                ..InForce::claude(lm.clone(), "ANTHROPIC_API_KEY")
+            },
             None => InForce::off(mm_assistant::providers::Off::NoKey, "ANTHROPIC_API_KEY"),
         }
     }
@@ -170,6 +174,8 @@ struct Book {
     said: Mutex<HashMap<i64, Assessment>>,
     batches: Mutex<BTreeMap<i64, Batch>>,
     items: Mutex<HashMap<i64, i64>>,
+    /// A model to choose (the engine's slot, and its name) once a batch's row is committed, before it is sent.
+    choose_on_begin: Mutex<Option<(Arc<Mutex<String>>, String)>>,
 }
 
 const OUT: [&str; 2] = ["submitting", "running"];
@@ -246,6 +252,9 @@ impl BatchBook for Book {
             },
         );
         lock(&self.items).extend(begun.keys.iter().map(|k| (*k, id)));
+        if let Some((chosen, model)) = lock(&self.choose_on_begin).take() {
+            *lock(&chosen) = model;
+        }
         Ok(Some(id))
     }
 
@@ -376,7 +385,8 @@ fn world(messages: i64, on: bool, limit_micros: Option<i64>) -> World {
     });
     let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
     let lm: Arc<dyn LanguageModel> = model.clone();
-    let engine = Arc::new(Keyed(on.then_some(lm), Mutex::new(AiProvider::Anthropic)));
+    let chosen = Arc::new(Mutex::new(DEFAULT.to_owned()));
+    let engine = Arc::new(Keyed(on.then_some(lm), Mutex::new(AiProvider::Anthropic), chosen));
     let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
     let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
     let calls = Arc::new(Calls::new(gateway, status.clone(), None, false));
@@ -767,6 +777,38 @@ fn with_another_provider_no_batch_goes_the_backlog_is_triaged_at_once_and_one_ou
 
     *lock(&w.engine.1) = AiProvider::Anthropic;
     assert_eq!(w.collect(), 100, "Claude again: the one out comes in");
+}
+
+#[test]
+fn a_batchs_answers_carry_the_model_it_asked_not_the_one_in_force() {
+    let w = world(120, true, None);
+    assert_eq!(w.submit(), 100);
+    // Sent while another model was chosen: the one in force now is the default.
+    let asked = "claude-opus-4-8";
+    let id = w.book.open().expect("out").expect("a batch").id;
+    w.book.batch_mut(id, |b| b.model = asked.into());
+    assert_eq!(w.calls.model_label(), DEFAULT);
+    w.model.end_batch();
+    w.clock.shift(batches::POLL);
+    assert_eq!(w.collect(), 100);
+    let said = lock(&w.book.said).clone();
+    assert_eq!(said.len(), 100);
+    assert!(said.values().all(|s| s.model == asked), "every answer under the model the batch asked");
+}
+
+#[test]
+fn a_batch_asks_the_model_its_row_names_when_another_is_chosen_as_it_goes() {
+    let w = world(120, true, None);
+    // Another model chosen once the batch's row is committed, before it is sent.
+    *lock(&w.book.choose_on_begin) = Some((w.engine.2.clone(), "claude-opus-4-8".into()));
+    assert_eq!(w.submit(), 100);
+    assert_eq!(w.calls.model_label(), "claude-opus-4-8");
+    let out = w.book.open().expect("out").expect("a batch");
+    assert_eq!(out.model, DEFAULT);
+    let asked: Vec<String> =
+        lock(&w.model.batches).values().flat_map(|h| h.requests.iter().map(|(_, p)| p.model.clone())).collect();
+    assert_eq!(asked.len(), 100);
+    assert!(asked.iter().all(|m| m == DEFAULT), "every request asks the model the row is booked under");
 }
 
 #[test]
