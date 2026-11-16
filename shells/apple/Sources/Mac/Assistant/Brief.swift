@@ -400,7 +400,7 @@ extension BriefClock where Schedule == EveryMinuteTimelineSchedule {
 }
 
 /// AI off for want of something, in the page's words for the provider chosen: why, where in Settings it turns on, and
-/// what would be sent and to whom.
+/// what AI mode would send, to whom and when (`AIWords.sends`), as Settings says it.
 struct AIOffNote: View {
     /// How AI stands: off for want of a key, a model or a URL says why and where it turns on; turned off, nothing is
     /// said at all.
@@ -420,7 +420,7 @@ struct AIOffNote: View {
                     .foregroundStyle(meadow.ink3)
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     MeadowIconView(.lock, size: 14).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
-                    Text(AIWords.privacy(ai.provider))
+                    Text(AIWords.sends(ai.provider))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(.meadow(.ui, 13))

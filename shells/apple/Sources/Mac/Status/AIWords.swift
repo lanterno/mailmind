@@ -128,23 +128,9 @@ enum AIWords {
         return ["127.0.0.1", "::1", "[::1]", "localhost"].contains(host)
     }
 
-    /// What is sent and to whom, as Settings and the first run say it under the AI's settings. `url` is the service's
-    /// URL as chosen: a compatible service answering on this Mac keeps the text here too.
-    static func privacy(_ provider: API.AiProvider, url: String = "") -> String {
-        guard let recipient = provider.recipient, !(provider == .compatible && onThisMac(url)) else {
-            return String(localized: """
-                The model runs on this Mac, so the text of a message never leaves it: it goes to \(provider.name), \
-                here, only when it is summarized, briefed or drafted.
-                """)
-        }
-        return String(localized: """
-            With AI on, the text of a message goes to \(recipient) only when it is summarized, briefed or drafted; \
-            nothing else leaves this Mac.
-            """)
-    }
-
     /// What AI mode sends, to whom and when, said before it is turned on as after: under its switch, in the first
-    /// run's AI step and in Help. A model on this Mac, or a compatible service answering here, sends nothing off it.
+    /// run's AI step, in Help and on the brief while AI waits for a key. A model on this Mac, or a compatible service
+    /// answering here, sends nothing off it.
     static func sends(_ provider: API.AiProvider, url: String = "") -> String {
         guard let recipient = provider.recipient, !(provider == .compatible && onThisMac(url)) else {
             return provider == .local ? String(localized: "With a model on this Mac, nothing leaves this Mac.")
