@@ -311,6 +311,17 @@ def test_the_command_line_lists_each_day_by_feature_and_the_total(gateway, ai, c
         "  in all      $0.03      3 calls"]
 
 
+def test_the_command_lines_total_is_held_at_the_most_the_ledger_holds(data_dir, monkeypatch, capsys):
+    from mailmind.__main__ import ai_usage
+    from mailmind.assistant.domain.pricing import MOST, usd
+    from mailmind.bootstrap import assistant
+    held = {"calls": MOST, "cost_micros": MOST}
+    days = [{"day": day, **held, "features": {"triage": held}} for day in ("2026-11-04", "2026-11-03")]
+    monkeypatch.setattr(assistant, "gateway", lambda: type("Held", (), {"usage": lambda self, n: days})())
+    assert ai_usage(2) == 0
+    assert capsys.readouterr().out.splitlines()[-1].split() == ["in", "all", usd(MOST), str(MOST), "calls"]
+
+
 def test_the_command_line_reads_and_never_migrates(tmp_path, capsys):
     from mailmind.__main__ import ai_usage
     from mailmind.platform import settings
