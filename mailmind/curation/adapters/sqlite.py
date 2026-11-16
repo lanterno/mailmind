@@ -136,7 +136,7 @@ class SenderMail:
 
     def stored_inbox(self, account):
         with _uow.read() as c:
-            return c.execute("""SELECT from_addr, from_name, subject, bucket, list_unsub_raw FROM messages
+            return c.execute("""SELECT from_addr, from_name, subject, bucket, list_unsub_raw, seen, flagged FROM messages
                                 WHERE account=? AND folder='INBOX' AND deleted=0 AND pending_removal IS NULL""", (account,)).fetchall()
 
     def stored_junk_ids(self, account):

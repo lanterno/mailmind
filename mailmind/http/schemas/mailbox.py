@@ -391,6 +391,7 @@ class AccountStats(Answer):
     by_bucket: dict[str, int]
     junk: int
     keep: int
+    sweepable: int                  # the junk a sweep would move now, as stored: read and not starred
     top_senders: dict[str, list[str]]
     error: str | None
 

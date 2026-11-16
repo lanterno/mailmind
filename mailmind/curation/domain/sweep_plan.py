@@ -54,6 +54,13 @@ def stored_bucket(row: Row, rules: RuleSets) -> tuple[str, str]:
     return classifier.classify(addr, row["subject"] or "", row["from_name"] or "", listed, rules=rules)[0], addr
 
 
+def sweepable(rows: Iterable[Row], judged: Iterable[tuple[str, str]]) -> int:
+    """How much of a stored inbox a sweep would move now, from its rows and each one's (bucket, sender): its junk that
+    someone has read and no one starred."""
+    return sum(1 for r, (bucket, _) in zip(rows, judged)
+               if bucket in classifier.JUNK_BUCKETS and r["seen"] and not r["flagged"])
+
+
 def junk(rows: Iterable[Classified]) -> list[Classified]:
     """What a sweep takes of what it classified."""
     return [r for r in rows if r["bucket"] in classifier.JUNK_BUCKETS]

@@ -59,12 +59,15 @@ class Sweeps:
         classifier (so it reflects current keep/block rules and matches what a live sweep would move).
         Accurate because auto-reconcile keeps the stored INBOX in sync with the server. Used by the
         Curate drawer (/api/stats), which was a slow live header scan of every account; the Sweep buttons still
-        re-verify live before moving anything."""
+        re-verify live before moving anything. `sweepable` is the junk a sweep would move now, as stored: what someone has
+        read and no one starred."""
         res: dict[str, Any] = {"account": acct["email"], "kind": acct["kind"], "in_inbox": 0,
                                "by_bucket": {}, "junk": 0, "keep": 0, "top_senders": {}, "error": None}
         rows = self._mail.stored_inbox(acct["email"])
         sets = self._rules.sets()
-        res.update(sweep_plan.tally(sweep_plan.stored_bucket(r, sets) for r in rows))
+        judged = [sweep_plan.stored_bucket(r, sets) for r in rows]
+        res.update(sweep_plan.tally(judged))
+        res["sweepable"] = sweep_plan.sweepable(rows, judged)
         return res
 
     def sweep(self, acct: dict[str, Any], dry: bool = False, group: str | None = None) -> dict[str, Any]:
