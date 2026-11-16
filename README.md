@@ -20,7 +20,8 @@ See [Features](#features) for what ships today and
   thing that leaves your machine is the text of the mail the AI works on, sent to
   the provider you chose (Claude by default), or to none with a model on this Mac or AI mode off.
   With AI mode on, each new message's sender, subject and opening text go to be summarized by
-  themselves; whole conversations only when you ask, and attachments never.
+  themselves, and those summaries again for the day's brief and what came in since you looked; whole
+  conversations only when you ask, and attachments never.
 - **Any mailbox.** Gmail/Workspace, generic IMAP (cPanel/Dovecot/…), and Proton
   (via Bridge) — all configured in one JSON file.
 - **It learns.** A keep/block rules layer remembers your decisions so the same
@@ -253,8 +254,10 @@ and the AI provider you chose (Claude by default).
 
 Everything here runs through the AI provider you chose (Claude by default) and returns
 **schema-validated** structured output, so malformed-response errors don't reach the UI.
-With AI mode on, only new mail's summaries go by themselves; everything else waits for you to ask,
-or for a switch you turned on in Settings › AI.
+With AI mode on, three things go by themselves: new mail's summaries, the line on what came in since
+you looked as the new-mail pill shows, and the day's brief as the Inbox opens when none is stored, the
+last two written from the senders, subjects and summaries already made. Everything else waits for you to
+ask, or for a switch you turned on in Settings › AI.
 
 - **The Claude API.** With an API key set, the server and every command call the Messages API
   through the official Anthropic SDK (`claude-opus-5-5` unless you choose another in Settings or

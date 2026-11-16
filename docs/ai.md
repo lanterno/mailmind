@@ -35,12 +35,14 @@ summary (the reader's, `POST /api/ai/summarize`): opening it asks for none. The 
 `summaries_waiting`, while AI is on, counts the messages from those 30 days with no summary yet. Settings' Spending card
 says both, on the page and in the Mac app.
 
-What AI mode sends is said before it is turned on, under its switch, in the Mac app's first run and in Help: each new
-message's sender, subject and opening text go to the provider by themselves, to be summarized; whole conversations only
-when a person asks (a summary, a draft, the brief, Ask, a search written as a sentence, Rewrite); attachments never;
-and with a model on this Mac, or a compatible service at a URL on it, nothing leaves this Mac (`lib/ai.ts`'s `aiSends`,
-`AIWords.sends`). Each paid provider's key card says it bills per use, apart from any ChatGPT or Claude subscription, and
-where credit is added; Gemini's, that a key belongs on a billed project (`BILLING`, `API.AiProvider.billing`).
+What AI mode sends is said before it is turned on, under its switch, in the Mac app's first run and in Help
+(`lib/ai.ts`'s `aiSends`, `AIWords.sends`). Each new message's sender, subject and opening text go to the provider by
+themselves, to be summarized, and so do the senders, subjects and summaries that the 'since you looked' line and the
+day's brief are written from, when the page or the Mac app asks for one that isn't stored; whole conversations go only
+when a person asks (a thread's summary, a draft, Ask, a search written as a sentence, Rewrite); attachments never; and
+with a model on this Mac, or a compatible service at a URL on it, nothing leaves this Mac. Each paid provider's key card
+says it bills per use, apart from any ChatGPT or Claude subscription, and where credit is added; Gemini's, that a key
+belongs on a billed project (`BILLING`, `API.AiProvider.billing`).
 
 AI mode the file doesn't say (`accounts.domain.preferences.ai_mode_default`) is on where `mailmind.config.json` names a
 key for any provider or `ANTHROPIC_API_KEY` is set, so whoever set Claude up keeps AI, and off otherwise: a fresh install
