@@ -33,6 +33,14 @@ class Probe:
         self._called("draft", acct, timeout)
 
 
+def without_words(r):
+    """A failed test's answer without what a person is told of it (test_login_words.py's), which it must hold."""
+    r = dict(r)
+    assert isinstance(r.pop("says"), str) and "link" in r
+    r.pop("link")
+    return r
+
+
 def connections(probe):
     def nobody(*_):
         raise AssertionError("not asked of a test")
@@ -70,7 +78,7 @@ def test_a_draft_whose_port_no_connection_could_reach_says_so(port):
     probe = Probe()
     r = connections(probe).test({"draft": {"email": "dee@example.test", "host": "h.example.test", "port": port,
                                            "credential": {"style": "keychain", "value": "typed"}}})
-    assert r == {"ok": True, "connect": False, "email": "dee@example.test", "error": "port must be 1–65535"}
+    assert without_words(r) == {"ok": True, "connect": False, "email": "dee@example.test", "error": "port must be 1–65535"}
     assert probe.calls == []
 
 
@@ -100,7 +108,7 @@ def test_an_account_no_one_saved_is_not_found():
                                          (TimeoutError("timed out"), "timeout")], ids=lambda v: str(v))
 def test_a_failure_says_what_went_wrong_in_words_of_its_own(error, says):
     r = connections(Probe(raises=error)).test({"email": ADA["email"]})
-    assert r == {"ok": True, "connect": False, "email": ADA["email"], "error": says}
+    assert without_words(r) == {"ok": True, "connect": False, "email": ADA["email"], "error": says}
 
 
 class SMTPAuthenticationError(Exception):
@@ -113,7 +121,7 @@ class SMTPAuthenticationError(Exception):
 def test_an_outgoing_server_that_wont_take_the_login_says_so_after_smtp(raised, says):
     probe = Probe(outgoing=raised)
     r = connections(probe).test({"email": ADA["email"]})
-    assert r == {"ok": True, "connect": False, "email": ADA["email"], "error": says}
+    assert without_words(r) == {"ok": True, "connect": False, "email": ADA["email"], "error": says}
     assert [how for how, *_ in probe.calls] == ["saved", "outgoing"]
 
 
@@ -135,5 +143,15 @@ def test_a_draft_whose_outgoing_port_no_connection_could_reach_says_so(port):
     probe = Probe()
     r = connections(probe).test({"draft": {"email": "dee@example.test", "host": "h.example.test", "smtp_port": port,
                                            "credential": {"style": "keychain", "value": "typed"}}})
-    assert r == {"ok": True, "connect": False, "email": "dee@example.test", "error": "SMTP port must be 1–65535"}
+    assert without_words(r) == {"ok": True, "connect": False, "email": "dee@example.test",
+                                "error": "SMTP port must be 1–65535"}
     assert probe.calls == []
+
+
+def test_a_failed_test_says_what_to_do_next_and_where():
+    r = connections(Probe(raises=SMTPAuthenticationError(535))).test({"draft": {
+        "email": "dee@icloud.com", "host": "imap.mail.me.com", "credential": {"style": "keychain", "value": "t"}}})
+    assert r["error"] == "AUTHENTICATIONFAILED" and r["says"].startswith("iCloud didn't accept that password.")
+    assert r["link"] == {"url": "https://account.apple.com", "words": "Make an app-specific password"}
+    r = connections(Probe(outgoing=SMTPAuthenticationError(535))).test({"email": ADA["email"]})
+    assert (r["says"].startswith("Reading mail works"), r["link"]) == (True, None)

@@ -170,7 +170,9 @@
    "connect": false,
    "email": "dee@example.test",
    "error": "AUTHENTICATIONFAILED",
-   "ok": true
+   "link": null,
+   "ok": true,
+   "says": "The server didn't accept that address and password. Check them; if your provider offers app passwords, make one and paste it here."
   },
   "headers": {
    "cache-control": "no-store",
@@ -190,7 +192,9 @@
    "connect": false,
    "email": "dee@example.test",
    "error": "connection refused",
-   "ok": true
+   "link": null,
+   "ok": true,
+   "says": "The server didn't answer. Check the server's name and port, and that this Mac is online."
   },
   "headers": {
    "cache-control": "no-store",

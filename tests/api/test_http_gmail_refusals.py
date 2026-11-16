@@ -28,8 +28,8 @@ WRONG = "Gmail didn't accept that App Password: paste it again, or create a new 
 def test_gmails_refusal_is_said_plainly(app, world, said, says):
     world.server.fail("LOGIN", said, user=w.CY)
     tested = app.post("/api/accounts/test", {"email": w.CY})
-    assert (tested.status, tested.json) == (200, {"ok": True, "connect": False, "email": w.CY, "error": says})
-    assert "https://" not in json.dumps(tested.json)
+    assert (tested.status, tested.json["connect"], tested.json["error"], tested.json["says"]) == (200, False, says, says)
+    assert "support.google.com" not in json.dumps(tested.json) and "ContinueSignIn" not in json.dumps(tested.json)
 
 
 def test_another_accounts_refusal_says_what_it_always_said(app, world):

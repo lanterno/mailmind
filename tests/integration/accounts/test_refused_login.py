@@ -198,8 +198,8 @@ def test_testing_a_saved_account_its_server_refuses_says_so_and_doesnt_lengthen_
     sync()
     before = logins(world)
     for _ in range(3):
-        assert app.post("/api/accounts/test", {"email": w.ADA}).json == {
-            "ok": True, "connect": False, "email": w.ADA, "error": "AUTHENTICATIONFAILED"}
+        tested = app.post("/api/accounts/test", {"email": w.ADA}).json
+        assert (tested["connect"], tested["email"], tested["error"]) == (False, w.ADA, "AUTHENTICATIONFAILED")
     assert logins(world) == before + 3
     past_the_hold(app)
     sync()
