@@ -228,8 +228,8 @@ final class AppStatus {
         return accounts.allSatisfy { mark(before, $0) != mark(after, $0) }
     }
 
-    /// Strike what was deleted elsewhere: a dry run first, then the real one only when it finds something
-    /// (`reconcile`).
+    /// Check the mail kept here against the servers, and let go of what was deleted elsewhere: a dry run first, then
+    /// the real one only when it finds something (`reconcile`).
     func reconcile() async {
         guard let core, !reconciling else { return }
         reconciling = true
@@ -237,16 +237,16 @@ final class AppStatus {
         do {
             let dry = try await core.post(API.Post.Reconcile.self, API.ReconcileBody(account: "all", dryRun: true))
             guard dry.totalGhosts > 0 else {
-                say(String(localized: "Nothing to reconcile — the record is straight."))
+                say(String(localized: "Your mail here matches the servers."))
                 return
             }
-            say(String(localized: "Reconciling — striking \(dry.totalGhosts) ghosts…"))
+            say(String(localized: "Removing \(dry.totalGhosts) messages deleted elsewhere…"))
             let real = try await core.post(API.Post.Reconcile.self, API.ReconcileBody(account: "all", dryRun: false))
             await readDigest()
             let kept = digest?.stats.kept ?? 0
-            say(String(localized: "Struck \(real.totalPruned.formatted()) deleted items · \(kept.formatted()) stand"))
+            say(String(localized: "Removed \(real.totalPruned.formatted()) messages deleted elsewhere · \(kept.formatted()) here"))
         } catch {
-            say(String(localized: "Reconcile failed"))
+            say(String(localized: "Couldn’t check mail against the server. Try again later."))
         }
     }
 

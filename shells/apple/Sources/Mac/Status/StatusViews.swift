@@ -33,7 +33,7 @@ struct StatusPill: View {
         .focusEffectDisabled()
         .meadowFocusRing(focused, radius: 17)
         .onHover { hovering = $0 }
-        .help("Sync, reconcile and curation")
+        .help("Sync, checks against the server, and tidying up")
         .accessibilityLabel("Sync status: \(pill.text)")
         .meadowPopover(isPresented: $open, keys: { menu.key($0) }) {
             // Settings opens from the window's own environment: the popover's panel is outside the app's scenes.
@@ -109,7 +109,7 @@ struct StatusMenu: View {
         }
         parts.append(.item(MeadowMenuItem(id: "sync", title: String(localized: "Check for mail now"), icon: .refresh,
                                           disabled: status.syncing) { [status] in Task { await status.syncNow() } }))
-        parts.append(.item(MeadowMenuItem(id: "reconcile", title: String(localized: "Reconcile with the servers"),
+        parts.append(.item(MeadowMenuItem(id: "reconcile", title: String(localized: "Check Mail Against the Server"),
                                           detail: String(localized: "Drop mail deleted elsewhere"), icon: .restore,
                                           disabled: status.reconciling) {
             [status] in Task { await status.reconcile() }

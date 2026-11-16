@@ -86,7 +86,7 @@ enum StatusWords {
                 ? String(localized: "Reading your inbox: \(done) of \(total)")
                 : String(localized: "Reading your inboxes: \(done) of \(total)"))
         }
-        if reconciling { return Pill(dot: .busy, text: String(localized: "Reconciling…")) }
+        if reconciling { return Pill(dot: .busy, text: String(localized: "Checking against the server…")) }
         let anySyncing = digest.accounts.contains { standing(of: $0, digest: digest, health: health) == .syncing }
         if syncing || digest.sync.running || anySyncing { return Pill(dot: .busy, text: String(localized: "Syncing…")) }
         if digest.profile == "read-only" { return Pill(dot: .none, text: String(localized: "Read-only")) }

@@ -10,7 +10,7 @@ import SwiftUI
 /// It is handed the core once the window has opened it, and hands it to `AppStatus`.
 struct StatusHooks: ViewModifier {
     let core: Core?
-    /// The window's mailbox, whose keys and palette reach help, Settings, a sync and a reconcile.
+    /// The window's mailbox, whose keys and palette reach help, Settings, a sync and a check against the server.
     var mailbox: Mailbox?
     var status = AppStatus.shared
     @Environment(\.openSettings) private var openSettings
@@ -60,7 +60,8 @@ struct StatusHooks: ViewModifier {
                     MailCommand(id: "sync", group: .commands, label: String(localized: "Sync now")) {
                         Task { await status.syncNow() }
                     },
-                    MailCommand(id: "reconcile", group: .commands, label: String(localized: "Reconcile (prune ghosts)")) {
+                    MailCommand(id: "reconcile", group: .commands,
+                                label: String(localized: "Check Mail Against the Server")) {
                         Task { await status.reconcile() }
                     },
                 ]
@@ -75,8 +76,8 @@ struct StatusHooks: ViewModifier {
     }
 }
 
-/// The menu bar's part of the status: Get New Mail and Reconcile in the Mailbox's place in the File menu, and the Help
-/// menu: MailMind Help and the guide.
+/// The menu bar's part of the status: Get New Mail in the Mailbox's place in the File menu, and the Help menu: MailMind
+/// Help and the guide. Checking mail against the server is the status's own, in its menu (`StatusMenu`).
 struct StatusCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
@@ -96,8 +97,6 @@ private struct StatusMenuItems: View {
         Button("Get New Mail") { Task { await status.syncNow() } }
             .keyboardShortcut("n", modifiers: [.command, .shift])
             .disabled(status.core == nil || status.syncing)
-        Button("Reconcile") { Task { await status.reconcile() } }
-            .disabled(status.core == nil || status.reconciling)
     }
 }
 
