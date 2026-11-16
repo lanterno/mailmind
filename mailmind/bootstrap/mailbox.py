@@ -31,6 +31,7 @@ from mailmind.mailbox.application.digest import Digest
 from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.copies import Copies
 from mailmind.mailbox.application.filing import Filing
+from mailmind.mailbox.application.folder_changes import FolderChanges
 from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.queries import Queries
@@ -383,7 +384,7 @@ def assemble():
     stack, and imaplib for every account with nothing else offered. Importing this module assembles them once, which is
     all the command line needs; wiring.assemble makes a new set of every context's."""
     global copies, server_ops, commands, pool, ingest, warm, realtime, stats, folders, queries, bodies, reversals, undo, \
-        filing, tidying, syncing, reconciler, digest
+        filing, tidying, syncing, reconciler, digest, folder_changes
     reset()
     copies = Copies(_open, imap_quote)
     server_ops = ServerOps(_uow, store, _directory, _open, imap_quote)
@@ -406,6 +407,7 @@ def assemble():
     syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick)
     reconciler = Reconciler(_uow, store, _directory, pool, folders, stats, reconcile_trail)
     digest = Digest(_uow, store, _directory, syncing, _ai_status)
+    folder_changes = FolderChanges(_uow, store, _directory, commands, folders)
 
 
 assemble()

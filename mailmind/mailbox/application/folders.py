@@ -14,7 +14,7 @@ from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.pool import Pool
 from mailmind.mailbox.application.ports import Account, Accounts, Attention, StoredMail
 from mailmind.mailbox.application.sync import Ingest
-from mailmind.mailbox.domain import destination, sync_plan
+from mailmind.mailbox.domain import destination, folder_change, sync_plan
 from mailmind.mailbox.domain import roles as folder_roles
 from mailmind.mailbox.domain.roles import RailFolder
 from mailmind.platform import sse
@@ -80,15 +80,18 @@ class Folders:
         over a POOLED connection (reused — no per-call login/logout churn)."""
         out: list[RailFolder] = []
         with self._pool.borrow(acct) as s:
-            folders = [f for f in s.folders() if f.selectable]
+            listed = s.folders()
+            folders = [f for f in listed if f.selectable]
             playing = folder_roles.playing(folders)
+            changeable = folder_change.changeable_names(listed, self._accounts.trash_folder(acct))
             for f in folders:
                 name, role = f.name, playing.get(f.name, "custom")
                 try:
                     unseen, total = s.status(name)
                 except Exception:
                     unseen = total = 0
-                out.append({"name": name, "role": role, "unseen": unseen, "total": total})
+                out.append({"name": name, "role": role, "unseen": unseen, "total": total,
+                            "own_name": folder_roles.own_name(name, f.delimiter), "changeable": name in changeable})
         return folder_roles.rail_order(out)
 
 

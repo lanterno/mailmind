@@ -13,6 +13,8 @@ Never the server's order: Proton Bridge lists its folders in a new order each ti
 `all` is a folder holding every message, Gmail's All Mail and Proton's alike. Archiving moves to
 `archive`, and only where there is none to `all`.
 """
+import base64
+import binascii
 import re
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
@@ -54,6 +56,28 @@ class Folder:
         if self.delimiter:
             return self.name.count(self.delimiter)
         return len(re.findall(r"[/.]", self.name))
+
+
+def from_modified_utf7(text: str) -> str:
+    """What a name in IMAP's modified UTF-7 says (RFC 3501 5.1.3): &- as &, and a run between & and - as base64 of UTF-16
+    with , for /. A run that doesn't read as one stays as it is."""
+    def run(found: re.Match[str]) -> str:
+        shifted = found.group(1)
+        if not shifted:
+            return "&"
+        padded = shifted.replace(",", "/") + "=" * (-len(shifted) % 4)
+        try:
+            return base64.b64decode(padded, validate=True).decode("utf-16-be")
+        except (binascii.Error, UnicodeDecodeError):
+            return found.group(0)
+    return re.sub(r"&([A-Za-z0-9+,]*)-", run, text)
+
+
+def own_name(name: str, delimiter: str | None) -> str:
+    """A folder's own name as a person reads it, from its name as LIST gives it: its last part by the server's separator
+    (all of it with none), a quoted string's escapes undone, and its modified UTF-7 read."""
+    last = name.rpartition(delimiter)[2] if delimiter else name
+    return from_modified_utf7(re.sub(r"\\(.)", r"\1", last))
 
 
 def _last_segment(name: str, delimiter: str | None) -> str:
@@ -125,6 +149,8 @@ class RailFolder(TypedDict):
     role: str
     unseen: int
     total: int
+    own_name: str               # its last part as a person reads it (`own_name`)
+    changeable: bool            # whether a person may rename or delete it (`folder_change.changeable`)
 
 
 _RAIL_PLACE = {"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "all": 4, "junk": 8, "trash": 9}
@@ -149,4 +175,5 @@ def stored_rail(counts: Mapping[str, tuple[int | None, int]]) -> list[RailFolder
     held.setdefault("INBOX", (0, 0))
     names = sorted(held, key=lambda n: (len(re.findall(r"[/.]", n)), n.lower()))
     plays = playing([Folder(n, frozenset(), None) for n in names])
-    return rail_order([{"name": n, "role": plays.get(n, "custom"), "unseen": held[n][0] or 0, "total": held[n][1] or 0} for n in names])
+    return rail_order([{"name": n, "role": plays.get(n, "custom"), "unseen": held[n][0] or 0, "total": held[n][1] or 0,
+                        "own_name": own_name(n, None), "changeable": False} for n in names])

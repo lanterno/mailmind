@@ -22,9 +22,9 @@ from mailmind.mailbox.adapters.sqlite.messages import (copy_in_folder, copy_now,
     delete_message, forget_account, forget_gone_messages, get_message, get_message_by_key, get_message_by_msgid, has_copy_in, is_known,
     is_listed_in, mark_pending_removal, mark_verified, message_pk, mint_key, names_of, newest_copy_in, pending_removal_pks,
     pk_in, reconcile, repair_keys, restore_pending, set_list_unsub, stored_uids, thread_pks_in, upsert_message)
-from mailmind.mailbox.adapters.sqlite.sync_state import (account_health, clear_sync_error, get_modseq, get_scan_state,
-    get_uidvalidity, get_watermark, record_sync_result, reset_folder, set_modseq, set_scan_state, set_uidvalidity,
-    set_watermark, synced_folders)
+from mailmind.mailbox.adapters.sqlite.sync_state import (account_health, clear_sync_error, forget_folder, get_modseq,
+    get_scan_state, get_uidvalidity, get_watermark, record_sync_result, rename_folders, reset_folder, set_modseq,
+    set_scan_state, set_uidvalidity, set_watermark, stored_folder_names, synced_folders)
 from mailmind.mailbox.adapters.sqlite.threads import needs_threading, recompute_threads, thread_stored
 
 __all__ = [
@@ -34,7 +34,7 @@ __all__ = [
     "command_mark_reversed", "command_never_begun", "command_open", "command_open_counts", "command_ran_under",
     "command_record", "command_set_params", "conn", "conversation_rows", "copy_in_folder", "copy_now", "copy_pk",
     "delete_attachments", "delete_by_uids", "delete_message", "delta_rows", "digest", "draft_candidates",
-    "flag_changes_waiting", "flag_command", "flag_rows_newest", "flag_rows_of", "folder_conversation_count",
+    "flag_changes_waiting", "flag_command", "flag_rows_newest", "flag_rows_of", "folder_conversation_count", "forget_folder",
     "folder_conversation_rows", "folder_count", "folder_rows", "forget_account", "forget_gone_messages", "fts_set_body", "get_body",
     "get_message", "get_message_by_key", "get_message_by_msgid", "get_modseq", "get_scan_state", "get_uidvalidity",
     "get_watermark", "handled_since", "has_attachments", "has_copy_in", "inboxes_conversation_count",
@@ -42,10 +42,12 @@ __all__ = [
     "labels_of_account", "mark_has_attachments", "mark_pending_removal", "mark_verified", "message_pk", "message_stamp",
     "message_to_reply_to", "mint_key", "names_of", "needs_threading", "needs_you_rows", "newest_copy_in", "pending_removal_pks",
     "pk_in", "queue_flags", "received_by_bucket", "received_since", "recipients_of", "recompute_threads", "reconcile",
-    "record_sync_result", "repair_keys", "reset_folder", "restore_pending", "sender_recent", "sender_stats", "sent_since",
+    "record_sync_result", "rename_folders", "repair_keys", "reset_folder", "restore_pending", "sender_recent", "sender_stats",
+    "sent_since",
     "set_classification", "set_flags_if_still", "set_ingested_headers", "set_labels", "set_list_unsub", "set_local_flags",
     "set_modseq", "set_recipients", "set_recipients_text", "set_scan_state", "set_uidvalidity", "set_watermark",
     "snoozed_count", "snoozed_rows", "stats", "still_without_body", "store_body", "stored_accounts", "stored_folder_counts",
-    "stored_uids", "synced_folders", "thread_anchor_pk", "thread_pks_in", "thread_rows", "thread_stamps", "thread_stored",
+    "stored_folder_names", "stored_uids", "synced_folders", "thread_anchor_pk", "thread_pks_in", "thread_rows", "thread_stamps",
+    "thread_stored",
     "upsert_message",
 ]

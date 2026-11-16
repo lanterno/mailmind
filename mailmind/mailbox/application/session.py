@@ -73,6 +73,9 @@ class MailSession(Protocol):
     def expunge(self, uids: Uids) -> None: ...              # UID EXPUNGE of these alone, never a bulk one
     def append(self, folder: str, raw: bytes, *, flags: Collection[str] = (),
                when: datetime | None = None) -> int | None: ...             # its UID
+    def create(self, folder: str) -> None: ...                  # a new folder by this name
+    def rename(self, folder: str, to: str) -> None: ...         # the folders inside it go with it
+    def delete(self, folder: str) -> None: ...                  # a folder the caller has emptied first
     def noop(self) -> bool: ...
     def set_timeout(self, seconds: float) -> None: ...   # how long any one answer may take from now on; sends nothing
     def idle(self, seconds: float) -> bool: ...     # IDLE on the selected folder: True once it changed
@@ -206,3 +209,12 @@ class ReadOnlySession:
 
     def append(self, folder: str, raw: bytes, *, flags: Collection[str] = (), when: datetime | None = None) -> NoReturn:
         raise profile.ReadOnlyError("IMAP append")
+
+    def create(self, folder: str) -> NoReturn:
+        raise profile.ReadOnlyError("IMAP create")
+
+    def rename(self, folder: str, to: str) -> NoReturn:
+        raise profile.ReadOnlyError("IMAP rename")
+
+    def delete(self, folder: str) -> NoReturn:
+        raise profile.ReadOnlyError("IMAP delete")

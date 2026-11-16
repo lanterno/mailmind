@@ -21,6 +21,7 @@ from mailmind.kernel.row import Connection, Row
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import UNREACHABLE, ServerOps
+from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain import command, destination
 from mailmind.mailbox.domain import flags as mail_flags
 from mailmind.mailbox.domain import try_target
@@ -363,6 +364,21 @@ class MailCommands:
             _forget_undo(c, row)
             return row
         return self._commit(go)
+
+
+    # ── a folder's own change ───────────────────────────────────────────────────────────────────
+
+    FOLDER_WAIT = 10        # seconds a folder's change waits for the account's gate: no worker takes one over
+
+    def change_folder[T](self, account: str, change: Callable[[MailSession], T]) -> T:
+        """A change to a folder itself (made, renamed or deleted): change(session) on the server now, as a job on the
+        account's gate. Nothing queues it, since a person waits to see the folder, and a change tried later, offline, could
+        meet a folder changed since: a server that can't be reached raises a member of UNREACHABLE, and a busy gate
+        gates.Busy. A read-only process refuses it before anything is sent. KeyError for an account that isn't one."""
+        profile.refuse_writes("a folder change")
+        acct = self._accounts.get(account)
+        return self.gates.run(account, lambda: self._server.on_session(acct, change, timeout=self.TRY_TIMEOUT),
+                              priority=self.gates.Priority.INTERACTIVE, deadline=self.FOLDER_WAIT)
 
 
     # ── the worker ──────────────────────────────────────────────────────────────────────────────

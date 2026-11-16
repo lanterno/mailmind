@@ -75,6 +75,23 @@ class MoveToBody(MoveBody):
     to: str                                 # a folder of the message's own account, as /api/folders names it
 
 
+class NewFolderBody(RequestBody):
+    account: str | None = None              # either left out is the use case's `account required`
+    name: str | None = None                 # as a person typed it: left out is `A folder needs a name.`
+
+
+class RenameFolderBody(RequestBody):
+    account: str | None = None
+    folder: str | None = None               # as /api/folders names it
+    name: str | None = None                 # its new last part, as a person typed it
+
+
+class DeleteFolderBody(RequestBody):
+    account: str | None = None
+    folder: str | None = None
+    confirm: Flag | None = None             # a person has said to delete it with its mail, which goes to Trash first
+
+
 class FlagBody(ACopy):
     flag: FlagName | None = None            # left out it's `flagged`
     on: Flag | None = None                  # left out, it sets
@@ -266,6 +283,8 @@ class RailFolder(Answer):
     unseen: int
     total: int
     takes_filing: bool                      # whether a person may move mail into it
+    own_name: str                           # its last part, as a person reads it: what a rename starts from
+    changeable: bool                        # whether a person may rename or delete it
 
 
 class ViewCounts(Answer):
@@ -284,6 +303,22 @@ class Folders(ViewCounts):
 
 class FoldersRefused(Failure):
     folders: list[RailFolder] | None = None
+
+
+class FolderChanged(Answer):
+    ok: Literal[True]
+    folder: str                             # its name now, as /api/folders will name it
+
+
+class FolderDeleted(Answer):
+    ok: Literal[True]
+    trashed: int                            # how many messages went to Trash before it went
+
+
+class FolderHoldsMail(Failure):
+    messages: int | None = None             # how many it holds, when that is why it wasn't deleted
+    to_trash: bool | None = None            # ... and whether deleting it moves them to Trash: not on Gmail, where they stay
+    trashed: int | None = None              # how many went to Trash before the server kept the folder
 
 
 class PendingChange(Answer):

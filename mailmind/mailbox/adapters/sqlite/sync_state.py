@@ -103,3 +103,24 @@ def synced_folders(c, account):
     """Each folder a sync has stored (it has a sync_state row), INBOX first."""
     return [r["folder"] for r in c.execute(
         "SELECT folder FROM sync_state WHERE account=? ORDER BY folder <> 'INBOX', folder", (account,))]
+
+
+def stored_folder_names(c, account):
+    """Every folder the account has rows in or a sync's record of, in no order."""
+    return [r["folder"] for r in c.execute(
+        "SELECT folder FROM messages WHERE account=? UNION SELECT folder FROM sync_state WHERE account=?", (account, account))]
+
+
+def rename_folders(c, account, renamed):
+    """A folder renamed on the server, and those inside it, go by their new names here: {old: new}. Its rows and its sync's
+    record keep what they were, and the next sync finds out whether the server kept its UIDs."""
+    for old, new in renamed.items():
+        c.execute("UPDATE messages SET folder=? WHERE account=? AND folder=?", (new, account, old))
+        c.execute("UPDATE sync_state SET folder=? WHERE account=? AND folder=?", (new, account, old))
+
+
+def forget_folder(c, account, folder):
+    """A folder deleted on the server: its rows and its sync's record go. Returns how many rows went."""
+    gone = reset_folder(c, account, folder)
+    c.execute("DELETE FROM sync_state WHERE account=? AND folder=?", (account, folder))
+    return gone

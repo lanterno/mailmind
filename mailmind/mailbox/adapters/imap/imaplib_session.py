@@ -166,6 +166,15 @@ class ImaplibSession:
     def expunge(self, uids):
         _ok("EXPUNGE", *self._M.uid("EXPUNGE", _uid_set(uids)))
 
+    def create(self, folder):
+        _ok("CREATE", *self._M.create(mailbox_arg(folder)))
+
+    def rename(self, folder, to):
+        _ok("RENAME", *self._M.rename(mailbox_arg(folder), mailbox_arg(to)))
+
+    def delete(self, folder):
+        _ok("DELETE", *self._M.delete(mailbox_arg(folder)))
+
     def append(self, folder, raw, *, flags=(), when=None):
         date = imaplib.Time2Internaldate(when) if when is not None else None
         data = _ok("APPEND", *self._M.append(mailbox_arg(folder), _flag_list(flags) if flags else None, date, raw))

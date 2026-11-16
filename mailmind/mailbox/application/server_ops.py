@@ -91,6 +91,11 @@ class ServerOps:
                 pass
 
 
+    def on_session[T](self, acct: Account, fn: Callable[[MailSession], T], timeout: int | None = None) -> T:
+        """fn(session) on a session of its own, as a try does: what a change to a folder itself asks of the server."""
+        return self._do_imap(acct, fn, timeout)
+
+
     def _already_in(self, s: MailSession, folder: str, mid: str, back_to: str) -> bool:
         """Whether `folder` already holds a message with Message-ID `mid`, with `back_to` selected
         again after. A queued move asks before it moves: on a server without MOVE, a connection that

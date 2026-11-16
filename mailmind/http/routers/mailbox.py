@@ -15,10 +15,14 @@ from mailmind.http.schemas.mailbox import (
     BulkMoveBody,
     CopyBodyArgs,
     CopyDocumentArgs,
+    DeleteFolderBody,
     Digest,
     Done,
     Filed,
     FlagBody,
+    FolderChanged,
+    FolderDeleted,
+    FolderHoldsMail,
     FolderListArgs,
     FolderListing,
     Folders,
@@ -32,6 +36,7 @@ from mailmind.http.schemas.mailbox import (
     MoveBody,
     MoveToBody,
     MutedListing,
+    NewFolderBody,
     NamesAPending,
     NothingToUndo,
     PartArgs,
@@ -39,6 +44,7 @@ from mailmind.http.schemas.mailbox import (
     Pending,
     Prefetched,
     ReconcileBody,
+    RenameFolderBody,
     Reconciled,
     ReplyLaterListing,
     RowsFiled,
@@ -93,6 +99,18 @@ def router(mailbox):
     @r.get("/api/folders/across", responses=answers(ViewCounts))
     def folders_across():
         return mailbox.folders.across_accounts()
+
+    @r.post("/api/folders/create", responses=answers(FolderChanged))
+    def folder_create(body: NewFolderBody):
+        return mailbox.folder_changes.create(body.account, body.name)
+
+    @r.post("/api/folders/rename", responses=answers(FolderChanged))
+    def folder_rename(body: RenameFolderBody):
+        return mailbox.folder_changes.rename(body.account, body.folder, body.name)
+
+    @r.post("/api/folders/delete", responses=answers(FolderDeleted, {409: FolderHoldsMail}))
+    def folder_delete(body: DeleteFolderBody):
+        return mailbox.folder_changes.delete(body.account, body.folder, bool(body.confirm))
 
     @r.get("/api/labels", responses=answers(Labels))         # a Gmail account's own labels: its lanes in the rail
     def labels(args: Annotated[FoldersArgs, Query()]):

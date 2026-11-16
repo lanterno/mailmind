@@ -163,6 +163,15 @@ class ImapClientSession:
     def expunge(self, uids):
         self._c.uid_expunge([int(u) for u in uids])
 
+    def create(self, folder):
+        self._c.create_folder(unescaped(folder))
+
+    def rename(self, folder, to):
+        self._c.rename_folder(unescaped(folder), unescaped(to))
+
+    def delete(self, folder):
+        self._c.delete_folder(unescaped(folder))
+
     def append(self, folder, raw, *, flags=(), when=None):
         said = self._c.append(unescaped(folder), raw, flags=list(flags),
                               msg_time=when if isinstance(when, datetime) else None)
