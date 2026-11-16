@@ -321,21 +321,32 @@ impl Sweeps {
             return Err(fault);
         }
         let uids: Vec<String> = junk.iter().map(|r| r.read.uid.clone()).collect();
-        let moved = s.trash(trash).and_then(|trash| move_verified(&mut *s, &uids, &trash));
-        let (moved, stragglers) = match moved {
+        // The Trash as the server lists it, a localised or renamed one too: where the mail goes, and where its way back
+        // finds it.
+        let trash = match s.trash(trash) {
+            Ok(trash) => trash,
+            Err(e) => {
+                // The server's folders couldn't be read: nothing was moved.
+                log::warning(TAG, "an account failed", &[(Field::Why, e.class())], None);
+                s.close(matches!(e, LiveError::Lost(_)));
+                out.insert("error".into(), json!(e.class()));
+                return Ok((Value::Object(out), false));
+            }
+        };
+        let (moved, stragglers) = match move_verified(&mut *s, &uids, &trash) {
             Ok(done) => done,
             Err(e) => {
                 log::warning(TAG, "an account failed", &[(Field::Why, e.class())], None);
                 s.close(matches!(e, LiveError::Lost(_)));
                 out.insert("error".into(), json!(e.class()));
-                let pushed = self.stopped(account, trash, &junk, group, &mut out)?;
+                let pushed = self.stopped(account, &trash, &junk, group, &mut out)?;
                 return Ok((Value::Object(out), pushed));
             }
         };
         s.close(false);
         out.insert("moved".into(), json!(moved));
         out.insert("stragglers".into(), json!(stragglers));
-        let pushed = self.undo_push(account, trash, &junk, &stragglers, group)?;
+        let pushed = self.undo_push(account, &trash, &junk, &stragglers, group)?;
         // Swept mail isn't a ghost for the next reconcile to find.
         let gone: Vec<(String, String)> = junk.iter().map(|r| (r.read.uid.clone(), r.read.mid.clone())).collect();
         self.rows.forget_moved(account, &gone, &stragglers)?;
