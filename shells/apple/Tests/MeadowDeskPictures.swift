@@ -302,7 +302,7 @@ enum DeskPictures {
     static let digest = API.Digest(
         accounts: [work, home],
         ai: API.AiStatus(engine: "anthropic", keyFrom: "keychain", lastTs: 0, limitMicros: 15_000_000,
-                         model: "claude-haiku-4-5"),
+                         model: "claude-haiku-4-5", provider: .anthropic),
         aliases: [work: "Work", home: "Personal"], generated: "2026-11-15T09:00:00Z", items: items, profile: "full",
         sendAccounts: [work, home], signatureDefault: "", signatures: [:],
         stats: API.DigestStats(kept: 6, needs: 3, summarized: 11, total: 11, verified: 11),

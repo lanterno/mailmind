@@ -115,11 +115,11 @@ final class StatusScreenTests: XCTestCase {
         try render("settings-general", CGSize(width: 560, height: 540), GeneralPane(status: status))
         try render("settings-notifications", CGSize(width: 560, height: 400),
                    NotificationsPane(status: status, allowed: .some(false)))
-        try render("settings-ai", CGSize(width: 560, height: 560), AIPane(status: status, keySet: true))
+        try render("settings-ai", CGSize(width: 560, height: 560), AIPane(status: status, kept: [.anthropic]))
     }
 
     func testTheFirstRun() throws {
-        try render("first-run", CGSize(width: 900, height: 640), Welcome(status: status(firstRun: true), keySet: false))
+        try render("first-run", CGSize(width: 900, height: 640), Welcome(status: status(firstRun: true), kept: []))
     }
 
     func testTheStatus() throws {

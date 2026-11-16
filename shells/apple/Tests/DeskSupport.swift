@@ -206,11 +206,13 @@ enum DeskFixture {
                        subject: subject, summary: summary, uid: key - 100, when: "9:12 am")
     }
 
-    static func digest(ai: String = "anthropic", items: [API.DigestItem]? = nil) -> API.Digest {
+    /// `ai` is the engine; "none" is AI off, for want of a key unless `off` says otherwise.
+    static func digest(ai: String = "anthropic", off: API.AiOff = .noKey, items: [API.DigestItem]? = nil) -> API.Digest {
         API.Digest(
             accounts: ["ada@example.test"],
-            ai: API.AiStatus(engine: ai, keyFrom: ai == "none" ? "none" : "keychain", lastTs: 0, limitMicros: 15_000_000,
-                             model: "claude-haiku-4-5"),
+            ai: API.AiStatus(engine: ai, keyFrom: ai == "none" ? "" : "keychain", lastTs: 0, limitMicros: 15_000_000,
+                             model: ai == "none" ? "" : "claude-haiku-4-5", off: ai == "none" ? off : nil,
+                             provider: .anthropic),
             aliases: ["ada@example.test": "Work"], generated: "2026-11-15T09:00:00Z",
             items: items ?? [
                 item(101, from: "grace@example.test", name: "Grace Hopper", subject: "Q3 figures before the board",

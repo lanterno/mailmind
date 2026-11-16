@@ -191,6 +191,34 @@ final class MeadowDialogPictures: XCTestCase {
         }
     }
 
+    /// The AI pane (#49): on with Claude, OpenAI with its models listed, Ollama on this Mac waiting for a model, a
+    /// compatible service with no URL, and turned off, where spending and writing ahead aren't shown.
+    func testTheAIPaneOnAndOff() throws {
+        func ai(_ preferences: API.Preferences, _ digest: API.Digest) -> AppStatus {
+            let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                          badge: { _ in }, announce: { _ in }))
+            status.hold(digest: digest, preferences: preferences, now: now)
+            return status
+        }
+        let size = CGSize(width: 620, height: 1100)
+        let claude = ai(F.preferences(), F.digest(spent: 1_420_000))
+        try draw("settings-ai-claude", size) { _ in OnPaper { AIPane(status: claude, kept: [.anthropic]) } }
+        let openAI = ai(F.preferences(provider: "openai", model: "gpt-fictional-mini"),
+                        F.digest(provider: "openai", model: "gpt-fictional-mini"))
+        let listed = AIChoices.Listed(provider: .openai, list: API.ModelList(
+            default: "gpt-fictional", models: ["gpt-fictional", "gpt-fictional-mini", "gpt-fictional-nano"], ok: true))
+        try draw("settings-ai-openai", size) { _ in
+            OnPaper { AIPane(status: openAI, kept: [.openai], listed: listed) }
+        }
+        let ollama = ai(F.preferences(provider: "ollama"), F.digest(engine: "none", provider: "ollama", off: "no-model"))
+        try draw("settings-ai-ollama", size) { _ in OnPaper { AIPane(status: ollama, kept: []) } }
+        let compatible = ai(F.preferences(provider: "compatible"),
+                            F.digest(engine: "none", provider: "compatible", off: "no-url"))
+        try draw("settings-ai-compatible", size) { _ in OnPaper { AIPane(status: compatible, kept: []) } }
+        let off = ai(F.preferences(aiEnabled: false), F.digest(engine: "none", off: "turned-off"))
+        try draw("settings-ai-off", size) { _ in OnPaper { AIPane(status: off, kept: [.anthropic]) } }
+    }
+
     func testTheAccountFormAsADialog() throws {
         var draft = AccountDraft()
         draft.email = "ada@example.test"
@@ -217,7 +245,7 @@ final class MeadowDialogPictures: XCTestCase {
 
     func testTheFirstRunInTheBriefsManner() throws {
         try draw("first-run", CGSize(width: 1000, height: 760)) { _ in
-            Welcome(status: status(firstRun: true), keySet: false, lights: false)
+            Welcome(status: status(firstRun: true), kept: [], lights: false)
         }
     }
 
@@ -248,5 +276,14 @@ final class MeadowDialogPictures: XCTestCase {
             ContactCard(mailbox: mailbox, address: card.addr, card: card, close: {})
                 .meadowPanel(radius: 18, raised: true)
         }
+    }
+}
+
+/// A pane on the Settings dialog's paper, as the dialog lays it.
+private struct OnPaper<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content().background { ComposePaper() }
     }
 }

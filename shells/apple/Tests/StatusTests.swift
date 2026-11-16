@@ -257,6 +257,32 @@ final class AppStatusTests: XCTestCase {
         XCTAssertEqual(merged.undoSendSeconds, 10)
     }
 
+    /// Another provider starts from its own model and URL, as the server sets them back, unless the change names them.
+    func testAnotherProviderStartsFromItsOwnModelAndURL() throws {
+        let held = F.preferences(provider: "compatible", model: "fictional-7b", baseURL: "https://ai.example.test/v1")
+        let other = try XCTUnwrap(AppStatus.merged(held, AIChoices.choose(.openai)))
+        XCTAssertEqual(other.aiProvider, .openai)
+        XCTAssertEqual(other.aiModel, "")
+        XCTAssertEqual(other.aiBaseUrl, "")
+        let named = try XCTUnwrap(AppStatus.merged(held, .init(aiModel: "gpt-fictional", aiProvider: .openai)))
+        XCTAssertEqual(named.aiModel, "gpt-fictional", "a model named with it stays")
+        XCTAssertEqual(named.aiBaseUrl, "")
+        let same = try XCTUnwrap(AppStatus.merged(held, .init(aiProvider: .compatible)))
+        XCTAssertEqual(same.aiModel, "fictional-7b", "the same provider again keeps them")
+        XCTAssertEqual(same.aiBaseUrl, "https://ai.example.test/v1")
+    }
+
+    /// Only AI's settings make the window read how AI stands again.
+    func testWhatTouchesAI() {
+        XCTAssertTrue(AppStatus.touchesAI(.init(aiEnabled: false)))
+        XCTAssertTrue(AppStatus.touchesAI(.init(aiProvider: .gemini)))
+        XCTAssertTrue(AppStatus.touchesAI(.init(aiModel: "")))
+        XCTAssertTrue(AppStatus.touchesAI(.init(aiBaseUrl: "")))
+        XCTAssertTrue(AppStatus.touchesAI(.init(aiDailyLimitUsd: 5)))
+        XCTAssertFalse(AppStatus.touchesAI(.init(quietHours: true)))
+        XCTAssertFalse(AppStatus.touchesAI(.init(morningBrief: true)))
+    }
+
     func testASyncEndsWhenEveryAccountHasSyncedOrFailedSince() {
         let before = [F.standing("ada@example.test", ok: "2026-11-14T09:00:00Z", count: 1),
                       F.standing("news@example.test", ok: "2026-11-14T09:00:00Z", count: 1)]

@@ -155,17 +155,44 @@ final class SecretStandingTests: XCTestCase {
     func testTheClaudeKey() {
         let on = F.digest().ai, off = F.digest(engine: "none", keyFrom: "").ai
         let fromVariable = F.digest(keyFrom: "ANTHROPIC_API_KEY").ai
-        XCTAssertEqual(SecretStanding.apiKey(set: true, ai: on, sources: .init()).summary, "Kept in your login Keychain")
-        XCTAssertNil(SecretStanding.apiKey(set: true, ai: on, sources: .init()).note)
-        XCTAssertEqual(SecretStanding.apiKey(set: true, ai: on, sources: .init(apiKeyVariable: true)).note,
+        XCTAssertEqual(SecretStanding.apiKey(.anthropic, kept: true, ai: on, sources: .init()).summary,
+                       "Kept in your login Keychain")
+        XCTAssertNil(SecretStanding.apiKey(.anthropic, kept: true, ai: on, sources: .init()).note)
+        XCTAssertEqual(SecretStanding.apiKey(.anthropic, kept: true, ai: on, sources: .init(apiKeyVariable: true)).note,
                        "ANTHROPIC_API_KEY is set too, and the key kept here wins over it.")
-        XCTAssertEqual(SecretStanding.apiKey(set: true, ai: off, sources: .init()).summary,
+        XCTAssertEqual(SecretStanding.apiKey(.anthropic, kept: true, ai: off, sources: .init()).summary,
                        "A key is kept, but it can’t be read")
-        let environment = SecretStanding.apiKey(set: false, ai: fromVariable, sources: .init(apiKeyVariable: true))
+        let environment = SecretStanding.apiKey(.anthropic, kept: false, ai: fromVariable,
+                                                sources: .init(apiKeyVariable: true))
         XCTAssertEqual(environment.summary, "From the environment variable ANTHROPIC_API_KEY")
         XCTAssertEqual(environment.note, "A key kept here would win over it.")
         XCTAssertFalse(environment.kept)
-        XCTAssertEqual(SecretStanding.apiKey(set: false, ai: off, sources: .init()).summary, "No key: AI is off")
+        XCTAssertEqual(SecretStanding.apiKey(.anthropic, kept: false, ai: off, sources: .init()).summary,
+                       "No key: AI is off")
+    }
+
+    /// Each provider's key stands on its own: only Claude's is read from ANTHROPIC_API_KEY, and what the digest says
+    /// of the provider in force says nothing of another's.
+    func testEachProvidersKey() {
+        let openAIOff = F.digest(engine: "none", keyFrom: "", provider: "openai").ai
+        let claudeOn = F.digest().ai
+        let variable = SecretSources(apiKeyVariable: true)
+        let none = SecretStanding.apiKey(.openai, kept: false, ai: openAIOff, sources: variable)
+        XCTAssertEqual(none.summary, "No key: AI is off")
+        XCTAssertEqual(none.note, "Without a key nothing is sent to OpenAI.", "the variable is Claude's alone")
+        XCTAssertFalse(none.kept)
+        XCTAssertEqual(SecretStanding.apiKey(.openai, kept: true, ai: openAIOff, sources: .init()).summary,
+                       "A key is kept, but it can’t be read")
+        XCTAssertEqual(SecretStanding.apiKey(.gemini, kept: true, ai: openAIOff, sources: .init()).summary,
+                       "Kept in your login Keychain", "OpenAI's trouble isn't Gemini's")
+        XCTAssertNil(SecretStanding.apiKey(.gemini, kept: true, ai: claudeOn, sources: variable).note)
+        XCTAssertEqual(SecretStanding.apiKey(.gemini, kept: false, ai: claudeOn, sources: .init()).note,
+                       "Without a key nothing is sent to Google.")
+        let optional = SecretStanding.apiKey(.compatible, kept: false, ai: nil, sources: .init())
+        XCTAssertEqual(optional.summary, "No key")
+        XCTAssertEqual(optional.note, "The service is asked with none. Keep one if it asks for one.")
+        XCTAssertEqual(SecretStanding.apiKey(.compatible, kept: true, ai: nil, sources: .init()).summary,
+                       "Kept in your login Keychain")
     }
 
     func testTheBridgePasswordTheEnvironmentThen1PasswordThenTheKeychain() {
@@ -232,20 +259,66 @@ final class SettingsCoreTests: XCTestCase {
     func testTheClaudeKeyIsKeptInTheStandInAndNeverAnswered() async throws {
         let (core, status) = try await opened()
         let before = try await core.get(API.Get.AiKey.self)
-        XCTAssertFalse(before.set)
-        let kept = try await SecretPost.post(core, API.Post.AiKey.self, API.KeyBody(key: Self.apiKey))
-        XCTAssertTrue(kept.set)
+        XCTAssertEqual(before.kept, [])
+        let kept = try await SecretPost.post(core, API.Post.AiKey.self,
+                                             API.KeyBody(key: Self.apiKey, provider: .anthropic))
+        XCTAssertEqual(kept.kept, [.anthropic])
         let after = try await core.get(API.Get.AiKey.self)
-        XCTAssertTrue(after.set)
+        XCTAssertEqual(after.kept, [.anthropic])
         let stood = try String(contentsOf: keychain, encoding: .utf8)
         XCTAssertTrue(stood.contains(Self.apiKey), "the stand-in, not the login Keychain, keeps it")
         for target in ["/api/ai/key", "/api/digest", "/api/accounts"] {
             let answer = await core.send("GET", target, Data())
             XCTAssertFalse(String(decoding: answer.body, as: UTF8.self).contains(Self.apiKey), target)
         }
-        let cleared = try await core.post(API.Post.AiKeyClear.self, API.NoBody())
-        XCTAssertFalse(cleared.set)
+        let cleared = try await core.post(API.Post.AiKeyClear.self, API.ProviderBody(provider: .anthropic))
+        XCTAssertEqual(cleared.kept, [])
         XCTAssertFalse(try String(contentsOf: keychain, encoding: .utf8).contains(Self.apiKey))
+        await close(core, status)
+    }
+
+    /// Each provider's key is kept on its own, Ollama takes none, and the pane's choices reach the core as it keeps
+    /// them: another provider starts from its own model and URL.
+    @MainActor
+    func testEachProvidersKeyAndTheChoicesTheCoreKeeps() async throws {
+        let (core, status) = try await opened()
+        let openAI = "sk-openai-fictional-0002"
+        let kept = try await SecretPost.post(core, API.Post.AiKey.self, API.KeyBody(key: openAI, provider: .openai))
+        XCTAssertEqual(kept.kept, [.openai])
+        do {
+            _ = try await SecretPost.post(core, API.Post.AiKey.self, API.KeyBody(key: openAI, provider: .ollama))
+            XCTFail("Ollama takes no key")
+        } catch let problem as Problem {
+            XCTAssertEqual(problem.detail, "Ollama takes no key.")
+        }
+        await status.setPreferences(.init(aiModel: "gpt-fictional", aiProvider: .openai))?.value
+        XCTAssertEqual(status.preferences?.aiProvider, .openai)
+        XCTAssertEqual(status.preferences?.aiModel, "gpt-fictional")
+        await status.setPreferences(AIChoices.choose(.ollama))?.value
+        XCTAssertEqual(status.preferences?.aiProvider, .ollama)
+        XCTAssertEqual(status.preferences?.aiModel, "", "another provider starts from its own model")
+        XCTAssertEqual(status.digest?.ai.off, .noModel, "Ollama has no model of its own")
+        XCTAssertEqual(status.digest?.ai.provider, .ollama)
+        await status.setPreferences(.init(aiEnabled: false))?.value
+        XCTAssertEqual(status.digest?.ai.off, .turnedOff)
+        XCTAssertEqual(status.digest?.ai.engine, "none")
+        await close(core, status)
+    }
+
+    /// Asking a provider for its models is refused, in words a person reads, where it can't be asked; nothing here
+    /// reaches a real provider.
+    @MainActor
+    func testTheModelsAreRefusedWhereTheyCantBeAsked() async throws {
+        let (core, status) = try await opened()
+        for (provider, why) in [(API.AiProvider.compatible, "Give the service’s URL first."),
+                                (.gemini, "Keep a key for this provider first.")] {
+            do {
+                _ = try await core.get(API.Get.AiModels.self, ["provider": provider.rawValue])
+                XCTFail("\(provider) can't be asked yet")
+            } catch let problem as Problem {
+                XCTAssertEqual(problem.detail?.replacingOccurrences(of: "'", with: "’"), why)
+            }
+        }
         await close(core, status)
     }
 
