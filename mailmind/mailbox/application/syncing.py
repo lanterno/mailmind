@@ -62,7 +62,9 @@ class Syncing:
 
     def sync_accounts(self, emails: Collection[str] | None = None) -> int:
         """Sync the given account emails (or all when None). Emits realtime events. Caller
-        must hold the _sync single-flight guard (sync_once / sync_guarded)."""
+        must hold the _sync single-flight guard (sync_once / sync_guarded).
+        An Inbox's first scan stores mail that was there before, so it is no new mail: it counts
+        none and says no new-mail."""
         new = 0
         for a in self._accounts.accounts():
             if emails is not None and a["email"] not in emails:
@@ -70,15 +72,21 @@ class Syncing:
             before = self._status.get(a["email"])
             self._status[a["email"]] = {"health": "syncing", "msg": ""}
             try:
+                with self._uow.read() as c:
+                    first = self._store.get_watermark(c, a["email"], "INBOX") == 0
+                first = first and not self._ingest.folder_synced(a["email"], "INBOX")
                 kept, junk, _ = self._ingest.sync_new(a)
-                new += kept
+                arrived = 0 if first else kept
+                new += arrived
                 self._failing.pop(a["email"], None)
                 self._status[a["email"]] = {"health": "ok", "msg": f"+{kept}"}
                 with self._uow.write() as c:
                     self._store.record_sync_result(c, a["email"], True)
                 sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
-                if kept > 0:
-                    sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": kept})
+                if arrived > 0:
+                    sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": arrived})
+                elif kept or junk:
+                    self._folders.invalidate(a["email"])   # what the first scan stored changes the rail's counts
             except Exception as e:
                 kind, now = self._accounts.error_kind(e), time.time()
                 run = sync_health.and_one_more(self._failing.get(a["email"]), type(e).__name__, self._accounts.may_pass(e), now)
