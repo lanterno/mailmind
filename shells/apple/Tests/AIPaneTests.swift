@@ -45,7 +45,7 @@ final class AIChoicesTests: XCTestCase {
         for provider in API.AiProvider.allCases {
             for words in [provider.label, provider.name, provider.writer,
                           AIChoices.urlHelp(provider), AIChoices.keyLabel(provider), AIChoices.keyPrompt(provider),
-                          AIChoices.removeWarning(provider), AIWords.privacy(provider)] {
+                          AIChoices.removeWarning(provider), AIWords.sends(provider)] {
                 XCTAssertFalse(words.contains("Ollama"), "\(provider): \(words)")
             }
         }
@@ -313,26 +313,6 @@ final class LocalFinderTests: XCTestCase {
 
 /// What the app says of AI: whom a message goes to, how AI stands, and why it is off.
 final class AIWordsTests: XCTestCase {
-    func testWhatIsSentAndToWhom() {
-        XCTAssertEqual(AIWords.privacy(.anthropic), """
-            With AI on, the text of a message goes to Anthropic only when it is summarized, briefed or drafted; \
-            nothing else leaves this Mac.
-            """)
-        XCTAssertTrue(AIWords.privacy(.openai).contains("goes to OpenAI only"))
-        XCTAssertTrue(AIWords.privacy(.gemini).contains("goes to Google only"))
-        XCTAssertTrue(AIWords.privacy(.compatible).contains("goes to the service at the URL you gave only"))
-        XCTAssertEqual(AIWords.privacy(.local), """
-            The model runs on this Mac, so the text of a message never leaves it: it goes to your model server, \
-            here, only when it is summarized, briefed or drafted.
-            """)
-        XCTAssertTrue(AIWords.privacy(.compatible, url: "http://localhost:8080/v1").contains("never leaves it"),
-                      "a compatible service answering on this Mac keeps the text here too")
-        XCTAssertTrue(AIWords.privacy(.compatible, url: "https://ai.example.test/v1").contains("goes to the service"))
-        for provider in API.AiProvider.allCases where provider != .anthropic {
-            XCTAssertFalse(AIWords.privacy(provider).contains("Anthropic"), "\(provider)")
-        }
-    }
-
     /// What AI mode sends is said before it is turned on: what goes to the provider by itself, what goes only when asked,
     /// and that attachments never leave; with a model on this Mac, or a service answering here, nothing leaves.
     func testWhatAIModeSendsIsSaidBeforeItIsOn() {
@@ -344,6 +324,7 @@ final class AIWordsTests: XCTestCase {
         XCTAssertTrue(AIWords.sends(.openai).contains("opening text go to OpenAI to be summarized"))
         XCTAssertTrue(AIWords.sends(.gemini).contains("opening text go to Google to be summarized"))
         XCTAssertTrue(AIWords.sends(.compatible).contains("go to the service at the URL you gave to be summarized"))
+        XCTAssertTrue(AIWords.sends(.compatible, url: "https://ai.example.test/v1").contains("go to the service"))
         XCTAssertEqual(AIWords.sends(.local), "With a model on this Mac, nothing leaves this Mac.")
         XCTAssertEqual(AIWords.sends(.compatible, url: "http://localhost:8080/v1"),
                        "With the service on this Mac, nothing leaves this Mac.")
