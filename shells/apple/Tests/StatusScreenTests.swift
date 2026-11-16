@@ -40,6 +40,7 @@ final class StatusScreenTests: XCTestCase {
                                      last: "2026-11-14T14:52:00Z"),
                     accounts: accounts, health: failing ? health : Array(health.prefix(2)),
                     preferences: F.preferences(quiet: true), upcoming: [F.meeting("Design review", start: now.addingTimeInterval(240))],
+                    failingJobs: failing ? ["draft-push"] : [],
                     now: now)
         return status
     }
@@ -124,7 +125,7 @@ final class StatusScreenTests: XCTestCase {
 
     func testTheStatus() throws {
         let failing = status(failing: true)
-        try render("status-menu", CGSize(width: 340, height: 420),
+        try render("status-menu", CGSize(width: 340, height: 480),
                    StatusMenu(status: failing, model: MeadowMenuModel(), settings: {}, close: {}))
         try render("status-bar", CGSize(width: 900, height: 120), VStack(spacing: 0) {
             HStack(spacing: 10) {
