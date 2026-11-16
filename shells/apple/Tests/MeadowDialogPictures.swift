@@ -238,6 +238,14 @@ final class MeadowDialogPictures: XCTestCase {
         try draw("settings-ai-off", size) { _ in OnPaper { AIPane(status: off, kept: [.anthropic]) } }
     }
 
+    /// An account that couldn't sync, as Accounts' health line says it: the sentence, what to do, and the kind.
+    func testASyncErrorInWords() throws {
+        let status = status(failing: true)
+        try draw("settings-sync-error", CGSize(width: 620, height: 170)) { _ in
+            OnPaper { HealthRow(status: status, email: "home@example.test").padding(20) }
+        }
+    }
+
     func testTheAccountFormAsADialog() throws {
         var draft = AccountDraft()
         draft.email = "ada@example.test"
