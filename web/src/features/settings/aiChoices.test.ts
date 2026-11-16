@@ -1,12 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PostBodies } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
-import { aiParts, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave, type LocalServer } from "./aiChoices";
+import { aiKept, aiParts, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave, type LocalServer } from "./aiChoices";
 
 describe("the AI tab", () => {
   it("holds only AI mode's switch while it is off", () => expect(aiParts(false)).toEqual(["mode"]));
   it("shows the connection once AI mode is on, then spending and what is written ahead", () => {
     expect(aiParts(true)).toEqual(["mode", "connection", "spending", "ahead"]);
+  });
+  it("says its settings are kept on this Mac and each key in the Keychain, never that they are in a file", () => {
+    expect(aiKept(false, "openai", "")).toBe("Kept on this Mac, with each key in your login Keychain.");
+    expect(aiKept(false, "openai", "")).not.toContain("mailmind.config.json");
+  });
+  it("says with AI mode on who the text of a message goes to, the provider chosen or nobody off this Mac", () => {
+    expect(aiKept(true, "openai", "")).toBe("Kept on this Mac, with each key in your login Keychain. With AI on, the text of a message goes to OpenAI only when it is summarized, briefed, drafted or asked about; nothing else leaves this machine.");
+    expect(aiKept(true, "gemini", "")).toContain("goes to Google only");
+    expect(aiKept(true, "local", "")).toBe("Kept on this Mac, with each key in your login Keychain. With a model on this Mac, the text of a message never leaves this Mac.");
+    expect(aiKept(true, "compatible", "http://127.0.0.1:8080/v1")).toContain("never leaves this Mac");
   });
 });
 
