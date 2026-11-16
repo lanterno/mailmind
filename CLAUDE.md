@@ -33,7 +33,8 @@ uv run python -m mailmind export        # what an export would hold; `--format e
 uv run python -m mailmind db check-upgrade   # owner only: try the next upgrade on a copy; counts and checks
 uv run python -m mailmind db compact         # owner only, MailMind stopped: give back the room freed in the file
 uv run python -m mailmind accounts password WHO   # keep an account's password in the login Keychain (prompt, or stdin)
-uv run python -m mailmind ai key                  # keep the Claude API key there
+uv run python -m mailmind ai key                  # keep the Claude API key there; `--provider openai|gemini|compatible` another's
+uv run python -m mailmind ai on|off               # AI's switch, as Settings has it: off, nothing goes to any provider
 uv run python -m mailmind ai usage --days 7  # what the Claude API cost each day, by feature; reads only
 uv run python -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
 ```

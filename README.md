@@ -16,14 +16,14 @@ See [Features](#features) for what ships today and
   (FastAPI, uvicorn, the Anthropic SDK, IMAPClient, icalendar and recurring-ical-events) that
   [uv](https://docs.astral.sh/uv/) fetches on first run.
 - **Your data stays local.** Mail is stored in a local SQLite file; the only
-  thing that leaves your machine is the text of the mail Claude works on, sent to
-  Anthropic through the Claude API.
+  thing that leaves your machine is the text of the mail the AI works on, sent to
+  the provider you chose (Claude by default), or to none with Ollama on this Mac or AI turned off.
 - **Any mailbox.** Gmail/Workspace, generic IMAP (cPanel/Dovecot/…), and Proton
   (via Bridge) — all configured in one JSON file.
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
-> **Heads-up:** summaries and the other AI features need a Claude API key, kept in your login Keychain with `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`; calls are billed per token to that key's organization. Without one, AI is off: MailMind still ingests and curates mail, sends nothing to Anthropic, and the brief says AI is off and how to turn it on.
+> **Heads-up:** summaries and the other AI features need a Claude API key, kept in your login Keychain with `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`, unless you choose another provider in Settings; calls are billed per token to that key's organization. Without one, or with AI turned off, MailMind still ingests and curates mail, sends nothing to any AI provider, and the brief says AI is off and how to turn it on.
 
 ---
 
@@ -255,13 +255,20 @@ automatically.
   takes it out; or name it there with `{"op": …}` / `{"env": …}`, like an account password), and
   that wins over `ANTHROPIC_API_KEY`, so a key your shell exports for other tools isn't used by
   accident. The server's startup line names the model and where the key came from.
+  **Or another provider.** Settings has a switch that turns AI off altogether, every background job
+  included, and a choice of provider: Claude (the default), OpenAI, Google Gemini, Ollama on this Mac
+  (no key, and nothing leaves the machine) or any other OpenAI-compatible service at a URL you give,
+  each with a model of your choosing from the list the provider offers. Each provider's key is kept
+  in the login Keychain like Claude's (`ai key --provider openai`); `ai on` and `ai off` turn the
+  switch from the command line. Every provider goes through the same daily limit and usage ledger,
+  priced from its own list (a model on this Mac costs nothing), and only Claude takes batches.
   The sync menu names the model, and in red the reason ("the API key was rejected",
   "rate-limited for now") when the last call failed. With no key, the brief says
   AI is off calmly and the composer drops Draft and Rewrite. The brief's card, and the sync
   menu with AI on, say that message text goes to Anthropic only when it is summarized, briefed or
   drafted.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
-  …) at Anthropic's list prices. The sync menu shows what today cost so far against the
+  …) at the provider's list prices. The sync menu shows what today cost so far against the
   daily limit, and `uv run python -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
   A backlog (a first import, or after an outage) goes to the Message Batches API at half price,
   one batch at a time, while new mail is still triaged as it arrives, so a large import can leave
@@ -487,7 +494,7 @@ automatically.
   place, `/p/` and a random id, whose meaning stays in the encrypted database. Back, a reload and a link opened in a new
   tab still come back to it, and the browser's storage holds no address either.
 - **Your passwords are in the Keychain, never in a file.** A password you type in Settings, or give
-  `uv run python -m mailmind accounts password you@example.com`, and the Claude API key (`ai key`) go to your login
+  `uv run python -m mailmind accounts password you@example.com`, and each AI provider's API key (`ai key`) go to your login
   Keychain; `mailmind.config.json` only says where each one is. A config that holds a password itself is refused.
 - **One-click local backup** of your whole mailbox as a consistent `.db` snapshot, encrypted as the database is, from
   Settings, or a zip of lossless per-message `.eml` files or standard `mbox` archives, there
@@ -663,8 +670,9 @@ Credential styles: `{"keychain": "account:you@x"}` (the login Keychain, which Se
 `{"proton_bridge": true}`. `uv run python -m mailmind accounts materialize` moves what an `op` or `env` credential
 names into the Keychain.
 
-Two top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` says where the Claude API key is, in any
-of those styles (`ai key` keeps it in the Keychain as `anthropic-api-key`). `"ai_daily_limit_usd"` is the most MailMind spends on it in a day,
+Top-level keys beside `"accounts"` are for the AI. `"anthropic_api_key"` says where the Claude API key is, in any
+of those styles (`ai key` keeps it in the Keychain as `anthropic-api-key`), and `"openai_api_key"`, `"gemini_api_key"`
+and `"compatible_api_key"` where another provider's is (`ai key --provider openai`, and so on). `"ai_daily_limit_usd"` is the most MailMind spends on it in a day,
 in US dollars: `15` unless you set another positive number.
 
 An account may say `"pool": true` to keep a connection open between reads, and `"warm_folders": true` to sync its
@@ -730,7 +738,8 @@ uv run python -m mailmind rules                  # show the learned lists
 uv run python -m mailmind rules expire github.com 72  # trash this domain's INBOX mail after 72h (0 clears)
 uv run python -m mailmind expire all --dry       # preview what the expiry rules would trash now
 uv run python -m mailmind accounts password you@x.com  # keep an account's password in the login Keychain
-uv run python -m mailmind ai key                  # keep the Claude API key there
+uv run python -m mailmind ai key                  # keep the Claude API key there (--provider openai|gemini|compatible for another's)
+uv run python -m mailmind ai off                  # turn AI off: nothing goes to any AI provider (`ai on` turns it back on)
 uv run python -m mailmind assess --batch         # what has no summary yet, as a batch at half price, within today's limit; again for the answers
 ```
 
