@@ -294,6 +294,30 @@ def test_a_call_refused_for_want_of_credit_names_the_account_to_top_up(app, worl
     assert app.get("/api/digest").json["ai"]["last_error"] == "the Anthropic account has no credit left"
 
 
+def test_spending_says_what_the_last_week_and_this_month_cost_by_what_each_feature_is_called(app, world, ai):
+    def costly(obj, tokens):
+        status, said = fa.answer(obj)
+        return status, {**said, "usage": {"input_tokens": tokens, "output_tokens": 0}}
+    none = {"calls": 0, "cost_micros": 0, "features": []}
+    assert app.get("/api/ai/spending").json == {"ok": True, "week": none, "month": none}
+    app.clock.shift(timedelta(days=-3))                 # Friday 30 October: in the last week, not this month
+    ai.queue(costly({"text": "the"}, 1000))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 200
+    app.clock.shift(timedelta(days=3))
+    ai.queue(costly({"text": "the"}, 1000))
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 200
+    ai.queue(costly({"tldr": "Lunch is on Thursday.", "points": [], "action": "", "participants": []}, 5000))
+    assert app.post("/api/ai/summarize", world.copy("ada-inbox-02-lunch-confirm.eml")).status == 200
+    spent = app.get("/api/ai/spending").json
+    week, month = spent["week"], spent["month"]
+    assert [(f["label"], f["calls"]) for f in week["features"]] == [("Conversation summaries", 1), ("Rewrite", 2)]
+    assert [(f["label"], f["calls"]) for f in month["features"]] == [("Conversation summaries", 1), ("Rewrite", 1)]
+    assert (week["calls"], month["calls"]) == (3, 2)
+    assert week["cost_micros"] == sum(f["cost_micros"] for f in week["features"]) > month["cost_micros"] > 0
+    assert app.post("/api/preferences", {"ai_enabled": False}).status == 200
+    assert app.get("/api/ai/spending").json == spent                  # it reads what is stored, AI on or off
+
+
 def test_status_after_calls(app, golden, world, ai):
     golden.record("the digest's AI status before any call", app.get("/api/digest"))
     app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"})
