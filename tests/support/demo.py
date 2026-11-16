@@ -5,8 +5,11 @@ corpus in their folders (its dates moved up so its newest message is today), and
 each call's schema. `python -m mailmind serve` runs against them as it would against real servers, in a temp data
 directory that goes when it stops, its database encrypted with a key made for the run (never the Keychain's), the
 accounts' passwords in the tests' stand-in for the Keychain (a file in that directory), and with the suite's tripwire
-on, here and in the server: it refuses the real data files, any host off this machine and the programs that hold your
-credentials. What a send sends lands in the fake SMTP server, and what a filing moves moves on the fake IMAP server.
+on, here and in the server: it refuses the real data files, any host off this machine, the model servers that may run on
+it and the programs that hold your credentials. The server says each refusal as "Tripwire: ..." as it happens, though
+the app swallows the error. Settings finds no model server on this Mac, as the Mac app's demo finds none: a server that
+asked one would say so. What a send sends lands in the fake SMTP server, and what a filing moves moves on the fake IMAP
+server.
 
     python tests/support/demo.py [port]     # Ctrl-C ends it
 """
@@ -36,7 +39,8 @@ from fixtures import world as w                    # noqa: E402
 
 CORPUS_NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)     # conftest.NOW, which conftest can't lend without pytest
 DATE = re.compile(rb"^Date:[ \t]*([^\r\n]+)", re.I | re.M)
-SERVE = ("import sys; sys.path[:0] = [{support!r}, {root!r}]; import guard; guard.install(); "
+SERVE = ("import sys; sys.path[:0] = [{support!r}, {root!r}]; import guard; guard.install(loud=True); "
+         "from mailmind.assistant.adapters import local_servers; local_servers.known = lambda: []; "     # none on this Mac
          "import runpy; sys.argv = {argv!r}; runpy.run_module('mailmind', run_name='__main__')")
 
 

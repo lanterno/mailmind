@@ -6,7 +6,8 @@ open(), sqlite3.connect(), SQLCipher's connect, rename, delete, socket connect, 
 process, so a module path a fixture forgot to redirect fails the test instead of reading or
 writing real mail. Each refusal raises, so the access never happens, and is recorded, so a caller
 that swallows the exception still fails the test (see the autouse fixture in conftest.py).
-A hook can't be removed, which is the point.
+A hook can't be removed, which is the point. A process whose record no test reads (the server the demo starts) installs
+it `loud`, so each refusal is also said on standard error as it happens, swallowed or not.
 
 It also puts a stand-in in the login Keychain's place (fake_keychain.py, `KEYCHAIN`), before any MailMind module asks
 it for a secret: a test, or a server a test starts, keeps and reads its secrets there, and never reaches the real one.
@@ -42,6 +43,7 @@ PROGRAMS = ("claude", "op", "security")
 MODEL_SERVER_PORTS = frozenset({11434, 1234, 8080, 8000, 1337, 4891})
 
 violations = []
+_loud = False                                           # say each refusal on standard error too (install's `loud`)
 _busy = threading.local()
 KEYCHAIN = None                                         # the stand-in for the login Keychain, once installed
 
@@ -116,6 +118,9 @@ def _program(executable, args):
 
 def _refuse(what):
     violations.append(what)
+    if _loud:                                           # one write, so threads refused at once keep a line each
+        sys.stderr.write(f"Tripwire: {what}\n")
+        sys.stderr.flush()
     raise Tripwire(f"test tripwire: {what}")
 
 
@@ -151,8 +156,11 @@ def _hook(event, args):
 _installed = False
 
 
-def install():
-    global _installed
+def install(*, loud=False):
+    """The tripwire, once a process. `loud` also says each refusal on standard error as "Tripwire: ...", for a process
+    whose `violations` no test reads, so one the code under it swallows still shows in what it prints."""
+    global _installed, _loud
+    _loud = _loud or loud
     if not _installed:
         sys.addaudithook(_hook)
         _guard_the_driver()
