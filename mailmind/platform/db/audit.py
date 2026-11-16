@@ -27,6 +27,12 @@ def append(c: Connection, trail: str, records: Iterable[Record]) -> None:
         c.execute("INSERT INTO audit_events(trail, ts, body) VALUES(?,?,?)", (trail, r["ts"], json.dumps(r)))
 
 
+def forget_account(c: Connection, email: str) -> None:
+    """Each record of `email`'s mail, as its account is removed."""
+    c.execute("DELETE FROM audit_events WHERE coalesce(CASE WHEN json_valid(body) AND json_type(body) = 'object' "
+              "THEN json_extract(body, '$.account') END, '') = ? COLLATE NOCASE", (email,))
+
+
 def read(c: Connection, limit: int) -> dict[str, Any]:
     """The newest `limit` records of both trails, newest first and those of one moment in the order they were written, and
     whether there are older ones."""

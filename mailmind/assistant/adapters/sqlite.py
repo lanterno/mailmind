@@ -8,10 +8,12 @@ from mailmind.kernel.assessment import Assessment
 
 # ----------------------------------------------------------- thread summaries (AI)
 def forget_account(c, email):
-    """Its threads' summaries and its drafts made ahead, as its account is removed. What was said of each message goes with
-    its key."""
+    """Its threads' summaries and its drafts made ahead, and each card made for it (the brief, the review, what changed
+    since you looked: caches, made again), as its account is removed. What was said of each message goes with its key."""
     for table in ("thread_summaries", "draft_ahead"):
         c.execute(f"DELETE FROM {table} WHERE account=? COLLATE NOCASE", (email,))
+    for table in ("briefs", "reviews", "deltas"):     # each names the accounts it was made for, sorted and comma-joined
+        c.execute(f"DELETE FROM {table} WHERE instr(',' || lower(accounts) || ',', ',' || lower(?) || ',') > 0", (email,))
 
 
 def get_thread_summary(c, account, thread_id, scope="thread"):

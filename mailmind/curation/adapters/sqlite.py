@@ -11,6 +11,25 @@ from mailmind.platform.db.uow import UnitOfWork
 _uow = UnitOfWork()
 
 
+def forget_account(c, email):
+    """The address leaves the accounts each sender's way out and each unsubscribe names, as its account is removed; a row
+    that named only it goes."""
+    for table in ("sender_unsub", "unsub_log"):
+        rows = c.execute(f"SELECT rowid AS rid, accounts FROM {table} WHERE instr(lower(accounts), lower(?)) > 0",
+                         (email,)).fetchall()
+        for r in rows:
+            try:
+                named = json.loads(r["accounts"])
+            except ValueError:
+                continue
+            if not isinstance(named, list) or not any(str(a).lower() == email.lower() for a in named):
+                continue
+            if kept := [a for a in named if str(a).lower() != email.lower()]:
+                c.execute(f"UPDATE {table} SET accounts=? WHERE rowid=?", (json.dumps(kept), r["rid"]))
+            else:
+                c.execute(f"DELETE FROM {table} WHERE rowid=?", (r["rid"],))
+
+
 def sender_unsub_put(c, from_addr, info, accounts, when):
     """Keep how to unsubscribe from a sender, past the sender's mail. A newest message offering no way
     ends it: the list has stopped offering one."""

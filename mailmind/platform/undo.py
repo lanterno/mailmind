@@ -124,6 +124,27 @@ def forget(c: Connection, names: Callable[[Entry], bool]) -> None:
         return
 
 
+def forget_account(c: Connection, email: str) -> None:
+    """Every entry for `email`'s mail, as its account is removed: one of its own goes, and a group of its alone; another
+    group keeps its other children."""
+    def ours(e: object) -> bool:
+        return isinstance(e, dict) and str(e.get("account") or "").lower() == email.lower()
+
+    for r in c.execute("SELECT id, entry FROM undo_entries").fetchall():
+        try:
+            held = json.loads(r["entry"])
+        except ValueError:
+            continue
+        children = held.get("children") if isinstance(held, dict) else None
+        if ours(held):
+            c.execute("DELETE FROM undo_entries WHERE id=?", (r["id"],))
+        elif isinstance(children, list) and any(ours(e) for e in children):
+            if kept := [e for e in children if not ours(e)]:
+                c.execute("UPDATE undo_entries SET entry=? WHERE id=?", (json.dumps({**held, "children": kept}), r["id"]))
+            else:
+                c.execute("DELETE FROM undo_entries WHERE id=?", (r["id"],))
+
+
 def entries(c: Connection) -> list[Entry]:
     """The undo stack, oldest first."""
     return [json.loads(r["entry"]) for r in c.execute("SELECT entry FROM undo_entries WHERE created_at >= ? ORDER BY id",

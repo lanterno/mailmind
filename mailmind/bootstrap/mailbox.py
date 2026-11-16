@@ -19,6 +19,7 @@ from mailmind.accounts.api import CredentialsRejected, TLSPinMismatch, login_id,
 from mailmind.assistant.adapters import sqlite as assistant_store
 from mailmind.attention.adapters import sqlite as attention_store
 from mailmind.compose.adapters import sqlite as compose_store
+from mailmind.curation.adapters import sqlite as curation_store
 from mailmind.discovery.adapters import fts
 from mailmind.mailbox.adapters import reconcile_trail
 from mailmind.mailbox.adapters import sqlite as store
@@ -44,7 +45,8 @@ from mailmind.mailbox.application.tidying import Tidying
 from mailmind.mailbox.application.warm import Warming
 from mailmind.mailbox.application.session import MailSession, ReadOnlySession
 from mailmind.platform import bus, profile
-from mailmind.platform.db import txguard
+from mailmind.platform import undo as undo_stack
+from mailmind.platform.db import audit, txguard
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.undo import Undo
@@ -73,8 +75,8 @@ FORGET_WAIT = 30        # seconds a removed account's mail waits for what holds 
 
 def forget_account(email):
     """What this Mac keeps of `email`'s mail, let go as its account is removed and a person asks for it: the index's rows,
-    each context's own under its address, then the Mailbox's, in one block. Its mail on the server is untouched. How many
-    stored copies went.
+    each context's own under its address, Undo's entries and the audit trails' records of it, then the Mailbox's, in one
+    block. Its mail on the server is untouched. How many stored copies went.
 
     It goes on the account's gate, once what holds the gate (opening a body, a move, reconcile) has ended, or after
     FORGET_WAIT anyway, as the account is already gone; and again as each sync that was reading its mail lands, so what one
@@ -92,7 +94,8 @@ def forget_account(email):
 def _forget_account(email):
     with UnitOfWork().write() as c:
         fts.forget_account(c, email)
-        for forget in (attention_store.forget_account, assistant_store.forget_account, compose_store.forget_account):
+        for forget in (attention_store.forget_account, assistant_store.forget_account, compose_store.forget_account,
+                       curation_store.forget_account, undo_stack.forget_account, audit.forget_account):
             forget(c, email)
         return store.forget_account(c, email)
 
