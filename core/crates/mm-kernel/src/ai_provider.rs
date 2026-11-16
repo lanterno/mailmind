@@ -68,10 +68,10 @@ impl AiProvider {
 /// The longest base URL a person may give, in characters.
 pub const BASE_URL_MOST: usize = 500;
 
-/// The host a URL names, its scheme `https` or `http` in any case, with no user or password, no query and no
-/// fragment, and a port that is a number when it names one: None for any other URL, or text that is none.
+/// The host a URL in printable ASCII names, its scheme `https` or `http` in any case, with no user or password, no
+/// query and no fragment, and a port that is a number when it names one: None for any other URL, or text that is none.
 fn host_of(url: &str) -> Option<(bool, String)> {
-    if url.chars().any(|c| c.is_whitespace() || c.is_control()) || url.contains(['?', '#']) {
+    if url.chars().any(|c| !('!'..='~').contains(&c)) || url.contains(['?', '#']) {
         return None;
     }
     let (scheme, rest) = url.split_once("://")?;
@@ -115,9 +115,9 @@ fn loopback(host: &str) -> bool {
     host == "localhost" || host.parse::<IpAddr>().is_ok_and(|ip| this.contains(&ip))
 }
 
-/// A base URL as a person may give one, its trailing `/` dropped: at most `BASE_URL_MOST` characters, an `https` URL
-/// with a host, or an `http` one whose host is this machine (`127.0.0.1`, `::1`, `localhost`), with no user or
-/// password, no query and no fragment. None for any other.
+/// A base URL as a person may give one, its trailing `/` dropped: at most `BASE_URL_MOST` characters of printable
+/// ASCII, an `https` URL with a host, or an `http` one whose host is this machine (`127.0.0.1`, `::1`, `localhost`),
+/// with no user or password, no query and no fragment. None for any other.
 pub fn base_url(given: &str) -> Option<String> {
     if given.chars().count() > BASE_URL_MOST {
         return None;

@@ -104,11 +104,12 @@ fn refusal(name: &str) -> String {
         AI_DAILY_LIMIT => format!("the AI daily limit must be more than $0 and at most ${AI_DAILY_LIMIT_MAX:.0}"),
         "quiet_from" => "quiet hours need a time such as 22:00".to_owned(),
         "quiet_until" => "quiet hours need a time such as 07:00".to_owned(),
-        AI_MODEL => format!("a model's name is at most {MODEL_MOST} letters, digits and . _ : / @ + -"),
-        AI_BASE_URL => {
-            "the AI provider's address is an https URL, or http on this Mac, with no login, query or fragment"
-                .to_owned()
-        }
+        AI_MODEL => format!("the AI model must be up to {MODEL_MOST} letters, digits and . _ : / @ + -"),
+        AI_BASE_URL => format!(
+            "the AI service's URL must be https, or http on this Mac, in at most {} characters, with no user, \
+             password, query or fragment",
+            ai_provider::BASE_URL_MOST
+        ),
         _ => format!("{name} can't be that"),
     }
 }
@@ -164,12 +165,20 @@ pub fn said<'a>(raw: &'a Map<String, Value>, name: &str) -> Option<&'a Value> {
     block_of(raw).and_then(|block| block.get(name)).filter(|value| takes(name, value))
 }
 
+/// `value` as the file keeps it and a reader is given it: an address without its trailing `/`.
+fn kept(kind: Kind, value: &Value) -> Value {
+    match (kind, value.as_str()) {
+        (Kind::BaseUrl, Some(url)) => Value::from(url.trim_end_matches('/')),
+        _ => value.clone(),
+    }
+}
+
 /// Every preference as it stands: what the file says where that can be it, and else the default. It never fails.
 pub fn read(raw: &Map<String, Value>) -> Map<String, Value> {
     DEFAULTS
         .iter()
         .map(|(name, default)| {
-            let value = said(raw, name).cloned().unwrap_or_else(|| match default {
+            let value = said(raw, name).map(|v| kept(*default, v)).unwrap_or_else(|| match default {
                 Kind::Seconds(seconds) => Value::from(*seconds),
                 Kind::Choice(word, _) | Kind::Time(word) => Value::from(*word),
                 Kind::Flag(flag) => Value::Bool(*flag),
@@ -193,11 +202,8 @@ pub fn changes(asked: &Map<String, Value>) -> Result<Map<String, Value>, Problem
         if !takes(name, value) {
             return Err(Problem::refused(refusal(name)));
         }
-        let kept = match (default_of(name), value.as_str()) {
-            (Some(Kind::BaseUrl), Some(url)) if !url.is_empty() => Value::from(ai_provider::base_url(url)),
-            _ => value.clone(),
-        };
-        wanted.insert(name.clone(), kept);
+        let value = default_of(name).map_or_else(|| value.clone(), |kind| kept(kind, value));
+        wanted.insert(name.clone(), value);
     }
     Ok(wanted)
 }
