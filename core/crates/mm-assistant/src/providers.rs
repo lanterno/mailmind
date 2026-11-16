@@ -5,6 +5,8 @@
 //! Claude is the default, asked through Anthropic's own API. Every other provider is asked through the one adapter
 //! that speaks OpenAI's Chat Completions, given a base URL, a key (or none) and a model.
 
+use std::time::Duration;
+
 use mm_kernel::ai_provider::{self, AiProvider};
 
 use crate::models;
@@ -46,6 +48,17 @@ pub fn speaks_anthropic(provider: AiProvider) -> bool {
 /// Mac, or any provider at a loopback address.
 pub fn local(provider: AiProvider, base_url: &str) -> bool {
     provider == AiProvider::Local || ai_provider::on_this_machine(base_url)
+}
+
+/// How long one attempt at a call waits for its answer.
+pub const ATTEMPT: Duration = Duration::from_secs(120);
+/// The same for a model on this Mac, which may load on its first use.
+pub const LOCAL_ATTEMPT: Duration = Duration::from_secs(300);
+
+/// How long one attempt at a call to `provider` at `base_url` waits: `LOCAL_ATTEMPT` for a model on this Mac, or any
+/// provider whose URL is on this Mac, and `ATTEMPT` for any other.
+pub fn attempt_limit(provider: AiProvider, base_url: &str) -> Duration {
+    if local(provider, base_url) { LOCAL_ATTEMPT } else { ATTEMPT }
 }
 
 /// Why AI is off: turned off in Settings, or with no key, URL or model to ask. Nothing is sent while it is.

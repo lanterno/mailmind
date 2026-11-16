@@ -158,10 +158,13 @@ impl ApiEngine {
             return model.clone();
         }
         let key = Secret::new(made_for.key.expose().to_owned());
-        let model: Arc<dyn LanguageModel> = if speaks_anthropic(made_for.provider) {
-            Arc::new(mm_claude::ClaudeApi::new(key, Some(&made_for.base_url), self.outside.clone()))
+        // A model on this Mac may load on its first use, so each attempt waits longer for it.
+        let waits = providers::attempt_limit(made_for.provider, &made_for.base_url);
+        let (provider, url, outside) = (made_for.provider, made_for.base_url.as_str(), self.outside.clone());
+        let model: Arc<dyn LanguageModel> = if speaks_anthropic(provider) {
+            Arc::new(mm_claude::ClaudeApi::new(key, Some(url), outside).with_limits(waits, mm_claude::RETRIES))
         } else {
-            Arc::new(mm_openai::ChatApi::new(made_for.provider, &made_for.base_url, Some(key), self.outside.clone()))
+            Arc::new(mm_openai::ChatApi::new(provider, url, Some(key), outside).with_limits(waits, mm_openai::RETRIES))
         };
         *made = Some((made_for, model.clone()));
         model
