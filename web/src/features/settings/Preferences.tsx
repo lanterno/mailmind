@@ -6,14 +6,11 @@ import type { Density } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
 import { prefs, setPrefs } from "../../lib/prefs";
 import { THEME_LABEL } from "../../lib/theme";
+import { Check } from "./Check";
 import { Seg } from "./Seg";
 import { useStepBack } from "./useStepBack";
 
 const DENSITY_LABEL: Record<Density, string> = { comfortable: "Comfortable", cozy: "Cozy", compact: "Compact" };
-
-function Check({ checked, onChange, children }: { checked: boolean; onChange: (on: boolean) => void; children: React.ReactNode }) {
-  return <label className="pref-check"><input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />{children}</label>;
-}
 
 // A field the browser fills in halves, so a half-typed time is held back and stays as typed: nothing fixes it up under the fingers.
 function Time({ label, value, onChange }: { label: string; value: string; onChange: (time: string) => void }) {
