@@ -1,6 +1,6 @@
 //! What the log says as the cost governor's breaker opens (`governor.heard`): what stops, every background call or a
-//! feature on a model, and the status that stopped it, once each time it opens. A test binary of its own, as the log's
-//! sink is the process's.
+//! feature on a model, or that the account has no credit left, and the status that stopped it, once each time it
+//! opens. A test binary of its own, as the log's sink is the process's.
 
 use std::sync::atomic::AtomicI64;
 use std::sync::{Arc, Mutex};
@@ -73,12 +73,23 @@ fn the_breaker_opening_says_what_stops_and_the_status_once_each_time() {
     governor.heard("rewrite", "claude-opus-5-5", &model, Some(&key));
     // Open already, under the same model: nothing more is said.
     governor.heard("ask", "claude-opus-5-5", &model, Some(&ModelError::new("forbidden", Some(403))));
+    // An account with no credit left, on another governor: said once, and again once it opens anew after a reply.
+    let other = CostGovernor::new(Arc::new(Nothing), Arc::new(Frozen(AtomicI64::new(1_793_620_800_000_000))));
+    let no_credit = ModelError::new("credit balance is too low", Some(400)).with_no_credit("Anthropic");
+    other.heard("triage", "claude-haiku-5-5", &model, Some(&no_credit));
+    other.heard("triage", "claude-haiku-5-5", &model, Some(&no_credit));
+    other.heard("rewrite", "claude-opus-5-5", &model, None);
+    other.heard("triage", "claude-haiku-5-5", &model, Some(&no_credit));
     let message = "the API keeps rejecting requests: %(what)s stops until the key or the model changes (%(why)s)";
+    let credit = "the account has no credit left: every background call stops until a call goes through or an hour \
+                  passes (%(why)s)";
     assert_eq!(
         *kept.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner),
         [
             format!(r#"WARNING [ai] {message} ["what=triage on claude-sonnet-5-5", "why=400"]"#),
             format!(r#"WARNING [ai] {message} ["what=every background call", "why=401"]"#),
+            format!(r#"WARNING [ai] {credit} ["why=400"]"#),
+            format!(r#"WARNING [ai] {credit} ["why=400"]"#),
         ]
     );
 }

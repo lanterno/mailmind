@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use mm_assistant::calls::Calls;
 use mm_assistant::gateway::{Budget, Gateway};
-use mm_assistant::governor::{CostGovernor, PRESENCE_SECONDS, allowing_over};
+use mm_assistant::governor::{CREDIT_RETRY_SECONDS, CostGovernor, PRESENCE_SECONDS, allowing_over};
 use mm_assistant::ports::{
     AiSettings, Engine, InForce, LanguageModel, ModelError, Prompt, Reply, Spend, Usage, UsageLedger,
 };
@@ -220,6 +220,48 @@ fn an_account_with_no_credit_left_stops_every_background_call_and_the_status_nam
     assert_eq!(w.calls.call_claude("Ahead.", "brief-ahead"), Err(CallError::NotSent(NotSent::Deferred("breaker"))));
     let report = w.status.report().expect("a report");
     assert_eq!(report["last_error"], json!("the OpenAI account has no credit left"));
+}
+
+#[test]
+fn background_calls_stopped_for_want_of_credit_go_again_once_a_call_goes_through() {
+    let w = world(true, None);
+    let no_credit = ModelError::new("Claude API 400: credit balance is too low", Some(400)).with_no_credit("Anthropic");
+    w.model.replies.lock().expect("replies").push(Err(no_credit));
+    assert!(matches!(w.calls.call_claude("Asked for.", "rewrite"), Err(CallError::Model(_))));
+    w.clock.shift(46);
+    assert_eq!(w.calls.call_claude("Triage.", "triage"), Err(CallError::NotSent(NotSent::Deferred("breaker"))));
+    // Credit added to the same key: the model in use is the same, and a reply says it is back.
+    assert!(w.calls.call_claude("Asked for.", "rewrite").is_ok());
+    w.clock.shift(46);
+    assert!(w.calls.call_claude("Triage.", "triage").is_ok());
+    assert_eq!(w.governor.snapshot()["breaker"], json!([]));
+}
+
+#[test]
+fn background_calls_stopped_for_want_of_credit_try_again_an_hour_later() {
+    let w = world(true, None);
+    let no_credit = || ModelError::new("Gemini API 429: quota exceeded", Some(429)).with_no_credit("Gemini");
+    w.model.replies.lock().expect("replies").push(Err(no_credit()));
+    w.clock.shift(100);
+    assert!(matches!(w.calls.call_claude("Triage.", "triage"), Err(CallError::Model(_))));
+    w.clock.shift(CREDIT_RETRY_SECONDS as i64 - 1);
+    assert_eq!(w.calls.call_claude("Triage.", "triage"), Err(CallError::NotSent(NotSent::Deferred("breaker"))));
+    w.clock.shift(1);
+    w.model.replies.lock().expect("replies").push(Err(no_credit()));
+    assert!(matches!(w.calls.call_claude("Triage.", "triage"), Err(CallError::Model(_))));
+    // Still none: stopped for another hour.
+    assert_eq!(w.calls.call_claude("Triage.", "triage"), Err(CallError::NotSent(NotSent::Deferred("breaker"))));
+}
+
+#[test]
+fn a_reply_or_an_hour_leaves_a_refused_key_stopped() {
+    let w = world(true, None);
+    w.model.replies.lock().expect("replies").push(Err(ModelError::new("Claude API 401: invalid x-api-key", Some(401))));
+    w.clock.shift(100);
+    assert!(matches!(w.calls.call_claude("Triage.", "triage"), Err(CallError::Model(_))));
+    assert!(w.calls.call_claude("Asked for.", "thread").is_ok());
+    w.clock.shift(CREDIT_RETRY_SECONDS as i64);
+    assert_eq!(w.calls.call_claude("Triage.", "triage"), Err(CallError::NotSent(NotSent::Deferred("breaker"))));
 }
 
 #[test]
