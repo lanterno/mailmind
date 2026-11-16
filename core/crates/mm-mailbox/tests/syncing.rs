@@ -251,3 +251,49 @@ fn a_round_that_panics_before_any_account_brings_the_flight_down_too() {
     // The round that went on to the end says when.
     assert!(syncing.sync().unwrap().last.is_some());
 }
+
+const ADA: &str = "ada@example.test";
+const BEA: &str = "bea@example.test";
+
+fn fail(world: &World, account: &str, error: ServerError) {
+    world.fails.lock().unwrap().insert(account.to_owned(), error);
+}
+
+fn pass(world: &World, seconds: i64) {
+    world.now.fetch_add(seconds * 1_000_000, Ordering::SeqCst);
+}
+
+#[test]
+fn a_connection_lost_once_shows_nothing_and_keeps_no_error_until_the_next_sync_fails_too() {
+    let world = World::with(&[ADA]);
+    let syncing = syncing(&world);
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), None, "it shows as it did before");
+    assert_eq!(world.recorded.load(Ordering::SeqCst), 0, "nor does its record keep an error");
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), error("ConnectionRefused"));
+    assert_eq!(world.recorded.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_failure_that_may_pass_shows_three_minutes_on_though_no_sync_has_run_since() {
+    let world = World::with(&[ADA]);
+    fail(&world, ADA, ServerError::Unreachable("Timeout"));
+    let syncing = syncing(&world);
+    syncing.sync_guarded(None);
+    pass(&world, 179);
+    assert_eq!(standing(&syncing, ADA), None);
+    pass(&world, 1);
+    assert_eq!(standing(&syncing, ADA), error("Timeout"));
+}
+
+#[test]
+fn a_login_the_server_cant_take_for_now_may_pass_and_one_it_refused_shows_at_once() {
+    let world = World::with(&[ADA, BEA]);
+    fail(&world, ADA, ServerError::Unreachable("LoginUnavailable"));
+    fail(&world, BEA, ServerError::Unreachable("LoginRefused"));
+    let syncing = syncing(&world);
+    syncing.sync_guarded(None);
+    assert_eq!(standing(&syncing, ADA), None);
+    assert_eq!(standing(&syncing, BEA), error("LoginRefused"));
+}
