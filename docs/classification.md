@@ -52,7 +52,8 @@ leaves the undo stack as it was ([Writes and Undo](writes-and-undo.md)).
 The Curate card's numbers come from the stored plan (`plan_stored`, `mm_curation::sweep_plan::StoredPlans`), with no
 server asked: `junk` and `keep` as the classifier judges the stored Inbox now, and `sweepable`, the junk a sweep would
 move, stored as read (`seen`) and not starred (`flagged`). The card's **Sweep** button offers `sweepable` and isn't
-there when it is none; Undo is offered after a sweep only when it moved something.
+there when it is none; Undo is offered after a sweep only when it moved something, or stopped where the server couldn't
+be asked again how much went (`moved` 0 with an `undo_group`): the words say so, and Undo puts back whatever did.
 
 The preview's `confirm_token` (`perimeter.tokens`) is `<time>.<hmac>`, over the purpose, the sender, the way out it showed
 and where that goes (`unsubscribe.preview_said`), under the process's secret. It stands for `TOKEN_LIFE`, ten minutes. A cleanup with one out of date

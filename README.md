@@ -210,7 +210,8 @@ and the AI provider you chose (Claude by default).
   subjects. Starred and unread mail always stays, and the plan says how much; the button counts only what would go. A
   sweep takes the newest 500 at a time (sweep again for the rest), and one `z` puts it back from the Trash, an
   account's at once (the plan says how much of it, if any, has no Message-ID to find it by and can't come back). A
-  sweep the server stops says so in plain words: try again, or, if some went first, Undo brings that back.
+  sweep the server stops says so in plain words: try again, or, if some went first, Undo brings that back; and when it
+  can't ask the server again how much went, it says so and Undo puts back whatever did.
 - **Unsubscribe & sender cleanup.** A ranked "senders flooding you" lane where one
   confirm blocks the sender, sweeps their INBOX copies to Trash (one `z` reverses
   both) and fires one standards-compliant unsubscribe: RFC 8058's one-click POST where the
