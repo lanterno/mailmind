@@ -92,7 +92,12 @@
   `scan_state` it expects (`holds`), and a sync that read the folder afresh meanwhile makes it store nothing. Its
   last step leaves `synced`. While it reads, `/api/digest`'s `status` gives the account `done` and `total`. An Inbox
   message's text comes from its first 64 KiB (`MailServer::heads`, `BODY.PEEK[]<0.65536>`), so a first scan
-  downloads no attachment; only one whose cut-off opening says it may carry an invite is fetched whole.
+  downloads no attachment; only one whose cut-off opening says it may carry an invite is fetched whole. A FETCH of
+  openings the server refuses (Gmail's "Some messages could not be FETCHed") keeps what it sent and asks for the rest
+  a message at a time, so a message it can't send costs only its own text. A read of older mail does the same with
+  headers and leaves out a message whose headers are still refused, unless the server sends none of the step, which
+  then stores nothing and waits for the next round. A connection lost part way stores nothing of its step, which the
+  next sync or round reads again.
 - What a folder's sync asks the server for is `domain.sync_plan`, a pure value from what the select said and what is
   stored: `plan_folder` the mail to fetch, `plan_flags` how to read flags. `Ingest` does the asking and the storing.
 - An incremental sync reads flags again (`ingest._refresh_flags`). On a CONDSTORE server it compares
