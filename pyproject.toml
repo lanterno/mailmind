@@ -187,20 +187,22 @@ source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel"]
 forbidden_modules = ["mailmind.attention.adapters", "mailmind.calendar.adapters", "mailmind.compose.adapters", "mailmind.curation.adapters", "mailmind.assistant.adapters", "mailmind.accounts.adapters", "mailmind.mailbox.adapters", "mailmind.discovery.adapters"]
 
 [[tool.importlinter.contracts]]
-name = "only the SDK adapter reaches the Anthropic SDK"
+# httpx2 is the SDK's HTTP library: the adapter hands the SDK a client of it, and no other module makes one.
+name = "only the SDK adapter reaches the Anthropic SDK and its HTTP library"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel",
                   "mailmind.assistant.application", "mailmind.assistant.domain",
                   "mailmind.assistant.adapters.wire", "mailmind.assistant.adapters.disabled",
-                  "mailmind.assistant.adapters.chat_wire", "mailmind.assistant.adapters.openai_chat"]
-forbidden_modules = ["anthropic"]
+                  "mailmind.assistant.adapters.chat_wire", "mailmind.assistant.adapters.openai_chat",
+                  "mailmind.assistant.adapters.exchange", "mailmind.assistant.adapters.local_servers"]
+forbidden_modules = ["anthropic", "httpx2"]
 
 [[tool.importlinter.contracts]]
 # bootstrap.assistant binds the SDK's adapter, for the server and every command alike.
-name = "bootstrap imports the Anthropic SDK only through its adapter"
+name = "bootstrap imports the Anthropic SDK and its HTTP library only through its adapter"
 type = "forbidden"
 source_modules = ["mailmind.bootstrap"]
-forbidden_modules = ["anthropic"]
+forbidden_modules = ["anthropic", "httpx2"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
