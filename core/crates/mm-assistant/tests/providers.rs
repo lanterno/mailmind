@@ -9,8 +9,10 @@ use mm_assistant::calls::Calls;
 use mm_assistant::catalog::{Catalog, KEY_REFUSED, NO_KEY, NO_URL, UNREACHABLE};
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
+use mm_assistant::local_servers::Finder;
 use mm_assistant::ports::{
-    AiSettings, Engine, InForce, LanguageModel, ModelError, ModelLists, Prompt, Reply, Spend, Usage, UsageLedger,
+    AiSettings, Engine, InForce, LanguageModel, LocalServer, LocalServers, ModelError, ModelLists, Prompt, Reply,
+    Spend, Usage, UsageLedger,
 };
 use mm_assistant::providers::{self, Off, chat_models, default_base_url, default_model};
 use mm_assistant::refusals::{CallError, NotSent};
@@ -438,4 +440,53 @@ fn what_cant_be_asked_is_refused_in_words_and_no_answer_is_unreachable() {
         let refused = catalog.models(Gemini).expect_err("no list");
         assert_eq!((refused.kind, refused.said.as_str()), (Kind::Unreachable, UNREACHABLE));
     }
+}
+
+// -- the model servers on this Mac ----------------------------------------------------------------
+
+#[derive(Debug)]
+struct Asked(Vec<LocalServer>);
+
+impl LocalServers for Asked {
+    fn ask(&self) -> Vec<LocalServer> {
+        self.0.clone()
+    }
+}
+
+#[test]
+fn the_known_model_servers_are_asked_at_their_usual_addresses_in_this_order() {
+    assert_eq!(
+        mm_assistant::local_servers::KNOWN,
+        [
+            ("Ollama", "http://127.0.0.1:11434/v1"),
+            ("LM Studio", "http://127.0.0.1:1234/v1"),
+            ("llama.cpp", "http://127.0.0.1:8080/v1"),
+            ("vLLM", "http://127.0.0.1:8000/v1"),
+            ("Jan", "http://127.0.0.1:1337/v1"),
+            ("GPT4All", "http://127.0.0.1:4891/v1"),
+        ]
+    );
+    assert_eq!(default_base_url(Local), mm_assistant::local_servers::KNOWN[0].1, "Ollama's is a model on this Mac's");
+}
+
+#[test]
+fn the_finder_offers_the_servers_that_answered_in_order_with_the_models_that_can_chat() {
+    let server = |name: &str, models: Option<&[&str]>| LocalServer {
+        name: name.into(),
+        url: format!("http://127.0.0.1:1/{name}"),
+        models: models.map(|m| m.iter().map(|s| (*s).to_owned()).collect()),
+    };
+    let finder = Finder::new(Arc::new(Asked(vec![
+        server("Ollama", Some(&["qwen3:8b", "nomic-embed-text", "llama3.2:3b", "qwen3:8b"])),
+        server("LM Studio", None),
+        server("Jan", Some(&[])),
+    ])));
+    assert_eq!(
+        finder.find(),
+        json!({"ok": true, "servers": [
+            {"name": "Ollama", "url": "http://127.0.0.1:1/Ollama", "models": ["llama3.2:3b", "qwen3:8b"]},
+            {"name": "Jan", "url": "http://127.0.0.1:1/Jan", "models": []},
+        ]})
+    );
+    assert_eq!(Finder::new(Arc::new(Asked(vec![]))).find(), json!({"ok": true, "servers": []}));
 }

@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret, Tripped};
 use mm_server::environment::{Environment, Settings};
+use mm_server::local_ai::LocalModelServers;
 use mm_server::real::Sanitizing;
 use mm_server::{App, Seams, Server};
 use mm_store::{Database, DbKey};
@@ -76,8 +77,14 @@ struct Running {
     _runtime: tokio::runtime::Runtime,
 }
 
-/// The server over a data directory holding `config`, with `pairs` in its environment.
+/// The server over a data directory holding `config`, with `pairs` in its environment, and no model server on this
+/// Mac to find.
 fn running(config: &Value, pairs: &[(&str, &str)]) -> Running {
+    running_finding(config, pairs, &[])
+}
+
+/// The same, finding the model servers `local` names (by name and URL) on this Mac.
+fn running_finding(config: &Value, pairs: &[(&str, &str)], local: &[(&str, &str)]) -> Running {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(home.path().join("mailmind.config.json"), config.to_string()).unwrap();
     let (path, key) = (home.path().join("mailmind.db"), DbKey::from_bytes([0x5e; 32]));
@@ -95,7 +102,10 @@ fn running(config: &Value, pairs: &[(&str, &str)]) -> Running {
         keychain: keychain.clone(),
         sanitizer: Arc::new(Sanitizing),
         mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
-        local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
+        local_ai: Arc::new(LocalModelServers::at(
+            outside.clone(),
+            local.iter().map(|(name, url)| ((*name).to_owned(), (*url).to_owned())).collect(),
+        )),
     };
     let app = Arc::new(App::assemble(&environment, &settings, home.path().join("dist"), port, &seams).unwrap());
     let (stop, stopped) = tokio::sync::watch::channel(false);
@@ -523,6 +533,94 @@ fn what_cant_be_listed_is_refused_in_words_and_a_provider_that_didnt_answer_is_u
         (502, json!("/problems/unreachable"), json!("Couldn't reach the provider."))
     );
     assert!(!unreached.text().contains("fictional") && !refused_key.text().contains("fictional"));
+}
+
+// -- the model servers on this Mac ---------------------------------------------------------------
+
+/// A server on loopback that takes each connection and answers nothing, for `hold` each.
+fn silent(hold: Duration) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://127.0.0.1:{}/v1", listener.local_addr().unwrap().port());
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                std::thread::sleep(hold);
+                drop(stream);
+            });
+        }
+    });
+    url
+}
+
+#[test]
+fn the_model_servers_on_this_mac_that_answer_a_list_are_found_in_order_with_ai_mode_off() {
+    let models = json!({"object": "list", "data": [{"id": "qwen3:8b"}, {"id": "nomic-embed-text:latest"},
+                                                   {"id": "llama3.2:3b"}, {"id": "qwen3:8b"}]});
+    let (ollama, ollama_heard) = provider(vec![(200, models)]);
+    let (studio, _) = provider(vec![(200, json!({"data": []}))]);
+    let (page, _) = provider(vec![(200, json!("<html>a web page</html>"))]);
+    let (missing, _) = provider(vec![(404, json!({"error": "not found"}))]);
+    let closed = format!("http://127.0.0.1:{}/v1", closed_port());
+    let local = [
+        ("LM Studio", studio.as_str()),
+        ("Another app", page.as_str()),
+        ("Ollama", ollama.as_str()),
+        ("Gone", missing.as_str()),
+        ("Off", closed.as_str()),
+        ("Elsewhere", "https://llm.example.test/v1"),
+    ];
+    let r = running_finding(&json!({"local_api_key": {"keychain": "local-api-key"}}), &[], &local);
+    r.post("/api/ai/key", &json!({"provider": "local", "key": "sk-local-fictional"}));
+    r.post("/api/preferences", &json!({"ai_enabled": false}));
+    let found = r.get("/api/ai/local");
+    assert_eq!(
+        (found.status, found.json()),
+        (
+            200,
+            json!({"ok": true, "servers": [
+                {"name": "LM Studio", "url": studio, "models": []},
+                {"name": "Ollama", "url": ollama, "models": ["llama3.2:3b", "qwen3:8b"]},
+            ]})
+        )
+    );
+    let [asked] = heard(&ollama_heard).try_into().unwrap();
+    assert_eq!((asked.line.as_str(), asked.header("authorization")), ("GET /v1/models HTTP/1.1", None), "no key goes");
+    assert!(!r.outside.0.lock().unwrap().iter().any(|host| host.contains("example.test")), "nothing off this Mac");
+}
+
+#[test]
+fn nothing_found_is_no_server_and_the_servers_are_asked_all_at_once_a_second_each() {
+    let r = running(&json!({}), &[]);
+    assert_eq!(r.get("/api/ai/local").json(), json!({"ok": true, "servers": []}));
+
+    let hold = Duration::from_secs(4);
+    let quiet: Vec<String> = (0..4).map(|_| silent(hold)).collect();
+    let local: Vec<(&str, &str)> = quiet.iter().map(|url| ("Quiet", url.as_str())).collect();
+    let r = running_finding(&json!({}), &[], &local);
+    let began = std::time::Instant::now();
+    assert_eq!(r.get("/api/ai/local").json(), json!({"ok": true, "servers": []}));
+    // Four servers that never answer, a second each: asked one after another, that is four seconds at least.
+    assert!(began.elapsed() < Duration::from_millis(3500), "{:?}", began.elapsed());
+}
+
+#[test]
+fn a_tests_servers_are_named_name_equals_url_separated_by_semicolons() {
+    let listed = LocalModelServers::listed;
+    assert_eq!(
+        listed("Ollama=http://127.0.0.1:53001/v1;LM Studio=http://127.0.0.1:53002/v1"),
+        Some(vec![
+            ("Ollama".to_owned(), "http://127.0.0.1:53001/v1".to_owned()),
+            ("LM Studio".to_owned(), "http://127.0.0.1:53002/v1".to_owned())
+        ])
+    );
+    assert_eq!(listed(""), Some(vec![]), "set and empty, none is asked");
+    assert_eq!(listed(" ; "), Some(vec![]));
+    assert_eq!(
+        listed("Ollama=http://127.0.0.1:53001/v1;"),
+        Some(vec![("Ollama".into(), "http://127.0.0.1:53001/v1".into())])
+    );
+    assert_eq!(listed("Ollama"), None);
+    assert_eq!(listed("Ollama="), None);
 }
 
 // -- the background ------------------------------------------------------------------------------

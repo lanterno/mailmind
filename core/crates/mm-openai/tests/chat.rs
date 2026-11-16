@@ -366,6 +366,18 @@ fn only_a_leading_closed_thinking_block_is_dropped() {
 }
 
 #[test]
+fn only_a_list_of_models_is_readable_as_one() {
+    let page = "<html>a web page</html>".to_owned();
+    let (url, _) =
+        stand_in(vec![(200, vec![], page.clone()), (200, vec![], page), (200, vec![], "{\"data\": []}".into())]);
+    let api = api(Local, &url, None, Arc::new(Open::default()));
+    assert_eq!(api.list_models().expect("read as none"), Vec::<String>::new());
+    let failed = api.readable_models().expect_err("not a list");
+    assert_eq!(failed.status, None);
+    assert_eq!(api.readable_models().expect("an empty list"), Vec::<String>::new());
+}
+
+#[test]
 fn a_services_models_are_listed_once_with_its_key() {
     let listed = json!({"object": "list", "data": [{"id": "gpt-6.1-sol", "object": "model"}, {"id": "whisper-1"},
                         {"object": "model"}]})
