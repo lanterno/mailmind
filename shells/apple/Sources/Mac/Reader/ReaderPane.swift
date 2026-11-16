@@ -7,6 +7,7 @@ import SwiftUI
 struct ReaderPane: View {
     let app: MailApp
     @State private var conversation: ConversationModel?
+    @State private var find = ReaderFind()
     @Environment(\.openWindow) private var openWindow
 
     private var composing: Composing { .shared }
@@ -91,8 +92,10 @@ struct ReaderPane: View {
         VStack(spacing: 0) {
             MeadowPaneBar(app: app, mailbox: app.mailbox, message: app.reader.stage != .empty,
                           writing: PaneWriting(replyTo: replyTo, draft: draft))
+            if find.open, openCopy != nil { ReaderFindBar(find: find) }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .environment(\.readerFind, find)
         }
         .focusedSceneValue(\.mailWriting, MailWriting(replyTo: replyTo, draft: draft, current: current))
         .focusedSceneValue(\.readerTools, tools)
@@ -164,10 +167,11 @@ struct ReaderPane: View {
         return PaneEmptyWords.of(needsDone: needsDone, hasMail: hasMail)
     }
 
-    /// What the menu bar's Print acts on, while a message is open.
+    /// What the menu bar's Print and Find in Message act on, while a message is open.
     private var tools: ReaderTools? {
         guard openCopy != nil else { return nil }
-        return ReaderTools(print: { printOpen() })
+        let find = find
+        return ReaderTools(print: { printOpen() }, find: { find.show() })
     }
 
     /// File › Print: the message open, or a conversation's latest, whose head is read first.

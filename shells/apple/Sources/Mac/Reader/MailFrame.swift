@@ -70,6 +70,9 @@ struct MailFrame: NSViewRepresentable {
         }
         view.load(URLRequest(url: url))
         context.coordinator.showSoon()
+        // Find in Message looks in each frame the reader shows.
+        context.coordinator.find = context.environment.readerFind
+        context.coordinator.find?.add(view)
         return view
     }
 
@@ -87,6 +90,7 @@ struct MailFrame: NSViewRepresentable {
         view.navigationDelegate = nil
         FrameScript.remove(from: view.configuration.userContentController)
         coordinator.told = nil
+        coordinator.find?.remove(view)
     }
 }
 
@@ -241,6 +245,8 @@ final class FrameGuard: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKSc
     var printHead: String?
     /// Told once the document has loaded, or failed to: a printed copy waits for it.
     var loaded: ((Bool) -> Void)?
+    /// The reader's Find, which the frame joined as it was made.
+    weak var find: ReaderFind?
     /// The loads still going: one the web view stopped gets nothing more.
     private var going: Set<ObjectIdentifier> = []
 
