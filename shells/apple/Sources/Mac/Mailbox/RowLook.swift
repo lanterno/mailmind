@@ -246,16 +246,18 @@ enum DayGroup {
 }
 
 /// Today's brief as a row at the top of the Inbox (the mockup's `briefRowHTML()`, the page's `BriefRow`): the date,
-/// how many need you, wait and can wait, and who needs you.
+/// how many need you, wait and can wait, and who needs you. What can wait is the AI's rating, so with AI turned off
+/// (`canWait` nil) the line doesn't count it.
 struct BriefLine: Equatable {
     let date: String
     let tally: String
     let gist: String
     let needs: Bool
 
-    init(needs: [API.DigestItem], waiting: Int, canWait: Int, now: Date = Date(), locale: Locale = .current) {
+    init(needs: [API.DigestItem], waiting: Int, canWait: Int?, now: Date = Date(), locale: Locale = .current) {
         date = now.formatted(Date.FormatStyle(locale: locale).weekday(.abbreviated).day().month(.abbreviated))
-        tally = String(localized: "\(needs.count) need you · \(waiting) waiting · \(canWait) can wait")
+        tally = canWait.map { String(localized: "\(needs.count) need you · \(waiting) waiting · \($0) can wait") }
+            ?? String(localized: "\(needs.count) need you · \(waiting) waiting")
         self.needs = !needs.isEmpty
         gist = Self.who(needs)
     }

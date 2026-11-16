@@ -53,7 +53,7 @@ struct MailboxTable: View {
     private var briefLine: BriefLine? {
         guard let desk, mailbox.app?.listed?.isInbox == true else { return nil }
         return BriefLine(needs: desk.brief.needs, waiting: mailbox.across?.waiting ?? 0,
-                         canWait: desk.brief.tidy.count)
+                         canWait: desk.brief.aiTurnedOff ? nil : desk.brief.tidy.count)
     }
 
     /// The rows checked are in Trash, where the bulk bar restores them.

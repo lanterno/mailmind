@@ -62,7 +62,9 @@ final class BriefModel {
     }
 
     var needs: [API.DigestItem] { BriefWords.needsYou(items) }
-    var tidy: [API.DigestItem] { BriefWords.safeToFile(items) }
+    /// What the AI rates as safe to file, which the brief offers to file and counts as able to wait. None while AI is
+    /// turned off: the ratings are the AI's, so neither the offer nor its count shows then.
+    var tidy: [API.DigestItem] { aiTurnedOff ? [] : BriefWords.safeToFile(items) }
     var worthARead: [API.DigestItem] { BriefWords.worthARead(items) }
 
     /// The brief's topics, each with the mail it names still here.
