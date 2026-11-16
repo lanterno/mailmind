@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PostBodies } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
-import { keepKey, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
+import { aiParts, keepKey, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
+
+describe("the AI tab", () => {
+  it("holds only AI mode's switch while it is off", () => expect(aiParts(false)).toEqual(["mode"]));
+  it("shows the connection once AI mode is on, then spending and what is written ahead", () => {
+    expect(aiParts(true)).toEqual(["mode", "connection", "spending", "ahead"]);
+  });
+});
 
 describe("choosing another provider", () => {
   it("sets its model and URL back to its own, as the server does", () => {
