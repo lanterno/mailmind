@@ -650,9 +650,10 @@ mail syncs at once.
 
 When something goes wrong, **Help › Copy Diagnostics** copies what the owner needs to see why: the version, this Mac,
 how each account is set up, what failed lately and the log's last lines, with no address, subject, name or password
-in it. **Help › Report a Problem…** copies the same and opens a new issue on GitHub; send it to whoever gave you
+in it, and a mail server named only when it is a provider's (Gmail, iCloud, Yahoo, AOL, Fastmail, Outlook) or this
+Mac's own, any other as "own server". **Help › Report a Problem…** copies the same and opens a new issue on GitHub; send it to whoever gave you
 MailMind. A sync that fails says why in **Settings › Accounts**, with what to do next, and background work that keeps
-failing says so in the sync menu. If MailMind can't open its copy of your mail, its window says why, with **Copy
+failing says so in the sync menu. If MailMind can't open its copy of your mail, its window says why and what to do, with **Copy
 Details**, **Show in Finder** and **Start Fresh…**, which moves that copy into `backups/` and reads your mail from its
 servers again.
 
