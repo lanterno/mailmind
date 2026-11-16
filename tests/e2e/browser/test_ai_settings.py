@@ -202,7 +202,8 @@ def test_a_model_on_this_mac_is_picked_from_the_servers_found_with_its_url(local
     expect(dialog.get_by_text("Running on this Mac: Ollama and LM Studio.")).to_be_visible()
     expect(dialog.get_by_label("API key (optional)", exact=True)).to_be_visible()
     expect(dialog.get_by_text("Only if your server asks for one.", exact=False)).to_be_visible()
-    expect(dialog.get_by_text("give the model a context of at least 16K tokens", exact=False)).to_be_visible()
+    expect(page.locator("#aiContext")).to_have_text("In Ollama’s settings, set Context length to 16K or more.")
+    expect(page.locator("#aiGetOllama")).to_have_count(0)               # a server is running: nothing to get
     expect(page.locator("#aiStanding")).to_have_text("AI is off: no model on this Mac is chosen.")
     expect(page.locator("#aiSends")).to_have_text("With a model on this Mac, nothing leaves this Mac.")
 
@@ -227,8 +228,15 @@ def test_with_no_model_server_running_it_says_to_start_one_and_takes_a_url_and_a
     dialog = ai_open(page, app)
     with local_found(page):
         dialog.get_by_label("Provider", exact=True).select_option("local")
-    none = "No model server is running on this Mac. Start one, Ollama or LM Studio for example, and look again."
+    none = "No model server is running on this Mac yet."
     expect(dialog.get_by_text(none)).to_be_visible()
+    steps = page.locator("#aiGetOllama li")
+    expect(steps).to_have_text(["Get Ollama and open it.",
+                                "In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.",
+                                "In Ollama’s settings, set Context length to 16K or more.", "Then look again."])
+    get = dialog.get_by_role("link", name="Get Ollama")
+    expect(get).to_have_attribute("href", "https://ollama.com")
+    expect(get).to_have_attribute("rel", "noopener noreferrer")
     expect(dialog.get_by_label("Model", exact=True).locator("option")).to_have_text(["Choose a model"])
     with local_found(page):
         dialog.get_by_role("button", name="Look again").click()

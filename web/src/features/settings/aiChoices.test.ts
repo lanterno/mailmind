@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PostBodies } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
-import { AI_KEPT, aiParts, BILLING, billOfRecord, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, spentOver, summariesWaiting, urlToSave, type LocalServer } from "./aiChoices";
+import { AI_KEPT, aiParts, BILLING, billOfRecord, CHOSEN_ELSEWHERE, CONTEXT_STEP, GET_OLLAMA, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, spentOver, SUGGESTED_MODEL, summariesWaiting, urlToSave, type LocalServer } from "./aiChoices";
 
 describe("the AI tab", () => {
   it("holds only AI mode's switch while it is off", () => expect(aiParts(false)).toEqual(["mode"]));
@@ -52,6 +52,11 @@ const STUDIO: LocalServer = { name: "LM Studio", url: "http://127.0.0.1:1234/v1"
 const options = (m: ReturnType<typeof localMenu>) => [...(m.first ? [m.first.label] : []), ...m.groups.flatMap((g) => g.models.map((o) => `${g.name}: ${o.label}`))];
 
 describe("a model on this Mac", () => {
+  it("is set up in steps for a person with none: Ollama, one model suggested in plain words, and its context", () => {
+    expect(GET_OLLAMA).toBe("https://ollama.com");
+    expect(SUGGESTED_MODEL).toBe("In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.");
+    expect(CONTEXT_STEP).toBe("In Ollama’s settings, set Context length to 16K or more.");
+  });
   it("offers each server found by name, in the finder's order, with its models", () => {
     const menu = localMenu([OLLAMA, STUDIO], "", "");
     expect(menu.groups.map((g) => [g.name, g.url])).toEqual([["Ollama", OLLAMA.url], ["LM Studio", STUDIO.url]]);
@@ -80,7 +85,7 @@ describe("a model on this Mac", () => {
     expect(localFound([OLLAMA])).toBe("Running on this Mac: Ollama.");
     expect(localFound([OLLAMA, STUDIO, { name: "Jan", url: "http://127.0.0.1:1337/v1", models: [] }]))
       .toBe("Running on this Mac: Ollama, LM Studio and Jan. Jan has no model to chat with yet.");
-    expect(localFound([])).toBe("No model server is running on this Mac. Start one, Ollama or LM Studio for example, and look again.");
+    expect(localFound([])).toBe("No model server is running on this Mac yet.");
   });
 });
 
