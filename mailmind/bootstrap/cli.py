@@ -7,6 +7,7 @@ import sys
 
 from mailmind.accounts.api import CredentialRef, provider_of
 from mailmind.bootstrap import curation, discovery, mailbox
+from mailmind.kernel.ai_provider import AiProvider
 from mailmind.platform.db.uow import UnitOfWork
 
 
@@ -74,11 +75,31 @@ def set_password(who):
                  lambda item: f"{who}'s password is in the login Keychain as {item}, and mailmind.config.json names it.")
 
 
-def set_api_key():
-    """`ai key`: the Claude API key, kept in the login Keychain, and the config pointed at it."""
+_KEY_NAMES = {"anthropic": "Claude API key", "openai": "OpenAI API key", "gemini": "Gemini API key",
+              "compatible": "AI service's API key"}
+
+
+def set_api_key(provider: AiProvider = "anthropic"):
+    """`ai key [--provider P]`: an AI provider's API key, Claude's unless named, kept in the login Keychain, and the config
+    pointed at it."""
     from mailmind.bootstrap.accounts import config
-    return _keep("Claude API key (nothing shows as you type): ", config.set_api_key,
-                 lambda item: f"The Claude API key is in the login Keychain as {item}, and mailmind.config.json names it.")
+    name = _KEY_NAMES[provider]
+    return _keep(f"{name[0].upper()}{name[1:]} (nothing shows as you type): ",
+                 lambda secret: config.set_api_key(secret, provider),
+                 lambda item: f"The {name} is in the login Keychain as {item}, and mailmind.config.json names it.")
+
+
+def turn_ai(on):
+    """`ai on` or `ai off`: the preference Settings' switch sets. Off, nothing is sent to any AI provider."""
+    from mailmind.bootstrap import assistant
+    from mailmind.bootstrap.accounts import config
+    config.set_preferences({"ai_enabled": on})
+    if not on:
+        print("AI is off: nothing is sent to any AI provider until it is turned on again.")
+        return 0
+    off = assistant.engine().off
+    print("AI is on." if off is None else f"AI is on, but nothing is sent yet: {assistant.WHY[off].removeprefix('AI is off: ')}.")
+    return 0
 
 
 def sync(who, days):
@@ -113,8 +134,9 @@ def assess(limit, workers):
     from mailmind.bootstrap import assistant
     from mailmind.bootstrap.mailbox import store
     store.init()
-    if assistant.calls.engine() == "none":
-        print("AI is off: there is no API key, so nothing was summarized.")
+    off = assistant.engine().off
+    if off:
+        print(f"{assistant.WHY[off]}, so nothing was summarized.")
         return
     why = assistant.gateway().held_back("triage", assistant.calls.MODEL)
     if why:

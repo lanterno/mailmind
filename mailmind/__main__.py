@@ -29,16 +29,20 @@
   db compact                   give back the room freed in the database file, with MailMind stopped
   db rethread [WHO]            the repair: regroup the mail into threads from what each message names,
                                whole; no sync needs it, and what it changes moves as a merge does
-  ai usage [--days N]          what the Claude API cost each local day of the last N (default 7), by
-                               feature, from the usage ledger; it migrates nothing and calls nothing
-  ai key                       keep the Claude API key in the login Keychain and point the config at it, as
+  ai usage [--days N]          what AI cost each local day of the last N (default 7), by feature, from
+                               the usage ledger; it migrates nothing and calls nothing
+  ai key [--provider P]        keep an AI provider's API key (Claude's unless P names openai, gemini or
+                               compatible) in the login Keychain and point the config at it, as
                                `accounts password` does
+  ai on | off                  turn AI on, or off: off, nothing is sent to any AI provider
 """
 import argparse
 import os
 import shlex
 import signal
 import sys
+
+from mailmind.kernel.ai_provider import AI_PROVIDERS, DEFAULT_PROVIDER, KEYLESS
 
 
 MAILBOX_COMMANDS = {"status": "INBOX and Trash counts", "inventory": "every folder's counts",
@@ -95,10 +99,14 @@ def parser():
     shrink = db.add_parser("compact", help="give back the room freed in the file, with MailMind stopped")
     shrink.add_argument("--db", help="the database to compact (default: the data directory's)")
     db.add_parser("rethread", help="regroup the mail into threads, whole").add_argument("who", nargs="?", default="all", help="an account's address, or all")
-    ai = commands.add_parser("ai", help="the Claude API").add_subparsers(dest="ai_command", required=True)
+    ai = commands.add_parser("ai", help="AI: what it cost, its keys, on or off").add_subparsers(dest="ai_command", required=True)
     usage = ai.add_parser("usage", help="what AI cost each day, by feature")
     usage.add_argument("--days", type=int, default=7, help="how many days, today included (default 7)")
-    ai.add_parser("key", help="keep the Claude API key in the login Keychain")
+    keep = ai.add_parser("key", help="keep an AI provider's API key in the login Keychain")
+    keep.add_argument("--provider", choices=[p for p in AI_PROVIDERS if p not in KEYLESS], default=DEFAULT_PROVIDER,
+                      help=f"whose key (default {DEFAULT_PROVIDER})")
+    ai.add_parser("on", help="turn AI on")
+    ai.add_parser("off", help="turn AI off: nothing is sent to any AI provider")
     return top
 
 
@@ -131,7 +139,10 @@ def _run(args):
         sys.exit(wiring.assess_batch())
     if args.command == "ai" and args.ai_command == "key":
         from mailmind.bootstrap import cli
-        sys.exit(cli.set_api_key())
+        sys.exit(cli.set_api_key(args.provider))
+    if args.command == "ai" and args.ai_command in ("on", "off"):
+        from mailmind.bootstrap import cli
+        sys.exit(cli.turn_ai(args.ai_command == "on"))
     if args.command == "ai":
         sys.exit(ai_usage(args.days))
     if args.command == "db" and args.db_command == "rethread":
@@ -207,7 +218,7 @@ def ai_usage(days):
         print("The database predates the usage ledger: start the app once and it will be added.")
         return 1
     span = "today" if len(report) == 1 else f"the last {len(report)} days"
-    print(f"AI usage by local day at Anthropic's list prices, {span}:")
+    print(f"AI usage by local day at the providers' list prices, {span}:")
     calls = sum(d["calls"] for d in report)
     total = usd(sum(d["cost_micros"] for d in report))
     width = max([len(total)] + [len(usd(d["cost_micros"])) for d in report])
