@@ -288,7 +288,8 @@ function Inboxes() {
       const d = await post("/api/sweep", { account, dry_run: false, undo_group: undoGroup() });
       const r = d.results[0]!;
       toast(r.error ? `Sweep: ${r.error}` : `Swept ${r.moved}/${r.planned}${r.stragglers?.length ? ` · ${r.stragglers.length} unverified` : ""}`);
-      if (d.undo_group) offerUndo(`Swept ${r.moved ?? 0} to Trash`);
+      // Undo is offered for what went, and only when some did: a sweep the server stopped before anything moved has none.
+      if (d.undo_group && r.moved) offerUndo(`Swept ${r.moved} to Trash`);
     } catch {
       toast("Sweep failed");
     }
@@ -307,7 +308,8 @@ function Inboxes() {
             </div>
             <div className="r3">
               <span>{error ? <span style={{ color: "var(--err)" }}>{error.slice(0, 24)}</span> : `${a.junk} junk · ${a.keep} keep`}</span>
-              {a.junk > 0 && <button className="sweep" onClick={() => void arm(a.account)}>Sweep {a.junk}</button>}
+              {/* What a sweep would move now: the junk someone read and no one starred */}
+              {a.sweepable > 0 && <button className="sweep" onClick={() => void arm(a.account)}>Sweep {a.sweepable}</button>}
             </div>
             {armed?.account === a.account && (
               // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- Esc while the focus is on its buttons: the line itself takes no focus
