@@ -135,12 +135,14 @@ def test_triage_stores_the_structured_reply(api):
     api.queue(fa.answer({"summary": "Mira asks for the table.", "importance": 9,
                          "category": "action-needed", "action": "Reply by Friday"}))
     assert assistant.assessments.summarize_one(ROW) == (7, Assessment(
-        "Mira asks for the table.", 5, "action-needed", "Reply by Friday", "claude-opus-5-5",
+        "Mira asks for the table.", 5, "action-needed", "Reply by Friday", "claude-haiku-5-5",
         "claude-opus-5-5", TRIAGE.version, "assessed"))
+    assert api.requests[0].body["model"] == "claude-haiku-5-5"
 
 
-def test_triage_keeps_the_model_a_fallback_handed_over_to(api):
+def test_triage_keeps_the_model_a_fallback_handed_over_to(api, monkeypatch):
     from mailmind.bootstrap import assistant
+    monkeypatch.setattr(assistant.calls, "MODEL", "claude-opus-5-5")      # Haiku, triage's own, has no fallback
     api.queue(answer({"summary": "Mira asks.", "importance": 3, "category": "info"}, usage={
         "input_tokens": 10, "output_tokens": 5,
         "iterations": [{"type": "fallback_message", "model": "claude-opus-4-8", "input_tokens": 10, "output_tokens": 5}]}))
