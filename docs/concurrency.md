@@ -5,12 +5,13 @@ Every job that talks to an account's IMAP server runs through
 requests that open and file mail, undo, reconcile, expiry, the body backfill, the outbox, the
 command path and the thread summarizer. `MAILMIND_WORKERS` picks the gate:
 
-- Unset (or `global`), one process-wide lock is every account's gate, so all live-IMAP work is
+- On the Python app, unset (or `global`), one process-wide lock is every account's gate, so all live-IMAP work is
   serialized and a black-holed account holds up the rest until its connection times out.
 - `account`, each account has a gate of its own. Waiting jobs go by priority, then in turn. An
   `EVERY_ACCOUNT` job waits until no gate is held and holds them all, and a job that would come
-  after it waits behind it. The whole suite passes under either; the owner soaks `account`
-  before it becomes the default and the flag goes.
+  after it waits behind it. The whole suite passes under either.
+- On the Rust server (`environment::gate_per_account`, `mm_mailbox::gates`) a gate for each account is the default,
+  and `one` (or `global`) keeps the single gate.
 
 A job runs on its caller's thread either way, so context variables (`assistant.allowing_over()`)
 and txguard's per-thread record stay with it. The connection pool's per-account lock is taken

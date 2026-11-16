@@ -19,19 +19,16 @@ L = a week-plus.
 
 ## Speed and the connection layer
 
-- **Make a gate for each account the default** · high value · effort S · [#3](https://github.com/lanterno/mailmind/issues/3) — `MAILMIND_WORKERS=account`
-  gives each account its own gate, so a slow fetch on one account no longer blocks archive, send or open on another;
-  unset, one lock is still every account's gate. Both servers read it (`mailmind.platform.workers.gates`, and the Rust
-  server's `environment::gate_per_account`), so the owner can turn it on now and keep it through the flip. After a soak on
-  real accounts it becomes the Rust server's default and the flag goes. Then split the jobs that still pass
-  `EVERY_ACCOUNT`, which wait for every gate: a draft save whose old copy is in another account (`mm_compose::drafting`;
+- **Split the jobs that still wait for every account's gate** · medium value · effort S · [#3](https://github.com/lanterno/mailmind/issues/3) —
+  A gate for each account is the Rust server's default (`environment::gate_per_account`), but two jobs still pass
+  `EVERY_ACCOUNT`, which waits for every gate: a draft save whose old copy is in another account (`mm_compose::drafting`;
   it needs just the two accounts' gates, which the gates can't take yet), and an undo entry that names no account, as a
   snooze's does (`mm_mailbox::undo`), though undoing a snooze asks no server anything.
 - **Keep each account's IMAP connection on the Rust server** · high value · effort M · [#5](https://github.com/lanterno/mailmind/issues/5) — The Rust
   server opens a session and logs out for every read: `MAILMIND_POOL` is declared in `environment.rs`, and nothing reads
   it. The Python app's `Pool` (complete, opt-in, never soaked) goes with the flip; its docstring has a cold Proton body
   fetch at about 37 s against 2 s warm. Give each account's worker the connection it owns, for reads and then for
-  changes, with a Bridge connection recycled sooner as `ProviderProfile` does. Waits on the gate per account (#3).
+  changes, with a Bridge connection recycled sooner as `ProviderProfile` does.
 
 ## The move to the Rust core
 
@@ -156,5 +153,5 @@ implementation.
    two weeks on it.
 2. **The owner's two weeks on the Rust server** (high) — step 3 is done: every route the Python app answers is served
    there, the debug routes too, and a message whose body isn't stored opens. `just run-rust` starts them, in place of
-   `just run`, and they end in the flip (#11), which waits on nothing else. `MAILMIND_WORKERS=account` (#3) can soak in
-   them: both servers read it.
+   `just run`, and they end in the flip (#11), which waits on nothing else. A gate for each account, the Rust server's
+   default, soaks in them too.
