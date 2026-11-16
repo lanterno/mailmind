@@ -478,6 +478,8 @@ or for a switch you turned on in Settings › AI.
   mail when you open it, but writes nothing to a mail server. Its connections can only read,
   sends, moves, read marks and stars wait in their queues for a normal run, and what can't wait
   is refused. The sync pill says Read-only, and a move says it waits.
+  The Mac app has it as a switch in Settings › General ("Read only: MailMind changes nothing on your mail servers"),
+  which it applies the next time it opens, offering to open it again; its welcome screen mentions it.
 - **Filing never loses mail.** A move the server refuses leaves the message where it was
   and says so. On a server without MOVE, MailMind copies the one message, checks the
   copy landed, then removes only that message, never expunging the rest of the folder. A star
@@ -504,9 +506,21 @@ or for a switch you turned on in Settings › AI.
   and one account's slow server holds up no other. It reads each message's first 64 KiB for its preview and
   downloads no attachment. On either server, mail that was there before is no new mail: no notification, no badge,
   no "N new".
-- **Gmail's App Password, step by step.** Adding an account picks Gmail for a Gmail address and offers it for a
-  Workspace domain, shows the three steps to an App Password with a button to Google's page for it, takes the password
-  as Google shows it, spaces and all, and tests the connection as soon as it is saved, saying plainly what Gmail refused.
+- **Adding an account starts at its address.** MailMind knows Gmail, iCloud, Yahoo, AOL, Fastmail and Proton by an
+  address's domain, or by the mail servers its domain names, and fills in their servers, with the page where the
+  provider's app password is made beside the password. Gmail shows the three steps to an App Password and takes it as
+  Google shows it, spaces and all. Any other address is Other IMAP, with its incoming and outgoing (SMTP) servers
+  typed. Microsoft's accounts are recognised, and told they can't be added until MailMind can sign in to Microsoft
+  ([#47](https://github.com/lanterno/mailmind/issues/47)). A test of an account logs in at its outgoing server too, and
+  a connection is tested as soon as it is saved; the Mac app's first run tests it before saving.
+- **A failed login says what to do next.** In plain words, by what went wrong: a password refused (with the provider's
+  app-password page), a server that didn't answer, a certificate not trusted, Proton Bridge not running, or an outgoing
+  server that refused what the incoming one took. What kind of failure it was stays beside it in small type.
+- **Trash is found, not assumed.** A delete, a sweep and an expiry rule put mail in the account's Trash where its server
+  lists it, else in the folder the server marks as Trash (`\Trash`), else in one named like one, so a Gmail in another
+  language and iCloud's "Deleted Messages" work as they are.
+- **Removing an account can take its mail off this Mac.** Settings asks, ticked unless you untick it, whether the mail
+  MailMind keeps of the account goes too. Its mail on the server stays as it is.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect.
@@ -740,9 +754,14 @@ back, and the startup line `[imap] …` says how many accounts asked.
   `[Gmail]/Trash`.
 - **Generic IMAP** — set `host`/`port`. Default is `:993` direct TLS; use
   `"port": 143, "starttls": true` for STARTTLS. Either way the server's certificate
-  is verified, so a self-signed one won't connect. The **trash folder name matters** —
-  some servers use `INBOX.Trash` instead of `Trash`; a wrong name silently breaks
-  sweeps. Run `uv run python -m mailmind inventory you@company.com` to see the real names.
+  is verified, so a self-signed one won't connect. An outgoing (SMTP) server left out is the IMAP host, on
+  `smtp_port` 587 with STARTTLS unless `smtp_starttls` is false. Trash is the folder named `trash` when the server lists
+  it, else the one the server marks as Trash, else one named like one (`INBOX.Trash`, "Deleted Messages"). Run
+  `uv run python -m mailmind inventory you@company.com` to see the real names.
+- **iCloud, Yahoo, AOL and Fastmail** — Settings fills in their servers from the address, and Trash for iCloud. Each
+  takes an app password, not the account's own: Settings links the provider's page for one beside the password.
+- **Microsoft** (Outlook, Hotmail, Live, Microsoft 365) — not yet: these accounts need Microsoft's own sign-in
+  ([#47](https://github.com/lanterno/mailmind/issues/47)), and Settings says so before any password is asked.
 - **Proton** — install and run Proton Mail Bridge, then supply the Bridge
   password via `MAILMIND_PROTON_BRIDGE_PASS`, a 1Password item
   (`MAILMIND_PROTON_OP_ITEM`), the login Keychain (`proton-bridge-password`, which the

@@ -43,9 +43,16 @@ See [Architecture](architecture.md) for the layers around them.
   both. `ConnectionProbe` is bound in `mailmind.bootstrap.accounts`, and is no adapter of Accounts': a login goes through the Mailbox's sessions, which pick the IMAP adapter.
   A Gmail App Password typed as Google shows it, four groups of four letters, is kept and tried without its spaces
   (`domain.account.as_kept`), and a test of a login Gmail refused says in `domain.conn_error`'s words which refusal it was
-  and what to do. `application.presets.Presets` answers `/api/accounts/preset`: Gmail's preset for Google's own domains, and
-  offered for a domain whose MX records name Google's servers, which `adapters.mail_hosts` asks of the nameservers
-  `/etc/resolv.conf` lists, through the `MailHosts` port (one question over UDP; the Rust server's is `mm_net::dns`).
+  and what to do. `application.presets.Presets` answers `/api/accounts/preset`: a provider's preset
+  (`domain.preset.PROVIDERS`: Gmail, iCloud, Yahoo, AOL, Fastmail, Microsoft and Proton, each with its settings, its
+  note and the page where its app password is made) for its own domains, and offered for a domain whose MX records name
+  its servers, which `adapters.mail_hosts` asks of the nameservers `/etc/resolv.conf` lists, through the `MailHosts` port
+  (one question over UDP; the Rust server's is `mm_net::dns`). Microsoft's has no settings: MailMind can't sign in to it
+  yet. A test of a login (`application.connections`) logs in at the outgoing (SMTP) server too, once the incoming one let
+  it in, and a failure says in `domain.login_words`' words what went wrong and what to do next, with the page that
+  helps, by the class `conn_error.quiet` named, which stays in the answer's `error` (the Rust core's
+  `mm_accounts::login_words` says the same). Removing an account with `delete_mail` lets go of what this Mac keeps of its
+  mail too: `mailmind.bootstrap.mailbox.forget_account` runs each context's `forget_account` in one write.
   An account is still a dict, as the file holds it or as `domain.account.normalized` fills it in, and the whole app reads `acct["host"]`. `Endpoint` (`imap_endpoint`, `smtp_endpoint`) works out a server's host, port and TLS from an entry and its type,
   and an SMTP host left out is the IMAP host, so an account with one endpoint has both. `add_account` refuses an address already there. Both it and `update_account` refuse a credential no login could read, and an endpoint no connection could reach, the last only for what the
   write changes (`refuse_bad_endpoints`): what the file already held is the owner's, and an entry is read however it stands. `validate_new` still judges a whole entry, as it did: an edit of one with an unknown type, a port out of range or a generic account's host gone says so. `domain.draft` says what an unsaved account may try (see [Security model](security.md)).
@@ -70,6 +77,9 @@ See [Architecture](architecture.md) for the layers around them.
   several could play a role, an attribute beats a name, a shallower path a deeper one, then the
   lower name, never LIST's order (Proton Bridge shuffles it). `adapters.imap.imap_list` reads an
   imaplib LIST answer into `Folder`s, literals included.
+  An account's Trash is found, not assumed: `roles.trash(folders, named)` is the account's `trash` where the server
+  lists it, else the folder `find` gives the `trash` role, else the name, and `session.find_trash` asks a live session,
+  for a delete as it is tried and for a sweep's and an expiry's round.
   `session.find_role(s, *roles)` finds a folder on a live session; the rail gives each role to
   the one folder `find` picks, and `all` (Gmail's All Mail) is where archiving goes only when
   there is no `archive`. `application.session.MailSession` is the port for one logged-in
