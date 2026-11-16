@@ -172,6 +172,7 @@ tests/api/test_http_ai.py::test_a_call_refused_for_want_of_credit_names_the_acco
 tests/api/test_http_ai.py::test_drafting_ahead_starts_off_and_a_view_drafts_nothing_until_a_person_turns_it_on
 tests/api/test_http_ai.py::test_the_background_drafts_ahead_only_once_a_person_turns_it_on
 tests/api/test_http_ai.py::test_at_the_limit_what_came_in_since_you_looked_waits_and_asks_nothing
+tests/api/test_http_ai.py::test_spending_says_what_the_last_week_and_this_month_cost_by_what_each_feature_is_called
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/summarize-body0]
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/draft-reply-body1]
 tests/api/test_http_get.py::test_without_a_key_every_ai_request_says_ai_is_off[/api/ai/rewrite-body2]
