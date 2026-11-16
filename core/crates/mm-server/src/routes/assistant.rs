@@ -16,6 +16,7 @@ use mm_assistant::governor::allowing_over;
 use mm_assistant::prepared_replies::ReplyAsked;
 use mm_assistant::refusals::{AiFailure, NotSent};
 use mm_assistant::thread_digest::Asked;
+use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::errors::{Failure, Fault, NOT_YET, Problem};
 use mm_kernel::log;
 use serde_json::{Map, Value, json};
@@ -36,6 +37,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/ai/rewrite", post(rewrite))
         .route("/api/ai/extract", post(extract))
         .route("/api/ai/draft-ahead", get(draft_ahead))
+        .route("/api/ai/models", get(ai_models))
         .route("/api/ai/ask", post(ask))
         .route("/api/ai/do-plan", post(do_plan))
         .route("/api/ai/do-confirm", post(do_confirm))
@@ -425,6 +427,14 @@ async fn draft_ahead(State(app): State<Arc<App>>, request: Request) -> Response<
         Ok(answer::json(200, &said))
     })
     .await
+}
+
+/// The models a provider offers (`?provider=`, an `AiProvider`), for a person choosing one in Settings (`ModelList`):
+/// it sends no mail and spends nothing, so AI may be off.
+async fn ai_models(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    let given = Query::parse(uri.query().unwrap_or_default().as_bytes());
+    let provider = given.text("provider").and_then(AiProvider::parse).ok_or_else(Problem::bad_request);
+    super::run(&app, &method, &uri, move |app| Ok(app.assistant.catalog.models(provider?)?)).await
 }
 
 /// Why each sender a cleanup names is worth cleaning up, in a sentence; it does nothing.

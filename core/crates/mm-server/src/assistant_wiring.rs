@@ -23,13 +23,14 @@ use mm_assistant::asking::Asking;
 use mm_assistant::briefs::Briefs;
 use mm_assistant::bulk::BulkCommands;
 use mm_assistant::calls::Calls;
+use mm_assistant::catalog::Catalog;
 use mm_assistant::context::Context;
 use mm_assistant::extract::Extractor;
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
 use mm_assistant::ports::{
-    AccountList, Around, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, PlanSearch, Reached, Said,
-    Stamp,
+    AccountList, Around, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, ModelError, ModelLists,
+    PlanSearch, Reached, Said, Stamp,
 };
 use mm_assistant::prepared_replies::PreparedReplies;
 use mm_assistant::providers::{self, default_base_url, default_model, speaks_anthropic};
@@ -191,6 +192,28 @@ impl Engine for ApiEngine {
     }
 }
 
+impl ModelLists for ApiEngine {
+    fn key(&self, provider: AiProvider) -> Option<Secret> {
+        Some(self.key(provider).0).filter(|key| !key.expose().is_empty())
+    }
+
+    fn base_url(&self, provider: AiProvider) -> String {
+        let (chosen, chose) = self.preferences();
+        let url = chosen.get(mm_accounts::preferences::AI_BASE_URL).and_then(Value::as_str).unwrap_or_default();
+        self.chosen_url(provider, if chose == provider { url } else { "" })
+    }
+
+    fn list(&self, provider: AiProvider, base_url: &str, key: Option<&Secret>) -> Result<Vec<String>, ModelError> {
+        let key = key.map(|k| Secret::new(k.expose().to_owned()));
+        if speaks_anthropic(provider) {
+            let key = key.unwrap_or_else(|| Secret::new(String::new()));
+            mm_claude::ClaudeApi::new(key, Some(base_url), self.outside.clone()).list_models()
+        } else {
+            mm_openai::ChatApi::new(provider, base_url, key, self.outside.clone()).list_models()
+        }
+    }
+}
+
 /// What the Assistant is made from.
 pub(crate) struct Parts {
     pub(crate) database: Arc<Database>,
@@ -233,6 +256,8 @@ pub struct Assistant {
     pub sender_digest: Arc<SenderDigest>,
     /// What AI cost each local day, by feature (`calls.usage`).
     pub usage: Arc<mm_assistant::usage::UsageReport>,
+    /// The models a provider offers, for a person choosing one in Settings.
+    pub catalog: Arc<Catalog>,
 }
 
 /// The API routes a hidden tab fetches on its own, which say nothing of someone being here (`shared.UI_QUIET`).
@@ -264,6 +289,7 @@ impl Assistant {
         let budget = Arc::new(Budget { ledger: database.clone(), settings, clock: clock.clone(), zone: zone.clone() });
         let usage = Arc::new(mm_assistant::usage::UsageReport::new(database.clone(), clock.clone(), zone.clone()));
         let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
+        let catalog = Arc::new(Catalog::new(engine.clone()));
         let gateway = Arc::new(Gateway::new(engine, budget, governor.clone()));
         let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
@@ -315,6 +341,7 @@ impl Assistant {
             screening,
             sender_digest,
             usage,
+            catalog,
         }
     }
 
