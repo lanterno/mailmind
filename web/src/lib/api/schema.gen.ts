@@ -423,6 +423,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/spending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ai Spending */
+        get: operations["ai_spending_api_ai_spending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/summarize": {
         parameters: {
             query?: never;
@@ -2313,6 +2330,8 @@ export interface components {
             keep: number;
             /** Kind */
             kind: string;
+            /** Sweepable */
+            sweepable: number;
             /** Top Senders */
             top_senders: {
                 [key: string]: string[];
@@ -2329,10 +2348,18 @@ export interface components {
             by_bucket?: {
                 [key: string]: number;
             } | null;
+            /** Capped */
+            capped?: boolean | null;
             /** Error */
             error: string | null;
+            /** Going */
+            going?: components["schemas"]["SweepBucket"][] | null;
+            /** Held Back */
+            held_back?: number | null;
             /** Moved */
             moved?: number | null;
+            /** No Undo */
+            no_undo?: number | null;
             /** Planned */
             planned: number;
             /** Senders */
@@ -2368,9 +2395,12 @@ export interface components {
         /**
          * AiStatus
          * @description `Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
-         *     is on).
+         *     is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off.
+         *     `summaries_waiting` is how many messages from the last 30 days wait for a summary, there while AI is on.
          */
         AiStatus: {
+            /** Background Model */
+            background_model: string;
             /** Batch Waiting */
             batch_waiting?: number | null;
             /** Engine */
@@ -2391,6 +2421,8 @@ export interface components {
             provider: components["schemas"]["AiProvider"];
             /** Spent Today Micros */
             spent_today_micros: number | null;
+            /** Summaries Waiting */
+            summaries_waiting?: number | null;
         };
         /** AiToday */
         AiToday: {
@@ -2719,6 +2751,8 @@ export interface components {
             /** Conversations */
             conversations?: boolean | null;
             density?: components["schemas"]["Density"] | null;
+            /** Draft Ahead */
+            draft_ahead?: boolean | null;
             draft_tone?: components["schemas"]["DraftTone"] | null;
             /** Guide Offered */
             guide_offered?: boolean | null;
@@ -3547,6 +3581,18 @@ export interface components {
             calls: number;
             /** Cost Micros */
             cost_micros: number;
+        };
+        /**
+         * FeatureSpent
+         * @description What one feature's calls cost, by the name a person knows it by (`spending.label`).
+         */
+        FeatureSpent: {
+            /** Calls */
+            calls: number;
+            /** Cost Micros */
+            cost_micros: number;
+            /** Label */
+            label: string;
         };
         /** Filed */
         Filed: {
@@ -4537,6 +4583,18 @@ export interface components {
             /** Subject */
             subject: string | null;
         };
+        /**
+         * PeriodSpent
+         * @description What AI cost over some days, in micro-dollars: in all, and by feature, the dearest first.
+         */
+        PeriodSpent: {
+            /** Calls */
+            calls: number;
+            /** Cost Micros */
+            cost_micros: number;
+            /** Features */
+            features: components["schemas"]["FeatureSpent"][];
+        };
         /** @enum {string} */
         PictureType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
         /**
@@ -4711,6 +4769,8 @@ export interface components {
             /** Conversations */
             conversations: boolean;
             density: components["schemas"]["Density"];
+            /** Draft Ahead */
+            draft_ahead: boolean;
             draft_tone: components["schemas"]["DraftTone"];
             /** Guide Offered */
             guide_offered: boolean;
@@ -5740,6 +5800,19 @@ export interface components {
             /** When */
             when: string;
         };
+        /**
+         * Spending
+         * @description `Calls.spending`: what AI cost over the last seven days, today's among them, and this month so far.
+         */
+        Spending: {
+            month: components["schemas"]["PeriodSpent"];
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            week: components["schemas"]["PeriodSpent"];
+        };
         /** Standing */
         Standing: {
             /** Accounts */
@@ -5863,6 +5936,32 @@ export interface components {
             account?: string | null;
             /** Dry Run */
             dry_run?: boolean | null;
+            /** Undo Group */
+            undo_group?: string | null;
+        };
+        /**
+         * SweepBucket
+         * @description A junk bucket a sweep would move: how much of it, the senders with the most and the newest subjects, a few of each.
+         */
+        SweepBucket: {
+            /** Bucket */
+            bucket: string;
+            /** Count */
+            count: number;
+            /** Senders */
+            senders: components["schemas"]["SweepSender"][];
+            /** Subjects */
+            subjects: string[];
+        };
+        /**
+         * SweepSender
+         * @description One of the senders with the most of a bucket a sweep would move.
+         */
+        SweepSender: {
+            /** Count */
+            count: number;
+            /** From Addr */
+            from_addr: string;
         };
         /** Swept */
         Swept: {
@@ -5877,6 +5976,8 @@ export interface components {
             ok: true;
             /** Results */
             results: components["schemas"]["AccountSwept"][];
+            /** Undo Group */
+            undo_group?: string | null;
         };
         /** SyncRetried */
         SyncRetried: {
@@ -9291,6 +9392,116 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Unavailable"];
+                };
+            };
+        };
+    };
+    ai_spending_api_ai_spending_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Spending"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
                 };
             };
         };
