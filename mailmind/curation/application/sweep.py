@@ -88,8 +88,8 @@ class Sweeps:
         if dry or not junk_rows:
             return out, False
         self._audit.swept(acct["email"], junk_rows)  # log BEFORE moving so a crash still records intent
-        trash = self._boxes.trash_folder(acct)
         try:
+            trash = self._boxes.trash_folder(acct)
             s = self._boxes.open_session(acct)
         except Exception as e:
             log.warning("an account failed", exc_info=e)
