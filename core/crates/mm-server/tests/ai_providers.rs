@@ -30,6 +30,16 @@ impl Clock for Frozen {
     }
 }
 
+/// The same Monday at seven in the morning UTC: when the brief and the week's review are written ahead.
+#[derive(Debug)]
+struct Morning;
+
+impl Clock for Morning {
+    fn now(&self) -> Moment {
+        Moment::from_micros(1_793_602_800_000_000)
+    }
+}
+
 /// Reaches only this machine, and remembers each host it was asked about.
 #[derive(Debug, Default)]
 struct Loopback(Mutex<Vec<String>>);
@@ -85,10 +95,15 @@ fn running(config: &Value, pairs: &[(&str, &str)]) -> Running {
 
 /// The same, finding the model servers `local` names (by name and URL) on this Mac.
 fn running_finding(config: &Value, pairs: &[(&str, &str)], local: &[(&str, &str)]) -> Running {
+    running_with(config, pairs, local, Arc::new(Frozen))
+}
+
+/// The same, its time `clock`'s.
+fn running_with(config: &Value, pairs: &[(&str, &str)], local: &[(&str, &str)], clock: Arc<dyn Clock>) -> Running {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(home.path().join("mailmind.config.json"), config.to_string()).unwrap();
     let (path, key) = (home.path().join("mailmind.db"), DbKey::from_bytes([0x5e; 32]));
-    Database::new(path, key, Arc::new(Loopback::default())).ready(&Frozen).unwrap();
+    Database::new(path, key, Arc::new(Loopback::default())).ready(&*clock).unwrap();
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let server = runtime.block_on(Server::bind(0)).unwrap();
     let port = server.port().unwrap();
@@ -97,7 +112,7 @@ fn running_finding(config: &Value, pairs: &[(&str, &str)], local: &[(&str, &str)
     let settings = Settings { home: home.path().to_path_buf() };
     let (keychain, outside) = (Arc::new(Kept::default()), Arc::new(Loopback::default()));
     let seams = Seams {
-        clock: Arc::new(Frozen),
+        clock,
         outside: outside.clone(),
         keychain: keychain.clone(),
         sanitizer: Arc::new(Sanitizing),
@@ -503,19 +518,24 @@ fn another_provider_is_asked_its_own_model_whatever_mailmind_model_says() {
     assert_eq!(r.app.assistant.calls.model_label(), "llama3.2:3b", "and its results are labelled with it");
 }
 
-/// One message in the inbox with no summary yet, as a sync leaves it.
-fn one_waiting(r: &Running) {
+/// Message `n` in the inbox from early that Monday: with a summary saying it matters when `assessed`, else with none
+/// yet, as a sync leaves it.
+fn one_in_inbox(r: &Running, n: i64, assessed: bool) {
+    let mut sql = format!(
+        "INSERT INTO message_identity (key, account, identity) VALUES ({n}, 'ada@example.test', '<n{n}@example.test>');
+         INSERT INTO messages (account, kind, folder, uid, message_id, from_addr, subject, ts, snippet, message_key)
+         VALUES ('ada@example.test', 'imap', 'INBOX', {n}, '<n{n}@example.test>', 'pat@example.test', 'A note',
+                 1793600000, 'On the figures.', {n});"
+    );
+    if assessed {
+        sql.push_str(&format!(
+            "INSERT INTO assessments (message_key, summary, importance, category, action, model, created_at, outcome)
+             VALUES ({n}, 'Pat asks about the figures.', 3, 'action', 'reply', 'llama3.2:3b', '2026-11-02T06:00:00',
+                     'assessed');"
+        ));
+    }
     let database = Database::new(r.home.path().join("mailmind.db"), DbKey::from_bytes([0x5e; 32]), r.outside.clone());
-    database
-        .write(|c| {
-            c.execute_batch(
-                "INSERT INTO message_identity (key, account, identity) VALUES (1, 'ada@example.test', '<n1@example.test>');
-                 INSERT INTO messages (account, kind, folder, uid, message_id, from_addr, subject, ts, snippet, message_key)
-                 VALUES ('ada@example.test', 'imap', 'INBOX', 1, '<n1@example.test>', 'pat@example.test', 'A note',
-                         1793600000, 'On the figures.', 1);",
-            )
-        })
-        .unwrap();
+    database.write(|c| c.execute_batch(&sql)).unwrap();
 }
 
 #[test]
@@ -524,7 +544,7 @@ fn a_refused_keys_breaker_closes_on_another_model_and_on_ai_turned_off_and_on() 
     let (url, log) = provider(vec![(401, rejected.clone()), (401, rejected)]);
     let chosen = json!({"ai_enabled": true, "ai_provider": "local", "ai_model": "llama3.2:3b", "ai_base_url": url});
     let r = running(&json!({"preferences": chosen}), &[]);
-    one_waiting(&r);
+    one_in_inbox(&r, 1, false);
     let (bg, gateway) = (&r.app.background, r.app.assistant.calls.gateway());
     assert_eq!(gateway.held_back("triage", None), None);
     assert!(bg.assess_round().is_ok());
@@ -727,33 +747,43 @@ fn a_tests_servers_are_named_name_equals_url_separated_by_semicolons() {
 
 #[test]
 fn with_ai_turned_off_the_background_reaches_nothing() {
-    let (url, log) = provider(vec![(200, completion(&json!({"summary": "A note.", "importance": 3})))]);
-    let chosen = |enabled: bool| {
+    let chosen = |url: &str, enabled: bool| {
         json!({"preferences": {"ai_enabled": enabled, "ai_provider": "local", "ai_model": "llama3.2:3b",
                                "ai_base_url": url, "morning_brief": true, "weekly_review": true, "auto_tidy": true}})
     };
-    let r = running(&chosen(false), &[("MAILMIND_PROFILE", "full")]);
-    let database = Database::new(r.home.path().join("mailmind.db"), DbKey::from_bytes([0x5e; 32]), r.outside.clone());
-    database
-        .write(|c| {
-            c.execute_batch(
-                "INSERT INTO message_identity (key, account, identity) VALUES (1, 'ada@example.test', '<n1@example.test>');
-                 INSERT INTO messages (account, kind, folder, uid, message_id, from_addr, subject, ts, snippet, message_key)
-                 VALUES ('ada@example.test', 'imap', 'INBOX', 1, '<n1@example.test>', 'pat@example.test', 'A note',
-                         1793600000, 'On the figures.', 1);",
-            )
-        })
-        .unwrap();
+    // A Monday morning in the person's zone, with an important message and nothing waiting for a summary.
+    let pairs = [("TZ", "UTC"), ("MAILMIND_PROFILE", "full")];
+    let card = completion(&json!({"narrative": "Pat asks about the figures.", "groups": []}));
+
+    // On, the brief and the week's review are each written ahead: what the same rounds must not do with AI off.
+    let (url, log) = provider(vec![(200, card.clone()), (200, card)]);
+    let on = running_with(&chosen(&url, true), &pairs, &[], Arc::new(Morning));
+    one_in_inbox(&on, 1, true);
+    assert_eq!(on.app.background.brief_ahead_round(), Ok(None));
+    assert_eq!(heard(&log).len(), 1, "on, the brief is asked for ahead");
+    assert_eq!(on.app.background.review_ahead_round(), Ok(None));
+    assert_eq!(heard(&log).len(), 2, "and the week's review");
+
+    let (url, log) = provider(vec![(200, completion(&json!({"summary": "A note.", "importance": 3})))]);
+    let r = running_with(&chosen(&url, false), &pairs, &[], Arc::new(Morning));
+    one_in_inbox(&r, 1, true);
     let bg = &r.app.background;
-    for _ in 0..2 {
+    let every_round = || {
         let rounds = [bg.assess_round(), bg.draft_ahead_round(), bg.brief_ahead_round(), bg.review_ahead_round()];
         assert!(rounds.iter().all(Result::is_ok), "{rounds:?}");
         assert_eq!(bg.tidy_round(), Ok(None));
+    };
+    for _ in 0..2 {
+        every_round();
     }
     assert!(heard(&log).is_empty(), "turned off: nothing was asked");
     assert!(r.outside.0.lock().unwrap().is_empty(), "nor anything reached");
+    // A message waiting for a summary is no reason either.
+    one_in_inbox(&r, 2, false);
+    every_round();
+    assert!(heard(&log).is_empty() && r.outside.0.lock().unwrap().is_empty());
 
-    r.write_config(&chosen(true));
+    r.write_config(&chosen(&url, true));
     assert!(bg.assess_round().is_ok());
     let asked = heard(&log);
     assert_eq!(asked.len(), 1, "on, the same round asks the provider chosen");
