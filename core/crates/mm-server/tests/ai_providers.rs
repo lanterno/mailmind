@@ -486,6 +486,47 @@ fn a_call_goes_to_the_provider_chosen_and_with_ai_turned_off_nowhere() {
     assert_eq!(r.outside.0.lock().unwrap().len(), reached);
 }
 
+/// One message in the inbox with no summary yet, as a sync leaves it.
+fn one_waiting(r: &Running) {
+    let database = Database::new(r.home.path().join("mailmind.db"), DbKey::from_bytes([0x5e; 32]), r.outside.clone());
+    database
+        .write(|c| {
+            c.execute_batch(
+                "INSERT INTO message_identity (key, account, identity) VALUES (1, 'ada@example.test', '<n1@example.test>');
+                 INSERT INTO messages (account, kind, folder, uid, message_id, from_addr, subject, ts, snippet, message_key)
+                 VALUES ('ada@example.test', 'imap', 'INBOX', 1, '<n1@example.test>', 'pat@example.test', 'A note',
+                         1793600000, 'On the figures.', 1);",
+            )
+        })
+        .unwrap();
+}
+
+#[test]
+fn a_refused_keys_breaker_closes_on_another_model_and_on_ai_turned_off_and_on() {
+    let rejected = json!({"error": {"message": "unauthorized"}});
+    let (url, log) = provider(vec![(401, rejected.clone()), (401, rejected)]);
+    let chosen = json!({"ai_enabled": true, "ai_provider": "local", "ai_model": "llama3.2:3b", "ai_base_url": url});
+    let r = running(&json!({"preferences": chosen}), &[]);
+    one_waiting(&r);
+    let (bg, gateway) = (&r.app.background, r.app.assistant.calls.gateway());
+    assert_eq!(gateway.held_back("triage", None), None);
+    assert!(bg.assess_round().is_ok());
+    assert_eq!((heard(&log).len(), gateway.held_back("triage", None)), (1, Some("breaker")), "the key was refused");
+    assert!(bg.assess_round().is_ok());
+    assert_eq!(heard(&log).len(), 1, "held back, nothing more is asked");
+
+    r.post("/api/preferences", &json!({"ai_model": "llama3.2:1b"}));
+    assert_eq!(gateway.held_back("triage", None), None, "another model is another try");
+    assert!(bg.assess_round().is_ok());
+    assert_eq!((heard(&log).len(), gateway.held_back("triage", None)), (2, Some("breaker")));
+    assert_eq!(heard(&log)[1].body["model"], "llama3.2:1b");
+
+    r.post("/api/preferences", &json!({"ai_enabled": false}));
+    assert_eq!(r.ai()[2], "turned-off");
+    r.post("/api/preferences", &json!({"ai_enabled": true}));
+    assert_eq!(gateway.held_back("triage", None), None, "off and on again is another try");
+}
+
 // -- the models a provider lists ---------------------------------------------------------------
 
 #[test]
