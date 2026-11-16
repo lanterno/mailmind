@@ -294,6 +294,29 @@ fn a_connection_lost_once_shows_nothing_and_keeps_no_error_until_the_next_sync_f
     assert_eq!(world.recorded.load(Ordering::SeqCst), 1);
 }
 
+/// The log's lines, as level, tag, message and class: the process's sink, so every test here writes to it.
+#[derive(Debug)]
+struct Kept(Arc<Mutex<Vec<String>>>);
+
+impl mm_kernel::log::Sink for Kept {
+    fn write(&self, line: &mm_kernel::log::Line<'_>) {
+        let said = format!("{} [{}] {} ({:?})", line.level.name(), line.tag, line.message, line.error);
+        self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(said);
+    }
+}
+
+#[test]
+fn a_failure_held_back_still_logs_its_class() {
+    let kept = Arc::new(Mutex::new(Vec::new()));
+    mm_kernel::log::install(Box::new(Kept(kept.clone())));
+    let world = World::with(&[ADA]);
+    // A class no other test here fails by, as every test logs to the one sink.
+    fail(&world, ADA, ServerError::Unreachable("ConnectTimeout"));
+    syncing(&world).sync_guarded(None);
+    let said = r#"INFO [sync] an account's sync failed; it shows if the next fails too (Some("ConnectTimeout"))"#;
+    assert!(kept.lock().unwrap().iter().any(|line| line == said), "{:?}", kept.lock().unwrap());
+}
+
 #[test]
 fn a_failure_that_may_pass_shows_three_minutes_on_though_no_sync_has_run_since() {
     let world = World::with(&[ADA]);
