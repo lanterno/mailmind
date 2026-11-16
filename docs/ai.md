@@ -17,8 +17,9 @@ adapter on the standard library, `adapters.openai_chat`, whose wire format is `a
 choose: `ai_enabled` (AI mode), `ai_provider` (`anthropic` by default), `ai_model` and `ai_base_url` (each `""` for the
 provider's own; a URL is https, or http on this Mac, and a model on this Mac's is at 127.0.0.1, ::1 or localhost, or
 refused in those words: a server on another machine is `compatible`, over https). Choosing another provider without
-naming a model or URL sets both back to `""`. `MAILMIND_MODEL` still wins over the model chosen, and
-`ANTHROPIC_BASE_URL` stands in for Claude's URL when none is chosen.
+naming a model or URL sets both back to `""`. `MAILMIND_MODEL` is the Claude model: it wins over the model chosen
+while Claude is the provider, and with any other it is ignored. `ANTHROPIC_BASE_URL` stands in for Claude's URL when
+none is chosen.
 
 AI mode the file doesn't say (`accounts.domain.preferences.ai_mode_default`) is on where `mailmind.config.json` names a
 key for any provider or `ANTHROPIC_API_KEY` is set, so whoever set Claude up keeps AI, and off otherwise: a fresh install

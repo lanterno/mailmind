@@ -246,7 +246,8 @@ Everything here runs through the AI provider you chose (Claude by default) and r
 Nothing is ever sent automatically.
 
 - **The Claude API.** With an API key set, the server and every command call the Messages API
-  through the official Anthropic SDK (`claude-opus-5-5` unless `MAILMIND_MODEL` names another;
+  through the official Anthropic SDK (`claude-opus-5-5` unless you choose another in Settings or
+  `MAILMIND_MODEL` names one, which wins;
   per-message triage runs at low effort, everything else at medium). Without a key, AI is off and
   nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
@@ -609,7 +610,7 @@ How a release is made is in [docs/releasing.md](docs/releasing.md).
 - **[Node](https://nodejs.org)**, which builds the app and runs the frontend checks. `just run`
   builds it first.
 - **A Claude API key**, for summaries and the other AI features, kept in the Keychain with
-  `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`. Without one, AI mode starts off. Set `MAILMIND_MODEL` to pick a cheaper/faster model.
+  `uv run python -m mailmind ai key`, or in `ANTHROPIC_API_KEY`. Without one, AI mode starts off. Set `MAILMIND_MODEL` to pick a cheaper/faster Claude model.
 - **Optional:** [`just`](https://just.systems), which wraps the commands below. Without it, build
   the app with `cd web && npm ci && npx vite build`, then run `uv run python -m mailmind serve`.
 - **Optional:** the [`op`](https://developer.1password.com/docs/cli/) (1Password)
@@ -765,7 +766,7 @@ uv run python -m mailmind assess --batch         # what has no summary yet, as a
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. Either set, AI mode starts on; neither, it starts off. |
 | `MAILMIND_LOG_LEVEL=DEBUG` | Show debug lines and each error's text and traceback on the terminal, for chasing a fault. They can hold addresses and subjects. `mailmind.log` never does. |
-| `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5` |
+| `MAILMIND_MODEL` | Override the Claude model (default `claude-opus-5-5`), e.g. `claude-haiku-5-5`, over the one chosen in Settings. Ignored while another AI provider is chosen. |
 | `ANTHROPIC_BASE_URL` | Send API calls somewhere other than `https://api.anthropic.com` (a proxy). |
 | `MAILMIND_POOL=1` | Reuse persistent per-account IMAP connections instead of connecting per op — **much** faster repeated reads. Off by default; set to `1` for all accounts, or a comma-separated list of emails. Proton Bridge is excluded from the `1` catch-all and must be listed explicitly. |
 | `MAILMIND_WARM_FOLDERS=1` | Also sync each account's Drafts / Archive / Sent alongside INBOX, so search and threading cover more than the inbox. Off by default; same `1`-or-list form. |
