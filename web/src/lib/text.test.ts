@@ -18,6 +18,8 @@ it("gives a stable hue on the wheel", () => {
 });
 it("says a file's size", () => {
   expect([fileSize(0), fileSize(512), fileSize(2048), fileSize(3 * 1048576)]).toEqual(["", "512 B", "2 KB", "3.0 MB"]);
+  // A database grows past a gigabyte.
+  expect([fileSize(1023 * 1048576), fileSize(1.5 * 1073741824)]).toEqual(["1023.0 MB", "1.5 GB"]);
 });
 it("sorts a message into a day's section", () => {
   const now = new Date(2026, 10, 6, 12);
