@@ -36,7 +36,7 @@ export const PREFERENCE_DEFAULTS = {
   morning_brief: false,
   weekly_review: false,
   auto_tidy: false,
-  ai_enabled: true,
+  ai_enabled: false,
   ai_provider: "anthropic",
   ai_model: "",
   ai_base_url: "",

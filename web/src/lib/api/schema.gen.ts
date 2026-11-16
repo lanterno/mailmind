@@ -372,6 +372,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ai/local": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ai Local */
+        get: operations["ai_local_api_ai_local_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ai/models": {
         parameters: {
             query?: never;
@@ -2347,7 +2364,7 @@ export interface components {
         /** @enum {string} */
         AiOff: "turned-off" | "no-key" | "no-model" | "no-url";
         /** @enum {string} */
-        AiProvider: "anthropic" | "openai" | "gemini" | "ollama" | "compatible";
+        AiProvider: "anthropic" | "openai" | "gemini" | "local" | "compatible";
         /**
          * AiStatus
          * @description `Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
@@ -3972,6 +3989,32 @@ export interface components {
             name: string;
             /** Q */
             q: string;
+        };
+        /**
+         * LocalServer
+         * @description A model server on this Mac that answered: its name, the base URL a model on this Mac is reached at there, and the
+         *     models it lists that a person may choose, sorted.
+         */
+        LocalServer: {
+            /** Models */
+            models: string[];
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * LocalServers
+         * @description The model servers on this Mac that answered, in the order they are known; none is an empty list.
+         */
+        LocalServers: {
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            /** Servers */
+            servers: components["schemas"]["LocalServer"][];
         };
         /** LoggedIn */
         LoggedIn: {
@@ -8822,6 +8865,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KeysKept"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    ai_local_api_ai_local_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalServers"];
                 };
             };
             /** @description Bad Request */
