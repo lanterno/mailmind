@@ -125,10 +125,11 @@ export function localMenu(servers: readonly LocalServer[], savedUrl: string, cho
   return { value: "", first: { value: "", label: "Choose a model" }, groups };
 }
 
-// For a person with no model server yet, in steps: where Ollama is got, the one model suggested to start with, in plain words,
-// and the context Ollama needs to give it for long conversations, which is a step for anyone with a model on this Mac.
+// For a person with no model server yet, in steps: where Ollama is got, the one model suggested to start with, by the name
+// Ollama lists it under, and the context Ollama needs to give it for long conversations, which is a step for anyone with a
+// model on this Mac.
 export const GET_OLLAMA = "https://ollama.com";
-export const SUGGESTED_MODEL = "In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.";
+export const SUGGESTED_MODEL = "In Ollama, download a model. A good first one is qwen3:8b, as Ollama lists it: it runs well on a Mac with 16 GB of memory.";
 export const CONTEXT_STEP = "In Ollama’s settings, set Context length to 16K or more.";
 
 // What the search for model servers on this Mac says it found.
