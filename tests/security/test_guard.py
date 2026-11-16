@@ -109,6 +109,32 @@ def test_connecting_beyond_this_machine_is_refused(host, refused):
     assert refused
 
 
+@pytest.mark.parametrize("host", ["127.0.0.1", "::1", "localhost"])
+def test_connecting_to_a_model_server_on_this_machine_is_refused(host, refused):
+    """Ollama, LM Studio and the rest may be running here, with a person's own models: a test asks a fake on its own port."""
+    for port in sorted(guard.MODEL_SERVER_PORTS):
+        s = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET)
+        try:
+            with pytest.raises(guard.Tripwire):
+                s.connect((host, port))
+        finally:
+            s.close()
+    assert len(refused) == len(guard.MODEL_SERVER_PORTS)
+
+
+def test_the_model_servers_ports_are_those_the_app_finds_servers_on():
+    from urllib.parse import urlsplit
+    from mailmind.assistant.domain.providers import LOCAL_SERVERS, PROVIDERS
+    assert guard.MODEL_SERVER_PORTS == {urlsplit(url).port for _, url in LOCAL_SERVERS}
+    assert urlsplit(PROVIDERS["local"].base_url).port in guard.MODEL_SERVER_PORTS
+
+
+def test_a_fake_on_a_port_of_its_own_on_this_machine_is_reached(refused):
+    with socket.create_server(("127.0.0.1", 0)) as server, socket.create_connection(server.getsockname(), timeout=2):
+        pass
+    assert refused == []
+
+
 def test_connecting_to_a_remote_name_is_refused_before_the_lookup(refused):
     """The way imaplib, smtplib and urllib connect: getaddrinfo first."""
     with pytest.raises(guard.Tripwire):
