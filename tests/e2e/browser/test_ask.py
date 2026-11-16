@@ -79,6 +79,27 @@ def test_ask_answers_cites_and_changes_nothing(page, world, ai):
     clean(page)
 
 
+def test_turning_ai_off_takes_an_answer_off_the_screen_with_its_ask_again(page, world, ai):
+    pk = world.pk(LUNCH[1])
+    ai.responder = lambda req: (fa.answer({"answer": "Lunch is on Thursday at noon.", "cited_pks": [pk]})
+                                if req.schema and "answer" in (req.schema.get("properties") or {}) else None)
+    opened(page)
+    type_in_search(page, "?When is lunch with Lin?")
+    expect(page.locator(".ask-answer")).to_have_text("Lunch is on Thursday at noon.")
+    expect(page.get_by_role("button", name="↻ Ask again")).to_be_visible()
+
+    page.locator("#settingsBtn").click()
+    page.get_by_role("tab", name="AI").click()
+    with page.pw.expect_response(lambda r: r.url.endswith("/api/digest") and r.request.method == "GET"):
+        page.get_by_role("dialog", name="AI").get_by_label("AI mode", exact=True).uncheck()
+    page.locator("#setClose").click()
+    expect(page.locator(".ask-wrap")).to_have_count(0)
+    expect(page.get_by_role("button", name="↻ Ask again")).to_have_count(0)
+    expect(page.locator("#rows .row[data-key]").first).to_be_visible()
+    expect(page.locator("body")).not_to_contain_text("AI is off")
+    clean(page)
+
+
 def test_at_the_daily_limit_an_ask_goes_only_when_you_say_so(page, app, world, ai):
     spent_the_daily_limit(app, ai)
     ai.responder = lambda req: fa.answer({"answer": "Lunch is on Thursday at noon.", "cited_pks": []})
