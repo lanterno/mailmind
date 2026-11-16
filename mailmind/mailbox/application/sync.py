@@ -288,26 +288,38 @@ class Ingest:
         raising the mark to it would skip mail that arrived since the last sync; in a folder
         never opened, it would also mark the folder synced, so its first full sync never ran.
         Returns the number of messages stored (0 if not found)."""
-        if not message_id:
+        return self.ingest_messages(acct, folder, [message_id] if message_id else [])
+
+
+    def ingest_messages(self, acct: Account, folder: FolderName, message_ids: Sequence[str]) -> int:
+        """The same for each of `message_ids`, on one session: Undo's way to bring back a sweep's hundreds at once.
+        Returns how many it stored."""
+        wanted = [m for m in message_ids if m]
+        if not wanted:
             return 0
         s = self._open_session(acct)
         try:
             s.select(folder)
-            try:
-                uid = s.by_message_id(message_id)
-            except imaplib.IMAP4.abort:
-                raise
-            except imaplib.IMAP4.error:                  # a refused search finds nothing
-                uid = None
-            if uid is None:
+            uids: set[int] = set()
+            for mid in wanted:
+                try:
+                    uid = s.by_message_id(mid)
+                except imaplib.IMAP4.abort:
+                    raise
+                except imaplib.IMAP4.error:              # a refused search finds nothing
+                    uid = None
+                if uid is not None:
+                    uids.add(uid)
+            if not uids:
                 return 0
             stored: list[int] = []
-            self._process(s, acct, [uid], folder, with_body=sync_plan.reads_bodies(folder), advance=False, stored=stored)
+            self._process(s, acct, sorted(uids), folder, with_body=sync_plan.reads_bodies(folder), advance=False,
+                          stored=stored)
             with self._uow.write() as c:
                 self._store.thread_stored(c, acct["email"], stored)
                 self._attention.on_ingest(c, acct["email"])
                 self._attention.resolve_followups(c, acct["email"])     # new mail / answered-flag resolves waiting threads
-            return 1
+            return len(uids)
         finally:
             try:
                 s.logout()

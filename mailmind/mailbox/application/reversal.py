@@ -1,5 +1,6 @@
 """What reverses a move: the Mailbox's kinds of undo entry. One that hasn't reached the server is cancelled; one that has
-gets a counter-move, from where its command says it went."""
+gets a counter-move, from where its command says it went. A sweep's ways back (`sweep_back`) go together, an account's
+on one session."""
 import json
 from typing import Any
 
@@ -92,6 +93,26 @@ class Reversals:
         except Exception:
             pass
         return True, d["account"], d["src_folder"]
+
+
+    def sweep_back(self, entries: list[dict[str, Any]]) -> list[Reversed]:
+        """A sweep's ways back, one account's, at once: on one session each message found in the Trash it went to by its
+        Message-ID moves back to where it was, then one more session reads them all in. One still where it was, which the
+        sweep never moved, is back. What each came to, in their order."""
+        places = [(d["account"], d.get("dest_folder") or "", d.get("src_folder") or INBOX) for d in entries]
+        answers: list[Reversed] = [(False, account, src) for account, _, src in places]
+        for place in dict.fromkeys(p for p, d in zip(places, entries) if d.get("message_id")):
+            account, trash, to = place
+            at = [k for k, (p, d) in enumerate(zip(places, entries)) if p == place and d.get("message_id")]
+            mids = [entries[k]["message_id"] for k in at]
+            back = self._server.move_back_many(account, trash, to, mids)
+            for k, went in zip(at, back):
+                answers[k] = (went, account, to)
+            try:   # read in as each message put back is, on one more session for them all
+                self._ingest.ingest_messages(self._accounts.get(account), to, [m for m, went in zip(mids, back) if went])
+            except Exception:
+                pass
+        return answers
 
 
     def gmail_archive(self, d: dict[str, Any]) -> Reversed:

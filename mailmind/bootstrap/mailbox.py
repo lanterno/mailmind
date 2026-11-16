@@ -352,8 +352,10 @@ def assemble():
     queries = Queries(_uow, store, _attention, folders, _directory)
     bodies = Bodies(_uow, store, ingest, _Reader())
     reversals = Reversals(_uow, store, _directory, server_ops, commands, ingest)
-    undo = Undo(_uow, {"move": reversals.move, "gmail_archive": reversals.gmail_archive, "snooze": _reverse_snooze,
-                       "mute": _reverse_mute, "unblock": _reverse_block}, _after_undo, _directory.quiet_error)
+    undo = Undo(_uow, {"move": reversals.move, "gmail_archive": reversals.gmail_archive,
+                       "sweep_back": lambda d: reversals.sweep_back([d])[0], "snooze": _reverse_snooze,
+                       "mute": _reverse_mute, "unblock": _reverse_block}, _after_undo, _directory.quiet_error,
+                together={"sweep_back": reversals.sweep_back})
     filing = Filing(_uow, store, _directory, commands, ingest, undo, stats, folders, _attention)
     tidying = Tidying(_uow, store, filing, undo)
     syncing = Syncing(_uow, store, _directory, ingest, warm, folders, _attention, _kick)

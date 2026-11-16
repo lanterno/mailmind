@@ -279,6 +279,52 @@ class ServerOps:
                 pass
 
 
+    BACK_BATCH = 200                      # UIDs to one MOVE of many messages back, so no command line grows too long
+
+    def move_back_many(self, account: str, search_folder: str, dest_folder: str, message_ids: list[str]) -> list[bool]:
+        """Undo's way back for many messages of one account at once, a sweep's: on one session, each message found by its
+        exact Message-ID in search_folder (Trash) moves to dest_folder (the INBOX), BACK_BATCH at a time and a refused
+        batch one at a time, so one the server won't move holds back no other. Whether each is in dest_folder now: one
+        not found in search_folder is when dest_folder holds it, as a message a sweep the server stopped part way never
+        moved does, and otherwise isn't, never a guess."""
+        acct = self._accounts.get(account)
+        s = self._open_session(acct)
+        try:
+            s.select(search_folder, readonly=False)
+            found = [_uid_by_msgid(s, mid) for mid in message_ids]
+            back = [False] * len(message_ids)
+            at = [(k, uid) for k, uid in enumerate(found) if uid is not None]
+            for i in range(0, len(at), self.BACK_BATCH):
+                chunk = at[i:i + self.BACK_BATCH]
+                try:
+                    s.move([uid for _, uid in chunk], dest_folder)
+                except imaplib.IMAP4.abort:
+                    raise
+                except imaplib.IMAP4.error:               # a NO or BAD: one at a time, so one can't sink the rest
+                    for k, uid in chunk:
+                        try:
+                            s.move([uid], dest_folder)
+                        except imaplib.IMAP4.abort:
+                            raise
+                        except imaplib.IMAP4.error:
+                            continue
+                        back[k] = True
+                    continue
+                for k, _ in chunk:
+                    back[k] = True
+            missing = [k for k, uid in enumerate(found) if uid is None]
+            if missing:
+                s.select(dest_folder)
+                for k in missing:
+                    back[k] = _uid_by_msgid(s, message_ids[k]) is not None
+            return back
+        finally:
+            try:
+                s.logout()
+            except Exception:
+                pass
+
+
     def relabel_by_msgid(self, account: str, search_folder: str, message_id: str, label: str = "\\Inbox") -> tuple[bool, str]:
         """Gmail-archive reverse: re-add a label (default \\Inbox) to the message found by
         Message-ID in search_folder (All Mail). A refusal answers (False, why): the label isn't there."""
