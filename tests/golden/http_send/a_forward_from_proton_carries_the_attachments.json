@@ -37,7 +37,7 @@
  {
   "note": "sent: server writes",
   "value": [
-   "bea@example.test [None] APPEND \"Sent\" (\\Seen) \"02-Nov-2026 12:00:11 +0000\" {literal}"
+   "bea@example.test APPEND \"Sent\" (\\Seen) \"02-Nov-2026 12:00:11 +0000\" {literal}"
   ]
  },
  {
@@ -100,7 +100,7 @@
  {
   "note": "sent too: server writes",
   "value": [
-   "bea@example.test [None] APPEND \"Sent\" (\\Seen) \"02-Nov-2026 12:00:22 +0000\" {literal}"
+   "bea@example.test APPEND \"Sent\" (\\Seen) \"02-Nov-2026 12:00:22 +0000\" {literal}"
   ]
  },
  {

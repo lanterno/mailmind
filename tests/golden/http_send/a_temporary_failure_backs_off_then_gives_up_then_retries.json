@@ -234,7 +234,7 @@
  {
   "note": "after retry: server writes",
   "value": [
-   "ada@example.test [None] APPEND \"Sent\" (\\Seen) \"02-Nov-2026 13:15:11 +0000\" {literal}"
+   "ada@example.test APPEND \"Sent\" (\\Seen) \"02-Nov-2026 13:15:11 +0000\" {literal}"
   ]
  },
  {

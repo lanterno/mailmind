@@ -83,7 +83,10 @@ class Sender:
         self.golden.note(f"{label}: on the wire", [
             {"login": d.user, "mail_from": d.mail_from, "rcpts": d.rcpts,
              "data": d.data.decode("utf-8", "replace")} for d in sent])
-        self.golden.note(f"{label}: server writes", self.world.writes(self.mark))
+        # An APPEND names its own folder: which one a kept connection still has selected from the job before says
+        # nothing of it, so it is left out.
+        self.golden.note(f"{label}: server writes", [re.sub(r"^(\S+) \[[^\]]*\] APPEND ", r"\1 APPEND ", line)
+                                                     for line in self.world.writes(self.mark)])
         self.mark = self.world.mark()
         self.outbox(f"{label}: the outbox")
 
