@@ -12,9 +12,11 @@ export const healthOf = (digest: Digest | undefined) => (digest?.status ?? {}) a
 export const syncOf = (digest: Digest | undefined) => (digest?.sync ?? { last: null }) as unknown as SyncState;
 export const badAccounts = (digest: Digest | undefined) => Object.entries(healthOf(digest)).filter(([, st]) => st?.health === "error").map(([a]) => a);
 
-/** How far the Inboxes' first syncs have got, over the accounts whose older mail is still being read; undefined when none is. */
+/** How far the Inboxes' first syncs have got, over the accounts whose older mail is still being read; undefined when none is.
+ * Only the accounts the digest lists count: one removed while it was read is no inbox of yours. */
 export function readingOf(digest: Digest | undefined): { done: number; total: number; inboxes: number } | undefined {
-  const reading = Object.values(healthOf(digest)).filter((st) => st?.done != null && st.total != null);
+  const status = healthOf(digest);
+  const reading = (digest?.accounts ?? []).map((a) => status[a]).filter((st) => st?.done != null && st.total != null);
   if (!reading.length) return undefined;
   return { done: reading.reduce((n, st) => n + st!.done!, 0), total: reading.reduce((n, st) => n + st!.total!, 0), inboxes: reading.length };
 }
