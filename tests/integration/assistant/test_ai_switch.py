@@ -82,6 +82,21 @@ def test_another_provider_is_asked_in_claudes_place_by_the_jobs_too(app, openai,
     assert (st["engine"], st["provider"], st["model"], st["off"]) == ("api", "openai", "gpt-6.1-sol", None)
 
 
+def test_the_claude_model_mailmind_model_names_is_asked_only_while_claude_is_the_provider(app, world, ai, openai_api,
+                                                                                         fake_keychain, monkeypatch):
+    monkeypatch.setattr(assistant.calls, "MODEL", "claude-haiku-5-5")
+    assert app.post("/api/preferences", {"ai_model": "claude-sonnet-5-5"}).status == 200
+    assert assistant.assessments.summarize_pending(limit=1, workers=1) == 1
+    assert ai.requests[-1].body["model"] == "claude-haiku-5-5"
+    assert app.get("/api/digest").json["ai"]["model"] == "claude-haiku-5-5"
+    assert app.post("/api/preferences", {"ai_provider": "openai", "ai_base_url": openai_api.url}).status == 200
+    assert app.post("/api/ai/key", {"provider": "openai", "key": fo.KEY}).status == 200
+    assert assistant.assessments.summarize_pending(limit=1, workers=1) == 1
+    assert app.post("/api/ai/rewrite", {"op": "shorten", "text": "see you thursday"}).status == 200
+    assert [r.body["model"] for r in openai_api.chats] == ["gpt-6.1-sol"] * 2
+    assert app.get("/api/digest").json["ai"]["model"] == "gpt-6.1-sol"
+
+
 def test_a_backlog_never_goes_as_a_batch_to_another_provider(app, openai, ai, monkeypatch):
     monkeypatch.setattr(assistant.assessments, "BATCH_POLL", 0)
     assert assistant.assessments.batch_submit(at_least=1, keep=0) == 0

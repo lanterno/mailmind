@@ -119,12 +119,19 @@ def test_a_compatible_service_is_sent_its_key_only_when_one_is_kept(choose):
     assert api.requests[-1].key == fo.KEY
 
 
-def test_the_model_mailmind_model_names_wins_over_the_one_chosen(choose, monkeypatch):
+def test_the_claude_model_mailmind_model_names_is_ignored_with_another_provider(choose, monkeypatch):
     from mailmind.bootstrap import assistant
+    monkeypatch.setattr(assistant.calls, "MODEL", "claude-haiku-5-5")
     api = choose("openai", ai_model="gpt-6-luna")
-    monkeypatch.setattr(assistant.calls, "MODEL", "gpt-5-nano")
     ask()
-    assert api.requests[-1].body["model"] == "gpt-5-nano" and assistant.calls.model_label() == "gpt-5-nano"
+    assert api.requests[-1].body["model"] == "gpt-6-luna" and assistant.calls.model_label() == "gpt-6-luna"
+    assert assistant.status.report()["model"] == "gpt-6-luna"
+    assistant.assessments.summarize_one({"pk": 1, "from_name": "", "from_addr": "ada@example.test", "subject": "Lunch",
+                                         "date_iso": "", "snippet": "Thursday?"})
+    assert api.requests[-1].body["model"] == "gpt-6-luna"
+    choose("openai")
+    ask()
+    assert api.requests[-1].body["model"] == "gpt-6.1-sol"
 
 
 # ── how replies come back ─────────────────────────────────────────────────────
