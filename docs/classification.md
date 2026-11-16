@@ -41,8 +41,16 @@ the answer counts it (`held_back`). It takes the newest `SWEEP_MAX` (500) of the
 some (`capped`). A dry run's plan lists what goes (`going`): each junk bucket that has any, in the classifier's order,
 with its count, the `LISTED` (5) senders with the most of it and its newest five subjects. A real one audits, moves
 and verifies as before, then puts a way back for each message that went under one undo group: the request's
-`undo_group`, or a `sweep:` one of its own, which the answer names (null when nothing went). Each child is a `move`
-from the Inbox to Trash found again by its Message-ID, so one with none goes but can't come back (`no_undo`).
+`undo_group`, or a `sweep:` one of its own, which the answer names (null when nothing went). Each child is a
+`sweep_back` from the Trash to the Inbox, an account's put back together on one session and found again by its
+Message-ID, so one with none goes but can't come back (`no_undo`). A sweep the server stops part way reads the Inbox
+again on a fresh session: what left it is `moved`, has its rows forgotten and a way back, and a sweep that moved nothing
+leaves the undo stack as it was ([Writes and Undo](writes-and-undo.md)).
+
+The Curate card's numbers come from the stored plan (`plan_stored`, `mm_curation::sweep_plan::StoredPlans`), with no
+server asked: `junk` and `keep` as the classifier judges the stored Inbox now, and `sweepable`, the junk a sweep would
+move, stored as read (`seen`) and not starred (`flagged`). The card's **Sweep** button offers `sweepable` and isn't
+there when it is none; Undo is offered after a sweep only when it moved something.
 
 The preview's `confirm_token` (`perimeter.tokens`) is `<time>.<hmac>`, over the purpose, the sender, the way out it showed
 and where that goes (`unsubscribe.preview_said`), under the process's secret. It stands for `TOKEN_LIFE`, ten minutes. A cleanup with one out of date

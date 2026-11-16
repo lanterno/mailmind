@@ -108,7 +108,15 @@
   (`server_ops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
   life: the frontend's `undoGroup()` is a UUID, since the stack outlives a page load and a restart. A sweep pushes every
   child of its group at one write (`undo.push_many`, the core's `blocks::push_undo_many`), as pushing each in turn would
-  leave the stack, and caps itself at 500 a run, since Undo reverses each child on its own and a click waits on them.
+  leave the stack, and caps itself at 500 a run, since a click waits on its Undo.
+- A kind of entry may go back a run at a time: `Undo`'s `together` (the core's `Reverser::together` and
+  `reverse_together`) names it, and a group's children of that kind on one account, newest first, go to its reverser at
+  one turn of the account's gate, each still counted on its own. A sweep's children are `sweep_back`
+  (`Reversals.sweep_back`, `mm_mailbox::reversal`): one session finds each in the Trash it went to by its Message-ID and
+  moves them back 200 to a MOVE (`server_ops.move_back_many`), a refused batch one at a time, and one more session reads
+  them all in (`Ingest.ingest_messages`), so an Undo of 500 is two logins, not a thousand. One not in the Trash but still
+  in the Inbox is back already: a sweep the server stopped part way looks at the Inbox again on a fresh session and
+  gives a way back only to what left it, and gives one to all it meant to move only when the server can't be asked.
 - A bulk command's confirm carries out a plan (`mailmind.assistant.application.plans`,
   `/api/ai/do-plan` → `/api/ai/do-confirm`). The preview freezes what it matched, by message key and folder, and
   the page sends back only the plan's id, so a renumber or mail that came later changes nothing. A plan is

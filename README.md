@@ -201,8 +201,9 @@ and the AI provider you chose (Claude by default).
   the AI, under one Undo.
 - **Sweep an inbox's junk, with a look first.** Curate's **Sweep** reads the Inbox on the server and lists what
   would go before you confirm: each junk bucket with its count, the senders with the most of it and its newest
-  subjects. Starred and unread mail always stays, and the plan says how much. A sweep takes the newest 500 at a time
-  (sweep again for the rest), and one `z` puts all of it back from the Trash.
+  subjects. Starred and unread mail always stays, and the plan says how much; the button counts only what would go. A
+  sweep takes the newest 500 at a time (sweep again for the rest), and one `z` puts all of it back from the Trash, an
+  account's at once.
 - **Unsubscribe & sender cleanup.** A ranked "senders flooding you" lane where one
   confirm blocks the sender, sweeps their INBOX copies to Trash (one `z` reverses
   both) and fires one standards-compliant unsubscribe: RFC 8058's one-click POST where the
