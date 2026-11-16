@@ -10,7 +10,7 @@ use mm_curation::cleanup_ports::{
 };
 use mm_curation::ports::{Filing, RuleBook};
 use mm_curation::rulebook::Rules;
-use mm_curation::sweeping::{MOVE_BATCH, READ_ONLY, Sweeps, SweepsParts, move_verified, read_from_headers};
+use mm_curation::sweeping::{MOVE_BATCH, READ_ONLY, SWEEP_MAX, Sweeps, SweepsParts, move_verified, read_from_headers};
 use mm_kernel::errors::{Failure, Fault, Kind};
 use mm_kernel::seams::{Clock, Moment};
 use serde_json::{Value, json};
@@ -382,7 +382,8 @@ fn a_dry_run_plans_and_moves_nothing() {
         json!({"ok": true, "dry_run": true, "generated": "2026-11-02T12:00:00+00:00", "undo_group": null, "results": [{
             "account": "ada@example.test", "planned": 2,
             "by_bucket": {"other/personal-ish": 1, "newsletters/marketing": 1, "automated-notifications": 1},
-            "senders": 2, "held_back": 0, "no_undo": 0, "moved": 0, "stragglers": [], "error": null}]})
+            "senders": 2, "held_back": 0, "capped": false, "no_undo": 0, "moved": 0, "stragglers": [],
+            "error": null}]})
     );
     let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
     assert_eq!((inbox.moves.len(), inbox.closed), (0, Some(false)));
@@ -496,6 +497,25 @@ fn starred_and_unread_junk_stays_where_it_is() {
     assert_eq!(inbox.uids_in, [1, 2, 3, 4].into());
     let audited: Vec<String> = world.0.said().into_iter().filter(|s| s.starts_with("audit")).collect();
     assert_eq!(audited, ["audit ada@example.test 5 automated-notifications no-reply / notification address"]);
+}
+
+#[test]
+fn a_sweep_moves_the_newest_of_its_junk_up_to_its_cap_and_says_more_is_left() {
+    const SEEN: &[&str] = &["\\Seen"];
+    let world = world();
+    let last = 10 + SWEEP_MAX as u32;
+    let mail: Vec<(u32, Vec<u8>, &[&str])> =
+        (10..=last).map(|uid| (uid, heads("news@loom.example.test", &format!("issue-{uid}"), true), SEEN)).collect();
+    more(&world, &mail);
+    let said = |done: &Value, field: &str| done["results"][0][field].clone();
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
+    assert_eq!((said(&plan, "planned"), said(&plan, "capped")), (json!(SWEEP_MAX), json!(true)));
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
+    assert_eq!((said(&done, "moved"), said(&done, "capped")), (json!(SWEEP_MAX), json!(true)));
+    let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
+    assert_eq!(inbox.uids_in, [1, 2, 3, 10].into(), "the oldest wait for the next sweep");
+    let moved: Vec<u32> = inbox.moves.iter().flat_map(|(uids, _)| uids.iter().copied()).collect();
+    assert_eq!(moved, (11..=last).collect::<Vec<u32>>(), "in the order the INBOX holds them");
 }
 
 #[test]
