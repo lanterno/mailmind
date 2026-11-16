@@ -39,14 +39,6 @@ const RECIPIENT: Record<Exclude<AiProvider, "local">, string> = {
   compatible: "the OpenAI-compatible service",
 };
 
-// What AI sends off this Mac, and to whom: the provider chosen, or nothing at all when it answers here. `baseUrl` is the
-// preference as set, "" for the provider's own.
-export function aiPrivacy(provider: AiProvider, baseUrl: string): string {
-  if (provider === "local") return "With a model on this Mac, the text of a message never leaves this Mac.";
-  if (runsHere(provider, baseUrl)) return `With ${PROVIDER_NAME[provider]} on this Mac, the text of a message never leaves this Mac.`;
-  return `With AI on, the text of a message goes to ${RECIPIENT[provider]} only when it is summarized, briefed, drafted or asked about; nothing else leaves this machine.`;
-}
-
 // What AI mode sends, to whom and when, said before it is turned on as after: under its switch and in Help. A model on this
 // Mac, or a service at a loopback address, sends nothing off this Mac. `baseUrl` is the preference as set.
 export function aiSends(provider: AiProvider, baseUrl: string): string {
@@ -55,6 +47,13 @@ export function aiSends(provider: AiProvider, baseUrl: string): string {
   return `With AI mode on, each new message’s sender, subject and opening text go to ${RECIPIENT[provider]} to be summarized, automatically. `
     + "Whole conversations go when you ask for a summary, a draft or the brief, with what you type into Ask, a search written as a "
     + "sentence, or Rewrite. Attachments never leave this Mac.";
+}
+
+// The same in short, for the sync menu with AI on: what goes on its own, that more goes when asked, and never an attachment.
+export function aiSendsInShort(provider: AiProvider, baseUrl: string): string {
+  if (provider === "local" || runsHere(provider, baseUrl)) return aiSends(provider, baseUrl);
+  return `Each new message’s sender, subject and opening text go to ${RECIPIENT[provider]} automatically, and more when you ask `
+    + "for something. Attachments never leave this Mac.";
 }
 
 // Why AI is off, in plain words for the provider chosen: "" while it is on.

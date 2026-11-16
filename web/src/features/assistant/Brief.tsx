@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { go, type DigestList, type ListSource } from "../../app/route";
-import { aiOffered, aiPrivacy, offLine } from "../../lib/ai";
+import { aiOffered, aiSends, offLine } from "../../lib/ai";
 import { get, post } from "../../lib/api/client";
 import type { AiStatus } from "../../lib/api/types";
 import { EMPTY } from "../../lib/emptyWords";
@@ -45,7 +45,7 @@ function AiOff({ ai }: { ai: AiStatus }) {
     <div className="bf-aioff">
       <p><b>{offLine(ai)}.</b> Summaries, this brief and reply drafts need it. Your mail works the same without it.</p>
       <p className="m"><SetUpAi /></p>
-      <p className="m pv"><Icon name="lock" /><span>{aiPrivacy(ai.provider, baseUrl)}</span></p>
+      <p className="m pv"><Icon name="lock" /><span>{aiSends(ai.provider, baseUrl)}</span></p>
     </div>
   );
 }

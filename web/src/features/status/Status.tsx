@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
-import { aiOffered, aiPrivacy, offLine, PROVIDER_LABEL } from "../../lib/ai";
+import { aiOffered, aiSendsInShort, offLine, PROVIDER_LABEL } from "../../lib/ai";
 import { get, post } from "../../lib/api/client";
 import { minute } from "../../lib/clock";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
@@ -76,7 +76,7 @@ function AiLine({ digest, close }: { digest: Digest; close: () => void }) {
   return (
     <>
       <div className={failing ? "sm-sub sm-ai err" : "sm-sub sm-ai"}><Icon name="wind" /><span>{what}{failing ? ` · last call failed: ${a.last_error}` : ""}</span></div>
-      <div className="sm-sub sm-ai m"><Icon name="lock" /><span>{aiPrivacy(a.provider, baseUrl)}</span></div>
+      <div className="sm-sub sm-ai m"><Icon name="lock" /><span>{aiSendsInShort(a.provider, baseUrl)}</span></div>
     </>
   );
 }
