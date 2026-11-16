@@ -3,7 +3,8 @@
 //! anything moves, so a stored row can't send the wrong message anywhere. Starred and unread mail stays where it is,
 //! whatever it is. A plan names what would go, bucket by bucket, with its senders and subjects, so a person sees it
 //! before saying yes. What a sweep moves goes on the undo stack under one group, so one Undo puts it all back from
-//! Trash, each message found there by its Message-ID. Each account's work is on its own gate.
+//! Trash, each message found there by its Message-ID, an account's on one session. Each account's work is on its own
+//! gate.
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashSet};
@@ -217,11 +218,11 @@ fn failed(account: &str, class: &str) -> Value {
     json!({"account": account, "error": class, "planned": 0})
 }
 
-/// What puts a swept message back: a move from Trash to the INBOX, of the message found there by its Message-ID, as
-/// a person's own move is undone.
+/// What puts a swept message back: a move from Trash to the INBOX, of the message found there by its Message-ID. An
+/// account's go back together, on one session (`sweep_back`), so one Undo of hundreds asks the server once.
 fn undo_entry(account: &str, trash: &str, r: &Classified) -> Value {
     let who = if r.read.name.is_empty() { &r.read.from } else { &r.read.name };
-    json!({"kind": "move", "account": account, "src_folder": "INBOX", "dest_folder": trash,
+    json!({"kind": "sweep_back", "account": account, "src_folder": "INBOX", "dest_folder": trash,
            "message_id": r.read.mid, "label": UNDO_LABEL, "subject": r.read.subject, "who": who})
 }
 
