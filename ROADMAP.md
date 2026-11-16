@@ -24,11 +24,6 @@ L = a week-plus.
   `EVERY_ACCOUNT`, which waits for every gate: a draft save whose old copy is in another account (`mm_compose::drafting`;
   it needs just the two accounts' gates, which the gates can't take yet), and an undo entry that names no account, as a
   snooze's does (`mm_mailbox::undo`), though undoing a snooze asks no server anything.
-- **Keep each account's IMAP connection on the Rust server** · high value · effort M · [#5](https://github.com/lanterno/mailmind/issues/5) — The Rust
-  server opens a session and logs out for every read: `MAILMIND_POOL` is declared in `environment.rs`, and nothing reads
-  it. The Python app's `Pool` (complete, opt-in, never soaked) goes with the flip; its docstring has a cold Proton body
-  fetch at about 37 s against 2 s warm. Give each account's worker the connection it owns, for reads and then for
-  changes, with a Bridge connection recycled sooner as `ProviderProfile` does.
 
 ## The move to the Rust core
 
