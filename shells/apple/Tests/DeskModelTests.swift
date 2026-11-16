@@ -321,6 +321,18 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(model.needs.count, 3)
     }
 
+    /// Turned off, what the AI rated as safe to file before then isn't offered or counted, and filing sends nothing.
+    func testWithAITurnedOffNothingIsOfferedToFile() async {
+        scriptTheBrief(ai: "none", off: .turnedOff, briefing: Self.missing)
+        let model = briefModel()
+        await model.load()
+
+        XCTAssertEqual(BriefWords.safeToFile(model.items).map(\.key), [105, 106], "the digest still carries the ratings")
+        XCTAssertTrue(model.tidy.isEmpty, "no card, no File to Archive and no \"can wait\"")
+        await model.fileTidy()
+        XCTAssertTrue(routes.sent("POST", "/api/bulk/file").isEmpty)
+    }
+
     func testAStoredBriefIsShownWithoutWritingOne() async {
         scriptTheBrief(briefing: .brief(DeskFixture.brief))
         let model = briefModel()

@@ -332,6 +332,12 @@ final class AITurnedOffTests: XCTestCase {
                                           commitments: 0, week: false), [])
     }
 
+    /// The Inbox's line for the brief counts what can wait only while AI isn't turned off: the count is the AI's.
+    func testTheInboxsBriefLineLeavesOutWhatCanWait() {
+        XCTAssertEqual(BriefLine(needs: [], waiting: 1, canWait: nil).tally, "0 need you · 1 waiting")
+        XCTAssertEqual(BriefLine(needs: [], waiting: 1, canWait: 2).tally, "0 need you · 1 waiting · 2 can wait")
+    }
+
     func testTheSearchFieldSearchesForWhatStartsWithAQuestionMark() async {
         let app = MailApp()
         let server = Fixture.server()
