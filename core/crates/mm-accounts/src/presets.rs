@@ -1,7 +1,9 @@
 //! Which preset an address's account takes, from its domain (`mailmind.accounts.domain.preset` and
 //! `application.presets`): a provider's own domains take its preset, which the form chooses (`sure`), and a domain whose
 //! mail a provider's servers take (a Google Workspace or Fastmail domain's, say), as its MX records name them, is
-//! offered it. An offer is only that: the person chooses, and nothing is guessed that they can't undo.
+//! offered it, as an iCloud+ custom domain's is iCloud's. An offer is only that: the person chooses, and nothing is
+//! guessed that they can't undo. A brand's domain is its own under `.com` or a country's ending (yahoo.fr,
+//! yahoo.co.uk), but for a country where the brand is another company's (Yahoo Japan's yahoo.co.jp).
 //!
 //! A preset says what the form needs of its provider: the type and servers its account takes, a line said before
 //! the password (an app password asked for, Proton Bridge needed), and the page where that password is made. A
@@ -55,8 +57,12 @@ pub struct Provider {
     pub name: &'static str,
     /// Its own domains.
     pub domains: &'static [&'static str],
-    /// A brand whose domain under any country's ending is its own (`yahoo` for yahoo.com, yahoo.co.uk, yahoo.fr).
+    /// A brand whose domain under `.com` or a country's ending is its own (`yahoo` for yahoo.com, yahoo.co.uk,
+    /// yahoo.fr).
     pub brands: &'static [&'static str],
+    /// The countries under whose ending the brand is another company's, with servers of its own: Yahoo Japan's
+    /// yahoo.co.jp.
+    pub not_in: &'static [&'static str],
     /// An MX record naming one of these, or a host under it, is its servers'.
     pub mail_hosts: &'static [&'static str],
     /// What its account is saved as; None for one MailMind can't log in to yet.
@@ -84,6 +90,7 @@ pub const PROVIDERS: [Provider; 7] = [
         name: "Gmail",
         domains: &GOOGLE_DOMAINS,
         brands: &[],
+        not_in: &[],
         mail_hosts: &["google.com", "googlemail.com"],
         settings: Some(Settings { kind: "gmail", imap: None, smtp: None, trash: None }),
         note: None,
@@ -94,7 +101,8 @@ pub const PROVIDERS: [Provider; 7] = [
         name: "iCloud",
         domains: &["icloud.com", "me.com", "mac.com"],
         brands: &[],
-        mail_hosts: &[],
+        not_in: &[],
+        mail_hosts: &["mail.icloud.com"],
         settings: Some(Settings {
             kind: "imap",
             imap: server("imap.mail.me.com", 993, false),
@@ -112,6 +120,7 @@ pub const PROVIDERS: [Provider; 7] = [
         name: "Yahoo",
         domains: &["ymail.com", "rocketmail.com"],
         brands: &["yahoo"],
+        not_in: &["jp"],
         mail_hosts: &[],
         settings: Some(Settings {
             kind: "imap",
@@ -130,6 +139,7 @@ pub const PROVIDERS: [Provider; 7] = [
         name: "AOL",
         domains: &["aim.com"],
         brands: &["aol"],
+        not_in: &[],
         mail_hosts: &[],
         settings: Some(Settings {
             kind: "imap",
@@ -148,6 +158,7 @@ pub const PROVIDERS: [Provider; 7] = [
         name: "Fastmail",
         domains: &["fastmail.com", "fastmail.fm"],
         brands: &[],
+        not_in: &[],
         mail_hosts: &["messagingengine.com"],
         settings: Some(Settings {
             kind: "imap",
@@ -169,6 +180,7 @@ pub const PROVIDERS: [Provider; 7] = [
         name: "Microsoft",
         domains: &["msn.com", "passport.com"],
         brands: &["outlook", "hotmail", "live"],
+        not_in: &[],
         mail_hosts: &["protection.outlook.com"],
         settings: None,
         note: Some(
@@ -182,6 +194,7 @@ pub const PROVIDERS: [Provider; 7] = [
         name: "Proton",
         domains: &["proton.me", "protonmail.com", "protonmail.ch", "pm.me"],
         brands: &[],
+        not_in: &[],
         mail_hosts: &["protonmail.ch"],
         settings: Some(Settings { kind: "proton", imap: None, smtp: None, trash: None }),
         note: Some(
@@ -217,19 +230,28 @@ pub fn domain_of(email: &str) -> Option<String> {
     Some(domain.to_owned())
 }
 
-/// Whether `domain` is `brand` under a country's or the world's ending: brand.tld, or brand.co.cc and the like.
-fn under_brand(domain: &str, brand: &str) -> bool {
+/// Whether `ending` is a country's: two letters.
+fn is_country(ending: &str) -> bool {
+    ending.len() == 2 && ending.bytes().all(|b| b.is_ascii_lowercase())
+}
+
+/// Whether `domain` is `brand` under `.com` or a country's ending, as brand.com, brand.fr or brand.co.uk, unless the
+/// country is one of `not_in`.
+fn under_brand(domain: &str, brand: &str, not_in: &[&str]) -> bool {
     let labels: Vec<&str> = domain.split('.').collect();
+    let country = |ending: &str| is_country(ending) && !not_in.contains(&ending);
     match labels.as_slice() {
-        [first, _] => *first == brand,
-        [first, second, country] => *first == brand && SECOND_LEVELS.contains(second) && country.len() == 2,
+        [first, ending] => *first == brand && (*ending == "com" || country(ending)),
+        [first, second, ending] => *first == brand && SECOND_LEVELS.contains(second) && country(ending),
         _ => false,
     }
 }
 
 /// The provider whose own domain `domain` is, if one's is.
 pub fn provider_of_domain(domain: &str) -> Option<&'static Provider> {
-    PROVIDERS.iter().find(|p| p.domains.contains(&domain) || p.brands.iter().any(|brand| under_brand(domain, brand)))
+    PROVIDERS
+        .iter()
+        .find(|p| p.domains.contains(&domain) || p.brands.iter().any(|brand| under_brand(domain, brand, p.not_in)))
 }
 
 /// Whether an MX record's host is one of `provider`'s mail servers.
