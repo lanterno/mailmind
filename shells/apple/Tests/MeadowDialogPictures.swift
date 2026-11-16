@@ -291,6 +291,16 @@ final class MeadowDialogPictures: XCTestCase {
         }
     }
 
+    /// A new Proton account, whose Test waits until it is added: the Bridge's password is tested only for a saved one.
+    func testANewProtonAccountsFormSaysItIsTestedOnceAdded() throws {
+        var proton = AccountDraft()
+        proton.email = "ada@example.test"
+        proton.pick(.proton)
+        try draw("settings-account-form-proton", CGSize(width: 560, height: 640)) { _ in
+            AccountForm(status: status(), draft: proton, done: { _ in })
+        }
+    }
+
     /// Removing an account, with its mail on this Mac going too unless unticked.
     func testRemovingAnAccount() throws {
         try draw("settings-account-remove", CGSize(width: 420, height: 240)) { _ in

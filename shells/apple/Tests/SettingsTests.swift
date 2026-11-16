@@ -108,6 +108,22 @@ final class AccountDraftTests: XCTestCase {
         XCTAssertNil(AccountDraft().test, "a new account with no password has nothing to test")
     }
 
+    func testAProtonAccountIsTestedOnlyOnceItIsSavedWithTheBridgesPassword() {
+        var draft = AccountDraft()
+        draft.email = "ada@example.test"
+        draft.pick(.proton)
+        XCTAssertNil(draft.test, "a new Proton account has nothing the server may test yet")
+        XCTAssertEqual(draft.testsOnceAdded, "Add the account, then test it.")
+        draft.pick(.imap)
+        XCTAssertNil(draft.testsOnceAdded)
+
+        var saved = AccountDraft(editing: F.account("ada@example.test", type: "proton", style: "proton_bridge"))
+        XCTAssertEqual(saved.test, API.TryBody(email: "ada@example.test"), "a saved one is tested as it is saved")
+        saved.password = typed
+        XCTAssertEqual(saved.test, API.TryBody(email: "ada@example.test"), "nothing typed stands for the Bridge's password")
+        XCTAssertNil(saved.testsOnceAdded)
+    }
+
     func testAnAccountThatReadsItsPasswordFrom1PasswordOrTheEnvironmentShowsItAndKeepsIt() {
         var op = AccountDraft(editing: F.account("ada@example.test", style: "op", ref: "op://Vault/Ada/password"))
         XCTAssertEqual(op.keptElsewhere, "From 1Password: op://Vault/Ada/password")
