@@ -20,6 +20,8 @@ pub(crate) struct Fetched {
     pub(crate) gmail_labels: Option<Vec<String>>,
     /// INTERNALDATE, when the message arrived, in Unix seconds: None where it wasn't asked for or doesn't read.
     pub(crate) arrived: Option<i64>,
+    /// RFC822.SIZE, the whole message's size in bytes, where it was asked for.
+    pub(crate) size: Option<u32>,
 }
 
 /// A response code (`[UIDVALIDITY 7]`), of those the session reads.
@@ -95,6 +97,7 @@ fn fetched(attributes: &[AttributeValue<'_>]) -> Fetched {
                 out.gmail_labels = Some(labels.iter().map(|l| label_name(l)).collect());
             }
             AttributeValue::InternalDate(date) => out.arrived = internal_date(date),
+            AttributeValue::Rfc822Size(size) => out.size = Some(*size),
             _ => {}
         }
     }

@@ -131,6 +131,23 @@ pub const HEADER_BATCH: usize = 300;
 /// UIDs to a FETCH of messages' heads, so no answer holds more than a few megabytes.
 pub const HEAD_BATCH: usize = 50;
 
+/// The first bytes of a message, and how long the whole of it is, as the server says (RFC822.SIZE).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Opening {
+    pub raw: Vec<u8>,
+    /// The whole message's size in bytes; None where the server didn't say.
+    pub size: Option<u32>,
+}
+
+impl Opening {
+    /// Whether this is the whole message, when its first `asked` bytes were asked for: it ended before them, or it is
+    /// as long as the server says the message is.
+    pub fn is_whole(&self, asked: u32) -> bool {
+        self.raw.len() < usize::try_from(asked).unwrap_or(usize::MAX)
+            || self.size.is_some_and(|size| self.raw.len() >= usize::try_from(size).unwrap_or(usize::MAX))
+    }
+}
+
 /// A logged-in connection, for everything the Mailbox asks of a server.
 pub trait MailServer: MailSession {
     /// The server's capabilities, upper-case, as it listed them once logged in.
@@ -156,6 +173,39 @@ pub trait MailServer: MailSession {
             match self.body(*uid) {
                 Ok(Some(mut raw)) => {
                     raw.truncate(usize::try_from(bytes).unwrap_or(usize::MAX));
+                    out.insert(*uid, raw);
+                }
+                Err(e) if e.is_unreachable() => return Err(e),
+                Ok(None) | Err(_) => {}
+            }
+        }
+        Ok(out)
+    }
+    /// The first `bytes` of each message with its whole size (`RFC822.SIZE BODY.PEEK[]<0.bytes>`), read without
+    /// marking it read, by UID, as `heads` reads them: one the server sent nothing of, or refuses to send, is left
+    /// out, and only a lost connection fails it.
+    fn openings(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Opening>, ServerError> {
+        let mut out = BTreeMap::new();
+        for uid in uids {
+            match self.body(*uid) {
+                Ok(Some(mut raw)) => {
+                    let size = u32::try_from(raw.len()).ok();
+                    raw.truncate(usize::try_from(bytes).unwrap_or(usize::MAX));
+                    out.insert(*uid, Opening { raw, size });
+                }
+                Err(e) if e.is_unreachable() => return Err(e),
+                Ok(None) | Err(_) => {}
+            }
+        }
+        Ok(out)
+    }
+    /// Whole messages, read without marking them read (BODY.PEEK[]), several a FETCH, by UID: one the server sent
+    /// nothing of, or refuses to send, is left out, and only a lost connection fails it.
+    fn bodies(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
+        let mut out = BTreeMap::new();
+        for uid in uids {
+            match self.body(*uid) {
+                Ok(Some(raw)) => {
                     out.insert(*uid, raw);
                 }
                 Err(e) if e.is_unreachable() => return Err(e),
@@ -198,6 +248,13 @@ pub trait MailServer: MailSession {
     fn delete_folder(&mut self, _name: &str) -> Result<(), ServerError> {
         Err(ServerError::Refused("Unsupported"))
     }
+
+    /// Whether the connection still answers (NOOP): a connection kept between jobs is asked before each.
+    fn noop(&mut self) -> Result<(), ServerError> {
+        Ok(())
+    }
+    /// From now on wait at most `seconds` for each answer: a connection kept between jobs waits as each one asks.
+    fn set_timeout(&mut self, _seconds: u64) {}
 }
 
 /// Where servers' sessions come from.
@@ -335,6 +392,14 @@ impl MailServer for ReadOnly {
         self.0.heads(uids, bytes)
     }
 
+    fn openings(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Opening>, ServerError> {
+        self.0.openings(uids, bytes)
+    }
+
+    fn bodies(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
+        self.0.bodies(uids)
+    }
+
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {
         self.0.arrivals(uids)
     }
@@ -377,5 +442,13 @@ impl MailServer for ReadOnly {
 
     fn delete_folder(&mut self, _: &str) -> Result<(), ServerError> {
         Err(READ_ONLY)
+    }
+
+    fn noop(&mut self) -> Result<(), ServerError> {
+        self.0.noop()
+    }
+
+    fn set_timeout(&mut self, seconds: u64) {
+        self.0.set_timeout(seconds);
     }
 }

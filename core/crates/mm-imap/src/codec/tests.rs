@@ -45,6 +45,7 @@ fn a_fetch_says_the_uid_flags_and_the_section_as_its_literal_held_it() {
             gmail_thread: None,
             gmail_labels: None,
             arrived: None,
+            size: None,
         })
     );
 }

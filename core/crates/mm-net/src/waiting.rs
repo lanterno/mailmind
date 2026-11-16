@@ -30,6 +30,12 @@ impl Stream {
         self.tcp().set_read_timeout(timeout)
     }
 
+    /// How long a write waits before it fails as timed out from now on; None for ever. A zero is refused, as the system
+    /// refuses it.
+    pub fn set_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        self.tcp().set_write_timeout(timeout)
+    }
+
     /// What ends a read waiting on this connection, from another thread.
     pub fn interrupter(&self) -> io::Result<Interrupter> {
         Ok(Interrupter(self.tcp().try_clone()?))

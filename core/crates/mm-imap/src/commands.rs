@@ -6,9 +6,10 @@
 //! `error`, as `imaplib.IMAP4.error` is. An expunge names its UIDs, never the whole folder.
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use mm_kernel::when::civil;
-use mm_mailbox::session::{HEAD_BATCH, HEADER_BATCH, Headers, MailServer, Search, Selected, ServerError};
+use mm_mailbox::session::{HEAD_BATCH, HEADER_BATCH, Headers, MailServer, Opening, Search, Selected, ServerError};
 
 use crate::codec::{Code, Fetched, Said};
 use crate::list::mailbox_arg;
@@ -227,6 +228,58 @@ impl MailServer for Session {
         Ok(out)
     }
 
+    fn openings(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Opening>, ServerError> {
+        let ask = |uids: &[u32]| format!("UID FETCH {} (UID RFC822.SIZE BODY.PEEK[]<0.{bytes}>)", uid_set(uids));
+        let keep = |out: &mut BTreeMap<u32, Opening>, fetched: Vec<Fetched>| {
+            for fetched in fetched {
+                if let (Some(uid), Some(mut raw)) = (fetched.uid, fetched.section) {
+                    raw.truncate(usize::try_from(bytes).unwrap_or(usize::MAX));
+                    out.insert(uid, Opening { raw, size: fetched.size });
+                }
+            }
+        };
+        let mut out = BTreeMap::new();
+        for batch in uids.chunks(HEAD_BATCH) {
+            let (fetched, whole) = self.fetched_in_part(&ask(batch))?;
+            keep(&mut out, fetched);
+            if whole {
+                continue;
+            }
+            // As `heads`: each the server didn't send is asked alone, and one still refused is left out.
+            let unsent: Vec<u32> = batch.iter().copied().filter(|uid| !out.contains_key(uid)).collect();
+            for uid in unsent {
+                let (fetched, _) = self.fetched_in_part(&ask(&[uid]))?;
+                keep(&mut out, fetched);
+            }
+        }
+        Ok(out)
+    }
+
+    fn bodies(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
+        let ask = |uids: &[u32]| format!("UID FETCH {} (UID BODY.PEEK[])", uid_set(uids));
+        let keep = |out: &mut BTreeMap<u32, Vec<u8>>, fetched: Vec<Fetched>| {
+            for fetched in fetched {
+                if let (Some(uid), Some(raw)) = (fetched.uid, fetched.section) {
+                    out.insert(uid, raw);
+                }
+            }
+        };
+        let mut out = BTreeMap::new();
+        for batch in uids.chunks(HEAD_BATCH) {
+            let (fetched, whole) = self.fetched_in_part(&ask(batch))?;
+            keep(&mut out, fetched);
+            if whole {
+                continue;
+            }
+            let unsent: Vec<u32> = batch.iter().copied().filter(|uid| !out.contains_key(uid)).collect();
+            for uid in unsent {
+                let (fetched, _) = self.fetched_in_part(&ask(&[uid]))?;
+                keep(&mut out, fetched);
+            }
+        }
+        Ok(out)
+    }
+
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {
         let mut out = BTreeMap::new();
         for batch in uids.chunks(HEADER_BATCH) {
@@ -311,5 +364,17 @@ impl MailServer for Session {
     fn delete_folder(&mut self, name: &str) -> Result<(), ServerError> {
         self.send(&format!("DELETE {}", folder(name)?))?;
         Ok(())
+    }
+
+    fn noop(&mut self) -> Result<(), ServerError> {
+        self.send("NOOP")?;
+        Ok(())
+    }
+
+    fn set_timeout(&mut self, seconds: u64) {
+        // A connection already gone has nothing to set; the next command finds it gone.
+        let limit = Some(Duration::from_secs(seconds.max(1)));
+        let _ = self.connection.wire.stream.set_read_timeout(limit);
+        let _ = self.connection.wire.stream.set_write_timeout(limit);
     }
 }
