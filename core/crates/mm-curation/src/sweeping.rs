@@ -326,9 +326,7 @@ impl Sweeps {
                 log::warning(TAG, "an account failed", &[(Field::Why, e.class())], None);
                 s.close(matches!(e, LiveError::Lost(_)));
                 out.insert("error".into(), json!(e.class()));
-                // Some of it may have gone before the server went: a way back for all of it, and Undo brings back
-                // what it finds in Trash.
-                let pushed = self.undo_push(account, trash, &junk, &[], group)?;
+                let pushed = self.stopped(account, trash, &junk, group, &mut out)?;
                 return Ok((Value::Object(out), pushed));
             }
         };
@@ -340,6 +338,39 @@ impl Sweeps {
         let gone: Vec<(String, String)> = junk.iter().map(|r| (r.read.uid.clone(), r.read.mid.clone())).collect();
         self.rows.forget_moved(account, &gone, &stragglers)?;
         Ok((Value::Object(out), pushed))
+    }
+
+    /// A sweep the server stopped part way: a fresh look at the INBOX says what had left it, and only that has a way
+    /// back and its rows forgotten, so a sweep that moved nothing leaves the stack as it was. When the server can't
+    /// be asked again, it can't be told what went: all of it has a way back, and Undo counts one still in the INBOX
+    /// as back. Whether there was any.
+    fn stopped(
+        &self,
+        account: &str,
+        trash: &str,
+        junk: &[&Classified],
+        group: &str,
+        out: &mut Map<String, Value>,
+    ) -> Result<bool, Fault> {
+        let Some(present) = self.inbox_now(account) else {
+            return self.undo_push(account, trash, junk, &[], group);
+        };
+        let went: Vec<&Classified> = junk.iter().copied().filter(|r| !present.contains(&r.read.uid)).collect();
+        out.insert("moved".into(), json!(went.len()));
+        if went.is_empty() {
+            return Ok(false);
+        }
+        let gone: Vec<(String, String)> = went.iter().map(|r| (r.read.uid.clone(), r.read.mid.clone())).collect();
+        self.rows.forget_moved(account, &gone, &[])?;
+        self.undo_push(account, trash, &went, &[], group)
+    }
+
+    /// The UIDs the account's INBOX holds now, on a session of their own; None when the server can't say.
+    fn inbox_now(&self, account: &str) -> Option<HashSet<String>> {
+        let mut s = self.boxes.open(account).ok()?;
+        let present = still_in_inbox(&mut *s);
+        s.close(matches!(present, Err(LiveError::Lost(_))));
+        present.ok()
     }
 
     /// A way back for each of `junk` that went to Trash, all of them under `group` at one write: none for a straggler,
