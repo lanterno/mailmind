@@ -753,6 +753,44 @@ fn nothing_found_is_no_server_and_the_servers_are_asked_all_at_once_a_second_eac
     assert!(began.elapsed() < Duration::from_millis(3500), "{:?}", began.elapsed());
 }
 
+/// A model server that answers each request with `head` and `first` at once, then a blank every fifth of a second
+/// for ten seconds: never idle a second, never done in time.
+fn trickling(head: &'static str, first: &'static str) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://127.0.0.1:{}/v1", listener.local_addr().unwrap().port());
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut chunk = [0u8; 4096];
+                let _ = stream.read(&mut chunk);
+                let _ = stream.write_all(format!("{head}{first}").as_bytes());
+                for _ in 0..50 {
+                    std::thread::sleep(Duration::from_millis(200));
+                    if stream.write_all(b" ").is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    url
+}
+
+#[test]
+fn a_model_server_that_trickles_its_list_is_left_out_after_a_second() {
+    let (ollama, _) = provider(vec![(200, json!({"data": [{"id": "llama3.2:3b"}]}))]);
+    // A list whole but for the blanks after it, which an answer with no length reads to its end.
+    let ending =
+        trickling("HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n", r#"{"data": [{"id": "slow"}]}"#);
+    let long = trickling("HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n", r#"{"data": []}"#);
+    let local = [("Ending", ending.as_str()), ("Long", long.as_str()), ("Ollama", ollama.as_str())];
+    let r = running_finding(&json!({}), &[], &local);
+    let began = std::time::Instant::now();
+    let found = r.get("/api/ai/local").json();
+    assert_eq!(found["servers"], json!([{"name": "Ollama", "url": ollama, "models": ["llama3.2:3b"]}]));
+    assert!(began.elapsed() < Duration::from_millis(2500), "{:?}", began.elapsed());
+}
+
 #[test]
 fn a_tests_servers_are_named_name_equals_url_separated_by_semicolons() {
     let listed = LocalModelServers::listed;

@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use mm_assistant::ports::{LanguageModel, Prompt};
+use mm_assistant::ports::{LanguageModel, ModelError, Prompt};
 use mm_claude::{ClaudeApi, Endpoint};
 use mm_kernel::seams::{Outside, Secret, Tripped};
 use serde_json::{Value, json};
@@ -289,6 +289,42 @@ fn a_key_with_a_space_or_a_line_break_in_it_is_a_refused_key_and_never_sent() {
         assert!(heard(&log).is_empty() && outside.reached.lock().expect("hosts").is_empty(), "{spaced:?}");
         assert!(!format!("{failed:?}").contains("sk-ant"));
     }
+}
+
+/// A stand-in that answers each request with a head saying a long body, then a blank every fifth of a second for ten
+/// seconds: never idle a second, never done in time.
+fn trickling() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+    let url = format!("http://127.0.0.1:{}", listener.local_addr().expect("its address").port());
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut chunk = [0u8; 4096];
+                let _ = stream.read(&mut chunk);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n");
+                for _ in 0..50 {
+                    std::thread::sleep(Duration::from_millis(200));
+                    if stream.write_all(b" ").is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    url
+}
+
+#[test]
+fn an_attempt_is_held_to_its_time_limit_all_told_however_the_answer_trickles_in() {
+    let client = ClaudeApi::new(Secret::new(KEY.into()), Some(&trickling()), Arc::new(Open::default()))
+        .with_limits(Duration::from_secs(1), 0);
+    let timed_out = ModelError::new("Claude API unreachable: Request timed out.", None);
+    let began = std::time::Instant::now();
+    assert_eq!(client.list_models().expect_err("timed out"), timed_out);
+    assert!(began.elapsed() < Duration::from_millis(2500), "{:?}", began.elapsed());
+    let began = std::time::Instant::now();
+    assert_eq!(client.complete(&prompt("claude-opus-5-5", true)).expect_err("timed out"), timed_out);
+    assert!(began.elapsed() < Duration::from_millis(2500), "{:?}", began.elapsed());
 }
 
 #[test]

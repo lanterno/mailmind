@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use mm_assistant::ports::{LanguageModel, Prompt};
+use mm_assistant::ports::{LanguageModel, ModelError, Prompt};
 use mm_kernel::ai_provider::AiProvider::{self, Compatible, Gemini, Local, OpenAi};
 use mm_kernel::seams::{Outside, Secret, Tripped};
 use mm_openai::ChatApi;
@@ -595,6 +595,42 @@ fn the_key_goes_in_the_clear_only_to_this_machine_and_a_refused_host_is_never_re
     let failed = api(Local, &url, None, Arc::new(Closed)).complete(&prompt("m", None)).expect_err("refused");
     assert_eq!((failed.status, failed.plain().as_str()), (None, "couldn't reach it"));
     assert!(heard(&log).is_empty());
+}
+
+/// A service that answers each request with a head saying a long body, then a blank every fifth of a second for ten
+/// seconds: never idle a second, never done in time.
+fn trickling() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+    let url = format!("http://127.0.0.1:{}/v1", listener.local_addr().expect("its address").port());
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut chunk = [0u8; 4096];
+                let _ = stream.read(&mut chunk);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n");
+                for _ in 0..50 {
+                    std::thread::sleep(Duration::from_millis(200));
+                    if stream.write_all(b" ").is_err() {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    url
+}
+
+#[test]
+fn an_attempt_is_held_to_its_time_limit_all_told_however_the_answer_trickles_in() {
+    let url = trickling();
+    let client = ChatApi::new(Compatible, &url, None, Arc::new(Open::default())).with_limits(Duration::from_secs(1), 0);
+    let began = std::time::Instant::now();
+    let timed_out = ModelError::new("compatible unreachable: timed out", None);
+    assert_eq!(client.list_models().expect_err("timed out"), timed_out);
+    assert!(began.elapsed() < Duration::from_millis(2500), "{:?}", began.elapsed());
+    let began = std::time::Instant::now();
+    assert_eq!(client.complete(&prompt("m", None)).expect_err("timed out"), timed_out);
+    assert!(began.elapsed() < Duration::from_millis(2500), "{:?}", began.elapsed());
 }
 
 #[test]
