@@ -7,8 +7,8 @@ import threading
 
 import pytest
 
-from mailmind.assistant.application.governor import (PRESENCE_SECONDS, SCHEDULED_PRESENCE_SECONDS, TRIP_AFTER, YIELD_SECONDS,
-                                                     CostGovernor, allowing_over)
+from mailmind.assistant.application.governor import (CREDIT_RETRY_SECONDS, PRESENCE_SECONDS, SCHEDULED_PRESENCE_SECONDS,
+                                                     TRIP_AFTER, YIELD_SECONDS, CostGovernor, allowing_over)
 from mailmind.assistant.application.ports import Deferred, ModelError, OverLimit
 from mailmind.assistant.domain import features
 from mailmind.platform.db import driver
@@ -200,6 +200,38 @@ def test_an_account_with_no_credit_left_stops_every_background_call_at_once():
     gov.heard("triage", "m", MODEL, ModelError("OpenAI API 429: no quota", 429, "OpenAI"))
     assert gov.held_back("background", "triage", "m", MODEL) == "breaker"
     assert gov.held_back("scheduled", "brief-ahead", "other-model", MODEL) == "breaker"
+
+
+def test_background_calls_stopped_for_want_of_credit_go_again_once_a_call_goes_through(capsys):
+    """Credit is added to the same key, so the model in use doesn't change: a reply says it is back."""
+    gov, _, _ = governor()
+    gov.heard("rewrite", "m", MODEL, ModelError("Claude API 400: credit balance is too low", 400, "Anthropic"))
+    assert gov.held_back("background", "triage", "m", MODEL) == "breaker"
+    gov.heard("rewrite", "m", MODEL, None)
+    assert gov.held_back("background", "triage", "m", MODEL) is None
+    assert gov.snapshot()["breaker"] == []
+    assert capsys.readouterr().out.count("has no credit left") == 1
+
+
+def test_background_calls_stopped_for_want_of_credit_try_again_an_hour_later(capsys):
+    gov, clock, _ = governor()
+    no_credit = ModelError("Gemini API 429: quota exceeded", 429, "Gemini")
+    gov.heard("triage", "m", MODEL, no_credit)
+    clock.shift(CREDIT_RETRY_SECONDS - 1)
+    assert gov.held_back("background", "triage", "m", MODEL) == "breaker"
+    clock.shift(1)
+    assert gov.held_back("background", "triage", "m", MODEL) is None
+    gov.heard("triage", "m", MODEL, no_credit)                # still none: stopped for another hour
+    assert gov.held_back("background", "triage", "m", MODEL) == "breaker"
+    assert capsys.readouterr().out.count("has no credit left") == 2
+
+
+def test_a_reply_or_an_hour_leaves_a_refused_key_stopped():
+    gov, clock, _ = governor()
+    gov.heard("triage", "m", MODEL, ModelError("Claude API 401: invalid x-api-key", 401))
+    gov.heard("ask", "m", MODEL, None)
+    clock.shift(CREDIT_RETRY_SECONDS)
+    assert gov.held_back("background", "triage", "m", MODEL) == "breaker"
 
 
 def test_three_rejections_in_a_row_stop_that_feature_on_that_model_only():

@@ -287,11 +287,46 @@ def test_the_status_counts_what_waits_for_a_summary_from_the_last_30_days(app, w
     assert waiting() is None
 
 
+NO_CREDIT = fa.error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. "
+                                                 "Please go to Plans & Billing to upgrade or purchase credits.")
+
+
 def test_a_call_refused_for_want_of_credit_names_the_account_to_top_up(app, world, ai):
-    ai.queue(fa.error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. "
-                                                    "Please go to Plans & Billing to upgrade or purchase credits."))
+    ai.queue(NO_CREDIT)
     assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 502
     assert app.get("/api/digest").json["ai"]["last_error"] == "the Anthropic account has no credit left"
+
+
+def summaries_waiting(app):
+    return app.get("/api/digest").json["ai"]["summaries_waiting"]
+
+
+def test_background_summaries_stopped_for_want_of_credit_go_again_once_a_call_goes_through(app, world, ai):
+    """Credit is added to the same key: the next call that goes through says it is back."""
+    waiting = summaries_waiting(app)
+    ai.queue(NO_CREDIT)
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 502
+    app.clock.shift(timedelta(seconds=46))             # past the yield to it
+    ai.responder = triage
+    app.work("assess")
+    assert summaries_waiting(app) == waiting > 0
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 200
+    app.clock.shift(timedelta(seconds=46))
+    app.work("assess")
+    assert summaries_waiting(app) == 0
+
+
+def test_background_summaries_stopped_for_want_of_credit_try_again_an_hour_later(app, world, ai):
+    waiting = summaries_waiting(app)
+    ai.queue(NO_CREDIT)
+    assert app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"}).status == 502
+    ai.responder = triage
+    app.clock.shift(timedelta(minutes=59))
+    app.work("assess")
+    assert summaries_waiting(app) == waiting > 0
+    app.clock.shift(timedelta(minutes=1))
+    app.work("assess")
+    assert summaries_waiting(app) == 0
 
 
 def test_spending_says_what_the_last_week_and_this_month_cost_by_what_each_feature_is_called(app, world, ai):
