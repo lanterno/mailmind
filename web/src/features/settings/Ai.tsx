@@ -18,7 +18,7 @@ import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigest } from "../mailbox";
-import { aiParts, BILLING, billOfRecord, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, spentOver, summariesWaiting, urlToSave } from "./aiChoices";
+import { aiParts, BILLING, billOfRecord, CHOSEN_ELSEWHERE, CONTEXT_STEP, GET_OLLAMA, keepKey, localFound, localMenu, localPicked, modelChoices, modelsUsed, NEEDS, providerChanges, spentOver, SUGGESTED_MODEL, summariesWaiting, urlToSave } from "./aiChoices";
 import { Check } from "./Check";
 import { useStepBack } from "./useStepBack";
 
@@ -256,6 +256,7 @@ export function AiForm() {
     });
   };
   const menu = localMenu(found.data?.servers ?? [], p.ai_base_url, p.ai_model);
+  const noneFound = found.data?.servers.length === 0;     // no model server here yet: the steps to get one
   let lookedFor = "";
   if (found.isFetching) lookedFor = "Looking for model servers on this Mac…";
   else if (found.isError) lookedFor = refusalOf(found.error)?.detail || "Couldn’t look for model servers on this Mac.";
@@ -324,6 +325,16 @@ export function AiForm() {
             </div>
           )}
           <div className="set-help" role="status">{local ? lookedFor : listed}</div>
+          {local && noneFound && (
+            <div className="set-apppw" id="aiGetOllama">
+              <ol>
+                <li><a className="set-mini" href={GET_OLLAMA} target="_blank" rel="noopener noreferrer">Get Ollama <Icon name="external" /></a> and open it.</li>
+                <li>{SUGGESTED_MODEL}</li>
+                <li>{CONTEXT_STEP}</li>
+                <li>Then look again.</li>
+              </ol>
+            </div>
+          )}
           {needs.url !== null && (
             <>
               <label className="lbl" htmlFor="aiUrl">{local ? "Your model server’s URL" : "The service’s URL"}</label>
@@ -338,7 +349,7 @@ export function AiForm() {
           {local && (
             <>
               <KeyField key={provider} provider={provider} kept={kept} keptFrom={keptFrom} done={keysKept} />
-              <div className="set-help">Long threads need room: give the model a context of at least 16K tokens in your model server’s settings.</div>
+              {!noneFound && <div className="set-help" id="aiContext">{CONTEXT_STEP}</div>}
             </>
           )}
           <div className="set-help ai-standing" id="aiStanding" role="status">{aiStanding(ai)}</div>
