@@ -46,6 +46,8 @@ mod account_wiring;
 pub mod login_keychain;
 // A domain's mail servers, asked of a nameserver.
 pub mod mail_hosts;
+// The model servers running on this Mac, asked for their models.
+pub mod local_ai;
 // 1Password, through its CLI: an account's password or the Claude API key, read once a process.
 pub mod one_password;
 // Compose's use cases bound: the sends, the drafts and the outbox that delivers them, and the outbox's worker.

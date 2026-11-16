@@ -95,6 +95,7 @@ fn running(config: &Value, pairs: &[(&str, &str)]) -> Running {
         keychain: keychain.clone(),
         sanitizer: Arc::new(Sanitizing),
         mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
+        local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
     };
     let app = Arc::new(App::assemble(&environment, &settings, home.path().join("dist"), port, &seams).unwrap());
     let (stop, stopped) = tokio::sync::watch::channel(false);

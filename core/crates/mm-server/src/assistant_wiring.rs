@@ -28,9 +28,10 @@ use mm_assistant::context::Context;
 use mm_assistant::extract::Extractor;
 use mm_assistant::gateway::{Budget, Gateway};
 use mm_assistant::governor::CostGovernor;
+use mm_assistant::local_servers::Finder;
 use mm_assistant::ports::{
-    AccountList, Around, ConversationBy, Engine, InForce, LanguageModel, Mail, Message, ModelError, ModelLists,
-    PlanSearch, Reached, Said, Stamp,
+    AccountList, Around, ConversationBy, Engine, InForce, LanguageModel, LocalServers, Mail, Message, ModelError,
+    ModelLists, PlanSearch, Reached, Said, Stamp,
 };
 use mm_assistant::prepared_replies::PreparedReplies;
 use mm_assistant::providers::{self, default_base_url, default_model, speaks_anthropic};
@@ -242,6 +243,8 @@ pub(crate) struct Parts {
     pub(crate) outside: Arc<dyn Outside>,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) zone: Arc<dyn Zone>,
+    /// The model servers on this Mac the finder asks (`Seams::local_ai`).
+    pub(crate) local_ai: Arc<dyn LocalServers>,
 }
 
 /// Every AI call, and how AI stands.
@@ -272,6 +275,8 @@ pub struct Assistant {
     pub usage: Arc<mm_assistant::usage::UsageReport>,
     /// The models a provider offers, for a person choosing one in Settings.
     pub catalog: Arc<Catalog>,
+    /// The model servers running on this Mac, for a person setting up a model on this Mac.
+    pub finder: Arc<Finder>,
     /// The AI in force, for the startup log's line.
     engine: Arc<ApiEngine>,
 }
@@ -297,7 +302,7 @@ impl Assistant {
     }
 
     pub(crate) fn assemble(parts: Parts, environment: &Environment) -> Assistant {
-        let Parts { database, accounts, servers, gates, config, keychain, op, outside, clock, zone } = parts;
+        let Parts { database, accounts, servers, gates, config, keychain, op, outside, clock, zone, local_ai } = parts;
         let around = Arc::new(Surroundings::over(&database, config.clone(), &outside, &clock, &zone));
         let engine = Arc::new(ApiEngine {
             file: config.clone(),
@@ -312,6 +317,7 @@ impl Assistant {
         let usage = Arc::new(mm_assistant::usage::UsageReport::new(database.clone(), clock.clone(), zone.clone()));
         let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
         let catalog = Arc::new(Catalog::new(engine.clone()));
+        let finder = Arc::new(Finder::new(local_ai));
         let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
         let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
         let calls = Arc::new(Calls::new(gateway, status.clone(), environment.model(), environment.no_schema()));
@@ -364,6 +370,7 @@ impl Assistant {
             sender_digest,
             usage,
             catalog,
+            finder,
             engine,
         }
     }

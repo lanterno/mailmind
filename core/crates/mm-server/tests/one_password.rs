@@ -344,6 +344,7 @@ fn world(config: Value, more: &[(&str, &str)]) -> World {
         keychain: Arc::new(Empty),
         sanitizer: Arc::new(mm_server::real::Sanitizing),
         mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
+        local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
     };
     let app = App::assemble(&environment, &settings, home.path().join("dist"), 1, &seams).unwrap();
     World { app: Arc::new(app), _home: home }

@@ -3,8 +3,10 @@
 //!
 //! It reads, beside MAILMIND_HOME and MAILMIND_DB_KEY: MAILMIND_TEST_NOW (where the clock stands), MAILMIND_TEST_DIST
 //! (the build it serves), MAILMIND_TEST_PORT (the port, when the suite restarts it), MAILMIND_TEST_GUARDED (folders
-//! the tripwire guards besides the repo root), MAILMIND_TEST_KEYCHAIN (the fake Keychain's file) and
-//! MAILMIND_TEST_DNS (the one nameserver a domain's mail servers are asked of, `host:port`; none is when it is unset).
+//! the tripwire guards besides the repo root), MAILMIND_TEST_KEYCHAIN (the fake Keychain's file),
+//! MAILMIND_TEST_DNS (the one nameserver a domain's mail servers are asked of, `host:port`; none is when it is unset)
+//! and MAILMIND_TEST_LOCAL_AI (the model servers on this Mac Settings looks for, `name=url` pairs separated by `;`:
+//! set, even empty, it replaces the servers MailMind knows of, so no test probes one the machine is running).
 //!
 //! It writes `ready <port>` on standard output once it answers, then answers each command on standard input with one
 //! line: `clock <ISO 8601>`, `work <job> <JSON>`, `settle`, `check`, `unsanitized on|off`; at the end of its input it
@@ -18,6 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mm_server::environment::{Environment, repo_root};
+use mm_server::local_ai::LocalModelServers;
 use mm_server::mail_hosts::SystemMailHosts;
 use mm_server::real::StandardError;
 use mm_server::{App, Seams, Server};
@@ -72,12 +75,20 @@ fn run() -> Result<(), String> {
         Some(named) => vec![named.parse::<SocketAddr>().map_err(|_| "MAILMIND_TEST_DNS isn't host:port")?],
         None => Vec::new(),
     };
+    let local_ai = match environment.raw("MAILMIND_TEST_LOCAL_AI") {
+        Some(listed) => LocalModelServers::at(
+            tripwire.clone(),
+            LocalModelServers::listed(listed).ok_or("MAILMIND_TEST_LOCAL_AI isn't name=url pairs separated by ;")?,
+        ),
+        None => LocalModelServers::known(tripwire.clone()),
+    };
     let seams = Seams {
         clock: clock.clone(),
         outside: tripwire.clone(),
         keychain: Arc::new(keychain),
         sanitizer: sanitizer.clone(),
         mail_hosts: Arc::new(SystemMailHosts::asking(tripwire.clone(), nameserver)),
+        local_ai: Arc::new(local_ai),
     };
 
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|_| "no runtime")?;

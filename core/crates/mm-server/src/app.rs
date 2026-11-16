@@ -56,6 +56,9 @@ pub struct Seams {
     /// A domain's mail servers, which Settings asks of an address's domain (`mail_hosts::SystemMailHosts`): a test's
     /// asks its own nameserver, or none.
     pub mail_hosts: Arc<dyn mm_accounts::ports::MailHosts>,
+    /// The model servers running on this Mac, which Settings looks for (`local_ai::LocalModelServers`): the known
+    /// ones, a test's stand-ins, or none.
+    pub local_ai: Arc<dyn mm_assistant::ports::LocalServers>,
 }
 
 #[derive(Debug)]
@@ -195,6 +198,7 @@ impl App {
                 outside: seams.outside.clone(),
                 clock: seams.clock.clone(),
                 zone: zone.clone(),
+                local_ai: seams.local_ai.clone(),
             },
             environment,
         );

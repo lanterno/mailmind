@@ -68,6 +68,7 @@ impl Served {
             keychain: Arc::new(mm_host::stand_in::FileKeychain::new(folder.join("keychain.json"))),
             sanitizer: Arc::new(mm_server::real::Sanitizing),
             mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
+            local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
         };
         let server = runtime.block_on(Server::bind(0)).expect("a loopback port");
         let port = server.port().expect("its port");

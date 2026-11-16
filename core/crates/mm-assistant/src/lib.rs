@@ -1,6 +1,6 @@
 //! Everything asked of the AI (`mailmind.assistant`): Claude by default, or the provider a person chose (#49). The
 //! gateway every call goes through, the cost governor that decides whether it may go now, the ledger of what each
-//! cost, how AI stands with no call made, and the models a provider offers.
+//! cost, how AI stands with no call made, the models a provider offers, and the model servers running on this Mac.
 //!
 //! What it needs of the world is in `ports`, which the store, the providers' crates (`mm-claude`, `mm-openai`) and the
 //! program implement; nothing here reads the disk, the network or the clock.
@@ -22,6 +22,7 @@ pub mod flights;
 pub mod gateway;
 pub mod governor;
 pub mod limits;
+pub mod local_servers;
 pub mod models;
 pub mod ports;
 pub mod prepared_replies;

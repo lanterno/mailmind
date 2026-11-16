@@ -76,6 +76,7 @@ fn running(profile: &str) -> Running {
         keychain: Arc::new(Empty),
         sanitizer: Arc::new(mm_server::real::Sanitizing),
         mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
+        local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
     };
     let dist = home.path().join("dist");
     let app = Arc::new(App::assemble(&environment, &settings, dist, port, &seams).unwrap());

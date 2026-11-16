@@ -38,6 +38,7 @@ pub(super) fn routes() -> Router<Arc<App>> {
         .route("/api/ai/extract", post(extract))
         .route("/api/ai/draft-ahead", get(draft_ahead))
         .route("/api/ai/models", get(ai_models))
+        .route("/api/ai/local", get(ai_local))
         .route("/api/ai/ask", post(ask))
         .route("/api/ai/do-plan", post(do_plan))
         .route("/api/ai/do-confirm", post(do_confirm))
@@ -430,6 +431,13 @@ async fn ai_models(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Res
     let given = Query::parse(uri.query().unwrap_or_default().as_bytes());
     let provider = given.text("provider").and_then(AiProvider::parse).ok_or_else(Problem::bad_request);
     super::run(&app, &method, &uri, move |app| Ok(app.assistant.catalog.models(provider?)?)).await
+}
+
+/// The model servers running on this Mac and the models each offers (`LocalServers`), for a person setting up a model
+/// on this Mac: each asked briefly and with no key, and none found is none. It sends no mail and spends nothing, so
+/// AI mode may be off.
+async fn ai_local(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Response<Body> {
+    super::run(&app, &method, &uri, |app| Ok(app.assistant.finder.find())).await
 }
 
 /// Why each sender a cleanup names is worth cleaning up, in a sentence; it does nothing.

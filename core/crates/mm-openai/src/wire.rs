@@ -155,8 +155,13 @@ pub fn reply(response: &Map<String, Value>, asked: &str) -> Reply {
     }
 }
 
-/// The ids a `GET {base}/models` answered with.
+/// The ids a `GET {base}/models` answered with, none where it isn't a list of models.
 pub fn model_ids(response: &Value) -> Vec<String> {
+    model_list(response).unwrap_or_default()
+}
+
+/// The ids a `GET {base}/models` answered with, or None where the answer isn't a list of models (`{"data": [...]}`).
+pub fn model_list(response: &Value) -> Option<Vec<String>> {
     let data = response.get("data").and_then(Value::as_array);
     data.map(|models| {
         models
@@ -166,7 +171,6 @@ pub fn model_ids(response: &Value) -> Vec<String> {
             .map(|id| id.as_str().map_or_else(|| id.to_string(), str::to_owned))
             .collect()
     })
-    .unwrap_or_default()
 }
 
 /// What a service said of an error, at most 200 characters: OpenAI's `{"error": {"message"}}`, or Ollama's

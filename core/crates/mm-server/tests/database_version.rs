@@ -81,6 +81,7 @@ fn start_with(home: &Path, environment: &Environment, keychain: Arc<Held>) -> Re
         keychain,
         sanitizer: Arc::new(Sanitizing),
         mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
+        local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
     };
     App::assemble(environment, &settings, home.join("dist"), 8721, &seams).map(|_| ())
 }

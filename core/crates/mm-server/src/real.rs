@@ -1,6 +1,6 @@
 //! The seams as `mailmind-server` runs: the system's clock, nothing between the app and its files, hosts and
-//! programs, the sanitizer itself, and the system's nameservers. Its Keychain is the login Keychain (`login_keychain`). Lines of the log go to
-//! standard error.
+//! programs, the sanitizer itself, the system's nameservers, and the model servers MailMind knows of. Its Keychain is
+//! the login Keychain (`login_keychain`). Lines of the log go to standard error.
 
 use std::io::Write;
 use std::path::Path;
@@ -23,6 +23,7 @@ pub fn seams() -> Seams {
         keychain: Arc::new(LoginKeychain::new(Arc::new(Unguarded))),
         sanitizer: Arc::new(Sanitizing),
         mail_hosts: Arc::new(crate::mail_hosts::SystemMailHosts::new(Arc::new(Unguarded))),
+        local_ai: Arc::new(crate::local_ai::LocalModelServers::known(Arc::new(Unguarded))),
     }
 }
 

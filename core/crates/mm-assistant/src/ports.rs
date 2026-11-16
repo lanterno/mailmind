@@ -215,6 +215,22 @@ pub trait ModelLists: Send + Sync + fmt::Debug {
     fn list(&self, provider: AiProvider, base_url: &str, key: Option<&Secret>) -> Result<Vec<String>, ModelError>;
 }
 
+/// One model server on this Mac as the finder asked it: its name, its URL, and the ids its list of models named, or
+/// None where it answered no list in time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalServer {
+    pub name: String,
+    pub url: String,
+    pub models: Option<Vec<String>>,
+}
+
+/// The model servers this Mac may run (#49), each asked `GET {url}/models` at its usual address: all at once, a
+/// second each, with no key, and only on this Mac.
+pub trait LocalServers: Send + Sync + fmt::Debug {
+    /// Every server known, in the order known, as each answered.
+    fn ask(&self) -> Vec<LocalServer>;
+}
+
 /// Where AI's settings are: the config file's `anthropic_api_key` and `ai_daily_limit_usd`, and the environment's
 /// ANTHROPIC_API_KEY.
 pub trait AiSettings: Send + Sync + fmt::Debug {

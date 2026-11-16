@@ -75,6 +75,16 @@ impl ChatApi {
         Ok(wire::model_ids(&parsed(&response).unwrap_or(serde_json::Value::Null)))
     }
 
+    /// The same, but an answer that isn't a list of models fails as one that can't be read: what tells a model server
+    /// from anything else listening at its address.
+    pub fn readable_models(&self) -> Result<Vec<String>, ModelError> {
+        let response = self.call("GET", "/models", None, 0)?;
+        parsed(&response)
+            .as_ref()
+            .and_then(wire::model_list)
+            .ok_or_else(|| ModelError::new(format!("{} answered what can't be read", self.provider.id()), None))
+    }
+
     fn connect(&self, endpoint: &Endpoint) -> Result<Stream, Lost> {
         self.outside.reach(&endpoint.host).map_err(|_| Lost("Refused"))?;
         endpoint.open(self.timeout)

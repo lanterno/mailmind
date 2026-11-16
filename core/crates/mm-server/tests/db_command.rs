@@ -73,6 +73,7 @@ fn seams(keychain: Arc<Empty>) -> Seams {
         keychain,
         sanitizer: Arc::new(Sanitizing),
         mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
+        local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
     }
 }
 
