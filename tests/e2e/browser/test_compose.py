@@ -818,17 +818,18 @@ def test_at_the_limit_a_rewrite_goes_only_when_you_say_so(page, app, world, ai):
     clean(page)
 
 
-def test_a_quick_reply_starts_as_its_line(page, world):
+def test_a_quick_reply_starts_as_its_line_and_with_ai_off_asks_it_for_nothing(page, world):
+    asked = []
+    page.on("request", lambda r: asked.append(r.url))
     opened(page)
     row(page, world, LUNCH[1]).click()
     expect(page.locator(".rd-subj")).to_be_visible()
     page.get_by_role("button", name="Thanks!").click()
     expect(body(page)).to_have_value(re.compile("^Thanks!"))
     expect(page.get_by_role("heading", name="Reply", exact=True)).to_be_visible()
-    until(page, lambda: page.problems, "a quick reply asks the AI for a version of its own, which AI being off refuses")
-    assert all("status of 409" in p for p in page.problems), page.problems
-    expect(body(page)).to_have_value(re.compile("^Thanks!"))      # with no AI the line stays
-    page.problems.clear()
+    page.heard_all_asked()
+    assert not [u for u in asked if "/api/ai/draft-reply" in u]     # AI is off: nothing asks it for a version of its own
+    expect(body(page)).to_have_value(re.compile("^Thanks!"))
     clean(page)
 
 
