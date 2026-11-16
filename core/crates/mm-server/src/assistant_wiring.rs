@@ -333,8 +333,7 @@ impl Assistant {
         let finder = Arc::new(Finder::new(local_ai));
         let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
         let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
-        // The engine puts MAILMIND_MODEL in force for Claude alone, so no call names a model of its own.
-        let calls = Arc::new(Calls::new(gateway, status.clone(), None, environment.no_schema()));
+        let calls = Arc::new(Calls::new(gateway, status.clone(), environment.no_schema()));
         let fetch = Arc::new(Fetching::new(FetchingParts {
             stored: database.clone(),
             kept: database.clone(),

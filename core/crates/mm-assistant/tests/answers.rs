@@ -256,7 +256,7 @@ fn world(on: bool) -> World {
     let lm: Arc<dyn LanguageModel> = model.clone();
     let gateway = Arc::new(Gateway::new(Arc::new(Keyed(on.then_some(lm))), budget, governor));
     let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
-    let calls = Arc::new(Calls::new(gateway, status, None, false));
+    let calls = Arc::new(Calls::new(gateway, status, false));
     let kept = Arc::new(Kept::default());
     let context = Context::new(Arc::new(lunch()), Arc::new(Ada));
     let digest = ThreadDigest::new(calls.clone(), kept.clone(), context.clone(), clock.clone());

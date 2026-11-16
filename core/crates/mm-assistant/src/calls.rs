@@ -17,15 +17,13 @@ use crate::status::Status;
 pub struct Calls {
     gateway: Arc<Gateway>,
     status: Arc<Status>,
-    /// MAILMIND_MODEL's, when it names one.
-    model: Option<String>,
     /// MAILMIND_NO_SCHEMA: free-form text rather than structured output.
     no_schema: bool,
 }
 
 impl Calls {
-    pub fn new(gateway: Arc<Gateway>, status: Arc<Status>, model: Option<String>, no_schema: bool) -> Calls {
-        Calls { gateway, status, model: model.filter(|m| !m.is_empty()), no_schema }
+    pub fn new(gateway: Arc<Gateway>, status: Arc<Status>, no_schema: bool) -> Calls {
+        Calls { gateway, status, no_schema }
     }
 
     pub fn gateway(&self) -> &Arc<Gateway> {
@@ -37,14 +35,14 @@ impl Calls {
         if self.gateway.on() { "api" } else { "none" }
     }
 
-    /// The model name stored beside each AI result and shown under it: MAILMIND_MODEL's, else the one in force.
+    /// The model name stored beside each AI result and shown under it: the one in force.
     pub fn model_label(&self) -> String {
-        self.model.clone().unwrap_or_else(|| self.gateway.model())
+        self.gateway.model()
     }
 
     /// Plain text (a thread's digest). `feature` names the call in the usage ledger.
     pub fn call_claude(&self, prompt: &str, feature: &str) -> Result<String, CallError> {
-        self.status.noting(|| self.gateway.ask(prompt, None, feature, self.model.as_deref(), None).map(|r| r.text))
+        self.status.noting(|| self.gateway.ask(prompt, None, feature, None, None).map(|r| r.text))
     }
 
     /// The whole reply to what `call_claude_json` asks, for a caller that keeps which model served it.
@@ -56,7 +54,7 @@ impl Calls {
         feature: &str,
     ) -> Result<Reply, CallError> {
         let schema = (!self.no_schema).then_some(schema);
-        self.status.noting(|| self.gateway.ask(prompt, schema, feature, self.model.as_deref(), effort))
+        self.status.noting(|| self.gateway.ask(prompt, schema, feature, None, effort))
     }
 
     /// Each (custom id, text) as one request of one batch to `model` under `schema` (none with MAILMIND_NO_SCHEMA), at

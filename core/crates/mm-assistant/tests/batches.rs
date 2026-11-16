@@ -387,7 +387,7 @@ fn world(messages: i64, on: bool, limit_micros: Option<i64>) -> World {
     let engine = Arc::new(Keyed(Mutex::new(on.then_some(lm)), Mutex::new(AiProvider::Anthropic), chosen));
     let gateway = Arc::new(Gateway::new(engine.clone(), budget, governor.clone()));
     let status = Arc::new(Status::new(gateway.clone(), clock.clone()));
-    let calls = Arc::new(Calls::new(gateway, status.clone(), None, false));
+    let calls = Arc::new(Calls::new(gateway, status.clone(), false));
     let batching = Batching::new(calls.clone(), book.clone(), book.clone(), clock.clone());
     World { model, engine, book, ledger, clock, governor, calls, batching, status }
 }

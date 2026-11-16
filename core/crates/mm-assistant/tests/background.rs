@@ -166,7 +166,7 @@ fn world(on: bool) -> World {
     let lm: Arc<dyn LanguageModel> = model.clone();
     let gateway = Arc::new(Gateway::new(Arc::new(Keyed(on.then_some(lm))), budget, governor));
     let status = Arc::new(mm_assistant::status::Status::new(gateway.clone(), clock.clone()));
-    let calls = Arc::new(Calls::new(gateway, status, None, false));
+    let calls = Arc::new(Calls::new(gateway, status, false));
     World { model, ledger, clock, calls }
 }
 

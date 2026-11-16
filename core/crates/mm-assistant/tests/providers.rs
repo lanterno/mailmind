@@ -290,7 +290,7 @@ fn world() -> World {
     let governor = Arc::new(CostGovernor::new(budget.clone(), clock.clone()));
     let gateway = Arc::new(Gateway::new(chosen.clone(), budget, governor));
     let status = Arc::new(Status::new(gateway.clone(), clock));
-    let calls = Calls::new(gateway, status.clone(), None, false);
+    let calls = Calls::new(gateway, status.clone(), false);
     World { model, chosen, ledger, calls, status }
 }
 
