@@ -225,6 +225,24 @@ def test_with_no_model_server_running_it_says_to_start_one_and_takes_a_url_and_a
     clean(page)
 
 
+def test_a_services_models_are_asked_for_once_the_url_given_is_saved(page, app, world, openai_api):
+    openai_api.key = None
+    dialog = ai_open(page, app)
+    with page.pw.expect_response(lambda r: r.url.endswith("/api/preferences") and r.request.method == "POST"):
+        dialog.get_by_label("Provider", exact=True).select_option("compatible")
+    expect(dialog.get_by_text("Give the service’s URL, and its models are listed here.")).to_be_visible()
+    listings = []
+    page.on("response", lambda r: listings.append(r.status) if "/api/ai/models" in r.url else None)
+    url = dialog.get_by_label("The service’s URL", exact=True)
+    url.fill(openai_api.url)
+    url.press("Enter")
+    expect(dialog.get_by_label("Model", exact=True).locator("option")).to_have_text(["Choose a model", "gpt-6-luna", "gpt-6.1-sol"])
+    page.heard_all_asked()
+    assert listings == [200]                                    # never before the server held the URL, to be told to give one
+    assert [r.path for r in openai_api.requests] == ["/models"]
+    clean(page)
+
+
 def test_with_ai_turned_off_nothing_only_ai_can_do_is_offered_and_nothing_says_why(page, world, ai):
     asked = []
     page.on("request", lambda r: asked.append(r.url))
