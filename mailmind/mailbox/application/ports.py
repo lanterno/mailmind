@@ -9,7 +9,7 @@ from mailmind.mailbox.application.session import MailSession
 
 type Account = dict[str, Any]                 # an entry of the configuration, as Accounts reads it
 type Result = dict[str, Any]                  # what a request is answered with: its JSON
-type Stored = tuple[int, int, int]            # what a sync stored: kept, junk, the highest UID it saw
+type Stored = tuple[int, int, int]            # what a sync stored: kept, junk, and the newest UID it kept (0 for none)
 
 
 class OpenSession(Protocol):

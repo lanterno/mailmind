@@ -97,7 +97,7 @@ class Syncing:
                     with self._uow.read() as c:
                         first = self._store.get_watermark(c, a["email"], INBOX) == 0
                     first = first and not self._ingest.folder_synced(a["email"], INBOX)
-                    kept, junk, _ = self._ingest.sync_new(a)
+                    kept, junk, newest = self._ingest.sync_new(a)
                     flight.going_on()
                     arrived = 0 if first else kept
                     new += arrived
@@ -106,8 +106,9 @@ class Syncing:
                     with self._uow.write() as c:
                         self._store.record_sync_result(c, a["email"], True)
                     sse.publish("sync-done", {"account": a["email"], "kept": kept, "junk": junk})
-                    if arrived > 0:
-                        sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": arrived})
+                    if arrived > 0:     # one message names its UID, so a notification can say whose it is and open it
+                        one = {"uid": newest} if arrived == 1 else {}
+                        sse.publish("new-mail", {"account": a["email"], "folder": "INBOX", "count": arrived, **one})
                     elif kept or junk:
                         self._folders.invalidate(a["email"])   # what the first scan stored changes the rail's counts
                 except AccountGone:

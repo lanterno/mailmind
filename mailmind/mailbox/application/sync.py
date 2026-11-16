@@ -124,9 +124,10 @@ class Ingest:
         seen every UID up to a point may say the folder is synced to there.
         `stored` gets the pks of what threading has yet to hear of.
         arriving=True says this mail is new to the folder, so the person's filters speak for what MailMind has never seen before.
-        Its account removed (`flight` stopped), it raises AccountGone before the next message is stored."""
+        Its account removed (`flight` stopped), it raises AccountGone before the next message is stored.
+        Returns how many it kept and how many were junk, and the newest UID it kept, junk aside: the message new-mail names."""
         rows: list[dict[str, Any]] = []
-        max_uid, kept, junk = 0, 0, 0
+        max_uid, kept, junk, newest_kept = 0, 0, 0, 0
         gmail = self._accounts.profile(acct).gmail_threads            # only Gmail understands X-GM-THRID and X-GM-LABELS
         if uids:
             for h in session.headers(uids, HEADER_FIELDS, gmail_thread=gmail, gmail_labels=gmail):
@@ -141,6 +142,8 @@ class Ingest:
                 isj = 1 if self._curation.is_junk(b) else 0
                 junk += isj
                 kept += (1 - isj)
+                if not isj:
+                    newest_kept = max(newest_kept, uid)
                 iso, ts = ingested.dated(msg.get("Date", ""))
                 rows.append({"uid": uid, "from_addr": addr.lower(), "from_name": dec(name),
                              "unsub": mime.list_unsub(dec(msg.get("List-Unsubscribe")),
@@ -206,7 +209,7 @@ class Ingest:
         if advance:
             with self._uow.write() as c:
                 self._store.set_watermark(c, acct["email"], max_uid, datetime.now(timezone.utc).isoformat(), folder)
-        return kept, junk, max_uid
+        return kept, junk, newest_kept
 
 
     def _apply_filters(self, c: Connection, pk: int) -> bool:
