@@ -23,8 +23,8 @@ final class DeskScreenTests: XCTestCase {
         }
     }
 
-    private func scriptTheBrief(ai: String = "anthropic") {
-        routes.answer("GET", "/api/digest", DeskFixture.digest(ai: ai))
+    private func scriptTheBrief(ai: String = "anthropic", off: API.AiOff = .noKey) {
+        routes.answer("GET", "/api/digest", DeskFixture.digest(ai: ai, off: off))
         // With AI off none was written.
         routes.answer("GET", "/api/briefing", ai == "none"
             ? API.BriefingAnswer.briefMissing(API.BriefMissing(cached: false, groups: [], missing: true, narrative: "",
@@ -57,6 +57,15 @@ final class DeskScreenTests: XCTestCase {
         let model = briefModel()
         await model.load()
         try draw("brief-ai-off", width: 1000, height: 820, BriefScreen(
+            model: model, attention: AttentionModel(link: link, notices: notices), actions: BriefActions(), now: Self.sunday))
+    }
+
+    /// Turned off in Settings (#49): the tallies under a plain heading, with no word of AI and no week.
+    func testTheBriefWithAITurnedOff() async throws {
+        scriptTheBrief(ai: "none", off: .turnedOff)
+        let model = briefModel()
+        await model.load()
+        try draw("brief-ai-turned-off", width: 1000, height: 820, BriefScreen(
             model: model, attention: AttentionModel(link: link, notices: notices), actions: BriefActions(), now: Self.sunday))
     }
 
@@ -117,6 +126,7 @@ final class DeskScreenTests: XCTestCase {
         await model.load()
         await model.suggest()
         try draw("screener", width: 820, height: 460, ScreenerScreen(model: model))
+        try draw("screener-ai-turned-off", width: 820, height: 460, ScreenerScreen(model: model, suggests: false))
     }
 
     func testCurate() async throws {

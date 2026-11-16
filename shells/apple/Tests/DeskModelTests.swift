@@ -257,8 +257,8 @@ final class DeskModelTests: XCTestCase {
 
     // MARK: The brief
 
-    private func scriptTheBrief(ai: String = "anthropic", briefing: API.BriefingAnswer) {
-        routes.answer("GET", "/api/digest", DeskFixture.digest(ai: ai))
+    private func scriptTheBrief(ai: String = "anthropic", off: API.AiOff = .noKey, briefing: API.BriefingAnswer) {
+        routes.answer("GET", "/api/digest", DeskFixture.digest(ai: ai, off: off))
         routes.answer("GET", "/api/briefing", briefing)
         routes.answer("GET", "/api/upcoming", DeskFixture.upcoming)
         routes.answer("GET", "/api/waiting-on-others", DeskFixture.waiting)
@@ -303,6 +303,21 @@ final class DeskModelTests: XCTestCase {
         XCTAssertNil(model.brief)
         XCTAssertNil(model.trouble)
         XCTAssertEqual(model.aiOn, false)
+        XCTAssertFalse(model.aiTurnedOff, "off for want of a key, the brief says how to turn it on")
+        XCTAssertEqual(model.needs.count, 3)
+    }
+
+    /// Turned off in Settings (#49): the brief stands on the digest, writes nothing, and says nothing of AI.
+    func testWithAITurnedOffTheBriefWritesNothing() async {
+        scriptTheBrief(ai: "none", off: .turnedOff, briefing: Self.missing)
+        let model = briefModel()
+
+        await model.load()
+
+        XCTAssertTrue(routes.sent("POST", "/api/briefing").isEmpty)
+        XCTAssertEqual(model.aiOn, false)
+        XCTAssertTrue(model.aiTurnedOff)
+        XCTAssertNil(model.failing)
         XCTAssertEqual(model.needs.count, 3)
     }
 

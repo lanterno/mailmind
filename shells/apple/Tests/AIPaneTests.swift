@@ -181,3 +181,49 @@ final class AIWordsTests: XCTestCase {
         XCTAssertFalse(wanting.isTurnedOff, "off for want of a key isn't turned off")
     }
 }
+
+/// With AI turned off, nothing only AI serves is offered: not its commands, the search field's ? and !, nor the
+/// brief's week.
+@MainActor
+final class AITurnedOffTests: XCTestCase {
+    func testTheAIsCommandsArentOffered() {
+        let ids = ["snooze", "summarize", "extract", "brief", "ask", "do", "commitments", "week", "curate"]
+        let all = ids.map { DeskCommand(id: $0, label: $0, key: nil, symbol: "circle") {} }
+        XCTAssertEqual(Desk.offered(all, aiTurnedOff: false).map(\.id), ids)
+        XCTAssertEqual(Desk.offered(all, aiTurnedOff: true).map(\.id), ["snooze", "brief", "commitments", "curate"])
+    }
+
+    func testTheBriefsTalliesLeaveOutTheWeek() {
+        XCTAssertEqual(BriefWords.tallies(needs: 1, waiting: 0, replyLater: 0, worthARead: 0, canWait: 0,
+                                          commitments: 0, week: false),
+                       [BriefWords.Tally(count: 1, words: "needs you", goes: .needs, sun: true)])
+        XCTAssertEqual(BriefWords.tallies(needs: 0, waiting: 0, replyLater: 0, worthARead: 0, canWait: 0,
+                                          commitments: 0, week: false), [])
+    }
+
+    func testTheSearchFieldSearchesForWhatStartsWithAQuestionMark() async {
+        let app = MailApp()
+        let server = Fixture.server()
+        server.on("GET", API.Get.Digest.path, Fixture.digest(ai: false, off: .turnedOff))
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        let mailbox = app.mailbox
+        app.place = .folder(account: Fixture.ada, folder: "INBOX")
+        XCTAssertTrue(mailbox.aiTurnedOff)
+        XCTAssertFalse(mailbox.aiOn)
+        XCTAssertEqual(mailbox.submitted("?what did Grace say"),
+                       .search(Search(q: "?what did Grace say", account: Fixture.ada)))
+        XCTAssertEqual(mailbox.submitted("!archive"), .search(Search(q: "!archive", account: Fixture.ada)))
+    }
+
+    func testOffForWantOfAKeyTheQuestionIsStillAQuestion() async {
+        let app = MailApp()
+        let server = Fixture.server()
+        server.on("GET", API.Get.Digest.path, Fixture.digest(ai: false, off: .noKey))
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        XCTAssertFalse(app.mailbox.aiTurnedOff)
+        XCTAssertEqual(app.mailbox.submitted("?what did Grace say"), .question("what did Grace say"),
+                       "the assistant says why it can't answer")
+    }
+}
