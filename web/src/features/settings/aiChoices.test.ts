@@ -1,12 +1,49 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PostBodies } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
-import { aiParts, keepKey, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
+import { aiParts, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave, type LocalServer } from "./aiChoices";
 
 describe("the AI tab", () => {
   it("holds only AI mode's switch while it is off", () => expect(aiParts(false)).toEqual(["mode"]));
   it("shows the connection once AI mode is on, then spending and what is written ahead", () => {
     expect(aiParts(true)).toEqual(["mode", "connection", "spending", "ahead"]);
+  });
+});
+
+const OLLAMA: LocalServer = { name: "Ollama", url: "http://127.0.0.1:11434/v1", models: ["llama3.3:latest", "qwen3:8b"] };
+const STUDIO: LocalServer = { name: "LM Studio", url: "http://127.0.0.1:1234/v1", models: ["qwen3:8b"] };
+const options = (m: ReturnType<typeof localMenu>) => [...(m.first ? [m.first.label] : []), ...m.groups.flatMap((g) => g.models.map((o) => `${g.name}: ${o.label}`))];
+
+describe("a model on this Mac", () => {
+  it("offers each server found by name, in the finder's order, with its models", () => {
+    const menu = localMenu([OLLAMA, STUDIO], "", "");
+    expect(menu.groups.map((g) => [g.name, g.url])).toEqual([["Ollama", OLLAMA.url], ["LM Studio", STUDIO.url]]);
+    expect(options(menu)).toEqual(["Choose a model", "Ollama: llama3.3:latest", "Ollama: qwen3:8b", "LM Studio: qwen3:8b"]);
+    expect(menu.value).toBe("");
+  });
+  it("sets the server's URL and the model in one change, the URL \"\" where it is Ollama's, which a model on this Mac starts at", () => {
+    const menu = localMenu([OLLAMA, STUDIO], "", "");
+    const [ollamas, studios] = [menu.groups[0]!.models[1]!.value, menu.groups[1]!.models[0]!.value];
+    expect(localPicked(ollamas)).toEqual({ ai_base_url: "", ai_model: "qwen3:8b" });
+    expect(localPicked(studios)).toEqual({ ai_base_url: "http://127.0.0.1:1234/v1", ai_model: "qwen3:8b" });
+  });
+  it("shows the model chosen where the server at the URL saved offers it, and the same name at another server isn't it", () => {
+    const studios = localMenu([OLLAMA, STUDIO], "http://127.0.0.1:1234/v1", "qwen3:8b");
+    expect(studios.first).toBeNull();
+    expect(localPicked(studios.value)).toEqual({ ai_base_url: "http://127.0.0.1:1234/v1", ai_model: "qwen3:8b" });
+    expect(localPicked(localMenu([OLLAMA, STUDIO], "", "qwen3:8b").value)).toEqual({ ai_base_url: "", ai_model: "qwen3:8b" });
+  });
+  it("keeps a model chosen that no server found offers, first and on its own", () => {
+    const menu = localMenu([OLLAMA], "http://localhost:8080/v1", "mistral-small");
+    expect(menu.value).toBe(CHOSEN_ELSEWHERE);
+    expect(options(menu)).toEqual(["mistral-small", "Ollama: llama3.3:latest", "Ollama: qwen3:8b"]);
+    expect(localMenu([], "", "mistral-small").first).toEqual({ value: CHOSEN_ELSEWHERE, label: "mistral-small" });
+  });
+  it("says what it found, which server has nothing to chat with yet, and with none what to start", () => {
+    expect(localFound([OLLAMA])).toBe("Running on this Mac: Ollama.");
+    expect(localFound([OLLAMA, STUDIO, { name: "Jan", url: "http://127.0.0.1:1337/v1", models: [] }]))
+      .toBe("Running on this Mac: Ollama, LM Studio and Jan. Jan has no model to chat with yet.");
+    expect(localFound([])).toBe("No model server is running on this Mac. Start one, Ollama or LM Studio for example, and look again.");
   });
 });
 
