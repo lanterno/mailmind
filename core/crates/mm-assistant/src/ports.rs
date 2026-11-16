@@ -201,6 +201,13 @@ impl InForce {
 /// be had is no key.
 pub trait Engine: Send + Sync + fmt::Debug {
     fn in_force(&self) -> InForce;
+
+    /// The model background summaries ask now (`providers::background_model`), read with no key looked up: unless an
+    /// engine says otherwise, the small model of the provider in force.
+    fn background_model(&self) -> String {
+        let force = self.in_force();
+        crate::providers::background_model(force.provider, &force.model, None)
+    }
 }
 
 /// What a provider's models are listed with (#49): the key kept for it and the URL chosen for it, asked once, since a

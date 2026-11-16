@@ -101,7 +101,7 @@ impl Batching {
     /// provider other than Claude (only Claude takes a batch), or while the cost governor holds a batch back, nothing
     /// goes. A batch that wasn't sent gives its messages back, and the next round tries again.
     pub fn submit(&self, at_least: usize, keep: usize) -> Result<usize, Fault> {
-        let label = self.calls.model_label();
+        let label = self.calls.background_label();
         let gateway = self.calls.gateway();
         if self.calls.engine() == "none"
             || !gateway.takes_batches()

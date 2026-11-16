@@ -118,6 +118,11 @@ impl Gateway {
         self.in_force().model
     }
 
+    /// The model background summaries ask: the provider's small one, unless every feature asks one model.
+    pub fn background_model(&self) -> String {
+        self.engine.background_model()
+    }
+
     /// Whether the provider in force takes a batch: only Claude does.
     pub fn takes_batches(&self) -> bool {
         self.in_force().takes_batches()

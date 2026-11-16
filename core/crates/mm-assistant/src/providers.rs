@@ -1,6 +1,9 @@
 //! The AI providers MailMind can ask, as the Assistant reaches them (`mailmind.assistant.domain.providers`, #49): how
-//! each is spoken to and where by default, the model it asks unless a person picks one, why AI is off, and which of
-//! the models a provider lists a person may pick.
+//! each is spoken to and where by default, the model it asks unless a person picks one, its small model, why AI is
+//! off, and which of the models a provider lists a person may pick.
+//!
+//! Background summaries run on every new message, so they ask the provider's small model, its cheapest; everything a
+//! person asks for goes to the model chosen.
 //!
 //! Claude is the default, asked through Anthropic's own API. Every other provider is asked through the one adapter
 //! that speaks OpenAI's Chat Completions, given a base URL, a key (or none) and a model.
@@ -25,6 +28,28 @@ pub fn default_model(provider: AiProvider) -> &'static str {
         AiProvider::Gemini => "gemini-4-hydrogen",
         AiProvider::Local | AiProvider::Compatible => "",
     }
+}
+
+/// The model background summaries ask of a provider: "" for a model on this Mac and a compatible service, which ask
+/// the one chosen.
+pub fn small_model(provider: AiProvider) -> &'static str {
+    match provider {
+        AiProvider::Anthropic => models::SMALL,
+        AiProvider::OpenAi => "gpt-6-luna",
+        AiProvider::Gemini => "gemini-3.5-flash-lite",
+        AiProvider::Local | AiProvider::Compatible => "",
+    }
+}
+
+/// The model background summaries ask: the one every feature asks where one is named (`every`, MAILMIND_MODEL's for
+/// Claude), else the provider's small model, else the one `chosen` (a model on this Mac, a compatible service), else
+/// the provider's own.
+pub fn background_model(provider: AiProvider, chosen: &str, every: Option<&str>) -> String {
+    [every.unwrap_or_default(), small_model(provider), chosen, default_model(provider)]
+        .into_iter()
+        .find(|model| !model.is_empty())
+        .unwrap_or_default()
+        .to_owned()
 }
 
 /// Where a provider's API is unless a person gives another URL: "" where they must.

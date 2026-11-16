@@ -5,7 +5,8 @@
 //! everything older than the newest it took, is left to it.
 //!
 //! Only mail from the last `RECENT_DAYS` is summarized in the background: older mail is summarized when it is opened,
-//! so turning AI on over a mailbox of years spends nothing on its past.
+//! so turning AI on over a mailbox of years spends nothing on its past. Background summaries ask the provider's small
+//! model (`Calls::background_label`), and each is stored under it.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -167,13 +168,18 @@ impl Assessments {
 
     /// Why triage would be held back now, or None when it would go.
     fn held_back(&self) -> Option<&'static str> {
-        self.calls.gateway().held_back("triage", Some(&self.calls.model_label()))
+        self.calls.gateway().held_back("triage", Some(&self.calls.background_label()))
     }
 
-    /// One message triaged, or None when no reply came: it waits for the next round.
+    /// One message triaged by the background's model, or None when no reply came: it waits for the next round.
     pub fn summarize_one(&self, row: &Pending) -> Option<Assessment> {
-        let reply = self.calls.reply_to(&triage_prompt(row), &triage_schema(), Some(EFFORT), "triage").ok()?;
-        Some(assessment_of(row, &reply, &self.calls.model_label(), prompts::TRIAGE.version))
+        self.summarize_with(row, &self.calls.background_label())
+    }
+
+    /// One message triaged by `model`, and kept under its name.
+    fn summarize_with(&self, row: &Pending, model: &str) -> Option<Assessment> {
+        let reply = self.calls.reply_from(&triage_prompt(row), &triage_schema(), Some(EFFORT), "triage", model).ok()?;
+        Some(assessment_of(row, &reply, model, prompts::TRIAGE.version))
     }
 
     /// Triage up to `limit` messages from the last `RECENT_DAYS` that have no summary yet, `workers` at a time, and say
@@ -184,6 +190,7 @@ impl Assessments {
         if self.calls.engine() == "none" || self.held_back().is_some() {
             return Ok(0);
         }
+        let model = self.calls.background_label();
         let recent = recent(self.clock.now().whole_seconds());
         let newer_than = self.triage.batch_cutoff()?.map_or(recent, |cutoff| cutoff.max(recent));
         let rows = self.triage.needs_summary(i64::try_from(limit).unwrap_or(i64::MAX), Some(newer_than))?;
@@ -199,7 +206,7 @@ impl Assessments {
                 scope.spawn(|| {
                     while !stopped.load(Ordering::SeqCst) {
                         let Some(row) = rows.get(next.fetch_add(1, Ordering::SeqCst)) else { break };
-                        let Some(said) = self.summarize_one(row) else { continue };
+                        let Some(said) = self.summarize_with(row, &model) else { continue };
                         let when = mm_kernel::when::iso(self.clock.now());
                         match self.triage.save_summary(row.pk, &said, &when) {
                             Ok(()) => {

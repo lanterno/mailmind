@@ -70,6 +70,8 @@ impl Status {
         report.insert("provider".into(), json!(in_force.provider.id()));
         report.insert("off".into(), json!(off));
         report.insert("model".into(), json!(if on { in_force.model.as_str() } else { "" }));
+        report
+            .insert("background_model".into(), json!(if on { self.gateway.background_model() } else { String::new() }));
         report.insert("key_from".into(), json!(if on { in_force.key_from } else { "" }));
         report.insert("last_ok".into(), json!(last.ok));
         report.insert("last_ts".into(), json!(last.ts));

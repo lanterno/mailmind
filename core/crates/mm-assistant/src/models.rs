@@ -3,6 +3,8 @@
 
 /// Every feature's model unless MAILMIND_MODEL names another.
 pub const DEFAULT: &str = "claude-opus-5-5";
+/// What background summaries ask, unless MAILMIND_MODEL names a model for every feature.
+pub const SMALL: &str = "claude-haiku-5-5";
 /// Sent explicitly: models differ in their default.
 pub const EFFORT: &str = "medium";
 pub const FALLBACK_BETA: &str = "server-side-fallback-2026-07-01";

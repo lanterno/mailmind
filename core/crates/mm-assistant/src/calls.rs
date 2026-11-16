@@ -40,6 +40,12 @@ impl Calls {
         self.gateway.model()
     }
 
+    /// The model background summaries ask, and so store beside what they say: the provider's small one, unless every
+    /// feature asks one model.
+    pub fn background_label(&self) -> String {
+        self.gateway.background_model()
+    }
+
     /// Plain text (a thread's digest). `feature` names the call in the usage ledger.
     pub fn call_claude(&self, prompt: &str, feature: &str) -> Result<String, CallError> {
         self.status.noting(|| self.gateway.ask(prompt, None, feature, None, None).map(|r| r.text))
@@ -55,6 +61,19 @@ impl Calls {
     ) -> Result<Reply, CallError> {
         let schema = (!self.no_schema).then_some(schema);
         self.status.noting(|| self.gateway.ask(prompt, schema, feature, None, effort))
+    }
+
+    /// The same, of `model` rather than the one in force: background summaries ask the background's model.
+    pub fn reply_from(
+        &self,
+        prompt: &str,
+        schema: &Value,
+        effort: Option<&str>,
+        feature: &str,
+        model: &str,
+    ) -> Result<Reply, CallError> {
+        let schema = (!self.no_schema).then_some(schema);
+        self.status.noting(|| self.gateway.ask(prompt, schema, feature, Some(model), effort))
     }
 
     /// Each (custom id, text) as one request of one batch to `model` under `schema` (none with MAILMIND_NO_SCHEMA), at

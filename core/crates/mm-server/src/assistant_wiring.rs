@@ -187,6 +187,14 @@ impl Engine for ApiEngine {
     fn in_force(&self) -> InForce {
         self.chosen().0
     }
+
+    /// The provider's small model, MAILMIND_MODEL's for Claude where it names one, or the one chosen for a model on
+    /// this Mac or a compatible service: read from the preferences, with no key looked up.
+    fn background_model(&self) -> String {
+        let (chosen, provider) = self.preferences();
+        let model = chosen.get(mm_accounts::preferences::AI_MODEL).and_then(Value::as_str).unwrap_or_default();
+        providers::background_model(provider, model, self.every(provider).as_deref())
+    }
 }
 
 impl ApiEngine {
@@ -195,9 +203,7 @@ impl ApiEngine {
         let (chosen, provider) = self.preferences();
         let said = |name: &str| chosen.get(name).and_then(Value::as_str).unwrap_or_default().to_owned();
         let enabled = chosen.get(mm_accounts::preferences::AI_ENABLED).and_then(Value::as_bool).unwrap_or(false);
-        // MAILMIND_MODEL is the Claude model: it wins over the one chosen only while Claude is the provider.
-        let claude_model = if speaks_anthropic(provider) { self.environment.model() } else { None };
-        let model = claude_model.unwrap_or_else(|| said(mm_accounts::preferences::AI_MODEL));
+        let model = self.every(provider).unwrap_or_else(|| said(mm_accounts::preferences::AI_MODEL));
         let model = if model.is_empty() { default_model(provider).to_owned() } else { model };
         let base_url = self.chosen_url(provider, &said(mm_accounts::preferences::AI_BASE_URL));
         let base_url = if base_url.is_empty() { default_base_url(provider).to_owned() } else { base_url };
@@ -215,6 +221,12 @@ impl ApiEngine {
             None => Ok(self.model_for(MadeFor { provider, base_url, key, model: model.clone() })),
         };
         (InForce { provider, model, key_from, local, lm }, keyed)
+    }
+
+    /// The model every feature asks, background summaries too, in place of the one chosen: MAILMIND_MODEL is the Claude
+    /// model, and wins only while Claude is the provider.
+    fn every(&self, provider: AiProvider) -> Option<String> {
+        if speaks_anthropic(provider) { self.environment.model() } else { None }
     }
 
     /// The startup log's line for the AI in force: never its URL, nor its key.
