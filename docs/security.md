@@ -49,12 +49,15 @@ or moving it to another style, removes its item. A config that holds a secret it
 is refused (`PlaintextSecret`): the app won't start, and `check` says which entry, never the secret. No credential may
 name the database's key.
 
-The Mac app's Settings keep the Claude key and the Proton Bridge's password the same way, through routes both servers
-answer: `POST /api/ai/key` (`{key}`) keeps the key in `anthropic-api-key` and names it in the config one version on, as
-`ai key` does, and `POST /api/ai/key/clear` takes the item and the config's `anthropic_api_key` out, whatever it named;
-`POST /api/accounts/bridge-password` (`{password}`) keeps the Bridge's in `proton-bridge-password`, which the config
-doesn't name, and `.../clear` takes it out. Each is a POST behind the perimeter like every other, and each answer, the
-GETs' too, says only whether one is set (`{"ok": true, "set": …}`): never the secret, its length or any part of it. A
+The Mac app's Settings keep each AI provider's key and the Proton Bridge's password the same way, through routes both
+servers answer: `POST /api/ai/key` (`{provider, key}`) keeps the key in `<provider>-api-key` and names it in the config's
+`<provider>_api_key` one version on, as `ai key --provider` does, and `POST /api/ai/key/clear` (`{provider}`) takes the
+item and what the config named out; Ollama takes no key and is refused one. `POST /api/accounts/bridge-password`
+(`{password}`) keeps the Bridge's in `proton-bridge-password`, which the config doesn't name, and `.../clear` takes it
+out. Each is a POST behind the perimeter like every other, and each answer, the GETs' too, says only which providers
+have a key (`{"ok": true, "kept": [...]}`) or whether the Bridge's is set (`{"ok": true, "set": …}`): never the secret,
+its length or any part of it. A key goes to the provider it was kept for and nowhere else, never into a log line or an
+error; a URL a person gives for an AI service is theirs, so it isn't logged either. A
 secret the Keychain can't hold is refused in its words. Keeping one writes nothing to a mail server, so a read-only
 process keeps it too. The Bridge's password is found in the first of `MAILMIND_PROTON_BRIDGE_PASS`, 1Password's
 `op://Private/<MAILMIND_PROTON_OP_ITEM>/password`, that Keychain item and, on the Python app only, the file below; it is

@@ -2,7 +2,7 @@
 
 See [Architecture](architecture.md) for the layers around them.
 
-- `mailmind.assistant` is the first bounded context: what MailMind asks Claude (see [AI calls](ai.md)).
+- `mailmind.assistant` is the first bounded context: what MailMind asks Claude, or the provider chosen instead (see [AI calls](ai.md)).
   `application` holds the ports, the `Gateway` and the `CostGovernor`, `calls` (`Calls`, the way every call goes), `status` (`Status`, how AI stands, and each call's outcome),
   `assessment` (`Assessments`, a message's verdict, its batches and the assess job's round), `context` (`ContextAssembler`, what the model reads of a conversation: the first message and the
   last 19, trimmed and within the caps, with a missing body asked of the `Mail` port at interactive priority), `thread_digest` (`ThreadDigest`), `brief` (`Briefs`), `review` (`Reviews`),
@@ -11,8 +11,10 @@ See [Architecture](architecture.md) for the layers around them.
   (a reply drafted ahead's rules: its key, what's eligible, when one may be served, the backoff and the three strikes; `reply_worthy` gates what is spent, not what is served),
   `brief`, `review` and `digest` (what is taken from a model's answer, within its caps, and what stands in when it won't do), `citations` (only the ids the model was shown)
   and `action_plan` (what is taken from a plan, and how far a verb may reach), and
-  `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK, for the server and every command)
-  and `DisabledModel`, and `sqlite` what the AI said (`answers`). `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
+  `adapters` the `LanguageModel`s: `AnthropicModel` (the SDK, for the server and every command), `ChatModel` (every other
+  provider, over OpenAI's Chat Completions on the standard library) and `DisabledModel`, and `sqlite` what the AI said
+  (`answers`). `domain.providers` says what each provider is and which is in force, and `application.catalog` lists a
+  provider's models for Settings. `mailmind.bootstrap.assistant` binds them, resolves the key, and is how the routers, the other
   contexts and the tests reach the Assistant (`assistant.calls`, `.status`, `.assessments`, `.context`, `.threads`, `.briefs`, `.reviews`, `.replies`, `.rewriter`, `.asker`, `.asking`, `.drafting`, `.bulk`).
   The mail it reads goes through its `Mail` port and a bulk command's filter through `Search`, both bound there.
 - `mailmind.accounts` is the second: the mail accounts and how MailMind reaches each. `mailmind.bootstrap.accounts` binds it, and the app reaches it there: `config`, the `Directory` of the file, `connections`, `health`, `logins`, and `accounts.get(email)`, `accounts.connect(acct)` and the like, the last through `adapters.imap_connection`. `mailmind.accounts.api` names what the other contexts' wiring asks of it (the events, `provider_of`, `TLSPinMismatch`, and `PlaintextSecret` for the entry point).
@@ -30,10 +32,11 @@ See [Architecture](architecture.md) for the layers around them.
   `account:<address>`, and writes `{"keychain": item, "version": n}`: a new one replaces what the item held and is the next
   version (`keychain_credential`), so IDLE logs in afresh and a process that read the last one reads it again. Removing the
   account takes its item out, and a Keychain that won't is `Unreachable`, the file left as it was. `accounts password` and
-  `ai key` do the same from the command line. A draft's test tries a `Typed` password and keeps it nowhere. The Claude
-  key and the Proton Bridge's password are kept and taken out from Settings through `/api/ai/key` and
-  `/api/accounts/bridge-password` (`Directory.set_api_key`, `clear_api_key`, `set_bridge_password`,
-  `clear_bridge_password`), in `anthropic-api-key` and `proton-bridge-password`; the Bridge's is found after the
+  `ai key` do the same from the command line. A draft's test tries a `Typed` password and keeps it nowhere. Each AI
+  provider's key and the Proton Bridge's password are kept and taken out from Settings through `/api/ai/key` and
+  `/api/accounts/bridge-password` (`Directory.set_api_key`, `clear_api_key`, `api_keys_kept`, `set_bridge_password`,
+  `clear_bridge_password`), in `<provider>-api-key` and `proton-bridge-password`; AI's switch, provider, model and URL are
+  preferences, held to their sets and limits there; the Bridge's is found after the
   environment and 1Password and before its file (`secrets.bridge_password`), and a new one tells each account on the
   Bridge it changed.
   `Directory` and `mailmind.bootstrap.assistant` (the API key, the daily limit) read through

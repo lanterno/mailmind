@@ -1,26 +1,51 @@
 # AI calls
 
 Everything routes through `assistant.calls.call_claude_json(prompt, schema)` (or
-`call_claude` for plain text), which call `mailmind.bootstrap.assistant.gateway()`. The
-Claude API is the only engine (decision D8). The `Gateway` builds each request from
-`mailmind.assistant.domain`: effort where the model takes one (`models.takes_effort`), the
+`call_claude` for plain text), which call `mailmind.bootstrap.assistant.gateway()`. Claude is the
+default engine (decision D8); since #49 a person may choose another provider in Settings. The `Gateway` builds each
+request from `mailmind.assistant.domain`: effort where the model takes one (`models.takes_effort`), the
 refusal fallback where it takes that (`models.takes_fallback`), the schema in structured
 output's form (`schema.structured`) and the system prompt. It sends it through a `LanguageModel` and gets back a
 `Reply`: the text, the model that served it, its `Usage` and its stop reason. A call with no
 reply raises `ModelError` (a `RuntimeError` with `status` and `permanent`).
 
-The server and every command talk through the Anthropic SDK: `mailmind.bootstrap.assistant` binds
-`AnthropicModel`, so the command line, which never comes through `front.build`, reaches the API as the
-server does. Only `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and
-`adapters.wire` holds what it sends and how it reads a reply. `tests/contract/test_ai_contract.py`
-holds it to the contract against the fake API. The key is
-`assistant.config_key()` (top-level `"anthropic_api_key"` in `mailmind.config.json`, any
-credential style but the Bridge password: `uv run python -m mailmind ai key`, or `POST /api/ai/key` from the Mac app's
-Settings, keeps it in the login Keychain and writes `{"keychain": "anthropic-api-key", ...}` there, and
-`POST /api/ai/key/clear` takes both out) and only then `ANTHROPIC_API_KEY`; a config key that won't resolve
-means no key, never a fall-through to the environment's. With no key the model is
-`DisabledModel`: `assistant.calls.engine()` is `"none"`, and a call raises `AIOff` (from
-`application.ports`) before anything is sent.
+The providers are a closed set, `kernel.ai_provider.AiProvider`, and `assistant.domain.providers.PROVIDERS` says what
+each is: `anthropic` (Claude, through the Anthropic SDK), and `openai`, `gemini`, `ollama` (on this Mac, no key) and
+`compatible` (any other service that speaks OpenAI's Chat Completions, at a URL a person gives), all through one
+adapter on the standard library, `adapters.openai_chat`, whose wire format is `adapters.chat_wire`. Four preferences
+choose: `ai_enabled` (the switch, on by default), `ai_provider` (`anthropic` by default), `ai_model` and
+`ai_base_url` (each `""` for the provider's own; a URL is https, or http on this Mac). Choosing another provider
+without naming a model or URL sets both back to `""`. `MAILMIND_MODEL` still wins over the model chosen, and
+`ANTHROPIC_BASE_URL` stands in for Claude's URL when none is chosen.
+
+`bootstrap.assistant.engine()` reads what is in force at each call (`providers.in_force`), and the gateway makes the
+model afresh when it changes: `AnthropicModel`, `ChatModel`, or `DisabledModel` when AI is off, for the first of
+`turned-off`, `no-key`, `no-url` (a compatible service with none) or `no-model` (Ollama or a compatible service with
+none chosen). Off, `assistant.calls.engine()` is `"none"`, and every call, a background job's too, raises `AIOff`
+(from `application.ports`, in words that say why) before anything is sent. `tests/contract/test_ai_contract.py` and
+`tests/contract/test_openai_chat_contract.py` hold the two adapters to the contract against the fake APIs.
+
+Only `mailmind/assistant/adapters/anthropic_sdk.py` imports `anthropic`, and `adapters.wire` holds what it sends and
+how it reads a reply. `ChatModel` posts to `{base}/chat/completions`: the system prompt as the first message, the
+schema as a `json_schema` response format (strict only where every object is closed and needs each property),
+`max_completion_tokens` for OpenAI and `max_tokens` for the rest, and no effort or fallback. Ollama or a compatible
+service that answers a 400 naming `response_format` is asked once more without it. A `message.refusal` is a refusal;
+cached prompt tokens are cache reads, and nothing writes a cache.
+
+Each provider's key is `assistant.config_key(provider)`: the top-level `"<provider>_api_key"` in
+`mailmind.config.json`, any credential style but the Bridge password. `uv run python -m mailmind ai key
+[--provider P]`, or `POST /api/ai/key` `{provider, key}` from Settings, keeps it in the login Keychain as
+`<provider>-api-key` and names that item there; `POST /api/ai/key/clear` `{provider}` takes both out. Each answers
+`{"ok": true, "kept": [...]}`, the providers whose key the file names, as `GET /api/ai/key` does. Only Claude's
+falls back to `ANTHROPIC_API_KEY`; a config key that won't resolve means no key, never a fall-through to the
+environment's. Ollama takes no key, and none is ever sent to it. `uv run python -m mailmind ai on|off` turns the
+switch as Settings does.
+
+`GET /api/ai/models?provider=P` (`application.catalog`) lists the models a provider offers, for Settings: at the URL
+chosen while P is the provider in force, else P's own, with the key kept for it. It answers `{ok, models, default}`,
+sorted, with Gemini's `models/` dropped and OpenAI's and Gemini's ids that can't chat left out. It spends nothing, so it
+goes with AI turned off too; no key, no URL or a key the provider refuses is a 400 in words, and a provider that
+doesn't answer is a 502.
 `MAILMIND_NO_SCHEMA=1` falls back to free-form text. AI actions never
 fire on their own — drafts wait, bulk commands require a preview and confirm. The three that do are opt-in and off by default: the morning's brief,
 written ahead of the first open, the week's review, written ahead on Monday morning and kept in the database, never sent as mail, and Tidy's
@@ -61,9 +86,12 @@ entry point that bypasses them won't show up there.
 The `Gateway` counts every call it sends in the usage ledger, migration 21's `ai_usage` (the
 `UsageLedger` port, `adapters.sqlite_ledger`). There is one row per local day, feature, model
 asked, model that served it and outcome: `ok`, `refused`, `rejected` (a permanent 4xx) or
-`failed`. Each row holds the calls, their tokens and `cost_micros`. `domain.pricing` computes the
-cost from Anthropic's list prices in integers, rounded up. It prices an unknown model as the
-dearest, and a server-side fallback at the dearer of the two models. `Gateway.ask` requires a
+`failed`. Each row holds the calls, their tokens and `cost_micros`, whichever provider served them. `domain.pricing`
+computes the cost from each provider's list prices (one table: Claude, OpenAI and Gemini) in integers, rounded up, with
+cache writes at 1.25 times input for Claude only. A name is looked up after its last `/` (so `openai/gpt-6.1-sol` and
+Gemini's `models/...` find their rows). An unknown model is free on Ollama or at a URL on this Mac, and otherwise the
+dearest of its family (`claude-`, `gpt-` or `o<digit>`, `gemini-`) or of the whole table; a server-side fallback costs
+the dearer of the two models. `Gateway.ask` requires a
 `feature`: `triage`, `triage-batch`, `thread`, `brief`, `delta`, `review`, `draft`, `draft-ahead`, `rewrite`, `extract`,
 `screen`, `rationale`, `sender`, `brief-ahead`, `review-ahead`, `auto-tidy`, `ask` and `plan` so far, and a new AI call names its own. `call_claude` and `call_claude_json`
 pass it on, `other` when the caller names none. With AI off nothing is counted. A ledger write
@@ -102,7 +130,9 @@ as a failure. Nothing in the governor is durable: a restart closes the breaker, 
 holds across one because the ledger does. `/api/debug/ai` shows its `snapshot()`, and the
 tests start each one afresh with `forget()`.
 
-A backlog goes through the Message Batches API at half price (`pricing.batch_micros`, decision D7): `BATCH_MIN`
+A backlog goes through the Message Batches API at half price (`pricing.batch_micros`, decision D7), only while Claude
+is the provider (`LanguageModel.takes_batches`): with another, a backlog goes synchronously, a batch already out waits
+until Claude is chosen again, and `assess --batch` says "Batches need Claude as the AI provider." `BATCH_MIN`
 messages waiting is one, whether a first import or after an outage, and new mail stays synchronous.
 `assistant.assessments.batch_submit` sends it and `batch_collect` brings the answers in, both from its `round`, which
 collects first since that sends no mail and the answers are paid for. `uv run python -m mailmind assess --batch` does
