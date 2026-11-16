@@ -217,9 +217,11 @@ impl Environment {
         self.raw("ANTHROPIC_BASE_URL").filter(|url| !url.is_empty()).map(str::to_owned)
     }
 
-    /// MAILMIND_MODEL: the Claude model every feature asks, None for the default.
+    /// MAILMIND_MODEL: the Claude model every feature asks, without the spaces around it as `str.strip` takes them
+    /// off; None for the default when unset or blank.
     pub fn model(&self) -> Option<String> {
-        Some(self.raw("MAILMIND_MODEL")?.trim().to_owned()).filter(|m| !m.is_empty())
+        let model = mm_kernel::text::strip(self.raw("MAILMIND_MODEL")?);
+        (!model.is_empty()).then(|| model.to_owned())
     }
 
     /// MAILMIND_NO_SCHEMA on: free-form JSON rather than structured output. A value it doesn't take is off.
