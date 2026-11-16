@@ -155,3 +155,35 @@ def test_a_failed_test_says_what_to_do_next_and_where():
     assert r["link"] == {"url": "https://account.apple.com", "words": "Make an app-specific password"}
     r = connections(Probe(outgoing=SMTPAuthenticationError(535))).test({"email": ADA["email"]})
     assert (r["says"].startswith("Reading mail works"), r["link"]) == (True, None)
+
+
+class _Removes:
+    """The file, as far as a removal asks it: it holds Ada alone."""
+    def remove_account(self, email):
+        return email == ADA["email"]
+
+
+def removing(forgot):
+    def forget_mail(email):
+        forgot.append(email)
+        return 7
+    return Connections(_Removes(), None, None, Probe(), quiet, None, lambda _email: None, forget_mail)
+
+
+def test_removing_an_account_with_its_mail_lets_go_of_what_this_mac_keeps():
+    forgot = []
+    r = removing(forgot).change("delete", {"email": ADA["email"], "delete_mail": True})
+    assert (r, forgot) == ({"ok": True, "removed": ADA["email"], "mail_deleted": 7}, [ADA["email"]])
+
+
+def test_removing_an_account_alone_keeps_its_mail():
+    forgot = []
+    assert removing(forgot).change("delete", {"email": ADA["email"]}) == {"ok": True, "removed": ADA["email"]}
+    assert forgot == []
+
+
+def test_an_account_the_file_doesnt_hold_lets_go_of_nothing():
+    forgot = []
+    with pytest.raises(NotFound):
+        removing(forgot).change("delete", {"email": "zed@example.test", "delete_mail": True})
+    assert forgot == []
