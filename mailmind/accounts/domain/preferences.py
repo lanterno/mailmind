@@ -15,10 +15,8 @@ import math
 import re
 from collections.abc import Mapping
 from typing import Any, Literal, get_args
-from urllib.parse import urlsplit
-
 from mailmind.accounts.domain.credential import api_key_who
-from mailmind.kernel import send_window
+from mailmind.kernel import ai_provider, send_window
 from mailmind.kernel.ai_provider import AI_PROVIDERS, DEFAULT_PROVIDER
 from mailmind.kernel.draft_tone import DEFAULT_TONE, DraftTone
 from mailmind.kernel.errors import Refused
@@ -74,8 +72,7 @@ DEFAULTS: Mapping[str, Any] = {
 AI_DAILY_LIMIT = "ai_daily_limit_usd"       # at the file's top level, not in the block
 AI_DAILY_LIMIT_MAX = 1000                   # dollars: past this is a slip of the keyboard, not a budget
 AI_MODEL_MAX = 200                          # characters in a model's name
-AI_BASE_URL_MAX = 500                       # characters in a service's URL
-LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})     # the hosts an http URL may name: this Mac
+AI_BASE_URL_MAX = ai_provider.BASE_URL_MAX  # characters in a service's URL
 BLOCK = "preferences"
 
 _FOLLOW_PROVIDER = ("ai_model", "ai_base_url")             # a provider's own, set back when another is chosen
@@ -92,32 +89,9 @@ _REFUSALS = {"undo_send_seconds": f"the Undo Send window must be {send_window.SH
 LOCAL_ELSEWHERE = "A model on this Mac must be at 127.0.0.1, ::1 or localhost."
 
 
-def _service_url(value: str) -> bool:
-    """Whether `value` can be an AI service's URL: https to a host, or http to this Mac, in printable ASCII, with no user or
-    password, query or fragment, and a port from 1 to 65535 where it names one."""
-    if len(value) > AI_BASE_URL_MAX or any(not "!" <= ch <= "~" for ch in value) or "?" in value or "#" in value:
-        return False
-    try:
-        parts = urlsplit(value)
-        port = parts.port                               # a port that is no number, or past 65535, raises
-    except ValueError:
-        return False
-    if "@" in parts.netloc or not parts.hostname or parts.netloc.endswith(":") or port == 0:     # "host:" names no port
-        return False
-    return parts.scheme == "https" or (parts.scheme == "http" and parts.hostname in LOOPBACK)
-
-
-def _on_this_mac(url: str) -> bool:
-    """Whether a URL that can be a service's names this Mac."""
-    try:
-        return urlsplit(url).hostname in LOOPBACK
-    except ValueError:
-        return False
-
-
 def _here_for_local(prefs: Mapping[str, Any]) -> bool:
     """Whether the provider and URL go together: a model on this Mac only at a URL on this Mac, or at its own."""
-    return prefs["ai_provider"] != "local" or not prefs["ai_base_url"] or _on_this_mac(prefs["ai_base_url"])
+    return prefs["ai_provider"] != "local" or not prefs["ai_base_url"] or ai_provider.on_this_machine(prefs["ai_base_url"])
 
 
 def _kept(name: str, value: Any) -> Any:
@@ -138,7 +112,7 @@ def _takes(name: str, value: Any) -> bool:
     if name == "ai_model":
         return isinstance(value, str) and (value == "" or _MODEL.fullmatch(value) is not None)
     if name == "ai_base_url":
-        return isinstance(value, str) and (value == "" or _service_url(value))
+        return isinstance(value, str) and (value == "" or ai_provider.base_url(value) is not None)
     return name in DEFAULTS and isinstance(value, bool)
 
 
