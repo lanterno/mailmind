@@ -121,14 +121,17 @@ fn truthy(value: Option<&Value>) -> bool {
 
 /// The reply in a response to a request for model `asked`. A refusal reads as "", as Claude's does: the call worked,
 /// so callers store their fallback rather than retry. Cached prompt tokens count as cache reads, and the rest of the
-/// prompt as input.
+/// prompt as input. The output is the completion's tokens, or all but the prompt's where `total_tokens` says more:
+/// Gemini leaves a thinking model's thoughts out of `completion_tokens`, and bills them as output.
 pub fn reply(response: &Map<String, Value>, asked: &str) -> Reply {
     let usage = response.get("usage").filter(|u| u.is_object());
     let prompt_tokens = count(usage, "prompt_tokens");
     let cached = count(usage.and_then(|u| u.get("prompt_tokens_details")), "cached_tokens").min(prompt_tokens);
+    // Without `total_tokens` this is less than nought, and the completion's count stands.
+    let beyond_prompt = count(usage, "total_tokens") - prompt_tokens;
     let spent = Usage {
         input_tokens: prompt_tokens - cached,
-        output_tokens: count(usage, "completion_tokens"),
+        output_tokens: count(usage, "completion_tokens").max(beyond_prompt),
         cache_write_tokens: 0,
         cache_read_tokens: cached,
     };
