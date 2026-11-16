@@ -1,7 +1,9 @@
 //! A message's body fetched as it opens (`Ingest.fetch_body` as `bodies.message_body` runs it), against a server
 //! that writes down what it was asked and a store in memory: on the account's gate as a person waits, or as a
 //! prefetch that gives way to a held gate; kept with what opening it records; read from the store once it is there.
-//! And as the body backfill fetches one: as a prefetch does, a lost connection told apart from the rest.
+//! And as the body backfill fetches a folder's few: as a prefetch gives way, their openings in one FETCH, the whole
+//! of those cut off several a FETCH where small enough and only the text of one too large, a lost connection told
+//! apart from the rest.
 
 #![allow(clippy::unwrap_used)]
 
@@ -12,12 +14,12 @@ use mm_content::mime::Attachment;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::backfill_ports::{BackfillFetch, Tried};
-use mm_mailbox::fetch_ports::{KeptBodies, KeptBody};
-use mm_mailbox::fetching::{Fetching, FetchingParts};
+use mm_mailbox::fetch_ports::{KeptBodies, KeptBody, KeptText};
+use mm_mailbox::fetching::{FETCH_BYTES, Fetching, FetchingParts, OPENING_BYTES, WHOLE_MOST};
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait};
 use mm_mailbox::ports::{BodyFetch, MailSession, Row, SessionError, StoredBodies};
 use mm_mailbox::roles::Folder;
-use mm_mailbox::session::{Headers, MailServer, MailServers, Search, Selected, ServerError};
+use mm_mailbox::session::{Headers, MailServer, MailServers, Opening, Search, Selected, ServerError};
 use serde_json::json;
 
 const ADA: &str = "ada@example.test";
@@ -44,11 +46,27 @@ enum Body {
     RefusesTheSelect,
 }
 
-/// A server with one message at UID 7, which writes down what it was asked.
+/// A server with the messages it is given, RAW at UID 7 unless told else, which writes down what it was asked.
 #[derive(Debug)]
 struct Server {
     body: Body,
     asked: Arc<Mutex<Vec<String>>>,
+    messages: BTreeMap<u32, Vec<u8>>,
+}
+
+/// UIDs as a set says them.
+fn set(uids: &[u32]) -> String {
+    uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",")
+}
+
+/// A message of about `kib` KiB: a line of text, then an attachment.
+fn sized(kib: usize) -> Vec<u8> {
+    let mut raw =
+        b"Subject: Plans\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\n\
+The plans, attached.\r\n--b\r\nContent-Type: application/pdf; name=plans.pdf\r\n\r\n"
+            .to_vec();
+    raw.resize(kib * 1024, b'x');
+    raw
 }
 
 impl MailSession for Server {
@@ -99,9 +117,30 @@ impl MailServer for Server {
         match self.body {
             Body::Refuses => Err(ServerError::Refused("error")),
             Body::Lost => Err(ServerError::Unreachable("abort")),
-            _ if uid == 7 => Ok(Some(RAW.to_vec())),
-            _ => Ok(None),
+            _ => Ok(self.messages.get(&uid).cloned()),
         }
+    }
+
+    fn openings(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Opening>, ServerError> {
+        self.asked.lock().unwrap().push(format!("OPENINGS {} {bytes}", set(uids)));
+        match self.body {
+            // Each refused is left out, as a server's NO for them leaves them.
+            Body::Refuses => Ok(BTreeMap::new()),
+            Body::Lost => Err(ServerError::Unreachable("abort")),
+            _ => Ok(uids
+                .iter()
+                .filter_map(|uid| self.messages.get(uid).map(|raw| (*uid, raw)))
+                .map(|(uid, raw)| {
+                    let size = Some(u32::try_from(raw.len()).unwrap());
+                    (uid, Opening { raw: raw[..raw.len().min(bytes as usize)].to_vec(), size })
+                })
+                .collect()),
+        }
+    }
+
+    fn bodies(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
+        self.asked.lock().unwrap().push(format!("BODIES {}", set(uids)));
+        Ok(uids.iter().filter_map(|uid| self.messages.get(uid).map(|raw| (*uid, raw.clone()))).collect())
     }
 
     fn arrivals(&mut self, _uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {
@@ -132,19 +171,23 @@ impl MailServer for Server {
         Err(ServerError::Refused("write"))
     }
 
-    fn shutdown(&mut self) {}
+    fn shutdown(&mut self) {
+        self.asked.lock().unwrap().push("SHUTDOWN".to_owned());
+    }
 }
 
 #[derive(Debug)]
 struct Servers {
     body: Mutex<Body>,
     asked: Arc<Mutex<Vec<String>>>,
+    messages: Mutex<BTreeMap<u32, Vec<u8>>>,
 }
 
 impl MailServers for Servers {
     fn open(&self, account: &str, _timeout_seconds: u64) -> Result<Box<dyn MailServer>, ServerError> {
         self.asked.lock().unwrap().push(format!("LOGIN {account}"));
-        Ok(Box::new(Server { body: *self.body.lock().unwrap(), asked: self.asked.clone() }))
+        let messages = self.messages.lock().unwrap().clone();
+        Ok(Box::new(Server { body: *self.body.lock().unwrap(), asked: self.asked.clone(), messages }))
     }
 }
 
@@ -170,12 +213,13 @@ impl Gates for Watched {
     }
 }
 
-/// One message's row, its body and parts as kept, in memory.
+/// One message's row, its body and parts as kept, and the text kept of one left to be opened, in memory.
 #[derive(Debug, Default)]
 struct Store {
     rows: Mutex<HashMap<i64, Row>>,
     bodies: Mutex<HashMap<i64, KeptBody>>,
     parts: Mutex<HashMap<i64, Vec<Attachment>>>,
+    texts: Mutex<HashMap<i64, KeptText>>,
 }
 
 impl Store {
@@ -223,6 +267,11 @@ impl KeptBodies for Store {
         }
         Ok(())
     }
+
+    fn keep_text(&self, pk: i64, text: &KeptText) -> Result<(), Fault> {
+        self.texts.lock().unwrap().insert(pk, text.clone());
+        Ok(())
+    }
 }
 
 struct World {
@@ -235,7 +284,8 @@ struct World {
 impl World {
     fn new(body: Body) -> World {
         let store = Arc::new(Store::with_message(1));
-        let servers = Arc::new(Servers { body: Mutex::new(body), asked: Arc::default() });
+        let messages = Mutex::new(BTreeMap::from([(7, RAW.to_vec())]));
+        let servers = Arc::new(Servers { body: Mutex::new(body), asked: Arc::default(), messages });
         let gates = Arc::new(Watched::default());
         let fetching = Fetching::new(FetchingParts {
             stored: store.clone(),
@@ -352,26 +402,83 @@ fn a_prefetch_gives_way_to_a_held_gate_and_fetches_nothing() {
     assert!(world.store.bodies.lock().unwrap().is_empty());
 }
 
+impl World {
+    /// The server holds `messages` too, as the store holds rows of pks `uid - 100`.
+    fn holding(self, messages: impl IntoIterator<Item = (u32, Vec<u8>)>) -> World {
+        for (uid, raw) in messages {
+            self.servers.messages.lock().unwrap().insert(uid, raw);
+            let row =
+                json!({"pk": i64::from(uid) - 100, "account": ADA, "folder": "Archive", "uid": uid, "body_fetched": 0});
+            self.store.rows.lock().unwrap().insert(i64::from(uid) - 100, row.as_object().unwrap().clone());
+        }
+        self
+    }
+
+    fn kept(&self) -> Vec<i64> {
+        let mut kept: Vec<i64> = self.store.bodies.lock().unwrap().keys().copied().collect();
+        kept.sort_unstable();
+        kept
+    }
+
+    fn texts(&self) -> Vec<i64> {
+        let mut texts: Vec<i64> = self.store.texts.lock().unwrap().keys().copied().collect();
+        texts.sort_unstable();
+        texts
+    }
+}
+
 #[test]
-fn the_backfill_fetches_and_keeps_a_body_at_maintenance_priority_without_waiting() {
-    let world = World::new(Body::Gives);
-    assert_eq!(world.fetching.try_body(ADA, 1), Tried::Ran);
+fn the_backfill_keeps_a_folders_bodies_from_one_fetch_of_their_openings_at_maintenance_priority() {
+    let world = World::new(Body::Gives).holding([(108, b"Subject: Hi\r\n\r\nHello\r\n".to_vec())]);
+    assert_eq!(world.fetching.try_bodies(ADA, "Archive", &[(1, 7), (8, 108)]), Tried::Ran);
     assert_eq!(world.jobs(), [(ADA.to_owned(), Priority::Maintenance, Wait::Not)]);
-    assert_eq!(world.asked()[1..], ["EXAMINE Archive".to_owned(), "BODY.PEEK[] 7".into(), "LOGOUT".into()]);
-    assert!(world.store.bodies.lock().unwrap().contains_key(&1));
+    assert_eq!(world.asked()[1..], ["EXAMINE Archive".to_owned(), "OPENINGS 7,108 65536".into(), "LOGOUT".into()]);
+    assert_eq!(world.kept(), [1, 8]);
+    assert_eq!(world.store.bodies.lock().unwrap()[&1].raw, RAW);
+    assert_eq!(OPENING_BYTES, 65_536);
+}
+
+#[test]
+fn a_message_cut_off_is_fetched_whole_several_a_fetch_and_one_too_large_keeps_only_its_texts() {
+    assert_eq!((WHOLE_MOST, FETCH_BYTES), (256 * 1024, 2 * 1024 * 1024));
+    let world = World::new(Body::Gives).holding([(101, sized(100)), (102, sized(300)), (103, sized(256))]);
+    let batch = [(1, 101), (2, 102), (3, 103), (7, 7)];
+    assert_eq!(world.fetching.try_bodies(ADA, "Archive", &batch), Tried::Ran);
+    assert_eq!(
+        world.asked()[1..],
+        ["EXAMINE Archive".to_owned(), "OPENINGS 101,102,103,7 65536".into(), "BODIES 101,103".into(), "LOGOUT".into()]
+    );
+    assert_eq!(world.kept(), [1, 3, 7]);
+    assert_eq!(world.store.bodies.lock().unwrap()[&3].raw, sized(256), "kept whole");
+    // The one over a quarter of a megabyte keeps its opening's text, and its attachment waits to be opened.
+    assert_eq!(world.texts(), [2]);
+    assert_eq!(world.store.texts.lock().unwrap()[&2].body_text.trim(), "The plans, attached.");
+}
+
+#[test]
+fn whole_messages_go_about_two_megabytes_a_fetch() {
+    let world = World::new(Body::Gives).holding((101..=112).map(|uid| (uid, sized(250))));
+    let batch: Vec<(i64, u32)> = (101..=112).map(|uid| (i64::from(uid) - 100, uid)).collect();
+    assert_eq!(world.fetching.try_bodies(ADA, "Archive", &batch), Tried::Ran);
+    let bodies: Vec<String> = world.asked().into_iter().filter(|a| a.starts_with("BODIES")).collect();
+    assert_eq!(bodies, ["BODIES 101,102,103,104,105,106,107,108", "BODIES 109,110,111,112"]);
+    assert_eq!(world.kept().len(), 12);
 }
 
 #[test]
 fn the_backfill_hears_of_a_held_gate_and_a_lost_connection_apart_from_the_rest() {
     let world = World::new(Body::Gives);
     *world.gates.held.lock().unwrap() = true;
-    assert_eq!(world.fetching.try_body(ADA, 1), Tried::Busy);
+    assert_eq!(world.fetching.try_bodies(ADA, "Archive", &[(1, 7)]), Tried::Busy);
     assert!(world.asked().is_empty());
-    assert_eq!(World::new(Body::Lost).fetching.try_body(ADA, 1), Tried::Unreachable);
-    // A refusal, a folder the server won't select and a row gone each ran, and kept nothing.
-    for (body, pk) in [(Body::Refuses, 1), (Body::RefusesTheSelect, 1), (Body::Gives, 2)] {
+    let lost = World::new(Body::Lost);
+    assert_eq!(lost.fetching.try_bodies(ADA, "Archive", &[(1, 7)]), Tried::Unreachable);
+    assert_eq!(lost.asked().last().map(String::as_str), Some("SHUTDOWN"), "a lost connection isn't kept");
+    // A refusal, a folder the server won't select and a message gone each ran, and kept nothing.
+    for (body, uid) in [(Body::Refuses, 7), (Body::RefusesTheSelect, 7), (Body::Gives, 8)] {
         let world = World::new(body);
-        assert_eq!(world.fetching.try_body(ADA, pk), Tried::Ran);
-        assert!(world.store.bodies.lock().unwrap().is_empty());
+        assert_eq!(world.fetching.try_bodies(ADA, "Archive", &[(1, uid)]), Tried::Ran);
+        assert!(world.kept().is_empty() && world.texts().is_empty());
+        assert_eq!(world.asked().last().map(String::as_str), Some("LOGOUT"));
     }
 }

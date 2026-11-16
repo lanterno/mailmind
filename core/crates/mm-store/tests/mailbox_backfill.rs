@@ -1,6 +1,6 @@
 //! What the body backfill reads, as the Python app's `bodies_to_fetch` and `still_without_body` read it: an account's
-//! newest messages with no body text, none on its way out, but for those a round leaves out; and which of some still
-//! have none.
+//! newest messages with no body text, none on its way out, but for those a round leaves out, as far back as it is
+//! asked, each with where it is; and which of some still have none.
 
 #![allow(clippy::unwrap_used)]
 
@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use mm_kernel::seams::{Outside, Tripped};
-use mm_mailbox::backfill_ports::BodiesWanted;
+use mm_mailbox::backfill_ports::{BodiesWanted, Wanted};
 use mm_store::{Database, DbKey, Store};
 
 #[derive(Debug)]
@@ -49,15 +49,32 @@ fn database(dir: &Path) -> Database {
     database
 }
 
+fn pks(wanted: Vec<Wanted>) -> Vec<i64> {
+    wanted.into_iter().map(|one| one.pk).collect()
+}
+
 #[test]
 fn an_accounts_newest_without_a_body_come_first_leaving_out_mail_on_its_way_out_and_what_a_round_skips() {
     let dir = tempfile::tempdir().unwrap();
     let database = database(dir.path());
-    assert_eq!(database.bodies_to_fetch("ada@example.test", &[], 12).unwrap(), [2, 3, 6, 1]);
-    assert_eq!(database.bodies_to_fetch("ada@example.test", &[], 2).unwrap(), [2, 3]);
-    assert_eq!(database.bodies_to_fetch("ada@example.test", &[3, 7], 2).unwrap(), [2, 6]);
-    assert_eq!(database.bodies_to_fetch("bea@example.test", &[], 12).unwrap(), [7]);
-    assert_eq!(database.bodies_to_fetch("cy@example.test", &[], 12).unwrap(), Vec::<i64>::new());
+    let wanted =
+        |account: &str, skip: &[i64], limit: usize| pks(database.bodies_to_fetch(account, skip, 0, limit).unwrap());
+    assert_eq!(wanted("ada@example.test", &[], 12), [2, 3, 6, 1]);
+    assert_eq!(wanted("ada@example.test", &[], 2), [2, 3]);
+    assert_eq!(wanted("ada@example.test", &[3, 7], 2), [2, 6]);
+    assert_eq!(wanted("bea@example.test", &[], 12), [7]);
+    assert_eq!(wanted("cy@example.test", &[], 12), Vec::<i64>::new());
+}
+
+#[test]
+fn each_says_where_it_is_and_none_older_than_asked_comes() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path());
+    let ada = database.bodies_to_fetch("ada@example.test", &[], 300, 12).unwrap();
+    let archived = Wanted { pk: 3, folder: "Archive".to_owned(), uid: 1 };
+    assert_eq!(ada, [Wanted { pk: 2, folder: "INBOX".to_owned(), uid: 2 }, archived]);
+    assert_eq!(pks(database.bodies_to_fetch("ada@example.test", &[], 301, 12).unwrap()), [2]);
+    assert_eq!(pks(database.bodies_to_fetch("bea@example.test", &[], 701, 12).unwrap()), Vec::<i64>::new());
 }
 
 #[test]

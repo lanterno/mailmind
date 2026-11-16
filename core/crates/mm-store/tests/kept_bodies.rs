@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use mm_kernel::seams::{Outside, Tripped};
-use mm_mailbox::fetch_ports::{KeptBodies, KeptBody};
+use mm_mailbox::fetch_ports::{KeptBodies, KeptBody, KeptText};
 use mm_mailbox::ports::StoredBodies;
 use mm_store::{Database, DbKey, Store};
 
@@ -128,4 +128,27 @@ fn a_body_kept_again_replaces_what_was_kept() {
         })
         .unwrap();
     assert_eq!(counts, (1, 1));
+}
+
+#[test]
+fn the_text_of_a_message_left_to_be_opened_is_kept_for_search_and_its_body_still_waits() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path());
+    // Its opening: the text, and the start of a part cut off.
+    let opening = &RAW[..RAW.len() - 20];
+    database.keep_text(1, &KeptText::of(opening)).unwrap();
+    let row = database.message(1).unwrap().unwrap();
+    assert_eq!(
+        (row["body_fetched"].clone(), row["body_text"].clone()),
+        (0.into(), "Herringbone lunch at noon?".into())
+    );
+    assert_eq!(row["snippet"], "Herringbone lunch at noon?");
+    assert_eq!(database.raw(1).unwrap(), None);
+    assert_eq!(found(&database, "herringbone"), [1]);
+    // A sync's snippet stays, and text kept already, from the whole body or before, is never replaced.
+    database.keep_text(2, &KeptText::of(opening)).unwrap();
+    assert_eq!(database.message(2).unwrap().unwrap()["snippet"], "Kept at sync");
+    database.keep_text(2, &KeptText::of(b"Subject: x\r\n\r\nSomething else\r\n")).unwrap();
+    assert_eq!(database.message(2).unwrap().unwrap()["body_text"], "Herringbone lunch at noon?");
+    assert!(found(&database, "something").is_empty());
 }
