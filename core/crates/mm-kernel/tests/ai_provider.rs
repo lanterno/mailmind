@@ -51,6 +51,9 @@ fn a_base_url_with_a_login_a_query_a_fragment_or_plain_http_off_this_machine_is_
         "http://api.example.test/v1",
         "http://10.0.0.5/v1",
         "http://127.0.0.2/v1",
+        // This machine only by the names the Python app takes: 127.0.0.1, ::1 and localhost.
+        "http://[0:0:0:0:0:0:0:1]/v1",
+        "http://[::ffff:127.0.0.1]/v1",
         "http://localhost.example.test/v1",
         "https://user:secret@api.example.test/v1",
         "https://user@api.example.test",
