@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod addresses;
 pub mod ago;
+pub mod ai_provider;
 pub mod errors;
 pub mod events;
 pub mod identity;
