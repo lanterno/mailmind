@@ -147,8 +147,9 @@ export function AiForm() {
   const kept = keys.data?.kept.includes(provider) ?? false;
   const ai = digest?.ai;
   const keptFrom = ai?.provider === provider && ai.key_from && ai.key_from !== "mailmind.config.json" ? ai.key_from : "";
-  const wants = needs.key === "needed" && !kept && !keptFrom ? "key" : needs.url === "" && !p.ai_base_url ? "url" : null;
   const current = held.provider === provider;
+  // A URL counts once the server holds it: asked before then, it would say to give one.
+  const wants = needs.key === "needed" && !kept && !keptFrom ? "key" : needs.url === "" && !(current ? held.url : p.ai_base_url) ? "url" : null;
   const models = useQuery({
     queryKey: ["aiModels", held.provider, held.url, kept],
     queryFn: () => get(`/api/ai/models?provider=${held.provider}`),
