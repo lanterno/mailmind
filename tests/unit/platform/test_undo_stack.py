@@ -95,3 +95,57 @@ def test_a_new_entry_ends_what_has_grown_too_old(data_dir):
         c = store.conn()
         assert c.execute("SELECT COUNT(*) FROM undo_entries").fetchone()[0] == 1
         c.close()
+
+
+class Swept:
+    """Reverses `swept` entries together and `move` ones alone, noting each call. One whose Message-ID is `missing`
+    doesn't go back; a run holding a `lost` one raises whole."""
+
+    def __init__(self):
+        self.asked = []
+
+    def one(self, d):
+        self.asked.append(f"one {d['message_id']}")
+        return d["message_id"] != "missing", d["account"], "INBOX"
+
+    def together(self, ds):
+        mids = [d["message_id"] for d in ds]
+        self.asked.append("together " + " ".join(mids))
+        if "lost" in mids:
+            raise ConnectionError("scripted")
+        return [(d["message_id"] != "missing", d["account"], "INBOX") for d in ds]
+
+
+def swept(kind, mid, account="ada@example.test"):
+    return {"kind": kind, "account": account, "message_id": mid, "label": "Swept junk"}
+
+
+def undo_over(reverser, children):
+    from mailmind.platform.undo import Undo
+    undo = Undo(mailbox.undo._uow, {"swept": lambda d: reverser.together([d])[0], "move": reverser.one}, lambda: None,
+                lambda e: type(e).__name__, together={"swept": reverser.together})
+    undo.push_many(children, "ug-1")
+    return undo
+
+
+def test_a_run_of_one_kind_and_one_account_goes_back_together_newest_first_and_the_rest_one_at_a_time(data_dir):
+    """As the Rust server's Undo does (core/crates/mm-store/tests/undo_groups.rs)."""
+    reverser = Swept()
+    undo = undo_over(reverser, [swept("swept", "m1"), swept("swept", "missing"), swept("move", "m3"),
+                                swept("swept", "m4"), swept("swept", "m5"), swept("swept", "m6", "bea@example.test")])
+    done = undo.undo_group("ug-1")
+    assert (done["reversed"], done["failed"]) == (5, 1)
+    assert reverser.asked == ["together m6", "together m5 m4", "one m3", "together missing m1"]
+    assert ids(undo.entries()) == [["missing"]]
+
+
+def test_a_run_that_fails_whole_is_on_the_stack_again_and_stops_no_other(data_dir):
+    reverser = Swept()
+    undo = undo_over(reverser, [swept("swept", "m1"), swept("swept", "lost"), swept("move", "m3")])
+    done = undo.undo_group("ug-1")
+    assert (done["reversed"], done["failed"]) == (1, 2)
+    assert reverser.asked == ["one m3", "together lost m1"]
+    assert ids(undo.entries()) == [["m1", "lost"]]
+    with pytest.raises(Conflict):                                   # nothing of it going back is a refusal
+        undo.undo_group("ug-1")
+    assert ids(undo.entries()) == [["m1", "lost"]]
