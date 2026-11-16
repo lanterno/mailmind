@@ -12,7 +12,8 @@ The SDK sends nothing itself: each of its attempts is an `exchange` with the end
 made for (`_Exchange`), as every other provider's are. So no proxy and no header the environment names
 steers a call, TLS is verified as every other provider's is rather than on httpx's bundle, no redirect
 is followed, an attempt's time limit is a deadline for all of it, and an answer runs to exchange.MOST
-bytes at most. A URL that names no API is unreachable, with nothing sent.
+bytes at most. A URL that names no API is unreachable, with nothing sent: ANTHROPIC_BASE_URL is held
+to the rules a URL a person gives a service keeps, https anywhere and plain http only to this machine.
 
 Only this module imports anthropic, and httpx2, the SDK's HTTP library, whose client it is handed.
 """
@@ -27,6 +28,7 @@ from mailmind.assistant.application.ports import BatchResult, ModelError, Prompt
 from mailmind.assistant.domain import models
 from mailmind.assistant.domain.models import FALLBACK_BETA
 from mailmind.assistant.domain.providers import TIMEOUT, sendable
+from mailmind.kernel import ai_provider
 from mailmind.platform.db import txguard
 
 RETRIES = 2                        # after the first attempt
@@ -107,9 +109,10 @@ def _calling[T](call: Callable[[anthropic.Anthropic], T], client: anthropic.Anth
 
 def _client(key: str, base_url: str | None, timeout: float, retries: int) -> anthropic.Anthropic | None:
     """The SDK's client for the API at `base_url` (DEFAULT_URL where it names none), its attempts made by `_Exchange`; None
-    for a URL that names no API."""
+    for a URL that names no API: one a person couldn't give as a service's (ai_provider.base_url), as ANTHROPIC_BASE_URL
+    can be, so the key never goes in the clear off this machine."""
     url = base_url or DEFAULT_URL
-    end = exchange.endpoint(url)
+    end = exchange.endpoint(url) if ai_provider.base_url(url) is not None else None
     if end is None:
         return None
     http = httpx2.Client(transport=_Exchange(end, key, timeout), trust_env=False, follow_redirects=False, timeout=timeout)
