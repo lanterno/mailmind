@@ -397,8 +397,8 @@ struct DeskSurfaces: ViewModifier {
                 desk.since.lookedAt(app.place, accounts: desk.accounts)
                 desk.since.cameBack()
             }
-            // AI turned on or off in Settings: the brief reads how it stands again.
-            .onReceive(NotificationCenter.default.publisher(for: .mailmindAIChanged)) { _ in desk.brief.reread() }
+            // AI's settings changed: the brief reads how AI stands, and AI just turned on writes what AI-off left out.
+            .onReceive(NotificationCenter.default.publisher(for: .mailmindAIChanged)) { _ in desk.brief.aiChanged() }
     }
 }
 

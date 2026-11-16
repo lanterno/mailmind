@@ -97,6 +97,9 @@ final class BriefModel {
     @ObservationIgnored private(set) var tallied = false
     /// The brief was arrived at, not opened: its next load writes none.
     @ObservationIgnored private var glancing = false
+    /// The brief on screen was opened on purpose, not only arrived at: AI turned on again writes the one AI-off left
+    /// unwritten, as opening it would have.
+    @ObservationIgnored private var deliberate = false
     /// The read under way after mail changed, and whether another waits behind it.
     @ObservationIgnored private var rereading: Task<Void, Never>?
     @ObservationIgnored private var rereadsAgain = false
@@ -107,6 +110,7 @@ final class BriefModel {
         guard let routes = link.routes else { return }
         let writes = !glancing
         glancing = false
+        deliberate = writes
         let first = !opened
         opened = true
         await reread()?.value
@@ -121,6 +125,23 @@ final class BriefModel {
     /// The brief left the screen: mail changing reads only its tallies again.
     func close() {
         opened = false
+        deliberate = false
+    }
+
+    /// One of AI's settings or a key changed in Settings: read how AI stands again. Only where that turned it on, off
+    /// before and on now, with the brief opened on purpose and none written because AI was off as it opened, is today's
+    /// asked for, as opening it with AI on asks. Another provider, model, URL or limit with AI on already asks nothing,
+    /// and nor does a brief only arrived at.
+    @discardableResult
+    func aiChanged() -> Task<Void, Never> {
+        let wasOn = aiOn
+        let reading = reread()
+        return Task { [weak self] in
+            await reading?.value
+            guard let self, wasOn == false, self.aiOn == true, self.opened, self.deliberate, self.brief == nil,
+                  !self.writing, let routes = self.link.routes else { return }
+            await self.readBrief(routes, writes: true)
+        }
     }
 
     /// Keep the tallies the rail and the Inbox's brief row show: read now, and again whenever mail changes.
