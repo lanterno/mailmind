@@ -6,8 +6,9 @@
 //!
 //! It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when there is a key. A request goes over
 //! HTTPS, its certificate verified on the roots the system trusts; plain HTTP goes only to this machine, so a key never
-//! goes in the clear to anything off it. The host is asked of `Outside` before a connection is made. A call is sent
-//! again, twice, after a status a retry can help (408, 409, 429, 5xx) or a lost connection, waiting what
+//! goes in the clear to anything off it. The host is asked of `Outside` before a connection is made. An attempt's time
+//! limit is a deadline for all of it, connecting, sending and reading the whole answer, of 32 MiB at most. A call is
+//! sent again, twice, after a status a retry can help (408, 409, 429, 5xx) or a lost connection, waiting what
 //! `retry-after` says or else a little longer each time. A model on this Mac and a compatible service may not take
 //! structured output: a 400 that names `response_format` is asked once more without it, the schema stated after the
 //! prompt instead, and the reply read as free-form JSON. Neither is sent an output ceiling; OpenAI and Gemini are,
@@ -25,8 +26,8 @@ use std::time::Duration;
 use mm_assistant::ports::{LanguageModel, ModelError, Prompt, RETRIED, Reply};
 use mm_kernel::ai_provider::{self, AiProvider};
 use mm_kernel::seams::{Outside, Secret};
+use mm_net::Lost;
 use mm_net::http::{self, Endpoint, backoff};
-use mm_net::{Lost, Stream};
 use wire::Without;
 
 /// Seconds per attempt.
@@ -67,7 +68,7 @@ impl ChatApi {
         ChatApi { provider, key, endpoint: Endpoint::parse(base_url), outside, timeout: TIMEOUT, retries: RETRIES }
     }
 
-    /// The same, waiting `timeout` for each answer and sending a call again up to `retries` times.
+    /// The same, each attempt held to `timeout` all told, and a call sent again up to `retries` times.
     pub fn with_limits(mut self, timeout: Duration, retries: u32) -> ChatApi {
         self.timeout = timeout;
         self.retries = retries;
@@ -90,19 +91,12 @@ impl ChatApi {
             .ok_or_else(|| ModelError::new(format!("{} answered what can't be read", self.provider.id()), None))
     }
 
-    fn connect(&self, endpoint: &Endpoint) -> Result<Stream, Lost> {
-        self.outside.reach(&endpoint.host).map_err(|_| Lost("Refused"))?;
-        endpoint.open(self.timeout)
-    }
-
+    /// One attempt, which the time limit holds all told: connecting, sending and reading the whole answer.
     fn attempt(&self, endpoint: &Endpoint, request: &[u8]) -> Attempt {
-        let mut stream = match self.connect(endpoint) {
-            Ok(stream) => stream,
-            Err(lost) => return Attempt::Lost(lost),
-        };
-        let answered = http::exchange(&mut stream, request);
-        stream.close_notify();
-        match answered {
+        if self.outside.reach(&endpoint.host).is_err() {
+            return Attempt::Lost(Lost("Refused"));
+        }
+        match endpoint.send(request, self.timeout) {
             Ok(response) => Attempt::Answered(response),
             Err(lost) => Attempt::Lost(lost),
         }

@@ -1,10 +1,14 @@
 //! One HTTP/1.1 exchange with an HTTP API (the AI providers'): where the API is (`Endpoint`), the connection to it, a
-//! request with a JSON body or none, written whole, and the response read back. Each exchange is a connection of its
-//! own, closed after it (`Connection: close`).
+//! request with a JSON body or none, written whole, and the response read back, of `MOST` bytes at most. Each exchange
+//! is a connection of its own, closed after it (`Connection: close`), and its time limit is a deadline for all of it.
 
 use std::io::{Read, Write};
-use std::net::IpAddr;
-use std::time::Duration;
+use std::net::{IpAddr, Shutdown, TcpStream};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use crate::{Lost, Stream, lost};
 
@@ -75,16 +79,77 @@ impl Endpoint {
         if self.port == if self.tls { 443 } else { 80 } { host } else { format!("{host}:{}", self.port) }
     }
 
-    /// A connection to it, each wait limited to `timeout`: TLS verified on the system's roots, on this machine as off
-    /// it, with no pin standing in for the chain; or plain, as the URL says. Whether the host may be reached is asked
-    /// of `Outside` by the caller, first.
-    pub fn open(&self, timeout: Duration) -> Result<Stream, Lost> {
-        let tcp = crate::connect(&self.host, self.port, timeout)?;
-        if !self.tls {
-            return Ok(Stream::Plain(tcp));
+    /// `request` sent on a connection of its own and the response read back, all of it within `limit`: connecting,
+    /// TLS's handshake, sending, and reading the whole answer. Past it the connection is ended under whatever waits on
+    /// it, and the attempt is `Timeout`, however the peer trickles its answer in, even one whose end looked like the
+    /// answer's. TLS is verified on the system's roots, on this machine as off it, with no pin standing in for the
+    /// chain; or the connection is plain, as the URL says. Whether the host may be reached is asked of `Outside` by the
+    /// caller, first.
+    pub fn send(&self, request: &[u8], limit: Duration) -> Result<Response, Lost> {
+        let deadline = Instant::now() + limit;
+        let tcp = crate::connect_by(&self.host, self.port, deadline)?;
+        let watch = Watch::start(&tcp, deadline)?;
+        let mut stream = if self.tls {
+            let config = crate::tls::config(false)?;
+            match crate::handshake(config, crate::server_name(&self.host)?, tcp) {
+                Ok(stream) => stream,
+                Err(_) if watch.cut() => return Err(Lost("Timeout")),
+                Err(lost) => return Err(lost),
+            }
+        } else {
+            Stream::Plain(tcp)
+        };
+        let answered = exchange(&mut stream, request);
+        // Ended under it, which can look like an answer that ended.
+        let late = watch.cut();
+        stream.close_notify();
+        drop(watch);
+        if late { Err(Lost("Timeout")) } else { answered }
+    }
+}
+
+/// Ends a connection at its deadline, from a thread of its own, unless it is let go first: its socket shut down both
+/// ways through a descriptor of the watch's own, which wakes a read or a write blocked on it and closes nothing (as
+/// an `Interrupter` does).
+struct Watch {
+    stop: Option<mpsc::Sender<()>>,
+    cut: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Watch {
+    fn start(tcp: &TcpStream, deadline: Instant) -> Result<Watch, Lost> {
+        let socket = tcp.try_clone().map_err(|e| lost(&e))?;
+        let (stop, stopped) = mpsc::channel::<()>();
+        let cut = Arc::new(AtomicBool::new(false));
+        let cutting = cut.clone();
+        let thread = std::thread::Builder::new()
+            .name("http-deadline".into())
+            .spawn(move || {
+                let left = deadline.saturating_duration_since(Instant::now());
+                if let Err(RecvTimeoutError::Timeout) = stopped.recv_timeout(left) {
+                    cutting.store(true, Ordering::SeqCst);
+                    // A socket already shut down, or gone, has nothing left to wake.
+                    let _ = socket.shutdown(Shutdown::Both);
+                }
+            })
+            .map_err(|e| lost(&e))?;
+        Ok(Watch { stop: Some(stop), cut, thread: Some(thread) })
+    }
+
+    /// Whether the deadline came and the connection was ended under it.
+    fn cut(&self) -> bool {
+        self.cut.load(Ordering::SeqCst)
+    }
+}
+
+impl Drop for Watch {
+    fn drop(&mut self) {
+        // Let go, the watch's thread wakes at once.
+        drop(self.stop.take());
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
         }
-        let config = crate::tls::config(false)?;
-        crate::handshake(config, crate::server_name(&self.host)?, tcp)
     }
 }
 

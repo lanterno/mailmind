@@ -17,7 +17,7 @@ pub use waiting::{Interrupter, timed_out};
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
@@ -47,6 +47,27 @@ pub fn connect(host: &str, port: u16, timeout: Duration) -> Result<TcpStream, Lo
             Ok(tcp) => {
                 tcp.set_read_timeout(Some(timeout)).map_err(|e| lost(&e))?;
                 tcp.set_write_timeout(Some(timeout)).map_err(|e| lost(&e))?;
+                return Ok(tcp);
+            }
+            Err(e) => last = lost(&e),
+        }
+    }
+    Err(last)
+}
+
+/// A TCP connection to `host` at `port` made by `deadline`: each address it resolves to tried in turn with the time
+/// left, and every read and write limited to what is left once it connects. None left is `Timeout`.
+pub fn connect_by(host: &str, port: u16, deadline: Instant) -> Result<TcpStream, Lost> {
+    let left = || Some(deadline.saturating_duration_since(Instant::now())).filter(|left| !left.is_zero());
+    let addresses = (host, port).to_socket_addrs().map_err(|_| Lost("NameNotResolved"))?;
+    let mut last = Lost("NameNotResolved");
+    for address in addresses {
+        let Some(wait) = left() else { return Err(Lost("Timeout")) };
+        match TcpStream::connect_timeout(&address, wait) {
+            Ok(tcp) => {
+                let wait = left().ok_or(Lost("Timeout"))?;
+                tcp.set_read_timeout(Some(wait)).map_err(|e| lost(&e))?;
+                tcp.set_write_timeout(Some(wait)).map_err(|e| lost(&e))?;
                 return Ok(tcp);
             }
             Err(e) => last = lost(&e),

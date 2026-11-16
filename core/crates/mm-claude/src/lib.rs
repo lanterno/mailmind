@@ -4,11 +4,12 @@
 //! A request goes over HTTPS, its certificate verified on the roots the system trusts. Plain HTTP goes only to a
 //! loopback host, which is what a stand-in for the API is: the key is never sent in the clear to anything off this
 //! machine, and never to any endpoint but the one it was given for. The host is asked of `Outside` before a connection
-//! is made. A call is sent again, twice, after a status worth sending again (`RETRIED`) or a lost connection, waiting
-//! what `retry-after` says or else a little longer each time, except a batch's sending, which never is; any other
-//! status is a `ModelError` saying it. The key never reaches a log line or an error, and one that isn't printable
-//! ASCII without a space (one with a space or a line break in it, or any character outside ASCII) is refused as a
-//! 401 is, never sent. It also lists the models the key may ask, for a person choosing one
+//! is made, and an attempt's time limit is a deadline for all of it, connecting, sending and reading the whole answer,
+//! of 32 MiB at most. A call is sent again, twice, after a status worth sending again (`RETRIED`) or a lost
+//! connection, waiting what `retry-after` says or else a little longer each time, except a batch's sending, which
+//! never is; any other status is a `ModelError` saying it. The key never reaches a log line or an error, and one
+//! that isn't printable ASCII without a space (one with a space or a line break in it, or any character outside
+//! ASCII) is refused as a 401 is, never sent. It also lists the models the key may ask, for a person choosing one
 //! (#49).
 
 pub mod batches;
@@ -20,9 +21,9 @@ use std::time::Duration;
 use mm_assistant::models::FALLBACK_BETA;
 use mm_assistant::ports::{BatchResult, LanguageModel, ModelError, Prompt, RETRIED, Reply};
 use mm_kernel::seams::{Outside, Secret};
+use mm_net::Lost;
 use mm_net::http::backoff;
 pub use mm_net::http::{self, Endpoint};
-use mm_net::{Lost, Stream};
 
 /// Where API calls go unless ANTHROPIC_BASE_URL names another.
 pub const DEFAULT_URL: &str = "https://api.anthropic.com";
@@ -62,26 +63,19 @@ impl ClaudeApi {
         ClaudeApi { key, endpoint: Endpoint::parse(url), outside, timeout: TIMEOUT, retries: RETRIES }
     }
 
-    /// The same, waiting `timeout` for each answer and sending a call again up to `retries` times.
+    /// The same, each attempt held to `timeout` all told, and a call sent again up to `retries` times.
     pub fn with_limits(mut self, timeout: Duration, retries: u32) -> ClaudeApi {
         self.timeout = timeout;
         self.retries = retries;
         self
     }
 
-    fn connect(&self, endpoint: &Endpoint) -> Result<Stream, Lost> {
-        self.outside.reach(&endpoint.host).map_err(|_| Lost("Refused"))?;
-        endpoint.open(self.timeout)
-    }
-
+    /// One attempt, which the time limit holds all told: connecting, sending and reading the whole answer.
     fn attempt(&self, endpoint: &Endpoint, request: &[u8]) -> Attempt {
-        let mut stream = match self.connect(endpoint) {
-            Ok(stream) => stream,
-            Err(lost) => return Attempt::Lost(lost),
-        };
-        let answered = http::exchange(&mut stream, request);
-        stream.close_notify();
-        match answered {
+        if self.outside.reach(&endpoint.host).is_err() {
+            return Attempt::Lost(Lost("Refused"));
+        }
+        match endpoint.send(request, self.timeout) {
             Ok(response) => Attempt::Answered(response),
             Err(lost) => Attempt::Lost(lost),
         }
