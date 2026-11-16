@@ -26,6 +26,8 @@ from mailmind.http.schemas.assistant import (
     CleanupRationales,
     Expired,
     Extracted,
+    ModelList,
+    ModelsArgs,
     PlanBody,
     PlanCarriedOut,
     PlanIsASearch,
@@ -93,6 +95,11 @@ def router(assistant, mailbox):
             return {"ok": True, "status": "none"}
         asked["pk"] = [str(pk)]
         return assistant.drafting.get(asked, kick_ok=perimeter.token_matches(request.headers, perimeter.CSRF))
+
+    # what a provider offers, for a person choosing a model in Settings: it sends no mail and spends nothing, so AI may be off
+    @r.get("/api/ai/models", responses=answers(ModelList))
+    def ai_models(args: Annotated[ModelsArgs, Query()]):
+        return assistant.catalog.models(args.provider)
 
     @r.post("/api/ai/summarize", responses=answers(Summary, {**_MAY_FAIL, 504: Failure}))
     @_scrubbed("error", "summary failed")

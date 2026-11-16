@@ -5,6 +5,7 @@ from pydantic import Field
 
 from mailmind.assistant.api import DraftTone, PlanVerb, RewriteOp
 from mailmind.http.schemas.common import Answer, Copy, Failure, Flag, NamesAMessage, Number, QueryArgs, RequestBody
+from mailmind.kernel.ai_provider import AiProvider
 from mailmind.kernel.sender_verdict import Verdict
 from mailmind.kernel.snoozed import SnoozePreset
 
@@ -356,3 +357,16 @@ class PlanCarriedOut(Answer):
     gone: int
     queued: int
     undoable: bool
+
+
+class ModelsArgs(QueryArgs):
+    """The AI provider whose models a person is choosing among (#49)."""
+    provider: AiProvider
+
+
+class ModelList(Answer):
+    """The models a provider lists that a person may choose, sorted, and the one it asks unless they choose (None where they
+    must)."""
+    ok: Literal[True]
+    models: list[str]
+    default: str | None
