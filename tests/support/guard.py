@@ -1,5 +1,5 @@
 """A tripwire for the test process: no test may touch the owner's mail data or the Bridge password
-file, reach past this machine, or start a credential helper or the claude CLI.
+file, reach past this machine or a model server that may run on it, or start a credential helper or the claude CLI.
 
 conftest.py installs it before any MailMind module is imported. Python audit hooks see every
 open(), sqlite3.connect(), SQLCipher's connect, rename, delete, socket connect, DNS lookup and process start in the
@@ -37,6 +37,9 @@ PRIVATE = ("mailmind.db", "mailmind.db-*", "mailmind.config.json*", "mailmind_ru
 SECRET_FILES = {os.path.realpath(os.path.expanduser("~/.config/mailmind/proton_bridge_pass")).lower()}
 # A real AI call, a 1Password read and a Keychain read.
 PROGRAMS = ("claude", "op", "security")
+# The ports the model servers a person may run on this machine listen on (providers.LOCAL_SERVERS: Ollama, LM Studio,
+# llama.cpp, vLLM, Jan, GPT4All), on loopback or anywhere: a test asks a model server only through a fake on a port of its own.
+MODEL_SERVER_PORTS = frozenset({11434, 1234, 8080, 8000, 1337, 4891})
 
 violations = []
 _busy = threading.local()
@@ -84,6 +87,11 @@ def _remote(host):
         return True                                     # a name other than localhost
 
 
+def _model_server(address):
+    """Whether a socket address names a model server's port (MODEL_SERVER_PORTS), on whatever host."""
+    return len(address) > 1 and address[1] in MODEL_SERVER_PORTS
+
+
 _SHELLS = ("sh", "bash", "zsh", "dash")
 
 
@@ -123,7 +131,7 @@ def _hook(event, args):
         elif event in ("os.rename", "os.remove", "os.truncate", "os.chmod", "os.utime") \
                 and any(_private(a) for a in args[:2] if isinstance(a, (str, bytes, os.PathLike))):
             _refuse(f"{event} {args[:2]!r}")
-        elif event == "socket.connect" and isinstance(args[1], tuple) and _remote(args[1][0]):
+        elif event == "socket.connect" and isinstance(args[1], tuple) and (_remote(args[1][0]) or _model_server(args[1])):
             _refuse(f"connect to {args[1]!r}")
         elif event in ("socket.getaddrinfo", "socket.gethostbyname", "socket.gethostbyname_ex") \
                 and _remote(args[0]):
