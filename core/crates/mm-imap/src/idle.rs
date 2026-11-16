@@ -3,8 +3,9 @@
 //!
 //! A wait lasts as long as it was given, each read limited to what is left of it, and the connection's own time
 //! limit comes back as it leaves. While it idles the system probes a quiet connection (TCP keepalive), so one that a
-//! sleep or a change of network left dead fails within about two minutes rather than when the wait runs out. Another thread ends a wait through the session's `Interrupter`, which shuts the
-//! socket down and closes nothing: the wait then fails as a lost connection, and the session is spent.
+//! sleep or a change of network left dead fails within about two minutes rather than when the wait runs out.
+//! Another thread ends a wait through the session's `Interrupter`, which shuts the socket down and closes nothing:
+//! the wait then fails as a lost connection, and the session is spent.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
