@@ -23,9 +23,10 @@ On the Rust server that flight is each account's own (`mm_mailbox::syncing::Sync
 not already syncing side by side, a thread each, and an account asked for while its sync runs goes round again as
 it ends, so one slow server holds up no other account's sync. An Inbox's first scan stores its newest 500 messages
 and leaves the rest to the `older-mail` lane (`Syncing::read_older`), which reads them newest first, 500 a step and
-`OLDER_STEPS` steps of each folder a round, a thread an account, and takes no gate either. Opening an Inbox whose
-first scan hasn't begun joins the account's sync (`InboxSync`) rather than scanning it again on the gate, so a
-message opens meanwhile.
+`OLDER_STEPS` steps of each folder a round, a thread an account, and takes no gate either. It runs in the read-only
+profile too, where the sync doesn't: it only EXAMINEs and peeks and writes only the database, so a folder first
+opened there is read to its oldest message. Opening an Inbox whose first scan hasn't begun joins the account's sync
+(`InboxSync`) rather than scanning it again on the gate, so a message opens meanwhile.
 
 - A job is a function, not a block: it returns what its caller needs instead of setting the
   caller's variables.
