@@ -70,6 +70,10 @@ def test_a_fresh_install_starts_with_ai_mode_off_and_turned_on_says_how_ai_stand
     link = dialog.get_by_role("link", name=re.compile(r"^Make a key at console\.anthropic\.com"))
     expect(link).to_have_attribute("href", "https://console.anthropic.com")
     expect(link).to_have_attribute("rel", "noopener noreferrer")
+    expect(page.locator("#aiBilling")).to_have_text("Billed per use by Anthropic, separately from any ChatGPT or Claude "
+                                                    "subscription. Add credit in Anthropic’s console, under Billing.")
+    credit = dialog.get_by_role("link", name=re.compile(r"^Add credit at console\.anthropic\.com"))
+    expect(credit).to_have_attribute("href", "https://console.anthropic.com/settings/billing")
     expect(dialog.get_by_text("Keep a key for Claude, and its models are listed here.")).to_be_visible()
     expect(page.locator("#aiStanding")).to_have_text("AI is off: there’s no key for Claude.")
     page.get_by_role("tab", name="Preferences").click()           # what the file holds: not the AI tab's words
@@ -109,6 +113,7 @@ def test_openai_is_chosen_its_key_kept_through_the_server_and_its_models_offered
     expect(page.locator("#aiStanding")).to_have_text("AI is off: there’s no key for OpenAI.")
     expect(dialog.get_by_role("link", name=re.compile(r"^Make a key at platform\.openai\.com"))).to_have_attribute(
         "href", "https://platform.openai.com/api-keys")
+    expect(page.locator("#aiBilling")).to_contain_text("Billed per use by OpenAI, separately from any ChatGPT or Claude subscription.")
     expect(dialog.get_by_text("Keep a key for OpenAI, and its models are listed here.")).to_be_visible()
     assert openai_api.requests == []
     assert app.post("/api/preferences", {"ai_base_url": openai_api.url}).status == 200     # the fake in OpenAI's place

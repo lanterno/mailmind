@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PostBodies } from "../../lib/api/types";
 import { createStore } from "../../lib/store";
-import { AI_KEPT, aiParts, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave, type LocalServer } from "./aiChoices";
+import { AI_KEPT, aiParts, BILLING, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave, type LocalServer } from "./aiChoices";
 
 describe("the AI tab", () => {
   it("holds only AI mode's switch while it is off", () => expect(aiParts(false)).toEqual(["mode"]));
@@ -65,6 +65,16 @@ describe("choosing another provider", () => {
   it("says where each provider that needs a key makes one", () => {
     expect([NEEDS.anthropic.keysAt, NEEDS.openai.keysAt, NEEDS.gemini.keysAt]).toEqual(
       ["https://console.anthropic.com", "https://platform.openai.com/api-keys", "https://aistudio.google.com/apikey"]);
+  });
+  it("says each paid provider bills per use, apart from a chat subscription, and where credit is added", () => {
+    expect(BILLING.anthropic?.words).toBe("Billed per use by Anthropic, separately from any ChatGPT or Claude subscription. "
+      + "Add credit in Anthropic’s console, under Billing.");
+    expect(BILLING.openai?.words).toContain("Billed per use by OpenAI, separately from any ChatGPT or Claude subscription.");
+    expect([BILLING.anthropic?.creditAt, BILLING.openai?.creditAt]).toEqual(
+      ["https://console.anthropic.com/settings/billing", "https://platform.openai.com/settings/organization/billing"]);
+    expect(BILLING.gemini?.words).toContain("Billed per use by Google, separately from any ChatGPT or Claude subscription.");
+    expect(BILLING.gemini?.words).toContain("Use a key on a billed project");
+    expect(Object.keys(BILLING)).toEqual(["anthropic", "openai", "gemini"]);    // a model on this Mac costs nothing
   });
 });
 
