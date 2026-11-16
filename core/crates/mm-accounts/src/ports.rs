@@ -56,6 +56,14 @@ pub trait LoginProbe: Send + Sync + std::fmt::Debug {
 
     /// Log a draft in where it was typed, with the password typed with it.
     fn draft(&self, draft: &crate::draft::Draft, timeout: std::time::Duration) -> Result<(), LoginTrouble>;
+
+    /// Log a saved account in at its saved outgoing (SMTP) server, with its saved secret, and quit. A read-only
+    /// process, which sends nothing, tries none and answers Ok.
+    fn saved_outgoing(&self, account: &crate::Account, timeout: std::time::Duration) -> Result<(), LoginTrouble>;
+
+    /// Log a draft in at the outgoing server it names, with the password typed with it, and quit; Ok in a read-only
+    /// process.
+    fn draft_outgoing(&self, draft: &crate::draft::Draft, timeout: std::time::Duration) -> Result<(), LoginTrouble>;
 }
 
 /// What happened to an account, once the file holds it or once its server has answered

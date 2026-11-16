@@ -362,7 +362,11 @@ impl App {
             stats: stats.clone(),
         });
         // Accounts' changes, and their test login.
-        let probe = crate::account_wiring::ImapProbe { login: login.clone() };
+        let probe = crate::account_wiring::ServerProbe {
+            login: login.clone(),
+            config: Arc::new(ConfigFile::new(settings.config(), seams.outside.clone())),
+            read_only: environment.read_only(),
+        };
         let connections = mm_accounts::connections::Connections::new(
             directory.clone(),
             Arc::new(probe),

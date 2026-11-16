@@ -131,14 +131,14 @@ fn names_an_account(body: &Map<String, Value>) -> Result<Map<String, Value>, Pro
     Ok(dumped)
 }
 
-/// `AccountDraft`: an account not saved yet, its endpoint and its credential loose, as the draft's use case words
+/// `AccountDraft`: an account not saved yet, its endpoints and its credential loose, as the draft's use case words
 /// what it can't take.
 fn account_draft(body: &Map<String, Value>) -> Result<Map<String, Value>, Problem> {
     let mut dumped = names_an_account(body)?;
-    for name in ["type", "host", "port"] {
+    for name in ["type", "host", "port", "smtp_host", "smtp_port"] {
         schema::optional(body, name, taken, &mut dumped)?;
     }
-    for name in ["starttls", "strip_spaces"] {
+    for name in ["starttls", "strip_spaces", "smtp_starttls"] {
         schema::optional(body, name, schema::flag, &mut dumped)?;
     }
     schema::optional(body, "credential", taken, &mut dumped)?;
@@ -162,11 +162,6 @@ fn account_body(body: &Map<String, Value>) -> Result<Map<String, Value>, Problem
     for name in ["alias", "signature", "trash"] {
         schema::optional(body, name, schema::text, &mut dumped)?;
     }
-    for name in ["smtp_host", "smtp_port"] {
-        schema::optional(body, name, taken, &mut dumped)?;
-    }
-    for name in ["smtp_starttls", "disabled"] {
-        schema::optional(body, name, schema::flag, &mut dumped)?;
-    }
+    schema::optional(body, "disabled", schema::flag, &mut dumped)?;
     Ok(dumped)
 }

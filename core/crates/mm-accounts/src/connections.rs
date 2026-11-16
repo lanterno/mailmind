@@ -56,6 +56,14 @@ pub fn quiet_for(trouble: LoginTrouble, kind: Option<&str>) -> &'static str {
 /// What a request asked of an account, as its schema handed it on.
 pub type Asked = Map<String, Value>;
 
+/// Which login of a test didn't work: the IMAP server's (or the draft as typed), or the outgoing server's, tried only
+/// once the IMAP server had let the account in.
+#[derive(Clone, Copy, Debug)]
+enum Tried {
+    Login(LoginTrouble),
+    Outgoing(LoginTrouble),
+}
+
 /// What a test of an account's login comes to.
 #[derive(Debug)]
 pub struct Connections {
@@ -84,9 +92,10 @@ impl Connections {
         Connections { directory, probe, events, clock }
     }
 
-    /// Try a saved account's login at its saved server (`{email}`), or a draft's where it was typed (`{draft}`), and
-    /// write nothing. A login that didn't work is an answer (`connect: false`), in `quiet_for`'s words for its type;
-    /// an account the file doesn't hold is NotFound, and a draft that may not be tried Refused.
+    /// Try a saved account's login at its saved servers (`{email}`), or a draft's where it was typed (`{draft}`), and
+    /// write nothing: its IMAP server's, then, once that has let it in, its outgoing (SMTP) server's. A login that
+    /// didn't work is an answer (`connect: false`), in `quiet_for`'s words for its type, the outgoing server's after
+    /// "SMTP "; an account the file doesn't hold is NotFound, and a draft that may not be tried Refused.
     pub fn test(&self, body: &Asked) -> Result<Value, Failure> {
         let started = self.clock.now();
         let draft = body.get("draft").filter(|d| truthy(d));
@@ -97,10 +106,14 @@ impl Connections {
             Some(Value::Object(draft)) => {
                 kind = draft.get("type").map_or(Some("imap"), Value::as_str).map(str::to_owned);
                 match draft::throwaway_account(draft) {
-                    Ok(draft) => {
-                        self.probe.draft(&draft, PROBE_TIMEOUT).map(|()| draft.email.map_or(Value::Null, Value::from))
-                    }
-                    Err(NotTried::BadPort) => Err(LoginTrouble(draft::BAD_PORT)),
+                    Ok(draft) => self
+                        .probe
+                        .draft(&draft, PROBE_TIMEOUT)
+                        .map_err(Tried::Login)
+                        .and_then(|()| self.probe.draft_outgoing(&draft, PROBE_TIMEOUT).map_err(Tried::Outgoing))
+                        .map(|()| draft.email.map_or(Value::Null, Value::from)),
+                    Err(NotTried::BadPort) => Err(Tried::Login(LoginTrouble(draft::BAD_PORT))),
+                    Err(NotTried::BadSmtpPort) => Err(Tried::Login(LoginTrouble(draft::BAD_SMTP_PORT))),
                     Err(NotTried::Refused(said)) => return Err(Problem::refused(said).into()),
                 }
             }
@@ -113,7 +126,11 @@ impl Connections {
                 };
                 let saved = saved.ok_or_else(|| Problem::not_found("account not found"))?;
                 kind = Some(saved.kind.clone());
-                self.probe.saved(&saved, PROBE_TIMEOUT).map(|()| Value::from(saved.email))
+                self.probe
+                    .saved(&saved, PROBE_TIMEOUT)
+                    .map_err(Tried::Login)
+                    .and_then(|()| self.probe.saved_outgoing(&saved, PROBE_TIMEOUT).map_err(Tried::Outgoing))
+                    .map(|()| Value::from(saved.email))
             }
         };
         Ok(match tried {
@@ -123,7 +140,11 @@ impl Connections {
             }
             Err(trouble) => {
                 let email = body.get("email").filter(|e| truthy(e)).or_else(|| draft.and_then(|d| d.get("email")));
-                json!({"ok": true, "connect": false, "email": email, "error": quiet_for(trouble, kind.as_deref())})
+                let error = match trouble {
+                    Tried::Login(trouble) => quiet_for(trouble, kind.as_deref()).to_owned(),
+                    Tried::Outgoing(trouble) => format!("SMTP {}", quiet(trouble)),
+                };
+                json!({"ok": true, "connect": false, "email": email, "error": error})
             }
         })
     }
