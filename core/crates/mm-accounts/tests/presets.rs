@@ -275,6 +275,20 @@ fn a_domain_whose_mail_a_providers_servers_take_is_offered_its_preset() {
 }
 
 #[test]
+fn an_icloud_plus_domain_is_named_with_nothing_to_save_and_told_to_add_its_icloud_address() {
+    // iCloud lets other mail apps sign in only with the @icloud.com address, and an account logs in as typed.
+    let found = hosts("acme.example.test", &["mx01.mail.icloud.com", "mx02.mail.icloud.com"]);
+    let said = Presets::new(found).preset(Some("ada@acme.example.test")).unwrap();
+    assert_eq!(which(&said), answer(Some("acme.example.test"), Some("icloud"), false));
+    assert_eq!((said["name"].as_str(), said["supported"].as_bool()), (Some("iCloud"), Some(false)));
+    assert_eq!((said["settings"].clone(), said["link"].clone()), (Value::Null, Value::Null));
+    let note = said["note"].as_str().unwrap();
+    assert!(note.contains("iCloud+") && note.contains("Add your @icloud.com address"), "{note}");
+    // An address at iCloud's own domains still takes its servers.
+    assert_eq!(preset_of("ada@me.com")["settings"]["host"], "imap.mail.me.com");
+}
+
+#[test]
 fn a_presets_imap_host_names_its_provider() {
     assert_eq!(provider_of_host("IMAP.mail.me.com").map(|p| p.preset), Some("icloud"));
     assert_eq!(provider_of_host("imap.fastmail.com").map(|p| p.preset), Some("fastmail"));
