@@ -519,12 +519,13 @@ or for a switch you turned on in Settings › AI.
   server that refused what the incoming one took. What kind of failure it was stays beside it in small type.
 - **Trash is found, not assumed.** A delete, a sweep and an expiry rule put mail in the account's Trash where its server
   lists it, else in the folder the server marks as Trash (`\Trash`), else in one named like one, so a Gmail in another
-  language and iCloud's "Deleted Messages" work as they are.
+  language and iCloud's "Deleted Messages" work as they are, and Undo brings a delete or a sweep back from there.
 - **Removing an account can take its mail off this Mac.** Settings asks, ticked unless you untick it, whether the mail
   MailMind keeps of the account goes too: its messages with their bodies and attachments, what was said of them, its
-  Undo entries, the sweep and reconcile records of it, and the AI's cards made for it. A sync reading the account stops
-  at its next message and keeps nothing, and every open window drops the account at once. Its mail on the server stays
-  as it is.
+  Undo entries, the sweep and reconcile records of it, and the AI's cards made for it. A sync reading the account, or a
+  read of its older mail, stops at its next message and keeps nothing, not even the trouble its syncs had, so the
+  account added again starts afresh; every open window drops the account at once. Its mail on the server stays as it
+  is.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect.

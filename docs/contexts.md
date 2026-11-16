@@ -57,9 +57,12 @@ See [Architecture](architecture.md) for the layers around them.
   context's `forget_account` in one write, with Undo's (`platform.undo`), the audit trails' (`platform.db.audit`), the
   Curation's ways out of a list and the AI's cards, on the account's gate. `AccountRemoved` is published first: it stops
   each of the account's syncs in flight at its next message (`mailbox.application.flights`), and the forget runs again
-  as the last of them lands, so nothing a sync read after it stays. The open tabs then hear `reconcile` with the
+  as the last of them lands, so nothing a sync read after it stays. Nor is anything kept of how the account's syncs
+  went (`Syncing.account_removed`): its status and its run of failures go now, and again as the last flight lands, so
+  the account added again starts its health afresh. The open tabs then hear `reconcile` with the
   account and `pruned`, how many copies went. The Rust core does the same (`mm_mailbox::flights`,
-  `mm_store::account_mail`).
+  `mm_store::account_mail`, `Syncing::removed`), where a read of a first scan's older mail is a flight too, and how far
+  the scan had got goes with the account's status.
   An account is still a dict, as the file holds it or as `domain.account.normalized` fills it in, and the whole app reads `acct["host"]`. `Endpoint` (`imap_endpoint`, `smtp_endpoint`) works out a server's host, port and TLS from an entry and its type,
   and an SMTP host left out is the IMAP host, so an account with one endpoint has both. `add_account` refuses an address already there. Both it and `update_account` refuse a credential no login could read, and an endpoint no connection could reach, the last only for what the
   write changes (`refuse_bad_endpoints`): what the file already held is the owner's, and an entry is read however it stands. `validate_new` still judges a whole entry, as it did: an edit of one with an unknown type, a port out of range or a generic account's host gone says so. `domain.draft` says what an unsaved account may try (see [Security model](security.md)).

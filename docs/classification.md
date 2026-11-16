@@ -43,7 +43,9 @@ with its count, the `LISTED` (5) senders with the most of it and its newest five
 and verifies as before, then puts a way back for each message that went under one undo group: the request's
 `undo_group`, or a `sweep:` one of its own, which the answer names (null when nothing went). Each child is a
 `sweep_back` from the Trash to the Inbox, an account's put back together on one session and found again by its
-Message-ID, so one with none goes but can't come back (`no_undo`). A sweep the server stops part way reads the Inbox
+Message-ID, so one with none goes but can't come back (`no_undo`). The Trash is the one the server lists, found as the
+sweep's session opens (`session.find_trash`, the core's `LiveSession::trash`): the mail goes there and its way back
+names it; a server whose folders can't be listed moves nothing. A sweep the server stops part way reads the Inbox
 again on a fresh session: what left it is `moved`, has its rows forgotten and a way back, and a sweep that moved nothing
 leaves the undo stack as it was ([Writes and Undo](writes-and-undo.md)).
 
