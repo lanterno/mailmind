@@ -1,5 +1,5 @@
 """Summarizing and scoring mail that isn't junk: a few calls in parallel for what's new, and a backlog as a batch at half
-price."""
+price, which only Claude takes."""
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from mailmind.assistant.application.calls import Calls
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.ports import Answers, BatchResult, BatchStatus, Mail, ModelError, NotSent, Reply
-from mailmind.assistant.domain import models, pricing, prompts
+from mailmind.assistant.domain import pricing, prompts
 from mailmind.assistant.domain.schema import object_in
 from mailmind.kernel.assessment import ASSESSED, REFUSED, UNUSABLE, Assessment
 from mailmind.kernel.ids import MessageKey, Pk
@@ -124,7 +124,7 @@ class Assessments:
         takes what fits in its share of today's limit, by estimate, and leaves the newest to go now."""
         at_least, keep = self.BATCH_MIN if at_least is None else at_least, self.BATCH_KEEP_NEWEST if keep is None else keep
         gw = self._gateway()
-        if self._calls.engine() == "none" or gw.held_back(self.BATCH_FEATURE, self._calls.MODEL):
+        if self._calls.engine() == "none" or not gw.takes_batches or gw.held_back(self.BATCH_FEATURE, self._calls.MODEL):
             return 0
         with self._uow.read() as c:
             if self._answers.batch_open(c):
@@ -132,7 +132,7 @@ class Assessments:
             rows = [r for r in self._answers.needs_summary(c, keep + self.BATCH_MAX) if r["message_key"] is not None]
         if len(rows) < at_least:
             return 0
-        name = self._calls.MODEL or models.DEFAULT
+        name = self._calls.model_label()
         room = gw.room()                    # None: no governor, so no limit to keep within
         requests: list[tuple[str, str]] = []
         keys: list[MessageKey] = []
@@ -185,9 +185,9 @@ class Assessments:
     def batch_collect(self, log: Log = lambda _: None) -> int:
         """Bring in the answers of a batch that has ended, and return how many it stored. Nothing here sends
         a message, so neither the limit nor someone using AI holds it back: these answers are paid for."""
-        if self._calls.engine() == "none":
-            return 0
         gw, now, stored = self._gateway(), int(time.time()), 0
+        if self._calls.engine() == "none" or not gw.takes_batches:      # one out waits for Claude to be the provider again
+            return 0
         try:
             with self._uow.read() as c:             # most rounds find nothing to do, and take no lock for it
                 cut_off = [b for b in self._answers.batches_in_state(c, "submitting")

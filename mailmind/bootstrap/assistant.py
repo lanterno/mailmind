@@ -1,12 +1,14 @@
-"""The Assistant's wiring: the language model the process talks to, and with which key.
+"""The Assistant's wiring: the language model the process talks to, with which key, and whether AI is on at all.
 
-The server and every command talk to the API through the Anthropic SDK. With no key the model is
-DisabledModel: AI is off and nothing is sent.
+The engine in force is read from what a person chose (#49): AI on or off, its provider, model and URL, which are preferences
+in mailmind.config.json, and the key kept for that provider. Claude, the default, goes through the Anthropic SDK; every other
+provider through the one adapter that speaks OpenAI's Chat Completions. AI off, turned off or with no key, URL or model to
+ask, the model is DisabledModel, and nothing is sent. MAILMIND_MODEL wins over the model a person chose.
 
-The key is config_key() (mailmind.config.json's "anthropic_api_key", in any credential style,
-read through the Accounts context), and only then ANTHROPIC_API_KEY. A config key that won't resolve is no key, never a quiet
-switch to the environment's. Both are read at each call, so a new key takes effect at once, and the
-model is made again only when the key or ANTHROPIC_BASE_URL changes.
+A provider's key is config_key() (mailmind.config.json's "anthropic_api_key", "openai_api_key" and the like, in any
+credential style, read through the Accounts context), and for Claude only then ANTHROPIC_API_KEY. A config key that won't
+resolve is no key, never a quiet switch to the environment's. Each is read at each call, so a change in Settings takes effect
+at once, and the model is made again only when what it was made for changes: the provider, model, URL or key.
 
 Every call is counted in the usage ledger, the ai_usage table of the data directory's database,
 and passes the cost governor first, whose daily limit is the config's "ai_daily_limit_usd" ($15
@@ -15,9 +17,12 @@ unless it names another, domain.limits), read at each call.
 import threading
 
 from mailmind.accounts.adapters import config_file, secrets
+from mailmind.accounts.api import PREFERENCE_DEFAULTS, api_key_who
+from mailmind.assistant.adapters import anthropic_sdk, openai_chat
 from mailmind.assistant.adapters import sqlite as answers
 from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
-from mailmind.assistant.adapters.disabled import DisabledModel
+from mailmind.assistant.adapters.disabled import WHY, DisabledModel
+from mailmind.assistant.adapters.openai_chat import ChatModel
 from mailmind.assistant.adapters.sqlite_ledger import SqliteLedger
 from mailmind.assistant.application.ask import Asker
 from mailmind.assistant.application.asking import Asking
@@ -25,10 +30,12 @@ from mailmind.assistant.application.assessment import Assessments
 from mailmind.assistant.application.brief import Briefs
 from mailmind.assistant.application.bulk import BulkCommands
 from mailmind.assistant.application.calls import Calls
+from mailmind.assistant.application.catalog import Catalog
 from mailmind.assistant.application.context import ContextAssembler
 from mailmind.assistant.application.extract import Extractor
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor, allowing_over
+from mailmind.assistant.application.ports import LanguageModel
 from mailmind.assistant.application.prepared_replies import PreparedReplies
 from mailmind.assistant.application.reply_draft import ReplyDrafts
 from mailmind.assistant.application.review import Reviews
@@ -38,55 +45,106 @@ from mailmind.assistant.application.screening import Screening
 from mailmind.assistant.application.sender_digest import SenderDigest
 from mailmind.assistant.application.status import Status
 from mailmind.assistant.application.thread_digest import ThreadDigest
-from mailmind.assistant.domain import limits
+from mailmind.assistant.domain import limits, providers
+from mailmind.assistant.domain.providers import PROVIDERS, Engine, Wire
 from mailmind.bootstrap import accounts, attention, curation, discovery, mailbox
 from mailmind.discovery.api import QuerySpec
+from mailmind.kernel.ai_provider import KEYLESS, AiProvider
 from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
 
-__all__ = ["allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "config_key", "context", "drafting", "extractor", "gateway", "governor", "key", "limit_micros", "rationales", "replies", "reviews", "rewriter", "screening", "sender_digest", "status", "threads"]
+__all__ = ["WHY", "allowing_over", "answers", "asker", "asking", "assessments", "briefs", "bulk", "calls", "catalog", "config_key", "context", "drafting", "engine", "extractor", "gateway", "governor", "key", "limit_micros", "rationales", "replies", "reviews", "rewriter", "screening", "sender_digest", "status", "threads"]
 
-CONFIG = "mailmind.config.json"
+CONFIG = providers.CONFIG
 ENV = environment.ANTHROPIC_API_KEY.name
 
 
-def config_key() -> str | None:
-    """The key mailmind.config.json's top-level "anthropic_api_key" names, in any credential style
-    but proton_bridge, or None when it names none. Raises when it names one that can't be had."""
-    cred = config_file.FILE.read().get("anthropic_api_key")
+def config_key(provider: AiProvider = "anthropic") -> str | None:
+    """The key mailmind.config.json's top-level "<provider>_api_key" names, in any credential style but proton_bridge, or None
+    when it names none. Raises when it names one that can't be had."""
+    who = api_key_who(provider)
+    cred = config_file.FILE.read().get(who)
     if not cred:
         return None
-    return secrets.resolve(cred, who="anthropic_api_key").strip()
+    return secrets.resolve(cred, who=who).strip()
 
 
-def key() -> tuple[str, str]:
-    """(the API key, where it came from), the key "" when there is none. The config file wins,
-    so a MailMind-only key isn't shadowed by one the shell exports for other tools."""
+def key(provider: AiProvider = "anthropic") -> tuple[str, str]:
+    """(`provider`'s API key, where it was looked for), the key "" when there is none. The config file wins, so a
+    MailMind-only key isn't shadowed by one the shell exports for other tools; only Claude's has the environment after it.
+    A provider that takes no key has none, from nowhere."""
+    if provider in KEYLESS:
+        return "", ""
     try:
-        k = config_key()
+        k = config_key(provider)
     except Exception:
         return "", CONFIG
     if k is not None:
         return k, CONFIG
+    if provider != "anthropic":
+        return "", ""
     return (environment.ANTHROPIC_API_KEY.value() or "").strip(), ENV
 
 
+def _preferences() -> dict[str, Any]:
+    """The preferences as they stand; their defaults when the file can't be read."""
+    try:
+        return accounts.config.preferences()
+    except (OSError, ValueError):
+        return dict(PREFERENCE_DEFAULTS)
+
+
+def _base_url(provider: AiProvider, chosen: str) -> str:
+    """Where `provider` is reached: the URL a person chose for it, else for Claude ANTHROPIC_BASE_URL, else "" for its own."""
+    if chosen or provider != "anthropic":
+        return chosen
+    return environment.ANTHROPIC_BASE_URL.value() or ""
+
+
+def engine() -> Engine:
+    """The AI in force now, from the preferences and the key kept for the provider chosen."""
+    prefs = _preferences()
+    provider: AiProvider = prefs["ai_provider"]
+    api_key, source = key(provider)
+    return providers.in_force(enabled=prefs["ai_enabled"], provider=provider, model=calls.MODEL or prefs["ai_model"],
+                              base_url=_base_url(provider, prefs["ai_base_url"]), key=api_key, key_from=source)
+
+
+def _model_for(e: Engine) -> LanguageModel:
+    if e.off:
+        return DisabledModel(e.off, e.model)
+    if PROVIDERS[e.provider].wire == "anthropic":
+        return AnthropicModel(e.key, e.base_url, model=e.model, local=e.local)
+    return ChatModel(e.provider, e.base_url, e.key, e.model, local=e.local)
+
+
 class _Bound:
-    """The LanguageModel for the key and base URL in force, made once for each."""
+    """The LanguageModel for the engine in force, made once for each provider, model, URL, key and reason AI is off."""
 
     def __init__(self):
         self._made: tuple[Any, Any] = None, None
         self._lock = threading.Lock()
 
     def __call__(self):
-        made_for = (key()[0], environment.ANTHROPIC_BASE_URL.value())
+        e = engine()
+        made_for = (e.provider, e.model, e.base_url, e.key, e.off)
         with self._lock:
             if self._made[0] != made_for:
-                api_key, base_url = made_for
-                model = AnthropicModel(api_key, base_url) if api_key else DisabledModel()
-                self._made = made_for, model
+                self._made = made_for, _model_for(e)
             return self._made[1]
+
+
+def _listing_base(provider: AiProvider) -> str:
+    """Where a provider's models are listed: the URL a person chose, while it is the provider chosen, else its own."""
+    prefs = _preferences()
+    return _base_url(provider, prefs["ai_base_url"] if prefs["ai_provider"] == provider else "")
+
+
+def _list_models(wire: Wire, provider: AiProvider, base_url: str, key: str) -> list[str]:
+    if wire == "anthropic":
+        return anthropic_sdk.list_models(key, base_url)
+    return openai_chat.list_models(provider, base_url, key)
 
 
 def limit_micros() -> int:
@@ -214,13 +272,12 @@ def assemble():
     """The Assistant's objects, made afresh: the spend ledger, the cost governor, the gateway, the status and every
     feature's use case. Importing this module assembles them once; wiring.assemble makes a new set of every context's."""
     global _bound, LEDGER, GOVERNOR, GATEWAY, status, calls, assessments, context, threads, briefs, reviews, replies, \
-        rewriter, extractor, asker, asking, drafting, bulk, screening, rationales, sender_digest
+        rewriter, extractor, asker, asking, drafting, bulk, screening, rationales, sender_digest, catalog
     _bound = _Bound()
     LEDGER = SqliteLedger()                  # the ai_usage table in the data directory's database
     GOVERNOR = CostGovernor(spent=lambda: GATEWAY.spent_today(), limit=limit_micros, reserved=lambda: LEDGER.reserved())
     GATEWAY = Gateway(_bound, LEDGER, governor=GOVERNOR)
-    status = Status(lambda: gateway(), lambda: key(), lambda: governor(),
-                    lambda: assessments.batch_status(), lambda: calls.model_label())
+    status = Status(lambda: gateway(), engine, lambda: governor(), lambda: assessments.batch_status())
     calls = Calls(lambda: gateway(), status)
     assessments = Assessments(calls, lambda: gateway(), answers, _uow, _mail)
     context = ContextAssembler(_mail)
@@ -237,6 +294,7 @@ def assemble():
     screening = Screening(calls, _uow, _mail)
     rationales = Rationales(calls, _uow, _mail)
     sender_digest = SenderDigest(calls, _uow, _mail)
+    catalog = Catalog(lambda provider: key(provider)[0], _listing_base, _list_models)
 
 
 assemble()

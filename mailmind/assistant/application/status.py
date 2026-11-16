@@ -1,5 +1,5 @@
-"""How AI stands, with no call made: what the UI and the startup line say of it, and how the most recent call went. With no
-API key the engine is "none", which is no failure. A call the cost governor held back (HeldBack: OverLimit for one someone
+"""How AI stands, with no call made: what the UI and the startup line say of it, and how the most recent call went. With AI
+off (turned off in Settings, or no key, URL or model) the engine is "none", which is no failure, and `off` says why. A call the cost governor held back (HeldBack: OverLimit for one someone
 asked for at the daily limit, Deferred for background work) wasn't made, so it isn't one either.
 """
 import time
@@ -9,6 +9,7 @@ from typing import Any
 from mailmind.assistant.application.gateway import Gateway
 from mailmind.assistant.application.governor import CostGovernor
 from mailmind.assistant.application.ports import BatchStatus, NotSent
+from mailmind.assistant.domain.providers import CONFIG, Engine
 from mailmind.platform.logging import get_logger
 
 log = get_logger("ai")
@@ -23,19 +24,19 @@ def _plain(e: Exception) -> str:
         return "rate-limited for now"
     if "timed out" in s.lower():
         return "it timed out"
+    if "unreachable" in s.lower():
+        return "couldn't reach it"
     status = getattr(e, "status", None)        # never what the API said: it can quote the request back
     return f"the API answered {status}" if status else type(e).__name__
 
 
 class Status:
-    def __init__(self, gateway: Callable[[], Gateway], key: Callable[[], tuple[str, str]],
-                 governor: Callable[[], CostGovernor], batch_status: Callable[[], BatchStatus],
-                 model_label: Callable[[], str]):
+    def __init__(self, gateway: Callable[[], Gateway], engine: Callable[[], Engine],
+                 governor: Callable[[], CostGovernor], batch_status: Callable[[], BatchStatus]):
         self._gateway = gateway
-        self._key = key
+        self._engine = engine
         self._governor = governor
         self._batch_status = batch_status
-        self._model_label = model_label
         self._last: dict[str, Any] = {"ok": None, "ts": 0, "error": ""}   # how the most recent AI call went, for report()
 
     def note(self, ok: bool, error: str) -> None:
@@ -55,26 +56,37 @@ class Status:
         return out
 
     def describe_engine(self) -> str:
-        """One line for the startup log."""
-        return f"Claude API · {self._model_label()} · {self._key_note()}"
+        """One line for the startup log: the provider, the model and where its key came from, or why AI is off. Never the
+        service's URL, which is the person's."""
+        engine = self._engine()
+        return f"{engine.label} · {engine.model or 'no model'} · {self._note(engine)}"
 
-    def _key_note(self) -> str:
-        """Where the API key came from, or why there is none."""
-        key, source = self._key()
-        if key:
-            return "key from " + source
-        if source == "mailmind.config.json":
-            return "no key, so AI is off: the anthropic_api_key in mailmind.config.json can't be read"
-        return "no key, so AI is off: keep one with `uv run python -m mailmind ai key`, or set ANTHROPIC_API_KEY"
+    def _note(self, engine: Engine) -> str:
+        """Where the API key came from, or why AI is off."""
+        flag = "" if engine.provider == "anthropic" else f" --provider {engine.provider}"
+        if engine.off == "turned-off":
+            return "AI is turned off: turn it on in Settings, or with `uv run python -m mailmind ai on`"
+        if engine.off == "no-key" and engine.key_from == CONFIG:
+            return f"no key, so AI is off: the {engine.provider}_api_key in mailmind.config.json can't be read"
+        if engine.off == "no-key" and engine.provider == "anthropic":
+            return "no key, so AI is off: keep one with `uv run python -m mailmind ai key`, or set ANTHROPIC_API_KEY"
+        if engine.off == "no-key":
+            return f"no key, so AI is off: keep one in Settings, or with `uv run python -m mailmind ai key{flag}`"
+        if engine.off == "no-url":
+            return "no URL, so AI is off: give the service's in Settings"
+        if engine.off == "no-model":
+            return "no model, so AI is off: choose one in Settings"
+        return "key from " + engine.key_from if engine.key else "no key"
 
     def report(self) -> dict[str, Any]:
-        """What the UI says about AI, with no call made: the engine ("api", or "none" with no key),
-        its model, where the key came from, how the most recent call went (last_ok None until one
-        has run), and what today's calls cost so far in micro-dollars (None when the usage ledger
+        """What the UI says about AI, with no call made: the engine ("api", or "none" while AI is off), the provider chosen and
+        why AI is off (None while it is on), the model in force, where the key came from, how the most recent call went
+        (last_ok None until one has run), and what today's calls cost so far in micro-dollars (None when the usage ledger
         can't be read)."""
+        engine = self._engine()
         on = self._gateway().on
-        return {"engine": "api" if on else "none", "model": self._model_label() if on else "",
-                "key_from": self._key()[1] if on else "",
+        return {"engine": "api" if on else "none", "provider": engine.provider, "off": None if on else engine.off,
+                "model": engine.model if on else "", "key_from": engine.key_from if on else "",
                 "last_ok": self._last["ok"], "last_ts": self._last["ts"], "last_error": self._last["error"],
                 "spent_today_micros": self._spent_today(), "limit_micros": self._governor().limit_micros(),
                 **self._batch_note(on)}

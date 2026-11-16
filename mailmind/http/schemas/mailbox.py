@@ -1,7 +1,9 @@
 """What the page asks of the Mailbox, and what it answers."""
 from typing import Literal
 
+from mailmind.assistant.api import AiOff
 from mailmind.http.schemas.common import ACopy, Answer, Copy, Failure, Flag, Number, QueryArgs, RequestBody
+from mailmind.kernel.ai_provider import AiProvider
 from mailmind.mailbox.api import FilingVerb, FlagName
 
 # ── what a request says ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -351,8 +353,11 @@ class SyncState(Answer):
 
 
 class AiStatus(Answer):
-    """`Status.report`: how AI stands, with no call made."""
+    """`Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
+    is on)."""
     engine: str
+    provider: AiProvider
+    off: AiOff | None
     model: str
     key_from: str
     last_ok: bool | None

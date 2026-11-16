@@ -47,8 +47,18 @@ class Gateway:
 
     @property
     def on(self) -> bool:
-        """False when AI is off: there is no key, and every call raises AIOff unsent."""
+        """False when AI is off (turned off, or no key, URL or model), and every call raises AIOff unsent."""
         return self._model().enabled
+
+    @property
+    def model(self) -> str:
+        """The model a call asks unless it names another: the one in force."""
+        return self._model().model
+
+    @property
+    def takes_batches(self) -> bool:
+        """Whether the model in force takes a batch: only Claude's does."""
+        return self._model().takes_batches
 
     def ask(self, text: str, schema: dict[str, Any] | None = None, *, feature: str, model: str | None = None,
             effort: str | None = None) -> Reply:
@@ -58,9 +68,9 @@ class Gateway:
         and one of NotSent's when no call was made: AIOff, or what the cost governor raises when
         it holds the call back (OverLimit, Deferred). The call is counted under `feature`
         whatever its outcome, if it was made."""
-        name = model or models.DEFAULT
-        prompt = self._prompt(text, name, schema, effort, models.takes_fallback(name))
         lm = self._model()
+        name = model or lm.model
+        prompt = self._prompt(text, name, schema, effort, models.takes_fallback(name))
         if not lm.enabled:
             return lm.complete(prompt)          # raises AIOff: nothing is sent
         with self._admitted(feature, name, lm):
@@ -70,10 +80,10 @@ class Gateway:
                 raise
             except ModelError as e:
                 self._heard(feature, name, lm, e)
-                self._count(feature, name, "", "rejected" if e.permanent else "failed", Usage())
+                self._count(feature, name, "", "rejected" if e.permanent else "failed", Usage(), lm.local)
                 raise
         self._heard(feature, name, lm, None)
-        self._count(feature, name, reply.model, "refused" if reply.refused else "ok", reply.usage)
+        self._count(feature, name, reply.model, "refused" if reply.refused else "ok", reply.usage, lm.local)
         return reply
 
     def _prompt(self, text: str, name: str, schema: dict[str, Any] | None, effort: str | None, fallback: bool) -> Prompt:
@@ -87,16 +97,16 @@ class Gateway:
         """Send each (custom id, text) as one request of one batch, and return the batch's id. Never
         with the refusal fallback, which batches reject. Its cost is counted when its answers are in;
         a failure to send it is counted as a call that failed."""
-        name = model or models.DEFAULT
-        prompts = [(cid, self._prompt(text, name, schema, effort, False)) for cid, text in requests]
         lm = self._model()
+        name = model or lm.model
+        prompts = [(cid, self._prompt(text, name, schema, effort, False)) for cid, text in requests]
         try:
             batch_id = lm.submit_batch(prompts)
         except NotSent:
             raise
         except ModelError as e:
             self._heard(feature, name, lm, e)
-            self._count(feature, name, "", "rejected" if e.permanent else "failed", Usage())
+            self._count(feature, name, "", "rejected" if e.permanent else "failed", Usage(), lm.local)
             raise
         self._heard(feature, name, lm, None)
         return batch_id
@@ -107,8 +117,8 @@ class Gateway:
     def batch_results(self, batch_id: str, *, feature: str, model: str | None = None) -> list[BatchResult]:
         """What a batch that has ended said, each answer counted under `feature` at half price, and
         how each went told to the cost governor, as a call's is."""
-        name = model or models.DEFAULT
         lm = self._model()
+        name = model or lm.model
         results = lm.batch_results(batch_id, name)
         tally: dict[tuple[str, str], list[int]] = {}
         for r in results:
@@ -124,7 +134,7 @@ class Gateway:
             for i, n in enumerate((1, u.input_tokens, u.output_tokens, u.cache_write_tokens, u.cache_read_tokens,
                                    pricing.batch_micros(pricing.cost_micros(
                                        name, reply.model if reply else "", u.input_tokens, u.output_tokens,
-                                       u.cache_write_tokens, u.cache_read_tokens)))):
+                                       u.cache_write_tokens, u.cache_read_tokens, lm.local)))):
                 row[i] += n
         for (served, outcome), (calls, i, o, w, r, cost) in tally.items():
             self._record(feature, name, served, outcome, Usage(i, o, w, r), cost, calls)
@@ -142,8 +152,8 @@ class Gateway:
         "breaker"), or None when it would go. Background work asks before a batch."""
         if self._governor is None:
             return None
-        return self._governor.held_back(features.kind(feature), feature, model or models.DEFAULT,
-                                        self._model())
+        lm = self._model()
+        return self._governor.held_back(features.kind(feature), feature, model or lm.model, lm)
 
     def _admitted(self, feature: str, name: str, lm: LanguageModel) -> AbstractContextManager[None]:
         if self._governor is None:
@@ -154,10 +164,10 @@ class Gateway:
         if self._governor is not None:
             self._governor.heard(feature, name, lm, error)
 
-    def _count(self, feature: str, asked: str, served: str, outcome: str, usage: Usage) -> None:
+    def _count(self, feature: str, asked: str, served: str, outcome: str, usage: Usage, local: bool) -> None:
         self._record(feature, asked, served, outcome, usage,
                      pricing.cost_micros(asked, served, usage.input_tokens, usage.output_tokens,
-                                         usage.cache_write_tokens, usage.cache_read_tokens))
+                                         usage.cache_write_tokens, usage.cache_read_tokens, local))
 
     def _record(self, feature: str, asked: str, served: str, outcome: str, usage: Usage, cost: int,
                 calls: int = 1) -> None:

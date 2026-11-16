@@ -4,15 +4,18 @@ ledger that counts what each call cost.
 A LanguageModel sends a Prompt as one user turn and returns the Reply. When no reply comes it
 raises ModelError, a RuntimeError, so the legacy callers' "a raise is retried later" contract
 holds: the API rejected the call (`status` says how), or nothing answered (`status` is None).
-Some say nothing was sent (NotSent): AIOff, which a model raises when there is no key, and what
-the cost governor raises when it holds a call back (OverLimit, Deferred).
+Some say nothing was sent (NotSent): AIOff, which a model raises when AI is off (turned off, or no
+key, URL or model), NoBatches, which one that takes no batch raises for one, and what the cost
+governor raises when it holds a call back (OverLimit, Deferred).
 """
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, Protocol, TypedDict
 
+from mailmind.assistant.domain.providers import Wire
 from mailmind.content.mime import Parsed
+from mailmind.kernel.ai_provider import AiProvider
 from mailmind.kernel.assessment import Assessment, Outcome
 from mailmind.kernel.ids import AccountId, FolderName, MessageKey, Pk, ThreadRef
 from mailmind.kernel.row import Connection, Row
@@ -88,7 +91,12 @@ class NotSent(ModelError):
 
 
 class AIOff(NotSent):
-    """AI is off: there is no API key, so nothing was sent."""
+    """AI is off: turned off, or with no key, URL or model to ask, so nothing was sent. Its words say which, and never hold a
+    secret."""
+
+
+class NoBatches(NotSent):
+    """The provider in force takes no batch (only Claude's Message Batches API does), so nothing was sent."""
 
 
 class HeldBack(NotSent):
@@ -118,6 +126,9 @@ class Deferred(HeldBack):
 
 class LanguageModel(Protocol):
     enabled: bool                    # False only for the stand-in used when AI is off
+    model: str                       # the model a call asks unless it names another ("" when there is none to ask)
+    local: bool                      # it runs on this Mac: a model the price table doesn't know costs nothing
+    takes_batches: bool              # it takes a batch: only Claude's does
 
     def complete(self, prompt: Prompt) -> Reply: ...
 
@@ -128,6 +139,12 @@ class LanguageModel(Protocol):
     def batch_results(self, batch_id: str, asked: str) -> list[BatchResult]: ...
 
     def discard_batch(self, batch_id: str) -> None: ...      # removes what the API keeps of it
+
+
+class ModelLister(Protocol):
+    """The ids of the models a provider lists, asked over `wire` at `base_url` with `key` ("" for none). Raises ModelError
+    as a call does."""
+    def __call__(self, wire: Wire, provider: AiProvider, base_url: str, key: str) -> list[str]: ...
 
 
 @dataclass(frozen=True)

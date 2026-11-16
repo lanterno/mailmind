@@ -191,7 +191,8 @@ name = "only the SDK adapter reaches the Anthropic SDK"
 type = "forbidden"
 source_modules = ["mailmind.http", "mailmind.platform", "mailmind.kernel",
                   "mailmind.assistant.application", "mailmind.assistant.domain",
-                  "mailmind.assistant.adapters.wire", "mailmind.assistant.adapters.disabled"]
+                  "mailmind.assistant.adapters.wire", "mailmind.assistant.adapters.disabled",
+                  "mailmind.assistant.adapters.chat_wire", "mailmind.assistant.adapters.openai_chat"]
 forbidden_modules = ["anthropic"]
 
 [[tool.importlinter.contracts]]

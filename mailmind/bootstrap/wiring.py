@@ -176,8 +176,12 @@ def assess_batch() -> int:
         print("The read-only profile sends nothing out, so nothing was sent.")
         return 1
     store.init()
-    if assistant.calls.engine() == "none":
-        print("AI is off: there is no API key, so nothing was sent.")
+    off = assistant.engine().off
+    if off:
+        print(f"{assistant.WHY[off]}, so nothing was sent.")
+        return 1
+    if not assistant.gateway().takes_batches:
+        print("Batches need Claude as the AI provider.")
         return 1
     assistant.assessments.batch_collect(print)
     sent = assistant.assessments.batch_submit(at_least=1, keep=0, log=print)

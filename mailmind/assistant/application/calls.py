@@ -1,6 +1,6 @@
-"""Every AI call in the app goes through call_claude_json or call_claude here, which ask the Claude API through the
-gateway, each call's outcome noted for `status.Status`. With no API key AI is off: those calls raise AIOff before anything
-is sent. The cost governor may hold a call back instead (HeldBack: OverLimit for one someone asked for at the daily limit,
+"""Every AI call in the app goes through call_claude_json or call_claude here, which ask the model in force through the
+gateway (Claude unless a person chose another provider), each call's outcome noted for `status.Status`. With AI off (turned
+off, or no key, URL or model) those calls raise AIOff before anything is sent. The cost governor may hold a call back instead (HeldBack: OverLimit for one someone asked for at the daily limit,
 Deferred for background work).
 """
 from collections.abc import Callable
@@ -9,13 +9,12 @@ from typing import Any
 from mailmind.assistant.application.gateway import DayCost, Gateway
 from mailmind.assistant.application.ports import Reply
 from mailmind.assistant.application.status import Status
-from mailmind.assistant.domain import models
 from mailmind.assistant.domain.schema import object_in
 from mailmind.platform import environment
 
 
 class Calls:
-    MODEL = environment.MODEL.value()  # optional, e.g. claude-haiku-5-5
+    MODEL = environment.MODEL.value()  # optional, e.g. claude-haiku-5-5: wins over the model a person chose
 
     def __init__(self, gateway: Callable[[], Gateway], status: Status):
         self._gateway = gateway
@@ -26,12 +25,12 @@ class Calls:
         return self._status.noting(make)
 
     def engine(self) -> str:
-        """"api" when an API key resolves, else "none": AI is off."""
+        """"api" while AI is on, else "none": AI is off."""
         return "api" if self._gateway().on else "none"
 
     def model_label(self) -> str:
-        """The model name stored beside each AI result and shown under it in the UI."""
-        return self.MODEL or models.DEFAULT
+        """The model name stored beside each AI result and shown under it in the UI: the one in force."""
+        return self.MODEL or self._gateway().model
 
     def usage(self, days: int = 30) -> list[DayCost]:
         """Each of the last `days` local days, newest first: its AI calls and their cost in
