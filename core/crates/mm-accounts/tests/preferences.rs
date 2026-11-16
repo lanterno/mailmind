@@ -7,7 +7,7 @@ use mm_accounts::Directory;
 use mm_accounts::ports::ConfigFile;
 use mm_accounts::preferences::{MODEL_MOST, apply, changes, daily_limit_usd, importable, provider, read, switching};
 use mm_kernel::ai_provider::AiProvider;
-use mm_kernel::errors::{Failure, Fault};
+use mm_kernel::errors::{Failure, Fault, Problem};
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Secret};
 use serde_json::{Map, Value, json};
 
@@ -242,4 +242,51 @@ fn settings_keep_a_switch_of_provider_without_the_last_ones_model_and_address() 
     let refused = directory.set_preferences(&object(json!({"ai_provider": "gemini", "ai_base_url": "ftp://x"})));
     assert!(matches!(refused, Err(Failure::Problem(_))));
     assert_eq!(file.read().expect("the file")["preferences"]["ai_provider"], json!("openai"), "nothing was written");
+}
+
+#[test]
+fn a_model_on_this_mac_is_at_an_address_on_this_mac_or_refused_in_words() {
+    let file = Arc::new(File(Mutex::new(object(json!({"accounts": [], "preferences": {
+        "ai_provider": "compatible", "ai_model": "mixtral", "ai_base_url": "https://llm.example.test/v1"}})))));
+    let directory = Directory::new(file.clone(), Arc::new(NoKeychain), Arc::new(At));
+    let set = |asked: Value| directory.set_preferences(&object(asked)).map(|answer| answer["preferences"].clone());
+    let refused = |words: &str| Err(Failure::Problem(Problem::refused(words)));
+    let elsewhere = "A model on this Mac must be at 127.0.0.1, ::1 or localhost.";
+    assert_eq!(set(json!({"ai_provider": "local", "ai_base_url": "https://llm.example.test/v1"})), refused(elsewhere));
+    assert_eq!(file.read().expect("the file")["preferences"]["ai_provider"], json!("compatible"), "nothing written");
+    // Switched without an address, it is at its usual one.
+    let said = set(json!({"ai_provider": "local"})).expect("kept");
+    assert_eq!((&said["ai_provider"], &said["ai_base_url"]), (&json!("local"), &json!("")));
+    assert_eq!(set(json!({"ai_base_url": "https://10.0.0.5/v1"})), refused(elsewhere));
+    let plain = "the AI service's URL must be https, or http on this Mac, in at most 500 characters, with no user, \
+                 password, query or fragment";
+    assert_eq!(
+        set(json!({"ai_base_url": "http://192.168.1.20:11434/v1"})),
+        refused(plain),
+        "any provider's rule first"
+    );
+    for here in
+        ["http://127.0.0.1:1234/v1/", "https://localhost:8443/v1", "http://[::1]:8080/v1", "HTTP://LOCALHOST/v1"]
+    {
+        let said = set(json!({"ai_base_url": here})).expect("on this Mac");
+        assert_eq!(said["ai_base_url"], json!(here.trim_end_matches('/')), "{here}");
+    }
+    // Back to a server elsewhere, as a compatible service.
+    let said = set(json!({"ai_provider": "compatible", "ai_base_url": "https://llm.example.test/v1"})).expect("kept");
+    assert_eq!(said["ai_base_url"], json!("https://llm.example.test/v1"));
+}
+
+#[test]
+fn a_model_on_this_mac_a_hand_edit_left_elsewhere_reads_at_its_usual_address_and_other_changes_go_on() {
+    let elsewhere =
+        json!({"accounts": [], "preferences": {"ai_provider": "local", "ai_base_url": "https://llm.example.test/v1"}});
+    assert_eq!(read(&object(elsewhere.clone()))["ai_base_url"], json!(""));
+    let compatible =
+        object(json!({"preferences": {"ai_provider": "compatible", "ai_base_url": "https://llm.example.test/v1"}}));
+    assert_eq!(read(&compatible)["ai_base_url"], json!("https://llm.example.test/v1"));
+
+    let file = Arc::new(File(Mutex::new(object(elsewhere))));
+    let directory = Directory::new(file.clone(), Arc::new(NoKeychain), Arc::new(At));
+    let answer = directory.set_preferences(&object(json!({"theme": "dusk", "ai_model": "qwen3:8b"}))).expect("kept");
+    assert_eq!((&answer["preferences"]["theme"], &answer["preferences"]["ai_base_url"]), (&json!("dusk"), &json!("")));
 }
