@@ -3,8 +3,6 @@ each one's key, while the Assistant talks to it, and neither context imports the
 `AiProvider`, so the page has them as a type and keeps only its words for each."""
 from typing import Literal, get_args
 
-type AiProvider = Literal["anthropic", "openai", "gemini", "ollama", "compatible"]
+type AiProvider = Literal["anthropic", "openai", "gemini", "local", "compatible"]     # local: a model on this Mac
 AI_PROVIDERS: tuple[AiProvider, ...] = get_args(AiProvider.__value__)
 DEFAULT_PROVIDER: AiProvider = "anthropic"
-KEYLESS: frozenset[AiProvider] = frozenset({"ollama"})        # takes no key: none is ever sent or kept
-KEYED: tuple[AiProvider, ...] = tuple(p for p in AI_PROVIDERS if p not in KEYLESS)

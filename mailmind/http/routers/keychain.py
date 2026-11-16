@@ -1,7 +1,7 @@
 """What a person keeps in the login Keychain from Settings, beside each account's own password: each AI provider's API key,
 which the config file names where the Assistant reads it, and the Proton Bridge's password, which every proton_bridge credential
 logs in with. Each is kept with a POST and taken out with another, read through the Directory. No answer holds the secret, its
-length or any part of it: the keys' answers say only which providers have one (Ollama takes none), and the Bridge's whether it
+length or any part of it: the keys' answers say only which providers have one, and the Bridge's whether it
 is set. Keeping one writes nothing to a mail server, so a read-only process keeps it too, as it keeps an account's typed
 password."""
 from mailmind.http import route

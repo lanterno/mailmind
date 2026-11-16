@@ -1,10 +1,10 @@
 """OpenAI's Chat Completions over HTTP, on the standard library: the language model for every provider but Claude (#49), OpenAI,
-Gemini through Google's OpenAI-compatible endpoint, Ollama on this Mac and any other compatible service, each given its base
+Gemini through Google's OpenAI-compatible endpoint, a model on this Mac and any other compatible service, each given its base
 URL, its key (or none) and its model. What goes on the wire and how a reply reads is `chat_wire`'s.
 
 It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when there is a key, and no proxy: the request
 goes to the host the URL names. It tries the statuses a retry can help (408, 409, 429 and 5xx), and a connection that
-failed, twice more, honouring retry-after, as the Anthropic SDK does. Ollama and a compatible service may not take
+failed, twice more, honouring retry-after, as the Anthropic SDK does. A model on this Mac and a compatible service may not take
 structured output: a 400 that names `response_format` is asked once more without it, and the reply read as free-form JSON.
 A rejected key's error holds none of what the service said, which can quote part of the key back. It takes no batch.
 """
@@ -27,7 +27,7 @@ RETRIES = 2                        # after the first attempt
 LONGEST_WAIT = 60                  # seconds: a retry-after past this isn't waited for
 _RETRIED = frozenset({408, 409, 429})
 _AUTH = frozenset({401, 403})
-_FALLS_BACK = frozenset({"ollama", "compatible"})     # may not take response_format
+_FALLS_BACK = frozenset({"local", "compatible"})      # may not take response_format
 _NO_BATCHES = "Batches need Claude as the AI provider."
 
 

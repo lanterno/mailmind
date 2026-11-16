@@ -10,7 +10,7 @@ gives none. Gemini's are aistudio.google.com/docs/pricing, read the same day, th
 
 A model is looked up by its name after the last `/`, so OpenRouter's `openai/gpt-6.1-sol` and Gemini's
 `models/gemini-4-hydrogen` are found. One the table still doesn't know costs nothing when it runs on
-this Mac (`local`: Ollama, or a service on loopback), and otherwise the dearest price of its family
+this Mac (`local`: a model on this Mac, or any service on loopback), and otherwise the dearest price of its family
 (claude-, gpt- or o<digit>, gemini-), or of the whole table for a name of none, so a spending limit errs
 toward stopping early, never toward overspending.
 """

@@ -24,7 +24,7 @@ class Catalog:
         base_url = self._base_url(provider) or p.base_url
         if not base_url:
             raise Refused("Give the service's URL first.")
-        key = "" if p.key == "none" else self._key(provider)
+        key = self._key(provider)
         if p.key == "needed" and not key:
             raise Refused("Keep a key for this provider first.")
         try:

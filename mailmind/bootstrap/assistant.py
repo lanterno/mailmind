@@ -49,7 +49,7 @@ from mailmind.assistant.domain import limits, providers
 from mailmind.assistant.domain.providers import PROVIDERS, Engine, Wire
 from mailmind.bootstrap import accounts, attention, curation, discovery, mailbox
 from mailmind.discovery.api import QuerySpec
-from mailmind.kernel.ai_provider import KEYLESS, AiProvider
+from mailmind.kernel.ai_provider import AiProvider
 from mailmind.platform import environment
 from mailmind.platform.db.uow import UnitOfWork
 from typing import Any
@@ -72,10 +72,7 @@ def config_key(provider: AiProvider = "anthropic") -> str | None:
 
 def key(provider: AiProvider = "anthropic") -> tuple[str, str]:
     """(`provider`'s API key, where it was looked for), the key "" when there is none. The config file wins, so a
-    MailMind-only key isn't shadowed by one the shell exports for other tools; only Claude's has the environment after it.
-    A provider that takes no key has none, from nowhere."""
-    if provider in KEYLESS:
-        return "", ""
+    MailMind-only key isn't shadowed by one the shell exports for other tools; only Claude's has the environment after it."""
     try:
         k = config_key(provider)
     except Exception:

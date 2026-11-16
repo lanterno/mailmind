@@ -23,7 +23,7 @@ can hold one.
 from dataclasses import dataclass, field
 from typing import Any, Literal, Required, TypedDict, TypeIs
 
-from mailmind.kernel.ai_provider import KEYED, AiProvider
+from mailmind.kernel.ai_provider import AI_PROVIDERS, AiProvider
 from mailmind.kernel.parsed import as_int, is_list, is_object
 
 
@@ -45,7 +45,8 @@ DATABASE_KEY_ITEM = "database-key"      # mailmind.platform.db.key's, which no c
 
 # What a refusal calls each AI provider's key.
 _API_KEY_NAMES: dict[AiProvider, str] = {"anthropic": "the Claude API key", "openai": "the OpenAI API key",
-                                         "gemini": "the Gemini API key", "compatible": "the AI service's API key"}
+                                         "gemini": "the Gemini API key", "local": "the key for the model on this Mac",
+                                         "compatible": "the AI service's API key"}
 
 
 def account_item(email: str) -> str:
@@ -64,7 +65,7 @@ def api_key_item(provider: AiProvider) -> str:
 
 
 def _provider_of(who: str) -> AiProvider | None:
-    return next((p for p in KEYED if api_key_who(p) == who), None)
+    return next((p for p in AI_PROVIDERS if api_key_who(p) == who), None)
 
 
 def _keeps(who: str) -> str:
@@ -216,7 +217,7 @@ def plaintext(raw: object) -> list[tuple[str, dict[str, Any], str, str]]:
             email = entry.get("email")
             who = email if isinstance(email, str) and email else "an account with no address"
             held.append((who, entry, "credential", account_item(who)))
-    for provider in KEYED:
+    for provider in AI_PROVIDERS:
         who = api_key_who(provider)
         if holds_plaintext(raw.get(who)):
             held.append((who, raw, who, api_key_item(provider)))

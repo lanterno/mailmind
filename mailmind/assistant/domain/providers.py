@@ -14,7 +14,7 @@ from mailmind.assistant.domain import models
 from mailmind.kernel.ai_provider import AiProvider
 
 type Wire = Literal["anthropic", "openai"]
-type KeyNeed = Literal["needed", "none", "optional"]
+type KeyNeed = Literal["needed", "optional"]
 type AiOff = Literal["turned-off", "no-key", "no-model", "no-url"]
 
 # Why AI is off, in words a person reads: an answer, the CLI and the startup line say them. None holds a secret.
@@ -41,7 +41,7 @@ PROVIDERS: dict[AiProvider, Provider] = {p.id: p for p in (
     Provider("openai", "OpenAI", "openai", "https://api.openai.com/v1", "needed", "gpt-6.1-sol"),
     Provider("gemini", "Google Gemini", "openai", "https://generativelanguage.googleapis.com/v1beta/openai", "needed",
              "gemini-4-hydrogen"),
-    Provider("ollama", "Ollama, on this Mac", "openai", "http://127.0.0.1:11434/v1", "none", ""),
+    Provider("local", "A model on this Mac", "openai", "http://127.0.0.1:11434/v1", "optional", ""),     # Ollama's address
     Provider("compatible", "Another OpenAI-compatible service", "openai", "", "optional", ""),
 )}
 LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -76,8 +76,9 @@ class Engine:
 
     @property
     def local(self) -> bool:
-        """It runs on this Mac (Ollama, or a service on loopback), so a model the price table doesn't know costs nothing."""
-        return self.provider == "ollama" or on_loopback(self.base_url)
+        """It runs on this Mac (a model on this Mac, or any service on loopback), so a model the price table doesn't know
+        costs nothing."""
+        return self.provider == "local" or on_loopback(self.base_url)
 
 
 def in_force(*, enabled: bool, provider: AiProvider, model: str, base_url: str, key: str, key_from: str) -> Engine:
@@ -85,7 +86,6 @@ def in_force(*, enabled: bool, provider: AiProvider, model: str, base_url: str, 
     order: turned off; a provider that needs a key with none; a service with no URL; one with no model."""
     p = PROVIDERS[provider]
     model, base_url = model or p.model, base_url or p.base_url
-    key, key_from = ("", "") if p.key == "none" else (key, key_from)
     off: AiOff | None = ("turned-off" if not enabled else
                          "no-key" if p.key == "needed" and not key else
                          "no-url" if not base_url else

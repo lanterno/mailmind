@@ -76,7 +76,7 @@ def set_password(who):
 
 
 _KEY_NAMES = {"anthropic": "Claude API key", "openai": "OpenAI API key", "gemini": "Gemini API key",
-              "compatible": "AI service's API key"}
+              "local": "key for the model on this Mac", "compatible": "AI service's API key"}
 
 
 def set_api_key(provider: AiProvider = "anthropic"):

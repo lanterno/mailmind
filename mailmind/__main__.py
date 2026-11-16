@@ -31,8 +31,8 @@
                                whole; no sync needs it, and what it changes moves as a merge does
   ai usage [--days N]          what AI cost each local day of the last N (default 7), by feature, from
                                the usage ledger; it migrates nothing and calls nothing
-  ai key [--provider P]        keep an AI provider's API key (Claude's unless P names openai, gemini or
-                               compatible) in the login Keychain and point the config at it, as
+  ai key [--provider P]        keep an AI provider's API key (Claude's unless P names openai, gemini, local
+                               or compatible) in the login Keychain and point the config at it, as
                                `accounts password` does
   ai on | off                  turn AI on, or off: off, nothing is sent to any AI provider
 """
@@ -42,7 +42,7 @@ import shlex
 import signal
 import sys
 
-from mailmind.kernel.ai_provider import AI_PROVIDERS, DEFAULT_PROVIDER, KEYLESS
+from mailmind.kernel.ai_provider import AI_PROVIDERS, DEFAULT_PROVIDER
 
 
 MAILBOX_COMMANDS = {"status": "INBOX and Trash counts", "inventory": "every folder's counts",
@@ -103,7 +103,7 @@ def parser():
     usage = ai.add_parser("usage", help="what AI cost each day, by feature")
     usage.add_argument("--days", type=int, default=7, help="how many days, today included (default 7)")
     keep = ai.add_parser("key", help="keep an AI provider's API key in the login Keychain")
-    keep.add_argument("--provider", choices=[p for p in AI_PROVIDERS if p not in KEYLESS], default=DEFAULT_PROVIDER,
+    keep.add_argument("--provider", choices=AI_PROVIDERS, default=DEFAULT_PROVIDER,
                       help=f"whose key (default {DEFAULT_PROVIDER})")
     ai.add_parser("on", help="turn AI on")
     ai.add_parser("off", help="turn AI off: nothing is sent to any AI provider")

@@ -9,7 +9,7 @@ Accounts live in `mailmind.config.json` (NOT git-tracked). Copy
 
 An optional top-level "anthropic_api_key" holds the Claude API key, in any of the same styles
 (proton_bridge aside). It wins over ANTHROPIC_API_KEY in the environment. "openai_api_key", "gemini_api_key" and
-"compatible_api_key" hold the other AI providers' keys the same way (#49); Ollama takes none. An optional top-level
+"local_api_key" and "compatible_api_key" hold the other AI providers' keys the same way (#49). An optional top-level
 "preferences" block holds what the Settings page sets (mailmind.accounts.domain.preferences);
 with none, each preference is its default.
 
@@ -38,8 +38,8 @@ from mailmind.accounts.domain import account, events, preferences
 from mailmind.accounts.domain.account import Entry, MaskedRow
 from mailmind.accounts.domain.credential import (BRIDGE_ITEM, CredentialRef, PlaintextSecret, Typed, account_item,
                                                  api_key_item, api_key_who, credential_from, keychain_credential, plaintext)
-from mailmind.kernel.ai_provider import KEYED, KEYLESS, AiProvider
-from mailmind.kernel.errors import Refused, Unreachable
+from mailmind.kernel.ai_provider import AI_PROVIDERS, AiProvider
+from mailmind.kernel.errors import Unreachable
 from mailmind.kernel.parsed import is_object
 from mailmind.platform import bus
 from mailmind.platform.keychain import KeychainProblem
@@ -267,10 +267,7 @@ class Directory:
 
     def set_api_key(self, secret: str, provider: AiProvider = "anthropic") -> str:
         """Keep `secret` as `provider`'s API key, in its Keychain item, and point the file's key for it (anthropic_api_key and
-        the like) at the item, whatever it said before. The answer is the item's name. Refuses a provider that takes no key,
-        and raises as set_password does."""
-        if provider in KEYLESS:
-            raise Refused("Ollama takes no key.")
+        the like) at the item, whatever it said before. The answer is the item's name. Raises as set_password does."""
         who, item = api_key_who(provider), api_key_item(provider)
         with self._write_lock:
             raw = self._raw()
@@ -283,19 +280,17 @@ class Directory:
 
     def api_key_set(self, provider: AiProvider = "anthropic") -> bool:
         """Whether the file names `provider`'s API key, wherever it keeps it."""
-        return provider not in KEYLESS and bool(self._raw().get(api_key_who(provider)))
+        return bool(self._raw().get(api_key_who(provider)))
 
     def api_keys_kept(self) -> list[AiProvider]:
         """Each provider whose API key the file names, wherever it keeps it, in the providers' order."""
         raw = self._raw()
-        return [p for p in KEYED if raw.get(api_key_who(p))]
+        return [p for p in AI_PROVIDERS if raw.get(api_key_who(p))]
 
     def clear_api_key(self, provider: AiProvider = "anthropic") -> None:
         """Take `provider`'s API key's Keychain item out, and the file's key for it with it, whatever it named: for Claude,
-        AI is off unless the environment gives a key. A provider that takes no key has none to take out. Raises Unreachable
-        when the Keychain won't let go of the item, and the file is left as it was."""
-        if provider in KEYLESS:
-            return
+        AI is off unless the environment gives a key. Raises Unreachable when the Keychain won't let go of the item, and the
+        file is left as it was."""
         who = api_key_who(provider)
         with self._write_lock:
             raw = self._raw()
@@ -378,7 +373,7 @@ class Directory:
                 print(f"  ok    {a['email']:42} ({len(v)} chars)")
             except Exception as e:
                 print(f"  FAIL  {a['email']:42} {e}")
-        for provider in KEYED:
+        for provider in AI_PROVIDERS:
             who = api_key_who(provider)
             if self._raw().get(who):
                 try:
