@@ -545,6 +545,51 @@ fn a_worker_resting_is_woken_at_once_when_stopped() {
 }
 
 #[test]
+fn a_renewal_has_each_worker_let_its_connection_go_and_open_another_at_once_saying_nothing_failed() {
+    let b = build(&["a", "b"]);
+    // Were it a failure, the next connection would wait an hour.
+    started(&b, AN_HOUR);
+    until(|| b.w.serving("a") && b.w.serving("b"));
+    let (a, bee) = (b.w.line_of("a", 0), b.w.line_of("b", 0));
+    b.sup.renew();
+    until(|| b.w.count("a") == 2 && b.w.line_of("a", 1).waiting.load(Ordering::SeqCst));
+    until(|| b.w.count("b") == 2 && b.w.line_of("b", 1).waiting.load(Ordering::SeqCst));
+    assert_eq!((a.interrupted_by(), bee.interrupted_by()), (vec![me()], vec![me()]));
+    assert_eq!((a.closed_by(), bee.closed_by()), (vec!["watch:a".to_owned()], vec!["watch:b".to_owned()]));
+    assert!(b.w.said().is_empty());
+    assert_eq!(b.sup.watching(), watching(&[("a", true), ("b", true)]));
+}
+
+#[test]
+fn a_renewal_wakes_a_worker_resting_and_it_connects_at_once() {
+    let b = build(&["a"]);
+    *b.w.refuse_connect.lock().unwrap() = 1;
+    started(&b, AN_HOUR);
+    until(|| b.w.said() == ["failed a ConnectionRefusedError"]);
+    // Resting an hour: the renewal brings its next connection now.
+    b.sup.renew();
+    until(|| b.w.serving("a"));
+    assert_eq!(b.w.said(), ["failed a ConnectionRefusedError"]);
+}
+
+#[test]
+fn a_renewal_before_begin_or_after_stop_does_nothing() {
+    let b = build(&["a"]);
+    b.sup.renew();
+    started(&b, Rests::default());
+    until(|| b.w.serving("a"));
+    // The renewal asked before the workers began left nothing waiting for the first connection.
+    std::thread::sleep(Duration::from_millis(20));
+    assert_eq!(b.w.count("a"), 1);
+    let line = b.w.line_of("a", 0);
+    b.sup.stop();
+    running(&b, 0);
+    b.sup.renew();
+    assert_eq!(line.interrupted_by(), [me()]);
+    assert_eq!(b.w.count("a"), 1);
+}
+
+#[test]
 fn a_worker_that_finds_itself_unwanted_says_so_and_hands_over() {
     // Changed with no one to say so: it notices for itself, and asks for a reconcile on its way out.
     let b = build(&["a"]);

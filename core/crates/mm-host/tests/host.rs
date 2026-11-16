@@ -385,3 +385,42 @@ fn a_home_that_isnt_there_says_so() {
     let said = Host::open(home(&gone)).expect_err("no folder, no app");
     assert!(!said.contains(KEY), "an error names no secret");
 }
+
+/// How many rounds the sync job has run, as `/api/debug/jobs` says.
+fn sync_runs(host: &Host) -> i64 {
+    let jobs = json_of(&host.request("GET", "/api/debug/jobs", &[]));
+    let sync = jobs["jobs"].as_array().expect("jobs").iter().find(|job| job["name"] == "sync").cloned();
+    sync.and_then(|job| job["runs"].as_i64()).unwrap_or(0)
+}
+
+fn until(what: impl Fn() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !what() {
+        assert!(Instant::now() < deadline, "it never came");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn a_wake_syncs_now_rather_than_at_the_next_round() {
+    let folder = tempfile::tempdir().expect("a home");
+    let host = opened(folder.path());
+    // The first round comes as the host opens, and the next not for five minutes.
+    until(|| sync_runs(&host) == 1);
+    host.woke();
+    until(|| sync_runs(&host) == 2);
+    host.close();
+    // Closed, a wake does nothing.
+    host.woke();
+}
+
+#[test]
+fn a_host_that_only_reads_syncs_nothing_on_a_wake() {
+    let folder = tempfile::tempdir().expect("a home");
+    let mut reading = home(folder.path());
+    reading.variables.push(("MAILMIND_PROFILE".into(), "read-only".into()));
+    let host = Host::open(reading).expect("the host opens a fictional home");
+    host.woke();
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(sync_runs(&host), 0);
+}
