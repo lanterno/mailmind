@@ -177,7 +177,9 @@ impl Host {
     /// have come while nothing listened. IDLE's workers let their connections go and open fresh ones at once, and
     /// every account is synced now rather than at the next round. A failure from before the sleep is no measure of
     /// now: trouble that may pass counts afresh, so the sync on waking, while the network comes back, shows nothing
-    /// on its own. A host that only reads, or has closed, does nothing, as its background sync does.
+    /// on its own. A first scan's older mail, whose last round the sleep or the network may have cut short, is read
+    /// on now too, rather than up to ten minutes on. A host that only reads syncs nothing, as its background sync
+    /// does, but reads on the older mail, as it does that; one that has closed does nothing.
     pub fn woke(&self) {
         if self.closing.load(Ordering::SeqCst) {
             return;
@@ -185,6 +187,7 @@ impl Host {
         self.app.syncing.woke();
         self.app.realtime.renew();
         self.app.jobs.kick("sync");
+        self.app.jobs.kick(mm_server::workers::OLDER_MAIL);
     }
 
     /// The app itself, for what is asked of it directly rather than through a route.
