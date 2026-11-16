@@ -6,8 +6,6 @@
 //! provider speaks OpenAI's Chat Completions, Ollama on this Mac with no key, and `compatible` any service that speaks
 //! it, at the address the person gives.
 
-use std::net::IpAddr;
-
 /// One of the providers, in the order a list of them is given.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AiProvider {
@@ -109,11 +107,14 @@ fn host_of(url: &str) -> Option<(bool, String)> {
     Some((tls, host.to_ascii_lowercase()))
 }
 
-/// Whether a host is this machine as a base URL may name it over plain HTTP: `127.0.0.1`, `::1` or `localhost`.
+/// Whether a host is this machine as a base URL may name it over plain HTTP: `127.0.0.1`, `::1` or `localhost`,
+/// written just so, as the Python app reads it.
 fn loopback(host: &str) -> bool {
-    let this = [IpAddr::from([127, 0, 0, 1]), IpAddr::from(std::net::Ipv6Addr::LOCALHOST)];
-    host == "localhost" || host.parse::<IpAddr>().is_ok_and(|ip| this.contains(&ip))
+    LOOPBACK.contains(&host)
 }
+
+/// The hosts that name this machine.
+const LOOPBACK: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
 
 /// A base URL as a person may give one, its trailing `/` dropped: at most `BASE_URL_MOST` characters of printable
 /// ASCII, an `https` URL with a host, or an `http` one whose host is this machine (`127.0.0.1`, `::1`, `localhost`),
