@@ -2,7 +2,7 @@
 (`delete_mail`): its stored copies with their bodies and attachments, the index's rows of them, what was said of them,
 each context's state under its address, Undo's entries and the audit trails' records of it, and the AI's cards made for
 it. Its mail on the server is untouched, and so is every other account's here. A sync reading its mail as it goes stops
-there and keeps nothing."""
+there and keeps nothing, and the open tabs hear of the removal."""
 import json
 from urllib.parse import urlencode
 
@@ -146,6 +146,17 @@ def test_an_account_no_one_saved_lets_go_of_nothing(app, world):
     assert stored(w.ADA) == kept
 
 
+def test_the_open_tabs_hear_an_account_removed_and_how_much_of_its_mail_went(app, world):
+    tab = Stream(app)
+    tab.frame()
+    kept = stored(w.ADA)["messages"]
+    app.post("/api/accounts/delete", {"email": w.ADA, "delete_mail": True})
+    app.post("/api/accounts/delete", {"email": w.BEA})
+    assert heard_until_mute(tab, app, world) == [("reconcile", {"account": w.ADA, "pruned": kept, "removed": True}),
+                                                 ("reconcile", {"account": w.BEA, "pruned": 0, "removed": True})]
+    tab.close()
+
+
 def test_an_account_removed_while_its_sync_reads_keeps_nothing_that_sync_read(app, world):
     world.server.deliver(w.ADA, "INBOX", MARKET)
     world.server.hold("UID FETCH", user=w.ADA, when=lambda args: "BODY.PEEK[]" in str(args))
@@ -159,6 +170,7 @@ def test_an_account_removed_while_its_sync_reads_keeps_nothing_that_sync_read(ap
     app.settle()
     assert stored(w.ADA) == {"messages": 0, "message_identity": 0, "sync_state": 0}
     heard = heard_until_mute(tab, app, world)
+    assert ("reconcile", {"account": w.ADA, "pruned": r.json["mail_deleted"], "removed": True}) in heard
     assert [data for event, data in heard if data.get("account") == w.ADA and event != "reconcile"] == []
     assert not any(event == "new-mail" for event, _ in heard)
     tab.close()
