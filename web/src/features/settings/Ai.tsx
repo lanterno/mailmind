@@ -1,8 +1,8 @@
-// AI (#49): whether MailMind uses it at all, which provider, with what key, model and URL, and what it may spend. Each choice
-// saves on its own, as Preferences' do, and the digest is read again so the page shows what is now in force. A key goes to the
-// server once, which keeps it in the login Keychain, and never comes back: the page says only whether one is kept. The provider
-// is asked for its models only when a person acts here (chooses it, keeps a key, opens the menu, asks again) or while this tab
-// is open with AI on, never on its own.
+// AI (#49): AI mode, whether MailMind uses it at all; and once it is on, the connection (which provider, with what key, model
+// and URL), what it may spend and what it writes ahead. Each choice saves on its own, as Preferences' do, and the digest is
+// read again so the page shows what is now in force. A key goes to the server once, which keeps it in the login Keychain, and
+// never comes back: the page says only whether one is kept. The provider is asked for its models only while this tab is open
+// with AI mode on, and again as a person acts here (chooses it, keeps a key, gives a URL, asks again), never on its own.
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input, Label, NumberField } from "react-aria-components";
@@ -16,7 +16,7 @@ import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigest } from "../mailbox";
-import { keepKey, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
+import { aiParts, keepKey, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
 import { Check } from "./Check";
 import { useStepBack } from "./useStepBack";
 
@@ -137,7 +137,6 @@ export function AiForm() {
   const { data: digest } = useDigest();
   useStepBack();
   const provider = p.ai_provider, needs = NEEDS[provider], name = PROVIDER_NAME[provider];
-  const [acted, setActed] = useState(false);     // something done here may ask the provider, with AI on or off
   const [byHand, setByHand] = useState(false);
   // The provider and URL the server holds, which its models are asked by: a choice counts once it is saved.
   const [held, setHeld] = useState({ provider, url: p.ai_base_url });
@@ -150,7 +149,7 @@ export function AiForm() {
   const models = useQuery({
     queryKey: ["aiModels", held.provider, held.url, kept],
     queryFn: () => get(`/api/ai/models?provider=${held.provider}`),
-    enabled: current && keys.data !== undefined && wants === null && (p.ai_enabled || acted),
+    enabled: current && keys.data !== undefined && wants === null && p.ai_enabled,
     staleTime: Infinity,
     retry: false,
     refetchOnWindowFocus: false,
@@ -159,7 +158,6 @@ export function AiForm() {
   const inForce = () => void qc.invalidateQueries({ queryKey: ["digest"] });
   const choose = (next: AiProvider) => {
     if (next === provider) return;
-    setActed(true);
     setByHand(false);
     setPrefs(providerChanges(next), () => {
       setHeld({ provider: next, url: "" });
@@ -168,13 +166,11 @@ export function AiForm() {
   };
   const chooseUrl = (ai_base_url: string) => {
     setPrefs({ ai_base_url }, () => {
-      setActed(true);
       setHeld({ provider, url: ai_base_url });
       inForce();
     });
   };
   const keysKept = (kept: AiProvider[]) => {
-    setActed(true);
     qc.setQueryData(["aiKeys"], { ok: true, kept });
     inForce();
   };
@@ -183,7 +179,6 @@ export function AiForm() {
     if (ai_model !== p.ai_model) setPrefs({ ai_model }, inForce);
   };
   const askAgain = () => {
-    setActed(true);
     void models.refetch();
   };
   const listedNow = current ? models.data : undefined;
@@ -195,14 +190,15 @@ export function AiForm() {
   else if (!listedNow && wants === "key") listed = `Keep a key for ${name}, and its models are listed here.`;
   else if (!listedNow && wants === "url") listed = "Give the service’s URL, and its models are listed here.";
   else if (!needs.ownModel && !p.ai_model) listed = `${name.charAt(0).toUpperCase()}${name.slice(1)} has no model of its own: choose one.`;
+  const parts = new Set(aiParts(p.ai_enabled));
   return (
-    <>
-      <div className="set-body" id="aiBody">
-        <div className="set-form">
-          <Check checked={p.ai_enabled} onChange={(ai_enabled) => setPrefs({ ai_enabled }, inForce)}>Use AI</Check>
-          <div className="set-help">Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.</div>
-        </div>
-        <div className="set-form">
+    <div className="set-body" id="aiBody">
+      <div className="set-form">
+        <Check checked={p.ai_enabled} onChange={(ai_enabled) => setPrefs({ ai_enabled }, inForce)}>AI mode</Check>
+        <div className="set-help">Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.</div>
+      </div>
+      {parts.has("connection") && (
+        <div className="set-form" id="aiConnection">
           <label className="lbl" htmlFor="aiProvider">Provider</label>
           <select id="aiProvider" value={provider} onChange={(e) => choose(e.target.value as AiProvider)}>
             {entries(PROVIDER_LABEL).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
@@ -213,7 +209,7 @@ export function AiForm() {
             ? <ModelByHand chosen={p.ai_model} use={chooseModel} back={() => setByHand(false)} />
             : (
               <div className="ai-row">
-                <select id="aiModel" value={p.ai_model} onFocus={() => setActed(true)} onChange={(e) => chooseModel(e.target.value)}>
+                <select id="aiModel" value={p.ai_model} onChange={(e) => chooseModel(e.target.value)}>
                   {choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
                 <button type="button" className="set-mini" aria-label="Ask the provider for its models again" title="Ask the provider for its models again" disabled={current && models.isFetching} onClick={askAgain}><Icon name="refresh" /></button>
@@ -228,37 +224,40 @@ export function AiForm() {
               <div className="set-help">{provider === "ollama" ? "Where Ollama answers on this Mac." : "Where the service answers, up to /v1: https, or http on this Mac."}</div>
             </>
           )}
+          <div className="set-help ai-standing" id="aiStanding" role="status">{aiStanding(ai)}</div>
         </div>
-        {p.ai_enabled && (
-          <div className="set-form">
-            <div className="lbl">Spending and work ahead</div>
-            <NumberField
-              className="pref-line"
-              minValue={0.01}
-              maxValue={LIMITS.ai_daily_limit_usd}
-              step={0.01}
-              formatOptions={{ maximumFractionDigits: 2 }}
-              value={p.ai_daily_limit_usd}
-              onChange={(ai_daily_limit_usd) => {
-                if (Number.isFinite(ai_daily_limit_usd)) setPrefs({ ai_daily_limit_usd }, inForce);
-              }}
-            >
-              <Label className="pref-name">Daily limit, in US dollars</Label>
-              <Input className="pref-num" id="prefAiLimit" />
-            </NumberField>
-            <div className="set-help">Once a day’s AI has cost this much, background work stops and MailMind asks before spending more.</div>
-            <Check checked={p.morning_brief} onChange={(morning_brief) => setPrefs({ morning_brief })}>Have today’s brief ready each morning</Check>
-            <div className="set-help">Written before you open your Inbox, within the daily limit, and only if you’ve used MailMind in the last two days.</div>
-            <Check checked={p.weekly_review} onChange={(weekly_review) => setPrefs({ weekly_review })}>Have last week’s review ready each Monday</Check>
-            <div className="set-help">Written on Monday morning, within the daily limit, and only if you’ve used MailMind in the last two days. Your week shows it until the next Monday, and ↻ there writes a new one.</div>
-            <Check checked={p.auto_tidy} onChange={(auto_tidy) => setPrefs({ auto_tidy })}>File low-priority mail by itself, once a day</Check>
-            <div className="set-help">Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.</div>
-          </div>
-        )}
-      </div>
-      <div className="set-foot">
-        <span className="set-hint" id="aiStanding" role="status">{aiStanding(ai)}</span>
-      </div>
-    </>
+      )}
+      {parts.has("spending") && (
+        <div className="set-form">
+          <div className="lbl">Spending</div>
+          <NumberField
+            className="pref-line"
+            minValue={0.01}
+            maxValue={LIMITS.ai_daily_limit_usd}
+            step={0.01}
+            formatOptions={{ maximumFractionDigits: 2 }}
+            value={p.ai_daily_limit_usd}
+            onChange={(ai_daily_limit_usd) => {
+              if (Number.isFinite(ai_daily_limit_usd)) setPrefs({ ai_daily_limit_usd }, inForce);
+            }}
+          >
+            <Label className="pref-name">Daily limit, in US dollars</Label>
+            <Input className="pref-num" id="prefAiLimit" />
+          </NumberField>
+          <div className="set-help">Once a day’s AI has cost this much, background work stops and MailMind asks before spending more.</div>
+        </div>
+      )}
+      {parts.has("ahead") && (
+        <div className="set-form">
+          <div className="lbl">Written ahead</div>
+          <Check checked={p.morning_brief} onChange={(morning_brief) => setPrefs({ morning_brief })}>Have today’s brief ready each morning</Check>
+          <div className="set-help">Written before you open your Inbox, within the daily limit, and only if you’ve used MailMind in the last two days.</div>
+          <Check checked={p.weekly_review} onChange={(weekly_review) => setPrefs({ weekly_review })}>Have last week’s review ready each Monday</Check>
+          <div className="set-help">Written on Monday morning, within the daily limit, and only if you’ve used MailMind in the last two days. Your week shows it until the next Monday, and ↻ there writes a new one.</div>
+          <Check checked={p.auto_tidy} onChange={(auto_tidy) => setPrefs({ auto_tidy })}>File low-priority mail by itself, once a day</Check>
+          <div className="set-help">Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.</div>
+        </div>
+      )}
+    </div>
   );
 }

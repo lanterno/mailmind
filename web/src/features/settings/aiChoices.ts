@@ -1,10 +1,15 @@
-// The AI tab's rules, with no DOM (#49): what each provider asks of a person, what choosing another provider changes, what the
+// The AI tab's rules, with no DOM (#49): what it shows with AI mode off and on, what each provider asks of a person, what choosing another provider changes, what the
 // model menu offers and in what order, what a URL typed saves as, and how a key typed leaves the page.
 import type { AiProvider, PostAnswers, PostBodies } from "../../lib/api/types";
 import type { Store } from "../../lib/store";
 
 type Changes = PostBodies["/api/preferences"];
 type Kept = PostAnswers["/api/ai/key"];
+
+// What the AI tab shows: AI mode's switch, and only once it is on the connection (the provider, then as it needs a key, a
+// model and a URL, and how AI stands), then spending and what is written ahead.
+export type AiPart = "mode" | "connection" | "spending" | "ahead";
+export const aiParts = (on: boolean): AiPart[] => (on ? ["mode", "connection", "spending", "ahead"] : ["mode"]);
 
 // What each provider asks of a person: a key (needed, optional or none) and where one is made; the URL it is reached at, which
 // a person gives for Ollama (its own, filled in) and for a compatible service (none until given), and Claude's and the rest
