@@ -21,6 +21,12 @@ def test_the_defaults_are_what_the_app_does_with_no_block():
     assert preferences.DEFAULTS["single_keys"] is True and preferences.DEFAULTS["conversations"] is True
 
 
+def test_a_fresh_install_follows_the_system_and_the_clock_and_a_theme_the_file_holds_stands():
+    assert preferences.read({})["theme"] == "auto"
+    assert preferences.read({"preferences": {"theme": "day"}})["theme"] == "day"
+    assert preferences.changes({"theme": "auto"}) == {"theme": "auto"}
+
+
 @pytest.mark.parametrize("block", [None, [], "dark", 7, {}])
 def test_a_block_that_is_no_object_is_the_same_as_none(block):
     assert preferences.read({"preferences": block}) == dict(preferences.DEFAULTS)
