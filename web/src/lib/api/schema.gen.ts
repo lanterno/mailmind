@@ -159,7 +159,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Delete */
+        /**
+         * Delete
+         * @description Its mail has left every list then, and with `delete_mail` this Mac: the open tabs hear so as mail gone from a
+         *     server is told (`reconcile`, how many copies went, and `removed`: the account is no more, so its own lists are
+         *     not read again), and the rail's badges are read again.
+         */
         post: operations["delete_api_accounts_delete_post"];
         delete?: never;
         options?: never;
@@ -2185,8 +2190,8 @@ export interface components {
         };
         /**
          * AccountBody
-         * @description An account to add, or what an edit changes (`account.apply_fields`). The page sends none of `trash`, `smtp_*`,
-         *     `strip_spaces` and `disabled`, which the use case still reads.
+         * @description An account to add, or what an edit changes (`account.apply_fields`). The page sends none of `strip_spaces` and
+         *     `disabled`, which the use case still reads, and `trash` only as a preset names it.
          */
         AccountBody: {
             /** Alias */
@@ -2232,6 +2237,12 @@ export interface components {
             host?: unknown;
             /** Port */
             port?: unknown;
+            /** Smtp Host */
+            smtp_host?: unknown;
+            /** Smtp Port */
+            smtp_port?: unknown;
+            /** Smtp Starttls */
+            smtp_starttls?: boolean | null;
             /** Starttls */
             starttls?: boolean | null;
             /** Strip Spaces */
@@ -2369,10 +2380,14 @@ export interface components {
         };
         /** AccountSync */
         AccountSync: {
+            /** Done */
+            done?: number | null;
             /** Health */
             health: string;
             /** Msg */
             msg: string;
+            /** Total */
+            total?: number | null;
         };
         /** AiCosts */
         AiCosts: {
@@ -2886,7 +2901,9 @@ export interface components {
         };
         /**
          * CouldntLogIn
-         * @description The test ran, and the login didn't work. `error` is `conn_error.quiet`'s, never what the server said.
+         * @description The test ran, and the login didn't work. `error` is its class in `conn_error.quiet`'s words, never what the server
+         *     said, the outgoing server's after "SMTP ": the owner's, in small type. `says` is what a person is told of it and what to
+         *     do next, and `link` the page that helps, if one does (`login_words`).
          */
         CouldntLogIn: {
             /**
@@ -2898,11 +2915,14 @@ export interface components {
             email: string | null;
             /** Error */
             error: string;
+            link: components["schemas"]["Link"] | null;
             /**
              * Ok
              * @constant
              */
             ok: true;
+            /** Says */
+            says: string;
         };
         /**
          * CredentialShown
@@ -4009,6 +4029,16 @@ export interface components {
              */
             ok: true;
         };
+        /**
+         * Link
+         * @description A page a person is sent to (a provider's, where its app password is made), and the words of its link.
+         */
+        Link: {
+            /** Url */
+            url: string;
+            /** Words */
+            words: string;
+        };
         /** Listed */
         Listed: {
             /** Accounts */
@@ -4820,25 +4850,58 @@ export interface components {
             /** Prefetched */
             prefetched: boolean;
         };
-        /** @constant */
-        Preset: "gmail";
+        /** @enum {string} */
+        Preset: "gmail" | "icloud" | "yahoo" | "aol" | "fastmail" | "microsoft" | "proton";
         /**
          * PresetFound
-         * @description `Presets.preset`: Gmail's preset for an address at one of Google's own domains, `sure`, which the form chooses; for
-         *     one whose domain's mail servers are Google's, offered (`sure` false); none for any other. `domain` is the address's,
-         *     in lower case, or None when it names none a lookup could ask about.
+         * @description `Presets.preset`: a provider's preset for an address at one of its own domains, `sure`, which the form chooses; for
+         *     one whose domain's mail servers are a provider's, offered (`sure` false); none for any other. `domain` is the
+         *     address's, in lower case, or None when it names none a lookup could ask about. `name` is the provider's; `settings`
+         *     what its account is saved as, None where MailMind can't log in to it yet (`supported` false); `note` what the form
+         *     says before the password, and `link` where that password is made.
          */
         PresetFound: {
             /** Domain */
             domain: string | null;
+            link: components["schemas"]["Link"] | null;
+            /** Name */
+            name: string | null;
+            /** Note */
+            note: string | null;
             /**
              * Ok
              * @constant
              */
             ok: true;
             preset: components["schemas"]["Preset"] | null;
+            settings: components["schemas"]["PresetSettings"] | null;
+            /** Supported */
+            supported: boolean;
             /** Sure */
             sure: boolean;
+        };
+        /**
+         * PresetSettings
+         * @description What an account of a preset is saved as, in `AccountBody`'s fields: its type, and a generic IMAP account's servers
+         *     and Trash. A field its type gives is None.
+         */
+        PresetSettings: {
+            /** Host */
+            host: string | null;
+            /** Port */
+            port: number | null;
+            /** Smtp Host */
+            smtp_host: string | null;
+            /** Smtp Port */
+            smtp_port: number | null;
+            /** Smtp Starttls */
+            smtp_starttls: boolean | null;
+            /** Starttls */
+            starttls: boolean | null;
+            /** Trash */
+            trash: string | null;
+            /** Type */
+            type: string;
         };
         /** Preview */
         Preview: {
@@ -4980,8 +5043,23 @@ export interface components {
             /** Total Pruned */
             total_pruned: number;
         };
-        /** Removed */
+        /**
+         * RemoveBody
+         * @description The account to remove, and whether this Mac lets go of what it keeps of its mail too.
+         */
+        RemoveBody: {
+            /** Delete Mail */
+            delete_mail?: boolean | null;
+            /** Email */
+            email?: string | null;
+        };
+        /**
+         * Removed
+         * @description `mail_deleted`, with `delete_mail` asked: how many stored copies of its mail this Mac let go.
+         */
         Removed: {
+            /** Mail Deleted */
+            mail_deleted?: number | null;
             /**
              * Ok
              * @constant
@@ -7469,7 +7547,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamesAnAccount"];
+                "application/json": components["schemas"]["RemoveBody"];
             };
         };
         responses: {
