@@ -317,7 +317,12 @@ fn a_login_that_works_ends_the_hold() {
 fn a_saved_accounts_test_its_server_refuses_holds_the_login_back() {
     let w = world(REFUSED);
     let tested = w.test(json!({"email": ADA}));
-    assert_eq!(tested, json!({"ok": true, "connect": false, "email": ADA, "error": "AUTHENTICATIONFAILED"}));
+    let says = "The server didn't accept that address and password. Check them; if your provider offers app passwords, \
+                make one and paste it here.";
+    assert_eq!(
+        tested,
+        json!({"ok": true, "connect": false, "email": ADA, "error": "AUTHENTICATIONFAILED", "says": says, "link": null})
+    );
     assert!(w.held());
     assert_eq!(w.sync(), "LoginRefused");
     assert_eq!(w.imap.logins(), 1);

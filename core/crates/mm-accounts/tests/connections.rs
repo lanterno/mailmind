@@ -159,6 +159,14 @@ fn world_sending(trouble: Option<&'static str>, outgoing: Option<&'static str>) 
     World { connections, probe, heard, file }
 }
 
+/// A failed test's answer without what a person is told of it (`login_words`'s, tested there), which it must hold.
+fn without_words(mut answer: Value) -> Value {
+    let words = answer.as_object_mut().unwrap();
+    assert!(words.remove("says").is_some_and(|s| s.as_str().is_some_and(|s| !s.is_empty())), "{answer}");
+    assert!(words.remove("link").is_some(), "{answer}");
+    answer
+}
+
 fn typed(password: &str) -> Value {
     json!({"style": "keychain", "value": password})
 }
@@ -220,7 +228,7 @@ fn a_draft_whose_port_no_connection_could_reach_says_so() {
             json!({"email": "dee@example.test", "host": "h.example.test", "port": port, "credential": typed("t")});
         let answer = w.connections.test(&object(json!({"draft": draft}))).unwrap();
         let said = json!({"ok": true, "connect": false, "email": "dee@example.test", "error": "port must be 1–65535"});
-        assert_eq!(answer, said, "{port}");
+        assert_eq!(without_words(answer), said, "{port}");
         assert!(w.probe.asked.lock().unwrap().is_empty());
     }
 }
@@ -251,7 +259,11 @@ fn a_failure_says_what_went_wrong_in_words_of_its_own() {
     ] {
         let w = world(Some(class));
         let answer = w.connections.test(&object(json!({"email": ADA}))).unwrap();
-        assert_eq!(answer, json!({"ok": true, "connect": false, "email": ADA, "error": says}), "{class}");
+        assert_eq!(
+            without_words(answer),
+            json!({"ok": true, "connect": false, "email": ADA, "error": says}),
+            "{class}"
+        );
         assert_eq!(quiet(LoginTrouble(class)), says);
     }
 }
@@ -385,7 +397,11 @@ fn an_outgoing_server_that_wont_take_the_login_says_so_after_smtp() {
     ] {
         let w = world_sending(None, Some(class));
         let answer = w.connections.test(&object(json!({"email": ADA}))).unwrap();
-        assert_eq!(answer, json!({"ok": true, "connect": false, "email": ADA, "error": says}), "{class}");
+        assert_eq!(
+            without_words(answer),
+            json!({"ok": true, "connect": false, "email": ADA, "error": says}),
+            "{class}"
+        );
     }
 }
 
@@ -423,7 +439,23 @@ fn a_draft_whose_outgoing_port_no_connection_could_reach_says_so() {
         let answer = w.connections.test(&object(json!({"draft": draft}))).unwrap();
         let said =
             json!({"ok": true, "connect": false, "email": "dee@example.test", "error": "SMTP port must be 1–65535"});
-        assert_eq!(answer, said, "{port}");
+        assert_eq!(without_words(answer), said, "{port}");
         assert!(w.probe.asked.lock().unwrap().is_empty());
     }
+}
+
+#[test]
+fn a_failed_test_says_what_to_do_next_and_where() {
+    let w = world(Some("LoginRefused"));
+    let draft = json!({"email": "dee@icloud.com", "host": "imap.mail.me.com", "credential": typed("t")});
+    let answer = w.connections.test(&object(json!({"draft": draft}))).unwrap();
+    assert_eq!(answer["error"], "AUTHENTICATIONFAILED");
+    assert!(answer["says"].as_str().unwrap().starts_with("iCloud didn't accept that password."));
+    assert_eq!(answer["link"], json!({"url": "https://account.apple.com", "words": "Make an app-specific password"}));
+    let w = world_sending(None, Some("LoginRefused"));
+    let answer = w.connections.test(&object(json!({"email": ADA}))).unwrap();
+    assert_eq!(
+        (answer["says"].as_str().unwrap().starts_with("Reading mail works"), &answer["link"]),
+        (true, &Value::Null)
+    );
 }
