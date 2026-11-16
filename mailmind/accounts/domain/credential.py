@@ -10,8 +10,8 @@
 An entry naming two gets the first of keychain, env, proton_bridge, op, and one naming plain is refused whatever else it
 names. Having the secret is
 mailmind.accounts.adapters.secrets's; this only says where it is, and what MailMind names the Keychain items it keeps:
-`account:<address>` for an account's password, `anthropic-api-key` for the Claude API key, `proton-bridge-password` for
-the Bridge's. No credential may name the item the database's key is kept in, which would send that key to a mail server.
+`account:<address>` for an account's password, `<provider>-api-key` for an AI provider's key (`anthropic-api-key` for the
+Claude API key, which the file names as `anthropic_api_key`), `proton-bridge-password` for the Bridge's. No credential may name the item the database's key is kept in, which would send that key to a mail server.
 
 The file never holds a secret itself. One that does, `{ "plain": "the-password" }` or a bare string as MailMind once
 wrote them, reads as the style "plain" only so it can be refused: `PlaintextSecret` says how to move it to the Keychain.
@@ -23,6 +23,7 @@ can hold one.
 from dataclasses import dataclass, field
 from typing import Any, Literal, Required, TypedDict, TypeIs
 
+from mailmind.kernel.ai_provider import KEYED, AiProvider
 from mailmind.kernel.parsed import as_int, is_list, is_object
 
 
@@ -42,25 +43,52 @@ BRIDGE_ITEM = "proton-bridge-password"  # the Proton Bridge's password, which ev
 DATABASE_KEY_ITEM = "database-key"      # mailmind.platform.db.key's, which no credential names
 
 
+# What a refusal calls each AI provider's key.
+_API_KEY_NAMES: dict[AiProvider, str] = {"anthropic": "the Claude API key", "openai": "the OpenAI API key",
+                                         "gemini": "the Gemini API key", "compatible": "the AI service's API key"}
+
+
 def account_item(email: str) -> str:
     """The Keychain item MailMind keeps `email`'s password in."""
     return f"account:{email}"
 
 
+def api_key_who(provider: AiProvider) -> str:
+    """The file's top-level key for an AI provider's key, and the name a refusal gives it: `anthropic_api_key` and the like."""
+    return f"{provider}_api_key"
+
+
+def api_key_item(provider: AiProvider) -> str:
+    """The Keychain item MailMind keeps an AI provider's key in: `anthropic-api-key` and the like."""
+    return f"{provider}-api-key"
+
+
+def _provider_of(who: str) -> AiProvider | None:
+    return next((p for p in KEYED if api_key_who(p) == who), None)
+
+
 def _keeps(who: str) -> str:
-    """The command that keeps `who`'s secret in the Keychain: an account's by its address, the Claude API key by ai key."""
-    if who == API_KEY_WHO:
+    """The command that keeps `who`'s secret in the Keychain: an account's by its address, an AI provider's key by ai key."""
+    provider = _provider_of(who)
+    if provider == "anthropic":
         return "ai key"
+    if provider is not None:
+        return f"ai key --provider {provider}"
     return f"accounts password {who if '@' in who else '<address>'}"
+
+
+def _named(who: str) -> str:
+    provider = _provider_of(who)
+    return _API_KEY_NAMES[provider] if provider is not None else f"{who}'s password"
 
 
 class PlaintextSecret(RuntimeError):
     """The file holds `who`'s secrets in plain text, which MailMind no longer reads. It says how to move them to the
-    Keychain, and holds no secret: `who` is each account's address, or API_KEY_WHO."""
+    Keychain, and holds no secret: `who` is each account's address, or an AI provider's key's name (`api_key_who`)."""
 
     def __init__(self, who: list[str]):
         self.who = who
-        said = [("the Claude API key" if one == API_KEY_WHO else f"{one}'s password") for one in who]
+        said = [_named(one) for one in who]
         them = said[0] if len(said) == 1 else ", ".join(said[:-1]) + " and " + said[-1]
         how = ", ".join(f"`uv run python -m mailmind {_keeps(one)}`" for one in who)
         super().__init__(f"mailmind.config.json holds {them} in plain text, which MailMind no longer reads. Keep "
@@ -178,7 +206,7 @@ def holds_plaintext(cred: object) -> bool:
 
 def plaintext(raw: object) -> list[tuple[str, dict[str, Any], str, str]]:
     """Each secret the file `raw` holds in plain text, in its order, as (who, the mapping that holds it, its key there, the
-    Keychain item it belongs in). Who is an account's address, or API_KEY_WHO for the Claude API key."""
+    Keychain item it belongs in). Who is an account's address, or an AI provider's key's name (`api_key_who`)."""
     if not is_object(raw):
         return []
     held: list[tuple[str, dict[str, Any], str, str]] = []
@@ -188,6 +216,8 @@ def plaintext(raw: object) -> list[tuple[str, dict[str, Any], str, str]]:
             email = entry.get("email")
             who = email if isinstance(email, str) and email else "an account with no address"
             held.append((who, entry, "credential", account_item(who)))
-    if holds_plaintext(raw.get(API_KEY_WHO)):
-        held.append((API_KEY_WHO, raw, API_KEY_WHO, API_KEY_ITEM))
+    for provider in KEYED:
+        who = api_key_who(provider)
+        if holds_plaintext(raw.get(who)):
+            held.append((who, raw, who, api_key_item(provider)))
     return held

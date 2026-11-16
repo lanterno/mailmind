@@ -15,9 +15,9 @@ __all__ = ["BadMailbox", "LoginUnreachable", "ReadOnlyIMAP", "accounts", "check_
            "imap_quote", "mailbox_arg", "preload_creds", "presets", "tls_context", "trash_folder"]
 
 
-def _ai_key():
+def _ai_key(provider):
     from mailmind.bootstrap import assistant
-    return assistant.config_key()
+    return assistant.config_key(provider)
 
 
 quiet_error = conn_error.quiet

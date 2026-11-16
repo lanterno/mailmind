@@ -8,7 +8,8 @@ Accounts live in `mailmind.config.json` (NOT git-tracked). Copy
     "credential": { ... one of the styles below ... } }
 
 An optional top-level "anthropic_api_key" holds the Claude API key, in any of the same styles
-(proton_bridge aside). It wins over ANTHROPIC_API_KEY in the environment. An optional top-level
+(proton_bridge aside). It wins over ANTHROPIC_API_KEY in the environment. "openai_api_key", "gemini_api_key" and
+"compatible_api_key" hold the other AI providers' keys the same way (#49); Ollama takes none. An optional top-level
 "preferences" block holds what the Settings page sets (mailmind.accounts.domain.preferences);
 with none, each preference is its default.
 
@@ -19,7 +20,7 @@ resolves. The file never holds a secret itself: one that does is refused (`refus
 Keychain, in the account's own item (`account:<address>`), before the file is written, and the file names the item. A
 Gmail App Password typed as Google shows it, in four groups of four letters, is kept without its spaces
 (`account.as_kept`). A new one replaces what the item held, and removing the account takes its item out. A Keychain
-that won't is `Unreachable`, and the file is left as it was. The Claude API key, which the file names, and the Proton
+that won't is `Unreachable`, and the file is left as it was. An AI provider's key, which the file names, and the Proton
 Bridge's password, which it doesn't, are kept and taken out alike (`set_api_key`, `clear_api_key`,
 `set_bridge_password`, `clear_bridge_password`).
 
@@ -35,9 +36,10 @@ from typing import Any
 from mailmind.accounts.application.ports import AccountRepository, SecretStore
 from mailmind.accounts.domain import account, events, preferences
 from mailmind.accounts.domain.account import Entry, MaskedRow
-from mailmind.accounts.domain.credential import (API_KEY_ITEM, API_KEY_WHO, BRIDGE_ITEM, CredentialRef, PlaintextSecret,
-                                                 Typed, account_item, credential_from, keychain_credential, plaintext)
-from mailmind.kernel.errors import Unreachable
+from mailmind.accounts.domain.credential import (BRIDGE_ITEM, CredentialRef, PlaintextSecret, Typed, account_item,
+                                                 api_key_item, api_key_who, credential_from, keychain_credential, plaintext)
+from mailmind.kernel.ai_provider import KEYED, KEYLESS, AiProvider
+from mailmind.kernel.errors import Refused, Unreachable
 from mailmind.kernel.parsed import is_object
 from mailmind.platform import bus
 from mailmind.platform.keychain import KeychainProblem
@@ -47,7 +49,7 @@ log = get_logger("accounts")
 
 
 class Directory:
-    def __init__(self, file: AccountRepository, secrets: SecretStore, ai_key: Callable[[], str | None]):
+    def __init__(self, file: AccountRepository, secrets: SecretStore, ai_key: Callable[[AiProvider], str | None]):
         self._file, self._secrets, self._ai_key = file, secrets, ai_key
         self._write_lock = threading.Lock()
 
@@ -263,31 +265,43 @@ class Directory:
         bus.publish(events.AccountChanged(entry["email"]))
         return entry["credential"]["keychain"]
 
-    def set_api_key(self, secret: str) -> str:
-        """Keep `secret` as the Claude API key, in its Keychain item, and point the file's anthropic_api_key at the item,
-        whatever it said before. The answer is the item's name. Raises as set_password does."""
+    def set_api_key(self, secret: str, provider: AiProvider = "anthropic") -> str:
+        """Keep `secret` as `provider`'s API key, in its Keychain item, and point the file's key for it (anthropic_api_key and
+        the like) at the item, whatever it said before. The answer is the item's name. Refuses a provider that takes no key,
+        and raises as set_password does."""
+        if provider in KEYLESS:
+            raise Refused("Ollama takes no key.")
+        who, item = api_key_who(provider), api_key_item(provider)
         with self._write_lock:
             raw = self._raw()
             raw.setdefault("accounts", [])
-            old = raw.get(API_KEY_WHO)
-            raw[API_KEY_WHO] = self._kept(API_KEY_ITEM, Typed(secret), old)
+            old = raw.get(who)
+            raw[who] = self._kept(item, Typed(secret), old)
             self._secrets.evict(old)
             self.save(raw)
-        return API_KEY_ITEM
+        return item
 
-    def api_key_set(self) -> bool:
-        """Whether the file names a Claude API key, wherever it keeps it."""
-        return bool(self._raw().get(API_KEY_WHO))
+    def api_key_set(self, provider: AiProvider = "anthropic") -> bool:
+        """Whether the file names `provider`'s API key, wherever it keeps it."""
+        return provider not in KEYLESS and bool(self._raw().get(api_key_who(provider)))
 
-    def clear_api_key(self) -> None:
-        """Take the Claude API key's Keychain item out, and the file's anthropic_api_key with it, whatever it named: AI is
-        off unless the environment gives a key. Raises Unreachable when the Keychain won't let go of the item, and the
-        file is left as it was."""
+    def api_keys_kept(self) -> list[AiProvider]:
+        """Each provider whose API key the file names, wherever it keeps it, in the providers' order."""
+        raw = self._raw()
+        return [p for p in KEYED if raw.get(api_key_who(p))]
+
+    def clear_api_key(self, provider: AiProvider = "anthropic") -> None:
+        """Take `provider`'s API key's Keychain item out, and the file's key for it with it, whatever it named: for Claude,
+        AI is off unless the environment gives a key. A provider that takes no key has none to take out. Raises Unreachable
+        when the Keychain won't let go of the item, and the file is left as it was."""
+        if provider in KEYLESS:
+            return
+        who = api_key_who(provider)
         with self._write_lock:
             raw = self._raw()
-            self._take_out(API_KEY_ITEM, "key")
-            if API_KEY_WHO in raw:
-                self._secrets.evict(raw.pop(API_KEY_WHO))
+            self._take_out(api_key_item(provider), "key")
+            if who in raw:
+                self._secrets.evict(raw.pop(who))
                 self.save(raw)
 
     def bridge_password_set(self) -> bool:
@@ -364,11 +378,13 @@ class Directory:
                 print(f"  ok    {a['email']:42} ({len(v)} chars)")
             except Exception as e:
                 print(f"  FAIL  {a['email']:42} {e}")
-        if self._raw().get("anthropic_api_key"):
-            try:
-                print(f"  ok    {'anthropic_api_key':42} ({len(self._ai_key() or '')} chars)")
-            except Exception as e:
-                print(f"  FAIL  {'anthropic_api_key':42} {e}")
+        for provider in KEYED:
+            who = api_key_who(provider)
+            if self._raw().get(who):
+                try:
+                    print(f"  ok    {who:42} ({len(self._ai_key(provider) or '')} chars)")
+                except Exception as e:
+                    print(f"  FAIL  {who:42} {e}")
 
 
 def _typed_for(entry: Entry, cred: dict[str, Any] | Typed) -> dict[str, Any] | Typed:
