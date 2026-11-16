@@ -1,7 +1,7 @@
 //! `syncing`: each account's INBOX synced through its own flight, and how each account's sync stands. A world of
 //! stand-ins: a server that never answers as it was asked to, a store that keeps nothing, and a clock the test moves.
-//! The served suites hold what a sync stores; these hold what the flight and an account's standing do when a sync
-//! goes wrong. Every address is fictional.
+//! The served suites hold what a sync stores; these hold what the flight, an account's standing and a round of
+//! older mail do when a sync goes wrong. Every address is fictional.
 
 #![allow(clippy::unwrap_used)]
 
@@ -19,6 +19,7 @@ use mm_mailbox::folders::Folders;
 use mm_mailbox::ingest::{Ingest, SyncError};
 use mm_mailbox::ports::{Accounts, MailSession, MailSessions, SessionError, StoredMail, ViewCounts};
 use mm_mailbox::session::{MailServer, MailServers, ServerError};
+use mm_mailbox::sync_plan::Scan;
 use mm_mailbox::sync_ports::{
     AroundSync, Classifier, Envelope, Events, FlagRow, FolderState, Incoming, MailboxEvent, Place, SyncAccount,
     SyncAccounts, SyncStore, Verdict,
@@ -41,6 +42,8 @@ struct World {
     woken: AtomicUsize,
     /// How many rounds' first step panics.
     panic_waking: AtomicUsize,
+    /// Each account and folder whose first scan has older mail to read.
+    older: Mutex<Vec<(String, String)>>,
     /// The clock, in microseconds.
     now: AtomicI64,
 }
@@ -75,8 +78,9 @@ impl MailServers for World {
 
 /// Nothing is stored: every sync here fails before it reads a message.
 impl SyncStore for World {
+    /// A folder whose first scan read down to UID 100.
     fn folder_state(&self, _: &str, _: &str) -> Result<FolderState, Fault> {
-        unreachable!()
+        Ok(FolderState { scan: Scan::Down(100), ..FolderState::default() })
     }
     fn reset_folder(&self, _: &str, _: &str, _: i64) -> Result<(), Fault> {
         unreachable!()
@@ -97,7 +101,7 @@ impl SyncStore for World {
         unreachable!()
     }
     fn reading_older(&self) -> Result<Vec<(String, String, u32)>, Fault> {
-        unreachable!()
+        Ok(self.older.lock().unwrap().iter().map(|(account, folder)| (account.clone(), folder.clone(), 100)).collect())
     }
     fn flag_rows(
         &self,
@@ -354,4 +358,17 @@ fn a_round_that_panics_before_its_accounts_sync_lands_their_flights_so_the_next_
     assert_eq!(world.opened.load(Ordering::SeqCst), 1);
     syncing.sync_guarded(None);
     assert_eq!(world.opened.load(Ordering::SeqCst), 3);
+}
+
+#[test]
+fn a_read_of_older_mail_that_panics_ends_only_its_folders_read_and_the_next_round_asks_again() {
+    let world = World::with(&[PANICS, ADA]);
+    let older = [(PANICS, "INBOX"), (PANICS, "Archive"), (ADA, "INBOX")];
+    *world.older.lock().unwrap() = older.iter().map(|(a, f)| ((*a).to_owned(), (*f).to_owned())).collect();
+    let syncing = syncing(&world);
+    assert!(!syncing.read_older().unwrap());
+    // Each folder's read went to its server: the Inbox's that panicked ended only its own.
+    assert_eq!(world.opened.load(Ordering::SeqCst), 3);
+    assert!(!syncing.read_older().unwrap());
+    assert_eq!(world.opened.load(Ordering::SeqCst), 6);
 }
