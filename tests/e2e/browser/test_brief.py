@@ -129,6 +129,27 @@ def test_with_ai_off_the_brief_and_the_review_say_so_and_ask_for_nothing(page, a
     clean(page)
 
 
+def test_turning_ai_on_writes_the_brief_that_ai_off_left_unwritten(page, app, world, anthropic_api, fake_keychain):
+    lunch_needs_a_reply(app, world)                     # a fresh install: AI mode off, and no key
+    brief_replies(anthropic_api)
+    page.goto("/")
+    expect(card(page, world, LUNCH[1])).to_be_visible()
+    for none in (".bf-narr", ".bf-aioff", ".bf-wait"):
+        expect(page.locator(none)).to_have_count(0)
+
+    page.locator("#settingsBtn").click()
+    page.get_by_role("tab", name="AI").click()
+    dialog = page.get_by_role("dialog", name="AI")
+    dialog.get_by_label("AI mode", exact=True).check()
+    dialog.get_by_label("API key", exact=True).fill(anthropic_api.KEY)
+    dialog.get_by_role("button", name="Keep key").click()
+    expect(page.locator("#aiStanding")).to_have_text(re.compile("^AI is on: Claude"))
+    page.locator("#setClose").click()
+    expect(page.locator(".bf-narr")).to_have_text(BRIEF)
+    assert len(briefs(anthropic_api)) == 1
+    clean(page)
+
+
 def test_refresh_writes_it_again(page, app, world, ai):
     lunch_needs_a_reply(app, world)
     brief_replies(ai)
