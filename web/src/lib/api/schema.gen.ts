@@ -344,8 +344,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Api Key */
-        get: operations["api_key_api_ai_key_get"];
+        /** Api Keys */
+        get: operations["api_keys_api_ai_key_get"];
         put?: never;
         /** Set Api Key */
         post: operations["set_api_key_api_ai_key_post"];
@@ -366,6 +366,23 @@ export interface paths {
         put?: never;
         /** Clear Api Key */
         post: operations["clear_api_key_api_ai_key_clear_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ai Models */
+        get: operations["ai_models_api_ai_models_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2327,9 +2344,14 @@ export interface components {
              */
             ok: true;
         };
+        /** @enum {string} */
+        AiOff: "turned-off" | "no-key" | "no-model" | "no-url";
+        /** @enum {string} */
+        AiProvider: "anthropic" | "openai" | "gemini" | "ollama" | "compatible";
         /**
          * AiStatus
-         * @description `Status.report`: how AI stands, with no call made.
+         * @description `Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
+         *     is on).
          */
         AiStatus: {
             /** Batch Waiting */
@@ -2348,6 +2370,8 @@ export interface components {
             limit_micros: number;
             /** Model */
             model: string;
+            off: components["schemas"]["AiOff"] | null;
+            provider: components["schemas"]["AiProvider"];
             /** Spent Today Micros */
             spent_today_micros: number | null;
         };
@@ -2664,8 +2688,15 @@ export interface components {
          * @description What changes. What a request doesn't name keeps what it was, so two tabs can each change their own.
          */
         ChangedPreferences: {
+            /** Ai Base Url */
+            ai_base_url?: string | null;
             /** Ai Daily Limit Usd */
             ai_daily_limit_usd?: number | null;
+            /** Ai Enabled */
+            ai_enabled?: boolean | null;
+            /** Ai Model */
+            ai_model?: string | null;
+            ai_provider?: components["schemas"]["AiProvider"] | null;
             /** Auto Tidy */
             auto_tidy?: boolean | null;
             /** Conversations */
@@ -3848,11 +3879,25 @@ export interface components {
         };
         /**
          * KeyBody
-         * @description The Claude API key, as typed or pasted.
+         * @description An AI provider's API key, as typed or pasted.
          */
         KeyBody: {
             /** Key */
             key: string;
+            provider: components["schemas"]["AiProvider"];
+        };
+        /**
+         * KeysKept
+         * @description Each AI provider whose key the config names, in the providers' order: never a key, how long, or any part of it.
+         */
+        KeysKept: {
+            /** Kept */
+            kept: components["schemas"]["AiProvider"][];
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
         };
         /** Known */
         Known: {
@@ -4042,6 +4087,22 @@ export interface components {
             to: string;
             /** Uid */
             uid: number;
+        };
+        /**
+         * ModelList
+         * @description The models a provider lists that a person may choose, sorted, and the one it asks unless they choose (None where they
+         *     must).
+         */
+        ModelList: {
+            /** Default */
+            default: string | null;
+            /** Models */
+            models: string[];
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
         };
         /** MoveBody */
         MoveBody: {
@@ -4593,8 +4654,15 @@ export interface components {
          * @description Every preference, as it stands: what the file says, or the default.
          */
         Preferences: {
+            /** Ai Base Url */
+            ai_base_url: string;
             /** Ai Daily Limit Usd */
             ai_daily_limit_usd: number;
+            /** Ai Enabled */
+            ai_enabled: boolean;
+            /** Ai Model */
+            ai_model: string;
+            ai_provider: components["schemas"]["AiProvider"];
             /** Auto Tidy */
             auto_tidy: boolean;
             /** Conversations */
@@ -4696,6 +4764,13 @@ export interface components {
             /** Cid */
             cid: string;
             content_type: components["schemas"]["PictureType"];
+        };
+        /**
+         * ProviderBody
+         * @description An AI provider, whose key is taken out.
+         */
+        ProviderBody: {
+            provider: components["schemas"]["AiProvider"];
         };
         /** Queued */
         Queued: {
@@ -8503,7 +8578,7 @@ export interface operations {
             };
         };
     };
-    api_key_api_ai_key_get: {
+    api_keys_api_ai_key_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -8518,7 +8593,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Kept"];
+                    "application/json": components["schemas"]["KeysKept"];
                 };
             };
             /** @description Bad Request */
@@ -8632,7 +8707,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Kept"];
+                    "application/json": components["schemas"]["KeysKept"];
                 };
             };
             /** @description Bad Request */
@@ -8736,7 +8811,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NoBody"];
+                "application/json": components["schemas"]["ProviderBody"];
             };
         };
         responses: {
@@ -8746,7 +8821,119 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Kept"];
+                    "application/json": components["schemas"]["KeysKept"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    ai_models_api_ai_models_get: {
+        parameters: {
+            query: {
+                provider: components["schemas"]["AiProvider"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelList"];
                 };
             };
             /** @description Bad Request */

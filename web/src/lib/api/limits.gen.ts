@@ -1,7 +1,9 @@
 // Written by `just gen-api` from mailmind/http/page_limits.py: the limits the page holds a person to and what each
 // preference is with nothing said, each the server's own. Never edit it by hand: `just check-web` fails when it no longer matches.
 export const LIMITS = {
+  ai_base_url_chars: 500,
   ai_daily_limit_usd: 1000,
+  ai_model_chars: 200,
   attach_bytes: 26214400,
   bulk_rows: 500,
   instruction_chars: 400,
@@ -34,5 +36,9 @@ export const PREFERENCE_DEFAULTS = {
   morning_brief: false,
   weekly_review: false,
   auto_tidy: false,
+  ai_enabled: true,
+  ai_provider: "anthropic",
+  ai_model: "",
+  ai_base_url: "",
   ai_daily_limit_usd: 15.0,
 } as const;
