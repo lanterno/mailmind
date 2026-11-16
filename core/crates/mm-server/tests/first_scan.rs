@@ -7,7 +7,8 @@
 //!
 //! A process that only reads reads the older mail too. A message whose opening the server won't send costs only its
 //! own text, one whose headers it won't send is left out of the older mail, and a connection lost part way stores
-//! nothing of its step. A sync that fails while older mail is still being read keeps saying how far it got.
+//! nothing of its step. A sync that fails while older mail is still being read keeps saying how far it got, and an
+//! Inbox opened during a sync that fails says so, though the failure may pass.
 
 #![allow(clippy::unwrap_used)]
 
@@ -775,4 +776,21 @@ fn a_sync_that_fails_while_a_first_scan_reads_older_mail_keeps_saying_how_far_it
     let said = w.said(ADA);
     assert_eq!(said["health"], "ok");
     assert!(said.get("done").is_none() && said.get("total").is_none(), "{said}");
+}
+
+#[test]
+fn an_inbox_opened_during_a_first_sync_that_fails_in_a_way_that_may_pass_says_its_sync_failed() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 3));
+    let w = world(imap, &[ADA]);
+    w.app.syncing.sync_once();
+    assert_eq!(w.said(ADA)["health"], "ok");
+    // The account is read afresh, as after it was removed and added again: no scan of its Inbox has begun.
+    database(w.home.path()).write(|c| c.execute("DELETE FROM sync_state WHERE account=?", [ADA])).unwrap();
+    w.imap.unavailable(ADA, true);
+    let page = Paging { offset: 0, limit: 50, grouped: false };
+    let listed = w.app.reading.lists.messages_in(Some(ADA), "INBOX", page).unwrap();
+    assert_eq!(listed["sync_failed"], true, "{listed}");
+    // The account still shows as it did: a failure that may pass shows once the next fails too.
+    assert_eq!(w.said(ADA)["health"], "ok");
 }
