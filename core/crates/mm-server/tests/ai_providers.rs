@@ -685,6 +685,34 @@ fn a_key_with_a_line_break_in_it_from_anywhere_but_settings_is_refused_and_never
     assert!(heard(&log).is_empty() && r.outside.0.lock().unwrap().is_empty(), "nothing was sent");
 }
 
+#[test]
+fn an_anthropic_base_url_that_breaks_the_rules_a_chosen_url_is_held_to_reaches_nothing() {
+    let (claude, log) = provider(vec![(200, json!({"data": [{"id": "claude-opus-5-5"}], "has_more": false}))]);
+    let base = claude.trim_end_matches("/v1");
+    let broken = [
+        base.replace("http://", "http://pat@"),
+        format!("{base}/?beta=1"),
+        format!("{base}:"),
+        format!("{base}/{}", "v".repeat(500)),
+        "http://api.example.test".to_owned(),
+    ];
+    for url in broken {
+        let pairs = [("ANTHROPIC_API_KEY", "sk-ant-fictional"), ("ANTHROPIC_BASE_URL", url.as_str())];
+        let r = running(&json!({"preferences": {"ai_enabled": true}}), &pairs);
+        let listed = r.get("/api/ai/models?provider=anthropic");
+        assert_eq!(
+            (listed.status, listed.json()["type"].clone(), listed.json()["detail"].clone()),
+            (502, json!("/problems/unreachable"), json!("Couldn't reach the provider.")),
+            "{url}"
+        );
+        let rewrite = r.post("/api/ai/rewrite", &json!({"text": "Hello there, how are you?", "op": "shorten"}));
+        assert_ne!(rewrite.status, 200, "{url}");
+        assert!(!rewrite.text().contains("fictional"));
+        assert!(r.outside.0.lock().unwrap().is_empty(), "{url}: nothing was reached");
+    }
+    assert!(heard(&log).is_empty(), "nothing was sent");
+}
+
 // -- the model servers on this Mac ---------------------------------------------------------------
 
 /// A server on loopback that takes each connection and answers nothing, for `hold` each.

@@ -266,6 +266,46 @@ fn the_key_goes_in_the_clear_only_to_this_machine() {
 }
 
 #[test]
+fn a_url_that_breaks_the_rules_a_base_url_is_held_to_reaches_nothing() {
+    // ANTHROPIC_BASE_URL's, as the one a person chooses: https anywhere, plain http only to this machine, no user,
+    // query or fragment, a port from 1 to 65535, nothing in brackets but an IPv6 address, at most 500 characters.
+    let (url, log) = stand_in(vec![(200, vec![], answer("never"))]);
+    let broken = [
+        "http://api.example.test".to_owned(),
+        url.replace("http://", "http://pat@"),
+        format!("{url}/?beta=1"),
+        format!("{url}/#top"),
+        format!("{url}:"),
+        format!(" {url}"),
+        format!("{url}/{}", "v".repeat(500)),
+        "http://localhost:0".to_owned(),
+        "http://localhost:".to_owned(),
+        "http://127.0.0.1:65536".to_owned(),
+        "http://[v1.fe]:8080".to_owned(),
+        "http://[fe80::1%25en0]:8080".to_owned(),
+        "ftp://127.0.0.1".to_owned(),
+        " ".to_owned(),
+    ];
+    for given in broken {
+        let outside = Arc::new(Open::default());
+        let failed = api(&given, outside.clone()).complete(&prompt("claude-opus-5-5", true)).expect_err("no address");
+        assert_eq!(failed, ModelError::new("Claude API unreachable: no API address", None), "{given:?}");
+        assert!(outside.reached.lock().expect("hosts").is_empty(), "{given:?}: nothing was reached");
+    }
+    assert!(heard(&log).is_empty(), "nothing was sent");
+    // Within them, its trailing / dropped, it is asked; none, or an empty one, is the API's own, an address the
+    // tripwire is asked about (and here refuses).
+    let reply = api(&format!("{url}/"), Arc::new(Open::default())).complete(&prompt("claude-opus-5-5", true));
+    assert_eq!(reply.expect("a reply").text, "never");
+    for own in [None, Some("")] {
+        let client =
+            ClaudeApi::new(Secret::new(KEY.into()), own, Arc::new(Closed)).with_limits(Duration::from_secs(5), 0);
+        let failed = client.complete(&prompt("claude-opus-5-5", true)).expect_err("refused");
+        assert_eq!(failed, ModelError::new("Claude API unreachable: Connection error.", None), "{own:?}");
+    }
+}
+
+#[test]
 fn a_key_with_a_space_or_a_line_break_in_it_is_a_refused_key_and_never_sent() {
     // Nor any character outside ASCII: none can go in a header.
     let outside_ascii = ["sk-ant-t\u{e9}st", "sk-ant\u{200b}", "\u{feff}sk-ant", "sk-ant-\u{2026}"];

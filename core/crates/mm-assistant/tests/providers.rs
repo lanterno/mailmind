@@ -82,6 +82,17 @@ fn each_provider_has_its_own_model_and_url_where_it_has_one() {
     assert!(providers::local(Anthropic, "http://127.0.0.1:8080"));
     assert!(!providers::local(Compatible, "https://llm.example.test/v1"));
     assert!(!providers::local(OpenAi, default_base_url(OpenAi)));
+    // A URL on this Mac that breaks the rules a base URL is held to (ANTHROPIC_BASE_URL's among them) reaches
+    // nothing, and is not on this Mac: a model the table doesn't know is priced as any other's.
+    let long = format!("http://127.0.0.1:8080/{}", "v".repeat(500));
+    for broken in
+        ["http://localhost:0", "http://pat@127.0.0.1:8080", "http://127.0.0.1:8080/?x", " http://[::1]:8080", &long]
+    {
+        assert!(!providers::local(Anthropic, broken), "{broken}");
+        assert!(!providers::local(Compatible, broken), "{broken}");
+        assert_eq!(providers::attempt_limit(Anthropic, broken), providers::ATTEMPT, "{broken}");
+    }
+    assert!(providers::local(Local, "http://localhost:0"), "a model on this Mac is on it, whatever its URL");
 }
 
 #[test]
