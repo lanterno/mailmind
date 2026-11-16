@@ -1,6 +1,6 @@
 """The AI usage ledger: what each call to the Claude API cost, counted by local day, feature, the
 model asked, the model that served it and the outcome (migration 21's ai_usage). Prices are
-Anthropic's list prices, in exact integer micro-dollars. Every test here uses the fake Claude API
+each provider's list prices, in exact integer micro-dollars. Every test here uses the fake Claude API
 and fictional mail; the token counts are made up."""
 from datetime import datetime, timedelta, timezone
 
@@ -60,11 +60,51 @@ def test_a_fraction_of_a_micro_dollar_rounds_up():
 
 
 def test_a_dated_model_is_priced_as_its_name_and_an_unknown_one_as_the_dearest():
-    from mailmind.assistant.domain.pricing import DEAREST, PRICES, price
+    from mailmind.assistant.domain.pricing import DEAREST_OF, PRICES, price
     assert price("claude-haiku-4-5-20251001") == PRICES["claude-haiku-4-5"]
     assert price("claude-opus-5-5") == PRICES["claude-opus-5-5"]          # not claude-opus-5's
     assert price("claude-opus-5-20261101") == PRICES["claude-opus-5"]
-    assert price("claude-unknown-9") == DEAREST
+    assert price("claude-unknown-9") == DEAREST_OF["claude"] == PRICES["claude-fable-5-1"]
+
+
+def test_the_other_providers_models_are_priced_from_their_own_lists():
+    from mailmind.assistant.domain.pricing import Price, cost_micros, price
+    assert price("gpt-6.1-sol") == Price(2, 10, 0.10) and price("gpt-5.4-mini-2026-03-17") == Price(0.75, 4.50, 0.075)
+    assert price("gpt-5") == Price(1.25, 10, 0.125) and price("gpt-5-mini") == Price(0.25, 2, 0.025)    # not gpt-5's
+    assert price("o3-pro") == Price(20, 80, 20) and price("gpt-4o-mini") == Price(0.15, 0.60, 0.075)
+    assert price("gemini-4-hydrogen") == Price(1.50, 7.50, 0.075) and price("gemini-2.5-flash-lite") == Price(0.10, 0.40, 0.01)
+    # Cached prompt tokens are reads at the cached price; none of these providers writes a cache.
+    assert cost_micros("gpt-6.1-sol", "gpt-6.1-sol", input_tokens=1000, output_tokens=500, cache_read_tokens=2000) == 7_200
+
+
+def test_a_gemini_pro_costs_more_past_two_hundred_thousand_prompt_tokens():
+    from mailmind.assistant.domain.pricing import Price, price
+    assert price("gemini-3.1-pro-preview", 200_000) == Price(2, 12, 0.20)
+    assert price("gemini-3.1-pro-preview", 200_001) == Price(4, 18, 0.40)
+    assert price("gemini-2.5-pro", 200_001) == Price(2.50, 15, 0.25)
+
+
+@pytest.mark.parametrize("name, priced_as", [("openai/gpt-6.1-sol", "gpt-6.1-sol"), ("models/gemini-4-hydrogen", "gemini-4-hydrogen"),
+                                             ("anthropic/claude-haiku-5-5", "claude-haiku-5-5"),
+                                             ("a/b/gpt-5-nano", "gpt-5-nano")])
+def test_a_name_after_a_vendor_is_priced_as_what_follows_its_last_slash(name, priced_as):
+    from mailmind.assistant.domain.pricing import PRICES, price
+    assert price(name) == PRICES[priced_as]
+
+
+def test_an_unknown_model_costs_the_dearest_of_its_family_or_of_the_whole_table():
+    from mailmind.assistant.domain.pricing import DEAREST, Price, price
+    assert price("gpt-9-galaxy") == price("o9-mini") == price("openrouter/gpt-9") == Price(30, 180, 30)
+    assert price("gemini-9-neon") == price("models/gemini-9") == Price(4, 20, 0.20)
+    assert price("claude-unknown-9") == Price(10, 50, 0.25)
+    assert price("llama3.3:70b") == price("mixtral-9x") == price("ollama") == DEAREST == Price(30, 180, 30)
+
+
+def test_an_unknown_model_on_this_mac_costs_nothing_and_a_known_one_its_price():
+    from mailmind.assistant.domain.pricing import FREE, PRICES, cost_micros, price
+    assert price("llama3.3:70b", local=True) == price("gpt-9-galaxy", local=True) == FREE
+    assert cost_micros("llama3.3", "llama3.3", 10_000, 10_000, local=True) == 0
+    assert price("gpt-6.1-sol", local=True) == PRICES["gpt-6.1-sol"]
 
 
 def test_a_fallback_is_priced_at_the_dearer_of_the_two_models():
