@@ -6,8 +6,9 @@ It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when 
 goes to the host the URL names. It tries the statuses a retry can help (408, 409, 429 and 5xx), and a connection that
 failed, twice more, honouring retry-after, as the Anthropic SDK does. A model on this Mac and a compatible service may not take
 structured output: a 400 that names `response_format` is asked once more without it, the schema stated in the prompt instead,
-and the reply read as free-form JSON. A rejected key's error holds none of what the service said, which can quote part of the
-key back. It takes no batch.
+and the reply read as free-form JSON. OpenAI and Gemini are given a ceiling on a reply's tokens that a model may be unable
+to meet: a 400 that names `max_tokens` or `max_completion_tokens` is asked once more without it. A rejected key's error holds
+none of what the service said, which can quote part of the key back. It takes no batch.
 """
 import http.client
 import json
@@ -32,6 +33,7 @@ _AUTH = frozenset({401, 403})
 _KEY_INVALID = "API_KEY_INVALID"   # the reason Gemini's 400 gives for a key that isn't one
 _NOT_VALID = "API key not valid"   # ...and how its message starts
 _FALLS_BACK = frozenset({"local", "compatible"})      # may not take response_format
+_CEILING_WORDS = (b"max_tokens", b"max_completion_tokens")       # in a 400 for a ceiling a model can't meet
 _NO_BATCHES = "Batches need Claude as the AI provider."
 
 
@@ -172,10 +174,17 @@ class ChatModel:
     def complete(self, prompt: Prompt) -> Reply:
         txguard.refuse_network("an AI provider request")
         provider = self._http.provider
+        with_format, with_ceiling = True, True
         answer = self._post(chat_wire.body(prompt, provider))
-        if (answer.status == 400 and prompt.schema is not None and provider in _FALLS_BACK
-                and b"response_format" in answer.body):
-            answer = self._post(chat_wire.body(prompt, provider, with_format=False))
+        while answer.status == 400 and not _key_refused(answer):
+            if (with_format and prompt.schema is not None and provider in _FALLS_BACK
+                    and b"response_format" in answer.body):
+                with_format = False
+            elif with_ceiling and provider in chat_wire.CEILING and any(w in answer.body for w in _CEILING_WORDS):
+                with_ceiling = False
+            else:
+                break
+            answer = self._post(chat_wire.body(prompt, provider, with_format, with_ceiling))
         if not 200 <= answer.status < 300:
             raise self._http.refused(answer)
         resp = answer.json()
