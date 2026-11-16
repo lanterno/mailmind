@@ -88,14 +88,17 @@ struct Syncs {
     scanned: Arc<Scanned>,
     asked: Mutex<Vec<(String, bool)>>,
     fails: Mutex<bool>,
+    /// Whether the next sync panics, as a malformed answer could make it.
+    panics: Mutex<bool>,
     new: Mutex<usize>,
     hold: Mutex<()>,
 }
 
 impl FolderSync for Syncs {
     fn sync_folder(&self, _account: &str, folder: &str, full: bool) -> Result<(usize, usize), SyncError> {
-        let _held = self.hold.lock().unwrap();
         self.asked.lock().unwrap().push((folder.to_owned(), full));
+        assert!(!std::mem::take(&mut *self.panics.lock().unwrap()), "a server's answer the sync couldn't read");
+        let _held = self.hold.lock().unwrap();
         if *self.fails.lock().unwrap() {
             return Err(SyncError::Server(ServerError::Refused("error")));
         }
@@ -280,6 +283,29 @@ fn a_folder_whose_first_scan_failed_says_so_and_is_scanned_on_the_next_open() {
     assert_eq!(world.open("Spam"), Opened::Done);
     assert_eq!(world.asked(), [("Spam".to_owned(), true), ("Spam".to_owned(), true)]);
     assert_eq!(world.told.nth(1), synced("Spam", true, 0));
+}
+
+#[test]
+fn a_first_scan_that_panics_ends_as_one_that_failed_and_the_next_open_scans_again() {
+    let world = World::new(&[]);
+    *world.syncs.panics.lock().unwrap() = true;
+    assert_eq!(world.open("Junk"), Opened::SyncFailed);
+    assert_eq!(world.told.nth(0), synced("Junk", false, 0));
+    assert_eq!(world.open("Junk"), Opened::Done);
+    assert_eq!(world.asked(), [("Junk".to_owned(), true), ("Junk".to_owned(), true)]);
+    assert_eq!(world.told.nth(1), synced("Junk", true, 0));
+}
+
+#[test]
+fn a_catch_up_that_panics_lets_the_next_one_run_when_due() {
+    let world = World::new(&["Archive"]);
+    *world.syncs.panics.lock().unwrap() = true;
+    world.open("Archive");
+    assert_eq!(world.told.nth(0), synced("Archive", false, 0));
+    world.clock.pass(61);
+    world.open("Archive");
+    assert_eq!(world.told.nth(1), synced("Archive", true, 0));
+    assert_eq!(world.asked(), [("Archive".to_owned(), false), ("Archive".to_owned(), false)]);
 }
 
 #[test]
