@@ -1,13 +1,15 @@
 //! Which preset an address's account takes, from its domain (`mailmind.accounts.domain.preset` and
 //! `application.presets`): a provider's own domains take its preset, which the form chooses (`sure`), and a domain whose
 //! mail a provider's servers take (a Google Workspace or Fastmail domain's, say), as its MX records name them, is
-//! offered it, as an iCloud+ custom domain's is iCloud's. An offer is only that: the person chooses, and nothing is
-//! guessed that they can't undo. A brand's domain is its own under `.com` or a country's ending (yahoo.fr,
-//! yahoo.co.uk), but for a country where the brand is another company's (Yahoo Japan's yahoo.co.jp).
+//! offered it. An offer is only that: the person chooses, and nothing is guessed that they can't undo. A brand's
+//! domain is its own under `.com` or a country's ending (yahoo.fr, yahoo.co.uk), but for a country where the brand is
+//! another company's (Yahoo Japan's yahoo.co.jp).
 //!
 //! A preset says what the form needs of its provider: the type and servers its account takes, a line said before
 //! the password (an app password asked for, Proton Bridge needed), and the page where that password is made. A
-//! provider MailMind can't log in to yet (Microsoft's, which needs its own sign-in, #47) is named, and has no servers.
+//! provider MailMind can't log in to yet (Microsoft's, which needs its own sign-in, #47) is named, and has no servers;
+//! so is iCloud for an iCloud+ custom domain, since iCloud lets other mail apps sign in only with the @icloud.com
+//! address and an account logs in with the address typed.
 //!
 //! A domain is looked up only when it reads as one a lookup could ask about: ASCII labels of letters, digits and
 //! hyphens, two or more of them, at most 253 characters. Anything else, a name in another script included, is no
@@ -71,6 +73,10 @@ pub struct Provider {
     pub note: Option<&'static str>,
     /// Where its password for MailMind is made, or what it needs is got.
     pub link: Option<Link>,
+    /// What the form says in place of `note` for a custom domain its servers take but sign in by another address
+    /// (iCloud+'s, by the @icloud.com address): an account logs in with the address typed, so such a domain is named
+    /// and offered no servers.
+    pub custom_domain: Option<&'static str>,
 }
 
 const fn server(host: &'static str, port: u16, starttls: bool) -> Option<Server> {
@@ -95,6 +101,7 @@ pub const PROVIDERS: [Provider; 7] = [
         settings: Some(Settings { kind: "gmail", imap: None, smtp: None, trash: None }),
         note: None,
         link: Some(GOOGLE_APP_PASSWORDS),
+        custom_domain: None,
     },
     Provider {
         preset: "icloud",
@@ -114,6 +121,11 @@ pub const PROVIDERS: [Provider; 7] = [
              account.apple.com, under Sign-In and Security, then paste it here.",
         ),
         link: Some(Link { url: "https://account.apple.com", words: "Make an app-specific password" }),
+        custom_domain: Some(
+            "This address's mail is at iCloud, through iCloud+, and iCloud lets other mail apps sign in only with your \
+             @icloud.com address, which MailMind can't pair with this one yet. Add your @icloud.com address \
+             instead: this address's mail arrives there too.",
+        ),
     },
     Provider {
         preset: "yahoo",
@@ -133,6 +145,7 @@ pub const PROVIDERS: [Provider; 7] = [
              settings, then paste it here.",
         ),
         link: Some(Link { url: "https://login.yahoo.com/account/security", words: "Make an app password" }),
+        custom_domain: None,
     },
     Provider {
         preset: "aol",
@@ -152,6 +165,7 @@ pub const PROVIDERS: [Provider; 7] = [
              settings, then paste it here.",
         ),
         link: Some(Link { url: "https://login.aol.com/account/security", words: "Make an app password" }),
+        custom_domain: None,
     },
     Provider {
         preset: "fastmail",
@@ -174,6 +188,7 @@ pub const PROVIDERS: [Provider; 7] = [
             url: "https://www.fastmail.help/hc/en-us/articles/360058752854",
             words: "How to make an app password",
         }),
+        custom_domain: None,
     },
     Provider {
         preset: "microsoft",
@@ -188,6 +203,7 @@ pub const PROVIDERS: [Provider; 7] = [
              support yet.",
         ),
         link: None,
+        custom_domain: None,
     },
     Provider {
         preset: "proton",
@@ -202,6 +218,7 @@ pub const PROVIDERS: [Provider; 7] = [
              it running while MailMind is open.",
         ),
         link: Some(PROTON_BRIDGE),
+        custom_domain: None,
     },
 ];
 
@@ -319,15 +336,18 @@ pub fn link_json(link: Option<Link>) -> Value {
 }
 
 fn answer(domain: Option<&str>, provider: Option<&Provider>, sure: bool) -> Value {
+    // A custom domain its provider signs in by another address: named, with nothing to save.
+    let elsewhere = provider.and_then(|p| p.custom_domain).filter(|_| !sure);
+    let settings = provider.and_then(|p| p.settings).filter(|_| elsewhere.is_none());
     json!({
         "ok": true,
         "domain": domain,
         "preset": provider.map(|p| p.preset),
         "sure": sure,
         "name": provider.map(|p| p.name),
-        "supported": provider.is_none_or(|p| p.settings.is_some()),
-        "settings": provider.and_then(|p| p.settings.as_ref()).map(settings_json),
-        "note": provider.and_then(|p| p.note),
-        "link": link_json(provider.and_then(|p| p.link)),
+        "supported": provider.is_none() || settings.is_some(),
+        "settings": settings.as_ref().map(settings_json),
+        "note": elsewhere.or_else(|| provider.and_then(|p| p.note)),
+        "link": link_json(provider.and_then(|p| p.link).filter(|_| elsewhere.is_none())),
     })
 }
