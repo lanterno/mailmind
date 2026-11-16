@@ -144,7 +144,7 @@ class Assessments:
                 break
             requests.append((str(r["message_key"]), text))
             keys.append(r["message_key"])
-            estimate += cost
+            estimate = min(estimate + cost, pricing.MOST)
             cutoff = max(cutoff, r["ts"] or 0)
         if not requests:
             return 0

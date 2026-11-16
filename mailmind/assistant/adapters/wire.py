@@ -1,6 +1,7 @@
 """The Messages API's wire format, which the SDK's adapter speaks: the request body for a Prompt,
 and the Reply in a response."""
 from mailmind.assistant.application.ports import BatchResult, Prompt, Reply, Usage
+from mailmind.assistant.domain import pricing
 
 
 def body(prompt: Prompt) -> dict:
@@ -21,10 +22,13 @@ def body(prompt: Prompt) -> dict:
 
 
 def _count(usage: dict, name: str) -> int:
+    """A count of tokens as a response gives it: a whole number from nought to the most the ledger holds; anything else is
+    none."""
     try:
-        return max(0, int(usage.get(name) or 0))
-    except (TypeError, ValueError):
+        n = int(usage.get(name) or 0)
+    except (TypeError, ValueError, OverflowError):
         return 0
+    return min(max(0, n), pricing.MOST)
 
 
 def _served(resp: dict, blocks: list, asked: str) -> str:

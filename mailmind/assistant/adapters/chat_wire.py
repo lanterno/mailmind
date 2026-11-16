@@ -13,6 +13,7 @@ import re
 from typing import Any, cast
 
 from mailmind.assistant.application.ports import Prompt, Reply, Usage
+from mailmind.assistant.domain import pricing
 from mailmind.kernel.ai_provider import AiProvider
 
 SCHEMA_NAME = "answer"
@@ -63,10 +64,13 @@ def body(prompt: Prompt, provider: AiProvider, with_format: bool = True, with_ce
 
 
 def _count(usage: Any, name: str) -> int:
+    """A count of tokens as a response gives it: a whole number from nought to the most the ledger holds; anything else is
+    none."""
     try:
-        return max(0, int((usage if isinstance(usage, dict) else {}).get(name) or 0))
-    except (TypeError, ValueError):
+        n = int((usage if isinstance(usage, dict) else {}).get(name) or 0)
+    except (TypeError, ValueError, OverflowError):
         return 0
+    return min(max(0, n), pricing.MOST)
 
 
 def _text(content: Any) -> str:

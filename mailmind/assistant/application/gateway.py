@@ -116,7 +116,8 @@ class Gateway:
 
     def batch_results(self, batch_id: str, *, feature: str, model: str | None = None) -> list[BatchResult]:
         """What a batch that has ended said, each answer counted under `feature` at half price, and
-        how each went told to the cost governor, as a call's is."""
+        how each went told to the cost governor, as a call's is. Each tally is held at the most the
+        ledger holds."""
         lm = self._model()
         name = model or lm.model
         results = lm.batch_results(batch_id, name)
@@ -135,7 +136,7 @@ class Gateway:
                                    pricing.batch_micros(pricing.cost_micros(
                                        name, reply.model if reply else "", u.input_tokens, u.output_tokens,
                                        u.cache_write_tokens, u.cache_read_tokens, lm.local)))):
-                row[i] += n
+                row[i] = min(row[i] + n, pricing.MOST)
         for (served, outcome), (calls, i, o, w, r, cost) in tally.items():
             self._record(feature, name, served, outcome, Usage(i, o, w, r), cost, calls)
         return results
@@ -186,7 +187,8 @@ class Gateway:
 
     def usage(self, days: int = 30) -> list[DayCost]:
         """Each of the last `days` local days, newest first: its calls and cost, in micro-dollars,
-        in all and by feature. A day without calls is there with zeros."""
+        in all and by feature. A day without calls is there with zeros, and a day's totals are held
+        at the most the ledger holds."""
         today = date.fromtimestamp(self._clock())
         wanted = [(today - timedelta(days=i)).isoformat() for i in range(max(1, days))]
         out: dict[str, DayCost] = {d: {"day": d, "calls": 0, "cost_micros": 0, "features": {}} for d in wanted}
@@ -194,7 +196,7 @@ class Gateway:
             day = out.get(row["day"])
             if day is None:
                 continue
-            day["calls"] += row["calls"]
-            day["cost_micros"] += row["cost_micros"]
+            day["calls"] = min(day["calls"] + row["calls"], pricing.MOST)
+            day["cost_micros"] = min(day["cost_micros"] + row["cost_micros"], pricing.MOST)
             day["features"][row["feature"]] = {"calls": row["calls"], "cost_micros": row["cost_micros"]}
         return [out[d] for d in wanted]

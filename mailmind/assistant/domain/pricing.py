@@ -94,6 +94,7 @@ LONG_PROMPTS = {"claude-haiku-5-5": (100_000, Price(0.50, 2.50, 0.05)),
                 "gemini-3.1-pro-preview": (200_000, Price(4, 18, 0.40)),
                 "gemini-2.5-pro": (200_000, Price(2.50, 15, 0.25))}
 FREE = Price(0, 0, 0)
+MOST = 2**63 - 1               # the largest count of tokens or cost the ledger holds: a signed 64-bit integer
 
 _FAMILIES = {"claude": re.compile(r"claude-"), "openai": re.compile(r"gpt-|o[0-9]"), "gemini": re.compile(r"gemini-")}
 
@@ -128,16 +129,16 @@ def price(model: str, prompt_tokens: int = 0, local: bool = False) -> Price:
 
 def cost_micros(asked: str, served: str, input_tokens: int = 0, output_tokens: int = 0,
                 cache_write_tokens: int = 0, cache_read_tokens: int = 0, local: bool = False) -> int:
-    """What the tokens cost, in micro-dollars, rounded up. Priced at the dearer of the model asked
-    and the model that served the reply, so a server-side fallback never reads as cheaper than it
-    may have been."""
+    """What the tokens cost, in micro-dollars, rounded up, and at most MOST. Priced at the dearer of
+    the model asked and the model that served the reply, so a server-side fallback never reads as
+    cheaper than it may have been."""
     prompt = input_tokens + cache_write_tokens + cache_read_tokens
 
     def at(p: Price) -> int:
         i, o, w, r = p.nanos()
         return input_tokens * i + output_tokens * o + cache_write_tokens * w + cache_read_tokens * r
     nanos = max(at(price(asked, prompt, local)), at(price(served or asked, prompt, local)))
-    return -(-nanos // 1000)
+    return min(-(-nanos // 1000), MOST)
 
 
 def batch_micros(micros: int) -> int:
