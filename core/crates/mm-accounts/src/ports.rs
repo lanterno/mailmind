@@ -78,6 +78,13 @@ pub enum AccountChange {
     CredentialsRejected(String, crate::login_hold::LoginId),
 }
 
+/// What this Mac keeps of an account's mail: its stored copies, their bodies and attachments, what was said of them,
+/// and each context's state under its address (`bootstrap.mailbox.forget_account` in the Python app).
+pub trait AccountMail: Send + Sync + std::fmt::Debug {
+    /// Let all of it go, in one transaction; the server's mail is untouched. How many stored copies went.
+    fn forget(&self, email: &str) -> Result<usize, Fault>;
+}
+
 /// Who hears of an account's change: its logins, and its IDLE (`bus.publish` in the Python app).
 pub trait AccountEvents: Send + Sync + std::fmt::Debug {
     fn publish(&self, change: AccountChange);

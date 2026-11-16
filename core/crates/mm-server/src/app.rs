@@ -372,7 +372,8 @@ impl App {
             Arc::new(probe),
             account_events,
             seams.clock.clone(),
-        );
+        )
+        .keeping_mail(database.clone());
         // Compose's, over sessions of its own and the config file as it is when each send goes.
         let compose = crate::compose_wiring::Compose::assemble(crate::compose_wiring::Parts {
             database: database.clone(),

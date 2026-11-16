@@ -43,6 +43,8 @@ mod mailbox;
 mod mailbox_commands;
 // What the forget round lets go of: keys with no copy left, and finished changes.
 mod mailbox_forget;
+// What this Mac keeps of an account's mail, let go as the account is removed.
+mod account_mail;
 // What the body backfill reads: the stored mail with no body text yet.
 mod mailbox_backfill;
 mod mailbox_sync;

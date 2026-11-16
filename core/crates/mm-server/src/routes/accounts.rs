@@ -104,7 +104,7 @@ async fn edit(State(app): State<Arc<App>>, method: Method, uri: Uri, headers: He
     super::run(&app, &method, &uri, move |app| app.connections.edit(&asked?)).await
 }
 
-/// Remove an account, and its own Keychain item (`NamesAnAccount`).
+/// Remove an account, and its own Keychain item, and with `delete_mail` what this Mac keeps of its mail (`RemoveBody`).
 async fn delete(
     State(app): State<Arc<App>>,
     method: Method,
@@ -113,7 +113,7 @@ async fn delete(
     body: Body,
 ) -> Response<Body> {
     let asked = match crate::body::object(uri.path(), &headers, body).await {
-        Ok(body) => names_an_account(&body),
+        Ok(body) => remove_body(&body),
         Err(refused) => return *refused,
     };
     super::run(&app, &method, &uri, move |app| app.connections.delete(&asked?)).await
@@ -128,6 +128,13 @@ fn taken(value: &Value) -> Option<Value> {
 fn names_an_account(body: &Map<String, Value>) -> Result<Map<String, Value>, Problem> {
     let mut dumped = Map::new();
     schema::optional(body, "email", schema::text, &mut dumped)?;
+    Ok(dumped)
+}
+
+/// `RemoveBody`: the account to remove, and whether this Mac lets go of its mail too.
+fn remove_body(body: &Map<String, Value>) -> Result<Map<String, Value>, Problem> {
+    let mut dumped = names_an_account(body)?;
+    schema::optional(body, "delete_mail", schema::flag, &mut dumped)?;
     Ok(dumped)
 }
 

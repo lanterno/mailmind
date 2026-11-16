@@ -12,7 +12,7 @@ use crate::Directory;
 use crate::account::truthy;
 use crate::draft::{self, NotTried};
 use crate::login_words::{self, Whose};
-use crate::ports::{AccountChange, AccountEvents, LoginProbe, LoginTrouble};
+use crate::ports::{AccountChange, AccountEvents, AccountMail, LoginProbe, LoginTrouble};
 use crate::presets;
 
 /// How long each step of a test login may take: a short wait gives quick word of a bad host.
@@ -73,6 +73,8 @@ pub struct Connections {
     probe: Arc<dyn LoginProbe>,
     events: Arc<dyn AccountEvents>,
     clock: Arc<dyn Clock>,
+    /// What this Mac keeps of an account's mail, which a removal may let go; None where nothing is kept.
+    mail: Option<Arc<dyn AccountMail>>,
 }
 
 /// What trusting an account's certificate again asks of the sync.
@@ -91,7 +93,14 @@ impl Connections {
         events: Arc<dyn AccountEvents>,
         clock: Arc<dyn Clock>,
     ) -> Connections {
-        Connections { directory, probe, events, clock }
+        Connections { directory, probe, events, clock, mail: None }
+    }
+
+    /// The same, with what this Mac keeps of each account's mail, for a removal that lets it go.
+    #[must_use]
+    pub fn keeping_mail(mut self, mail: Arc<dyn AccountMail>) -> Connections {
+        self.mail = Some(mail);
+        self
     }
 
     /// Try a saved account's login at its saved servers (`{email}`), or a draft's where it was typed (`{draft}`), and
@@ -193,15 +202,23 @@ impl Connections {
         Ok(json!({"ok": true, "account": row}))
     }
 
-    /// Remove the account saved under the body's `email` (`change("delete")`).
+    /// Remove the account saved under the body's `email` (`change("delete")`), and with `delete_mail`, what this Mac
+    /// keeps of its mail: how many stored copies went is `mail_deleted`. Its mail on the server is untouched.
     pub fn delete(&self, body: &Asked) -> Result<Value, Failure> {
         let asked = body.get("email").cloned().unwrap_or(Value::Null);
         let saved_as = self
             .directory
             .remove_account(asked.as_str().unwrap_or_default())?
             .ok_or_else(|| Problem::not_found("not found"))?;
+        let forgotten = match (body.get("delete_mail").is_some_and(truthy), &self.mail) {
+            (true, Some(mail)) => Some(mail.forget(&saved_as)?),
+            _ => None,
+        };
         self.events.publish(AccountChange::Removed(saved_as));
-        Ok(json!({"ok": true, "removed": asked}))
+        Ok(match forgotten {
+            Some(n) => json!({"ok": true, "removed": asked, "mail_deleted": n}),
+            None => json!({"ok": true, "removed": asked}),
+        })
     }
 
     /// Keep `typed` as the Proton Bridge's password, in the login Keychain (`set_bridge_password`). Each account that
