@@ -95,23 +95,58 @@ class Sweeps:
             log.warning("an account failed", exc_info=e)
             out["error"] = type(e).__name__      # what a server said stays out of the answer
             return out, False
+        verified: tuple[int, list[str]] | None = None
         try:
-            moved, stragglers = self._boxes.move_verified(s, [r["uid"] for r in junk_rows], trash)
+            verified = self._boxes.move_verified(s, [r["uid"] for r in junk_rows], trash)
         except Exception as e:
             log.warning("an account failed", exc_info=e)
             out["error"] = type(e).__name__
-            # Some of it may have gone before the server went: a way back for all of it, and Undo brings back what it
-            # finds in Trash.
-            return out, self._undo_push(acct["email"], trash, junk_rows, (), group)
         finally:
             try:
                 s.logout()
             except Exception:
                 pass
+        if verified is None:
+            return out, self._stopped(acct, trash, junk_rows, group, out)
+        moved, stragglers = verified
         out["moved"], out["stragglers"] = moved, stragglers
         pushed = self._undo_push(acct["email"], trash, junk_rows, stragglers, group)
         self._mail.forget_moved(acct["email"], junk_rows, stragglers)        # don't re-ghost swept mail
         return out, pushed
+
+    def _stopped(self, acct: dict[str, Any], trash: str, junk: list[Classified], group: str, out: dict[str, Any]) -> bool:
+        """A sweep the server stopped part way: a fresh look at the INBOX says what had left it, and only that has a way
+        back and its rows forgotten, so a sweep that moved nothing leaves the stack as it was. When the server can't be
+        asked again, it can't be told what went: all of it has a way back, and Undo counts one still in the INBOX as
+        back. Whether there was any."""
+        present = self._inbox_now(acct)
+        if present is None:
+            return self._undo_push(acct["email"], trash, junk, (), group)
+        went = [r for r in junk if r["uid"] not in present]
+        out["moved"] = len(went)
+        if not went:
+            return False
+        self._mail.forget_moved(acct["email"], went, [])
+        return self._undo_push(acct["email"], trash, went, (), group)
+
+    def _inbox_now(self, acct: dict[str, Any]) -> set[str] | None:
+        """The UIDs the account's INBOX holds now, on a session of their own; None when the server can't say."""
+        try:
+            s = self._boxes.open_session(acct)
+        except Exception as e:
+            log.warning("an account failed", exc_info=e)
+            return None
+        try:
+            s.select("INBOX")
+            return {str(u) for u in s.uids("ALL")}
+        except Exception as e:
+            log.warning("an account failed", exc_info=e)
+            return None
+        finally:
+            try:
+                s.logout()
+            except Exception:
+                pass
 
     def _undo_push(self, account: str, trash: str, junk: Sequence[Classified], stragglers: Iterable[str],
                    group: str) -> bool:
