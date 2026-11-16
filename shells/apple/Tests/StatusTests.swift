@@ -35,6 +35,21 @@ final class StatusWordsTests: XCTestCase {
         XCTAssertEqual(pill(F.digest(status: ["ada@example.test": "syncing"])), .init(dot: .busy, text: "Syncing…"))
     }
 
+    func testAFirstSyncSaysHowFarItHasGotAheadOfWhatElseRuns() {
+        var digest = F.digest(status: ["ada@example.test": "ok", "news@example.test": "ok"])
+        digest.status["ada@example.test"]?.done = 2300
+        digest.status["ada@example.test"]?.total = 41000
+        XCTAssertEqual(pill(digest, syncing: true), .init(dot: .busy, text: "Reading your inbox: 2,300 of 41,000"))
+        digest.status["news@example.test"]?.done = 500
+        digest.status["news@example.test"]?.total = 900
+        XCTAssertEqual(pill(digest).text, "Reading your inboxes: 2,800 of 41,900")
+        let failing = F.standing("news@example.test", error: "refused", kind: "NET")
+        XCTAssertEqual(pill(F.digest(), [failing]).text, "news can’t connect", "what can't connect still comes first")
+        digest.status["ada@example.test"] = API.AccountSync(health: "ok", msg: "+0")
+        digest.status["news@example.test"] = API.AccountSync(health: "ok", msg: "+0")
+        XCTAssertEqual(pill(digest).text, "Not synced yet", "read whole, it says nothing of it")
+    }
+
     func testThenWhenMailWasLastSynced() {
         XCTAssertEqual(pill(F.digest(profile: "read-only")), .init(dot: .none, text: "Read-only"))
         XCTAssertEqual(pill(F.digest(last: "2026-11-14T10:42:00Z")).text, "Synced 10:42\u{202F}AM", "today, by its time")
