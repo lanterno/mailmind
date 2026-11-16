@@ -29,6 +29,22 @@ pub const MOVE_BATCH: usize = 200;
 pub const READ_ONLY: Fault = Fault::new("ReadOnlyError");
 /// What Undo says it takes back.
 const UNDO_LABEL: &str = "Swept junk";
+/// The most of an account's junk one sweep moves: Undo puts each back on its own, and a click waits on it. The newest
+/// go first, and the next sweep takes the rest.
+pub const SWEEP_MAX: usize = 500;
+
+/// What a sweep takes of `junk`: the newest `SWEEP_MAX` by UID, in the order the INBOX holds them, and whether that
+/// leaves any for the next.
+pub fn within_cap(mut junk: Vec<&Classified>) -> (Vec<&Classified>, bool) {
+    if junk.len() <= SWEEP_MAX {
+        return (junk, false);
+    }
+    let uid = |r: &&Classified| r.read.uid.parse::<u32>().unwrap_or(0);
+    junk.sort_by_key(|r| std::cmp::Reverse(uid(r)));
+    junk.truncate(SWEEP_MAX);
+    junk.sort_by_key(uid);
+    (junk, true)
+}
 
 /// A message of the INBOX as the server shows it now, with what the classifier wants of its headers. Either List
 /// header says it's bulk.
@@ -225,6 +241,7 @@ impl Sweeps {
         // Starred or unread junk stays: a person's mark, or mail no one has seen yet, is never swept away.
         let (held, junk): (Vec<&Classified>, Vec<&Classified>) =
             rows.iter().filter(|r| r.bucket.is_junk()).partition(|r| r.read.held());
+        let (junk, capped) = within_cap(junk);
         let senders: HashSet<&str> = junk.iter().map(|r| r.read.from.as_str()).collect();
         let mut out = Map::new();
         out.insert("account".into(), json!(account));
@@ -232,6 +249,7 @@ impl Sweeps {
         out.insert("by_bucket".into(), plan.get("by_bucket").cloned().unwrap_or_else(|| json!({})));
         out.insert("senders".into(), json!(senders.len()));
         out.insert("held_back".into(), json!(held.len()));
+        out.insert("capped".into(), json!(capped));
         // Undo finds a message in Trash by its Message-ID: one with none goes, but can't come back.
         out.insert("no_undo".into(), json!(junk.iter().filter(|r| r.read.mid.is_empty()).count()));
         out.insert("moved".into(), json!(0));
