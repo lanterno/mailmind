@@ -2,7 +2,8 @@
 //! says when the selected folder changes, and DONE leaves IDLE before anything else is sent.
 //!
 //! A wait lasts as long as it was given, each read limited to what is left of it, and the connection's own time
-//! limit comes back as it leaves. Another thread ends a wait through the session's `Interrupter`, which shuts the
+//! limit comes back as it leaves. While it idles the system probes a quiet connection (TCP keepalive), so one that a
+//! sleep or a change of network left dead fails within about two minutes rather than when the wait runs out. Another thread ends a wait through the session's `Interrupter`, which shuts the
 //! socket down and closes nothing: the wait then fails as a lost connection, and the session is spent.
 
 use std::sync::Arc;
@@ -16,6 +17,12 @@ use mm_mailbox::session::{MailServer, Selected, ServerError};
 use crate::list::strip_prefix_ignoring_case;
 use crate::session::{Error, Session};
 use crate::wire::Piece;
+
+/// How long an idling connection may be quiet before the system probes it, how often it probes after that, and how
+/// many probes unanswered lose it: a dead connection known in about two minutes.
+pub const PROBE_AFTER: Duration = Duration::from_secs(60);
+pub const PROBE_EVERY: Duration = Duration::from_secs(15);
+pub const PROBES: u32 = 4;
 
 /// What a server says when the selected folder changed, as the Python app counts it (`_CHANGES`).
 const CHANGES: [&str; 3] = ["EXISTS", "RECENT", "EXPUNGE"];
@@ -73,6 +80,8 @@ impl Session {
     /// interrupted fails as unreachable; a server that refuses IDLE, as refused.
     pub fn idle(&mut self, wait: Duration) -> Result<bool, Error> {
         let deadline = Instant::now() + wait;
+        // A connection the system won't probe still idles, until its deadline.
+        let _ = self.connection.wire.stream.keep_alive(PROBE_AFTER, PROBE_EVERY, PROBES);
         let tag = self.connection.next_tag();
         self.connection.wire.send(format!("{tag} IDLE").as_bytes()).map_err(|e| lost(&e))?;
         let mut changed = false;

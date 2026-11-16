@@ -34,6 +34,23 @@ impl Stream {
     pub fn interrupter(&self) -> io::Result<Interrupter> {
         Ok(Interrupter(self.tcp().try_clone()?))
     }
+
+    /// Ask the system to probe the connection once it has been quiet for `after`, every `every` after that, and to
+    /// call it lost after `tries` probes unanswered: so a wait of many minutes on a connection that a sleep or a
+    /// change of network left dead fails within minutes, not when the wait runs out.
+    pub fn keep_alive(&self, after: Duration, every: Duration, tries: u32) -> io::Result<()> {
+        let probes = socket2::TcpKeepalive::new().with_time(after).with_interval(every).with_retries(tries);
+        socket2::SockRef::from(self.tcp()).set_tcp_keepalive(&probes)
+    }
+
+    /// How long the connection may be quiet before the system probes it; None when it never does.
+    pub fn keep_alive_after(&self) -> io::Result<Option<Duration>> {
+        let socket = socket2::SockRef::from(self.tcp());
+        if !socket.keepalive()? {
+            return Ok(None);
+        }
+        socket.tcp_keepalive_time().map(Some)
+    }
 }
 
 /// Whether an I/O error is a read that waited out its time limit, which asks nothing of the connection.
