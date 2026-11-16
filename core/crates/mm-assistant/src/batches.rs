@@ -7,7 +7,8 @@
 //! its share of what today's limit leaves, by an estimate that errs high, and books that against background work while
 //! it is out. Its row is committed as `submitting` before it is sent, and sending is never retried. Its answers are
 //! brought in once it has ended, whatever holds the rest back, since they are paid for; then the API is asked to let
-//! it go, as it holds mail. A batch the Python app sent is in the same rows, and is brought in the same way.
+//! it go, as it holds mail. Its answers are labelled with the model it asked. A batch the Python app sent is in the
+//! same rows, and is brought in the same way.
 
 use std::sync::Arc;
 
@@ -16,7 +17,7 @@ use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 
 use crate::assessments::{EFFORT, assessment_with, triage_prompt, triage_schema};
-use crate::background_ports::{BatchBook, Begun, FinishedBatches, Pending, Triage};
+use crate::background_ports::{Batch, BatchBook, Begun, FinishedBatches, Pending, Triage};
 use crate::calls::Calls;
 use crate::ports::{BatchResult, Reply};
 use crate::pricing;
@@ -146,7 +147,8 @@ impl Batching {
         // Committed before the network: sending it is a call.
         let Some(id) = self.book.begin(&begun)? else { return Ok(0) };
         let count = requests.len().to_string();
-        match self.calls.submit_batch(&requests, &triage_schema(), Some(EFFORT), FEATURE) {
+        // Sent to the model its row names, whatever is chosen meanwhile.
+        match self.calls.submit_batch(&requests, &triage_schema(), Some(EFFORT), FEATURE, &label) {
             Ok(remote_id) => {
                 self.book.sent(id, &remote_id, self.now())?;
                 log::info(TAG, "sent a batch of %(count)s", &[(Field::Count, &count)]);
@@ -209,7 +211,7 @@ impl Batching {
                 }
                 Ok(None) => self.book.polled(out.id, now)?,
                 Ok(Some(results)) => {
-                    stored = self.store(out.id, out.prompt_version, results, now)?;
+                    stored = self.store(&out, results, now)?;
                     log::info(TAG, "a batch brought %(count)s answers", &[(Field::Count, &stored.to_string())]);
                 }
             }
@@ -229,18 +231,18 @@ impl Batching {
         Ok(stored)
     }
 
-    /// Each answer a batch brought, under its message's key, and the batch collected: how many were its own.
-    fn store(&self, id: i64, version: Option<i64>, results: Vec<BatchResult>, now: i64) -> Result<usize, Fault> {
+    /// Each answer a batch brought, under its message's key and the model the batch asked (whatever is in force now),
+    /// and the batch collected: how many were its own.
+    fn store(&self, out: &Batch, results: Vec<BatchResult>, now: i64) -> Result<usize, Fault> {
         // A request with no answer is waiting again once the batch is collected.
         let answers: Vec<(i64, Reply)> =
             results.into_iter().filter_map(|r| Some((key_of(&r.custom_id)?, r.reply?))).collect();
-        let label = self.calls.model_label();
-        let version = version.and_then(|v| u32::try_from(v).ok());
+        let version = out.prompt_version.and_then(|v| u32::try_from(v).ok());
         let judge = |row: Option<&Pending>, reply: &Reply| {
-            assessment_with(row.unwrap_or(&Pending::default()), reply, &label, version)
+            assessment_with(row.unwrap_or(&Pending::default()), reply, &out.model, version)
         };
         let when = mm_kernel::when::iso(self.clock.now());
-        self.book.collected(id, now, &when, &answers, &judge)
+        self.book.collected(out.id, now, &when, &answers, &judge)
     }
 
     /// What is out in a batch, with no call made: how many messages, and what it may cost.
