@@ -1,7 +1,7 @@
 // The bar across the top: the rail's control, search, and the way back to the current app. Each keeps its state in the
 // body's classes and the storage keys the current page uses, since the two share a stylesheet and a browser.
 import { useEffect, useRef, useState } from "react";
-import { ask, doing, runDo, stopAsking, stopTranslating, translateProse } from "../features/assistant/ask";
+import { ask, doing, runDo, stopAsking, stopDoing, stopTranslating, translateProse } from "../features/assistant/ask";
 import { readsAsProse } from "../features/assistant/prose";
 import { composing } from "../features/compose/compose";
 import { OutboxButton } from "../features/compose/Outbox";
@@ -102,6 +102,12 @@ export function TopBar({ m, readOnly }: { m: Mailbox; readOnly: boolean }) {
     : null;
   const account = source?.kind === "folder" || source?.kind === "search" ? source.account : "";
   const asks = aiOffered(m.digest?.ai);     // AI turned off: the box only searches, and ? and ! are words like any other
+  useEffect(() => {
+    if (asks) return;
+    stopAsking();     // turned off with an answer, a plan or a translation on screen or on its way: it goes, and its Ask again
+    stopDoing();
+    stopTranslating();
+  }, [asks]);
   const suggest = useSuggestions(input);
   const leave = () => {
     setText("");
