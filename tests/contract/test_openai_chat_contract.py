@@ -203,6 +203,61 @@ def test_a_rejected_key_raises_without_a_retry_and_without_any_of_the_key(choose
     assert assistant.status.report()["last_error"] == "the API key was rejected"
 
 
+@pytest.mark.parametrize("refusal", [
+    fo.gemini_error(400, "API key not valid. Please pass a valid API key.", "API_KEY_INVALID"),
+    fo.gemini_error(400, "The key given is no key.", "API_KEY_INVALID"),                 # the reason alone
+    fo.gemini_error(400, "API key not valid. Please pass a valid API key."),             # the words alone
+    (400, {"error": {"message": "API key not valid.", "details": [{"reason": "API_KEY_INVALID"}]}}),   # not in a list
+])
+def test_a_key_gemini_refuses_with_a_400_is_a_refused_key(choose, refusal):
+    from mailmind.bootstrap import assistant
+    api = choose("gemini", key="sk-test-wrong-key-abcdefghijkl")
+    api.key = None
+    api.queue(refusal)
+    with pytest.raises(ModelError) as e:
+        ask()
+    assert (str(e.value), e.value.status, e.value.permanent) == ("gemini API 401: the key was refused", 401, True)
+    assert len(api.requests) == 1
+    assert assistant.status.report()["last_error"] == "the API key was rejected"
+
+
+def test_a_key_refused_with_a_400_stops_every_background_call_as_a_401_does(choose):
+    from mailmind.bootstrap import assistant
+    api = choose("gemini", key="sk-test-wrong-key-abcdefghijkl")
+    api.key = None
+    api.queue(fo.gemini_error(400, "API key not valid. Please pass a valid API key.", "API_KEY_INVALID"))
+    with pytest.raises(ModelError):
+        ask()
+    assert assistant.governor()._is_open("triage", "gemini-4-hydrogen", assistant.gateway()._model())
+
+
+@pytest.mark.parametrize("refusal", [
+    fo.gemini_error(400, "Request contains an invalid argument.", "BAD_REQUEST"),
+    fo.gemini_error(400, "The key's project has no billing.", kind="FAILED_PRECONDITION"),
+    (400, {"error": {"message": "Invalid value: API key not valid is no reason."}}),      # the words, not first
+    (422, [{"error": {"message": "API key not valid.", "details": [{"reason": "API_KEY_INVALID"}]}}]),    # not a 400
+])
+def test_any_other_refusal_is_no_refused_key_and_says_what_the_service_said_from_inside_a_list(choose, refusal):
+    api = choose("gemini")
+    api.queue(refusal)
+    with pytest.raises(ModelError) as e:
+        ask()
+    status, body = refusal
+    said = (body[0] if isinstance(body, list) else body)["error"]["message"]
+    assert (str(e.value), e.value.status) == (f"gemini API {status}: {said}", status)
+
+
+def test_a_list_asked_with_a_key_gemini_refuses_with_a_400_says_the_key_was_refused(openai_api):
+    from mailmind.assistant.application.catalog import Catalog
+    from mailmind.kernel.errors import Refused
+    openai_api.key = None
+    openai_api.queue(fo.gemini_error(400, "API key not valid. Please pass a valid API key.", "API_KEY_INVALID"))
+    catalog = Catalog(lambda provider: "sk-test-wrong-key-abcdefghijkl", lambda provider: openai_api.url,
+                      lambda wire, provider, base_url, key: list_models(provider, base_url, key), None)
+    with pytest.raises(Refused, match="^The provider refused the key.$"):
+        catalog.models("gemini")
+
+
 def test_a_rate_limit_is_tried_again(choose):
     api = choose("openai")
     api.queue(fo.error(429, "Rate limit reached", NOW_RETRY, kind="rate_limit_exceeded"))

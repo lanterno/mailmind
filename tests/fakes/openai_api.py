@@ -73,6 +73,16 @@ def error(status, message, headers=None, kind="invalid_request_error"):
     return out + (headers,) if headers else out
 
 
+def gemini_error(status, message, reason=None, kind="INVALID_ARGUMENT"):
+    """A refusal in the form Gemini's OpenAI-compatible endpoint gives it: the error inside a list, with an ErrorInfo detail
+    giving `reason` where there is one."""
+    err = {"code": status, "message": message, "status": kind}
+    if reason:
+        err["details"] = [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason,
+                           "domain": "googleapis.com", "metadata": {"service": "generativelanguage.googleapis.com"}}]
+    return status, [{"error": err}]
+
+
 class FakeOpenAI:
     KEY = KEY
 
