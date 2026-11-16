@@ -9,12 +9,14 @@
 //! The queue is the Python app's DurableQueue over the mail_commands table: an atomic claim, the `applied` flag as
 //! the exactly-once gate, backoff doubling from 20 seconds to 15 minutes, and rows a crash left running put back. Its
 //! worker (`workers::run_forever`) drains it whenever kicked, when the next row comes due, and at least every `POLL`.
+//! A try that panics is an attempt that failed (`Panic`), as one that lost its connection is: it backs off, and its
+//! message is listed again at the last; the rest of the pass goes on.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mm_kernel::errors::Fault;
+use mm_kernel::errors::{Fault, caught};
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_kernel::when;
@@ -351,9 +353,20 @@ impl MailCommands {
     pub fn submit(&self, accepted: &Accepted) -> Result<Outcome, Fault> {
         let Some(row) = &accepted.claimed else { return Ok(Outcome::Queued) };
         let id = row.id;
-        let tried = on_gate(&*self.gates, &row.account, Priority::Interactive, Wait::For(Self::FILE_WAIT), || {
-            self.try_on_gate(id, true)
+        let tried = caught(|| {
+            on_gate(&*self.gates, &row.account, Priority::Interactive, Wait::For(Self::FILE_WAIT), || {
+                self.try_on_gate(id, true)
+            })
         });
+        let tried = match tried {
+            Ok(tried) => tried,
+            Err(panic) => {
+                // As any other failure: no answer to give, and a hidden message mustn't wait for a restart. A try
+                // that had settled is no longer running, and stays as it is.
+                command_ports::write(&*self.store, |tx| tx.put_back(id, 0))?;
+                return Err(panic);
+            }
+        };
         let outcome = match tried {
             Err(Refused::Busy) => {
                 // It never ran.
@@ -526,17 +539,22 @@ impl MailCommands {
             return Ok(());
         };
         let id_text = id.to_string();
-        let tried =
-            on_gate(&*self.gates, &row.account, Priority::AfterUser, Wait::Ever, || self.try_on_gate(id, false));
+        let tried = caught(|| {
+            on_gate(&*self.gates, &row.account, Priority::AfterUser, Wait::Ever, || self.try_on_gate(id, false))
+        });
+        let tried = match tried {
+            Ok(Ok(Ok(outcome))) => Ok(outcome),
+            Ok(Ok(Err(e))) => Err(e.class()),
+            Ok(Err(Refused::Busy)) => Err("Busy"),
+            Ok(Err(Refused::Nested)) => Err("NestedGate"),
+            // A try that panicked once its change had settled left nothing to put right.
+            Err(_) if !self.running(id)? => return Ok(()),
+            Err(panic) => Err(panic.class),
+        };
         let outcome = match tried {
-            Ok(Ok(outcome)) => outcome,
-            failed => {
-                // A connection failure or anything else: a hidden message can't wait for a restart.
-                let class = match failed {
-                    Ok(Err(e)) => e.class(),
-                    Err(Refused::Busy) => "Busy",
-                    _ => "NestedGate",
-                };
+            Ok(outcome) => outcome,
+            Err(class) => {
+                // A connection failure, a panic or anything else: a hidden message can't wait for a restart.
                 let attempts = row.attempts + 1;
                 let terminal = attempts >= Self::MAX_ATTEMPTS;
                 let delay = Self::backoff(attempts);
@@ -581,15 +599,21 @@ impl MailCommands {
         Ok(())
     }
 
-    /// Each queued command that is due, oldest first; one that fails is logged and never stops the rest. A read-only
-    /// process leaves them for a full run.
+    /// Whether a try still holds command `id`'s claim.
+    fn running(&self, id: i64) -> Result<bool, Fault> {
+        command_ports::read(&*self.store, |tx| Ok(tx.command(id)?.is_some_and(|now| now.state == "running")))
+    }
+
+    /// Each queued command that is due, oldest first; one that fails, or panics, is logged and never stops the rest.
+    /// A read-only process leaves them for a full run.
     pub fn drain(&self) -> Result<(), Fault> {
         if self.read_only {
             return Ok(());
         }
         let now = self.now();
         for id in command_ports::read(&*self.store, |tx| tx.due(now))? {
-            if let Err(fault) = self.apply_one(id) {
+            // A try that panicked is put right in apply_one; this catches what panics around it.
+            if let Err(fault) = caught(|| self.apply_one(id)).and_then(|applied| applied) {
                 log::error(TAG, "apply_one #%(id)s errored", &[(Field::Id, &id.to_string())], Some(fault.class));
             }
         }
