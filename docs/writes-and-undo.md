@@ -83,6 +83,16 @@
   sync waited for up to `CATCH_UP_WAIT` seconds (`catching_up: true` past that), at most once
   every `CATCH_UP_EVERY` seconds unless `mailbox.folders.touched` says MailMind put mail in it.
   Each sync ends by publishing `folder-synced` with how many it stored.
+- An Inbox's first scan stores mail that was there before, so on both servers it is no new mail: the sync counts
+  none ("0 new") and publishes no `new-mail`, so no badge or notification follows, only `sync-done`.
+- On the Rust server a first scan reads newest first, in steps of `sync_plan::CHUNK` (500). The sync stores the newest
+  step and leaves `scan_state` at `down-to:<uid>`, the lowest UID it stored; the `older-mail` lane reads on below it
+  (`Ingest::read_older`), a step at a time, each step's messages, its watermark and its new `scan_state` committed in
+  one transaction (`SyncStore::store_step`), so a quit goes on from the last step stored. A step names the
+  `scan_state` it expects (`holds`), and a sync that read the folder afresh meanwhile makes it store nothing. Its
+  last step leaves `synced`. While it reads, `/api/digest`'s `status` gives the account `done` and `total`. An Inbox
+  message's text comes from its first 64 KiB (`MailServer::heads`, `BODY.PEEK[]<0.65536>`), so a first scan
+  downloads no attachment; only one whose cut-off opening says it may carry an invite is fetched whole.
 - What a folder's sync asks the server for is `domain.sync_plan`, a pure value from what the select said and what is
   stored: `plan_folder` the mail to fetch, `plan_flags` how to read flags. `Ingest` does the asking and the storing.
 - An incremental sync reads flags again (`ingest._refresh_flags`). On a CONDSTORE server it compares

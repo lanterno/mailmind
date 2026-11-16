@@ -497,6 +497,12 @@ or for a switch you turned on in Settings › AI.
 - **A hung server costs a click about twelve seconds, not two minutes,** and Undo is offered as soon as it answers;
   the worker keeps trying. Two processes changing your rules can't lose each other's change.
 - **A first read counts as it goes.** A folder read for the first time says how many messages have arrived so far.
+- **A new account's Inbox fills newest first.** On the Rust server and the Mac app, its first sync stores the newest
+  500 messages and shows them at once, then reads the rest in the background, 500 at a time and newest first, the
+  list filling as they come; quit meanwhile and it goes on where it stopped. The status says how far it has got
+  ("Reading your inbox: 2,300 of 41,000"), a message opens while it reads, and one account's slow server holds up no
+  other. It reads each message's first 64 KiB for its preview and downloads no attachment. On either server, mail
+  that was there before is no new mail: no notification, no badge, no "N new".
 - **Gmail's App Password, step by step.** Adding an account picks Gmail for a Gmail address and offers it for a
   Workspace domain, shows the three steps to an App Password with a button to Google's page for it, takes the password
   as Google shows it, spaces and all, and tests the connection as soon as it is saved, saying plainly what Gmail refused.
