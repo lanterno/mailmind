@@ -21,7 +21,8 @@ fn object(value: Value) -> Map<String, Value> {
 #[test]
 fn a_file_with_no_block_reads_as_the_defaults() {
     let read = read(&object(json!({"accounts": []})), false);
-    assert_eq!(read.len(), 25);
+    assert_eq!(read.len(), 26);
+    assert_eq!(read["draft_ahead"], json!(false), "drafting ahead starts off");
     assert_eq!(read["undo_send_seconds"], json!(10));
     assert_eq!(read["theme"], json!("day"));
     assert_eq!(read["single_keys"], json!(true));
@@ -92,7 +93,7 @@ fn a_fresh_file_has_ai_mode_off_with_claude_its_own_model_and_its_usual_address(
         (&json!(false), &json!("anthropic"), &json!(""), &json!(""))
     );
     let names: Vec<&str> = read.keys().map(String::as_str).collect();
-    assert_eq!(names[21..], ["ai_enabled", "ai_provider", "ai_model", "ai_base_url"]);
+    assert_eq!(names[21..], ["draft_ahead", "ai_enabled", "ai_provider", "ai_model", "ai_base_url"]);
     assert_eq!(provider(&object(json!({}))), AiProvider::Anthropic);
 }
 

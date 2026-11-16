@@ -188,6 +188,15 @@ fn at_the_limit_an_interactive_call_is_held_back_until_the_person_allows_it() {
 }
 
 #[test]
+fn what_came_in_since_you_looked_is_background_work_the_page_asks_for_on_its_own() {
+    let w = world(true, None);
+    w.calls.call_claude("Asked for.", "thread").expect("an interactive call");
+    assert_eq!(w.calls.call_claude("Since.", "delta"), Err(CallError::NotSent(NotSent::Deferred("yielding"))));
+    w.clock.shift(46);
+    assert!(w.calls.call_claude("Since.", "delta").is_ok());
+}
+
+#[test]
 fn background_work_yields_to_a_person_and_speculative_work_waits_for_one() {
     let w = world(true, None);
     w.calls.call_claude("Asked for.", "thread").expect("an interactive call");

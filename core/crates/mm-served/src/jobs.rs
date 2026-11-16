@@ -2,7 +2,7 @@
 //! (`serve_python.py` says what each does). Those this server has yet: a folder's sync, waking what is snoozed, the
 //! minute's round of follow-ups, a pass of the change queue, an account's reconcile, a pass of the outbox and a round
 //! of the drafts' pushes; the forget round; a round of the body backfill and one of warming folders beyond the Inbox;
-//! and the assistant's triage and a run of Tidy. A job the Rust server doesn't run yet says so.
+//! and the assistant's triage, a reply drafted ahead and a run of Tidy. A job the Rust server doesn't run yet says so.
 
 use mm_server::App;
 use serde_json::Value;
@@ -31,8 +31,10 @@ pub fn work(app: &App, argument: &str) -> String {
             .and_then(|_| app.background.forget_batches_round())
             .map(drop)
             .map_err(str::to_owned),
-        // The assistant's triage of what it hasn't summarized, and a run of Tidy for someone who turned it on.
+        // The assistant's triage of what it hasn't summarized, a reply drafted ahead and a run of Tidy, each for
+        // someone who turned it on.
         "assess" => app.background.assess_round().map(drop).map_err(str::to_owned),
+        "draft-ahead" => app.background.draft_ahead_round().map(drop).map_err(str::to_owned),
         "tidy" => app.background.tidy_round().map(drop).map_err(str::to_owned),
         // The Mailbox's: a round of the body backfill, and one of warming folders beyond the Inbox, every account's.
         "backfill" => app.backfill.round().map(drop).map_err(|fault| fault.class.to_owned()),
