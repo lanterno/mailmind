@@ -127,8 +127,11 @@ def test_one_undo_brings_back_all_a_sweep_moved_from_trash(world):
     assert (done["undo_group"], done["results"][0]["moved"], done["results"][0]["no_undo"]) == ("ug-sweep", 3, 0)
     [entry] = [e for e in mailbox.undo.entries() if e.get("group") == "ug-sweep"]
     assert (entry["label"], len(entry["children"])) == ("Swept junk", 3)
-    assert {(c["kind"], c["src_folder"], c["dest_folder"]) for c in entry["children"]} == {("move", "INBOX", "Trash")}
+    assert {(c["kind"], c["src_folder"], c["dest_folder"]) for c in entry["children"]} == {("sweep_back", "INBOX",
+                                                                                              "Trash")}
+    since = len(world.server.commands_for(w.ADA, "LOGIN"))
     undone = mailbox.undo.undo_group("ug-sweep")
+    assert len(world.server.commands_for(w.ADA, "LOGIN")) - since == 2     # one to move them back, one to read them in
     assert (undone["reversed"], undone["failed"], undone["label"]) == (3, 0, "Swept junk")
     for name in JUNK_INBOX:
         assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), name
@@ -212,6 +215,11 @@ def test_a_sweep_stopped_where_the_server_cant_be_asked_again_leaves_a_way_back_
     assert (done["results"][0]["moved"], done["undo_group"], len(opened)) == (0, "ug-dropped", 2)
     [entry] = mailbox.undo.entries()
     assert sorted(c["message_id"] for c in entry["children"]) == sorted(w.message_id(n) for n in JUNK_INBOX)
+    # None of it left: Undo finds each still in the Inbox, which is back, and nothing waits for another try.
+    undone = mailbox.undo.undo_group("ug-dropped")
+    assert (undone["reversed"], undone["failed"], mailbox.undo.entries()) == (3, 0, [])
+    for name in JUNK_INBOX:
+        assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), name
 
 
 FAR = 4_000_000_000                                              # a "now" long after every corpus date
