@@ -324,6 +324,19 @@ final class AITurnedOffTests: XCTestCase {
         XCTAssertEqual(Desk.offered(all, aiTurnedOff: true).map(\.id), ["snooze", "brief", "commitments", "curate"])
     }
 
+    /// The Assistant menu is in the menu bar whatever window is in front: with Settings, a composer or Help there no
+    /// desk is focused, and the app's word that AI is turned off still hides the AI's items.
+    func testTheAssistantMenuHidesTheAIsItemsWhateverWindowIsInFront() {
+        let off = F.digest(engine: "none", off: "turned-off").ai
+        let on = F.digest().ai
+        XCTAssertFalse(DeskCommands.offersAI(nil, off), "Settings in front, just after AI was turned off there")
+        XCTAssertTrue(DeskCommands.offersAI(nil, on))
+        XCTAssertTrue(DeskCommands.offersAI(nil, F.digest(engine: "none").ai), "off for want of a key, still offered")
+        XCTAssertTrue(DeskCommands.offersAI(nil, nil), "before the digest has come, nothing is hidden")
+        XCTAssertFalse(DeskCommands.offersAI(Desk(), off))
+        XCTAssertTrue(DeskCommands.offersAI(Desk(), on))
+    }
+
     func testTheBriefsTalliesLeaveOutTheWeek() {
         XCTAssertEqual(BriefWords.tallies(needs: 1, waiting: 0, replyLater: 0, worthARead: 0, canWait: 0,
                                           commitments: 0, week: false),
