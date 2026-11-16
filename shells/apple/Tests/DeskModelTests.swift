@@ -20,7 +20,7 @@ final class DeskModelTests: XCTestCase {
     private var undoable: Bool { notices.shown?.undoable ?? false }
 
     private func aiOff(_ method: String, _ path: String) {
-        routes.refuse(method, path, status: 409, type: "ai-off", detail: "AI is off: no Claude API key.",
+        routes.refuse(method, path, status: 409, type: "ai-off", detail: "AI is off: there is no API key",
                       more: #""ai_off": true"#)
     }
 
@@ -181,7 +181,7 @@ final class DeskModelTests: XCTestCase {
         let model = AskModel(link: link)
 
         await model.ask("anything")
-        XCTAssertEqual(model.asking, .failed(question: "anything", why: "AI is off"))
+        XCTAssertEqual(model.asking, .failed(question: "anything", why: "AI is off: there is no API key"))
         await model.ask("anything")
         XCTAssertEqual(model.asking, .failed(question: "anything", why: "today’s AI limit is reached"))
         await model.ask("   ")
@@ -546,7 +546,7 @@ final class DeskModelTests: XCTestCase {
         await model.suggest()
 
         XCTAssertNil(model.suggestions)
-        XCTAssertEqual(said, "AI is off")
+        XCTAssertEqual(said, "AI is off: there is no API key")
     }
 
     func testASenderCleanupIsPreviewedArmedThenRunByItsToken() async {

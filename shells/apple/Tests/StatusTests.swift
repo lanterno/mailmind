@@ -59,14 +59,29 @@ final class StatusWordsTests: XCTestCase {
     }
 
     func testTheLineOnAI() {
-        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none").ai).text, "AI is off · no API key")
+        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none").ai).text, "AI is off · no Claude API key")
         let on = StatusWords.ai(F.digest(spent: 120_000).ai)
-        XCTAssertEqual(on.text, "Claude API · Claude Haiku 4.5 · $0.12 of $15.00 today")
+        XCTAssertEqual(on.text, "Claude · Claude Haiku 4.5 · $0.12 of $15.00 today")
         XCTAssertFalse(on.failing)
         let failing = StatusWords.ai(F.digest(spent: 0, lastOk: false, lastError: "overloaded").ai)
-        XCTAssertEqual(failing.text, "Claude API · Claude Haiku 4.5 · last call failed: overloaded",
+        XCTAssertEqual(failing.text, "Claude · Claude Haiku 4.5 · last call failed: overloaded",
                        "nothing spent today says nothing of money")
         XCTAssertTrue(failing.failing)
+    }
+
+    /// The line names the provider chosen, or why AI is off, and never Claude for another's.
+    func testTheLineOnAINamesTheProviderChosen() {
+        XCTAssertEqual(StatusWords.ai(F.digest(spent: nil, provider: "openai", model: "gpt-fictional").ai).text,
+                       "OpenAI · gpt-fictional")
+        XCTAssertEqual(StatusWords.ai(F.digest(spent: nil, provider: "ollama", model: "llama-fictional").ai).text,
+                       "Ollama · llama-fictional")
+        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "gemini").ai).text,
+                       "AI is off · no Gemini API key")
+        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", off: "turned-off").ai).text, "AI is off")
+        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "compatible", off: "no-url").ai).text,
+                       "AI is off · no URL for the service")
+        XCTAssertEqual(StatusWords.ai(F.digest(engine: "none", provider: "ollama", off: "no-model").ai).text,
+                       "AI is off · no model chosen")
     }
 
     func testAnAccountsHealthLine() {
