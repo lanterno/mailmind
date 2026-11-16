@@ -432,6 +432,16 @@ final class SettingsCoreTests: XCTestCase {
     }
 
     @MainActor
+    func testTheCoreSaysWhatAICostLatelyAndAFreshHomeHasSpentNothing() async throws {
+        let (core, status) = try await opened()
+        let spent = try await core.get(API.Get.AiSpending.self)
+        XCTAssertEqual(AIWords.spent("The last 7 days", spent.week), "The last 7 days: nothing.")
+        XCTAssertEqual(AIWords.spent("This month", spent.month), "This month: nothing.")
+        XCTAssertEqual(status.digest?.ai.backgroundModel, "", "AI off for want of a key, no model is in use")
+        await close(core, status)
+    }
+
+    @MainActor
     func testAPreferenceTheServerRefusesComesBackAsItHoldsItWithItsWords() async throws {
         let (core, status) = try await opened()
         let was = try XCTUnwrap(status.preferences?.undoSendSeconds)

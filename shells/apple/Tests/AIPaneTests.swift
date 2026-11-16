@@ -408,6 +408,56 @@ final class AIWordsTests: XCTestCase {
                        "AI is off: no model is chosen.")
     }
 
+    /// The Spending card says which model background summaries ask and which one what a person asks for goes to.
+    func testTheModelsInUse() {
+        let claude = F.digest(model: "claude-opus-fictional", backgroundModel: "claude-haiku-fictional").ai
+        XCTAssertEqual(AIWords.modelsUsed(claude), """
+            Summaries made in the background use claude-haiku-fictional; everything you ask for uses \
+            claude-opus-fictional.
+            """)
+        let one = F.digest(provider: "local", model: "qwen-fictional").ai
+        XCTAssertEqual(AIWords.modelsUsed(one),
+                       "Summaries made in the background and everything you ask for use qwen-fictional.")
+        XCTAssertNil(AIWords.modelsUsed(F.digest(engine: "none").ai), "no model is in use while AI is off")
+    }
+
+    /// How many messages from the last 30 days wait for a summary, as the status counts them.
+    func testWhatWaitsForASummary() {
+        XCTAssertNil(AIWords.summariesWaiting(nil))
+        XCTAssertEqual(AIWords.summariesWaiting(0), "Every message from the last 30 days has its summary.")
+        XCTAssertEqual(AIWords.summariesWaiting(1), "1 message from the last 30 days waits for a summary.")
+        XCTAssertEqual(AIWords.summariesWaiting(1234), "1,234 messages from the last 30 days wait for a summary.")
+        XCTAssertEqual(AIWords.summariesWaiting(F.digest(waiting: 7).ai.summariesWaiting),
+                       "7 messages from the last 30 days wait for a summary.")
+    }
+
+    /// What AI cost lately: in all, its three dearest features by name and the rest summed, and where the bill is.
+    func testWhatAICostLately() {
+        XCTAssertEqual(AIWords.spent("The last 7 days", API.PeriodSpent(calls: 0, costMicros: 0, features: [])),
+                       "The last 7 days: nothing.")
+        let one = API.PeriodSpent(calls: 1, costMicros: 12_000, features: [.init(calls: 1, costMicros: 12_000, label: "Ask")])
+        XCTAssertEqual(AIWords.spent("This month", one), "This month: $0.02, 1 call (Ask $0.02).")
+        let month = API.PeriodSpent(calls: 1_502, costMicros: 4_310_000, features: [
+            .init(calls: 1_400, costMicros: 2_000_000, label: "Summaries"),
+            .init(calls: 30, costMicros: 1_200_000, label: "Today’s brief"),
+            .init(calls: 40, costMicros: 800_000, label: "Drafted replies"),
+            .init(calls: 30, costMicros: 300_000, label: "Ask"),
+            .init(calls: 2, costMicros: 10_000, label: "Rewrite"),
+        ])
+        XCTAssertEqual(AIWords.spent("This month", month), """
+            This month: $4.31, 1,502 calls (Summaries $2.00, Today’s brief $1.20, Drafted replies $0.80, \
+            the rest $0.31).
+            """)
+        XCTAssertEqual(AIWords.billOfRecord(.anthropic),
+                       "MailMind counts these from each call it makes; Anthropic’s console holds the bill.")
+        XCTAssertEqual(AIWords.billOfRecord(.openai),
+                       "MailMind counts these from each call it makes; OpenAI’s platform holds the bill.")
+        XCTAssertEqual(AIWords.billOfRecord(.gemini),
+                       "MailMind counts these from each call it makes; Google’s billing for your project holds the bill.")
+        XCTAssertEqual(AIWords.billOfRecord(.local),
+                       "MailMind counts these from each call it makes; a model on this Mac costs nothing.")
+    }
+
     /// Off for want of something, the cards say why and where it turns on; turned off, or on, they say nothing.
     func testTheOffNoteInvitesOnlyWhereSomethingIsWanting() {
         XCTAssertNil(AIWords.offNote(nil))
