@@ -39,8 +39,7 @@ impl Catalog {
         if base_url.is_empty() {
             return Err(Problem::refused(NO_URL));
         }
-        let key = if provider.takes_key() { self.lists.key(provider) } else { None };
-        let key = key.filter(|k| !k.expose().is_empty());
+        let key = self.lists.key(provider).filter(|k| !k.expose().is_empty());
         if provider.needs_key() && key.is_none() {
             return Err(Problem::refused(NO_KEY));
         }

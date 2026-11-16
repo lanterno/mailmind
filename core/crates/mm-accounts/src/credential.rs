@@ -25,25 +25,25 @@ pub const API_KEY_ITEM: &str = "anthropic-api-key";
 /// The file's key for where the Claude API key is.
 pub const API_KEY_WHO: &str = "anthropic_api_key";
 
-/// The Keychain item MailMind keeps an AI provider's API key in (#49), None for one that takes no key (Ollama).
-pub fn api_key_item(provider: AiProvider) -> Option<&'static str> {
+/// The Keychain item MailMind keeps an AI provider's API key in (#49): `<provider>-api-key`.
+pub fn api_key_item(provider: AiProvider) -> &'static str {
     match provider {
-        AiProvider::Anthropic => Some(API_KEY_ITEM),
-        AiProvider::OpenAi => Some("openai-api-key"),
-        AiProvider::Gemini => Some("gemini-api-key"),
-        AiProvider::Compatible => Some("compatible-api-key"),
-        AiProvider::Ollama => None,
+        AiProvider::Anthropic => API_KEY_ITEM,
+        AiProvider::OpenAi => "openai-api-key",
+        AiProvider::Gemini => "gemini-api-key",
+        AiProvider::Local => "local-api-key",
+        AiProvider::Compatible => "compatible-api-key",
     }
 }
 
-/// The file's top-level key for where an AI provider's API key is, None for one that takes no key (Ollama).
-pub fn api_key_who(provider: AiProvider) -> Option<&'static str> {
+/// The file's top-level key for where an AI provider's API key is: `<provider>_api_key`.
+pub fn api_key_who(provider: AiProvider) -> &'static str {
     match provider {
-        AiProvider::Anthropic => Some(API_KEY_WHO),
-        AiProvider::OpenAi => Some("openai_api_key"),
-        AiProvider::Gemini => Some("gemini_api_key"),
-        AiProvider::Compatible => Some("compatible_api_key"),
-        AiProvider::Ollama => None,
+        AiProvider::Anthropic => API_KEY_WHO,
+        AiProvider::OpenAi => "openai_api_key",
+        AiProvider::Gemini => "gemini_api_key",
+        AiProvider::Local => "local_api_key",
+        AiProvider::Compatible => "compatible_api_key",
     }
 }
 

@@ -95,9 +95,8 @@ impl ApiEngine {
     /// The key the config file names for `provider`, in any credential style but a plain one or the Bridge's: None
     /// when it names none, and an empty key when it names one that can't be had.
     fn config_key(&self, provider: AiProvider) -> Result<Option<Secret>, Fault> {
-        let Some(who) = api_key_who(provider) else { return Ok(None) };
         let raw = self.file.read()?;
-        let Some(named) = raw.get(who).filter(|c| mm_accounts::account::truthy(c)) else {
+        let Some(named) = raw.get(api_key_who(provider)).filter(|c| mm_accounts::account::truthy(c)) else {
             return Ok(None);
         };
         let credential = CredentialRef::parse(Some(named));
@@ -121,12 +120,9 @@ impl ApiEngine {
 
     /// `provider`'s API key and where it was looked for, the key empty when there is none. The config file wins, so a
     /// MailMind-only key isn't shadowed by one the shell exports for other tools; only Claude's has the environment
-    /// after it. A provider that takes no key has none, from nowhere.
+    /// after it.
     fn key(&self, provider: AiProvider) -> (Secret, &'static str) {
         let none = || Secret::new(String::new());
-        if !provider.takes_key() {
-            return (none(), "");
-        }
         match self.config_key(provider) {
             Err(_) => (none(), CONFIG),
             Ok(Some(key)) => (key, CONFIG),

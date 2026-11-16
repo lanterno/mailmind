@@ -472,29 +472,24 @@ impl Directory {
 /// What a Keychain that didn't answer whether it holds an item is told.
 const UNANSWERED: &str = "The Keychain didn't answer. Is the login keychain locked?";
 
-/// What asking to keep a key for Ollama is told: it takes none.
-pub const NO_KEY_FOR_OLLAMA: &str = "Ollama takes no key.";
-
 /// The other secrets a person keeps in the login Keychain from Settings, beside each account's own password: an API
-/// key for each AI provider that takes one (#49), which the file names as `anthropic_api_key`, `openai_api_key`,
-/// `gemini_api_key` and `compatible_api_key`, and the Proton Bridge's password, which every `{"proton_bridge": true}`
+/// key for each AI provider (#49), which the file names as `anthropic_api_key`, `openai_api_key`, `gemini_api_key`,
+/// `local_api_key` and `compatible_api_key`, and the Proton Bridge's password, which every `{"proton_bridge": true}`
 /// credential logs in with. Each is kept with the Keychain's `put` and taken out with its `delete`, never in the file,
 /// and nothing here says what one is: only whether one is set.
 impl Directory {
     /// The providers the file names an API key for, wherever it keeps each, in the closed set's order.
     pub fn api_keys_kept(&self) -> Result<Vec<AiProvider>, Fault> {
         let raw = self.file.read()?;
-        let named = |p: &AiProvider| credential::api_key_who(*p).and_then(|who| raw.get(who)).is_some_and(truthy);
+        let named = |p: &AiProvider| raw.get(credential::api_key_who(*p)).is_some_and(truthy);
         Ok(AiProvider::ALL.into_iter().filter(named).collect())
     }
 
     /// Keep `typed` as `provider`'s API key, in its own Keychain item, and name the item in the file, one version past
-    /// what it named before, whatever that was (`set_api_key`). Ollama takes no key, and is refused; so is a secret the
-    /// Keychain can't hold. A Keychain that won't keep it is `Unreachable`, the file left as it was.
+    /// what it named before, whatever that was (`set_api_key`). A secret the Keychain can't hold is refused. A Keychain
+    /// that won't keep it is `Unreachable`, the file left as it was.
     pub fn set_api_key(&self, provider: AiProvider, typed: Secret) -> Result<(), Failure> {
-        let (Some(item), Some(who)) = (credential::api_key_item(provider), credential::api_key_who(provider)) else {
-            return Err(Problem::refused(NO_KEY_FOR_OLLAMA).into());
-        };
+        let (item, who) = (credential::api_key_item(provider), credential::api_key_who(provider));
         let _writing = writing(&self.write)?;
         let mut raw = self.file.read()?;
         let old = raw.get(who).cloned();
@@ -507,12 +502,10 @@ impl Directory {
     }
 
     /// Take `provider`'s API key out of its Keychain item, and the file's entry for it with it, whatever that named
-    /// (`clear_api_key`): with Claude's, AI is off unless the environment gives a key. Ollama has none to take out. A
-    /// Keychain that won't let go of the item is `Unreachable`, the file left as it was.
+    /// (`clear_api_key`): with Claude's, AI is off unless the environment gives a key. A Keychain that won't let go of
+    /// the item is `Unreachable`, the file left as it was.
     pub fn clear_api_key(&self, provider: AiProvider) -> Result<(), Failure> {
-        let (Some(item), Some(who)) = (credential::api_key_item(provider), credential::api_key_who(provider)) else {
-            return Ok(());
-        };
+        let (item, who) = (credential::api_key_item(provider), credential::api_key_who(provider));
         let _writing = writing(&self.write)?;
         let mut raw = self.file.read()?;
         self.keychain.delete(item).map_err(|_| {

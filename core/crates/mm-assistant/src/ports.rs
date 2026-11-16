@@ -154,9 +154,9 @@ pub struct InForce {
     pub provider: AiProvider,
     /// MAILMIND_MODEL's, else the one a person chose, else the provider's own: "" where there is none.
     pub model: String,
-    /// "" where no key was looked for: a provider that takes none.
+    /// "" where the file names no key for it and, but for Claude, nothing else is looked at.
     pub key_from: &'static str,
-    /// Ollama, or a provider at a loopback address: a model the price table doesn't know costs nothing.
+    /// A model on this Mac, or a provider at a loopback address: a model the price table doesn't know costs nothing.
     pub local: bool,
     pub lm: Result<Arc<dyn LanguageModel>, Off>,
 }
@@ -205,7 +205,7 @@ pub trait Engine: Send + Sync + fmt::Debug {
 /// What a provider's models are listed with (#49): the key kept for it and the URL chosen for it, asked once, since a
 /// person is waiting. It sends no mail and spends nothing.
 pub trait ModelLists: Send + Sync + fmt::Debug {
-    /// The key kept for `provider`, None where none resolves or it takes none.
+    /// The key kept for `provider`, None where none resolves.
     fn key(&self, provider: AiProvider) -> Option<Secret>;
     /// The URL a person chose for `provider` while it is the one chosen (for Claude, else ANTHROPIC_BASE_URL's), ""
     /// for the provider's own.

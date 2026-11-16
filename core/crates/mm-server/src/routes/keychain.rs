@@ -62,7 +62,6 @@ async fn api_key(State(app): State<Arc<App>>, method: Method, uri: Uri) -> Respo
 }
 
 /// Keep the API key the body gives for its provider (`KeyBody`) in the login Keychain, and name it in the config file.
-/// Ollama takes none.
 async fn set_api_key(
     State(app): State<Arc<App>>,
     method: Method,

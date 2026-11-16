@@ -1,16 +1,17 @@
 //! The network: OpenAI's Chat Completions (`assistant.adapters.openai_chat`, #49), as the Assistant's
 //! `LanguageModel` for every provider but Claude, on mm-net: OpenAI, Gemini through Google's OpenAI-compatible
-//! endpoint, Ollama on this Mac, and any other service that speaks it, each given its base URL, its key (or none) and
-//! its model. What goes on the wire and how a reply reads is `wire`'s.
+//! endpoint, a model server on this Mac (Ollama, LM Studio, llama.cpp, vLLM, Jan, GPT4All), and any other service that
+//! speaks it, each given its base URL, its key (or none) and its model. What goes on the wire and how a reply reads is
+//! `wire`'s.
 //!
 //! It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when there is a key. A request goes over
 //! HTTPS, its certificate verified on the roots the system trusts; plain HTTP goes only to this machine, so a key never
 //! goes in the clear to anything off it. The host is asked of `Outside` before a connection is made. A call is sent
 //! again, twice, after a status a retry can help (408, 409, 429, 5xx) or a lost connection, waiting what
-//! `retry-after` says or else a little longer each time. Ollama and a compatible service may not take structured
-//! output: a 400 that names `response_format` is asked once more without it, and the reply read as free-form JSON. A
-//! rejected key's error holds none of what the service said, which can quote part of the key back, and no error ever
-//! holds the key. It takes no batch: only Claude's API does.
+//! `retry-after` says or else a little longer each time. A model on this Mac and a compatible service may not take
+//! structured output: a 400 that names `response_format` is asked once more without it, and the reply read as
+//! free-form JSON. A rejected key's error holds none of what the service said, which can quote part of the key back,
+//! and no error ever holds the key. It takes no batch: only Claude's API does.
 
 pub mod wire;
 
@@ -54,10 +55,10 @@ enum Attempt {
 }
 
 impl ChatApi {
-    /// `provider`'s API at `base_url`, called with `key` (None, or an empty one, for none: Ollama's never has one). A
-    /// URL that names no HTTP endpoint makes every call fail as unreachable.
+    /// `provider`'s API at `base_url`, called with `key` (None, or an empty one, for none). A URL that names no HTTP
+    /// endpoint makes every call fail as unreachable.
     pub fn new(provider: AiProvider, base_url: &str, key: Option<Secret>, outside: Arc<dyn Outside>) -> ChatApi {
-        let key = key.filter(|k| provider.takes_key() && !k.expose().is_empty());
+        let key = key.filter(|k| !k.expose().is_empty());
         ChatApi { provider, key, endpoint: Endpoint::parse(base_url), outside, timeout: TIMEOUT, retries: RETRIES }
     }
 
@@ -166,12 +167,12 @@ impl ChatApi {
         ModelError::new(format!("{provider} API {status}: {said}"), Some(status))
     }
 
-    /// Whether a 400 says the service doesn't take structured output: only Ollama and a compatible service are asked
-    /// again without it.
+    /// Whether a 400 says the service doesn't take structured output: only a model on this Mac and a compatible service
+    /// are asked again without it.
     fn refused_format(&self, prompt: &Prompt, response: &http::Response) -> bool {
         response.status == 400
             && prompt.schema.is_some()
-            && matches!(self.provider, AiProvider::Ollama | AiProvider::Compatible)
+            && matches!(self.provider, AiProvider::Local | AiProvider::Compatible)
             && response.body.windows(b"response_format".len()).any(|w| w == b"response_format")
     }
 }

@@ -21,7 +21,7 @@ pub fn default_model(provider: AiProvider) -> &'static str {
         AiProvider::Anthropic => models::DEFAULT,
         AiProvider::OpenAi => "gpt-6.1-sol",
         AiProvider::Gemini => "gemini-4-hydrogen",
-        AiProvider::Ollama | AiProvider::Compatible => "",
+        AiProvider::Local | AiProvider::Compatible => "",
     }
 }
 
@@ -31,7 +31,8 @@ pub fn default_base_url(provider: AiProvider) -> &'static str {
         AiProvider::Anthropic => "https://api.anthropic.com",
         AiProvider::OpenAi => "https://api.openai.com/v1",
         AiProvider::Gemini => "https://generativelanguage.googleapis.com/v1beta/openai",
-        AiProvider::Ollama => "http://127.0.0.1:11434/v1",
+        // Ollama's, the commonest model server on a Mac.
+        AiProvider::Local => "http://127.0.0.1:11434/v1",
         AiProvider::Compatible => "",
     }
 }
@@ -41,10 +42,10 @@ pub fn speaks_anthropic(provider: AiProvider) -> bool {
     provider == AiProvider::Anthropic
 }
 
-/// Whether a provider runs on this machine, so a model the price table doesn't know costs nothing: Ollama, or any
-/// provider at a loopback address.
+/// Whether a provider runs on this machine, so a model the price table doesn't know costs nothing: a model on this
+/// Mac, or any provider at a loopback address.
 pub fn local(provider: AiProvider, base_url: &str) -> bool {
-    provider == AiProvider::Ollama || ai_provider::on_this_machine(base_url)
+    provider == AiProvider::Local || ai_provider::on_this_machine(base_url)
 }
 
 /// Why AI is off: turned off in Settings, or with no key, URL or model to ask. Nothing is sent while it is.

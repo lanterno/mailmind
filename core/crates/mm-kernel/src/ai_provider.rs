@@ -3,8 +3,8 @@
 //! at.
 //!
 //! Claude is the default, so a file that says nothing goes on as it did. Anthropic's API is its own; every other
-//! provider speaks OpenAI's Chat Completions, Ollama on this Mac with no key, and `compatible` any service that speaks
-//! it, at the address the person gives.
+//! provider speaks OpenAI's Chat Completions: `local` a model server on this Mac (Ollama's address unless another is
+//! given), and `compatible` any service that speaks it, at the address the person gives. Every one may keep a key.
 
 /// One of the providers, in the order a list of them is given.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -12,18 +12,19 @@ pub enum AiProvider {
     Anthropic,
     OpenAi,
     Gemini,
-    Ollama,
+    /// A model server on this Mac: Ollama, LM Studio, llama.cpp, vLLM, Jan, GPT4All.
+    Local,
     Compatible,
 }
 
 impl AiProvider {
     /// Every provider, in the closed set's order.
     pub const ALL: [AiProvider; 5] =
-        [AiProvider::Anthropic, AiProvider::OpenAi, AiProvider::Gemini, AiProvider::Ollama, AiProvider::Compatible];
+        [AiProvider::Anthropic, AiProvider::OpenAi, AiProvider::Gemini, AiProvider::Local, AiProvider::Compatible];
     /// What a file that names none chooses.
     pub const DEFAULT: AiProvider = AiProvider::Anthropic;
     /// Each one's id, in the same order.
-    pub const IDS: [&'static str; 5] = ["anthropic", "openai", "gemini", "ollama", "compatible"];
+    pub const IDS: [&'static str; 5] = ["anthropic", "openai", "gemini", "local", "compatible"];
 
     /// Its id, as the preferences and the API name it.
     pub fn id(self) -> &'static str {
@@ -31,7 +32,7 @@ impl AiProvider {
             AiProvider::Anthropic => "anthropic",
             AiProvider::OpenAi => "openai",
             AiProvider::Gemini => "gemini",
-            AiProvider::Ollama => "ollama",
+            AiProvider::Local => "local",
             AiProvider::Compatible => "compatible",
         }
     }
@@ -47,19 +48,15 @@ impl AiProvider {
             AiProvider::Anthropic => "Claude (Anthropic)",
             AiProvider::OpenAi => "OpenAI",
             AiProvider::Gemini => "Google Gemini",
-            AiProvider::Ollama => "Ollama, on this Mac",
+            AiProvider::Local => "A model on this Mac",
             AiProvider::Compatible => "Another OpenAI-compatible service",
         }
     }
 
-    /// Whether a key is ever kept for it: every one but Ollama, which never takes one.
-    pub fn takes_key(self) -> bool {
-        self != AiProvider::Ollama
-    }
-
-    /// Whether AI is off with no key for it: every one that takes a key but `compatible`, for which it is optional.
+    /// Whether AI is off with no key for it: Claude, OpenAI and Gemini. A model on this Mac and a compatible service
+    /// may have one, and need none.
     pub fn needs_key(self) -> bool {
-        self.takes_key() && self != AiProvider::Compatible
+        matches!(self, AiProvider::Anthropic | AiProvider::OpenAi | AiProvider::Gemini)
     }
 }
 

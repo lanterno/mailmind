@@ -5,10 +5,10 @@
 //! the input price; only Anthropic reports any.
 //!
 //! A model the table doesn't know is looked up by what follows the last `/` of its name (OpenRouter's
-//! `openai/gpt-6.1-sol`, Gemini's `models/gemini-…`). Still unknown, it costs nothing on this machine (Ollama, or any
-//! provider at a loopback address); anywhere else it is priced as the dearest of its family (`claude-`, `gpt-` or
-//! `o<digit>`, `gemini-`), or of the whole table for a name of no known family, so a spending limit errs toward
-//! stopping early. Every price is the Python app's, to the nano-dollar.
+//! `openai/gpt-6.1-sol`, Gemini's `models/gemini-…`). Still unknown, it costs nothing on this machine (a model on
+//! this Mac, or any provider at a loopback address); anywhere else it is priced as the dearest of its family
+//! (`claude-`, `gpt-` or `o<digit>`, `gemini-`), or of the whole table for a name of no known family, so a spending
+//! limit errs toward stopping early. Every price is the Python app's, to the nano-dollar.
 
 /// Nano-dollars per token (thousandths of a dollar per million tokens): input, output and cache read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
