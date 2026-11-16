@@ -651,6 +651,12 @@ public protocol CoreHostProtocol: AnyObject, Sendable {
      */
     func subscribe(listener: EventListener) throws  -> EventSubscription
     
+    /**
+     * The computer woke from sleep, or its network changed: IDLE's connections are opened afresh and every account
+     * is synced now. It returns at once; the work runs in the background.
+     */
+    func woke() 
+    
 }
 /**
  * The app, running in this process. Releasing the last reference closes it.
@@ -776,6 +782,18 @@ open func subscribe(listener: EventListener)throws  -> EventSubscription  {
         FfiConverterTypeEventListener_lower(listener),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * The computer woke from sleep, or its network changed: IDLE's connections are opened afresh and every account
+     * is synced now. It returns at once; the work runs in the background.
+     */
+open func woke()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_mailmind_core_fn_method_corehost_woke(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
 }
     
 
@@ -2727,6 +2745,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_mailmind_core_checksum_method_corehost_subscribe() != 56883) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_mailmind_core_checksum_method_corehost_woke() != 18387) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_mailmind_core_checksum_method_eventlistener_on_event() != 35529) {

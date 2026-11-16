@@ -396,6 +396,11 @@ RustBuffer uniffi_mailmind_core_fn_method_corehost_request_over_limit(uint64_t p
 uint64_t uniffi_mailmind_core_fn_method_corehost_subscribe(uint64_t ptr, uint64_t listener, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_WOKE
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_METHOD_COREHOST_WOKE
+void uniffi_mailmind_core_fn_method_corehost_woke(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_EVENTLISTENER
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_FN_CLONE_EVENTLISTENER
 uint64_t uniffi_mailmind_core_fn_clone_eventlistener(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -811,6 +816,12 @@ uint16_t uniffi_mailmind_core_checksum_method_corehost_request_over_limit(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_SUBSCRIBE
 #define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_SUBSCRIBE
 uint16_t uniffi_mailmind_core_checksum_method_corehost_subscribe(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_WOKE
+#define UNIFFI_FFIDEF_UNIFFI_MAILMIND_CORE_CHECKSUM_METHOD_COREHOST_WOKE
+uint16_t uniffi_mailmind_core_checksum_method_corehost_woke(void
     
 );
 #endif
