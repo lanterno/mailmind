@@ -4,6 +4,9 @@
 # hardened runtime, a .dmg with the app and an Applications link, and the appcast Sparkle reads, signed with the
 # owner's update key. It prints the `gh release create` command for the owner to run, and never publishes.
 #
+# The version's symbols stay in build/release/symbols/<version>/, kept from one release to the next, so a crash report
+# from a copy of that version can be read: MailMind.app.dSYM, which holds the core's line tables too, and Sparkle's.
+#
 # Everything goes to build/release (ignored by git). The release check (check.sh) points it elsewhere and signs with a
 # throwaway key through three variables, which nothing else sets:
 #   MAILMIND_RELEASE_OUT          the folder for the .dmg, the appcast and the notes
@@ -89,6 +92,20 @@ for binary in "$app/Contents/MacOS/MailMind" "$app/Contents/Frameworks/Sparkle.f
     [[ "$archs" == *arm64* && "$archs" == *x86_64* ]] || stop "$(basename "$binary") is $archs, not universal"
 done
 
+echo "## the symbols, for crash reports"
+# Xcode's dsymutil gathered the core's line tables from its library into the app's dSYM as it linked. Each dSYM
+# matches its binary by UUID, so they are this build's alone, and a copy of the version reads against no others.
+dsym="$derived/Build/Products/Release/MailMind.app.dSYM"
+[[ -d "$dsym" ]] || stop "the build made no MailMind.app.dSYM"
+sources="$(xcrun dwarfdump --show-sources "$dsym")"
+[[ "$sources" == *mm-host/src/* ]] || stop "MailMind.app.dSYM holds none of the core's line tables"
+symbols="$out/symbols/$version"
+/bin/rm -rf "$symbols"
+mkdir -p "$symbols"
+for kept in "$derived/Build/Products/Release/"*.dSYM; do
+    ditto "$kept" "$symbols/$(basename "$kept")"
+done
+
 echo "## signed ad hoc, under the hardened runtime"
 # Inside out, as Sparkle's documentation orders it: each helper, then the framework, then the app, which seals them.
 # A Developer ID (#42) replaces '-' here, and adds a secure timestamp.
@@ -148,6 +165,7 @@ sed "s/{{version}}/$version/g" "$here/Release/notes.md" >"$out/notes.md"
 
 echo "## done"
 echo "MailMind $version: $dmg ($(($(stat -f %z "$dmg") / 1024)) KB), with $out/appcast.xml"
+echo "Its symbols, for crash reports: $symbols"
 commit="$(git -C "$here" rev-parse HEAD)"
 if [[ -n "$(git -C "$here" status --porcelain)" ]]; then
     echo "warning: the tree has changes not committed, so this build isn't the commit the release will name." >&2
