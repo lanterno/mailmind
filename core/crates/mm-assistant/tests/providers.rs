@@ -79,6 +79,50 @@ fn each_provider_has_its_own_model_and_url_where_it_has_one() {
 }
 
 #[test]
+fn the_startup_line_names_the_provider_the_model_and_the_key_or_why_ai_is_off_and_how_to_turn_it_on() {
+    use providers::startup_line as line;
+    let config = providers::CONFIG;
+    assert_eq!(
+        line(Anthropic, "claude-opus-5-5", None, "ANTHROPIC_API_KEY", true),
+        "Claude (Anthropic) · claude-opus-5-5 · key from ANTHROPIC_API_KEY"
+    );
+    assert_eq!(line(OpenAi, "gpt-6.1-sol", None, config, true), "OpenAI · gpt-6.1-sol · key from mailmind.config.json");
+    assert_eq!(line(Ollama, "llama3.2:3b", None, "", false), "Ollama, on this Mac · llama3.2:3b · no key");
+    assert_eq!(
+        line(Compatible, "mixtral", None, config, false),
+        "Another OpenAI-compatible service · mixtral · no key",
+        "a key named that can't be read is no key"
+    );
+    assert_eq!(
+        line(Gemini, "gemini-4-hydrogen", Some(Off::TurnedOff), "", false),
+        "Google Gemini · gemini-4-hydrogen · AI is turned off: turn it on in Settings, or with `uv run python -m \
+         mailmind ai on`"
+    );
+    assert_eq!(
+        line(Anthropic, "claude-opus-5-5", Some(Off::NoKey), "ANTHROPIC_API_KEY", false),
+        "Claude (Anthropic) · claude-opus-5-5 · no key, so AI is off: keep one with `uv run python -m mailmind ai key`, \
+         or set ANTHROPIC_API_KEY"
+    );
+    assert_eq!(
+        line(OpenAi, "gpt-6.1-sol", Some(Off::NoKey), config, false),
+        "OpenAI · gpt-6.1-sol · no key, so AI is off: the openai_api_key in mailmind.config.json can't be read"
+    );
+    assert_eq!(
+        line(Gemini, "gemini-4-hydrogen", Some(Off::NoKey), "", false),
+        "Google Gemini · gemini-4-hydrogen · no key, so AI is off: keep one in Settings, or with `uv run python -m \
+         mailmind ai key --provider gemini`"
+    );
+    assert_eq!(
+        line(Compatible, "mixtral", Some(Off::NoUrl), "", false),
+        "Another OpenAI-compatible service · mixtral · no URL, so AI is off: give the service's in Settings"
+    );
+    assert_eq!(
+        line(Ollama, "", Some(Off::NoModel), "", false),
+        "Ollama, on this Mac · no model · no model, so AI is off: choose one in Settings"
+    );
+}
+
+#[test]
 fn a_person_picks_from_the_models_that_can_chat_sorted_once_each() {
     let listed = |ids: &[&str]| ids.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
     let openai = listed(&[
