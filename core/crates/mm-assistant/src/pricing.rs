@@ -41,8 +41,9 @@ const FREE: Price = nanos(0, 0, 0);
 
 /// Each model's price: Anthropic's; OpenAI's (developers.openai.com/api/docs/pricing, read 2026-11-16, the standard
 /// tier, prompts up to 272K, a cached input the page gives no price for priced as input); and Google's
-/// (aistudio.google.com/docs/pricing, read 2026-11-16, the paid standard tier).
-const PRICES: [(&str, Price); 54] = [
+/// (aistudio.google.com/docs/pricing, read 2026-11-16, the paid standard tier). A dated snapshot the page prices apart
+/// from its name's (`gpt-4o-2024-05-13`) has a row of its own, or it would be priced as the name a date follows.
+const PRICES: [(&str, Price); 55] = [
     ("claude-fable-5-1", nanos(10_000, 50_000, 250)),
     ("claude-mythos-5-1", nanos(10_000, 50_000, 250)),
     ("claude-fable-5", nanos(10_000, 50_000, 1_000)),
@@ -82,6 +83,7 @@ const PRICES: [(&str, Price); 54] = [
     ("gpt-4.1", nanos(2_000, 8_000, 500)),
     ("gpt-4.1-mini", nanos(400, 1_600, 100)),
     ("gpt-4o", nanos(2_500, 10_000, 1_250)),
+    ("gpt-4o-2024-05-13", nanos(5_000, 15_000, 5_000)),
     ("gpt-4o-mini", nanos(150, 600, 75)),
     ("o3-pro", nanos(20_000, 80_000, 20_000)),
     ("o3", nanos(2_000, 8_000, 500)),
