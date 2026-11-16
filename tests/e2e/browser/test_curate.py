@@ -162,6 +162,7 @@ def test_a_sweep_says_what_goes_and_what_stays_before_it_moves_and_one_undo_brin
         expect(going).to_contain_text(said)
     expect(going).not_to_contain_text("prizes.example.test")
     expect(going.locator(".sg-note")).to_have_text("1 starred or unread message stays in your Inbox.")
+    expect(going.locator(".sg-undo")).to_have_text("Undo with z puts it all back.")   # each has a Message-ID to find it by
     mod.get_by_role("button", name="Confirm").click()
     expect(page.locator("#toast")).to_contain_text("Swept 2/2")
     until(page, lambda: world.where(NEWS)["server"][0][1] == "Trash", "it went to the Trash")
