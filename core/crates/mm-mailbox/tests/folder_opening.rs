@@ -6,7 +6,7 @@
 #![allow(clippy::unwrap_used)]
 
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -15,9 +15,9 @@ use mm_kernel::events::Topic;
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::folders::Folders;
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait};
-use mm_mailbox::ingest::SyncError;
+use mm_mailbox::ingest::{Progress, SyncError, Synced};
 use mm_mailbox::opening::{FolderOpening, OpeningParts, Waits};
-use mm_mailbox::opening_ports::{Background, FolderSync, InboxSync};
+use mm_mailbox::opening_ports::{Background, FolderSync, InboxSync, OlderMail};
 use mm_mailbox::ports::{
     Accounts, FolderSyncs, MailSession, MailSessions, Opened, Page, Row, SessionError, StoredLists, StoredMail,
     ViewCounts,
@@ -82,7 +82,7 @@ impl StoredLists for Scanned {
 }
 
 /// A sync that writes down each folder it was asked for and whether whole, finds `new` messages, fails while `fails`
-/// says, and waits while the test holds `hold`.
+/// says, leaves older mail to read while `leaves_older` says, and waits while the test holds `hold`.
 #[derive(Debug, Default)]
 struct Syncs {
     scanned: Arc<Scanned>,
@@ -91,11 +91,12 @@ struct Syncs {
     /// Whether the next sync panics, as a malformed answer could make it.
     panics: Mutex<bool>,
     new: Mutex<usize>,
+    leaves_older: Mutex<bool>,
     hold: Mutex<()>,
 }
 
 impl FolderSync for Syncs {
-    fn sync_folder(&self, _account: &str, folder: &str, full: bool) -> Result<(usize, usize), SyncError> {
+    fn sync_folder(&self, _account: &str, folder: &str, full: bool) -> Result<Synced, SyncError> {
         self.asked.lock().unwrap().push((folder.to_owned(), full));
         assert!(!std::mem::take(&mut *self.panics.lock().unwrap()), "a server's answer the sync couldn't read");
         let _held = self.hold.lock().unwrap();
@@ -105,7 +106,8 @@ impl FolderSync for Syncs {
         if full {
             self.scanned.0.lock().unwrap().insert(folder.to_owned());
         }
-        Ok((*self.new.lock().unwrap(), 0))
+        let reading = (full && *self.leaves_older.lock().unwrap()).then_some(Progress { done: 500, total: 1200 });
+        Ok(Synced { kept: *self.new.lock().unwrap(), reading, ..Synced::default() })
     }
 }
 
@@ -113,6 +115,16 @@ impl FolderSync for Syncs {
 impl InboxSync for Syncs {
     fn sync_inbox(&self, account: &str) -> bool {
         self.sync_folder(account, "INBOX", true).is_ok()
+    }
+}
+
+/// The background's read of older mail, set going this many times.
+#[derive(Debug, Default)]
+struct Older(AtomicUsize);
+
+impl OlderMail for Older {
+    fn left_some(&self) {
+        self.0.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -197,6 +209,7 @@ impl StoredMail for Ada {
 
 struct World {
     syncs: Arc<Syncs>,
+    older: Arc<Older>,
     gates: Arc<Watched>,
     told: Arc<Told>,
     clock: Arc<Ticking>,
@@ -209,6 +222,7 @@ impl World {
     fn new(scanned: &[&str]) -> World {
         let stored = Arc::new(Scanned(Mutex::new(scanned.iter().map(|f| (*f).to_owned()).collect())));
         let syncs = Arc::new(Syncs { scanned: stored.clone(), ..Syncs::default() });
+        let older = Arc::new(Older::default());
         let gates = Arc::new(Watched::default());
         let told = Arc::new(Told::default());
         let clock = Arc::new(Ticking::default());
@@ -224,8 +238,9 @@ impl World {
             background: Arc::new(Threads),
             waits,
             inbox: syncs.clone(),
+            older: older.clone(),
         });
-        World { syncs, gates, told, clock, folders, opening }
+        World { syncs, older, gates, told, clock, folders, opening }
     }
 
     /// The same, its waits as short as a server slower than them needs.
@@ -242,6 +257,7 @@ impl World {
             background: Arc::new(Threads),
             waits,
             inbox: world.syncs.clone(),
+            older: world.older.clone(),
         });
         World { opening, ..world }
     }
@@ -283,6 +299,26 @@ fn a_folder_whose_first_scan_failed_says_so_and_is_scanned_on_the_next_open() {
     assert_eq!(world.open("Spam"), Opened::Done);
     assert_eq!(world.asked(), [("Spam".to_owned(), true), ("Spam".to_owned(), true)]);
     assert_eq!(world.told.nth(1), synced("Spam", true, 0));
+}
+
+#[test]
+fn a_first_scan_that_leaves_older_mail_sets_its_read_going_at_once() {
+    let world = World::new(&[]);
+    *world.syncs.leaves_older.lock().unwrap() = true;
+    assert_eq!(world.open("Archive"), Opened::Done);
+    assert_eq!(world.older.0.load(Ordering::SeqCst), 1);
+    // A catch-up of it a minute on reads only what is new: the read already going reads the rest.
+    world.clock.pass(61);
+    assert_eq!(world.open("Archive"), Opened::Done);
+    assert_eq!(world.asked(), [("Archive".to_owned(), true), ("Archive".to_owned(), false)]);
+    assert_eq!(world.older.0.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_first_scan_that_read_its_folder_whole_sets_no_read_of_older_mail_going() {
+    let world = World::new(&[]);
+    assert_eq!(world.open("Junk"), Opened::Done);
+    assert_eq!(world.older.0.load(Ordering::SeqCst), 0);
 }
 
 #[test]
