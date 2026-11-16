@@ -9,7 +9,8 @@
 //! A message's text comes from its first `HEAD_BYTES` (`BODY.PEEK[]<0.65536>`), so no attachment is downloaded for a
 //! snippet. The whole message is fetched only for an invite: an Inbox message that carries one keeps its body as it
 //! is stored, as opening it would, so Today & next finds it. A message whose opening the server won't send costs only
-//! its own text; a connection lost part way stores nothing of the step, which is read again.
+//! its own text, and one whose headers it won't send is left out of a read of older mail; a connection lost part way
+//! stores nothing of the step, which is read again.
 //!
 //! Mail new to the Inbox that MailMind has never seen before is judged by the person's filters as it is stored, and
 //! what they ask is queued for the server (`arrival_flags`).
@@ -22,14 +23,16 @@ use std::sync::{Arc, OnceLock};
 use mm_content::mime;
 use mm_kernel::errors::Fault;
 use mm_kernel::events::Topic;
-use mm_kernel::log;
+use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_kernel::when;
 use serde_json::json;
 
 use crate::arrival_ports::ArrivalFilters;
 use crate::fetch_ports::KeptBody;
-use crate::session::{HEADER_FIELDS, MailServer, MailServers, Search, ServerError, found_by_message_id};
+use crate::session::{
+    HEADER_BATCH, HEADER_FIELDS, Headers, MailServer, MailServers, Search, ServerError, found_by_message_id,
+};
 use crate::sync_plan::{self, FLAG_REFRESH, Scan, Step};
 use crate::sync_ports::{
     Classifier, Envelope, Events, FlagRow, Incoming, MailboxEvent, Place, SyncAccount, SyncAccounts, SyncStore,
@@ -125,6 +128,9 @@ struct Pass<'a> {
     with_body: bool,
     /// What it finds is new to the folder, so the person's filters speak for what MailMind has never seen.
     arriving: bool,
+    /// It reads a first scan's older mail: a message whose headers the server won't send is left out, so the scan
+    /// still reaches the folder's oldest.
+    older: bool,
 }
 
 /// A message fetched, as it will be stored, with its whole body when it carries an invite.
@@ -139,6 +145,46 @@ fn may_hold_invite(head: &[u8]) -> bool {
     [&b"text/calendar"[..], b"application/ics", b".ics"]
         .iter()
         .any(|said| lower.windows(said.len()).any(|w| w == *said))
+}
+
+/// The headers of `uids` a server will send, for a read of older mail: a FETCH it refuses is asked again a message at a
+/// time, and one it still refuses is left out, so a message it can't send never holds the scan on its step. A step
+/// none of whose messages it sends gives way, rather than leave the folder read whole when it isn't.
+fn headers_sent(s: &mut dyn MailServer, acct: &SyncAccount, uids: &[u32]) -> Result<Vec<Headers>, ServerError> {
+    let mut out = Vec::with_capacity(uids.len());
+    let (mut refused, mut left_out) = (None, 0usize);
+    for batch in uids.chunks(HEADER_BATCH) {
+        match s.headers(batch, &HEADER_FIELDS, acct.gmail_threads) {
+            Ok(found) => out.extend(found),
+            Err(e) if e.is_unreachable() => return Err(e),
+            Err(e) => {
+                refused = Some(e);
+                for uid in batch {
+                    match s.headers(&[*uid], &HEADER_FIELDS, acct.gmail_threads) {
+                        Ok(found) => out.extend(found),
+                        Err(e) if e.is_unreachable() => return Err(e),
+                        Err(_) => left_out += 1,
+                    }
+                }
+            }
+        }
+    }
+    if let Some(e) = refused {
+        if out.is_empty() {
+            return Err(e);
+        }
+        if left_out > 0 {
+            let count = left_out.to_string();
+            log::warning(
+                TAG,
+                "%(count)s messages the server wouldn't send were left out",
+                &[(Field::Count, &count)],
+                Some(e.class()),
+            );
+        }
+    }
+    out.sort_by_key(|h| h.uid);
+    Ok(out)
 }
 
 impl Ingest {
@@ -194,7 +240,12 @@ impl Ingest {
         let found = s.0.search(plan.search())?;
         let total = found.len();
         let steps = plan.steps(found);
-        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: plan.arrives_in(folder) };
+        let pass = Pass {
+            folder,
+            with_body: sync_plan::reads_bodies(folder),
+            arriving: plan.arrives_in(folder),
+            older: false,
+        };
         // A folder read whole before and read whole again (one that was empty) finds what is new to it.
         let mut synced = Synced { afresh: plan.whole && plan.scan != Scan::Whole, ..Synced::default() };
         let mut stored = Vec::new();
@@ -244,7 +295,7 @@ impl Ingest {
         let below = s.0.search(Search::Below(floor))?;
         let total = usize::try_from(selected.exists).unwrap_or(usize::MAX).max(below.len());
         let mut left = below.len();
-        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false };
+        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false, older: true };
         let mut reached = None;
         for step in sync_plan::older_steps(floor, &below, chunks) {
             let mut stored = Vec::new();
@@ -293,7 +344,7 @@ impl Ingest {
         if uids.is_empty() {
             return Ok(0);
         }
-        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false };
+        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false, older: false };
         let fetched = self.fetch(&mut *s.0, &acct, &uids, pass)?;
         let mut stored = Vec::new();
         for Fetched { row, invite } in fetched {
@@ -319,7 +370,11 @@ impl Ingest {
         if uids.is_empty() {
             return Ok(Vec::new());
         }
-        let headers = s.headers(uids, &HEADER_FIELDS, acct.gmail_threads)?;
+        let headers = if pass.older {
+            headers_sent(s, acct, uids)?
+        } else {
+            s.headers(uids, &HEADER_FIELDS, acct.gmail_threads)?
+        };
         let fields: Vec<mime::Fields> = headers.iter().map(|h| mime::fields(&h.raw)).collect();
         let envelopes: Vec<Envelope<'_>> = fields
             .iter()
