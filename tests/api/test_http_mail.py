@@ -6,6 +6,8 @@ files are in tests/golden/http_mail/.
 Each provider files mail its own way. Ada's plain IMAP host moves the message. Bea's Proton Bridge
 moves it, and marks anything copied into Trash as read. Cy's Gmail drops a label instead.
 """
+import re
+
 import problems
 from fixtures import world as w
 
@@ -101,7 +103,8 @@ def test_trash_and_undo_elsewhere_neither_read_nor_change_seen(app, world):
     assert app.post("/api/trash", {**world.copy(name)}).json["ok"]
     assert app.post("/api/undo", {}).json["ok"]
     sent = [c["line"].split(" ", 1)[1] for c in world.server.commands[since:]]
-    assert not [line for line in sent if "STORE" in line.upper() or line.upper().endswith(" (FLAGS)")]
+    # No STORE, and no flags read: a kept connection's ENABLE CONDSTORE, sent as it opened, is neither.
+    assert not [line for line in sent if re.search(r"\bSTORE\b", line.upper()) or line.upper().endswith(" (FLAGS)")]
 
 
 def test_actions_in_one_undo_group_undo_together(app, golden, world):
