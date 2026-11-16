@@ -1,5 +1,5 @@
 """AI in Settings (#49): its own tab, with the switch first, the provider, its key, its model and the URL a service is reached
-at; the daily limit and the work written ahead shown only while AI is on; and a line saying how AI stands. A key goes to the
+at, the daily limit and the work written ahead, all shown only once AI mode is on; and a line saying how AI stands. A key goes to the
 server's Keychain (the tests' stand-in) and never shows again. Turned off, nothing only AI can do is offered anywhere, and
 nothing says it is missing. Nothing reaches a real provider: OpenAI is the fake
 OpenAI-compatible API on loopback, at a URL the test gives the server first.
@@ -47,7 +47,7 @@ def ai_open(page):
 
 def test_the_ai_tab_puts_the_switch_first_and_says_how_ai_stands(page, world):
     dialog = ai_open(page)
-    switch = dialog.get_by_label("Use AI", exact=True)
+    switch = dialog.get_by_label("AI mode", exact=True)
     expect(switch).to_be_checked()
     expect(dialog.get_by_text("Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.")).to_be_visible()
     expect(dialog.get_by_label("Provider", exact=True)).to_have_value("anthropic")
@@ -61,18 +61,27 @@ def test_the_ai_tab_puts_the_switch_first_and_says_how_ai_stands(page, world):
     clean(page)
 
 
-def test_turning_ai_off_takes_away_its_limit_and_its_work_ahead_and_goes_in_the_file(page, world):
+AI_ONLY = ("Provider", "API key", "Model", "Daily limit, in US dollars", "Have today’s brief ready each morning",
+           "Have last week’s review ready each Monday", "File low-priority mail by itself, once a day")
+
+
+def test_with_ai_mode_off_the_tab_holds_only_its_switch_and_the_file_holds_it(page, world):
     dialog = ai_open(page)
-    expect(dialog.get_by_label("Daily limit, in US dollars")).to_be_visible()
+    for shown in AI_ONLY:
+        expect(dialog.get_by_label(shown, exact=True)).to_be_visible()
     with page.pw.expect_response(lambda r: r.url.endswith("/api/digest") and r.request.method == "GET"):
-        dialog.get_by_label("Use AI", exact=True).uncheck()
+        dialog.get_by_label("AI mode", exact=True).uncheck()
     until(page, lambda: file_of(world).get("preferences", {}).get("ai_enabled") is False, "the file holds the switch")
-    for gone in ("Daily limit, in US dollars", "Have today’s brief ready each morning", "Have last week’s review ready each Monday",
-                 "File low-priority mail by itself, once a day"):
-        expect(dialog.get_by_label(gone)).to_have_count(0)
-    expect(page.locator("#aiStanding")).to_have_text("AI is turned off.")
-    dialog.get_by_label("Use AI", exact=True).check()
-    expect(dialog.get_by_label("Daily limit, in US dollars")).to_be_visible()
+    for gone in AI_ONLY:
+        expect(dialog.get_by_label(gone, exact=True)).to_have_count(0)
+    expect(page.locator("#aiConnection")).to_have_count(0)
+    expect(page.locator("#aiStanding")).to_have_count(0)
+    expect(dialog.get_by_text("Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.")).to_be_visible()
+
+    dialog.get_by_label("AI mode", exact=True).check()
+    for shown in AI_ONLY:
+        expect(dialog.get_by_label(shown, exact=True)).to_be_visible()
+    expect(page.locator("#aiStanding")).to_have_text("AI is off: there’s no key for Claude.")
     until(page, lambda: file_of(world).get("preferences", {}).get("ai_enabled") is not False, "the switch is on again")
     clean(page)
 
@@ -116,31 +125,32 @@ def test_openai_is_chosen_its_key_kept_through_the_server_and_its_models_offered
 def test_ollamas_url_is_filled_in_and_a_model_typed_by_hand(page, app, world, openai_api):
     openai_api.key = None
     openai_api.models = ["qwen3:8b", "llama3.3:latest"]
-    # Off, nothing asks Ollama at its own URL, where a real one may be listening on this computer.
-    assert app.post("/api/preferences", {"ai_provider": "ollama", "ai_enabled": False}).status == 200
-    asked = []
-    page.on("request", lambda r: asked.append(r.url))
+    assert app.post("/api/preferences", {"ai_provider": "ollama", "ai_enabled": True}).status == 200
+    # The page's ask for Ollama's models at its own URL is answered here, with none, so the server never asks a real Ollama
+    # that may be listening on this computer.
+    models, asked = re.compile(r"/api/ai/models"), []
+    page.pw.route(models, lambda route: (asked.append(route.request.url), route.fulfill(json={"ok": True, "models": [], "default": None})))
     dialog = ai_open(page)
     expect(dialog.get_by_label("API key", exact=True)).to_have_count(0)
     url = dialog.get_by_label("The service’s URL", exact=True)
     expect(url).to_have_value("http://127.0.0.1:11434/v1")
-    expect(dialog.get_by_text("Ollama has no model of its own: choose one.")).to_be_visible()
-    expect(page.locator("#aiStanding")).to_have_text("AI is turned off.")
-    page.heard_all_asked()
-    assert not [u for u in asked if "/api/ai/models" in u]
+    until(page, lambda: asked, "the page asked for Ollama's models, with AI mode on and the tab open")
+    expect(dialog.get_by_label("Model", exact=True).locator("option")).to_have_text(["Choose a model"])
+    page.pw.unroute(models)
 
     url.fill(openai_api.url + "/")
     with page.pw.expect_response(lambda r: "/api/ai/models" in r.url and r.ok):
         url.press("Enter")
     until(page, lambda: file_of(world).get("preferences", {}).get("ai_base_url") == openai_api.url, "the file holds the URL")
     expect(dialog.get_by_label("Model", exact=True).locator("option")).to_have_text(["Choose a model", "llama3.3:latest", "qwen3:8b"])
+    expect(dialog.get_by_text("Ollama has no model of its own: choose one.")).to_be_visible()
+    expect(page.locator("#aiStanding")).to_have_text("AI is off: no model is chosen for Ollama.")
 
     dialog.get_by_role("button", name="Type a name").click()
     dialog.get_by_label("Model", exact=True).fill("llama3.3:70b")
     dialog.get_by_role("button", name="Use it").click()
     until(page, lambda: file_of(world).get("preferences", {}).get("ai_model") == "llama3.3:70b", "the file holds the model typed")
     expect(dialog.get_by_label("Model", exact=True)).to_have_value("llama3.3:70b")
-    dialog.get_by_label("Use AI", exact=True).check()
     expect(page.locator("#aiStanding")).to_have_text("AI is on: Ollama, on this Mac · llama3.3:70b.")
     clean(page)
 
@@ -161,7 +171,7 @@ def test_with_ai_turned_off_nothing_only_ai_can_do_is_offered_and_nothing_says_w
     page.locator("#settingsBtn").click()
     page.get_by_role("tab", name="AI").click()
     with page.pw.expect_response(lambda r: r.url.endswith("/api/digest") and r.request.method == "GET"):
-        page.get_by_role("dialog", name="AI").get_by_label("Use AI", exact=True).uncheck()
+        page.get_by_role("dialog", name="AI").get_by_label("AI mode", exact=True).uncheck()
     page.locator("#setClose").click()
     calls = len(ai.requests)
 
