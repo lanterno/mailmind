@@ -124,7 +124,7 @@ fn note(provider: AiProvider, off: Option<Off>, key_from: &str, keyed: bool) -> 
     };
     match off {
         Some(Off::TurnedOff) => {
-            "AI is turned off: turn it on in Settings, or with `uv run python -m mailmind ai on`".to_owned()
+            "AI mode is off: turn it on in Settings, or with `uv run python -m mailmind ai on`".to_owned()
         }
         Some(Off::NoKey) if key_from == CONFIG => {
             format!("no key, so AI is off: the {}_api_key in mailmind.config.json can't be read", provider.id())
