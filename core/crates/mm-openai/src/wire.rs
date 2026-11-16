@@ -3,8 +3,9 @@
 //!
 //! The system prompt goes as a `system` message ahead of the user's. Structured output is `response_format`'s
 //! `json_schema`, strict only where the schema keeps strict mode's rules (every object closed, and every property in it
-//! required), since a strict schema that breaks them is refused. OpenAI takes `max_completion_tokens`, and the others
-//! `max_tokens`. No effort and no server-side fallback go out: neither is theirs. A reasoning model's thinking, put
+//! required), since a strict schema that breaks them is refused. OpenAI takes its output ceiling as
+//! `max_completion_tokens` and Gemini as `max_tokens`; a model on this Mac and a compatible service are sent none. No
+//! effort and no server-side fallback go out: neither is theirs. A reasoning model's thinking, put
 //! first as `<think>…</think>` (or `<thinking>…</thinking>`), is dropped before the reply is read.
 
 use mm_assistant::ports::{Prompt, Reply, Usage};
@@ -50,14 +51,33 @@ fn strict_node(node: &Map<String, Value>) -> bool {
 /// schema as compact JSON, so a service that refused structured output is still told the shape of the answer.
 pub const SCHEMA_STATED: &str = "Reply with only a JSON object that matches this JSON Schema: ";
 
-/// The body of a `POST {base}/chat/completions` for `prompt`, with its schema as `response_format` unless
-/// `with_format` is false (a service that refused it), when the schema is stated after the prompt instead.
-pub fn body(prompt: &Prompt, provider: AiProvider, with_format: bool) -> Value {
+/// The field a provider takes its output ceiling in: OpenAI's `max_completion_tokens`, Gemini's `max_tokens`; None
+/// for a model on this Mac and a compatible service, which are sent none, since a server that checks it against the
+/// context it was given refuses a ceiling past it, and one left out fits.
+pub fn ceiling(provider: AiProvider) -> Option<&'static str> {
+    match provider {
+        AiProvider::OpenAi => Some("max_completion_tokens"),
+        AiProvider::Anthropic | AiProvider::Gemini => Some("max_tokens"),
+        AiProvider::Local | AiProvider::Compatible => None,
+    }
+}
+
+/// What a request leaves out, as a service that refused it is asked again: structured output, the output ceiling.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Without {
+    pub format: bool,
+    pub ceiling: bool,
+}
+
+/// The body of a `POST {base}/chat/completions` for `prompt`: with its schema as `response_format` unless `without`
+/// says a service refused it, when the schema is stated after the prompt instead; and with the output ceiling the
+/// provider takes, unless it takes none or `without` says it was refused.
+pub fn body(prompt: &Prompt, provider: AiProvider, without: Without) -> Value {
     let mut messages = Vec::new();
     if let Some(system) = prompt.system.filter(|s| !s.is_empty()) {
         messages.push(json!({"role": "system", "content": system}));
     }
-    let text = match prompt.schema.as_ref().filter(|_| !with_format) {
+    let text = match prompt.schema.as_ref().filter(|_| without.format) {
         // Compact, its keys in the schema's own order.
         Some(schema) => format!("{}\n\n{SCHEMA_STATED}{schema}", prompt.text),
         None => prompt.text.clone(),
@@ -66,9 +86,10 @@ pub fn body(prompt: &Prompt, provider: AiProvider, with_format: bool) -> Value {
     let mut out = Map::new();
     out.insert("model".into(), json!(prompt.model));
     out.insert("messages".into(), Value::Array(messages));
-    let most = if provider == AiProvider::OpenAi { "max_completion_tokens" } else { "max_tokens" };
-    out.insert(most.into(), json!(prompt.max_tokens));
-    if let Some(schema) = prompt.schema.as_ref().filter(|_| with_format) {
+    if let Some(most) = ceiling(provider).filter(|_| !without.ceiling) {
+        out.insert(most.into(), json!(prompt.max_tokens));
+    }
+    if let Some(schema) = prompt.schema.as_ref().filter(|_| !without.format) {
         out.insert(
             "response_format".into(),
             json!({"type": "json_schema",

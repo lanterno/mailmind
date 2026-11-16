@@ -10,9 +10,11 @@
 //! again, twice, after a status a retry can help (408, 409, 429, 5xx) or a lost connection, waiting what
 //! `retry-after` says or else a little longer each time. A model on this Mac and a compatible service may not take
 //! structured output: a 400 that names `response_format` is asked once more without it, the schema stated after the
-//! prompt instead, and the reply read as free-form JSON. A rejected key (a 401 or a 403, or Gemini's 400 saying the
-//! key isn't valid, read as a 401) has an error that holds none of what the service said, which can quote part of the
-//! key back, and no error ever holds the key. It takes no batch: only Claude's API does.
+//! prompt instead, and the reply read as free-form JSON. Neither is sent an output ceiling; OpenAI and Gemini are,
+//! and a 400 whose words name it is asked once more without it. A rejected key (a 401 or a 403, or Gemini's 400
+//! saying the key isn't valid, read as a 401) is never asked again without either, and has an error that holds none
+//! of what the service said, which can quote part of the key back, and no error ever holds the key. It takes no
+//! batch: only Claude's API does.
 
 pub mod wire;
 
@@ -24,6 +26,7 @@ use mm_kernel::ai_provider::AiProvider;
 use mm_kernel::seams::{Outside, Secret};
 use mm_net::http::{self, Endpoint, backoff};
 use mm_net::{Lost, Stream};
+use wire::Without;
 
 /// Seconds per attempt.
 pub const TIMEOUT: Duration = Duration::from_secs(120);
@@ -187,6 +190,16 @@ impl ChatApi {
             && matches!(self.provider, AiProvider::Local | AiProvider::Compatible)
             && response.body.windows(b"response_format".len()).any(|w| w == b"response_format")
     }
+
+    /// Whether a 400 refuses the output ceiling: what the service said names `max_tokens` or `max_completion_tokens`,
+    /// to a provider that is sent one (OpenAI and Gemini).
+    fn refused_ceiling(&self, response: &http::Response) -> bool {
+        if response.status != 400 || wire::ceiling(self.provider).is_none() {
+            return false;
+        }
+        let said = wire::error_text(&response.body);
+        said.contains("max_tokens") || said.contains("max_completion_tokens")
+    }
 }
 
 /// The statuses a retry can help: a timeout, a conflict, a rate limit, and any server error.
@@ -203,12 +216,22 @@ impl LanguageModel for ChatApi {
     fn complete(&self, prompt: &Prompt) -> Result<Reply, ModelError> {
         let provider = self.provider.id();
         let failed = || ModelError::new(format!("{provider} failed: the request can't be written"), None);
-        let body = serde_json::to_vec(&wire::body(prompt, self.provider, true)).map_err(|_| failed())?;
-        let mut response = self.send("POST", "/chat/completions", Some(&body), self.retries)?;
-        if self.refused_format(prompt, &response) {
-            let plain = serde_json::to_vec(&wire::body(prompt, self.provider, false)).map_err(|_| failed())?;
-            response = self.send("POST", "/chat/completions", Some(&plain), self.retries)?;
-        }
+        let mut without = Without::default();
+        let response = loop {
+            let body = serde_json::to_vec(&wire::body(prompt, self.provider, without)).map_err(|_| failed())?;
+            let response = self.send("POST", "/chat/completions", Some(&body), self.retries)?;
+            // A key refused with a 400 is never asked again, as one refused with a 401 never is. What else a service
+            // refused is left out of the next request, each at most once a call, structured output first.
+            if response.status == 400 && wire::key_invalid(&response.body) {
+                break response;
+            } else if !without.format && self.refused_format(prompt, &response) {
+                without.format = true;
+            } else if !without.ceiling && self.refused_ceiling(&response) {
+                without.ceiling = true;
+            } else {
+                break response;
+            }
+        };
         if !(200..300).contains(&response.status) {
             return Err(self.refused(&response));
         }
