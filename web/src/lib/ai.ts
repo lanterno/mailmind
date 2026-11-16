@@ -13,12 +13,12 @@ export const PROVIDER_LABEL: Record<AiProvider, string> = {
   compatible: "Another OpenAI-compatible service",
 };
 
-// Each provider as a sentence names it.
+// Each provider as a sentence names it. A model on this Mac is no one's: the server running it is named only as one found.
 export const PROVIDER_NAME: Record<AiProvider, string> = {
   anthropic: "Claude",
   openai: "OpenAI",
   gemini: "Gemini",
-  local: "your model server",
+  local: "a model on this Mac",
   compatible: "the OpenAI-compatible service",
 };
 
@@ -31,20 +31,19 @@ export const aiOffered = (ai: Said | null | undefined) => ai?.off !== "turned-of
 const HERE = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i;
 export const runsHere = (provider: AiProvider, baseUrl: string) => provider === "local" || HERE.test(baseUrl);
 
-// Who the text of a message goes to, for each provider: the company, or the server named.
-const RECIPIENT: Record<AiProvider, string> = {
+// Who the text of a message goes to, for each provider that isn't on this Mac: the company, or the service named.
+const RECIPIENT: Record<Exclude<AiProvider, "local">, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   gemini: "Google",
-  local: "your model server",
   compatible: "the OpenAI-compatible service",
 };
 
 // What AI sends off this Mac, and to whom: the provider chosen, or nothing at all when it answers here. `baseUrl` is the
 // preference as set, "" for the provider's own.
 export function aiPrivacy(provider: AiProvider, baseUrl: string): string {
-  const name = PROVIDER_NAME[provider];
-  if (runsHere(provider, baseUrl)) return `${name[0]!.toUpperCase()}${name.slice(1)} runs on this Mac, so the text of your mail never leaves it.`;
+  if (provider === "local") return "With a model on this Mac, the text of a message never leaves this Mac.";
+  if (runsHere(provider, baseUrl)) return `With ${PROVIDER_NAME[provider]} on this Mac, the text of a message never leaves this Mac.`;
   return `With AI on, the text of a message goes to ${RECIPIENT[provider]} only when it is summarized, briefed, drafted or asked about; nothing else leaves this machine.`;
 }
 
@@ -55,7 +54,7 @@ export function whyOff(ai: Said | null | undefined): string {
   if (ai.off === "turned-off") return "it is turned off in Settings";
   if (ai.off === "no-key") return `there’s no key for ${name}`;
   if (ai.off === "no-url") return `${name} has no URL`;
-  return `no model is chosen for ${name}`;
+  return ai.provider === "local" ? "no model on this Mac is chosen" : `no model is chosen for ${name}`;
 }
 
 // AI off, and why, for a place that needs it: "AI is off" alone where the digest doesn't say (or says it is on).

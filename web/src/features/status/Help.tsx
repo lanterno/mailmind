@@ -1,6 +1,6 @@
 // What the keys do, and the one setting WCAG 2.1.4 asks for: single keys off.
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
-import { aiOffered, aiPrivacy, offLine, PROVIDER_LABEL } from "../../lib/ai";
+import { aiOffered, aiPrivacy, offLine, PROVIDER_NAME } from "../../lib/ai";
 import type { AiStatus } from "../../lib/api/types";
 import { prefs, singleKeys } from "../../lib/prefs";
 import { createStore } from "../../lib/store";
@@ -44,7 +44,7 @@ function AiNote({ ai }: { ai: AiStatus | null | undefined }) {
     <>
       <div className="legh"><Icon name="wind" /> How MailMind uses AI</div>
       <div className="legnote">
-        Summaries, importance scores, the daily brief, drafts and Ask are written by <b>{PROVIDER_LABEL[ai.provider]}</b>, chosen in Settings under AI
+        Summaries, importance scores, the daily brief, drafts and Ask are written by <b>{PROVIDER_NAME[ai.provider]}</b>, chosen in Settings under AI
         {ai.off ? `; for now ${offLine(ai)}, and nothing is sent` : ""}. {aiPrivacy(ai.provider, baseUrl)} Your mailbox itself stays in a
         database on this machine. {sandbox}
       </div>
