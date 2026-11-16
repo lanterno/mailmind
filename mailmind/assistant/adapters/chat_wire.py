@@ -5,8 +5,9 @@ The system prompt goes as a `system` message ahead of the user's. Structured out
 strict only where the schema keeps strict mode's rules (every object closed, and every property in it required), since a
 strict schema that breaks them is refused. Asked without it, as a service that refused it is, the prompt states the schema
 instead. OpenAI's ceiling on a reply's tokens is `max_completion_tokens` and Gemini's `max_tokens`; a model on this Mac and a
-compatible service are given none. No effort and no server-side fallback go out: neither is theirs. A reasoning model may put its thinking ahead of its reply, as `<think>…</think>` or
-`<thinking>…</thinking>`: that block is dropped before the reply is read.
+compatible service are given none. No effort and no server-side fallback go out: neither is theirs. A reasoning model may
+put its thinking ahead of its reply, as `<think>…</think>` or `<thinking>…</thinking>`: that block is dropped before the
+reply is read.
 """
 import json
 import re
