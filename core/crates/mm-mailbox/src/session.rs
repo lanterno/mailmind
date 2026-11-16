@@ -92,6 +92,8 @@ pub enum Search<'a> {
     All,
     /// Every UID above this one (`UID n+1:*`, which always matches the last UID, even one below it).
     Above(u32),
+    /// Every UID below this one (`UID 1:n-1`); none below 1.
+    Below(u32),
     /// This UID, if the folder still holds it.
     Uid(u32),
     /// What arrived on or after this day, in days since 1970-01-01 (`SINCE 1-Jan-1970`).
@@ -124,6 +126,8 @@ pub const HEADER_FIELDS: [&str; 11] = [
 
 /// UIDs to a header FETCH, so no command line grows too long.
 pub const HEADER_BATCH: usize = 300;
+/// UIDs to a FETCH of messages' heads, so no answer holds more than a few megabytes.
+pub const HEAD_BATCH: usize = 50;
 
 /// A logged-in connection, for everything the Mailbox asks of a server.
 pub trait MailServer: MailSession {
@@ -140,6 +144,19 @@ pub trait MailServer: MailSession {
     fn headers(&mut self, uids: &[u32], fields: &[&str], gmail: bool) -> Result<Vec<Headers>, ServerError>;
     /// A whole message, read without marking it read (BODY.PEEK[]).
     fn body(&mut self, uid: u32) -> Result<Option<Vec<u8>>, ServerError>;
+    /// The first `bytes` of each message, read without marking it read (`BODY.PEEK[]<0.bytes>`), by UID: a message
+    /// no longer than that whole, and one the server sent nothing of left out. A server that can't send part of one
+    /// sends it whole, cut here.
+    fn heads(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
+        let mut out = BTreeMap::new();
+        for uid in uids {
+            if let Some(mut raw) = self.body(*uid)? {
+                raw.truncate(usize::try_from(bytes).unwrap_or(usize::MAX));
+                out.insert(*uid, raw);
+            }
+        }
+        Ok(out)
+    }
     /// When each message arrived, as the server says (INTERNALDATE), in Unix seconds: one whose date doesn't read
     /// is left out.
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError>;
@@ -281,6 +298,10 @@ impl MailServer for ReadOnly {
 
     fn body(&mut self, uid: u32) -> Result<Option<Vec<u8>>, ServerError> {
         self.0.body(uid)
+    }
+
+    fn heads(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
+        self.0.heads(uids, bytes)
     }
 
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {

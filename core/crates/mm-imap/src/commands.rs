@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use mm_kernel::when::civil;
-use mm_mailbox::session::{HEADER_BATCH, Headers, MailServer, Search, Selected, ServerError};
+use mm_mailbox::session::{HEAD_BATCH, HEADER_BATCH, Headers, MailServer, Search, Selected, ServerError};
 
 use crate::codec::{Code, Said};
 use crate::list::mailbox_arg;
@@ -115,6 +115,8 @@ impl MailServer for Session {
         let criteria = match criteria {
             Search::All => "ALL".to_owned(),
             Search::Above(uid) => format!("UID {}:*", u64::from(uid) + 1),
+            Search::Below(uid) if uid <= 1 => return Ok(Vec::new()),
+            Search::Below(uid) => format!("UID 1:{}", uid - 1),
             Search::Uid(uid) => format!("UID {uid}"),
             Search::Since(days) => format!("SINCE {}", imap_day(days)),
             Search::MessageId(id) => format!("HEADER Message-ID {}", quoted(id)?),
@@ -182,6 +184,20 @@ impl MailServer for Session {
     fn body(&mut self, uid: u32) -> Result<Option<Vec<u8>>, ServerError> {
         let fetched = self.fetched(&format!("UID FETCH {uid} (BODY.PEEK[])"))?;
         Ok(fetched.into_iter().find_map(|f| f.section))
+    }
+
+    fn heads(&mut self, uids: &[u32], bytes: u32) -> Result<BTreeMap<u32, Vec<u8>>, ServerError> {
+        let mut out = BTreeMap::new();
+        for batch in uids.chunks(HEAD_BATCH) {
+            for fetched in self.fetched(&format!("UID FETCH {} (UID BODY.PEEK[]<0.{bytes}>)", uid_set(batch)))? {
+                if let (Some(uid), Some(mut raw)) = (fetched.uid, fetched.section) {
+                    // A server that sent more than was asked for is held to it.
+                    raw.truncate(usize::try_from(bytes).unwrap_or(usize::MAX));
+                    out.insert(uid, raw);
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, ServerError> {
