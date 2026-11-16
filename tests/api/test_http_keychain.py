@@ -112,13 +112,28 @@ def test_a_key_for_no_provider_there_is_is_a_bad_request(app, world, fake_keycha
 def test_a_secret_the_keychain_cant_hold_is_refused_in_its_words_and_nothing_is_kept(app, world, fake_keychain, path,
                                                                                       field, more):
     before = (config(world), fake_keychain.items())
-    for typed in ["", "sk-ant-café", "two\nlines"]:
+    for typed in ["", "sk-ant-café"] + (["two\nlines"] if field == "password" else []):
         refused = app.post(path, {**more, field: typed})
         assert (refused.status, refused.json) == (400, problems.refused(UNPRINTABLE)), typed
     for body in [more, {**more, field: None}, {**more, field: 7}, {**more, field: ["x"]}]:
         refused = app.post(path, body)
         assert (refused.status, refused.json) == (400, problems.BAD_REQUEST), body
     assert (config(world), fake_keychain.items()) == before
+
+
+@pytest.mark.parametrize("typed", ["two\nlines", "sk-test-one sk-test-two", "sk-test-a\tb", "sk-test-a\x00b",
+                                   " sk-test-a b\n"])
+def test_a_key_with_a_space_or_line_break_inside_is_refused_in_words_that_hold_no_key(app, world, fake_keychain, typed):
+    before = (config(world), fake_keychain.items())
+    refused = app.post("/api/ai/key", {"provider": "openai", "key": typed})
+    assert (refused.status, refused.json) == (400, problems.refused("An API key can't hold spaces or line breaks."))
+    assert (config(world), fake_keychain.items()) == before
+
+
+def test_a_key_is_kept_without_the_spaces_and_line_breaks_around_it(app, world, fake_keychain):
+    kept = app.post("/api/ai/key", {"provider": "openai", "key": " \tsk-test-pasted-with-a-line-break\r\n"})
+    assert (kept.status, kept.json) == (200, {"ok": True, "kept": ["openai"]})
+    assert fake_keychain.items()["openai-api-key"] == "sk-test-pasted-with-a-line-break"
 
 
 def test_the_bridges_password_is_kept_and_a_proton_account_logs_in_with_it(app, world, fake_keychain):

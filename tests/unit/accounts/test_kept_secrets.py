@@ -62,13 +62,28 @@ def test_clearing_the_key_takes_its_item_and_whatever_the_file_named_out(directo
     assert written(data_dir) == {"accounts": []}
 
 
-@pytest.mark.parametrize("typed", ["", "sk-ant-café", "two\nlines"])
+@pytest.mark.parametrize("typed", ["", " \n", "sk-ant-café"])
 def test_a_key_the_keychain_cant_hold_is_refused_in_its_words_and_nothing_changes(directory, data_dir, fake_keychain,
                                                                                  typed):
     directory.save({"accounts": []})
     with pytest.raises(ValueError, match="A secret MailMind keeps in the Keychain is printable ASCII, and not empty"):
         directory.set_api_key(typed)
     assert fake_keychain.items() == {} and written(data_dir) == {"accounts": []}
+
+
+@pytest.mark.parametrize("typed", ["two\nlines", "sk-ant-one sk-ant-two", "sk-ant-a\tb", "sk-ant-a\rb", "sk-ant-a\x00b",
+                                   "sk-ant-a\x7fb", "sk-ant-a\u00a0b", " sk-ant-a b\n"])
+def test_a_key_with_a_space_or_line_break_inside_is_refused_in_words_that_hold_no_key(directory, data_dir, fake_keychain,
+                                                                                      typed):
+    directory.save({"accounts": []})
+    with pytest.raises(ValueError, match="^An API key can't hold spaces or line breaks.$"):
+        directory.set_api_key(typed, "openai")
+    assert fake_keychain.items() == {} and written(data_dir) == {"accounts": []}
+
+
+def test_a_key_is_kept_without_the_spaces_and_line_breaks_around_it(directory, fake_keychain):
+    directory.set_api_key(" \tsk-test-pasted-with-a-line-break\r\n", "openai")
+    assert fake_keychain.items() == {"openai-api-key": "sk-test-pasted-with-a-line-break"}
 
 
 @pytest.mark.parametrize("provider", ["openai", "gemini", "local", "compatible"])

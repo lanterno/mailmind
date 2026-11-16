@@ -314,6 +314,24 @@ def test_ai_key_with_a_provider_keeps_that_providers_key(data_dir, monkeypatch, 
     assert assistant.key(provider) == ("sk-test-kept-for-a-provider", "mailmind.config.json")
 
 
+@pytest.mark.parametrize("typed", ["sk-test-one sk-test-two", "sk-test-a\tb", "sk-test-a\x00b"])
+def test_ai_key_with_a_space_inside_is_refused_in_words_that_hold_no_key(data_dir, monkeypatch, capsys, fake_keychain, typed):
+    import json
+    (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": []}))
+    _typing(monkeypatch, typed, tty=True)
+    assert _exit(["ai", "key", "--provider", "openai"]) == 1
+    assert capsys.readouterr().out == "Nothing changed: An API key can't hold spaces or line breaks.\n"
+    assert fake_keychain.items() == {} and json.loads((data_dir / "mailmind.config.json").read_text()) == {"accounts": []}
+
+
+def test_ai_key_keeps_a_key_without_the_spaces_around_it(data_dir, monkeypatch, capsys, fake_keychain):
+    import json
+    (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": []}))
+    _typing(monkeypatch, "  sk-test-pasted-with-spaces \t", tty=True)
+    assert _exit(["ai", "key", "--provider", "openai"]) == 0
+    assert fake_keychain.items() == {"openai-api-key": "sk-test-pasted-with-spaces"}
+
+
 @pytest.mark.parametrize("provider", ["ollama", "mistral"])
 def test_ai_key_for_a_provider_there_isnt_is_refused_by_its_choices(data_dir, capsys, provider):
     with pytest.raises(SystemExit) as done:
