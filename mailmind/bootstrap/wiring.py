@@ -43,8 +43,8 @@ def _after_draft_removed(gone):
 
 
 def _after_removal(removed):
-    """AccountRemoved: each sync reading its mail stops at its next message."""
-    mailbox.ingest.flights.stop(removed.email)
+    """AccountRemoved: each sync reading its mail stops at its next message, and nothing is kept of how its syncs went."""
+    mailbox.syncing.account_removed(removed.email)
 
 
 def _after_idle(changed):

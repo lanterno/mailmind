@@ -3,7 +3,11 @@ job at a time, with what each account's last try came to.
 
 An account shows as failing only as domain.sync_health says: trouble that may pass (a lost connection, a timeout, a
 server that can't take a login for now) once a second sync in a row has failed too, or three minutes on. Until then it shows as it did before, and its record keeps no
-error."""
+error.
+
+An account removed (`account_removed`) stops each sync reading its mail at its next message, as its flights were told, and
+nothing is kept of how its syncs went: its status, its run of failures, its body backfill's rest; now, and again as the last
+sync reading its mail lands."""
 import threading
 import time
 from collections.abc import Callable, Collection, Mapping
@@ -57,6 +61,19 @@ class Syncing:
                 shown[email] = {"health": "error", "msg": run.error}
         return shown
 
+    def account_removed(self, email: str) -> None:
+        """AccountRemoved: each sync reading its mail stops at its next message, and nothing is kept of how its syncs
+        went, now or as the last of them lands, so a sync that ended meanwhile leaves nothing either."""
+        self._ingest.flights.stop(email)
+        self._forget(email)
+        self._ingest.flights.after(email, lambda: self._forget(email))
+
+    def _forget(self, email: str) -> None:
+        """Nothing is kept of how a removed account's syncs went: its status, its run of failures, its backfill's rest."""
+        self._status.pop(email, None)
+        self._failing.pop(email, None)
+        self._backfill_resting.pop(email, None)
+
     @property
     def sync(self) -> dict[str, Any]:
         """How the sync as a whole stands now."""
@@ -94,10 +111,10 @@ class Syncing:
                     elif kept or junk:
                         self._folders.invalidate(a["email"])   # what the first scan stored changes the rail's counts
                 except AccountGone:
-                    self._status.pop(a["email"], None)
+                    self._forget(a["email"])
                 except Exception as e:
                     if flight.stopped:
-                        self._status.pop(a["email"], None)
+                        self._forget(a["email"])
                         continue
                     kind, now = self._accounts.error_kind(e), time.time()
                     run = sync_health.and_one_more(self._failing.get(a["email"]), type(e).__name__,
