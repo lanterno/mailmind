@@ -31,6 +31,8 @@ mm-smtp = { path = "crates/mm-smtp" }
 mm-calendar = { path = "crates/mm-calendar" }
 # The assistant: the Claude API's Messages endpoint, on mm-net.
 mm-claude = { path = "crates/mm-claude" }
+# Every other AI provider (#49): OpenAI's Chat Completions, on mm-net.
+mm-openai = { path = "crates/mm-openai" }
 # RFC 8058's one-click unsubscribe POST (a sender's cleanup), on mm-net.
 mm-oneclick = { path = "crates/mm-oneclick" }
 # The app in a shell's own process (the Mac app's): mm-server's App, its workers and its routes, with no port open.

@@ -1,0 +1,17 @@
+[package]
+name = "mm-openai"
+description = "The network: OpenAI's Chat Completions, over HTTPS or to this machine, as the Assistant's language model for every provider but Claude"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mm-assistant.workspace = true
+mm-kernel.workspace = true
+mm-net.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+[lints]
+workspace = true

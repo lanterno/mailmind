@@ -1,0 +1,207 @@
+//! The network: OpenAI's Chat Completions (`assistant.adapters.openai_chat`, #49), as the Assistant's
+//! `LanguageModel` for every provider but Claude, on mm-net: OpenAI, Gemini through Google's OpenAI-compatible
+//! endpoint, Ollama on this Mac, and any other service that speaks it, each given its base URL, its key (or none) and
+//! its model. What goes on the wire and how a reply reads is `wire`'s.
+//!
+//! It asks `POST {base}/chat/completions`, with `Authorization: Bearer <key>` when there is a key. A request goes over
+//! HTTPS, its certificate verified on the roots the system trusts; plain HTTP goes only to this machine, so a key never
+//! goes in the clear to anything off it. The host is asked of `Outside` before a connection is made. A call is sent
+//! again, twice, after a status a retry can help (408, 409, 429, 5xx) or a lost connection, waiting what
+//! `retry-after` says or else a little longer each time. Ollama and a compatible service may not take structured
+//! output: a 400 that names `response_format` is asked once more without it, and the reply read as free-form JSON. A
+//! rejected key's error holds none of what the service said, which can quote part of the key back, and no error ever
+//! holds the key. It takes no batch: only Claude's API does.
+
+pub mod wire;
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use mm_assistant::ports::{LanguageModel, ModelError, Prompt, RETRIED, Reply};
+use mm_kernel::ai_provider::AiProvider;
+use mm_kernel::seams::{Outside, Secret};
+use mm_net::http::{self, Endpoint, backoff};
+use mm_net::{Lost, Stream};
+
+/// Seconds per attempt.
+pub const TIMEOUT: Duration = Duration::from_secs(120);
+/// Attempts after the first.
+pub const RETRIES: u32 = 2;
+
+/// One provider's Chat Completions, reached at one base URL with one key, or none.
+pub struct ChatApi {
+    provider: AiProvider,
+    key: Option<Secret>,
+    endpoint: Option<Endpoint>,
+    outside: Arc<dyn Outside>,
+    timeout: Duration,
+    retries: u32,
+}
+
+impl std::fmt::Debug for ChatApi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChatApi")
+            .field("provider", &self.provider)
+            .field("endpoint", &self.endpoint)
+            .finish_non_exhaustive()
+    }
+}
+
+/// How an attempt went: a response, or a connection that didn't go or was lost.
+enum Attempt {
+    Answered(http::Response),
+    Lost(Lost),
+}
+
+impl ChatApi {
+    /// `provider`'s API at `base_url`, called with `key` (None, or an empty one, for none: Ollama's never has one). A
+    /// URL that names no HTTP endpoint makes every call fail as unreachable.
+    pub fn new(provider: AiProvider, base_url: &str, key: Option<Secret>, outside: Arc<dyn Outside>) -> ChatApi {
+        let key = key.filter(|k| provider.takes_key() && !k.expose().is_empty());
+        ChatApi { provider, key, endpoint: Endpoint::parse(base_url), outside, timeout: TIMEOUT, retries: RETRIES }
+    }
+
+    /// The same, waiting `timeout` for each answer and sending a call again up to `retries` times.
+    pub fn with_limits(mut self, timeout: Duration, retries: u32) -> ChatApi {
+        self.timeout = timeout;
+        self.retries = retries;
+        self
+    }
+
+    /// The ids `GET {base}/models` names, asked once: a person is waiting. Fails as a call does.
+    pub fn list_models(&self) -> Result<Vec<String>, ModelError> {
+        let response = self.call("GET", "/models", None, 0)?;
+        Ok(wire::model_ids(&parsed(&response).unwrap_or(serde_json::Value::Null)))
+    }
+
+    fn connect(&self, endpoint: &Endpoint) -> Result<Stream, Lost> {
+        self.outside.reach(&endpoint.host).map_err(|_| Lost("Refused"))?;
+        endpoint.open(self.timeout)
+    }
+
+    fn attempt(&self, endpoint: &Endpoint, request: &[u8]) -> Attempt {
+        let mut stream = match self.connect(endpoint) {
+            Ok(stream) => stream,
+            Err(lost) => return Attempt::Lost(lost),
+        };
+        let answered = http::exchange(&mut stream, request);
+        stream.close_notify();
+        match answered {
+            Ok(response) => Attempt::Answered(response),
+            Err(lost) => Attempt::Lost(lost),
+        }
+    }
+
+    /// A ModelError that says only that nothing answered, and why, by the class of the failure.
+    fn unreachable(&self, why: &str) -> ModelError {
+        ModelError::new(format!("{} unreachable: {why}", self.provider.id()), None)
+    }
+
+    /// `method` on `path` after the base, with `body` as JSON, sent again up to `retries` times after a status a retry
+    /// can help or a lost connection: the response, whatever its status, or a ModelError when nothing answered.
+    fn send(&self, method: &str, path: &str, body: Option<&[u8]>, retries: u32) -> Result<http::Response, ModelError> {
+        let Some(endpoint) = &self.endpoint else {
+            return Err(self.unreachable("no API address"));
+        };
+        // A key goes in the clear only to this machine, and nothing does to a host off it over plain HTTP.
+        if !endpoint.tls && !endpoint.loopback() {
+            return Err(self.unreachable("plain HTTP is only for this machine"));
+        }
+        let bearer = self.key.as_ref().map(|k| format!("Bearer {}", k.expose()));
+        if bearer.as_ref().is_some_and(|b| b.contains(['\r', '\n'])) {
+            return Err(ModelError::new(format!("{} failed: the key can't be sent", self.provider.id()), None));
+        }
+        let mut headers = vec![("Accept", "application/json"), ("User-Agent", "MailMind")];
+        if body.is_some() {
+            headers.push(("Content-Type", "application/json"));
+        }
+        if let Some(bearer) = &bearer {
+            headers.push(("Authorization", bearer.as_str()));
+        }
+        let path = format!("{}{path}", endpoint.base);
+        let request = http::request(method, &path, &endpoint.host_header(), &headers, body);
+        let mut retried = 0;
+        loop {
+            let attempt = self.attempt(endpoint, &request);
+            let again = match &attempt {
+                Attempt::Answered(response) => retried_status(response.status),
+                Attempt::Lost(lost) => lost.0 != "Refused",
+            };
+            if again && retried < retries {
+                let response = match &attempt {
+                    Attempt::Answered(response) => Some(response),
+                    Attempt::Lost(_) => None,
+                };
+                std::thread::sleep(backoff(response, retried));
+                retried += 1;
+                continue;
+            }
+            return match attempt {
+                Attempt::Lost(Lost("Timeout")) => Err(self.unreachable("timed out")),
+                Attempt::Lost(Lost("ConnectionRefused")) => Err(self.unreachable("connection refused")),
+                Attempt::Lost(Lost(class)) => Err(self.unreachable(class)),
+                Attempt::Answered(response) => Ok(response),
+            };
+        }
+    }
+
+    /// `send`, and a ModelError for an answer that isn't a 2xx: what the service said, unless it refused the key.
+    fn call(&self, method: &str, path: &str, body: Option<&[u8]>, retries: u32) -> Result<http::Response, ModelError> {
+        let response = self.send(method, path, body, retries)?;
+        if (200..300).contains(&response.status) { Ok(response) } else { Err(self.refused(&response)) }
+    }
+
+    /// The ModelError for an answer that isn't a 2xx, with what the service said unless it refused the key, and
+    /// never the key.
+    fn refused(&self, response: &http::Response) -> ModelError {
+        let provider = self.provider.id();
+        let status = response.status;
+        if matches!(status, 401 | 403) {
+            return ModelError::new(format!("{provider} API {status}: the key was refused"), Some(status));
+        }
+        let mut said = wire::error_text(&response.body);
+        if let Some(key) = self.key.as_ref().map(Secret::expose).filter(|k| !k.is_empty()) {
+            said = said.replace(key, "<key>");
+        }
+        ModelError::new(format!("{provider} API {status}: {said}"), Some(status))
+    }
+
+    /// Whether a 400 says the service doesn't take structured output: only Ollama and a compatible service are asked
+    /// again without it.
+    fn refused_format(&self, prompt: &Prompt, response: &http::Response) -> bool {
+        response.status == 400
+            && prompt.schema.is_some()
+            && matches!(self.provider, AiProvider::Ollama | AiProvider::Compatible)
+            && response.body.windows(b"response_format".len()).any(|w| w == b"response_format")
+    }
+}
+
+/// The statuses a retry can help: a timeout, a conflict, a rate limit, and any server error.
+fn retried_status(status: u16) -> bool {
+    RETRIED.contains(&status) || (500..600).contains(&status)
+}
+
+/// A response's JSON body, or None when it isn't JSON.
+fn parsed(response: &http::Response) -> Option<serde_json::Value> {
+    serde_json::from_slice(&response.body).ok()
+}
+
+impl LanguageModel for ChatApi {
+    fn complete(&self, prompt: &Prompt) -> Result<Reply, ModelError> {
+        let provider = self.provider.id();
+        let failed = || ModelError::new(format!("{provider} failed: the request can't be written"), None);
+        let body = serde_json::to_vec(&wire::body(prompt, self.provider, true)).map_err(|_| failed())?;
+        let mut response = self.send("POST", "/chat/completions", Some(&body), self.retries)?;
+        if self.refused_format(prompt, &response) {
+            let plain = serde_json::to_vec(&wire::body(prompt, self.provider, false)).map_err(|_| failed())?;
+            response = self.send("POST", "/chat/completions", Some(&plain), self.retries)?;
+        }
+        if !(200..300).contains(&response.status) {
+            return Err(self.refused(&response));
+        }
+        match parsed(&response) {
+            Some(serde_json::Value::Object(answer)) => Ok(wire::reply(&answer, &prompt.model)),
+            _ => Err(ModelError::new(format!("{provider} answered what can't be read"), None)),
+        }
+    }
+}

@@ -1,0 +1,172 @@
+//! OpenAI's Chat Completions wire format, which every provider but Claude is asked in (`assistant.adapters.chat_wire`,
+//! #49): the request body for a `Prompt`, and the `Reply` in a response.
+//!
+//! The system prompt goes as a `system` message ahead of the user's. Structured output is `response_format`'s
+//! `json_schema`, strict only where the schema keeps strict mode's rules (every object closed, and every property in it
+//! required), since a strict schema that breaks them is refused. OpenAI takes `max_completion_tokens`, and the others
+//! `max_tokens`. No effort and no server-side fallback go out: neither is theirs.
+
+use mm_assistant::ports::{Prompt, Reply, Usage};
+use mm_kernel::ai_provider::AiProvider;
+use serde_json::{Map, Value, json};
+
+/// The name structured output's schema goes by.
+pub const SCHEMA_NAME: &str = "answer";
+
+/// Whether `schema` keeps strict mode's rules: every object closed, and every property it names required.
+pub fn strict(schema: &Value) -> bool {
+    match schema {
+        Value::Array(items) => items.iter().all(strict),
+        Value::Object(node) => strict_node(node),
+        _ => true,
+    }
+}
+
+fn strict_node(node: &Map<String, Value>) -> bool {
+    let properties = node.get("properties").and_then(Value::as_object);
+    if node.get("type").and_then(Value::as_str) == Some("object") || properties.is_some() {
+        let mut names: Vec<&str> = properties.map(|p| p.keys().map(String::as_str).collect()).unwrap_or_default();
+        let mut required: Vec<&str> = match node.get("required") {
+            Some(Value::Array(required)) => required.iter().filter_map(Value::as_str).collect(),
+            _ => Vec::new(),
+        };
+        names.sort_unstable();
+        names.dedup();
+        required.sort_unstable();
+        required.dedup();
+        if node.get("additionalProperties") != Some(&Value::Bool(false)) || names != required {
+            return false;
+        }
+    }
+    node.iter().all(|(key, value)| match key.as_str() {
+        "properties" | "$defs" | "definitions" => value.as_object().is_none_or(|kids| kids.values().all(strict)),
+        "items" | "anyOf" | "oneOf" | "allOf" | "prefixItems" => strict(value),
+        _ => true,
+    })
+}
+
+/// The body of a `POST {base}/chat/completions` for `prompt`, with its schema as `response_format` unless
+/// `with_format` is false (a service that refused it).
+pub fn body(prompt: &Prompt, provider: AiProvider, with_format: bool) -> Value {
+    let mut messages = Vec::new();
+    if let Some(system) = prompt.system.filter(|s| !s.is_empty()) {
+        messages.push(json!({"role": "system", "content": system}));
+    }
+    messages.push(json!({"role": "user", "content": prompt.text}));
+    let mut out = Map::new();
+    out.insert("model".into(), json!(prompt.model));
+    out.insert("messages".into(), Value::Array(messages));
+    let most = if provider == AiProvider::OpenAi { "max_completion_tokens" } else { "max_tokens" };
+    out.insert(most.into(), json!(prompt.max_tokens));
+    if let Some(schema) = prompt.schema.as_ref().filter(|_| with_format) {
+        out.insert(
+            "response_format".into(),
+            json!({"type": "json_schema",
+                   "json_schema": {"name": SCHEMA_NAME, "schema": schema, "strict": strict(schema)}}),
+        );
+    }
+    Value::Object(out)
+}
+
+/// A count of tokens as a response gives it: a number, never below nought; anything else is none.
+fn count(usage: Option<&Value>, name: &str) -> i64 {
+    let said = usage.and_then(|u| u.get(name));
+    let n = match said {
+        Some(Value::Number(n)) => n.as_i64().or_else(|| n.as_f64().map(|f| f as i64)),
+        Some(Value::String(s)) => s.trim().parse::<i64>().ok(),
+        _ => None,
+    };
+    n.unwrap_or(0).max(0)
+}
+
+/// A message's content: a string, or a list of parts whose text parts are joined.
+fn text(content: Option<&Value>) -> String {
+    match content {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(parts)) => parts
+            .iter()
+            .filter(|p| p.get("type").and_then(Value::as_str) == Some("text"))
+            .filter_map(|p| p.get("text").and_then(Value::as_str))
+            .collect(),
+        _ => String::new(),
+    }
+}
+
+/// Whether a value says something, as Python's truth does.
+fn truthy(value: Option<&Value>) -> bool {
+    match value {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => false,
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Array(a)) => !a.is_empty(),
+        Some(Value::Object(o)) => !o.is_empty(),
+        Some(Value::Number(n)) => n.as_f64() != Some(0.0),
+        Some(Value::Bool(true)) => true,
+    }
+}
+
+/// The reply in a response to a request for model `asked`. A refusal reads as "", as Claude's does: the call worked,
+/// so callers store their fallback rather than retry. Cached prompt tokens count as cache reads, and the rest of the
+/// prompt as input.
+pub fn reply(response: &Map<String, Value>, asked: &str) -> Reply {
+    let usage = response.get("usage").filter(|u| u.is_object());
+    let prompt_tokens = count(usage, "prompt_tokens");
+    let cached = count(usage.and_then(|u| u.get("prompt_tokens_details")), "cached_tokens").min(prompt_tokens);
+    let spent = Usage {
+        input_tokens: prompt_tokens - cached,
+        output_tokens: count(usage, "completion_tokens"),
+        cache_write_tokens: 0,
+        cache_read_tokens: cached,
+    };
+    let served = match response.get("model") {
+        Some(Value::String(model)) if !model.is_empty() => model.clone(),
+        Some(other) if truthy(Some(other)) => other.to_string(),
+        _ => asked.to_owned(),
+    };
+    let first = response.get("choices").and_then(Value::as_array).and_then(|c| c.first()).filter(|c| c.is_object());
+    let message = first.and_then(|c| c.get("message")).filter(|m| m.is_object());
+    if truthy(message.and_then(|m| m.get("refusal"))) {
+        return Reply { text: String::new(), model: served, usage: spent, stop_reason: "refusal".into() };
+    }
+    let stop_reason = match first.and_then(|c| c.get("finish_reason")) {
+        Some(Value::String(reason)) => reason.clone(),
+        Some(other) if truthy(Some(other)) => other.to_string(),
+        _ => String::new(),
+    };
+    Reply {
+        text: text(message.and_then(|m| m.get("content"))).trim().to_owned(),
+        model: served,
+        usage: spent,
+        stop_reason,
+    }
+}
+
+/// The ids a `GET {base}/models` answered with.
+pub fn model_ids(response: &Value) -> Vec<String> {
+    let data = response.get("data").and_then(Value::as_array);
+    data.map(|models| {
+        models
+            .iter()
+            .filter_map(|m| m.get("id"))
+            .filter(|id| truthy(Some(id)))
+            .map(|id| id.as_str().map_or_else(|| id.to_string(), str::to_owned))
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// What a service said of an error, at most 200 characters: OpenAI's `{"error": {"message"}}`, or Ollama's
+/// `{"error": "..."}`.
+pub fn error_text(body: &[u8]) -> String {
+    let parsed: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+    let error = parsed.get("error");
+    let said = match error {
+        Some(Value::Object(inner)) => inner.get("message"),
+        other => other,
+    };
+    let said = match said {
+        Some(Value::String(s)) => s.clone(),
+        Some(other) if truthy(Some(other)) => other.to_string(),
+        _ => String::new(),
+    };
+    said.chars().take(200).collect()
+}
