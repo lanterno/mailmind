@@ -8,9 +8,9 @@ URL it is asked at, its key, and why AI is off, in the order a person can do som
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal
-from urllib.parse import urlsplit
 
 from mailmind.assistant.domain import models
+from mailmind.kernel import ai_provider
 from mailmind.kernel.ai_provider import AiProvider
 
 type Wire = Literal["anthropic", "openai"]
@@ -55,18 +55,16 @@ PROVIDERS: dict[AiProvider, Provider] = {p.id: p for p in (
     Provider("local", "A model on this Mac", "openai", "http://127.0.0.1:11434/v1", "optional", ""),     # Ollama's address
     Provider("compatible", "Another OpenAI-compatible service", "openai", "", "optional", ""),
 )}
-LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
 
 # What a model's id holds when it can't chat: every list but Claude's names these beside the ones that can (nomic-embed-text).
 _NOT_CHAT = ("embed", "tts", "whisper", "dall-e", "image", "audio", "realtime", "transcribe", "moderation", "search", "live")
 
 
 def on_loopback(url: str) -> bool:
-    """Whether `url` names this Mac."""
-    try:
-        return urlsplit(url).hostname in LOOPBACK
-    except ValueError:
-        return False
+    """Whether `url` names this Mac, as a URL a person may give a service names it: 127.0.0.1, ::1 or localhost in a URL
+    with no user or password, query or fragment, and no port that is empty or outside 1 to 65535. Any other is elsewhere,
+    so a model it serves that the price table doesn't know is priced, and its calls wait no longer."""
+    return ai_provider.on_this_machine(url)
 
 
 def sendable(key: str) -> bool:
