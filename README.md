@@ -802,14 +802,17 @@ in `mailmind.config.json`; a variable that is set decides over the file.
 
 ## Where your data lives (all local, all git-ignored)
 
-In the repo folder, or in the directory `MAILMIND_HOME` names:
+In the repo folder, or in the directory `MAILMIND_HOME` names. The Mac app keeps the same files in a folder of its
+own, `~/Library/Application Support/io.github.lanterno.mailmind`:
 
 - `mailmind.db` — messages, bodies, attachments, summaries, your learned keep/block lists, expiry rules and filters,
   saved views, snippets and the audit trails, encrypted with the key in your login Keychain. Keep a copy of that key
   somewhere safe, such as 1Password: without it neither the database nor its backups can be read on another computer.
   `security find-generic-password -s mailmind -a database-key -w` prints it.
 - `mailmind.log` (and `.1` to `.3`, older) — what the app said of its own running, one JSON object a
-  line, readable by you only. It holds ids, counts and the kinds of error, never an address or a subject.
+  line, readable by you only. It holds ids, counts and the kinds of error, never an address or a subject. The Mac app
+  and the Rust server write it too, and when something in them breaks it says which part and which line of the code,
+  never what it was working on.
 - `backups/` — the database as it stood before each upgrade (the newest three, encrypted and readable by you only).
 - `mailmind.config.json` — your accounts, your preferences, and where each password is (never a password itself),
   readable by you only.

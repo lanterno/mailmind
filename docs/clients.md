@@ -148,6 +148,21 @@ slice is built:
 - **A test reaches the server only through `Seams`** (`Clock`, `Outside`, `Keychain`), which `mm-served` fills with
   the frozen clock, the tripwire and the fake Keychain. The server has no test hooks; the served suites' `work` line
   runs one pass of a job (`mm-served/src/jobs.rs`), and one not ported yet answers `failed not on the Rust server yet`.
+- **The log is `mm_kernel::log`**, and `mm_server::logging` is where its lines go: standard error, and from the moment
+  a data folder is open, `mailmind.log` in it, as the Python app writes it (JSON lines with a UTC time, fields only
+  from the `Field` allowlist, a value holding `@` or `%40` withheld, readable by its owner only, rotated at 1 MiB with
+  `.1` to `.3` kept). `mailmind-server` and the Mac app's host (`mm-host`, as `Host::open` opens a home) install it.
+  `MAILMIND_LOG_LEVEL=debug` adds debug lines at the terminal, never in the file.
+- **A panic is a fault of its own, `Panic`.** The hook `mailmind-server` and `CoreHost::open` install logs the
+  thread's name and the file and line, never the panic's words, which can quote mail. Every background lane's round,
+  the durable queues' passes, the sync's single flight (`sync_guarded`) and each account's sync in it, IDLE's workers
+  and its dispatcher run under `mm_kernel::errors::caught`, so a panic ends that round as a failure, is logged, comes
+  down off its running flag, and the lane goes on.
+- **A wake from sleep or a change of network** is the shell's to hear, and `CoreHost::woke` (`Host::woke`) what it
+  tells the core: IDLE's workers let their connections go and open fresh ones at once (`Supervisor::renew`), and the
+  sync runs its round now. A connection waiting in IDLE is probed with TCP keepalive (after a minute quiet, every 15
+  seconds, lost after four unanswered), so one that died without a word fails in about two minutes rather than at
+  IDLE's 24-minute renewal.
 
 ## The six questions
 

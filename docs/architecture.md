@@ -106,7 +106,8 @@ The app lives in `mailmind/`.
   included. Once `wiring.start` has called `setup()`, it also goes as a JSON object to `mailmind.log` in the data
   directory, rotated and readable by its owner only, with `request_id` (`Route`) and `job_id`
   (`Scheduler.run`) from `contextvars`. `MAILMIND_LOG_LEVEL=DEBUG` shows debug lines and each exception's text at
-  the terminal, never in the file. The `mailmind` logger doesn't propagate. `/api/debug/health` says how the job
+  the terminal, never in the file. The Rust core writes the same file the same way (`mm_server::logging`, see
+  [clients.md](clients.md)), so the Mac app and the Rust server leave one too. The `mailmind` logger doesn't propagate. `/api/debug/health` says how the job
   lanes, IDLE's workers, the queues, the breaker and today's AI ledger stand, in ids and counts, and reading it
   doesn't count as someone here. Only a command's own output still prints (`bootstrap/cli.py`, `__main__.py`, `wiring.assess_batch`, `Directory.check` and `materialize`), which a test holds. It is standard library only.
 - `mailmind.platform.bus` is an in-process publish and subscribe. An event is a frozen dataclass
