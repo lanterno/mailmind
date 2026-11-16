@@ -188,11 +188,11 @@ accounts:
 sync target="all" days="90":
     {{py}} -m mailmind sync {{target}} {{days}}
 
-# Summarize mail with no summary yet, at full price (with no API key, AI is off)
+# Summarize the last 30 days' mail with no summary yet, at full price (with no API key, AI is off)
 assess limit="2000" workers="3":
     {{py}} -m mailmind assess {{limit}} {{workers}}
 
-# Send the mail with no summary yet as a batch, at half price; run again to bring in its answers
+# Send the last 30 days' mail with no summary yet as a batch, at half price; run again to bring in its answers
 backfill:
     {{py}} -m mailmind assess --batch
 

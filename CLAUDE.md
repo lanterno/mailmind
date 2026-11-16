@@ -26,7 +26,7 @@ MAILMIND_PROFILE=read-only uv run python -m mailmind serve   # the same, read-on
 
 uv run python -m mailmind check         # verify credentials resolve, per account (prints ok/fail, no secrets)
 uv run python -m mailmind sync all 90   # pull last 90 days; `sync <email> <days>` for one account
-uv run python -m mailmind assess 2000 3 # summarize up to 2000 messages, 3 workers
+uv run python -m mailmind assess 2000 3 # summarize up to 2000 messages of the last 30 days, 3 workers
 uv run python -m mailmind rules         # the learned rules; `rules keep|block|remove|expire ...` change them
 uv run python -m mailmind sweep --dry   # what a junk sweep would trash; also status, inventory, plan, expire
 uv run python -m mailmind export        # what an export would hold; `--format eml|mbox|db --out DIR` writes it
@@ -36,7 +36,7 @@ uv run python -m mailmind accounts password WHO   # keep an account's password i
 uv run python -m mailmind ai key                  # keep the Claude API key there; `--provider openai|gemini|local|compatible` another's
 uv run python -m mailmind ai on|off               # AI mode, as Settings has it: off, nothing goes to any provider
 uv run python -m mailmind ai usage --days 7  # what AI cost each day, by feature, whichever provider; reads only
-uv run python -m mailmind assess --batch     # send what has no summary as a batch; brings in one that ended
+uv run python -m mailmind assess --batch     # send the last 30 days' with no summary as a batch; brings in one that ended
 ```
 
 `just test` (`uv run pytest -n auto`) runs every test, a process for each core, and `just test -k hardening` picks by file or

@@ -706,7 +706,7 @@ uv run python -m mailmind check
 
 # 3. Pull recent mail, then summarize it
 uv run python -m mailmind sync all 90   # last 90 days (use a big number like 3650 for all-time)
-uv run python -m mailmind assess 2000 3  # summarize up to 2000, 3 workers
+uv run python -m mailmind assess 2000 3  # summarize up to 2000 of the last 30 days, 3 workers
 
 # 4. Run the dashboard
 just run                          # builds the app, then http://127.0.0.1:8721   (custom port: just run 9000)
@@ -823,7 +823,7 @@ uv run python -m mailmind expire all --dry       # preview what the expiry rules
 uv run python -m mailmind accounts password you@x.com  # keep an account's password in the login Keychain
 uv run python -m mailmind ai key                  # keep the Claude API key there (--provider openai|gemini|local|compatible for another's)
 uv run python -m mailmind ai off                  # turn AI mode off: nothing goes to any AI provider (`ai on` turns it back on)
-uv run python -m mailmind assess --batch         # what has no summary yet, as a batch at half price, within today's limit; again for the answers
+uv run python -m mailmind assess --batch         # the last 30 days' with no summary yet, as a batch at half price, within today's limit; again for the answers
 ```
 
 > ⚠️ **`sweep`, `sweep-stored`, `expire` and `empty-trash` mutate real mailboxes** (move to Trash / purge).
