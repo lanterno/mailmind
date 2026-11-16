@@ -71,7 +71,11 @@ describe("day sections", () => {
 });
 
 describe("a folder's name", () => {
-  const folders = [{ name: "[Gmail]/All Mail", role: "all", total: 1, unseen: 0, takes_filing: false }, { name: "Lists", role: "custom", total: 1, unseen: 0, takes_filing: true }, { name: "Sent Items", role: "sent", total: 1, unseen: 0, takes_filing: false }];
+  const folders = [
+    { name: "[Gmail]/All Mail", own_name: "All Mail", role: "all", total: 1, unseen: 0, takes_filing: false, changeable: false },
+    { name: "Lists", own_name: "Lists", role: "custom", total: 1, unseen: 0, takes_filing: true, changeable: true },
+    { name: "Sent Items", own_name: "Sent Items", role: "sent", total: 1, unseen: 0, takes_filing: false, changeable: false },
+  ];
   it("is its role's, or its own when it plays none", () => {
     expect(folders.map(roleLabel)).toEqual(["All mail", "Lists", "Sent"]);
   });
