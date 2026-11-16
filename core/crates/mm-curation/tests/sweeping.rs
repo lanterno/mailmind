@@ -193,6 +193,8 @@ struct World {
     opens: Option<usize>,
     opened: Mutex<usize>,
     said: Mutex<Vec<String>>,
+    /// Each way back put on the stack, as it was put.
+    pushed: Mutex<Vec<Value>>,
 }
 
 impl World {
@@ -323,6 +325,7 @@ impl Filing for Shared {
     fn undo_push_many(&self, entries: &[Value], group: &str) -> Result<(), Fault> {
         let ids: Vec<&str> = entries.iter().map(|e| e["message_id"].as_str().unwrap_or_default()).collect();
         self.0.note(format!("undo {group} {ids:?}"));
+        self.0.pushed.lock().expect("lock").extend_from_slice(entries);
         Ok(())
     }
     fn stats_changed(&self) {
@@ -439,6 +442,20 @@ fn each_message_that_went_has_its_way_back_under_the_group_the_request_named() {
     let world = self::world();
     let done = sweeps(&world, true).run(None, false, Some("")).expect("swept");
     assert_eq!(done["undo_group"], json!("sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+}
+
+#[test]
+fn a_way_back_is_a_sweep_back_from_trash_to_the_inbox_that_an_accounts_undo_takes_together() {
+    let world = world();
+    sweeps(&world, true).run(None, false, Some("ug-1")).expect("swept");
+    let pushed = world.0.pushed.lock().expect("lock").clone();
+    assert_eq!(
+        pushed[0],
+        json!({"kind": "sweep_back", "account": "ada@example.test", "src_folder": "INBOX", "dest_folder": "Trash",
+               "message_id": "<issue@example.test>", "label": "Swept junk", "subject": "issue",
+               "who": "news@loom.example.test"})
+    );
+    assert!(pushed.iter().all(|e| e["kind"] == "sweep_back"));
 }
 
 #[test]
