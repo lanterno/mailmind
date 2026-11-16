@@ -246,6 +246,27 @@ def test_a_ceiling_refused_is_asked_again_only_once(choose):
     assert e.value.status == 400 and len(api.chats) == 2
 
 
+def test_a_ceiling_gemini_refuses_inside_its_list_is_asked_once_more_without_it(choose):
+    api = choose("gemini")
+    api.queue(fo.gemini_error(400, "Invalid max_tokens value, the valid range of max_tokens is [1, 8192]"))
+    assert ask() == {"body": "stub body"}
+    first, second = api.chats
+    assert first.body["max_tokens"] == 16000 and "max_tokens" not in second.body
+
+
+@pytest.mark.parametrize("refusal", [
+    (400, {"error": {"message": "Unsupported parameter.", "type": "invalid_request_error", "param": "max_tokens"}}),
+    (400, {"error": {"type": "invalid_request_error", "detail": "max_completion_tokens is too large"}}),
+    (400, "max_completion_tokens is too large"),
+], ids=["its-param", "no-message", "no-error"])
+def test_a_400_that_names_the_ceiling_only_outside_what_the_service_said_is_not_asked_again(choose, refusal):
+    api = choose("openai")
+    api.queue(refusal)
+    with pytest.raises(ModelError) as e:
+        ask()
+    assert e.value.status == 400 and len(api.chats) == 1
+
+
 def test_a_400_naming_the_ceiling_from_a_service_given_none_is_not_asked_again(choose):
     api = choose("compatible", key=None, ai_model="mixtral-9x")
     api.key = None
