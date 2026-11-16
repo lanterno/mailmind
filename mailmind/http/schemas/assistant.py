@@ -370,3 +370,17 @@ class ModelList(Answer):
     ok: Literal[True]
     models: list[str]
     default: str | None
+
+
+class LocalServer(Answer):
+    """A model server on this Mac that answered: its name, the base URL a model on this Mac is reached at there, and the
+    models it lists that a person may choose, sorted."""
+    name: str
+    url: str
+    models: list[str]
+
+
+class LocalServers(Answer):
+    """The model servers on this Mac that answered, in the order they are known; none is an empty list."""
+    ok: Literal[True]
+    servers: list[LocalServer]

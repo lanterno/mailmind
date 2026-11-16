@@ -27,6 +27,15 @@ CONFIG = "mailmind.config.json"           # where a key came from, for every pro
 TIMEOUT = 120                             # seconds a call's attempt waits
 LOCAL_TIMEOUT = 300                       # ...on this Mac, where a model loads on its first use
 
+# The model servers a person may run on this Mac, each at its OpenAI-compatible API on its own port, in the order Settings
+# offers the ones that answer.
+LOCAL_SERVERS: tuple[tuple[str, str], ...] = (("Ollama", "http://127.0.0.1:11434/v1"),
+                                              ("LM Studio", "http://127.0.0.1:1234/v1"),
+                                              ("llama.cpp", "http://127.0.0.1:8080/v1"),
+                                              ("vLLM", "http://127.0.0.1:8000/v1"),
+                                              ("Jan", "http://127.0.0.1:1337/v1"),
+                                              ("GPT4All", "http://127.0.0.1:4891/v1"))
+
 
 @dataclass(frozen=True)
 class Provider:

@@ -18,7 +18,7 @@ import threading
 
 from mailmind.accounts.adapters import config_file, secrets
 from mailmind.accounts.api import PREFERENCE_DEFAULTS, api_key_who
-from mailmind.assistant.adapters import anthropic_sdk, openai_chat
+from mailmind.assistant.adapters import anthropic_sdk, local_servers, openai_chat
 from mailmind.assistant.adapters import sqlite as answers
 from mailmind.assistant.adapters.anthropic_sdk import AnthropicModel
 from mailmind.assistant.adapters.disabled import WHY, DisabledModel
@@ -291,7 +291,7 @@ def assemble():
     screening = Screening(calls, _uow, _mail)
     rationales = Rationales(calls, _uow, _mail)
     sender_digest = SenderDigest(calls, _uow, _mail)
-    catalog = Catalog(lambda provider: key(provider)[0], _listing_base, _list_models)
+    catalog = Catalog(lambda provider: key(provider)[0], _listing_base, _list_models, local_servers)
 
 
 assemble()

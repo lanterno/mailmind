@@ -26,6 +26,7 @@ from mailmind.http.schemas.assistant import (
     CleanupRationales,
     Expired,
     Extracted,
+    LocalServers,
     ModelList,
     ModelsArgs,
     PlanBody,
@@ -100,6 +101,11 @@ def router(assistant, mailbox):
     @r.get("/api/ai/models", responses=answers(ModelList))
     def ai_models(args: Annotated[ModelsArgs, Query()]):
         return assistant.catalog.models(args.provider)
+
+    # the model servers on this Mac and their models, for a person choosing a model on this Mac: AI may be off here too
+    @r.get("/api/ai/local", responses=answers(LocalServers))
+    def ai_local():
+        return assistant.catalog.local_servers()
 
     @r.post("/api/ai/summarize", responses=answers(Summary, {**_MAY_FAIL, 504: Failure}))
     @_scrubbed("error", "summary failed")

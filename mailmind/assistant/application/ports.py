@@ -8,7 +8,7 @@ Some say nothing was sent (NotSent): AIOff, which a model raises when AI is off 
 key, URL or model), NoBatches, which one that takes no batch raises for one, and what the cost
 governor raises when it holds a call back (OverLimit, Deferred).
 """
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, Protocol, TypedDict
@@ -149,6 +149,15 @@ class ModelLister(Protocol):
     """The ids of the models a provider lists, asked over `wire` at `base_url` with `key` ("" for none). Raises ModelError
     as a call does."""
     def __call__(self, wire: Wire, provider: AiProvider, base_url: str, key: str) -> list[str]: ...
+
+
+class LocalServers(Protocol):
+    """The model servers on this Mac: the ones there may be, as (name, base URL), and what those at `urls` list."""
+    def known(self) -> Sequence[tuple[str, str]]: ...
+
+    def listing(self, urls: Sequence[str]) -> dict[str, list[str]]:
+        """The ids each of `urls` that answered with a list of models names, with no key. One that didn't is left out."""
+        ...
 
 
 @dataclass(frozen=True)
