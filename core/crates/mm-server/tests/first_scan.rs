@@ -2,7 +2,8 @@
 //! down what each account was sent: the Inbox's newest 500 stored at once, the rest newest first a few steps a round,
 //! each step one transaction, so a round that stops goes on where the last left off; each message's text read from
 //! its first 64 KiB, only an invite cut off fetched whole; how far the scan has got in the sync's status; none of it
-//! new mail; and each account syncing on its own.
+//! new mail; each account syncing on its own; and an Inbox opened while its first sync runs joining it, holding no
+//! gate, so a message opens meanwhile.
 
 #![allow(clippy::unwrap_used)]
 
@@ -17,6 +18,8 @@ use std::time::{Duration, Instant};
 
 use futures_core::Stream;
 use mm_kernel::seams::{Clock, Keychain, KeychainProblem, Moment, Outside, Secret, Tripped};
+use mm_mailbox::gates::{Priority, Wait, on_gate};
+use mm_mailbox::lists::Paging;
 use mm_server::environment::{Environment, Settings};
 use mm_server::events::TabStream;
 use mm_server::workers::OLDER_MAIL;
@@ -537,4 +540,27 @@ fn one_accounts_slow_server_holds_up_no_other() {
         round.join().unwrap();
     });
     assert_eq!(w.stored(ADA), [1, 2, 3]);
+}
+
+#[test]
+fn an_inbox_opened_during_its_first_sync_joins_it_and_a_message_opens_meanwhile() {
+    let imap = Imap::start();
+    imap.add(ADA, notes(1, 3));
+    imap.hold(ADA);
+    let w = &world(imap, &[ADA]);
+    std::thread::scope(|scope| {
+        let round = scope.spawn(|| w.app.syncing.sync_once());
+        until(|| w.imap.sent(ADA, "UID FETCH ").len() == 1);
+        let page = Paging { offset: 0, limit: 50, grouped: false };
+        let opened = scope.spawn(move || w.app.reading.lists.messages_in(Some(ADA), "INBOX", page).unwrap());
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(w.imap.sent(ADA, "UID SEARCH").len(), 1, "the open read the Inbox a second time");
+        assert!(!w.app.gates.held(ADA));
+        assert_eq!(on_gate(&*w.app.gates, ADA, Priority::Interactive, Wait::Not, || 7), Ok(7));
+        w.imap.let_go(ADA);
+        round.join().unwrap();
+        let listed = opened.join().unwrap();
+        assert_eq!(listed["items"].as_array().unwrap().len(), 3);
+        assert!(listed.get("syncing").is_none(), "{listed}");
+    });
 }

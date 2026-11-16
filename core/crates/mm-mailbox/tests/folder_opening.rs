@@ -17,7 +17,7 @@ use mm_mailbox::folders::Folders;
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait};
 use mm_mailbox::ingest::SyncError;
 use mm_mailbox::opening::{FolderOpening, OpeningParts, Waits};
-use mm_mailbox::opening_ports::{Background, FolderSync};
+use mm_mailbox::opening_ports::{Background, FolderSync, InboxSync};
 use mm_mailbox::ports::{
     Accounts, FolderSyncs, MailSession, MailSessions, Opened, Page, Row, SessionError, StoredLists, StoredMail,
     ViewCounts,
@@ -103,6 +103,13 @@ impl FolderSync for Syncs {
             self.scanned.0.lock().unwrap().insert(folder.to_owned());
         }
         Ok((*self.new.lock().unwrap(), 0))
+    }
+}
+
+/// The background's sync of the Inbox, read whole as a first scan reads it.
+impl InboxSync for Syncs {
+    fn sync_inbox(&self, account: &str) -> bool {
+        self.sync_folder(account, "INBOX", true).is_ok()
     }
 }
 
@@ -213,6 +220,7 @@ impl World {
             folders: folders.clone(),
             background: Arc::new(Threads),
             waits,
+            inbox: syncs.clone(),
         });
         World { syncs, gates, told, clock, folders, opening }
     }
@@ -230,6 +238,7 @@ impl World {
             folders: world.folders.clone(),
             background: Arc::new(Threads),
             waits,
+            inbox: world.syncs.clone(),
         });
         World { opening, ..world }
     }
@@ -323,6 +332,18 @@ fn the_inbox_is_left_to_the_background_sync() {
     assert_eq!(world.open("INBOX"), Opened::Done);
     assert!(world.asked().is_empty());
     assert_eq!(world.told.count(), 0);
+}
+
+#[test]
+fn an_inbox_no_scan_has_begun_joins_the_background_sync_and_takes_no_gate() {
+    let world = World::new(&[]);
+    assert_eq!(world.open("INBOX"), Opened::Done);
+    assert_eq!(world.asked(), [("INBOX".to_owned(), true)]);
+    assert!(world.gates.0.lock().unwrap().is_empty(), "the Inbox's sync holds no gate, so a message opens meanwhile");
+    assert_eq!(world.told.nth(0), synced("INBOX", true, 0));
+    // Begun, it is left to the background.
+    assert_eq!(world.open("INBOX"), Opened::Done);
+    assert!(world.asked().is_empty());
 }
 
 #[test]
