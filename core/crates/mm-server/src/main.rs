@@ -42,7 +42,7 @@ fn main() -> ExitCode {
     match runtime.block_on(serve(port)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(said) => {
-            eprintln!("mailmind-server: {said}");
+            eprintln!("mailmind-server: {}", mm_server::on_the_command_line(&said));
             ExitCode::FAILURE
         }
     }

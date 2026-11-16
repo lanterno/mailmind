@@ -79,4 +79,5 @@ mod plan_wiring;
 mod backfill_wiring;
 
 pub use app::{App, Seams};
+pub use database_version::on_the_command_line;
 pub use serve::{Server, Work};
