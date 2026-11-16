@@ -31,20 +31,19 @@ final class AIChoicesTests: XCTestCase {
                        SecretStanding(summary: "No key", note: "Only if your server asks for one.", kept: false))
     }
 
-    /// A model on this Mac is said as one, never as the server it runs in; Ollama is named only as a server found.
+    /// A model on this Mac is said as one, never as the server it runs in; Ollama is named only as a server found, and
+    /// in the steps to one and the context it needs.
     func testAModelOnThisMacIsSaidAsOne() {
         XCTAssertEqual(API.AiProvider.local.name, "your model server")
         XCTAssertEqual(API.AiProvider.local.writer, "a model on this Mac")
         XCTAssertEqual(API.AiProvider.local.title, "A model on this Mac")
         XCTAssertEqual(API.AiProvider.openai.title, "OpenAI")
         XCTAssertEqual(API.AiProvider.compatible.title, "Your AI service")
-        XCTAssertEqual(AIChoices.modelHelp(.local), """
-            Long threads need room: give the model a context of at least 16K tokens in your model server’s settings.
-            """)
+        XCTAssertEqual(AIChoices.modelHelp(.local), "In Ollama’s settings, set Context length to 16K or more.")
         XCTAssertEqual(AIChoices.urlHelp(.local),
                        "Where your model server listens, on this Mac: 127.0.0.1, ::1 or localhost.")
         for provider in API.AiProvider.allCases {
-            for words in [provider.label, provider.name, provider.writer, AIChoices.modelHelp(provider),
+            for words in [provider.label, provider.name, provider.writer,
                           AIChoices.urlHelp(provider), AIChoices.keyLabel(provider), AIChoices.keyPrompt(provider),
                           AIChoices.removeWarning(provider), AIWords.privacy(provider)] {
                 XCTAssertFalse(words.contains("Ollama"), "\(provider): \(words)")
@@ -249,8 +248,15 @@ final class LocalFinderTests: XCTestCase {
         let look = await AIChoices.look { API.LocalServers(ok: true, servers: []) }
         XCTAssertEqual(look, .found([]))
         XCTAssertEqual(AIChoices.lookLine(look), """
-            No model server is running on this Mac. Start one, Ollama or LM Studio for example, and look again.
+            No model server is running on this Mac yet.
             """)
+        XCTAssertEqual(AIChoices.firstSteps, [
+            "Get Ollama and open it.",
+            "In Ollama, download a model. Qwen 3 (8B) is a good first one: it runs well on a Mac with 16 GB of memory.",
+            "In Ollama’s settings, set Context length to 16K or more.",
+            "Then look again.",
+        ], "the steps to a model on this Mac, as the page has them")
+        XCTAssertEqual(AIChoices.getOllama.absoluteString, "https://ollama.com")
     }
 
     func testLooking() {
