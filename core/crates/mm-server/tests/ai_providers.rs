@@ -402,11 +402,26 @@ fn a_call_goes_to_the_provider_chosen_and_with_ai_turned_off_nowhere() {
         (
             409,
             json!({"type": "/problems/ai-off", "title": "AI is off", "status": 409,
-                     "detail": "AI is off: MailMind has no Claude API key", "ai_off": true})
+                     "detail": "AI is off: it is turned off in Settings", "ai_off": true})
         )
     );
     assert_eq!(r.outside.0.lock().unwrap().len(), reached, "nothing was reached");
     assert_eq!(heard(&log).len(), 1);
+
+    // Each reason in its own words.
+    for (chosen, words) in [
+        (json!({"ai_enabled": true, "ai_provider": "openai"}), "AI is off: there is no API key"),
+        (json!({"ai_provider": "compatible", "ai_model": "mixtral"}), "AI is off: the service has no URL"),
+        (json!({"ai_provider": "ollama"}), "AI is off: no model is chosen"),
+    ] {
+        r.post("/api/preferences", &chosen);
+        let off = r.post("/api/ai/rewrite", &rewrite);
+        assert_eq!(
+            (off.status, off.json()["detail"].clone(), off.json()["ai_off"].clone()),
+            (409, json!(words), json!(true))
+        );
+    }
+    assert_eq!(r.outside.0.lock().unwrap().len(), reached);
 }
 
 // -- the models a provider lists ---------------------------------------------------------------
