@@ -296,6 +296,48 @@ def test_ai_key_keeps_the_claude_key_in_the_keychain_and_the_assistant_reads_it(
     assert assistant.key() == ("sk-ant-kept-in-the-keychain", "mailmind.config.json")
 
 
+@pytest.mark.parametrize("provider, named, item", [("openai", "OpenAI API key", "openai-api-key"),
+                                                   ("gemini", "Gemini API key", "gemini-api-key"),
+                                                   ("compatible", "AI service's API key", "compatible-api-key")])
+def test_ai_key_with_a_provider_keeps_that_providers_key(data_dir, monkeypatch, capsys, fake_keychain, provider, named, item):
+    import json
+    from mailmind.bootstrap import assistant
+    (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": []}))
+    asked = _typing(monkeypatch, "sk-test-kept-for-a-provider", tty=True)
+    assert _exit(["ai", "key", "--provider", provider]) == 0
+    assert asked == [f"{named[0].upper()}{named[1:]} (nothing shows as you type): "]
+    assert capsys.readouterr().out == f"The {named} is in the login Keychain as {item}, and mailmind.config.json names it.\n"
+    assert fake_keychain.items() == {item: "sk-test-kept-for-a-provider"}
+    written = (data_dir / "mailmind.config.json").read_text()
+    assert json.loads(written)[f"{provider}_api_key"] == {"keychain": item, "version": 1} and "sk-test" not in written
+    assert assistant.key(provider) == ("sk-test-kept-for-a-provider", "mailmind.config.json")
+
+
+@pytest.mark.parametrize("provider", ["ollama", "mistral"])
+def test_ai_key_for_a_provider_that_takes_none_is_refused_by_its_choices(data_dir, capsys, provider):
+    with pytest.raises(SystemExit) as done:
+        main(["ai", "key", "--provider", provider])
+    assert done.value.code == 2 and "invalid choice" in capsys.readouterr().err
+
+
+def test_ai_off_and_on_turn_the_switch_and_say_what_is_in_force(data_dir, capsys, monkeypatch):
+    import json
+    from mailmind.bootstrap import assistant
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-in-the-environment")
+    (data_dir / "mailmind.config.json").write_text(json.dumps({"accounts": [], "theme": "dark"}))
+    assert _exit(["ai", "off"]) == 0
+    assert capsys.readouterr().out == "AI is off: nothing is sent to any AI provider until it is turned on again.\n"
+    assert json.loads((data_dir / "mailmind.config.json").read_text()) == {
+        "accounts": [], "theme": "dark", "preferences": {"ai_enabled": False}}
+    assert assistant.engine().off == "turned-off"
+    assert _exit(["ai", "on"]) == 0
+    assert capsys.readouterr().out == "AI is on.\n"
+    assert assistant.engine().off is None
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    assert _exit(["ai", "on"]) == 0
+    assert capsys.readouterr().out == "AI is on, but nothing is sent yet: there is no API key.\n"
+
+
 def _plaintext_config(data_dir):
     import json
     raw = {"anthropic_api_key": "sk-ant-in-the-file", "accounts": [

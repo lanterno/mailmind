@@ -242,7 +242,7 @@ def test_the_command_line_lists_each_day_by_feature_and_the_total(gateway, ai, c
         main(["ai", "usage", "--days", "3"])
     assert ended.value.code == 0
     assert capsys.readouterr().out.splitlines() == [
-        "AI usage by local day at Anthropic's list prices, the last 3 days:",
+        "AI usage by local day at the providers' list prices, the last 3 days:",
         "  2026-11-04  $0.01      1 call   triage $0.01 (1)",
         "  2026-11-03      -",
         "  2026-11-02  $0.03      2 calls  draft $0.02 (1) · triage $0.01 (1)",
