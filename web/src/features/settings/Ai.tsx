@@ -18,7 +18,7 @@ import { createStore } from "../../lib/store";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
 import { useDigest } from "../mailbox";
-import { aiParts, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
+import { aiParts, BILLING, CHOSEN_ELSEWHERE, keepKey, localFound, localMenu, localPicked, modelChoices, NEEDS, providerChanges, urlToSave } from "./aiChoices";
 import { Check } from "./Check";
 import { useStepBack } from "./useStepBack";
 
@@ -29,7 +29,7 @@ function KeyField({ provider, kept, keptFrom, done }: { provider: AiProvider; ke
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState("");
-  const needs = NEEDS[provider];
+  const needs = NEEDS[provider], billing = BILLING[provider];
   const keep = async () => {
     setRefused("");
     setBusy(true);
@@ -84,6 +84,12 @@ function KeyField({ provider, kept, keptFrom, done }: { provider: AiProvider; ke
       {needs.keysAt && (
         <a className="set-mini set-link" href={needs.keysAt} target="_blank" rel="noopener noreferrer">
           Make a key at {needs.keysAt.replace(/^https:\/\//, "")} <Icon name="external" />
+        </a>
+      )}
+      {billing && <div className="set-help" id="aiBilling">{billing.words}</div>}
+      {billing?.creditAt && (
+        <a className="set-mini set-link" href={billing.creditAt} target="_blank" rel="noopener noreferrer">
+          Add credit at {new URL(billing.creditAt).host} <Icon name="external" />
         </a>
       )}
       <div className="err" role="alert">{refused}</div>

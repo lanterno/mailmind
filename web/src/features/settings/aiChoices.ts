@@ -28,6 +28,17 @@ export const NEEDS: Record<AiProvider, Needs> = {
   compatible: { key: "optional", url: "", ownModel: false },
 };
 
+// How a provider whose key is paid for bills it, in plain words on its key's card: per use, by the provider, apart from any
+// chat subscription, and where credit is added (for Gemini, the project a key belongs to is billed). A model on this Mac costs
+// nothing, and a compatible service says its own.
+const APART = "separately from any ChatGPT or Claude subscription.";
+export interface Billing { words: string; creditAt?: string }
+export const BILLING: Partial<Record<AiProvider, Billing>> = {
+  anthropic: { words: `Billed per use by Anthropic, ${APART} Add credit in Anthropic’s console, under Billing.`, creditAt: "https://console.anthropic.com/settings/billing" },
+  openai: { words: `Billed per use by OpenAI, ${APART} Add credit on OpenAI’s platform, under Billing.`, creditAt: "https://platform.openai.com/settings/organization/billing" },
+  gemini: { words: `Billed per use by Google, ${APART} Use a key on a billed project: on the free tier, a key stops each day at its quota.` },
+};
+
 // Another provider: its own model and URL until a person chooses others, as the server sets them back.
 export const providerChanges = (provider: AiProvider): Changes => ({ ai_provider: provider, ai_model: "", ai_base_url: "" });
 
