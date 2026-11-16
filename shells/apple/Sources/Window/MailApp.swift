@@ -166,6 +166,13 @@ final class MailApp {
         event.name == "folder-synced" && event.decoded([String: JSONValue].self)?["ok"] == .bool(true)
     }
 
+    /// Whether the list on screen is read again after `event`. An Inbox's first scan says no new-mail, since none of
+    /// what it stores is new, so the list doesn't wait for one: the end of the sync that stored its newest mail
+    /// (`sync-done`) reads it again, and so does each step of its older mail as it is stored (`folder-synced`).
+    static func refreshesTheList(_ event: CoreEvent) -> Bool {
+        mailChanged.contains(event.name) || readAFolder(event)
+    }
+
     private func listen(to core: Core) {
         listening = Task { [weak self] in
             guard let events = try? await core.events() else { return }
@@ -174,7 +181,7 @@ final class MailApp {
                 #if os(macOS)
                 self.mailbox.heard(event)
                 #endif
-                if Self.mailChanged.contains(event.name) || Self.readAFolder(event) {
+                if Self.refreshesTheList(event) {
                     self.list?.refresh()
                 }
             }
