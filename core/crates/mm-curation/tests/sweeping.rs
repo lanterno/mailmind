@@ -16,13 +16,14 @@ use mm_kernel::seams::{Clock, Moment};
 use serde_json::{Value, json};
 
 /// A server's INBOX. A MOVE naming a `refused` UID is a NO; an `ignored` one is answered OK and kept for that many
-/// MOVEs; `lost` ends the connection at the first MOVE of that many UIDs.
+/// MOVEs; `lost` ends the connection at the first MOVE of that many UIDs, and `lost_after` once that MOVE is done.
 #[derive(Debug, Default)]
 struct Inbox {
     uids_in: BTreeSet<u32>,
     refused: BTreeSet<u32>,
     ignored: HashMap<u32, u32>,
     lost: Option<usize>,
+    lost_after: Option<usize>,
     heads: HashMap<u32, Vec<u8>>,
     flags: HashMap<u32, Vec<String>>,
     moves: Vec<(Vec<u32>, String)>,
@@ -77,6 +78,10 @@ impl LiveSession for Inbox {
                     self.uids_in.remove(u);
                 }
             }
+        }
+        if self.lost_after == Some(uids.len()) {
+            self.lost_after = None;
+            return Err(LiveError::Lost("ConnectionLost"));
         }
         Ok(())
     }
@@ -179,11 +184,14 @@ fn a_star_or_no_seen_flag_holds_a_message_back_whatever_the_case() {
 
 // ── a sweep of an account ────────────────────────────────────────────────
 
-/// The accounts, their inboxes and everything the sweep writes, each noted.
+/// The accounts, their inboxes and everything the sweep writes, each noted. `opens` sessions are opened, and none
+/// after them.
 #[derive(Debug, Default)]
 struct World {
     inbox: Mutex<Option<Inbox>>,
     refuse_open: bool,
+    opens: Option<usize>,
+    opened: Mutex<usize>,
     said: Mutex<Vec<String>>,
 }
 
@@ -255,7 +263,12 @@ impl LiveInboxes for Shared {
         unreachable!("a sweep a person asked for waits its turn")
     }
     fn open(&self, _: &str) -> Result<Box<dyn LiveSession>, &'static str> {
-        if self.0.refuse_open {
+        let opened = {
+            let mut opened = self.0.opened.lock().expect("lock");
+            *opened += 1;
+            *opened
+        };
+        if self.0.refuse_open || self.0.opens.is_some_and(|opens| opened > opens) {
             return Err("ConnectionRefused");
         }
         let inbox = self.0.inbox.lock().expect("lock").take().expect("one session at a time");
@@ -462,21 +475,51 @@ fn nothing_that_went_leaves_the_stack_alone_and_the_answer_names_no_group() {
     assert!(!world.0.said().iter().any(|s| s.starts_with("undo")));
 }
 
+/// What a sweep answered and noted of `world`'s account: (error, moved, undo group), and its undo and forget notes.
+fn stopped(world: &Shared) -> ((Value, Value, Value), Vec<String>) {
+    let done = sweeps(world, true).run(None, false, None).expect("swept");
+    let said = (done["results"][0]["error"].clone(), done["results"][0]["moved"].clone(), done["undo_group"].clone());
+    let notes = world.0.said().into_iter().filter(|s| s.starts_with("undo") || s.starts_with("forget")).collect();
+    (said, notes)
+}
+
 #[test]
-fn a_connection_lost_on_the_way_leaves_a_way_back_for_all_it_meant_to_move() {
+fn a_connection_lost_before_anything_moved_leaves_the_stack_as_it_was() {
     let world = world();
     world.0.inbox.lock().expect("lock").as_mut().expect("closed").lost = Some(2);
-    let done = sweeps(&world, true).run(None, false, None).expect("swept");
+    let (said, notes) = stopped(&world);
+    assert_eq!(said, (json!("ConnectionLost"), json!(0), Value::Null));
+    assert_eq!(notes, Vec::<String>::new());
+    let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
+    assert_eq!((inbox.uids_in, inbox.closed), ([1, 2, 3].into(), Some(false)), "a fresh look found it all there");
+}
+
+#[test]
+fn a_connection_lost_after_its_move_gives_a_way_back_to_what_a_fresh_look_finds_gone() {
+    let world = world();
+    world.0.inbox.lock().expect("lock").as_mut().expect("closed").lost_after = Some(2);
+    let (said, notes) = stopped(&world);
+    assert_eq!(said, (json!("ConnectionLost"), json!(2), json!("sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")));
     assert_eq!(
-        (done["results"][0]["error"].clone(), done["undo_group"].clone()),
-        (json!("ConnectionLost"), json!("sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+        notes,
+        [
+            "forget ada@example.test [(\"2\", \"<issue@example.test>\"), (\"3\", \"<alert@example.test>\")] []",
+            "undo sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa [\"<issue@example.test>\", \"<alert@example.test>\"]",
+        ]
     );
-    let undo: Vec<String> = world.0.said().into_iter().filter(|s| s.starts_with("undo")).collect();
+}
+
+#[test]
+fn a_server_that_cant_be_asked_again_leaves_a_way_back_for_all_it_meant_to_move() {
+    let mut inbox = world().0.inbox.lock().expect("lock").take().expect("closed");
+    inbox.lost = Some(2);
+    let world = Shared(Arc::new(World { inbox: Mutex::new(Some(inbox)), opens: Some(1), ..World::default() }));
+    let (said, notes) = stopped(&world);
+    assert_eq!(said, (json!("ConnectionLost"), json!(0), json!("sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")));
     assert_eq!(
-        undo,
+        notes,
         ["undo sweep:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa [\"<issue@example.test>\", \"<alert@example.test>\"]"]
     );
-    assert!(!world.0.said().iter().any(|s| s.starts_with("forget")));
 }
 
 #[test]
