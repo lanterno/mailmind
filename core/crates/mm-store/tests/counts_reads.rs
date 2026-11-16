@@ -89,6 +89,19 @@ fn a_stored_inbox_leaves_out_what_is_deleted_or_on_its_way_out() {
 }
 
 #[test]
+fn a_stored_inbox_says_what_was_read_and_what_was_starred() {
+    let (_dir, database) = database();
+    database
+        .read(|c| {
+            c.execute_batch("UPDATE messages SET seen=1 WHERE pk IN (1, 3); UPDATE messages SET flagged=1 WHERE pk=3;")
+        })
+        .unwrap();
+    let inboxes = database.stored_inboxes(&["ada@example.test"]).unwrap();
+    let flags: Vec<(bool, bool)> = inboxes[0].iter().map(|s| (s.seen, s.flagged)).collect();
+    assert_eq!(flags, [(true, false), (true, true)]);
+}
+
+#[test]
 fn the_rule_book_is_its_document_none_before_a_rule_is_made_and_a_fault_when_it_wont_parse() {
     let (_dir, database) = database();
     assert_eq!(database.rules().unwrap(), None);

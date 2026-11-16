@@ -164,7 +164,7 @@ fn each_plan_names_its_account_its_kind_and_no_error_in_the_order_asked() {
     let found = plans(None).plans_stored(&[("bea@example.test", "proton"), ADA]).unwrap();
     assert_eq!(found.len(), 2);
     let (bea, ada) = (&found[0], &found[1]);
-    assert_eq!(ada.len(), 8);
+    assert_eq!(ada.len(), 9);
     assert_eq!(
         (&ada["account"], &ada["kind"], &ada["error"]),
         (&json!("ada@example.test"), &json!("imap"), &Value::Null)
@@ -188,4 +188,23 @@ fn a_plan_reads_the_rules_as_they_stand() {
 fn a_rule_book_that_isnt_one_fails_the_plan() {
     let failed = plans(Some(json!({"keep_senders": 1}))).plans_stored(&[ADA]).unwrap_err();
     assert_eq!(failed.class, "MalformedRules");
+}
+
+#[test]
+fn a_plan_counts_as_sweepable_the_junk_someone_read_and_no_one_starred() {
+    let listed = |seen, flagged| Stored {
+        list_unsub_raw: Some("<https://loom.example.test/u>".into()),
+        seen,
+        flagged,
+        ..from("news@loom.example.test")
+    };
+    let inbox = vec![
+        listed(true, false),
+        listed(true, false),
+        listed(false, false),
+        listed(true, true),
+        Stored { seen: true, ..from("lin@example.test") },
+    ];
+    let found = StoredPlans::new(Arc::new(Inbox(inbox)), Arc::new(Book(None))).plans_stored(&[ADA]).unwrap();
+    assert_eq!((&found[0]["junk"], &found[0]["keep"], &found[0]["sweepable"]), (&json!(4), &json!(1), &json!(2)));
 }
