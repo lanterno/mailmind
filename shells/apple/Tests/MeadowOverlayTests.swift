@@ -490,7 +490,7 @@ final class MeadowOverlayTests: XCTestCase {
     // MARK: The keyboard's legend
 
     func testTheLegendListsTheWindowsKeys() {
-        let listed = Set(KeysLegend.columns.flatMap { $0 }.flatMap(\.keys).map { $0.keys.joined(separator: " ") })
+        let listed = Set(KeysLegend.columns().flatMap { $0 }.flatMap(\.keys).map { $0.keys.joined(separator: " ") })
         // The list's single keys (`RowKeys`), the desk's and the composer's, and the frame's.
         for key in ["J", "K", "N", "P", "E", "D", "#", "B", "M", "S", "U", "Z", "V", "/", "H", "W", "L", "I",
                     "R", "A", "F", "C", "[", "↵", "Esc", "?", "⌘K"] {
@@ -498,6 +498,14 @@ final class MeadowOverlayTests: XCTestCase {
         }
         // Snooze is H, as the window has it.
         XCTAssertEqual(KeysLegend.triage.keys.first { $0.words.hasPrefix("Snooze") }?.keys, ["H"])
+    }
+
+    func testWithAITurnedOffTheLegendLeavesOutOnlySummarize() {
+        func listed(_ off: Bool) -> Set<String> {
+            Set(KeysLegend.columns(aiTurnedOff: off).flatMap { $0 }.flatMap(\.keys).map { $0.keys.joined(separator: " ") })
+        }
+        XCTAssertTrue(listed(false).contains("I"))
+        XCTAssertEqual(listed(true), listed(false).subtracting(["I"]), "only the key AI serves goes")
     }
 
     func testGoToListsEveryFolderAKeyGoesTo() {
