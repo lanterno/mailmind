@@ -108,7 +108,9 @@ struct GeneralPane: View {
 }
 
 /// The read-only switch: MailMind changes nothing on the mail servers, kept by the app and handed to the core as it
-/// opens (`CoreHome.ofThisProcess`), so a change asks to open MailMind again.
+/// opens (`CoreHome.ofThisProcess`), so a change asks to open MailMind again. Only a person's own run has it: a demo
+/// or test run shares the app's defaults, so the switch there would change the person's MailMind, and it runs only as
+/// it was started.
 struct ReadOnlySection: View {
     let status: AppStatus
     @AppStorage(CoreHome.readOnlyKey) private var readOnly = false
@@ -117,30 +119,27 @@ struct ReadOnlySection: View {
 
     var body: some View {
         DeskSideCard(title: String(localized: "Mail servers"), icon: .shield) {
-            SettingSwitch(String(localized: "Read only"), help: ReadOnlyRun.help,
-                          isOn: Binding(get: { readOnly }, set: { readOnly = $0; asking = true }))
-            if let pending = ReadOnlyRun.pending(chosen: readOnly, running: status.digest?.profile) {
-                HStack(spacing: 8) {
-                    SettingHelp(pending)
-                    Spacer(minLength: 0)
-                    if ReadOnlyRun.canRelaunch {
+            if ReadOnlyRun.switchable {
+                SettingSwitch(String(localized: "Read only"), help: ReadOnlyRun.help,
+                              isOn: Binding(get: { readOnly }, set: { readOnly = $0; asking = true }))
+                if let pending = ReadOnlyRun.pending(chosen: readOnly, running: status.digest?.profile) {
+                    HStack(spacing: 8) {
+                        SettingHelp(pending)
+                        Spacer(minLength: 0)
                         Button("Relaunch Now") { ReadOnlyRun.relaunch() }
                             .meadowButton(small: true)
                     }
                 }
+            } else {
+                SettingHelp(ReadOnlyRun.notSwitchable(running: status.digest?.profile))
             }
         }
         .alert(readOnly ? "Open MailMind again to turn read only on?" : "Open MailMind again to turn read only off?",
                isPresented: $asking) {
-            if ReadOnlyRun.canRelaunch {
-                Button("Relaunch Now") { ReadOnlyRun.relaunch() }
-                Button("Later", role: .cancel) {}
-            } else {
-                Button("OK", role: .cancel) {}
-            }
+            Button("Relaunch Now") { ReadOnlyRun.relaunch() }
+            Button("Later", role: .cancel) {}
         } message: {
-            Text(ReadOnlyRun.canRelaunch ? "MailMind applies this as it opens."
-                                         : "MailMind applies this as it opens. Quit it, then open it again.")
+            Text("MailMind applies this as it opens.")
         }
     }
 }
@@ -160,8 +159,17 @@ enum ReadOnlyRun {
                       : String(localized: "MailMind changes mail on your servers again the next time it opens.")
     }
 
-    /// Only a person's run opens itself again: another's home is in an environment a relaunch wouldn't carry.
-    static var canRelaunch: Bool { CoreHome.isAPersonsRun() }
+    /// Whether this run has the switch: only a person's own, which is also the only one that opens itself again (a
+    /// demo's or a test's home is in an environment a relaunch wouldn't carry).
+    static var switchable: Bool { CoreHome.isAPersonsRun() }
+
+    /// What a demo or test run says in the switch's place: how it runs, which only how it was started decides.
+    /// `running` is the profile the core says it runs; nil before it has said.
+    static func notSwitchable(running: String?) -> String {
+        let how = running == "read-only" ? String(localized: "This demo or test run is read only, as it was started.")
+            : String(localized: "This demo or test run changes mail on its servers, as it was started.")
+        return how + " " + String(localized: "Read only is a switch here when you open MailMind yourself.")
+    }
 
     /// Quit, and open MailMind again once this run has ended, so two runs never hold its data at once.
     @MainActor static func relaunch() {

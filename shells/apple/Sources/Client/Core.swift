@@ -223,10 +223,13 @@ extension CoreHome {
     public static var readOnlyChosen: Bool { UserDefaults.standard.bool(forKey: readOnlyKey) }
 
     /// The variables the core is handed: those passed on from the environment, and `MAILMIND_PROFILE=read-only` when
-    /// the switch is on and the environment names no profile of its own.
+    /// the switch is on, the environment names no profile of its own, and this is a person's run. The switch is the
+    /// person's own MailMind's: a demo or test run shares the app's defaults, and runs only as it was started.
     static func variables(_ environment: [String: String], readOnly: Bool) -> [String: String] {
         var variables = environment.filter { passedOn.contains($0.key) }
-        if readOnly, variables["MAILMIND_PROFILE"] == nil { variables["MAILMIND_PROFILE"] = "read-only" }
+        if readOnly, isAPersonsRun(environment), variables["MAILMIND_PROFILE"] == nil {
+            variables["MAILMIND_PROFILE"] = "read-only"
+        }
         return variables
     }
 
