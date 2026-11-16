@@ -63,6 +63,10 @@ Python app gets fixes only.
   quote in an earlier parameter, a value or name starting with a tspecial, `*` or `\`, an apostrophe in an unquoted value,
   an unclosed comment in the type, and three two-byte boundary cases. Decide each by the RFCs and mail clients, and mend
   the core where Python's reading is the sound one.
+- **Two mailbox browser tests that fail now and then on the Rust server** · low value · effort S · [#50](https://github.com/lanterno/mailmind/issues/50) — Under
+  `just test-rust`'s four browsers, archiving that opens the next message sometimes logs a 404, and `g` then a letter
+  sometimes hasn't changed the folder within 5 s; each passes alone. Find the request that 404s and what the folder
+  switch waits on, and have the page or the test wait on what it means, not on the clock.
 - **The flip** · high value · effort M · [#11](https://github.com/lanterno/mailmind/issues/11) — Step 4: when the served suites pass against both servers and the owner has used
   the Rust server daily for two weeks (`just run-rust`), the Python server goes. Step 3 is done, so it waits only on
   those two weeks; `/api/debug/health`, `/api/debug/jobs` and `/api/debug/ai` say how the jobs, the queues and AI
