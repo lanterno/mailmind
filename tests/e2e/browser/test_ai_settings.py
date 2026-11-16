@@ -16,6 +16,10 @@ from fakes import openai_api as fo
 pytestmark = pytest.mark.browser
 
 RECEIPT = "ada-inbox-05-receipt.eml"
+KEPT = "Kept on this Mac, with each key in your login Keychain."
+SENDS = ("With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be summarized, automatically. "
+         "Whole conversations go when you ask for a summary, a draft or the brief, with what you type into Ask, a search written "
+         "as a sentence, or Rewrite. Attachments never leave this Mac.")
 
 
 def clean(page):
@@ -54,12 +58,12 @@ def test_a_fresh_install_starts_with_ai_mode_off_and_turned_on_says_how_ai_stand
     switch = dialog.get_by_label("AI mode", exact=True)
     expect(switch).not_to_be_checked()
     expect(dialog.get_by_text("Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.")).to_be_visible()
-    expect(page.locator("#setSub")).to_have_text("Kept on this Mac, with each key in your login Keychain.")
+    expect(page.locator("#aiSends")).to_have_text(SENDS)            # what would go, said before it is turned on
+    expect(page.locator("#setSub")).to_have_text(KEPT)
     expect(page.locator("#aiConnection")).to_have_count(0)
     switch.check()
-    expect(page.locator("#setSub")).to_have_text("Kept on this Mac, with each key in your login Keychain. With AI on, the text of a "
-                                                  "message goes to Anthropic only when it is summarized, briefed, drafted or asked "
-                                                  "about; nothing else leaves this machine.")
+    expect(page.locator("#aiSends")).to_have_text(SENDS)
+    expect(page.locator("#setSub")).to_have_text(KEPT)
     expect(dialog.get_by_label("Provider", exact=True)).to_have_value("anthropic")
     expect(dialog.get_by_label("Provider", exact=True).locator("option")).to_have_text(
         ["Claude (Anthropic)", "OpenAI", "Google Gemini", "A model on this Mac", "Another OpenAI-compatible service"])
@@ -179,8 +183,7 @@ def test_a_model_on_this_mac_is_picked_from_the_servers_found_with_its_url(local
     expect(dialog.get_by_text("Only if your server asks for one.", exact=False)).to_be_visible()
     expect(dialog.get_by_text("give the model a context of at least 16K tokens", exact=False)).to_be_visible()
     expect(page.locator("#aiStanding")).to_have_text("AI is off: no model on this Mac is chosen.")
-    expect(page.locator("#setSub")).to_have_text("Kept on this Mac, with each key in your login Keychain. With a model on this "
-                                                  "Mac, the text of a message never leaves this Mac.")
+    expect(page.locator("#aiSends")).to_have_text("With a model on this Mac, nothing leaves this Mac.")
 
     model.select_option(label="mistral-small")                 # LM Studio's: its URL and the model, in one change
     held = lambda: file_of(world).get("preferences", {})
@@ -320,9 +323,10 @@ def test_with_ai_turned_off_nothing_only_ai_can_do_is_offered_and_nothing_says_w
     expect(menu.locator(".sm-ai")).to_have_count(0)
     expect(menu).not_to_contain_text("summarized")
     page.keyboard.press("Escape")
-    page.keyboard.press("?")                            # the legend: no ? or !, and only that nothing is sent
+    page.keyboard.press("?")                            # the legend: no ? or !, and that nothing is sent, and what would be
     keys = page.get_by_role("dialog", name="Keyboard")
     expect(keys).to_contain_text("AI is turned off in Settings, so MailMind sends nothing to any AI service")
+    expect(keys).to_contain_text(SENDS)
     expect(keys).not_to_contain_text("?question")
     page.keyboard.press("Escape")
 
