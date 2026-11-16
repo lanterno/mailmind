@@ -90,6 +90,18 @@ app is loads its Sparkle, the app carries the acknowledgements, the .dmg's windo
 signature and the appcast's own both verify against the app's key and no other, and the feed changed after signing
 doesn't. Run it after changing anything in `shells/apple/Release`; CI runs it on every change to the clients.
 
+## Symbols, for crash reports
+
+The core's release builds keep line tables (`debug = "line-tables-only"` in `core/Cargo.toml`), and Xcode's dsymutil
+gathers them from the core's library into `MailMind.app.dSYM` as it links; none of it goes in the app, whose binary is
+stripped. `just apple release` stops if the dSYM holds none of the core's, and keeps it, with Sparkle's, in
+`shells/apple/build/release/symbols/<version>/`, which git ignores and the next release leaves be. A crash report from a
+copy of that version reads against that folder: macOS's own reports name each frame's address, and
+`xcrun atos -o <version>/MailMind.app.dSYM/Contents/Resources/DWARF/MailMind -arch arm64 -l <load address> <address>`
+turns one into a function, file and line. Each dSYM matches only the build it came from, so keep the folder of every
+version people may still run. The release check holds that the dSYM is kept, matches the app's binary and holds the
+core's line tables.
+
 ## What people see the first time
 
 The app is signed ad hoc, not with a Developer ID, and not notarized, so Gatekeeper won't open it until the person
