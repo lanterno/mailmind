@@ -383,7 +383,11 @@ fn a_dry_run_plans_and_moves_nothing() {
             "account": "ada@example.test", "planned": 2,
             "by_bucket": {"other/personal-ish": 1, "newsletters/marketing": 1, "automated-notifications": 1},
             "senders": 2, "held_back": 0, "capped": false, "no_undo": 0, "moved": 0, "stragglers": [],
-            "error": null}]})
+            "error": null, "going": [
+                {"bucket": "newsletters/marketing", "count": 1, "subjects": ["issue"],
+                 "senders": [{"from_addr": "news@loom.example.test", "count": 1}]},
+                {"bucket": "automated-notifications", "count": 1, "subjects": ["alert"],
+                 "senders": [{"from_addr": "no-reply@alerts.example.test", "count": 1}]}]}]})
     );
     let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
     assert_eq!((inbox.moves.len(), inbox.closed), (0, Some(false)));
@@ -516,6 +520,37 @@ fn a_sweep_moves_the_newest_of_its_junk_up_to_its_cap_and_says_more_is_left() {
     assert_eq!(inbox.uids_in, [1, 2, 3, 10].into(), "the oldest wait for the next sweep");
     let moved: Vec<u32> = inbox.moves.iter().flat_map(|(uids, _)| uids.iter().copied()).collect();
     assert_eq!(moved, (11..=last).collect::<Vec<u32>>(), "in the order the INBOX holds them");
+}
+
+#[test]
+fn a_plan_names_the_senders_with_the_most_and_the_newest_subjects_of_each_bucket_that_goes() {
+    const SEEN: &[&str] = &["\\Seen"];
+    let world = world();
+    let mail: Vec<(u32, Vec<u8>, &[&str])> = [
+        (10, "a", "spring"),
+        (11, "c", "spring"),
+        (12, "b", "sale"),
+        (13, "d", "summer"),
+        (14, "e", "autumn"),
+        (15, "b", "weekly"),
+        (16, "f", "weekly"),
+        (17, "news", "issue 2"),
+    ]
+    .into_iter()
+    .map(|(uid, who, subject)| (uid, heads(&format!("{who}@loom.example.test"), subject, true), SEEN))
+    .chain([(18, heads("g@loom.example.test", "not read yet", true), &[][..])])
+    .collect();
+    more(&world, &mail);
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
+    let sender = |who: &str, n: usize| json!({"from_addr": format!("{who}@loom.example.test"), "count": n});
+    assert_eq!(
+        plan["results"][0]["going"][0],
+        json!({"bucket": "newsletters/marketing", "count": 9,
+               "senders": [sender("b", 2), sender("news", 2), sender("a", 1), sender("c", 1), sender("d", 1)],
+               "subjects": ["issue 2", "weekly", "autumn", "summer", "sale"]})
+    );
+    assert_eq!(plan["results"][0]["going"][1]["bucket"], json!("automated-notifications"));
+    assert_eq!(plan["results"][0]["going"].as_array().map(Vec::len), Some(2));
 }
 
 #[test]
