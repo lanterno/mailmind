@@ -163,6 +163,57 @@ def test_a_sweep_that_moved_nothing_names_no_undo_group(world):
     assert mailbox.undo.entries() == []
 
 
+def test_a_sweep_dropped_before_its_move_ran_leaves_the_undo_stack_as_it_was(world):
+    """The server hung up at the MOVE without running it: a fresh look finds all of it still in the Inbox, so nothing
+    went and no Undo waits on top for mail that never left."""
+    from mailmind.bootstrap import mailbox
+    read_junk(world)
+    world.server.drop("UID MOVE", user=w.ADA)
+    done = curation.sweeps.run(w.ADA, False, "ug-dropped")
+    [res] = done["results"]
+    assert (bool(res["error"]), res["moved"], done["undo_group"]) == (True, 0, None)
+    assert mailbox.undo.entries() == []
+    for name in JUNK_INBOX:
+        assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), name
+
+
+def test_a_sweep_dropped_after_its_move_ran_finds_what_went_and_one_undo_brings_it_back(world):
+    """The server ran the MOVE and hung up before saying so: a fresh look finds it all gone, which is what moved, and
+    each has its way back."""
+    from mailmind.bootstrap import mailbox
+    read_junk(world)
+    world.server.drop_after("UID MOVE", user=w.ADA)
+    done = curation.sweeps.run(w.ADA, False, "ug-dropped")
+    [res] = done["results"]
+    assert (bool(res["error"]), res["moved"], done["undo_group"]) == (True, 3, "ug-dropped")
+    for name in JUNK_INBOX:
+        assert boxes(world, name) == ([(w.ADA, "Trash")], []), name           # its row forgotten, as a sweep's is
+    assert mailbox.undo.undo_group("ug-dropped")["reversed"] == 3
+    for name in JUNK_INBOX:
+        assert boxes(world, name) == ([(w.ADA, "INBOX")], [(w.ADA, "INBOX")]), name
+
+
+def test_a_sweep_stopped_where_the_server_cant_be_asked_again_leaves_a_way_back_for_all_it_meant_to_move(world,
+                                                                                                       monkeypatch):
+    from mailmind.bootstrap import mailbox
+    read_junk(world)
+    world.server.drop("UID MOVE", user=w.ADA)
+    boxes_ = curation.sweeps._boxes
+    opened = []
+    real = boxes_.open_session
+
+    def open_once(a):
+        opened.append(a["email"])
+        if len(opened) > 1:
+            raise ConnectionRefusedError("scripted")
+        return real(a)
+    monkeypatch.setattr(boxes_, "open_session", open_once)
+    done = curation.sweeps.run(w.ADA, False, "ug-dropped")
+    assert (done["results"][0]["moved"], done["undo_group"], len(opened)) == (0, "ug-dropped", 2)
+    [entry] = mailbox.undo.entries()
+    assert sorted(c["message_id"] for c in entry["children"]) == sorted(w.message_id(n) for n in JUNK_INBOX)
+
+
 FAR = 4_000_000_000                                              # a "now" long after every corpus date
 
 
