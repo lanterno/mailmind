@@ -294,6 +294,9 @@ impl LiveSession for Session {
         assert_eq!(fields, AGE_FIELDS);
         Ok(self.0.inbox(&self.1, |inbox| uids.iter().filter_map(|u| Some((*u, inbox.get(u)?.0.clone()))).collect()))
     }
+    fn flags(&mut self, _: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError> {
+        unreachable!("expiry goes by age, whatever a message's flags")
+    }
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
         Ok(self.0.inbox(&self.1, |inbox| uids.iter().filter_map(|u| Some((*u, inbox.get(u)?.1))).collect()))
     }

@@ -24,6 +24,7 @@ struct Inbox {
     ignored: HashMap<u32, u32>,
     lost: Option<usize>,
     heads: HashMap<u32, Vec<u8>>,
+    flags: HashMap<u32, Vec<String>>,
     moves: Vec<(Vec<u32>, String)>,
     selected: Vec<(String, bool)>,
     closed: Option<bool>,
@@ -51,6 +52,10 @@ impl LiveSession for Inbox {
 
     fn headers(&mut self, uids: &[u32], _: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
         Ok(uids.iter().map(|u| (*u, self.heads.get(u).cloned().unwrap_or_default())).collect())
+    }
+
+    fn flags(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError> {
+        Ok(uids.iter().filter_map(|u| Some((*u, self.flags.get(u)?.clone()))).collect())
     }
 
     fn arrivals(&mut self, _: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
@@ -143,6 +148,7 @@ fn a_message_is_read_from_the_fields_a_sweep_asks_for() {
         7,
         b"From: The Weekly Loom <News@Loom.example.test>\r\nSubject: Issue 218\r\n\
           Message-ID: <issue-218@loom.example.test>\r\nList-Id: <loom.example.test>\r\n\r\n",
+        Some(&["\\Seen".to_owned()][..]),
     );
     assert_eq!(
         (read.uid.as_str(), read.from.as_str(), read.name.as_str()),
@@ -152,6 +158,23 @@ fn a_message_is_read_from_the_fields_a_sweep_asks_for() {
         (read.subject.as_str(), read.mid.as_str(), read.bulk),
         ("Issue 218", "<issue-218@loom.example.test>", true)
     );
+    assert_eq!((read.starred, read.unread, read.held()), (false, false, false));
+}
+
+#[test]
+fn a_star_or_no_seen_flag_holds_a_message_back_whatever_the_case() {
+    let flagged = |flags: &[&str]| {
+        let flags: Vec<String> = flags.iter().map(|f| (*f).to_owned()).collect();
+        let read = read_from_headers(1, b"From: a@example.test\r\n\r\n", Some(flags.as_slice()));
+        (read.starred, read.unread, read.held())
+    };
+    assert_eq!(flagged(&["\\Seen"]), (false, false, false));
+    assert_eq!(flagged(&["\\seen", "\\Answered"]), (false, false, false));
+    assert_eq!(flagged(&["\\Seen", "\\FLAGGED"]), (true, false, true));
+    assert_eq!(flagged(&["\\Flagged"]), (true, true, true));
+    assert_eq!(flagged(&[]), (false, true, true));
+    // A message whose flags the server didn't say counts as unread.
+    assert!(read_from_headers(1, b"From: a@example.test\r\n\r\n", None).held());
 }
 
 // ── a sweep of an account ────────────────────────────────────────────────
@@ -199,6 +222,9 @@ impl LiveSession for Session {
     }
     fn headers(&mut self, uids: &[u32], fields: &[&str]) -> Result<Vec<(u32, Vec<u8>)>, LiveError> {
         self.inbox().headers(uids, fields)
+    }
+    fn flags(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, Vec<String>>, LiveError> {
+        self.inbox().flags(uids)
     }
     fn arrivals(&mut self, uids: &[u32]) -> Result<BTreeMap<u32, i64>, LiveError> {
         self.inbox().arrivals(uids)
@@ -300,12 +326,27 @@ fn heads(from: &str, subject: &str, listed: bool) -> Vec<u8> {
     format!("From: {from}\r\nSubject: {subject}\r\nMessage-ID: <{subject}@example.test>\r\n{list}\r\n").into_bytes()
 }
 
+/// Lin's lunch, Loom's issue and an alert, each read.
 fn world() -> Shared {
     let mut inbox = Inbox::of(1..=3);
     inbox.heads.insert(1, heads("lin@example.test", "lunch", false));
     inbox.heads.insert(2, heads("news@loom.example.test", "issue", true));
     inbox.heads.insert(3, heads("no-reply@alerts.example.test", "alert", false));
+    for uid in 1..=3 {
+        inbox.flags.insert(uid, vec!["\\Seen".into()]);
+    }
     Shared(Arc::new(World { inbox: Mutex::new(Some(inbox)), ..World::default() }))
+}
+
+/// More messages in the world's inbox: (uid, its fields, its flags).
+fn more(world: &Shared, mail: &[(u32, Vec<u8>, &[&str])]) {
+    let mut inbox = world.0.inbox.lock().expect("lock");
+    let inbox = inbox.as_mut().expect("closed");
+    for (uid, heads, flags) in mail {
+        inbox.uids_in.insert(*uid);
+        inbox.heads.insert(*uid, heads.clone());
+        inbox.flags.insert(*uid, flags.iter().map(|f| (*f).to_owned()).collect());
+    }
 }
 
 fn sweeps(world: &Shared, writes_allowed: bool) -> Sweeps {
@@ -329,7 +370,7 @@ fn a_dry_run_plans_and_moves_nothing() {
         json!({"ok": true, "dry_run": true, "generated": "2026-11-02T12:00:00+00:00", "results": [{
             "account": "ada@example.test", "planned": 2,
             "by_bucket": {"other/personal-ish": 1, "newsletters/marketing": 1, "automated-notifications": 1},
-            "senders": 2, "moved": 0, "stragglers": [], "error": null}]})
+            "senders": 2, "held_back": 0, "moved": 0, "stragglers": [], "error": null}]})
     );
     let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
     assert_eq!((inbox.moves.len(), inbox.closed), (0, Some(false)));
@@ -353,6 +394,30 @@ fn a_sweep_records_what_it_will_trash_moves_it_and_forgets_its_rows() {
             "stats",
         ]
     );
+}
+
+#[test]
+fn starred_and_unread_junk_stays_where_it_is() {
+    let world = world();
+    more(
+        &world,
+        &[
+            (2, heads("news@loom.example.test", "issue", true), &["\\Seen", "\\Flagged"]),
+            (3, heads("no-reply@alerts.example.test", "alert", false), &[]),
+            (4, heads("deals@loom.example.test", "sale", true), &["\\Flagged"]),
+            (5, heads("no-reply@alerts.example.test", "sign-in", false), &["\\Seen"]),
+        ],
+    );
+    let plan = sweeps(&world, true).run(None, true).expect("planned");
+    let said = |done: &Value, field: &str| done["results"][0][field].clone();
+    assert_eq!((said(&plan, "planned"), said(&plan, "held_back")), (json!(1), json!(3)));
+    let done = sweeps(&world, true).run(None, false).expect("swept");
+    assert_eq!((said(&done, "moved"), said(&done, "held_back")), (json!(1), json!(3)));
+    let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
+    assert_eq!(inbox.moves, [(vec![5], "Trash".to_owned())]);
+    assert_eq!(inbox.uids_in, [1, 2, 3, 4].into());
+    let audited: Vec<String> = world.0.said().into_iter().filter(|s| s.starts_with("audit")).collect();
+    assert_eq!(audited, ["audit ada@example.test 5 automated-notifications no-reply / notification address"]);
 }
 
 #[test]
