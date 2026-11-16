@@ -411,7 +411,7 @@ fn the_startup_line_says_the_ai_in_force_and_never_its_url_or_key() {
     let line = || r.app.assistant.describe_engine();
     assert_eq!(
         line(),
-        "Claude (Anthropic) · claude-opus-5-5 · AI is turned off: turn it on in Settings, or with `uv run python -m \
+        "Claude (Anthropic) · claude-opus-5-5 · AI mode is off: turn it on in Settings, or with `uv run python -m \
          mailmind ai on`"
     );
     r.post("/api/preferences", &json!({"ai_enabled": true}));
@@ -425,7 +425,7 @@ fn the_startup_line_says_the_ai_in_force_and_never_its_url_or_key() {
     r.post("/api/preferences", &json!({"ai_provider": "compatible", "ai_model": "mixtral", "ai_base_url": url}));
     assert_eq!(line(), "Another OpenAI-compatible service · mixtral · key from mailmind.config.json");
     r.post("/api/preferences", &json!({"ai_enabled": false}));
-    assert!(line().ends_with("AI is turned off: turn it on in Settings, or with `uv run python -m mailmind ai on`"));
+    assert!(line().ends_with("AI mode is off: turn it on in Settings, or with `uv run python -m mailmind ai on`"));
     assert!(!line().contains("example.test") && !line().contains("fictional"));
 }
 

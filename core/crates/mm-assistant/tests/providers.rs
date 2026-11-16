@@ -117,7 +117,7 @@ fn the_startup_line_names_the_provider_the_model_and_the_key_or_why_ai_is_off_an
     );
     assert_eq!(
         line(Gemini, "gemini-4-hydrogen", Some(Off::TurnedOff), "", false),
-        "Google Gemini · gemini-4-hydrogen · AI is turned off: turn it on in Settings, or with `uv run python -m \
+        "Google Gemini · gemini-4-hydrogen · AI mode is off: turn it on in Settings, or with `uv run python -m \
          mailmind ai on`"
     );
     assert_eq!(
