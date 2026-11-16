@@ -141,7 +141,9 @@ fn a_database_with_no_key_gets_none_made_for_it() {
     database(home.path(), [0x5e; 32], VERSION);
     let keychain = Arc::new(Held::default());
     let said = start_with(home.path(), &Environment::default(), keychain.clone()).unwrap_err();
-    assert!(said.contains("no database key"), "{said}");
+    assert!(said.contains("key to this Mac's copy of your mail isn't in your Keychain"), "{said}");
+    assert!(said.contains("Start Fresh makes a new copy"), "{said}");
+    for_a_person(&said);
     assert_eq!(keychain.holding("database-key"), None);
 }
 
@@ -150,7 +152,8 @@ fn a_keychain_that_wont_keep_a_new_key_makes_no_database() {
     let home = tempfile::tempdir().unwrap();
     let keychain = Arc::new(Held { keeps_nothing: true, ..Held::default() });
     let said = start_with(home.path(), &Environment::default(), keychain).unwrap_err();
-    assert!(said.contains("wouldn't keep a new one"), "{said}");
+    assert!(said.contains("Your Keychain wouldn't keep MailMind's key"), "{said}");
+    for_a_person(&said);
     assert!(!home.path().join("mailmind.db").exists());
 }
 
@@ -160,15 +163,50 @@ fn a_keychain_that_doesnt_answer_gets_no_key_made_in_it() {
     let home = tempfile::tempdir().unwrap();
     let keychain = Arc::new(Held { answers_nothing: true, ..Held::default() });
     let said = start_with(home.path(), &Environment::default(), keychain).unwrap_err();
-    assert!(said.contains("no database key"), "{said}");
+    assert!(said.contains("Your Keychain didn't give MailMind the key") && said.contains("Unlock"), "{said}");
+    for_a_person(&said);
     assert!(!home.path().join("mailmind.db").exists());
 }
 
-/// Words the Mac app's window shows as they are: they name no developer's program or command.
+#[test]
+fn a_keychain_key_that_isnt_one_is_told_in_a_persons_words() {
+    let home = tempfile::tempdir().unwrap();
+    database(home.path(), [0x5e; 32], VERSION);
+    let keychain = Arc::new(Held::default());
+    keychain.items.lock().unwrap().insert("database-key".to_owned(), "not a key".to_owned());
+    let said = start_with(home.path(), &Environment::default(), keychain).unwrap_err();
+    assert!(said.contains("What your Keychain holds as MailMind's key") && said.contains("Start Fresh"), "{said}");
+    for_a_person(&said);
+}
+
+#[test]
+fn a_variables_key_that_isnt_one_names_the_variable() {
+    // Only a developer, a test or the demo sets it: the words are theirs.
+    let home = tempfile::tempdir().unwrap();
+    let environment = Environment::from_pairs([("MAILMIND_DB_KEY", "5e")]);
+    let said = start_with(home.path(), &environment, Arc::new(Held::default())).unwrap_err();
+    assert_eq!(said, "MAILMIND_DB_KEY isn't 64 hex digits.");
+    assert!(!home.path().join("mailmind.db").exists());
+}
+
+#[test]
+fn on_the_command_line_a_keys_words_say_where_a_developer_gives_one() {
+    let home = tempfile::tempdir().unwrap();
+    database(home.path(), [0x5e; 32], VERSION);
+    let said = start_with(home.path(), &Environment::default(), Arc::new(Held::default())).unwrap_err();
+    let told = mm_server::on_the_command_line(&said);
+    assert!(told.starts_with(&said) && told.contains("MAILMIND_DB_KEY"), "{told}");
+    // Anything else is said as it is.
+    assert_eq!(mm_server::on_the_command_line("can't listen on 127.0.0.1:8721"), "can't listen on 127.0.0.1:8721");
+}
+
+/// Words the Mac app's window shows as they are: sentences, as the window sets them, that name no developer's
+/// program, command or variable.
 fn for_a_person(said: &str) {
-    for developers in ["Python", "just run", "`", "server"] {
+    for developers in ["Python", "just run", "`", "mailmind-server", "Rust", "MAILMIND_", "hex", "database"] {
         assert!(!said.contains(developers), "{developers:?} in {said:?}");
     }
+    assert!(said.starts_with(char::is_uppercase) && said.ends_with('.'), "not a sentence: {said:?}");
 }
 
 #[test]
@@ -207,5 +245,7 @@ fn over_a_newer_database_it_says_to_install_the_newest_mailmind_and_opens_nothin
 fn a_key_that_doesnt_open_it_is_told_apart() {
     let home = tempfile::tempdir().unwrap();
     database(home.path(), [0x11; 32], VERSION);
-    assert_eq!(start(home.path()), Err("the database key doesn't open the database".to_owned()));
+    let said = start(home.path()).unwrap_err();
+    assert!(said.starts_with("MailMind's key doesn't open this Mac's copy of your mail"), "{said}");
+    for_a_person(&said);
 }
