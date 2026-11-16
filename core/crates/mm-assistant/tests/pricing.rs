@@ -20,6 +20,8 @@ fn openai_and_gemini_models_cost_what_their_pages_say() {
         ("gpt-5-nano", 0.05, 0.40, 0.005),
         ("gpt-5", 1.25, 10.0, 0.125),
         ("gpt-4o", 2.50, 10.0, 1.25),
+        // A dated snapshot the page prices apart, with no cached price: priced as input.
+        ("gpt-4o-2024-05-13", 5.0, 15.0, 5.0),
         ("gpt-4o-mini", 0.15, 0.60, 0.075),
         ("o3", 2.0, 8.0, 0.50),
         ("o3-pro", 20.0, 80.0, 20.0),
@@ -52,6 +54,10 @@ fn the_longest_name_that_fits_is_the_price_and_a_date_or_a_version_after_it_keep
     assert_eq!(price_of("gemini-2.5-flash-lite"), price_of("gemini-2.5-flash-lite-preview-09-2025"));
     assert_ne!(price_of("gemini-2.5-flash-lite"), price_of("gemini-2.5-flash"));
     assert_eq!(price_of("o3-pro"), price_of("o3-pro-2025-06-10"));
+    // A snapshot with a row of its own is never priced as the name its date follows.
+    assert_ne!(price_of("gpt-4o-2024-05-13"), price_of("gpt-4o"));
+    assert_eq!(price_of("gpt-4o-2024-08-06"), price_of("gpt-4o"));
+    assert_eq!(cost_micros("gpt-4o-2024-05-13", "", 10_000, 1_000, 0, 0), 65_000);
 }
 
 #[test]
