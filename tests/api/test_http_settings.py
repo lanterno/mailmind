@@ -129,6 +129,18 @@ def test_a_sweep_leaves_starred_and_unread_junk_in_the_inbox(app, world):
         assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
 
 
+def test_a_sweep_reads_each_messages_flags_in_the_fetch_of_its_headers(app, world):
+    """What a sweep holds back goes by the flags the FETCH of its headers brought, so the two agree, and it asks for no
+    flags on their own: one FETCH a batch rather than two."""
+    for name in JUNK:
+        world.server_flags(name, "\\Seen")
+    since = len(world.server.commands_for(w.ADA, "UID FETCH"))
+    [plan] = app.post("/api/sweep", {"account": w.ADA, "dry_run": True}).json["results"]
+    assert (plan["planned"], plan["held_back"], plan["error"]) == (3, 0, None)
+    fetched = [c["line"].upper() for c in world.server.commands_for(w.ADA, "UID FETCH")[since:]]
+    assert fetched and all("HEADER.FIELDS" in line and "FLAGS" in line for line in fetched), fetched
+
+
 def test_the_stats_count_only_the_junk_a_sweep_would_move_now(app, world):
     """The Curate card's Sweep button says how many a sweep would take: Ada's junk that someone read and no one starred.
     Of her corpus junk only the CI mail is read; of three more newsletters, one read, one read and starred and one
