@@ -643,7 +643,15 @@ MailMind has a native Mac app over the Rust core (`shells/apple`). It runs the w
 with no port open: the mailbox and search, reading and writing, Settings and the first run, and the assistant,
 curation, attention and the calendar, as the page has them, with the menu bar's commands and a Mac's keys. It wears
 the page's Meadow look: paper panels on a painted sky in Day, Dusk, Night or Automatic, the page's typefaces and icons, a rail
-that folds to icons, the summary note and a reply under the message, the brief beside the Inbox. It can be
+that folds to icons, the summary note and a reply under the message, the brief beside the Inbox. It reads and
+organises as a Mac's mail app does: **File › Print** (⌘P) prints the open message, with the images you chose to show,
+⌘F goes to the search field and **Find in Message** (⌥⌘F) finds a word in what's open, a double-click opens a message
+in a window of its own, and rows dragged onto one of the rail's folders move there. **Move To** makes a new folder and
+moves into it, and a folder of your own has **Rename Folder…** and **Delete Folder…** in its menu (never one the server
+keeps, as Gmail's Starred); one that holds mail is deleted only once you say so again, its mail moved to Trash first,
+or on Gmail, where a folder is a label, left in All Mail. When one message comes, its notification says who sent it
+and the subject, and a
+click opens it, as a meeting's reminder opens its invite, reopening the window if you closed it. It can be
 your Mac's mail app (**Mail › Settings › General › Default email reader**), so a mailto: link opens its composer. It
 is a .dmg on this repo's [Releases](https://github.com/lanterno/mailmind/releases/latest) page, for macOS 26 or later
 on Apple silicon or Intel:
