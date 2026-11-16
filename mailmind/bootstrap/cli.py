@@ -247,6 +247,8 @@ def _plan(accts, do_sweep=False, dry=False):
         if do_sweep and not dry and going:
             r = curation.sweeps.sweep(a, dry=False)
             msg = f"   swept: moved {r['moved']}/{r['planned']} to Trash (recorded in the audit trail)"
+            if r.get("capped"):
+                msg += "  - the newest only: sweep again for the rest"
             if r["stragglers"]:
                 msg += f"  ! {len(r['stragglers'])} could not be verified-moved"
             print(msg)

@@ -78,9 +78,10 @@ class Sweeps:
         if p["error"]:
             return {"account": acct["email"], "error": p["error"], "planned": 0}, False
         # Starred or unread junk stays: a person's mark, or mail no one has seen yet, is never swept away.
-        junk_rows: list[Classified] = [r for r in sweep_plan.junk(p["_rows"]) if not held(r)]
+        junk_rows, capped = sweep_plan.within_cap([r for r in sweep_plan.junk(p["_rows"]) if not held(r)])
         out: dict[str, Any] = {"account": acct["email"], "planned": len(junk_rows), "by_bucket": p["by_bucket"],
                                "senders": len(set(r["from"] for r in junk_rows)), "held_back": p["held_back"],
+                               "capped": capped,
                                # Undo finds a message in Trash by its Message-ID: one with none goes, but can't come back.
                                "no_undo": sum(1 for r in junk_rows if not r["mid"]),
                                "moved": 0, "stragglers": [], "error": None}

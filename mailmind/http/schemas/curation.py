@@ -231,6 +231,7 @@ class AccountSwept(Answer):
     by_bucket: dict[str, int] | None = None
     senders: int | None = None
     held_back: int | None = None            # junk left where it is: starred, or not read yet
+    capped: bool | None = None              # more junk than one sweep moves: the next takes the rest
     no_undo: int | None = None              # of what goes, how much has no Message-ID for Undo to find it by
     moved: int | None = None
     stragglers: list[str] | None = None

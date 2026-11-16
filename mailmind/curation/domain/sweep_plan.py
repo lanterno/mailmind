@@ -11,6 +11,7 @@ from mailmind.curation.domain.rulebook import keep_ruled
 from mailmind.kernel.row import Row
 
 TOP_SENDERS = 4
+SWEEP_MAX = 500     # the most of an account's junk one sweep moves: Undo puts each back on its own, and a click waits on it
 
 
 class Tally(TypedDict):
@@ -54,6 +55,15 @@ def stored_bucket(row: Row, rules: RuleSets) -> tuple[str, str]:
 def junk(rows: Iterable[Classified]) -> list[Classified]:
     """What a sweep takes of what it classified."""
     return [r for r in rows if r["bucket"] in classifier.JUNK_BUCKETS]
+
+
+def within_cap(junk: list[Classified]) -> tuple[list[Classified], bool]:
+    """What a sweep takes of `junk`: the newest SWEEP_MAX by UID, in the order the INBOX holds them, and whether that leaves
+    any for the next sweep."""
+    if len(junk) <= SWEEP_MAX:
+        return junk, False
+    newest = sorted(junk, key=lambda r: int(r["uid"]), reverse=True)[:SWEEP_MAX]
+    return sorted(newest, key=lambda r: int(r["uid"])), True
 
 
 def stored_targets(live: Iterable[Read], junk_ids: Collection[str], rules: RuleSets) -> tuple[list[Read], int]:
