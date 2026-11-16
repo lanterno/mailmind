@@ -154,17 +154,31 @@ impl Ingest {
     /// Ingest the one message whose Message-ID is `message_id` into `folder`, past the watermark, which stays where
     /// it was: Undo's way to bring back a message whose UID a sync wouldn't fetch again. How many it stored.
     pub fn ingest_message(&self, account: &str, folder: &str, message_id: &str) -> Result<usize, SyncError> {
-        if message_id.is_empty() {
+        self.ingest_messages(account, folder, &[message_id.to_owned()])
+    }
+
+    /// The same for each of `message_ids`, on one session: Undo's way to bring back a sweep's hundreds at once. How
+    /// many it stored.
+    pub fn ingest_messages(&self, account: &str, folder: &str, message_ids: &[String]) -> Result<usize, SyncError> {
+        if message_ids.iter().all(String::is_empty) {
             return Ok(0);
         }
         let acct = self.account(account)?;
         let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
         s.0.select(folder, true)?;
-        let Some(uid) = found_by_message_id(&mut *s.0, message_id)? else { return Ok(0) };
+        let mut uids = Vec::with_capacity(message_ids.len());
+        for mid in message_ids.iter().filter(|mid| !mid.is_empty()) {
+            uids.extend(found_by_message_id(&mut *s.0, mid)?);
+        }
+        uids.sort_unstable();
+        uids.dedup();
+        if uids.is_empty() {
+            return Ok(0);
+        }
         let mut stored = Vec::new();
-        self.process(&mut *s.0, &acct, &[uid], folder, sync_plan::reads_bodies(folder), false, false, &mut stored)?;
+        self.process(&mut *s.0, &acct, &uids, folder, sync_plan::reads_bodies(folder), false, false, &mut stored)?;
         self.store.settle(&acct.email, folder, None, &stored, &self.now())?;
-        Ok(1)
+        Ok(uids.len())
     }
 
     /// Store every one of `uids` in the selected `folder`, junk kept as a badge. The Inbox's bodies are read for

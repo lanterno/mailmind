@@ -1,5 +1,6 @@
 //! What reverses a move: the Mailbox's kinds of undo entry (`mailbox.application.reversal`). One that hasn't reached
-//! the server is cancelled; one that has gets a counter-move, from where its command says it went.
+//! the server is cancelled; one that has gets a counter-move, from where its command says it went. A sweep's ways back
+//! (`sweep_back`) go together, an account's on one session.
 
 use std::sync::Arc;
 
@@ -155,16 +156,75 @@ impl Reversals {
     }
 }
 
+/// What a sweep's way back is: a message it moved from the INBOX to Trash, which no command moved.
+const SWEEP_BACK: &str = "sweep_back";
+
+impl Reversals {
+    /// A sweep's ways back, one account's, at once: on one session each message found in the Trash it went to by its
+    /// Message-ID moves back to where it was, then one more session reads them all in. One still where it was, which
+    /// the sweep never moved, is back.
+    fn swept_back(&self, entries: &[Value]) -> Result<Vec<Reversed>, Fault> {
+        // Where each went from and to: (its account, its Trash, where it was).
+        let places: Vec<(&str, &str, &str)> = entries
+            .iter()
+            .map(|e| match text(e, "src_folder") {
+                "" => (text(e, "account"), text(e, "dest_folder"), "INBOX"),
+                src => (text(e, "account"), text(e, "dest_folder"), src),
+            })
+            .collect();
+        let mut answers: Vec<Reversed> = places.iter().map(|(account, _, src)| done(account, src, false)).collect();
+        let mut asked: Vec<(&str, &str, &str)> = Vec::new();
+        for (k, place) in places.iter().enumerate() {
+            if asked.contains(place) || text(&entries[k], "message_id").is_empty() {
+                continue;
+            }
+            asked.push(*place);
+            let (account, trash, to) = *place;
+            let at: Vec<usize> = (k..entries.len())
+                .filter(|j| places[*j] == *place && !text(&entries[*j], "message_id").is_empty())
+                .collect();
+            let mids: Vec<String> = at.iter().map(|j| text(&entries[*j], "message_id").to_owned()).collect();
+            let back =
+                self.commands.server().move_back_many(account, trash, to, &mids).map_err(|e| Fault::new(e.class()))?;
+            let mut read = Vec::new();
+            for ((j, mid), went) in at.iter().zip(mids).zip(back) {
+                answers[*j].0 = went;
+                if went {
+                    read.push(mid);
+                }
+            }
+            // Read in as each message put back is (`read_back`), on one more session for them all.
+            _ = self.ingest.ingest_messages(account, to, &read);
+        }
+        Ok(answers)
+    }
+}
+
 impl Reverser for Reversals {
     fn reverses(&self, kind: &str) -> bool {
-        matches!(kind, "move" | "gmail_archive")
+        matches!(kind, "move" | "gmail_archive" | SWEEP_BACK)
     }
 
     fn reverse(&self, entry: &Value) -> Result<Reversed, Fault> {
-        if entry.get("kind").and_then(Value::as_str) == Some("gmail_archive") {
-            self.gmail_archive(entry)
+        match entry.get("kind").and_then(Value::as_str) {
+            Some("gmail_archive") => self.gmail_archive(entry),
+            Some(SWEEP_BACK) => {
+                let mut answers = self.swept_back(std::slice::from_ref(entry))?;
+                Ok(answers.pop().unwrap_or((false, None, None)))
+            }
+            _ => self.move_back(entry),
+        }
+    }
+
+    fn together(&self, kind: &str) -> bool {
+        kind == SWEEP_BACK
+    }
+
+    fn reverse_together(&self, entries: &[Value]) -> Result<Vec<Reversed>, Fault> {
+        if entries.iter().all(|e| e.get("kind").and_then(Value::as_str) == Some(SWEEP_BACK)) {
+            self.swept_back(entries)
         } else {
-            self.move_back(entry)
+            entries.iter().map(|entry| self.reverse(entry)).collect()
         }
     }
 }

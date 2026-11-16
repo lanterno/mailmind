@@ -21,6 +21,8 @@ use crate::sync_plan::{COLUMNS, IMAP_NAMES};
 const SESSION_TIMEOUT: u64 = 60;
 /// A read-only process's changes queue for a full run: refused before any connection, as unreachable.
 const READ_ONLY: ServerError = ServerError::Unreachable("ReadOnlyError");
+/// UIDs to one MOVE of many messages back, so no command line grows too long.
+const BACK_BATCH: usize = 200;
 
 #[derive(Debug)]
 pub struct ServerOps {
@@ -186,6 +188,53 @@ impl ServerOps {
                 }
             }
             Ok(true)
+        })
+    }
+
+    /// Undo's way back for many messages of one account at once, a sweep's: on one session, each message found by its
+    /// exact Message-ID in `search_folder` (Trash) moves to `dest_folder` (the INBOX), `BACK_BATCH` at a time and a
+    /// refused batch one at a time, so one the server won't move holds back no other. Whether each is in
+    /// `dest_folder` now: one not found in `search_folder` is when `dest_folder` holds it, as a message a sweep the
+    /// server stopped part way never moved does, and otherwise isn't, never a guess.
+    pub fn move_back_many(
+        &self,
+        account: &str,
+        search_folder: &str,
+        dest_folder: &str,
+        message_ids: &[String],
+    ) -> Result<Vec<bool>, ServerError> {
+        self.on_server(account, None, |s| {
+            s.select(search_folder, false)?;
+            let mut found = Vec::with_capacity(message_ids.len());
+            for mid in message_ids {
+                found.push(found_by_message_id(s, mid)?);
+            }
+            let mut back = vec![false; message_ids.len()];
+            let at: Vec<(usize, u32)> = found.iter().enumerate().filter_map(|(k, uid)| Some((k, (*uid)?))).collect();
+            for chunk in at.chunks(BACK_BATCH) {
+                let uids: Vec<u32> = chunk.iter().map(|(_, uid)| *uid).collect();
+                match move_to(s, &uids, dest_folder) {
+                    Ok(()) => chunk.iter().for_each(|(k, _)| back[*k] = true),
+                    Err(ServerError::Refused(_)) => {
+                        for (k, uid) in chunk {
+                            match move_to(s, &[*uid], dest_folder) {
+                                Ok(()) => back[*k] = true,
+                                Err(ServerError::Refused(_)) => {}
+                                Err(other) => return Err(other),
+                            }
+                        }
+                    }
+                    Err(other) => return Err(other),
+                }
+            }
+            let missing: Vec<usize> = (0..message_ids.len()).filter(|k| found[*k].is_none()).collect();
+            if !missing.is_empty() {
+                s.select(dest_folder, true)?;
+                for k in missing {
+                    back[k] = found_by_message_id(s, &message_ids[k])?.is_some();
+                }
+            }
+            Ok(back)
         })
     }
 
