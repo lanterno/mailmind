@@ -221,6 +221,14 @@ fn a_bad_request_says_its_status() {
 }
 
 #[test]
+fn a_key_the_api_quotes_in_what_isnt_words_is_taken_out_as_json_writes_it() {
+    use mm_claude::wire::said;
+    let key = "sk-ant-test-\"quoted\"\\key";
+    let body = json!({"type": "error", "error": {"message": {"got": key, "why": "bad"}}}).to_string();
+    assert_eq!(said(body.as_bytes(), Some(key)), "{\"got\":\"<key>\",\"why\":\"bad\"}");
+}
+
+#[test]
 fn the_key_is_taken_out_of_all_the_api_said_before_it_is_cut_short() {
     use mm_claude::wire::{SAID_MOST, said};
     // The key starts before the cut and runs past it.

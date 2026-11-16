@@ -545,6 +545,14 @@ fn what_a_service_said_is_read_from_the_first_of_a_list_too() {
 }
 
 #[test]
+fn a_key_a_service_quotes_in_what_isnt_words_is_taken_out_as_json_writes_it() {
+    use mm_openai::wire::said;
+    let key = "sk-test-\"quoted\"\\key-0123456789";
+    let body = json!({"error": {"message": {"got": key, "why": "bad"}}}).to_string();
+    assert_eq!(said(body.as_bytes(), Some(key)), "{\"got\":\"<key>\",\"why\":\"bad\"}");
+}
+
+#[test]
 fn the_key_is_taken_out_of_all_a_service_said_before_it_is_cut_short() {
     use mm_openai::wire::{SAID_MOST, said};
     // The key starts before the cut and runs past it.

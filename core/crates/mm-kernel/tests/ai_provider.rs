@@ -1,6 +1,6 @@
 //! The AI providers' closed set, and the base URL a person may give one at (#49).
 
-use mm_kernel::ai_provider::{AiProvider, BASE_URL_MOST, base_url, key_spaced, on_this_machine, sendable};
+use mm_kernel::ai_provider::{AiProvider, BASE_URL_MOST, base_url, key_spaced, on_this_machine, sendable, unkeyed};
 
 #[test]
 fn the_set_is_named_in_its_order_and_claude_is_the_default() {
@@ -37,6 +37,15 @@ fn a_key_is_sent_only_in_printable_ascii_without_a_space() {
     }
     // Settings refuses a space or a control character in words, and leaves the rest to the Keychain's own rules.
     assert!(key_spaced("sk one") && key_spaced("sk\u{7f}") && !key_spaced("sk-t\u{e9}st") && !key_spaced("sk\u{200b}"));
+}
+
+#[test]
+fn a_key_is_taken_out_as_it_is_and_as_json_writes_it_in_a_string() {
+    for key in ["sk-test\"one", "sk-test\\one", "sk-\"\\\"-test", "sk-test-plain"] {
+        let said = format!("{} and {key}", serde_json::json!({"got": key, "again": key}));
+        assert_eq!(unkeyed(&said, key), "{\"got\":\"<key>\",\"again\":\"<key>\"} and <key>", "{key:?}");
+    }
+    assert_eq!(unkeyed("sk-test \"quoted\"", ""), "sk-test \"quoted\"");
 }
 
 #[test]
