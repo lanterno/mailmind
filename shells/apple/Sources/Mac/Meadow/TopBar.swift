@@ -109,7 +109,7 @@ struct MeadowBrand: View {
 
 /// The search (`.search`): a box of raised paper, up to 720 wide, that searches as the window's search field did:
 /// `?words` asks your inbox, `!words` plans a bulk action, anything else searches, with the server's suggestions under
-/// it as you type. Its ⌘K opens the palette; `/` and Search (⌥⌘F) put the cursor in it.
+/// it as you type. Its ⌘K opens the palette; `/` and Search (⌘F) put the cursor in it.
 struct MeadowSearchBox: View {
     let app: MailApp
     @Bindable var mailbox: Mailbox

@@ -73,7 +73,7 @@ struct MailboxCommands: Commands {
                 Button("Documents") { mailbox?.app?.place = .documents }
                 Divider()
                 Button("Search") { mailbox?.searchFocus = true }
-                    .keyboardShortcut("f", modifiers: [.option, .command])
+                    .keyboardShortcut("f", modifiers: .command)
                 Button("Save Search as View…") {
                     if let q = mailbox?.app?.place?.search?.q { mailbox?.savingView = q }
                 }

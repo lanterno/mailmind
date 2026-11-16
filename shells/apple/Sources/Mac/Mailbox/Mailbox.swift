@@ -65,7 +65,7 @@ final class Mailbox {
     var savingView: String?
     /// The sender whose card is open.
     var contact: String?
-    /// Whether the search field has the focus: `/` and Search (⌥⌘F) put it there.
+    /// Whether the search field has the focus: `/` and Search (⌘F) put it there.
     var searchFocus = false
     /// A field of the window's is being typed in, where ⌘⌫ deletes text and not mail.
     var typing = false
