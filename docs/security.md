@@ -52,7 +52,7 @@ name the database's key.
 The Mac app's Settings keep each AI provider's key and the Proton Bridge's password the same way, through routes both
 servers answer: `POST /api/ai/key` (`{provider, key}`) keeps the key in `<provider>-api-key` and names it in the config's
 `<provider>_api_key` one version on, as `ai key --provider` does, and `POST /api/ai/key/clear` (`{provider}`) takes the
-item and what the config named out; Ollama takes no key and is refused one. `POST /api/accounts/bridge-password`
+item and what the config named out. `POST /api/accounts/bridge-password`
 (`{password}`) keeps the Bridge's in `proton-bridge-password`, which the config doesn't name, and `.../clear` takes it
 out. Each is a POST behind the perimeter like every other, and each answer, the GETs' too, says only which providers
 have a key (`{"ok": true, "kept": [...]}`) or whether the Bridge's is set (`{"ok": true, "set": …}`): never the secret,
