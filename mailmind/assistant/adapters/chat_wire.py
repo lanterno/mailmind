@@ -4,14 +4,17 @@ and the Reply in a response.
 The system prompt goes as a `system` message ahead of the user's. Structured output is `response_format`'s `json_schema`,
 strict only where the schema keeps strict mode's rules (every object closed, and every property in it required), since a
 strict schema that breaks them is refused. OpenAI takes `max_completion_tokens`, and the others `max_tokens`. No effort and
-no server-side fallback go out: neither is theirs.
+no server-side fallback go out: neither is theirs. A reasoning model may put its thinking ahead of its reply, as
+`<think>…</think>` or `<thinking>…</thinking>`: that block is dropped before the reply is read.
 """
+import re
 from typing import Any, cast
 
 from mailmind.assistant.application.ports import Prompt, Reply, Usage
 from mailmind.kernel.ai_provider import AiProvider
 
 SCHEMA_NAME = "answer"
+_THINKING = re.compile(r"\A\s*<(think|thinking)>.*?</\1>", re.DOTALL)
 
 
 def strict(schema: Any) -> bool:
@@ -65,6 +68,11 @@ def _text(content: Any) -> str:
     return ""
 
 
+def without_thinking(text: str) -> str:
+    """`text` without a reasoning model's leading <think>…</think> (or <thinking>…</thinking>) block."""
+    return _THINKING.sub("", text, count=1)
+
+
 def reply(resp: dict[str, Any], asked: str) -> Reply:
     """The Reply in a response to a request for model `asked`. A refusal reads as "", as Claude's does: the call worked, so
     callers store their fallback rather than retry. Cached prompt tokens count as cache reads, and the rest of the prompt as
@@ -81,7 +89,7 @@ def reply(resp: dict[str, Any], asked: str) -> Reply:
     message: dict[str, Any] = said if isinstance(said, dict) else {}
     if message.get("refusal"):
         return Reply("", served, spent, "refusal")
-    return Reply(_text(message.get("content")).strip(), served, spent, str(first.get("finish_reason") or ""))
+    return Reply(without_thinking(_text(message.get("content"))).strip(), served, spent, str(first.get("finish_reason") or ""))
 
 
 def model_ids(resp: Any) -> list[str]:
