@@ -113,10 +113,14 @@ def test_at_the_daily_limit_the_brief_waits_for_a_click(page, app, world, ai):
 def test_with_ai_off_the_brief_and_the_review_say_so_and_ask_for_nothing(page, app, world, anthropic_api):
     lunch_needs_a_reply(app, world)
     page.goto("/")
-    expect(page.locator(".bf-aioff")).to_contain_text("AI is off.")
+    expect(page.locator(".bf-aioff")).to_contain_text("AI is off: there’s no key for Claude.")
+    expect(page.locator(".bf-aioff")).to_contain_text("the text of a message goes to Anthropic only")
     page.get_by_role("button", name="Your week").click()
-    expect(page.locator("#rvBody")).to_have_text(
-        "AI is off, so there is no review: Claude writes it, and MailMind has no Anthropic API key.")
+    expect(page.locator("#rvBody")).to_have_text("AI is off: there’s no key for Claude, so there is no review. Set up AI in Settings")
+    page.locator("#rvBody").get_by_role("button", name="Set up AI in Settings").click()
+    expect(page.locator("#rvBody")).to_have_count(0)
+    expect(page.get_by_role("dialog", name="AI")).to_be_visible()
+    expect(page.locator("#aiKey")).to_be_visible()
     assert anthropic_api.requests == []
     assert all("409" in p for p in page.problems)      # the review it was asked for
     assert len(page.problems) == 1

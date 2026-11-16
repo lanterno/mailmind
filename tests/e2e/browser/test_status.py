@@ -39,7 +39,8 @@ def test_the_sync_menu_says_what_ai_cost_today_and_sync_now_syncs(page, app, wor
     opened(page)
     page.locator("#statusBtn").click()
     menu = page.get_by_role("dialog", name="Sync status")
-    expect(menu).to_contain_text("Claude API · claude-opus-5-5 · $0.02 of $15.00 today")
+    expect(menu).to_contain_text("Claude (Anthropic) · claude-opus-5-5 · $0.02 of $15.00 today")
+    expect(menu).to_contain_text("the text of a message goes to Anthropic only when it is summarized")
     menu.get_by_role("button", name="Sync now").click()
     expect(page.locator("#statusTxt")).to_have_text("Syncing…")
     page.clock.run_for(4000)
@@ -146,6 +147,8 @@ def test_the_help_overlay_lists_the_keys_and_can_turn_single_keys_off(page, worl
     page.keyboard.press("?")
     dialog = page.get_by_role("dialog", name="Keyboard")
     expect(dialog).to_contain_text("Next unread")
+    expect(dialog).to_contain_text("written by Claude (Anthropic), chosen in Settings under AI; for now AI is off: "
+                                   "there’s no key for Claude, and nothing is sent.")
     dialog.get_by_label(re.compile("Disable single-key shortcuts")).check()
     page.keyboard.press("Escape")
     expect(dialog).to_be_hidden()

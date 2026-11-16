@@ -176,6 +176,11 @@ def test_with_ai_turned_off_nothing_only_ai_can_do_is_offered_and_nothing_says_w
     expect(menu.locator(".sm-ai")).to_have_count(0)
     expect(menu).not_to_contain_text("summarized")
     page.keyboard.press("Escape")
+    page.keyboard.press("?")                            # the legend: no ? or !, and only that nothing is sent
+    keys = page.get_by_role("dialog", name="Keyboard")
+    expect(keys).to_contain_text("AI is turned off in Settings, so MailMind sends nothing to any AI service")
+    expect(keys).not_to_contain_text("?question")
+    page.keyboard.press("Escape")
 
     page.goto("/")                                      # the brief: its tallies and cards, nothing of AI's
     expect(page.locator(".bf-card")).to_be_visible()

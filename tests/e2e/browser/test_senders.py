@@ -142,8 +142,11 @@ def test_with_ai_off_a_sender_summary_says_so(page, world):
     page.locator("button.rd-sender").click()
     card = page.get_by_role("dialog", name="About this sender")
     card.get_by_role("button", name="Summarize this sender").click()
-    expect(card.locator(".cc-sum")).to_contain_text("AI is off.")
+    expect(card.locator(".cc-sum")).to_contain_text("AI is off: there’s no key for Claude.")
     expect(card.get_by_role("button", name="Summarize this sender")).to_have_count(0)
+    card.get_by_role("button", name="Set up AI in Settings").click()
+    expect(card).to_have_count(0)
+    expect(page.get_by_role("dialog", name="AI")).to_be_visible()
 
 
 def test_the_sender_opens_a_card_that_says_who_they_are(page, world):
