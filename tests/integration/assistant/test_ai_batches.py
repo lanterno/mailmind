@@ -165,6 +165,16 @@ def test_status_says_so_only_when_a_batch_is_out(backlog, ai):
     assert "batch_waiting" not in assistant.status.report()
 
 
+def test_messages_out_in_a_batch_still_wait_for_a_summary_until_its_answers_are_in(backlog, ai):
+    from mailmind.bootstrap import assistant
+    before = assistant.status.report()["summaries_waiting"]
+    n = assistant.assessments.batch_submit()
+    assert n > 0 and assistant.status.report()["summaries_waiting"] == before
+    ai.end_batch()
+    assistant.assessments.batch_collect()
+    assert assistant.status.report()["summaries_waiting"] == before - n
+
+
 def test_finished_batches_are_forgotten_after_a_month(backlog, ai):
     from mailmind.bootstrap import assistant
     assert assistant.assessments.batch_submit() > 0

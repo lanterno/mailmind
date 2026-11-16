@@ -17,7 +17,8 @@
     "model": "claude-opus-5-5",
     "off": null,
     "provider": "anthropic",
-    "spent_today_micros": 0
+    "spent_today_micros": 0,
+    "summaries_waiting": 20
    },
    "aliases": {
     "ada@example.test": "Ada",
@@ -78,7 +79,8 @@
    "model": "claude-opus-5-5",
    "off": null,
    "provider": "anthropic",
-   "spent_today_micros": 0
+   "spent_today_micros": 0,
+   "summaries_waiting": 20
   }
  },
  {
@@ -94,7 +96,8 @@
    "model": "claude-opus-5-5",
    "off": null,
    "provider": "anthropic",
-   "spent_today_micros": 0
+   "spent_today_micros": 0,
+   "summaries_waiting": 20
   }
  }
 ]

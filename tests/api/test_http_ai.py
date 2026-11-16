@@ -214,6 +214,25 @@ def test_draft_ahead_generates_once_then_serves(app, golden, world, ai):
     golden.note("calls for those", len(ai.requests))
 
 
+def test_the_status_counts_what_waits_for_a_summary_from_the_last_30_days(app, world, ai):
+    def waiting():
+        return app.get("/api/digest").json["ai"].get("summaries_waiting")
+    before = waiting()
+    assert before > 0
+    for subject, date in (("Lunch, last summer", "Tue, 01 Sep 2026 12:00:00 +0000"),
+                          ("Lunch, this week", "Mon, 02 Nov 2026 11:50:00 +0000")):
+        world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Subject=subject, Date=date,
+                                                Message_ID=f"<{len(subject)}-{date[5:7]}@example.test>"))
+    assert waiting() == before + 1
+    ai.responder = triage
+    app.work("assess")
+    asked = [r.prompt for r in ai.requests if r.prompt.startswith("You are triaging ONE email")]
+    assert len(asked) == before + 1 and not [p for p in asked if "Lunch, last summer" in p]
+    assert waiting() == 0
+    assert app.post("/api/preferences", {"ai_enabled": False}).status == 200
+    assert waiting() is None
+
+
 def test_status_after_calls(app, golden, world, ai):
     golden.record("the digest's AI status before any call", app.get("/api/digest"))
     app.post("/api/ai/rewrite", {"op": "fix", "text": "teh"})
