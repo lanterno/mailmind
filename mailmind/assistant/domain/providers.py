@@ -24,6 +24,8 @@ OFF_WORDS: dict[AiOff, str] = {"turned-off": "AI is off: it is turned off in Set
                                "no-model": "AI is off: no model is chosen"}
 
 CONFIG = "mailmind.config.json"           # where a key came from, for every provider but Claude's from the environment
+TIMEOUT = 120                             # seconds a call's attempt waits
+LOCAL_TIMEOUT = 300                       # ...on this Mac, where a model loads on its first use
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,11 @@ class Engine:
         """It runs on this Mac (a model on this Mac, or any service on loopback), so a model the price table doesn't know
         costs nothing."""
         return self.provider == "local" or on_loopback(self.base_url)
+
+    @property
+    def timeout(self) -> int:
+        """Seconds an attempt waits: longer on this Mac, where a model is loaded on its first use."""
+        return LOCAL_TIMEOUT if self.local else TIMEOUT
 
 
 def in_force(*, enabled: bool, provider: AiProvider, model: str, base_url: str, key: str, key_from: str) -> Engine:

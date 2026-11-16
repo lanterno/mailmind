@@ -112,8 +112,8 @@ def _model_for(e: Engine) -> LanguageModel:
     if e.off:
         return DisabledModel(e.off, e.model)
     if PROVIDERS[e.provider].wire == "anthropic":
-        return AnthropicModel(e.key, e.base_url, model=e.model, local=e.local)
-    return ChatModel(e.provider, e.base_url, e.key, e.model, local=e.local)
+        return AnthropicModel(e.key, e.base_url, timeout=e.timeout, model=e.model, local=e.local)
+    return ChatModel(e.provider, e.base_url, e.key, e.model, timeout=e.timeout, local=e.local)
 
 
 class _Bound:

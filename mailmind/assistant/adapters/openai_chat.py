@@ -19,10 +19,10 @@ from urllib.parse import urlsplit
 
 from mailmind.assistant.adapters import chat_wire
 from mailmind.assistant.application.ports import BatchResult, ModelError, NoBatches, Prompt, Reply
+from mailmind.assistant.domain.providers import TIMEOUT
 from mailmind.kernel.ai_provider import AiProvider
 from mailmind.platform.db import txguard
 
-TIMEOUT = 120                      # seconds per attempt
 RETRIES = 2                        # after the first attempt
 LONGEST_WAIT = 60                  # seconds: a retry-after past this isn't waited for
 _RETRIED = frozenset({408, 409, 429})

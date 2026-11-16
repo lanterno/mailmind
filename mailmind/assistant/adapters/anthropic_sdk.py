@@ -15,9 +15,9 @@ from mailmind.assistant.adapters import wire
 from mailmind.assistant.application.ports import BatchResult, ModelError, Prompt, Reply
 from mailmind.assistant.domain import models
 from mailmind.assistant.domain.models import FALLBACK_BETA
+from mailmind.assistant.domain.providers import TIMEOUT
 from mailmind.platform.db import txguard
 
-TIMEOUT = 120                      # seconds per attempt
 RETRIES = 2                        # after the first attempt
 DEFAULT_URL = "https://api.anthropic.com"
 MODELS_PAGE = 1000                 # the most the API lists at once
