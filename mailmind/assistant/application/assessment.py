@@ -1,6 +1,9 @@
 """Summarizing and scoring mail that isn't junk: a few calls in parallel for what's new, and a backlog as a batch at half
 price, which only Claude takes. A batch out when a person chooses another provider is let go here, with nothing sent: its
-messages wait for a summary again, and what it booked is free again."""
+messages wait for a summary again, and what it booked is free again.
+
+Only mail from the last RECENT_DAYS is summarized in the background: older mail is summarized when it is opened, so turning AI
+on over a mailbox of years spends nothing on its past."""
 import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,6 +27,7 @@ assess_log = get_logger("assess")
 type Log = Callable[[str], None]
 
 WORKERS = 4
+RECENT_DAYS = 30           # how far back the background summarizes; older mail is summarized when it is opened
 
 # --- triage schema: structured output returns an object that matches it, so a triage reply needs
 #     no regex scrape (the old parse-error class).
@@ -55,15 +59,21 @@ class Assessments:
 
     ASSESS_BATCH = 300                        # messages triaged in one round
     ASSESS_YIELD = 45                         # seconds a round waits while the user is using AI
+    RECENT_DAYS = RECENT_DAYS
 
     def __init__(self, calls: Calls, gateway: Callable[[], Gateway], answers: Answers, uow: UnitOfWork, mail: Mail,
-                 provider: Callable[[], AiProvider] = lambda: DEFAULT_PROVIDER):
+                 provider: Callable[[], AiProvider] = lambda: DEFAULT_PROVIDER, clock: Callable[[], float] = time.time):
         self._calls = calls
         self._gateway = gateway
         self._answers = answers
         self._uow = uow
         self._mail = mail
         self._provider = provider           # the provider a person chose, AI mode on or off
+        self._clock = clock
+
+    def _recent(self) -> int:
+        """The moment the background's reach starts: mail from before it waits to be opened."""
+        return int(self._clock()) - self.RECENT_DAYS * 86400
 
     def _triage_prompt(self, row: Row) -> str:
         frm = f"{row['from_name']} <{row['from_addr']}>" if row["from_name"] else row["from_addr"]
@@ -94,14 +104,15 @@ class Assessments:
         return row["pk"], self._assessment(row, reply, prompts.TRIAGE.version)
 
     def summarize_pending(self, limit: int = 200, workers: int = WORKERS, log: Log = lambda _: None) -> int:
-        """Triage up to `limit` messages that have no summary yet, `workers` at a time, and return how
-        many were summarized. With AI off, or while the cost governor holds triage back, it returns 0
-        at once: not one message is tried."""
+        """Triage up to `limit` messages from the last RECENT_DAYS that have no summary yet, `workers` at a time, and
+        return how many were summarized. With AI off, or while the cost governor holds triage back, it returns 0 at once:
+        not one message is tried."""
         if self._calls.engine() == "none" or self._gateway().held_back("triage"):
             return 0
+        recent = self._recent()
         with self._uow.read() as c:
             out = self._answers.batch_open(c)
-            rows = self._answers.needs_summary(c, limit, newer_than=out["cutoff_ts"] if out else None)
+            rows = self._answers.needs_summary(c, limit, newer_than=max(out["cutoff_ts"] or 0, recent) if out else recent)
         if not rows:
             return 0
         log(f"summarizing {len(rows)} messages with {workers} workers...")
@@ -125,8 +136,8 @@ class Assessments:
             feature=self.BATCH_FEATURE, model=name, effort=self.TRIAGE_EFFORT))
 
     def batch_submit(self, at_least: int | None = None, keep: int | None = None, log: Log = lambda _: None) -> int:
-        """When a backlog is waiting and no batch is out, send it as one, and return how many it took. It
-        takes what fits in its share of today's limit, by estimate, and leaves the newest to go now."""
+        """When a backlog from the last RECENT_DAYS is waiting and no batch is out, send it as one, and return how many it
+        took. It takes what fits in its share of today's limit, by estimate, and leaves the newest to go now."""
         at_least, keep = self.BATCH_MIN if at_least is None else at_least, self.BATCH_KEEP_NEWEST if keep is None else keep
         gw = self._gateway()
         if self._calls.engine() == "none" or not gw.takes_batches or gw.held_back(self.BATCH_FEATURE):
@@ -134,7 +145,8 @@ class Assessments:
         with self._uow.read() as c:
             if self._answers.batch_open(c):
                 return 0
-            rows = [r for r in self._answers.needs_summary(c, keep + self.BATCH_MAX) if r["message_key"] is not None]
+            rows = [r for r in self._answers.needs_summary(c, keep + self.BATCH_MAX, newer_than=self._recent())
+                    if r["message_key"] is not None]
         if len(rows) < at_least:
             return 0
         name = self._calls.model_label()
