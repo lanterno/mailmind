@@ -414,15 +414,24 @@ private struct InboxRow: View {
             }
             .font(.meadow(.ui, 13))
             if let armed = model.sweepArmed, armed.account == account.account {
-                HStack(spacing: 8) {
-                    Text("Sweep **\(nameOf(account.account))** · **\(armed.planned)** msgs")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sweep **\(nameOf(account.account))** · **\(armed.planned)** to Trash")
                         .font(.meadow(.ui, 13.5))
                         .foregroundStyle(meadow.sunInk)
-                    Spacer()
-                    Button("Abort") { model.abortSweep() }.meadowButton(.quiet, small: true)
-                    Button("Confirm") { Task { await model.sweep() } }.meadowButton(.danger, small: true)
+                    ForEach(armed.going ?? [], id: \.bucket) { bucket in
+                        SweepBucketLines(bucket: bucket)
+                    }
+                    ForEach(CurateModel.sweepNotes(armed), id: \.self) { note in
+                        Text(note).font(.meadow(.ui, 12.5, .semibold)).foregroundStyle(meadow.sunInk)
+                    }
+                    HStack(spacing: 8) {
+                        Text("Undo puts it all back.").font(.meadow(.ui, 12.5)).foregroundStyle(meadow.ink3)
+                        Spacer()
+                        Button("Abort") { model.abortSweep() }.meadowButton(.quiet, small: true)
+                        Button("Confirm") { Task { await model.sweep() } }.meadowButton(.danger, small: true)
+                    }
                 }
-                .padding(8)
+                .padding(10)
                 .background(RoundedRectangle(cornerRadius: 10).fill(meadow.sunWash))
             }
         }
@@ -441,6 +450,36 @@ private struct InboxRow: View {
         case "other/personal-ish": meadow.sun.opacity(0.5)
         default: meadow.ink3
         }
+    }
+}
+
+/// One bucket a sweep would move: its name and count, the senders with the most of it, and its newest subjects.
+private struct SweepBucketLines: View {
+    let bucket: API.SweepBucket
+    @Environment(\.meadow) private var meadow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Circle().fill(InboxRow.colour(bucket.bucket, meadow)).frame(width: 7, height: 7)
+                Text(CurateModel.bucketWords(bucket.bucket)).font(.meadow(.ui, 13, .bold)).foregroundStyle(meadow.ink)
+                Spacer()
+                Text("\(bucket.count)").font(.meadow(.ui, 13)).monospacedDigit().foregroundStyle(meadow.ink3)
+            }
+            Text(CurateModel.sweepSenders(bucket))
+                .font(.meadow(.mono, 11.5))
+                .foregroundStyle(meadow.ink3)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(bucket.subjects.enumerated()), id: \.offset) { _, subject in
+                Text("· " + (subject.isEmpty ? String(localized: "(no subject)") : subject))
+                    .font(.meadow(.ui, 12.5))
+                    .foregroundStyle(meadow.ink2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .padding(.top, 6)
+        .overlay(alignment: .top) { Rectangle().fill(meadow.line).frame(height: 1) }
     }
 }
 

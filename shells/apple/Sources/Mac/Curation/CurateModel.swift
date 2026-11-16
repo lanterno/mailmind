@@ -48,8 +48,8 @@ final class CurateModel {
     var marked: Set<String> = []
     var cleaning: Cleaning?
     var batching: Batching?
-    /// An account's sweep, planned and waiting for Confirm.
-    private(set) var sweepArmed: (account: String, planned: Int)?
+    /// An account's sweep, planned and waiting for Confirm: what goes, bucket by bucket, and what stays.
+    private(set) var sweepArmed: API.AccountSwept?
     var filterForm: FilterForm?
 
     @ObservationIgnored let link: CoreLink
@@ -205,10 +205,12 @@ final class CurateModel {
             guard let result = planned.results.first else { return notices.say(String(localized: "Nothing to sweep")) }
             if let error = result.error {
                 notices.say(String(localized: "Sweep: \(error)"))
+            } else if result.planned == 0, let held = result.heldBack, held > 0 {
+                notices.say(String(localized: "Nothing to sweep: \(held) starred or unread stay"))
             } else if result.planned == 0 {
                 notices.say(String(localized: "Nothing to sweep"))
             } else {
-                sweepArmed = (account, result.planned)
+                sweepArmed = result
             }
         } catch {
             notices.say(String(localized: "Plan failed"))
@@ -222,20 +224,57 @@ final class CurateModel {
 
     func sweep() async {
         guard let routes = link.routes, let armed = sweepArmed else { return }
-        let (account, planned) = armed
         sweepArmed = nil
-        notices.say(String(localized: "Sweeping \(planned)…"))
+        notices.say(String(localized: "Sweeping \(armed.planned)…"))
         do {
-            let swept = try await routes.post(API.Post.Sweep.self, API.SweepBody(account: account, dryRun: false))
+            let swept = try await routes.post(API.Post.Sweep.self, API.SweepBody(
+                account: armed.account, dryRun: false, undoGroup: newUndoGroup()))
             if let result = swept.results.first {
                 let unverified = (result.stragglers ?? []).count
-                notices.say(String(localized: "Swept \(result.moved ?? 0)/\(result.planned)")
-                    + (unverified > 0 ? String(localized: " · \(unverified) unverified") : ""))
+                let words = result.error.map { String(localized: "Sweep: \($0)") }
+                    ?? String(localized: "Swept \(result.moved ?? 0)/\(result.planned)")
+                        + (unverified > 0 ? String(localized: " · \(unverified) unverified") : "")
+                // Whatever went, one Undo brings it back from the Trash.
+                notices.say(words, undoable: swept.undoGroup != nil)
             }
         } catch {
             notices.say(String(localized: "Sweep failed"))
         }
         await again()
+    }
+
+    /// What a junk bucket is called before a sweep; one this app doesn't know goes by the server's name for it.
+    static func bucketWords(_ bucket: String) -> String {
+        switch bucket {
+        case "spam/scam": String(localized: "Spam and scams")
+        case "blocked": String(localized: "Senders you blocked")
+        case "newsletters/marketing": String(localized: "Newsletters and marketing")
+        case "automated-notifications": String(localized: "Automatic notifications")
+        default: bucket
+        }
+    }
+
+    /// A bucket's senders with the most of it, and how many when more than one.
+    static func sweepSenders(_ bucket: API.SweepBucket) -> String {
+        bucket.senders.map { $0.count > 1 ? "\($0.fromAddr) (\($0.count))" : $0.fromAddr }.joined(separator: ", ")
+    }
+
+    /// What a sweep's plan says under what goes: what stays, what waits for the next sweep, what Undo can't bring
+    /// back, and that Undo brings back the rest.
+    static func sweepNotes(_ plan: API.AccountSwept) -> [String] {
+        var notes: [String] = []
+        if let held = plan.heldBack, held > 0 {
+            notes.append(held == 1
+                ? String(localized: "1 starred or unread message stays in your Inbox.")
+                : String(localized: "\(held) starred or unread messages stay in your Inbox."))
+        }
+        if plan.capped == true {
+            notes.append(String(localized: "The newest \(plan.planned) only — sweep again for the rest."))
+        }
+        if let lost = plan.noUndo, lost > 0 {
+            notes.append(String(localized: "\(lost) of them can’t be brought back with Undo."))
+        }
+        return notes
     }
 
     // MARK: Rules and filters
