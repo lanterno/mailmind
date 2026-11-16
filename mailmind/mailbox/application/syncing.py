@@ -10,6 +10,7 @@ from collections.abc import Callable, Collection, Mapping
 from typing import Any
 
 from mailmind.kernel.errors import Refused
+from mailmind.kernel.ids import INBOX
 from mailmind.kernel.when import now_iso
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.folders import Folders
@@ -73,8 +74,8 @@ class Syncing:
             self._status[a["email"]] = {"health": "syncing", "msg": ""}
             try:
                 with self._uow.read() as c:
-                    first = self._store.get_watermark(c, a["email"], "INBOX") == 0
-                first = first and not self._ingest.folder_synced(a["email"], "INBOX")
+                    first = self._store.get_watermark(c, a["email"], INBOX) == 0
+                first = first and not self._ingest.folder_synced(a["email"], INBOX)
                 kept, junk, _ = self._ingest.sync_new(a)
                 arrived = 0 if first else kept
                 new += arrived
