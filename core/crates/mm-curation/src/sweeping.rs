@@ -1,10 +1,12 @@
 //! Sweeping an inbox (`mailmind.curation.application.sweep`, `domain.live` and `mailbox.application.bulk_moves`):
 //! classify it as the server shows it now, then move its junk to Trash, verified and audited. Mail is read live before
 //! anything moves, so a stored row can't send the wrong message anywhere. Starred and unread mail stays where it is,
-//! whatever it is. What a sweep moves goes on the undo stack under one group, so one Undo puts it all back from Trash,
-//! each message found there by its Message-ID. Each account's work is on its own gate.
+//! whatever it is. A plan names what would go, bucket by bucket, with its senders and subjects, so a person sees it
+//! before saying yes. What a sweep moves goes on the undo stack under one group, so one Undo puts it all back from
+//! Trash, each message found there by its Message-ID. Each account's work is on its own gate.
 
-use std::collections::HashSet;
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use mm_kernel::errors::{Failure, Fault, Problem};
@@ -33,17 +35,59 @@ const UNDO_LABEL: &str = "Swept junk";
 /// go first, and the next sweep takes the rest.
 pub const SWEEP_MAX: usize = 500;
 
+/// How many of a bucket's senders, and of its subjects, a sweep's plan names before it asks.
+pub const LISTED: usize = 5;
+
+fn uid(r: &&Classified) -> u32 {
+    r.read.uid.parse().unwrap_or(0)
+}
+
 /// What a sweep takes of `junk`: the newest `SWEEP_MAX` by UID, in the order the INBOX holds them, and whether that
 /// leaves any for the next.
 pub fn within_cap(mut junk: Vec<&Classified>) -> (Vec<&Classified>, bool) {
     if junk.len() <= SWEEP_MAX {
         return (junk, false);
     }
-    let uid = |r: &&Classified| r.read.uid.parse::<u32>().unwrap_or(0);
-    junk.sort_by_key(|r| std::cmp::Reverse(uid(r)));
+    junk.sort_by_key(|r| Reverse(uid(r)));
     junk.truncate(SWEEP_MAX);
     junk.sort_by_key(uid);
     (junk, true)
+}
+
+/// What goes, a junk bucket at a time in the classifier's order, each that holds any: how many, the `LISTED` senders
+/// with the most of it (then by address) and how many each, and its newest `LISTED` subjects, none twice.
+pub fn going(junk: &[&Classified]) -> Value {
+    let mut out = Vec::new();
+    for bucket in Bucket::ALL.into_iter().filter(|b| b.is_junk()) {
+        let mut mail: Vec<&Classified> = junk.iter().copied().filter(|r| r.bucket == bucket).collect();
+        if mail.is_empty() {
+            continue;
+        }
+        let mut by: BTreeMap<&str, usize> = BTreeMap::new();
+        for r in &mail {
+            *by.entry(r.read.from.as_str()).or_default() += 1;
+        }
+        let mut senders: Vec<(&str, usize)> = by.into_iter().collect();
+        senders.sort_by_key(|(_, n)| Reverse(*n));
+        senders.truncate(LISTED);
+        mail.sort_by_key(|r| Reverse(uid(r)));
+        let mut subjects: Vec<&str> = Vec::with_capacity(LISTED);
+        for r in &mail {
+            if subjects.len() == LISTED {
+                break;
+            }
+            if !subjects.contains(&r.read.subject.as_str()) {
+                subjects.push(&r.read.subject);
+            }
+        }
+        out.push(json!({
+            "bucket": bucket.name(),
+            "count": mail.len(),
+            "senders": senders.iter().map(|(from, n)| json!({"from_addr": from, "count": n})).collect::<Vec<_>>(),
+            "subjects": subjects,
+        }));
+    }
+    Value::Array(out)
 }
 
 /// A message of the INBOX as the server shows it now, with what the classifier wants of its headers. Either List
@@ -248,6 +292,7 @@ impl Sweeps {
         out.insert("planned".into(), json!(junk.len()));
         out.insert("by_bucket".into(), plan.get("by_bucket").cloned().unwrap_or_else(|| json!({})));
         out.insert("senders".into(), json!(senders.len()));
+        out.insert("going".into(), going(&junk));
         out.insert("held_back".into(), json!(held.len()));
         out.insert("capped".into(), json!(capped));
         // Undo finds a message in Trash by its Message-ID: one with none goes, but can't come back.
