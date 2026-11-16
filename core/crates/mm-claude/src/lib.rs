@@ -6,7 +6,8 @@
 //! machine, and never to any endpoint but the one it was given for. The host is asked of `Outside` before a connection
 //! is made. A call is sent again, twice, after a status worth sending again (`RETRIED`) or a lost connection, waiting
 //! what `retry-after` says or else a little longer each time, except a batch's sending, which never is; any other
-//! status is a `ModelError` saying it. The key never reaches a log line or an error.
+//! status is a `ModelError` saying it. The key never reaches a log line or an error. It also lists the models the key
+//! may ask, for a person choosing one (#49).
 
 pub mod batches;
 pub mod wire;
@@ -187,5 +188,46 @@ impl LanguageModel for ClaudeApi {
 
     fn discard_batch(&self, batch_id: &str) -> Result<(), ModelError> {
         self.delete(batch_id)
+    }
+}
+
+/// The most models the API lists at once.
+const MODELS_PAGE: u32 = 1000;
+/// The most pages of models read: a list longer than this is cut off, never followed forever.
+const MODELS_PAGES: u32 = 20;
+
+impl ClaudeApi {
+    /// The ids of the models the key may ask, from `GET /v1/models`, every page of it (#49). Each page is asked once:
+    /// a person is waiting. Fails as a call does.
+    pub fn list_models(&self) -> Result<Vec<String>, ModelError> {
+        let mut ids = Vec::new();
+        let mut after: Option<String> = None;
+        for _ in 0..MODELS_PAGES {
+            let path = match &after {
+                None => format!("/v1/models?limit={MODELS_PAGE}"),
+                Some(last) => format!("/v1/models?limit={MODELS_PAGE}&after_id={}", query_value(last)?),
+            };
+            let call = Call { method: "GET", path: &path, accept: JSON, beta: None, body: None, retries: 0 };
+            let page = parsed(&self.call(&call)?)?;
+            let listed = page.get("data").and_then(serde_json::Value::as_array).cloned().unwrap_or_default();
+            let named = listed.iter().filter_map(|m| m.get("id")?.as_str()).filter(|id| !id.is_empty());
+            ids.extend(named.map(str::to_owned));
+            let more = page.get("has_more").and_then(serde_json::Value::as_bool).unwrap_or(false);
+            match page.get("last_id").and_then(serde_json::Value::as_str) {
+                Some(last) if more && !last.is_empty() => after = Some(last.to_owned()),
+                _ => break,
+            }
+        }
+        Ok(ids)
+    }
+}
+
+/// An id as a query's value: letters, digits, `-`, `_`, `.` and `:` only, so nothing the API said can change the
+/// request.
+fn query_value(id: &str) -> Result<&str, ModelError> {
+    if id.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.:".contains(&b)) {
+        Ok(id)
+    } else {
+        Err(ModelError::new("Claude API failed: APIResponseValidationError", None))
     }
 }
