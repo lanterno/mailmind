@@ -1,5 +1,5 @@
 //! A folder's sync as it opens (`mailbox.application.folders`' `on_open`, `scanning_first` and `_folder_sync`): the
-//! first scan of a folder no scan has read whole, or a catch-up of one read before when one is due, each a job on the
+//! first scan of a folder no scan has begun, or a catch-up of one read before when one is due, each a job on the
 //! account's gate, on a thread of its own. The open waits for it a moment, and answers with what is stored if it
 //! hasn't ended by then (`syncing`, `catching_up`). However it ends, it says so on the event stream (`folder-synced`,
 //! with whether it read the folder and how many messages it stored), so a list that answered before it ended can load
@@ -8,6 +8,9 @@
 //! Only INBOX is synced in the background, so another folder is caught up as it opens, at most once a minute, unless
 //! MailMind put mail there since (`Folders::touched`). An open while a sync of that folder runs joins it, rather than
 //! start another.
+//!
+//! A first scan stores the folder's newest mail and leaves the rest to the background (`Syncing::read_older`), so a
+//! folder whose first scan has begun is caught up as one read before.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
@@ -191,7 +194,7 @@ impl Inner {
 
 impl FolderSyncs for FolderOpening {
     fn on_open(&self, account: &str, folder: &str) -> Result<Opened, Fault> {
-        if !self.0.stored.scanned_whole(account, folder)? {
+        if !self.0.stored.scan_begun(account, folder)? {
             if !self.0.folder_sync(account, folder, true)?.wait(self.0.waits.first_scan) {
                 // Still reading: what is stored now, then folder-synced.
                 return Ok(Opened::Syncing);
@@ -209,7 +212,7 @@ impl FolderSyncs for FolderOpening {
     }
 
     fn scanning_first(&self, account: &str, folder: &str) -> Result<bool, Fault> {
-        if self.0.stored.scanned_whole(account, folder)? {
+        if self.0.stored.scan_begun(account, folder)? {
             return Ok(false);
         }
         Ok(!self.0.folder_sync(account, folder, true)?.wait(Duration::ZERO))

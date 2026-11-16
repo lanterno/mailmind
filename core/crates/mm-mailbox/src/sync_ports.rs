@@ -10,6 +10,7 @@ use mm_kernel::errors::Fault;
 use mm_kernel::events::Topic;
 
 use crate::fetch_ports::KeptBody;
+use crate::sync_plan::Scan;
 
 /// What a sync needs to know of an account.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,6 +74,21 @@ pub struct FolderState {
     pub watermark: i64,
     /// The HIGHESTMODSEQ the last whole read of its flags left.
     pub modseq: Option<i64>,
+    /// What its scans have read so far.
+    pub scan: Scan,
+}
+
+/// Where a step of a sync leaves its folder, written in the transaction that stores the step's messages.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Place {
+    /// The watermark rises to this, never falls; 0 leaves it.
+    pub watermark: u32,
+    /// What the folder's scans have read now, or None to leave it.
+    pub leaves: Option<Scan>,
+    /// What they must still have read, or nothing is stored: the folder was read afresh meanwhile.
+    pub holds: Option<Scan>,
+    /// The folder's last sync.
+    pub when: String,
 }
 
 /// A stored row, as a read of the server's flags compares with it.
@@ -96,9 +112,19 @@ pub trait SyncStore: Send + Sync + fmt::Debug {
     /// Store one message, its flags, its way out of a list, its recipients, its labels and its headers, and index
     /// it for search. Its pk, and whether threading has yet to hear of it.
     fn store_copy(&self, account: &SyncAccount, folder: &str, message: &Incoming) -> Result<(i64, bool), Fault>;
-    /// Every UID up to `max_uid` is seen: the watermark rises to it, never falls.
-    fn advance(&self, account: &str, folder: &str, max_uid: u32, when: &str) -> Result<(), Fault>;
-    fn set_scan_state(&self, account: &str, folder: &str, state: &str) -> Result<(), Fault>;
+    /// Store each of `messages` as `store_copy` does, and where the sync got to, all in one transaction: so a step is
+    /// one write to the disk, and a sync that stops goes on from the last step stored. Each one's pk and whether
+    /// threading has yet to hear of it, or None when the folder no longer holds what `place` says it must, and
+    /// nothing was stored.
+    fn store_step(
+        &self,
+        account: &SyncAccount,
+        folder: &str,
+        messages: &[Incoming],
+        place: &Place,
+    ) -> Result<Option<Vec<(i64, bool)>>, Fault>;
+    /// Each folder whose first scan has older mail still to read: its account, its name and the lowest UID read.
+    fn reading_older(&self) -> Result<Vec<(String, String, u32)>, Fault>;
     /// The rows to compare with the server's flags, those of `uids` or with None the `newest`, and the Message-IDs
     /// with a flag change still on its way to the server.
     fn flag_rows(
@@ -155,4 +181,9 @@ pub trait AroundSync: Send + Sync + fmt::Debug {
     fn wake_due(&self);
     /// The round brought new mail: the job that triages it runs its next round now.
     fn new_mail(&self);
+    /// A first scan left older mail to read: the round that reads it runs now. Whether anything here reads it: a
+    /// process that only reads runs no rounds.
+    fn older_to_read(&self) -> bool {
+        false
+    }
 }

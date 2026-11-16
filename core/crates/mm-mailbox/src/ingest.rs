@@ -1,29 +1,37 @@
 //! Mail into the database, whole or by UID watermark (`mailbox.application.sync.Ingest`): fetch the headers,
-//! classify, store with the message's identity and index it, read the body text of the Inbox's mail that isn't junk,
-//! read again the flags of mail already stored, and thread what arrived.
+//! classify, store with the message's identity and index it, read the opening of the Inbox's mail that isn't junk for
+//! its text, read again the flags of mail already stored, and thread what arrived.
+//!
+//! What a sync stores goes in steps (`sync_plan::Step`), each one transaction with how far the sync got. A first scan
+//! stores the newest step and leaves the folder's older mail to `read_older`, which the background calls a few steps
+//! at a time, newest first, each step giving way to a sync that read the folder afresh meanwhile.
+//!
+//! A message's text comes from its first `HEAD_BYTES` (`BODY.PEEK[]<0.65536>`), so no attachment is downloaded for a
+//! snippet. The whole message is fetched only for an invite: an Inbox message that carries one keeps its body as it
+//! is stored, as opening it would, so Today & next finds it.
 //!
 //! Mail new to the Inbox that MailMind has never seen before is judged by the person's filters as it is stored, and
 //! what they ask is queued for the server (`arrival_flags`).
 //!
-//! An Inbox message that carries a calendar invite keeps its body as it is stored, as opening it would, so Today &
-//! next finds the invite.
-//!
 //! No transaction stays open while the server is asked: each store call is its own.
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
 use mm_content::mime;
 use mm_kernel::errors::Fault;
+use mm_kernel::events::Topic;
 use mm_kernel::log;
 use mm_kernel::seams::Clock;
 use mm_kernel::when;
+use serde_json::json;
 
 use crate::arrival_ports::ArrivalFilters;
 use crate::fetch_ports::KeptBody;
-use crate::session::{HEADER_FIELDS, MailServer, MailServers, ServerError, found_by_message_id};
-use crate::sync_plan::{self, FLAG_REFRESH, WHOLE};
+use crate::session::{HEADER_FIELDS, MailServer, MailServers, Search, ServerError, found_by_message_id};
+use crate::sync_plan::{self, FLAG_REFRESH, Scan, Step};
 use crate::sync_ports::{
-    Classifier, Envelope, Events, FlagRow, Incoming, MailboxEvent, SyncAccount, SyncAccounts, SyncStore,
+    Classifier, Envelope, Events, FlagRow, Incoming, MailboxEvent, Place, SyncAccount, SyncAccounts, SyncStore,
 };
 
 const TAG: &str = "ingest";
@@ -31,6 +39,8 @@ const TAG: &str = "ingest";
 const TIMEOUT_SECONDS: u64 = 60;
 /// How many UIDs one flag read names (`FLAG_BATCH`).
 pub const FLAG_BATCH: usize = 500;
+/// How much of a message a sync reads for its text: the rest, attachments mostly, waits to be opened.
+pub const HEAD_BYTES: u32 = 65_536;
 
 /// Why a sync didn't finish: the server, or the store.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,8 +73,27 @@ impl From<Fault> for SyncError {
     }
 }
 
-/// What a pass stored: (not junk, junk, the highest UID it saw).
-pub type Stored = (usize, usize, u32);
+/// How far a folder's first scan has got: of the messages the folder holds, how many it has stored.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Progress {
+    pub done: usize,
+    pub total: usize,
+}
+
+/// What a sync of one folder came to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Synced {
+    /// How many messages it stored, not junk and junk.
+    pub kept: usize,
+    pub junk: usize,
+    /// The highest UID it stored.
+    pub max_uid: u32,
+    /// It read the folder afresh, a first scan or one the server renumbered: what it stored was there before, so it
+    /// isn't new mail.
+    pub afresh: bool,
+    /// How far the folder's first scan has got, while older mail is still to read in the background.
+    pub reading: Option<Progress>,
+}
 
 #[derive(Debug)]
 pub struct Ingest {
@@ -85,6 +114,30 @@ impl Drop for Open {
     fn drop(&mut self) {
         self.0.logout();
     }
+}
+
+/// How a pass over one folder stores what it fetches.
+#[derive(Clone, Copy, Debug)]
+struct Pass<'a> {
+    folder: &'a str,
+    /// The Inbox's: each message's text is read from its opening.
+    with_body: bool,
+    /// What it finds is new to the folder, so the person's filters speak for what MailMind has never seen.
+    arriving: bool,
+}
+
+/// A message fetched, as it will be stored, with its whole body when it carries an invite.
+struct Fetched {
+    row: Incoming,
+    invite: Option<Vec<u8>>,
+}
+
+/// Whether the opening of a message that was cut off may carry an invite further on: it names a calendar part.
+fn may_hold_invite(head: &[u8]) -> bool {
+    let lower = head.to_ascii_lowercase();
+    [&b"text/calendar"[..], b"application/ics", b".ics"]
+        .iter()
+        .any(|said| lower.windows(said.len()).any(|w| w == *said))
 }
 
 impl Ingest {
@@ -114,41 +167,105 @@ impl Ingest {
     }
 
     /// Sync one folder, UIDVALIDITY checked: `full` scans it whole, else only UIDs above its watermark. `recent`
-    /// bounds a first or whole scan to the newest N UIDs. The folder's scan_state says what the scans so far read.
+    /// bounds a first or whole scan to the newest N UIDs. A first scan stores the folder's newest messages and
+    /// leaves the rest to `read_older`. The folder's scan_state says what the scans so far read.
     pub fn sync_folder(
         &self,
         account: &str,
         folder: &str,
         full: bool,
         recent: Option<usize>,
-    ) -> Result<Stored, SyncError> {
+    ) -> Result<Synced, SyncError> {
         let acct = self.account(account)?;
         let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
         let condstore = s.0.enable_condstore()?;
         let selected = s.0.select(folder, true)?;
         let modseq = if condstore { selected.highest_modseq } else { None };
         let state = self.store.folder_state(&acct.email, folder)?;
-        let plan = sync_plan::plan_folder(selected.uidvalidity, state.uidvalidity, state.watermark, full, recent);
+        let plan =
+            sync_plan::plan_folder(selected.uidvalidity, state.uidvalidity, state.watermark, state.scan, full, recent);
         if plan.reset {
             self.store.reset_folder(&acct.email, folder, self.clock.now().micros().div_euclid(1_000_000))?;
         }
         if let Some(uidvalidity) = selected.uidvalidity.filter(|v| *v != 0) {
             self.store.set_uidvalidity(&acct.email, folder, uidvalidity)?;
         }
-        let (uids, scan) = plan.to_fetch(s.0.search(plan.search())?);
+        let found = s.0.search(plan.search())?;
+        let total = found.len();
+        let steps = plan.steps(found);
+        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: plan.arrives_in(folder) };
+        // A folder read whole before and read whole again (one that was empty) finds what is new to it.
+        let mut synced = Synced { afresh: plan.whole && plan.scan != Scan::Whole, ..Synced::default() };
         let mut stored = Vec::new();
-        let with_body = sync_plan::reads_bodies(folder);
-        let arriving = plan.arrives_in(folder);
-        let result = self.process(&mut *s.0, &acct, &uids, folder, with_body, arriving, true, &mut stored)?;
-        if let Some(scan) = scan {
-            self.store.set_scan_state(&acct.email, folder, scan)?;
+        for step in &steps {
+            let Some((kept, junk, max_uid)) = self.store_step(&mut *s.0, &acct, pass, step, &mut stored)? else {
+                break;
+            };
+            synced.kept += kept;
+            synced.junk += junk;
+            synced.max_uid = synced.max_uid.max(max_uid);
+        }
+        let leaves = steps.last().and_then(|step| step.leaves);
+        if let Some(Scan::Down(_)) = leaves {
+            synced.reading = Some(Progress { done: steps.iter().map(|step| step.uids.len()).sum(), total });
         }
         if plan.read_flags {
             self.refresh_flags(&mut *s.0, &acct, folder, modseq)?;
         }
-        let mark = if scan == Some(WHOLE) { modseq.filter(|m| *m != 0) } else { None };
+        // A whole read of the folder's flags, or of its newest with the rest read after this mark, leaves the mark.
+        let mark = if plan.whole && leaves != Some(Scan::Cut) { modseq.filter(|m| *m != 0) } else { None };
         self.store.settle(&acct.email, folder, mark, &stored, &self.now())?;
-        Ok(result)
+        Ok(synced)
+    }
+
+    /// Read older mail of a folder whose first scan left some (`Scan::Down`), newest first, at most `chunks` steps,
+    /// each in one transaction and said on the event stream as `folder-synced` once it is stored; `heard` hears how
+    /// far the scan has got after each. How far it got, or None once the folder is read whole, or when a sync read
+    /// it afresh meanwhile and this gave way.
+    pub fn read_older(
+        &self,
+        account: &str,
+        folder: &str,
+        chunks: usize,
+        heard: &mut dyn FnMut(Option<Progress>),
+    ) -> Result<Option<Progress>, SyncError> {
+        let acct = self.account(account)?;
+        let Scan::Down(floor) = self.store.folder_state(&acct.email, folder)?.scan else { return Ok(None) };
+        let mut s = Open(self.servers.open(&acct.email, TIMEOUT_SECONDS)?);
+        let selected = s.0.select(folder, true)?;
+        let state = self.store.folder_state(&acct.email, folder)?;
+        let renumbered = matches!((selected.uidvalidity, state.uidvalidity), (Some(now), Some(known))
+            if now != 0 && known != 0 && i64::from(now) != known);
+        if renumbered || state.scan != Scan::Down(floor) {
+            // The next sync reads it afresh.
+            return Ok(None);
+        }
+        let below = s.0.search(Search::Below(floor))?;
+        let total = usize::try_from(selected.exists).unwrap_or(usize::MAX).max(below.len());
+        let mut left = below.len();
+        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false };
+        let mut reached = None;
+        for step in sync_plan::older_steps(floor, &below, chunks) {
+            let mut stored = Vec::new();
+            let Some((kept, junk, _)) = self.store_step(&mut *s.0, &acct, pass, &step, &mut stored)? else {
+                return Ok(None);
+            };
+            self.store.settle(&acct.email, folder, None, &stored, &self.now())?;
+            left = left.saturating_sub(step.uids.len());
+            reached = match step.leaves {
+                Some(Scan::Down(_)) => Some(Progress { done: total.saturating_sub(left), total }),
+                _ => None,
+            };
+            heard(reached);
+            let data = json!({"account": acct.email, "folder": folder, "ok": true, "new": kept + junk});
+            self.events.publish(MailboxEvent::Page { topic: Topic::FolderSynced, data });
+        }
+        Ok(reached)
+    }
+
+    /// Each account and folder whose first scan has older mail still to read.
+    pub fn reading_older(&self) -> Result<Vec<(String, String)>, Fault> {
+        Ok(self.store.reading_older()?.into_iter().map(|(account, folder, _)| (account, folder)).collect())
     }
 
     /// Ingest the one message whose Message-ID is `message_id` into `folder`, past the watermark, which stays where
@@ -175,53 +292,50 @@ impl Ingest {
         if uids.is_empty() {
             return Ok(0);
         }
+        let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false };
+        let fetched = self.fetch(&mut *s.0, &acct, &uids, pass)?;
         let mut stored = Vec::new();
-        self.process(&mut *s.0, &acct, &uids, folder, sync_plan::reads_bodies(folder), false, false, &mut stored)?;
+        for Fetched { row, invite } in fetched {
+            let (pk, threads) = self.store.store_copy(&acct, folder, &row)?;
+            if threads {
+                stored.push(pk);
+            }
+            self.keep_invite(pk, invite);
+        }
         self.store.settle(&acct.email, folder, None, &stored, &self.now())?;
         Ok(uids.len())
     }
 
-    /// Store every one of `uids` in the selected `folder`, junk kept as a badge. The Inbox's bodies are read for
-    /// their text (`with_body`); other folders' wait to be opened. `arriving` says this mail is new to the folder, so
-    /// the person's filters speak for what MailMind has never seen before. `advance` false stores them without
-    /// touching the watermark.
-    #[allow(clippy::too_many_arguments)]
-    fn process(
+    /// The messages `uids` names in the selected folder: their headers, classified, and the Inbox's text read from
+    /// the opening of each that isn't junk, oldest first.
+    fn fetch(
         &self,
         s: &mut dyn MailServer,
         acct: &SyncAccount,
         uids: &[u32],
-        folder: &str,
-        with_body: bool,
-        arriving: bool,
-        advance: bool,
-        stored: &mut Vec<i64>,
-    ) -> Result<Stored, SyncError> {
-        let filters = self.arrivals.get().filter(|_| arriving);
-        let mut queued = false;
-        let (mut max_uid, mut kept, mut junk) = (0u32, 0usize, 0usize);
-        let mut rows: Vec<Incoming> = Vec::new();
-        if !uids.is_empty() {
-            let fetched = s.headers(uids, &HEADER_FIELDS, acct.gmail_threads)?;
-            let fields: Vec<mime::Fields> = fetched.iter().map(|h| mime::fields(&h.raw)).collect();
-            let envelopes: Vec<Envelope<'_>> = fields
-                .iter()
-                .map(|f| Envelope {
-                    from_addr: &f.from_addr,
-                    subject: &f.subject,
-                    from_name: &f.from_name,
-                    has_list_unsub: f.has_list_unsub,
-                })
-                .collect();
-            let verdicts = self.classifier.classify(&envelopes)?;
-            for ((h, fields), verdict) in fetched.into_iter().zip(fields).zip(verdicts) {
-                max_uid = max_uid.max(h.uid);
-                if verdict.is_junk {
-                    junk += 1
-                } else {
-                    kept += 1
-                }
-                rows.push(Incoming {
+        pass: Pass<'_>,
+    ) -> Result<Vec<Fetched>, SyncError> {
+        if uids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let headers = s.headers(uids, &HEADER_FIELDS, acct.gmail_threads)?;
+        let fields: Vec<mime::Fields> = headers.iter().map(|h| mime::fields(&h.raw)).collect();
+        let envelopes: Vec<Envelope<'_>> = fields
+            .iter()
+            .map(|f| Envelope {
+                from_addr: &f.from_addr,
+                subject: &f.subject,
+                from_name: &f.from_name,
+                has_list_unsub: f.has_list_unsub,
+            })
+            .collect();
+        let verdicts = self.classifier.classify(&envelopes)?;
+        let mut fetched: Vec<Fetched> = headers
+            .into_iter()
+            .zip(fields)
+            .zip(verdicts)
+            .map(|((h, fields), verdict)| Fetched {
+                row: Incoming {
                     uid: h.uid,
                     flags: sync_plan::columns_of(&h.flags),
                     fields,
@@ -229,32 +343,87 @@ impl Ingest {
                     gmail_labels: h.gmail_labels,
                     verdict,
                     snippet: String::new(),
-                });
+                },
+                invite: None,
+            })
+            .collect();
+        if !pass.with_body {
+            return Ok(fetched);
+        }
+        let wanted: Vec<u32> = fetched.iter().filter(|f| !f.row.verdict.is_junk).map(|f| f.row.uid).collect();
+        let mut heads = match s.heads(&wanted, HEAD_BYTES) {
+            Ok(heads) => heads,
+            Err(e) => {
+                if !e.is_unreachable() {
+                    log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
+                }
+                BTreeMap::new()
+            }
+        };
+        for f in &mut fetched {
+            let Some(head) = heads.remove(&f.row.uid) else { continue };
+            f.row.snippet = mime::text_body(&head);
+            f.invite = self.invite_of(s, f.row.uid, head);
+        }
+        Ok(fetched)
+    }
+
+    /// The whole message to keep for the invite it carries, or None. An opening that was cut off is fetched whole
+    /// only where it names a calendar part.
+    fn invite_of(&self, s: &mut dyn MailServer, uid: u32, head: Vec<u8>) -> Option<Vec<u8>> {
+        if head.len() < usize::try_from(HEAD_BYTES).unwrap_or(usize::MAX) {
+            return mime::has_invite(&head).then_some(head);
+        }
+        if !(mime::has_invite(&head) || may_hold_invite(&head)) {
+            return None;
+        }
+        match s.body(uid) {
+            Ok(raw) => raw.filter(|raw| mime::has_invite(raw)),
+            Err(e) => {
+                if !e.is_unreachable() {
+                    log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
+                }
+                None
             }
         }
-        for mut row in rows {
-            let mut invite = None;
-            if with_body && !row.verdict.is_junk {
-                row.snippet = match s.body(row.uid) {
-                    Ok(raw) => {
-                        let raw = raw.unwrap_or_default();
-                        let text = mime::text_body(&raw);
-                        invite = mime::has_invite(&raw).then_some(raw);
-                        text
-                    }
-                    Err(e) => {
-                        if !e.is_unreachable() {
-                            log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
-                        }
-                        String::new()
-                    }
-                };
-            }
-            let news = match filters {
-                Some(_) => !self.store.is_known(&acct.email, &row.fields)?,
-                None => false,
-            };
-            let (pk, threads) = self.store.store_copy(acct, folder, &row)?;
+    }
+
+    /// Today & next reads invites from stored bodies only.
+    fn keep_invite(&self, pk: i64, invite: Option<Vec<u8>>) {
+        if let Some(raw) = invite
+            && let Err(fault) = self.store.keep_invite(pk, &KeptBody::of(raw, self.now()))
+        {
+            log::warning(TAG, "an invite's body wasn't kept", &[], Some(fault.class));
+        }
+    }
+
+    /// Store one step of a pass, junk kept as a badge, in one transaction with where it leaves the folder; `stored`
+    /// gets what threading has yet to hear of. (not junk, junk, the highest UID), or None when the folder was read
+    /// afresh meanwhile and the step gave way.
+    fn store_step(
+        &self,
+        s: &mut dyn MailServer,
+        acct: &SyncAccount,
+        pass: Pass<'_>,
+        step: &Step,
+        stored: &mut Vec<i64>,
+    ) -> Result<Option<(usize, usize, u32)>, SyncError> {
+        let filters = self.arrivals.get().filter(|_| pass.arriving);
+        let fetched = self.fetch(s, acct, &step.uids, pass)?;
+        let junk = fetched.iter().filter(|f| f.row.verdict.is_junk).count();
+        let max_uid = fetched.iter().map(|f| f.row.uid).max().unwrap_or(0);
+        let news: Vec<bool> = match filters {
+            Some(_) => fetched
+                .iter()
+                .map(|f| self.store.is_known(&acct.email, &f.row.fields).map(|k| !k))
+                .collect::<Result<_, _>>()?,
+            None => vec![false; fetched.len()],
+        };
+        let place = Place { watermark: step.watermark, leaves: step.leaves, holds: step.holds, when: self.now() };
+        let rows: Vec<Incoming> = fetched.iter().map(|f| f.row.clone()).collect();
+        let Some(pks) = self.store.store_step(acct, pass.folder, &rows, &place)? else { return Ok(None) };
+        let mut queued = false;
+        for ((f, (pk, threads)), news) in fetched.into_iter().zip(pks).zip(news) {
             if threads {
                 stored.push(pk);
             }
@@ -264,20 +433,12 @@ impl Ingest {
                     queued = true;
                 }
             }
-            // Today & next reads invites from stored bodies only.
-            if let Some(raw) = invite
-                && let Err(fault) = self.store.keep_invite(pk, &KeptBody::of(raw, self.now()))
-            {
-                log::warning(TAG, "an invite's body wasn't kept", &[], Some(fault.class));
-            }
+            self.keep_invite(pk, f.invite);
         }
         if let Some(filters) = filters.filter(|_| queued) {
             filters.flags_queued();
         }
-        if advance {
-            self.store.advance(&acct.email, folder, max_uid, &self.now())?;
-        }
-        Ok((kept, junk, max_uid))
+        Ok(Some((rows.len() - junk, junk, max_uid)))
     }
 
     /// Read the flags of the folder's mail again and store what changed, so mail read, starred or answered in
@@ -302,14 +463,14 @@ impl Ingest {
         }
         let mut uids: Option<Vec<u32>> = None;
         if let Some(changed_since) = plan.changed_since {
-            match s.search(crate::session::Search::ChangedSince(changed_since)) {
+            match s.search(Search::ChangedSince(changed_since)) {
                 Ok(found) => uids = Some(found),
                 Err(e) if e.is_unreachable() => return Err(e.into()),
                 Err(e) => log::warning(TAG, "SEARCH MODSEQ refused: reading the newest instead", &[], Some(e.class())),
             }
         }
         let (rows, waiting) = self.store.flag_rows(email, folder, uids.as_deref(), FLAG_REFRESH)?;
-        let mut now = std::collections::BTreeMap::new();
+        let mut now = BTreeMap::new();
         for batch in rows.chunks(FLAG_BATCH) {
             let asked: Vec<u32> = batch.iter().map(|r| r.uid).collect();
             match s.flags(&asked) {

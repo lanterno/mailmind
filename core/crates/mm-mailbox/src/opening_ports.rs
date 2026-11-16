@@ -13,7 +13,7 @@ pub trait FolderSync: Send + Sync + fmt::Debug {
 
 impl FolderSync for Ingest {
     fn sync_folder(&self, account: &str, folder: &str, full: bool) -> Result<(usize, usize), SyncError> {
-        Ingest::sync_folder(self, account, folder, full, None).map(|(kept, junk, _)| (kept, junk))
+        Ingest::sync_folder(self, account, folder, full, None).map(|synced| (synced.kept, synced.junk))
     }
 }
 

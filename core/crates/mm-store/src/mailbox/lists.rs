@@ -3,6 +3,7 @@
 
 use mm_kernel::errors::Fault;
 use mm_mailbox::ports::{Page, Row, StoredLists};
+use mm_mailbox::sync_plan::Scan;
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, Params, ToSql, params, params_from_iter};
 use serde_json::Value;
@@ -247,14 +248,14 @@ impl StoredLists for Database {
         })
     }
 
-    fn scanned_whole(&self, account: &str, folder: &str) -> Result<bool, Fault> {
+    fn scan_begun(&self, account: &str, folder: &str) -> Result<bool, Fault> {
         self.read(|c| {
             let state: Option<String> = c
                 .prepare_cached("SELECT scan_state FROM sync_state WHERE account=? AND folder=?")?
                 .query_map(params![account, folder], |r| r.get(0))?
                 .next()
                 .transpose()?;
-            Ok(state.as_deref() == Some("synced"))
+            Ok(Scan::read(state.as_deref()).begun())
         })
     }
 }

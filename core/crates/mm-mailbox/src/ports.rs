@@ -99,8 +99,9 @@ pub trait StoredLists: Send + Sync + fmt::Debug {
     fn reply_later(&self, accounts: &[String]) -> Result<Vec<Row>, Fault>;
     /// A conversation's messages in the account, oldest first, every copy of each.
     fn thread(&self, account: &str, thread_id: &str) -> Result<Vec<Row>, Fault>;
-    /// Whether a scan has read the whole folder (`sync_state.scan_state`).
-    fn scanned_whole(&self, account: &str, folder: &str) -> Result<bool, Fault>;
+    /// Whether the folder's first scan has begun (`sync_state.scan_state`): it read the folder whole, or its newest
+    /// mail with the rest still being read.
+    fn scan_begun(&self, account: &str, folder: &str) -> Result<bool, Fault>;
 }
 
 /// How a folder's sync went as it opened, for its list to say.

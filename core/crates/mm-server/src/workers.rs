@@ -23,6 +23,8 @@ use crate::app::App;
 const TAG: &str = "jobs";
 /// Seconds between automatic syncs.
 pub const SYNC_INTERVAL: i64 = 300;
+/// The job that reads what a first scan left of a folder's older mail.
+pub const OLDER_MAIL: &str = "older-mail";
 /// Seconds between the minute's rounds: snoozes woken, follow-ups brought up to date.
 pub const CLOCKED_INTERVAL: i64 = 60;
 
@@ -251,6 +253,14 @@ impl Workers {
                     syncing.sync_once();
                     Ok(None)
                 }),
+            ));
+            // A first scan's older mail, a few steps of each folder a round, newest first. A first scan that leaves
+            // some kicks it, a round that leaves more runs the next at once, and after a quit it goes on where the
+            // last step stored left it.
+            let reading = app.syncing.clone();
+            lanes.push((
+                app.jobs.add(OLDER_MAIL, mm_mailbox::syncing::OLDER_EVERY, mm_mailbox::syncing::OLDER_FIRST),
+                Box::new(move || reading.read_older().map(|more| more.then_some(1)).map_err(|fault| fault.class)),
             ));
             if let Some((every, first)) = reconcile_timing(reconcile_secs) {
                 let reconciling = app.clone();

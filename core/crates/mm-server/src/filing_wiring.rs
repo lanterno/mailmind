@@ -163,4 +163,9 @@ impl AroundSync for AroundRounds {
     fn new_mail(&self) {
         self.jobs.kick("assess");
     }
+
+    fn older_to_read(&self) -> bool {
+        self.jobs.kick(crate::workers::OLDER_MAIL);
+        self.jobs.names().contains(&crate::workers::OLDER_MAIL)
+    }
 }

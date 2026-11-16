@@ -30,6 +30,6 @@ pub trait WarmSync: Send + Sync + fmt::Debug {
 
 impl WarmSync for Ingest {
     fn sync_recent(&self, account: &str, folder: &str, recent: usize) -> Result<usize, SyncError> {
-        self.sync_folder(account, folder, false, Some(recent)).map(|(kept, _, _)| kept)
+        self.sync_folder(account, folder, false, Some(recent)).map(|synced| synced.kept)
     }
 }

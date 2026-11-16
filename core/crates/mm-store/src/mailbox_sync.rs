@@ -11,8 +11,8 @@ use mm_content::mime::Fields;
 use mm_kernel::errors::Fault;
 use mm_kernel::identity;
 use mm_mailbox::fetch_ports::KeptBody;
-use mm_mailbox::sync_plan::{COLUMNS, still_to_say};
-use mm_mailbox::sync_ports::{FlagRow, FolderState, Incoming, SyncAccount, SyncStore};
+use mm_mailbox::sync_plan::{COLUMNS, DOWN_TO, Scan, still_to_say};
+use mm_mailbox::sync_ports::{FlagRow, FolderState, Incoming, Place, SyncAccount, SyncStore};
 use mm_mailbox::threading::{StoredCopy, Threader};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 
@@ -112,6 +112,41 @@ fn upsert(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) -> 
         ],
         |r| r.get(0),
     )
+}
+
+/// Store one message, its flags, its way out of a list, its recipients, its labels and its headers, and index it for
+/// search: its pk, and whether threading has yet to hear of it. The caller's transaction holds it.
+fn store_one(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) -> rusqlite::Result<(i64, bool)> {
+    let pk = upsert(c, account, folder, m)?;
+    set_flags(c, pk, &m.flags)?;
+    c.prepare_cached("UPDATE messages SET list_unsub_raw=?, list_unsub_method=? WHERE pk=?")?.execute(params![
+        m.fields.unsub_raw,
+        m.fields.unsub_method,
+        pk
+    ])?;
+    c.prepare_cached("DELETE FROM message_recipients WHERE message_pk=?")?.execute([pk])?;
+    for addr in m.fields.recipient_addrs.iter().take(RECIPIENT_ROWS_MAX) {
+        c.prepare_cached("INSERT OR IGNORE INTO message_recipients(message_pk, addr) VALUES (?,?)")?
+            .execute(params![pk, addr])?;
+    }
+    if let Some(labels) = &m.gmail_labels {
+        c.prepare_cached("DELETE FROM message_labels WHERE message_pk=?")?.execute([pk])?;
+        let mut sorted: Vec<&String> = labels.iter().collect();
+        sorted.sort();
+        for label in sorted.into_iter().take(LABEL_ROWS_MAX) {
+            c.prepare_cached("INSERT OR IGNORE INTO message_labels(message_pk, label) VALUES (?,?)")?
+                .execute(params![pk, label])?;
+        }
+    }
+    let threads = needs_threading(c, pk, &m.fields.in_reply_to, &m.fields.refs)?;
+    c.prepare_cached("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?")?.execute(params![
+        m.fields.in_reply_to,
+        m.fields.refs,
+        m.fields.recipients,
+        pk
+    ])?;
+    index_message(c, pk)?;
+    Ok((pk, threads))
 }
 
 fn set_flags(c: &Connection, pk: i64, flags: &[i64; 5]) -> rusqlite::Result<()> {
@@ -418,13 +453,14 @@ impl SyncStore for Database {
     fn folder_state(&self, account: &str, folder: &str) -> Result<FolderState, Fault> {
         self.read(|c| {
             Ok(c.prepare_cached(
-                "SELECT uidvalidity, last_uid, highest_modseq FROM sync_state WHERE account=? AND folder=?",
+                "SELECT uidvalidity, last_uid, highest_modseq, scan_state FROM sync_state WHERE account=? AND folder=?",
             )?
             .query_row(params![account, folder], |r| {
                 Ok(FolderState {
                     uidvalidity: r.get(0)?,
                     watermark: r.get::<_, Option<i64>>(1)?.unwrap_or(0),
                     modseq: r.get(2)?,
+                    scan: Scan::read(r.get::<_, Option<String>>(3)?.as_deref()),
                 })
             })
             .optional()?
@@ -461,53 +497,54 @@ impl SyncStore for Database {
     }
 
     fn store_copy(&self, account: &SyncAccount, folder: &str, m: &Incoming) -> Result<(i64, bool), Fault> {
-        self.write(|c| {
-            let pk = upsert(c, account, folder, m)?;
-            set_flags(c, pk, &m.flags)?;
-            c.prepare_cached("UPDATE messages SET list_unsub_raw=?, list_unsub_method=? WHERE pk=?")?
-                .execute(params![m.fields.unsub_raw, m.fields.unsub_method, pk])?;
-            c.prepare_cached("DELETE FROM message_recipients WHERE message_pk=?")?.execute([pk])?;
-            for addr in m.fields.recipient_addrs.iter().take(RECIPIENT_ROWS_MAX) {
-                c.prepare_cached("INSERT OR IGNORE INTO message_recipients(message_pk, addr) VALUES (?,?)")?
-                    .execute(params![pk, addr])?;
-            }
-            if let Some(labels) = &m.gmail_labels {
-                c.prepare_cached("DELETE FROM message_labels WHERE message_pk=?")?.execute([pk])?;
-                let mut sorted: Vec<&String> = labels.iter().collect();
-                sorted.sort();
-                for label in sorted.into_iter().take(LABEL_ROWS_MAX) {
-                    c.prepare_cached("INSERT OR IGNORE INTO message_labels(message_pk, label) VALUES (?,?)")?
-                        .execute(params![pk, label])?;
-                }
-            }
-            let threads = needs_threading(c, pk, &m.fields.in_reply_to, &m.fields.refs)?;
-            c.prepare_cached("UPDATE messages SET in_reply_to=?, refs=?, recipients=? WHERE pk=?")?
-                .execute(params![m.fields.in_reply_to, m.fields.refs, m.fields.recipients, pk])?;
-            index_message(c, pk)?;
-            Ok((pk, threads))
-        })
+        self.write(|c| store_one(c, account, folder, m))
     }
 
-    fn advance(&self, account: &str, folder: &str, max_uid: u32, when: &str) -> Result<(), Fault> {
+    fn store_step(
+        &self,
+        account: &SyncAccount,
+        folder: &str,
+        messages: &[Incoming],
+        place: &Place,
+    ) -> Result<Option<Vec<(i64, bool)>>, Fault> {
         self.write(|c| {
-            c.execute(
+            if let Some(holds) = place.holds {
+                let now: Option<String> = c
+                    .prepare_cached("SELECT scan_state FROM sync_state WHERE account=? AND folder=?")?
+                    .query_row(params![account.email, folder], |r| r.get(0))
+                    .optional()?;
+                if Scan::read(now.as_deref()) != holds {
+                    return Ok(None);
+                }
+            }
+            let stored = messages.iter().map(|m| store_one(c, account, folder, m)).collect::<Result<Vec<_>, _>>()?;
+            c.prepare_cached(
                 "INSERT INTO sync_state(account,folder,last_sync,last_uid) VALUES(?,?,?,?) \
                  ON CONFLICT(account,folder) DO UPDATE SET last_sync=excluded.last_sync, \
                  last_uid=MAX(sync_state.last_uid, excluded.last_uid)",
-                params![account, folder, when, max_uid],
-            )?;
-            Ok(())
+            )?
+            .execute(params![account.email, folder, place.when, place.watermark])?;
+            if let Some(leaves) = place.leaves {
+                c.prepare_cached("UPDATE sync_state SET scan_state=? WHERE account=? AND folder=?")?
+                    .execute(params![leaves.state(), account.email, folder])?;
+            }
+            Ok(Some(stored))
         })
     }
 
-    fn set_scan_state(&self, account: &str, folder: &str, state: &str) -> Result<(), Fault> {
-        self.write(|c| {
-            c.execute(
-                "INSERT INTO sync_state(account,folder,scan_state) VALUES(?,?,?) \
-                 ON CONFLICT(account,folder) DO UPDATE SET scan_state=excluded.scan_state",
-                params![account, folder, state],
-            )?;
-            Ok(())
+    fn reading_older(&self) -> Result<Vec<(String, String, u32)>, Fault> {
+        self.read(|c| {
+            let rows: Vec<(String, String, Option<String>)> = c
+                .prepare_cached("SELECT account, folder, scan_state FROM sync_state WHERE scan_state LIKE ? ORDER BY account, folder")?
+                .query_map([format!("{DOWN_TO}%")], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+                .collect::<Result<_, _>>()?;
+            Ok(rows
+                .into_iter()
+                .filter_map(|(account, folder, state)| match Scan::read(state.as_deref()) {
+                    Scan::Down(floor) => Some((account, folder, floor)),
+                    _ => None,
+                })
+                .collect())
         })
     }
 

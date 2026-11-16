@@ -8,7 +8,7 @@ use mm_accounts::Directory;
 use mm_kernel::errors::Fault;
 use mm_mailbox::digest::NotSyncing;
 use mm_mailbox::ports::{Accounts, MailSession, MailSessions, SessionError};
-use mm_mailbox::syncing::Syncing;
+use mm_mailbox::syncing::{AccountSync, Syncing};
 use serde_json::{Value, json};
 
 /// What a session waits for each answer when opened with none named (`pool.KEPT_TIMEOUT`).
@@ -141,12 +141,21 @@ impl LiveSync {
     }
 }
 
+/// An account's sync as the status says it: its health and what it said, and while its Inbox's first scan is still
+/// reading older mail, how many of the Inbox's messages it has read (`done`) of how many (`total`).
+fn said(a: &AccountSync) -> Value {
+    let mut said = json!({"health": a.health, "msg": a.msg});
+    if let Some(reading) = a.reading {
+        said["done"] = json!(reading.done);
+        said["total"] = json!(reading.total);
+    }
+    said
+}
+
 impl mm_mailbox::ports::SyncStatus for LiveSync {
     fn status(&self) -> Value {
         match self.0.get().map(|syncing| syncing.status()) {
-            Some(Ok(status)) => Value::Object(
-                status.into_iter().map(|(account, a)| (account, json!({"health": a.health, "msg": a.msg}))).collect(),
-            ),
+            Some(Ok(status)) => Value::Object(status.into_iter().map(|(account, a)| (account, said(&a))).collect()),
             _ => NotSyncing.status(),
         }
     }
