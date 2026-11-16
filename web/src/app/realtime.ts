@@ -70,7 +70,15 @@ export function useRealtime() {
       whileDown(() => again("digest"), 45_000),
       whileDown(() => { again("outbox"); again("pending"); }, 20_000),
     ];
-    es.addEventListener("sync-done", () => {
+    es.addEventListener("sync-done", (e) => {
+      // A first scan stores mail and says no new-mail, since none of it is new: a list already open (All inboxes, say,
+      // as a new account's first sync runs) shows it once the sync that stored it ends.
+      const d = JSON.parse((e as MessageEvent<string>).data) as { kept?: number; junk?: number };
+      if ((d.kept ?? 0) + (d.junk ?? 0) > 0) {
+        again("messages");
+        again("screener");
+        again("tidy");
+      }
       again("digest");
       again("folders");
       again("documents");
