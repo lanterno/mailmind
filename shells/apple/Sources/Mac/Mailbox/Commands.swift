@@ -111,7 +111,7 @@ struct MailboxCommands: Commands {
 extension Mailbox {
     /// A sheet is asking something of a person, so the window's verbs wait.
     var asking: Bool {
-        moving != nil || paletteOpen || savingView != nil || contact != nil
+        moving != nil || folderAsk != nil || paletteOpen || savingView != nil || contact != nil
     }
 }
 #else

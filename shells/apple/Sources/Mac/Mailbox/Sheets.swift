@@ -69,7 +69,10 @@ struct Entries: View {
         var rows: [(section: String?, entry: Entry)] = ranked.enumerated().map {
             ($0.offset == 0 ? String(localized: "Commands") : nil, $0.element)
         }
-        if let search = typed?(typedWords) { rows.append((rows.isEmpty ? nil : String(localized: "Mail"), search)) }
+        // What is typed is a search for it, headed Mail, unless the entry names its own heading.
+        if let search = typed?(typedWords) {
+            rows.append((rows.isEmpty ? nil : search.group.isEmpty ? String(localized: "Mail") : search.group, search))
+        }
         return rows
     }
 
@@ -277,15 +280,24 @@ enum PaletteIcons {
 }
 
 /// Move what is chosen or open to a folder picked by typing (app/MoveTo.tsx), in the palette's dialog: only the
-/// account's own folders that take filing, as the server says of each, and not the one the mail is in.
+/// account's own folders that take filing, as the server says of each, and not the one the mail is in. New Folder…
+/// comes last, and once a name is typed, a new folder by that name: either asks its name, makes it and moves there.
 struct MoveToSheet: View {
     let mailbox: Mailbox
     let ask: MoveAsk
     let close: @MainActor () -> Void
 
     var body: some View {
+        let ask = ask, mailbox = mailbox
         Entries(entries: mailbox.destinations(ask).map { folder in
             Entries.Entry(id: folder.name, label: Words.role(folder), icon: .folder) { mailbox.move(to: folder) }
+        } + [Entries.Entry(id: "\u{0}new", label: String(localized: "New Folder…"), icon: .plus) {
+            mailbox.folderAsk = .create(ask, name: "")
+        }], typed: { words in
+            Entries.Entry(id: "\u{0}new-named", group: String(localized: "New folder"),
+                          label: String(localized: "Make “\(words)” and move there"), icon: .plus) {
+                mailbox.folderAsk = .create(ask, name: words)
+            }
         }, placeholder: String(localized: "Move to a folder…"), label: String(localized: "Folder"),
         hints: [MeadowPaletteFoot.Hint(keys: ["↑", "↓"], words: String(localized: "move")),
                 MeadowPaletteFoot.Hint(keys: ["↵"], words: String(localized: "move there"))],

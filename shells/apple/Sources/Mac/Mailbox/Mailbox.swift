@@ -59,6 +59,8 @@ final class Mailbox {
     private(set) var toast: Toast?
     /// The Move To sheet, while it is open.
     var moving: MoveAsk?
+    /// The folder dialog, while it is open (`FolderSheet`).
+    var folderAsk: FolderAsk?
     /// The command palette, while it is open.
     var paletteOpen = false
     /// A search being saved as a view: its query, while the sheet asks its name.

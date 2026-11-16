@@ -3,11 +3,12 @@ import AppKit
 import SwiftUI
 
 /// What stands on the window's scrim, one at a time (the mockup's `openOverlay()`): the palette, with the words it
-/// opens on (`? ` to ask, `! ` and a command for a bulk action), Move To, Save View, a snooze's time of one's own, a
-/// sender's card, or the keyboard's legend.
+/// opens on (`? ` to ask, `! ` and a command for a bulk action), Move To, a folder's dialog, Save View, a snooze's time
+/// of one's own, a sender's card, or the keyboard's legend.
 enum WindowDialog: Equatable {
     case palette(initial: String)
     case move(MoveAsk)
+    case folder(FolderAsk)
     case saveView(String)
     case snoozeTime([MailCopy])
     case contact(String)
@@ -18,6 +19,7 @@ enum WindowDialog: Equatable {
         switch self {
         case .palette: "palette"
         case .move: "move"
+        case .folder: "folder"
         case .saveView: "save-view"
         case .snoozeTime: "snooze-time"
         case .contact: "contact"
@@ -25,10 +27,13 @@ enum WindowDialog: Equatable {
         }
     }
 
-    /// The one to show of all asked for: what a person was asked to answer (a move's folder, a view's name, a
-    /// snooze's time), a sender's card, then what the desk opened (Ask, a bulk action), the palette, and the legend.
-    static func shown(moving: MoveAsk?, savingView: String?, choosingTime: [MailCopy]? = nil, contact: String? = nil,
-                      sheet: Desk.Sheet?, planned: String?, palette: Bool, keys: Bool) -> WindowDialog? {
+    /// The one to show of all asked for: what a person was asked to answer (a folder's name or its deleting, a move's
+    /// folder, a view's name, a snooze's time), a sender's card, then what the desk opened (Ask, a bulk action), the
+    /// palette, and the legend.
+    static func shown(moving: MoveAsk?, folder: FolderAsk? = nil, savingView: String?, choosingTime: [MailCopy]? = nil,
+                      contact: String? = nil, sheet: Desk.Sheet?, planned: String?, palette: Bool,
+                      keys: Bool) -> WindowDialog? {
+        if let folder { return .folder(folder) }
         if let moving { return .move(moving) }
         if let savingView { return .saveView(savingView) }
         if let choosingTime { return .snoozeTime(choosingTime) }
@@ -55,7 +60,7 @@ struct WindowOverlays: ViewModifier {
     @State private var focus = DialogFocus()
 
     func body(content: Content) -> some View {
-        let dialog = WindowDialog.shown(moving: mailbox.moving, savingView: mailbox.savingView,
+        let dialog = WindowDialog.shown(moving: mailbox.moving, folder: mailbox.folderAsk, savingView: mailbox.savingView,
                                         choosingTime: desk?.attention.choosingTime, contact: mailbox.contact,
                                         sheet: desk?.sheet,
                                         planned: desk?.plan.command, palette: mailbox.paletteOpen,
@@ -104,6 +109,10 @@ struct WindowOverlays: ViewModifier {
             MeadowDialog(close: close) {
                 MoveToSheet(mailbox: mailbox, ask: ask, close: close)
             }
+        case .folder(let ask):
+            MeadowDialog(place: .form, close: close) {
+                FolderSheet(mailbox: mailbox, ask: ask, close: close)
+            }
         case .saveView(let query):
             MeadowDialog(place: .form, close: close) {
                 SaveViewSheet(mailbox: mailbox, query: query, close: close)
@@ -135,6 +144,7 @@ struct WindowOverlays: ViewModifier {
     private func close() {
         mailbox.paletteOpen = false
         mailbox.moving = nil
+        mailbox.folderAsk = nil
         mailbox.savingView = nil
         mailbox.contact = nil
         status.showingKeys = false
