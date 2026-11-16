@@ -204,7 +204,7 @@ final class CurateModel {
             let planned = try await routes.post(API.Post.Sweep.self, API.SweepBody(account: account, dryRun: true))
             guard let result = planned.results.first else { return notices.say(String(localized: "Nothing to sweep")) }
             if let error = result.error {
-                notices.say(String(localized: "Sweep: \(error)"))
+                notices.say(Self.sweepStopped(error))
             } else if result.planned == 0, let held = result.heldBack, held > 0 {
                 notices.say(String(localized: "Nothing to sweep: \(held) starred or unread stay"))
             } else if result.planned == 0 {
@@ -213,7 +213,7 @@ final class CurateModel {
                 sweepArmed = result
             }
         } catch {
-            notices.say(String(localized: "Plan failed"))
+            notices.say(Self.sweepFailed(error, planning: true))
         }
     }
 
@@ -231,14 +231,14 @@ final class CurateModel {
                 account: armed.account, dryRun: false, undoGroup: newUndoGroup()))
             if let result = swept.results.first {
                 let unverified = (result.stragglers ?? []).count
-                let words = result.error.map { String(localized: "Sweep: \($0)") }
+                let words = result.error.map { Self.sweepStopped($0, moved: result.moved ?? 0) }
                     ?? String(localized: "Swept \(result.moved ?? 0)/\(result.planned)")
                         + (unverified > 0 ? String(localized: " · \(unverified) unverified") : "")
                 // Whatever went, one Undo brings it back from the Trash; a sweep that moved nothing offers none.
                 notices.say(words, undoable: swept.undoGroup != nil && (result.moved ?? 0) > 0)
             }
         } catch {
-            notices.say(String(localized: "Sweep failed"))
+            notices.say(Self.sweepFailed(error, planning: false))
         }
         await again()
     }
@@ -287,6 +287,33 @@ final class CurateModel {
     /// Message-ID to find it by in the Trash (the page's `undoBrings`).
     static func undoLine(_ plan: API.AccountSwept) -> String {
         (plan.noUndo ?? 0) > 0 ? String(localized: "Undo puts the rest back.") : String(localized: "Undo puts it all back.")
+    }
+
+    /// A sweep the server stopped, at its plan or as it moved mail, after `moved` went: plain words with what to do
+    /// next, and the server's class of the trouble after them in brackets, for whoever looks into it, never alone (the
+    /// page's `sweepStopped`).
+    static func sweepStopped(_ error: String, moved: Int = 0) -> String {
+        let why = switch moved {
+        case ...0: String(localized: "Couldn’t reach the mail server, so nothing was swept. Try again in a moment.")
+        case 1: String(localized: """
+            Couldn’t reach the mail server, so the sweep stopped after 1. Undo brings it back; sweep again for the rest.
+            """)
+        default: String(localized: """
+            Couldn’t reach the mail server, so the sweep stopped after \(moved). Undo brings them back; sweep again for \
+            the rest.
+            """)
+        }
+        return "\(why) (\(error))"
+    }
+
+    /// A sweep, or its plan, that got no answer: the server's own words when it refused, else what to do (the page's
+    /// `sweepFailed`).
+    static func sweepFailed(_ error: any Error, planning: Bool) -> String {
+        if let problem = error as? Problem, problem.isRefusal, let detail = problem.detail, !detail.isEmpty {
+            return detail
+        }
+        return planning ? String(localized: "Couldn’t look at this Inbox. Try again in a moment.")
+            : String(localized: "The sweep didn’t finish. Try again in a moment.")
     }
 
     // MARK: Rules and filters
