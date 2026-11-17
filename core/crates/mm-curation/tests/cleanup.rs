@@ -19,7 +19,7 @@ use mm_curation::rulebook::Rules;
 use mm_curation::unsubscribe::{
     self, Attempt, Logged, Mailto, UnsubWay, Unsubscribing, UnsubscribingParts, after_mailto, after_one_click,
     attempt_key, list_unsub, mail_date, mailto_message, mailto_of, not_tried, parse_list_unsub, preview, preview_said,
-    read_only, repeat_of, said, without_sending,
+    repeat_of, said, without_sending,
 };
 use mm_kernel::errors::{Failure, Fault, NOT_YET, READ_ONLY};
 use mm_kernel::seams::{Clock, Moment};
@@ -191,7 +191,6 @@ fn only_what_got_somewhere_is_latched() {
         (after_mailto(false), false),
         (without_sending(&page()), true),
         (without_sending(&UnsubWay::none()), false),
-        (read_only(), false),
         (not_tried(true), false),
         (not_tried(false), false),
     ] {
@@ -214,7 +213,6 @@ fn each_way_says_what_it_came_to() {
         Attempt { browser_url: page().https_uri, ..attempt("needs_browser", "http-page") }
     );
     assert_eq!(without_sending(&UnsubWay::none()), attempt("no_method", "none"));
-    assert_eq!(read_only(), attempt("read_only", "none"));
     assert_eq!(not_tried(true), attempt("no_token", "none"));
     assert_eq!(not_tried(false), attempt("skipped", "none"));
 }
