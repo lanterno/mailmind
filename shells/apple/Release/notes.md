@@ -1,5 +1,5 @@
-<!-- What's new below is 0.3.0's. For the next release, write what changed since this one in its place. -->
-## What's new in MailMind {{version}}
+<!-- 0.3.0's news. At the next release, replace this heading and the news under it with that release's. -->
+## What's new in MailMind 0.3.0
 
 MailMind now runs on **macOS 15 or later**, on Apple silicon and Intel Macs.
 
@@ -16,8 +16,8 @@ MailMind now runs on **macOS 15 or later**, on Apple silicon and Intel Macs.
 **Your first sync**
 
 - A big Inbox shows its newest mail first, then reads the rest in the background, newest first, and says how far it
-  has got ("Reading your inbox: 2,300 of 41,000"). Quit meanwhile and it carries on where it stopped. It downloads
-  no attachments.
+  has got ("Reading your inbox: 2,300 of 41,000"). Quit meanwhile and it carries on where it stopped. It reads
+  only the start of each message, so a large attachment waits until you open it.
 - Mail that was already there doesn't count as new: no notifications, no badge.
 - One account's slow server no longer holds up the others, and you can open a message while the first sync runs.
 - Each account keeps its connection to its server open, so opening messages and folders is quicker.
