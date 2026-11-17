@@ -442,6 +442,7 @@ private struct InboxRow: View {
                         Spacer()
                         Button("Abort") { model.abortSweep() }.meadowButton(.quiet, small: true)
                         Button("Confirm") { Task { await model.sweep() } }.meadowButton(.danger, small: true)
+                            .disabled(model.sweepBusy != nil)
                     }
                 }
                 .padding(10)

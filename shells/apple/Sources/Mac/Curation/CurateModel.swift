@@ -222,8 +222,11 @@ final class CurateModel {
     // MARK: Sweeps
 
     /// Plan an account's sweep, and wait for Confirm. One at a time: a plan reads the whole Inbox from its server.
+    /// Another account's plan waiting for Confirm goes as this one starts, so only one plan is ever on screen: its
+    /// Confirm would do nothing while this one runs.
     func armSweep(_ account: String) async {
         guard let routes = link.routes, sweepBusy == nil else { return }
+        sweepArmed = nil
         sweepBusy = SweepBusy(account: account, step: .planning)
         defer { sweepBusy = nil }
         do {
