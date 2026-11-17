@@ -14,7 +14,7 @@ final class ReadOnlyTests: XCTestCase {
         Problem(FakeServer.refused(409, detail, more: ["read_only": true]))
     }
 
-    func testTheWordsAreThePagesWords() {
+    func testTheWordsAreThePagesPlusWhereToTurnItOff() {
         XCTAssertEqual(ReadOnlyWords.note, """
             Read only is on: MailMind changes nothing on your mail servers, so sending, filing and starring are turned \
             off. Turn it off in Settings › General.
