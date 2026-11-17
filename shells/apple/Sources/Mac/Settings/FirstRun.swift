@@ -121,14 +121,17 @@ struct Welcome: View {
         Settings › AI chooses the service, and turns it off.
         """)
 
-    /// The scene across the top (`.bhero`), 220 high from the window's top, with the greeting on its sky: said once,
-    /// with no line over it. With the traffic lights over the scene's corner, the greeting stands just below their
-    /// row, its capitals about as far under the lights as the lights are under the window's top (`room`). A press on
-    /// the sky moves the window, as the top bar's empty stretches do, for the welcome covers the top bar.
+    /// The scene across the top (`.bhero`), from the window's top, with the greeting on its sky: said once, with no
+    /// line over it. With the traffic lights over the scene's corner, the scene is their row higher (`row`): it spans
+    /// the whole window, which crops more of its sky away the wider it is, and at the size the window opens at the
+    /// sun or the moon still shows. The greeting stands just below the lights, its capitals about as far under them as
+    /// they are under the window's top (`room`). A press on the sky moves the window, as the top bar's empty stretches
+    /// do, for the welcome covers the top bar.
     private var hero: some View {
+        let row: CGFloat = lights ? 36 : 0
         let room: CGFloat = lights ? 8 : 0
         return MeadowScene(seed: 11)
-            .frame(height: 220)
+            .frame(height: 220 + row)
             .overlay { WindowDragArea() }
             .overlay(alignment: .topLeading) {
                 Text("Welcome to MailMind.")
