@@ -12,7 +12,10 @@ function deferred<T>() {
 }
 
 const FROM = "ada@example.test";
-const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+// What the page says of a change read only refused, as the page's env gives it; and that refusal, as the client throws it.
+const READ_ONLY = "Read only is on, so nothing was changed. Turn it off in Settings › General.";
+const refusedReadOnly = () => Object.assign(new Error("MailMind is running read-only"), { status: 409, readOnly: true });
+const flush =async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
 function setup(over: Partial<Env> = {}) {
   const calls: { path: string; body: Json }[] = [];
@@ -35,6 +38,7 @@ function setup(over: Partial<Env> = {}) {
     get: vi.fn(async () => ({ ok: true })),
     toast: (m) => void toasts.push(m),
     say: (m) => void said.push(m),
+    readOnly: (e) => ((e as { readOnly?: unknown } | null)?.readOnly === true ? READ_ONLY : null),
     senders: () => [FROM],
     current: () => FROM,
     mine: () => new Set([FROM]),
@@ -348,6 +352,15 @@ describe("closing and discarding", () => {
     gate.resolve({ ok: true, draft_id: 12 });
     await gone;
     expect(posted("/api/draft")).toEqual([{ draft_id: 12, delete: true }]);
+    expect(m.view.get()).toBeNull();
+  });
+
+  it("says so when read only refuses to take a discarded draft's copy off its server, which stays a draft", async () => {
+    const { m, answer, toasts } = setup();
+    answer("/api/draft", () => { throw refusedReadOnly(); });
+    m.open({ draftId: 3 });
+    await m.discard();
+    expect(toasts).toEqual([READ_ONLY]);
     expect(m.view.get()).toBeNull();
   });
 
@@ -680,6 +693,40 @@ describe("sending", () => {
     await flush();
     expect(m.view.get()!.body).toBe("hello");
     expect(m.float.get()).toBeNull();
+  });
+
+  it("brings a send read only refused back to its composer, and says so", async () => {
+    const { m, answer, toasts, posted } = setup();
+    answer("/api/send", () => { throw refusedReadOnly(); });
+    ready(m);
+    m.send();
+    await flush();
+    expect(toasts).toContain(READ_ONLY);
+    const c = m.view.get()!;
+    expect([c.to.map((r) => r.v), c.subject, c.body]).toEqual([[person], "Hello", "hello"]);
+    expect(m.float.get()).toBeNull();
+    expect(c.dirty).toBe(true);                         // closed, it is saved: a draft read only keeps on this Mac
+    expect(posted("/api/outbox/cancel")).toEqual([]);   // nothing went, so there is nothing to take back
+  });
+
+  it("keeps a send read only refused a click away when another composer opened meanwhile", async () => {
+    const { m, answer, toasts } = setup();
+    const gate = deferred<Json>();
+    answer("/api/send", () => gate.promise);
+    ready(m);
+    m.send();
+    m.open({ to: ["cy@example.test"], subject: "Another" });
+    gate.reject(refusedReadOnly());
+    await flush();
+    expect(toasts).toContain(READ_ONLY);
+    expect(m.view.get()!.subject).toBe("Another");     // what is being written stays
+    const f = m.float.get();
+    expect(f).toMatchObject({ kind: "failed", text: READ_ONLY });
+    if (f?.kind !== "failed") return;
+    m.close(true);
+    f.edit();
+    await flush();
+    expect(m.view.get()!.body).toBe("hello");
   });
 
   it("doesn't ask again after an Undo for what you already waved through", async () => {
