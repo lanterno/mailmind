@@ -210,6 +210,25 @@ final class MeadowWindowTests: XCTestCase {
         }
     }
 
+    /// The guide (Help › Show Me Around) is Meadow's dialog: its paper reaches each corner, in each light.
+    func testTheGuideIsOnMeadowsPaper() throws {
+        for light in [MeadowLight.day, .night] {
+            let renderer = ImageRenderer(content: GuideSheet(steps: Guide.steps(ai: true, singleKeys: true)) {}
+                .meadowLight(light))
+            renderer.scale = 1
+            let image = try XCTUnwrap(renderer.cgImage, "the guide drew")
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            let paper = try XCTUnwrap(NSColor(MeadowPalette.of(light).paperRaised).usingColorSpace(.sRGB))
+            for (x, y) in [(3, 3), (bitmap.pixelsWide - 4, 3), (3, bitmap.pixelsHigh - 4),
+                           (bitmap.pixelsWide - 4, bitmap.pixelsHigh - 4)] {
+                let drawn = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), "a colour at \(x), \(y)")
+                XCTAssertEqual(drawn.alphaComponent, 1, accuracy: 0.01, "paper, not nothing, at \(x), \(y) in \(light)")
+                XCTAssertEqual(drawn.redComponent, paper.redComponent, accuracy: 0.12, "\(light)’s paper at \(x), \(y)")
+                XCTAssertEqual(drawn.blueComponent, paper.blueComponent, accuracy: 0.12, "\(light)’s paper at \(x), \(y)")
+            }
+        }
+    }
+
     /// Every view under `view` of the class `kind`.
     private static func views<T: NSView>(in view: NSView, of kind: T.Type) -> [T] {
         ((view as? T).map { [$0] } ?? []) + view.subviews.flatMap { views(in: $0, of: kind) }
