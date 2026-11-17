@@ -264,11 +264,6 @@ impl Attempt {
     }
 }
 
-/// A read-only process sends nothing outside; not latched, so retryable.
-pub fn read_only() -> Attempt {
-    Attempt::new("read_only", "none")
-}
-
 /// An unsubscribe that didn't go: nobody asked, or nobody showed a preview's good token. Block and sweep still stand.
 pub fn not_tried(asked: bool) -> Attempt {
     Attempt::new(if asked { "no_token" } else { "skipped" }, "none")
@@ -541,11 +536,9 @@ impl Unsubscribing {
         Ok((UnsubWay::none(), accounts))
     }
 
-    /// What trying the way `resolved` names would do.
+    /// What trying the way `resolved` names would do. A read-only process never gets here: the cleanup that asks
+    /// refuses before anything is blocked or moved (`Cleaning::refuse_writes`), and each way out has a wall of its own.
     pub fn next(&self, from_addr: &str, resolved: &Resolved) -> Result<Next, Fault> {
-        if !self.writes_allowed {
-            return Ok(Next::Answered(read_only()));
-        }
         let (info, _) = resolved;
         if let Some(again) = repeat_of(self.mail.attempt(&attempt_key(from_addr))?.as_ref(), info) {
             return Ok(Next::Answered(again));
