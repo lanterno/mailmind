@@ -32,12 +32,13 @@ export const aiOffered = (ai: Said | null | undefined) => ai?.off !== "turned-of
 const HERE = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i;
 export const runsHere = (provider: AiProvider, baseUrl: string) => provider === "local" || HERE.test(baseUrl);
 
-// Who the text of a message goes to, for each provider that isn't on this Mac: the company, or the service named.
+// Who the text of a message goes to, for each provider that isn't on this Mac: the company, or the service at the URL given.
+// The Mac app says the same (`AiProvider.recipient`).
 const RECIPIENT: Record<Exclude<AiProvider, "local">, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   gemini: "Google",
-  compatible: "the OpenAI-compatible service",
+  compatible: "the service at the URL you gave",
 };
 
 // What decides what AI mode sends: the provider and its URL as set, the model chosen, whether that model runs in a cloud though
@@ -59,10 +60,10 @@ export function sendsOf(ai: Pick<AiStatus, "provider" | "model" | "cloud_model">
 }
 
 // Where mail goes for a model served on this Mac: nowhere, unless the model runs in Ollama's cloud. `ahead` is what drafting
-// ahead adds, said only then.
+// ahead adds, said only then. The Mac app's `AIWords.sends` says the same.
 function servedHere(s: Sends, ahead: string): string {
-  if (!s.cloud) return s.provider === "local" ? "With a model on this Mac, nothing leaves this Mac." : `With ${PROVIDER_NAME[s.provider]} on this Mac, nothing leaves this Mac.`;
-  return `${s.model || "The model"} runs in Ollama’s cloud, so what is summarized goes to Ollama’s servers.${s.draftAhead ? ` ${ahead}` : ""}`;
+  if (!s.cloud) return s.provider === "local" ? "With a model on this Mac, nothing leaves this Mac." : "With the service on this Mac, nothing leaves this Mac.";
+  return `${s.model || "The model chosen"} runs in Ollama’s cloud, so what is summarized goes to Ollama’s servers.${s.draftAhead ? ` ${ahead}` : ""}`;
 }
 
 // Who mail goes to off this Mac: the company behind the provider, or the service named; null for one served here.
@@ -90,10 +91,14 @@ export function aiSendsInShort(s: Sends): string {
     + `for something.${s.draftAhead ? ` ${ahead}` : ""} Attachments never leave this Mac.`;
 }
 
-// What drafting ahead sends, said under its switch: nothing more, for a model that runs on this Mac.
+// Who what is written ahead goes to: the provider's company or service, Ollama's servers for a model here that runs in its
+// cloud, or null when it is written on this Mac.
+const aheadTo = (s: Sends) => awayTo(s) ?? (s.cloud ? "Ollama’s servers" : null);
+
+// What drafting ahead sends, said under its switch, as the Mac app's `AIWords.aheadGoes` says it.
 export function draftAheadSends(s: Sends): string {
-  const to = awayTo(s) ?? (s.cloud ? "Ollama’s servers" : null);
-  return to ? `On, whole conversations of important mail go to ${to}, to draft replies before you open them.` : "";
+  const to = aheadTo(s);
+  return to ? `On, whole conversations of important mail go to ${to} to draft them.` : "On, they are drafted on this Mac, and nothing leaves it.";
 }
 
 // Why AI is off, in plain words for the provider chosen: "" while it is on.

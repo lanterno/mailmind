@@ -272,7 +272,6 @@ export function AiForm() {
   else if (!needs.ownModel && !p.ai_model) listed = `${name.charAt(0).toUpperCase()}${name.slice(1)} has no model of its own: choose one.`;
   const parts = new Set(aiParts(p.ai_enabled));
   const sends = sendsOf(ai, p, provider);
-  const ahead = draftAheadSends(sends);
   return (
     <div className="set-body" id="aiBody">
       <div className="set-form">
@@ -390,7 +389,7 @@ export function AiForm() {
           <Check checked={p.auto_tidy} onChange={(auto_tidy) => setPrefs({ auto_tidy })}>File low-priority mail by itself, once a day</Check>
           <div className="set-help">Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.</div>
           <Check checked={p.draft_ahead} onChange={(draft_ahead) => setPrefs({ draft_ahead })}>Draft replies ahead for important mail</Check>
-          <div className="set-help" id="aiDraftAhead">Written while you’re using MailMind, within the daily limit, so a reply is ready when you open the message. Off, a reply is drafted only when you ask for one.{ahead ? ` ${ahead}` : ""}</div>
+          <div className="set-help" id="aiDraftAhead">Written while you’re using MailMind, within the daily limit, so a reply is ready when you open the message. Off, a reply is drafted only when you ask for one. {draftAheadSends(sends)}</div>
         </div>
       )}
     </div>
