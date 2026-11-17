@@ -83,6 +83,7 @@ final class AttentionModel {
     }
 
     /// Mute the thread of each copy. Several go one request each under one undo group, as the page's bulk mute does.
+    /// Read only turns every one down, so its no ends the rest unasked and is said as itself.
     func mute(_ copies: [MailCopy]) async {
         if copies.count == 1 {
             await act(copies, fail: { Self.couldnt(String(localized: "Couldn’t mute"), $0) }) { routes in
@@ -96,9 +97,13 @@ final class AttentionModel {
         await act(copies, fail: { _ in String(localized: "Couldn’t mute") }) { routes in
             var done = 0
             for copy in copies {
-                let muted = try? await routes.post(API.Post.Mute.self, API.MuteBody(
-                    folder: copy.folder, key: copy.key, uid: copy.uid, undoGroup: group))
-                if muted != nil { done += 1 }
+                do {
+                    _ = try await routes.post(API.Post.Mute.self, API.MuteBody(
+                        folder: copy.folder, key: copy.key, uid: copy.uid, undoGroup: group))
+                    done += 1
+                } catch let refusal as Problem where refusal.isReadOnly {
+                    throw refusal
+                } catch {}
             }
             return ("Muted " + countNoun(done, "thread", "threads"), done > 0)
         }
