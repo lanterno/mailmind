@@ -105,43 +105,69 @@ enum SendGuard {
         #"[وفبلك]{0,2}(?:ال|ل)مرفق[ء-ي]{0,3}"#,                  // المرفقات: "the attachments"
     ]
 
+    // Each pattern finds a word that isn't part of a longer one, and its group 1 is the word. The page's take the
+    // character before the word, `(^|[^\p{L}\p{N}])`; here a lookbehind checks it instead. ICU tries a match at each
+    // place in the text and skips only the places a pattern can't start at, so taking any character first had it try
+    // every word after each dash of a pasted run: seconds for 50,000 of them. Starting with the lookbehind, it tries
+    // only where a word's first letter stands.
     private static func words(_ list: [String]) -> NSRegularExpression {
-        try! NSRegularExpression(pattern: #"(^|[^\p{L}\p{N}])("# + list.joined(separator: "|") + #")(?![\p{L}\p{N}])"#)
+        try! NSRegularExpression(pattern: #"(?<![\p{L}\p{N}])("# + list.joined(separator: "|") + #")(?![\p{L}\p{N}])"#)
     }
 
     private static let strongWords = words(strong)
     private static let weakWords = words(weak)
     /// A file name (weak). "_" and "-" can't start one mid-run, so a long run of them stays fast.
     private static let fileName = try! NSRegularExpression(
-        pattern: #"(^|[^\p{L}\p{N}_-])([\p{L}\p{N}_-]+\.(?:pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|csv|zip))(?![\p{L}\p{N}])"#)
+        pattern: #"(?<![\p{L}\p{N}_-])([\p{L}\p{N}_-]+\.(?:pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|csv|zip))(?![\p{L}\p{N}])"#)
     // Case-sensitive, on unfolded text. A bare "PJ" is also a nickname, "pessoa jurídica" or "police judiciaire", so it
     // needs "en PJ", "voir PJ" or "PJ :" to be strong and an article to be weak.
     private static let pj = try! NSRegularExpression(
-        pattern: #"(^|[^\p{L}\p{N}])((?:[Ee]n|[Vv]oir|[Cc]f\.?) PJ(?![\p{L}\p{N}])|PJ(?=\s{0,3}:))"#)
+        pattern: #"(?<![\p{L}\p{N}])((?:[Ee]n|[Vv]oir|[Cc]f\.?) PJ(?![\p{L}\p{N}])|PJ(?=\s{0,3}:))"#)
     private static let pjWeak = try! NSRegularExpression(
-        pattern: #"(^|[^\p{L}\p{N}])((?:[Ll]a|[Ll]es|[Uu]ne|[Dd]es|[Mm]a|[Mm]es|[Vv]otre|[Vv]os|[Nn]otre|[Nn]os|[Cc]ette|[Cc]es) PJ)(?![\p{L}\p{N}])"#)
-    private static let cv = try! NSRegularExpression(pattern: #"(^|[^\p{L}\p{N}])(CV)(?![\p{L}\p{N}])"#)
+        pattern: #"(?<![\p{L}\p{N}])((?:[Ll]a|[Ll]es|[Uu]ne|[Dd]es|[Mm]a|[Mm]es|[Vv]otre|[Vv]os|[Nn]otre|[Nn]os|[Cc]ette|[Cc]es) PJ)(?![\p{L}\p{N}])"#)
+    private static let cv = try! NSRegularExpression(pattern: #"(?<![\p{L}\p{N}])(CV)(?![\p{L}\p{N}])"#)
     private static let replyPrefix = try! NSRegularExpression(pattern: #"^\s*(?:(?:re|fwd?|fw)\s*:\s*)+"#,
                                                                 options: [.caseInsensitive])
 
     /// Text folded for matching, and where each of its UTF-16 units came from in the original (`map[k]`), so a match
-    /// echoes as it was typed.
+    /// echoes as it was typed. ASCII only lowers its capitals, and any other character is folded once a text, so a long
+    /// text costs a step a character rather than a few strings made for each.
     static func fold(_ text: String) -> (text: String, map: [Int]) {
-        var folded = "", map: [Int] = [], at = 0
+        var folded = "", map: [Int] = [], at = 0, known: [Unicode.Scalar: String] = [:]
+        map.reserveCapacity(text.utf16.count + 1)
         for scalar in text.unicodeScalars {
-            let bare = String(scalar).decomposedStringWithCanonicalMapping.unicodeScalars.filter {
-                switch $0.properties.generalCategory {
-                case .nonspacingMark, .spacingMark, .enclosingMark: false
-                default: true
-                }
+            if scalar.isASCII {
+                folded.unicodeScalars.append(capitals.contains(scalar) ? Unicode.Scalar(UInt8(scalar.value | 0x20)) : scalar)
+                map.append(at)
+                at += 1
+                continue
             }
-            let lower = String(String.UnicodeScalarView(bare)).lowercased()
+            let lower: String
+            if let seen = known[scalar] {
+                lower = seen
+            } else {
+                lower = foldOne(scalar)
+                known[scalar] = lower
+            }
             map.append(contentsOf: repeatElement(at, count: lower.utf16.count))
             folded += lower
             at += scalar.utf16.count
         }
         map.append(at)
         return (folded, map)
+    }
+
+    private static let capitals: ClosedRange<Unicode.Scalar> = "A"..."Z"
+
+    /// One character decomposed, its marks dropped, lowercased.
+    private static func foldOne(_ scalar: Unicode.Scalar) -> String {
+        let bare = String(scalar).decomposedStringWithCanonicalMapping.unicodeScalars.filter {
+            switch $0.properties.generalCategory {
+            case .nonspacingMark, .spacingMark, .enclosingMark: false
+            default: true
+            }
+        }
+        return String(String.UnicodeScalarView(bare)).lowercased()
     }
 
     private static let line = try! NSRegularExpression(pattern: #"\r\n?"#)
@@ -166,8 +192,9 @@ enum SendGuard {
             kept.append(line)
         }
         let joined = kept.joined(separator: "\n")
-        let trimmed = String(joined.reversed().drop(while: { $0.isWhitespace }).reversed())
-        return String(trimmed.prefix(scanMax))
+        var end = joined.endIndex   // the trailing space off, read from the end
+        while end > joined.startIndex, joined[joined.index(before: end)].isWhitespace { end = joined.index(before: end) }
+        return String(joined[..<end].prefix(scanMax))
     }
 
     private static func matches(_ text: String, _ pattern: String, caseless: Bool = false) -> Bool {
@@ -207,7 +234,7 @@ enum SendGuard {
             let source = isFolded ? foldedUnits : cleanUnits
             guard let match = regex.firstMatch(in: source as String, range: NSRange(location: 0, length: source.length))
             else { return "" }
-            let word = match.range(at: 2)
+            let word = match.range(at: 1)
             if !isFolded { return cleanUnits.substring(with: word) }
             let start = map[word.location], end = map[word.location + word.length]
             return cleanUnits.substring(with: NSRange(location: start, length: end - start))
