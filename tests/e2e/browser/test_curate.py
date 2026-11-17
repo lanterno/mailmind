@@ -149,9 +149,10 @@ def test_each_inbox_says_what_it_holds_and_a_sweep_asks_first(page, world):
     clean(page)
 
 
-def test_a_sweep_says_what_goes_and_what_stays_before_it_moves_and_one_undo_brings_it_back(page, world):
+def test_a_sweep_says_what_goes_and_what_stays_before_it_moves_and_one_undo_brings_it_back(page, app, world):
     world.server_flags(NEWS, "\\Seen")                         # read in another client
     world.server_flags(SCAM, "\\Seen", "\\Flagged")            # read, and starred: it stays
+    app.work("sync", w.ADA, "INBOX")                            # and MailMind's sync hears of it
     d = drawer(page)
     mod = d.locator(f'.acctmod[data-acct="{w.ADA}"]')
     mod.get_by_role("button", name=re.compile(r"^Sweep \d+")).click()

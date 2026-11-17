@@ -5,6 +5,8 @@ tests/golden/http_settings/.
 """
 import json
 
+import pytest
+
 from fixtures import world as w
 from mailmind.platform.db.uow import UnitOfWork
 from stored_rows import document
@@ -103,9 +105,20 @@ def test_reconcile_prunes_what_the_server_no_longer_has(app, golden, world):
 JUNK = ("ada-inbox-03-newsletter.eml", "ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml")
 
 
+def header_reads(world):
+    """How many times the server has been asked for headers of Ada's mail, as a sweep reads them."""
+    return sum("HEADER.FIELDS" in c["line"].upper() for c in world.server.commands_for(w.ADA, "UID FETCH"))
+
+
+def flagged_elsewhere(app, world, flags):
+    """Another client leaves each of {name: flags} so on the server, and Ada's Inbox syncs, so MailMind knows."""
+    for name, said in flags.items():
+        world.server_flags(name, *said)
+    app.work("sync", w.ADA, "INBOX")
+
+
 def test_sweep_moves_the_junk_buckets_out_of_the_inbox(app, golden, world):
-    for name in JUNK:                                           # read in another client: a sweep takes only read mail
-        world.server_flags(name, "\\Seen")
+    flagged_elsewhere(app, world, {name: ("\\Seen",) for name in JUNK})    # a sweep takes only read mail
     post(app, golden, "sweep Ada, dry run", "/api/sweep", {"account": w.ADA, "dry_run": True})
     since = world.mark()
     post(app, golden, "sweep Ada", "/api/sweep", {"account": w.ADA, "undo_group": "ug-sweep-ada"})
@@ -118,7 +131,7 @@ def test_sweep_moves_the_junk_buckets_out_of_the_inbox(app, golden, world):
 def test_a_sweep_leaves_starred_and_unread_junk_in_the_inbox(app, world):
     """Loom's issue and the scam are unread, and Ada starred the CI mail she read: the plan says all three stay, and the
     sweep moves none of them."""
-    world.server_flags("ada-inbox-04-ci.eml", "\\Seen", "\\Flagged")
+    flagged_elsewhere(app, world, {"ada-inbox-04-ci.eml": ("\\Seen", "\\Flagged")})
     [plan] = app.post("/api/sweep", {"account": w.ADA, "dry_run": True}).json["results"]
     assert (plan["planned"], plan["held_back"], plan["error"]) == (0, 3, None)
     since = world.mark()
@@ -135,10 +148,56 @@ def test_a_sweep_reads_each_messages_flags_in_the_fetch_of_its_headers(app, worl
     for name in JUNK:
         world.server_flags(name, "\\Seen")
     since = len(world.server.commands_for(w.ADA, "UID FETCH"))
-    [plan] = app.post("/api/sweep", {"account": w.ADA, "dry_run": True}).json["results"]
-    assert (plan["planned"], plan["held_back"], plan["error"]) == (3, 0, None)
+    [swept] = app.post("/api/sweep", {"account": w.ADA}).json["results"]
+    assert (swept["planned"], swept["held_back"], swept["moved"], swept["error"]) == (3, 0, 3, None)
     fetched = [c["line"].upper() for c in world.server.commands_for(w.ADA, "UID FETCH")[since:]]
     assert fetched and all("HEADER.FIELDS" in line and "FLAGS" in line for line in fetched), fetched
+
+
+def test_a_sweeps_preview_comes_from_the_stored_inbox_and_asks_the_server_nothing(app, world):
+    """Ada's Inbox has had its first scan, so the preview is what MailMind stored of it, read and starred as the last
+    sync left it: a big Inbox's would otherwise read every message's headers off the server first."""
+    flagged_elsewhere(app, world, {"ada-inbox-03-newsletter.eml": ("\\Seen",), "ada-inbox-12-scam.eml": ("\\Seen", "\\Flagged")})
+    since = len(world.server.commands_for(w.ADA))
+    [plan] = app.post("/api/sweep", {"account": w.ADA, "dry_run": True}).json["results"]
+    assert world.server.commands_for(w.ADA)[since:] == []
+    assert (plan["planned"], plan["held_back"], plan["senders"], plan["capped"], plan["no_undo"]) == (2, 1, 2, False, 0)
+    assert [(b["bucket"], b["count"], b["subjects"]) for b in plan["going"]] == [
+        ("newsletters/marketing", 1, ["This week: five new patterns"]),
+        ("automated-notifications", 1, ["[quilt] Build #412 passed"])]
+
+
+@pytest.mark.parametrize("scan", ["never", "recent", "down-to:7"])
+def test_a_sweeps_preview_reads_the_server_until_a_first_scan_has_read_the_inbox_whole(app, world, scan):
+    """While Ada's first scan hasn't read her whole Inbox (none has begun, a warm read only its newest, or older mail is
+    still to come), only the server can say what it holds: the preview reads it there, flags and all."""
+    with app.stopped():
+        with UnitOfWork().write() as c:
+            c.execute("UPDATE sync_state SET scan_state=? WHERE account=? AND folder='INBOX'", (scan, w.ADA))
+    for name in JUNK:
+        world.server_flags(name, "\\Seen")                     # read in another client, and MailMind not told
+    since = header_reads(world)
+    [plan] = app.post("/api/sweep", {"account": w.ADA, "dry_run": True}).json["results"]
+    assert (plan["planned"], plan["held_back"], plan["error"]) == (3, 0, None)
+    assert header_reads(world) > since
+
+
+def test_a_sweep_reads_the_inbox_off_the_server_once_and_moves_what_it_says_is_still_read_and_unstarred(app, world):
+    """The preview, from what is stored, says all three junk messages go. Before Confirm, another client stars the CI
+    mail and marks the scam unread, and MailMind isn't told: Confirm reads the Inbox off the server, the only time this
+    sweep does, and moves Loom's issue alone."""
+    flagged_elsewhere(app, world, {name: ("\\Seen",) for name in JUNK})
+    since = header_reads(world)
+    [plan] = app.post("/api/sweep", {"account": w.ADA, "dry_run": True}).json["results"]
+    assert (plan["planned"], plan["held_back"]) == (3, 0)
+    world.server_flags("ada-inbox-04-ci.eml", "\\Seen", "\\Flagged")
+    world.server_flags("ada-inbox-12-scam.eml")
+    [swept] = app.post("/api/sweep", {"account": w.ADA, "undo_group": "ug-still"}).json["results"]
+    assert (swept["planned"], swept["held_back"], swept["moved"], swept["capped"]) == (1, 2, 1, False)
+    assert header_reads(world) - since == 1                    # Ada's Inbox is one FETCH, read once
+    assert [box for _, box, *_ in world.where("ada-inbox-03-newsletter.eml")["server"]] == ["Trash"]
+    for name in ("ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml"):
+        assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
 
 
 def test_the_stats_count_only_the_junk_a_sweep_would_move_now(app, world):
