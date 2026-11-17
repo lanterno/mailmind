@@ -1,16 +1,19 @@
 //! A sweep, held to the Python app's answers (tests/unit/mailbox/test_bulk_moves.py, and what
 //! tests/api/test_http_settings.py's sweep shows): the moves checked and tried once more, then the sweep of an account
-//! on fakes behind Curation's ports.
+//! on fakes behind Curation's ports, its plan read off the server or from the stored INBOX.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use mm_curation::cleanup_ports::{
-    Audited, Ids, LiveError, LiveHeaders, LiveInboxes, LiveSession, NamedCopy, SweepTrail, SweptAccount, SweptRows,
+    Audited, Ids, InboxCopy, LiveError, LiveHeaders, LiveInboxes, LiveSession, NamedCopy, ScannedInbox, SweepTrail,
+    SweptAccount, SweptRows,
 };
-use mm_curation::ports::{Filing, RuleBook};
+use mm_curation::ports::{Filing, RuleBook, Stored};
 use mm_curation::rulebook::Rules;
-use mm_curation::sweeping::{MOVE_BATCH, READ_ONLY, SWEEP_MAX, Sweeps, SweepsParts, move_verified, read_from_headers};
+use mm_curation::sweeping::{
+    MOVE_BATCH, READ_ONLY, SWEEP_MAX, Sweeps, SweepsParts, move_verified, read_from_headers, read_from_stored,
+};
 use mm_kernel::errors::{Failure, Fault, Kind};
 use mm_kernel::seams::{Clock, Moment};
 use serde_json::{Value, json};
@@ -33,6 +36,8 @@ struct Inbox {
     trash_listed: Option<String>,
     /// The connection ends as the server's folders are listed.
     lost_listing: bool,
+    /// How many times its headers were asked for.
+    fetches: usize,
 }
 
 impl Inbox {
@@ -57,6 +62,7 @@ impl LiveSession for Inbox {
 
     /// Each message's fields with its flags, as one FETCH brings them.
     fn headers(&mut self, uids: &[u32], _: &[&str]) -> Result<Vec<LiveHeaders>, LiveError> {
+        self.fetches += 1;
         Ok(uids
             .iter()
             .map(|u| LiveHeaders {
@@ -197,6 +203,46 @@ fn a_star_or_no_seen_flag_holds_a_message_back_whatever_the_case() {
     assert!(read_from_headers(1, b"From: a@example.test\r\n\r\n", None).held());
 }
 
+/// A message as its INBOX was stored, read and unstarred, from no list.
+fn copy(uid: i64, from: &str, subject: &str) -> InboxCopy {
+    InboxCopy {
+        uid,
+        message_id: Some(format!("<{subject}@example.test>")),
+        stored: Stored {
+            from_addr: Some(from.into()),
+            subject: Some(subject.into()),
+            bucket: Some("other/personal-ish".into()),
+            seen: true,
+            ..Stored::default()
+        },
+    }
+}
+
+#[test]
+fn a_stored_message_reads_as_a_sweep_reads_one_off_the_server() {
+    let mut issue = copy(7, "News@Loom.example.test", "Issue 218");
+    issue.message_id = Some(" <issue-218@loom.example.test> ".into());
+    issue.stored.from_name = Some("The Weekly Loom".into());
+    let read = read_from_stored(&issue);
+    assert_eq!(
+        (read.uid.as_str(), read.from.as_str(), read.name.as_str(), read.subject.as_str(), read.mid.as_str()),
+        ("7", "news@loom.example.test", "The Weekly Loom", "Issue 218", "<issue-218@loom.example.test>")
+    );
+    assert_eq!((read.bulk, read.starred, read.unread, read.held()), (false, false, false, false));
+    // A list shows in the bucket ingest gave it, or in the way out it kept.
+    issue.stored.bucket = Some("newsletters/marketing".into());
+    assert!(read_from_stored(&issue).bulk);
+    issue.stored.bucket = None;
+    issue.stored.list_unsub_raw = Some("<https://loom.example.test/u>".into());
+    assert!(read_from_stored(&issue).bulk);
+    // Starred, or with no flag that says it was seen, it stays.
+    issue.stored.flagged = true;
+    assert_eq!((read_from_stored(&issue).starred, read_from_stored(&issue).held()), (true, true));
+    let unseen = InboxCopy { message_id: None, stored: Stored::default(), ..issue };
+    let read = read_from_stored(&unseen);
+    assert_eq!((read.unread, read.held(), read.mid.as_str(), read.from.as_str()), (true, true, "", ""));
+}
+
 // ── a sweep of an account ────────────────────────────────────────────────
 
 /// The accounts, their inboxes and everything the sweep writes, each noted. `opens` sessions are opened, and none
@@ -204,6 +250,8 @@ fn a_star_or_no_seen_flag_holds_a_message_back_whatever_the_case() {
 #[derive(Debug, Default)]
 struct World {
     inbox: Mutex<Option<Inbox>>,
+    /// The INBOX as its first scan stored it, once that scan has read it whole.
+    scanned: Option<Vec<InboxCopy>>,
     refuse_open: bool,
     opens: Option<usize>,
     opened: Mutex<usize>,
@@ -290,6 +338,12 @@ impl LiveInboxes for Shared {
         }
         let inbox = self.0.inbox.lock().expect("lock").take().expect("one session at a time");
         Ok(Box::new(Session(self.clone(), Some(inbox))))
+    }
+}
+
+impl ScannedInbox for Shared {
+    fn scanned(&self, _: &str) -> Result<Option<Vec<InboxCopy>>, Fault> {
+        Ok(self.0.scanned.clone())
     }
 }
 
@@ -395,6 +449,7 @@ fn sweeps(world: &Shared, writes_allowed: bool) -> Sweeps {
     Sweeps::new(SweepsParts {
         rules: Arc::new(world.clone()),
         boxes: Arc::new(world.clone()),
+        stored: Arc::new(world.clone()),
         audit: Arc::new(world.clone()),
         rows: Arc::new(world.clone()),
         filing: Arc::new(world.clone()),
@@ -423,6 +478,84 @@ fn a_dry_run_plans_and_moves_nothing() {
     let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
     assert_eq!((inbox.moves.len(), inbox.closed), (0, Some(false)));
     assert_eq!(world.0.said(), ["gate ada@example.test"]);
+}
+
+/// `world`'s inbox as its first scan stored it: the same three, each read, Loom's issue with its way out.
+fn scanned(world: Shared) -> Shared {
+    let mut issue = copy(2, "news@loom.example.test", "issue");
+    issue.stored.list_unsub_raw = Some("<https://list.example.test/u>".into());
+    let scanned = vec![copy(1, "lin@example.test", "lunch"), issue, copy(3, "no-reply@alerts.example.test", "alert")];
+    let world = Arc::into_inner(world.0).expect("one");
+    Shared(Arc::new(World { scanned: Some(scanned), ..world }))
+}
+
+#[test]
+fn a_plan_from_the_stored_inbox_answers_as_one_read_off_the_server_and_asks_no_server() {
+    let live = sweeps(&world(), true).run(Some("all"), true, None).expect("planned");
+    let world = scanned(world());
+    let stored = sweeps(&world, true).run(Some("all"), true, None).expect("planned");
+    assert_eq!(stored, live);
+    // No session, and no turn on the account's gate.
+    assert_eq!((*world.0.opened.lock().expect("lock"), world.0.said()), (0, Vec::<String>::new()));
+}
+
+#[test]
+fn a_stored_plan_holds_back_what_was_stored_as_starred_or_unread() {
+    let world = scanned(world());
+    let mut stored = world.0.scanned.clone().expect("scanned");
+    stored[1].stored.flagged = true;
+    stored[2].stored.seen = false;
+    stored.push(InboxCopy {
+        stored: Stored {
+            bucket: Some("newsletters/marketing".into()),
+            ..copy(4, "deals@loom.example.test", "sale").stored
+        },
+        ..copy(4, "deals@loom.example.test", "sale")
+    });
+    let world = Shared(Arc::new(World { scanned: Some(stored), ..Arc::into_inner(world.0).expect("one") }));
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
+    let said = |field: &str| plan["results"][0][field].clone();
+    assert_eq!((said("planned"), said("held_back"), said("senders")), (json!(1), json!(2), json!(1)));
+    assert_eq!(
+        said("going"),
+        json!([{"bucket": "newsletters/marketing", "count": 1, "subjects": ["sale"],
+                "senders": [{"from_addr": "deals@loom.example.test", "count": 1}]}])
+    );
+}
+
+#[test]
+fn a_stored_plan_takes_the_newest_of_its_junk_up_to_its_cap() {
+    let world = scanned(world());
+    let mut stored = world.0.scanned.clone().expect("scanned");
+    let last = 10 + i64::try_from(SWEEP_MAX).expect("small");
+    stored.extend((10..=last).map(|uid| copy(uid, "no-reply@alerts.example.test", &format!("alert-{uid}"))));
+    let world = Shared(Arc::new(World { scanned: Some(stored), ..Arc::into_inner(world.0).expect("one") }));
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
+    let said = |field: &str| plan["results"][0][field].clone();
+    assert_eq!((said("planned"), said("capped")), (json!(SWEEP_MAX), json!(true)));
+    // The newest are all alerts: Loom's issue and the oldest alerts wait for the next sweep.
+    let going = said("going");
+    assert_eq!((going.as_array().map(Vec::len), going[0]["count"].clone()), (Some(1), json!(SWEEP_MAX)));
+    assert_eq!(going[0]["subjects"][0], json!(format!("alert-{last}")));
+}
+
+#[test]
+fn a_sweep_reads_the_server_once_and_moves_what_it_says_now_whatever_was_stored() {
+    let world = scanned(world());
+    let mut stored = world.0.scanned.clone().expect("scanned");
+    stored[2].stored.seen = false;
+    let world = Shared(Arc::new(World { scanned: Some(stored), ..Arc::into_inner(world.0).expect("one") }));
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
+    assert_eq!((plan["results"][0]["planned"].clone(), plan["results"][0]["held_back"].clone()), (json!(1), json!(1)));
+    // Since then, Loom's issue was starred elsewhere and the alert read: the server says so.
+    let starred = vec!["\\Seen".to_owned(), "\\Flagged".to_owned()];
+    world.0.inbox.lock().expect("lock").as_mut().expect("closed").flags.insert(2, starred);
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
+    let said = |field: &str| done["results"][0][field].clone();
+    assert_eq!((said("planned"), said("held_back"), said("moved")), (json!(1), json!(1), json!(1)));
+    let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
+    assert_eq!((inbox.moves, inbox.fetches), (vec![(vec![3], "Trash".to_owned())], 1));
+    assert_eq!(*world.0.opened.lock().expect("lock"), 1);
 }
 
 #[test]

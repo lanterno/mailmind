@@ -6,6 +6,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use mm_curation::cleanup_ports::ScannedInbox;
 use mm_curation::ports::{RulesDocument, Stored, StoredInbox};
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Outside, Tripped};
@@ -99,6 +100,39 @@ fn a_stored_inbox_says_what_was_read_and_what_was_starred() {
     let inboxes = database.stored_inboxes(&["ada@example.test"]).unwrap();
     let flags: Vec<(bool, bool)> = inboxes[0].iter().map(|s| (s.seen, s.flagged)).collect();
     assert_eq!(flags, [(true, false), (true, true)]);
+}
+
+#[test]
+fn a_stored_inbox_is_a_sweeps_to_read_once_a_first_scan_has_read_it_whole() {
+    let (_dir, database) = database();
+    database
+        .read(|c| {
+            c.execute_batch(
+                "ALTER TABLE sync_state ADD COLUMN scan_state TEXT NOT NULL DEFAULT 'never';
+                 UPDATE messages SET message_id='<lunch@example.test>', seen=1 WHERE pk=1;",
+            )
+        })
+        .unwrap();
+    // A warm read only the newest, and a first scan still reading older mail, leave it to the server.
+    for state in ["never", "recent", "down-to:2"] {
+        database.read(|c| c.execute("UPDATE sync_state SET scan_state=?1 WHERE folder='INBOX'", [state])).unwrap();
+        assert_eq!(database.scanned("ada@example.test").unwrap(), None, "{state}");
+    }
+    database.read(|c| c.execute_batch("UPDATE sync_state SET scan_state='synced' WHERE folder='INBOX'")).unwrap();
+    assert_eq!(database.scanned("cy@example.test").unwrap(), None, "no scan of it at all");
+    let mut copies = database.scanned("ada@example.test").unwrap().unwrap();
+    copies.sort_by_key(|c| c.uid);
+    let said: Vec<(i64, Option<&str>, Option<&str>, bool)> =
+        copies.iter().map(|c| (c.uid, c.message_id.as_deref(), c.stored.from_addr.as_deref(), c.stored.seen)).collect();
+    assert_eq!(
+        said,
+        [
+            (1, Some("<lunch@example.test>"), Some("lin@example.test"), true),
+            (2, None, Some("news@loom.example.test"), false)
+        ],
+        "what is deleted or on its way out is left out"
+    );
+    assert_eq!(copies[1].stored.list_unsub_raw.as_deref(), Some("<https://loom.example.test/u>"));
 }
 
 #[test]
