@@ -46,7 +46,9 @@
 - `outbox.wait_kind` (migration 41) says what a queued send waits for: `grace` (Undo Send's window), `scheduled` (a time
   someone picked) or `backoff` (a try failed). The list says `scheduled` or `retrying` from it, never from how far off the
   row is due, and a retrying row offers Try now and Cancel.
-- A queued send goes only while MailMind is open. The Mac app, asked to quit (`Quitting.settle`), sends a row in its
+- A queued send goes only while MailMind is open. The Mac app, asked to quit (`Quitting.settle`), first saves each open
+  composer's draft as closing it would (`Composer.saveBeforeQuitting`, in a read-only run too, where it is kept on this
+  Mac), waiting up to 5 seconds and asking before it quits with one unsaved; then it sends a row in its
   Undo window at once (`/api/outbox/sendnow`) and waits up to 30 seconds for it to go; a `scheduled` or `retrying` row
   is asked about first ("Quit anyway? It sends when MailMind is next open"), and Don't Quit leaves every row as it was.
 - What a delivered send still owes is each its own flag: its Sent copy, `\\Answered`, its draft's copy. One that fails

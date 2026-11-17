@@ -546,7 +546,8 @@ ask, or for a switch you turned on in Settings › AI.
   Undo entries, the sweep and reconcile records of it, and the AI's cards made for it. A sync reading the account, or a
   read of its older mail, stops at its next message and keeps nothing, not even the trouble its syncs had, so the
   account added again starts afresh; every open window drops the account at once. Its mail on the server stays as it
-  is.
+  is. In the Mac app the dialog warns first when the account has sends that haven't gone or drafts not yet on its
+  server, which are only on this Mac, and says that copies in MailMind's backups stay until they're replaced.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect.
@@ -674,7 +675,8 @@ on Apple silicon or Intel:
 3. From then on it updates itself: it asks before its first check, and **MailMind › Check for Updates…** checks at once.
 
 It sends and syncs only while it is open. **Settings › General › Open at login** opens it as you log in, and
-quitting sends a message still in its Undo window first, and asks before leaving one scheduled for later. Its window
+quitting saves whatever you are writing as a draft, sends a message still in its Undo window first, and asks before
+leaving one scheduled for later. Its window
 closed and opened again from the Dock shows the mail already open, and when the Mac wakes or its network changes the
 mail syncs at once.
 
