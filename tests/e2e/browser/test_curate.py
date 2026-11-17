@@ -149,6 +149,53 @@ def test_each_inbox_says_what_it_holds_and_a_sweep_asks_first(page, world):
     clean(page)
 
 
+class Held:
+    """The page's requests to `path` wait here until let go, as they would on a slow server."""
+
+    def __init__(self, page, path):
+        self.routes = []
+        page.route(f"**{path}", self._arrived)
+
+    def _arrived(self, route):
+        self.routes.append(route)
+
+    def let_go(self):
+        routes, self.routes = self.routes, []
+        for r in routes:
+            r.fallback()
+
+
+def test_while_a_plan_or_a_sweep_runs_its_row_says_so_and_neither_can_be_pressed_again(page, world):
+    d = drawer(page)
+    mod = d.locator(f'.acctmod[data-acct="{w.ADA}"]')
+    sweep = mod.get_by_role("button", name=re.compile(r"^Sweep \d+"))
+    busy = mod.get_by_role("status")
+    expect(busy).to_have_text("")
+    held = Held(page, "/api/sweep")
+    sweep.click()
+    expect(busy).to_have_text("Looking at what a sweep would move…")
+    expect(sweep).to_be_disabled()
+    until(page, lambda: len(held.routes) == 1, "the plan was asked for")
+    held.let_go()
+    confirm = mod.get_by_role("button", name="Confirm")
+    expect(confirm).to_be_enabled()
+    expect(busy).to_have_text("")
+    expect(sweep).to_be_enabled()
+    before = world.mark()
+    confirm.click()
+    expect(busy).to_have_text("Sweeping 1 to Trash…")
+    expect(sweep).to_be_disabled()
+    sweep.click(force=True)                                    # pressed again: nothing more is asked
+    until(page, lambda: len(held.routes) == 1, "the sweep was asked for")
+    page.wait_for_timeout(200)
+    assert len(held.routes) == 1
+    held.let_go()
+    expect(page.locator("#toast")).to_contain_text("Swept 1/1")
+    expect(busy).to_have_text("")
+    until(page, lambda: world.writes(before), "the sweep moved mail")
+    clean(page)
+
+
 def test_a_sweep_says_what_goes_and_what_stays_before_it_moves_and_one_undo_brings_it_back(page, app, world):
     world.server_flags(NEWS, "\\Seen")                         # read in another client
     world.server_flags(SCAM, "\\Seen", "\\Flagged")            # read, and starred: it stays
