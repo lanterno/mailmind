@@ -41,6 +41,8 @@ impl Clock for Frozen {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Body {
     Gives,
+    /// Gives, and says each message is 3 KiB shorter than it is, as an estimate of its size can (Exchange's).
+    SaysItShorter,
     Refuses,
     Lost,
     RefusesTheSelect,
@@ -131,7 +133,8 @@ impl MailServer for Server {
                 .iter()
                 .filter_map(|uid| self.messages.get(uid).map(|raw| (*uid, raw)))
                 .map(|(uid, raw)| {
-                    let size = Some(u32::try_from(raw.len()).unwrap());
+                    let short = if self.body == Body::SaysItShorter { 3 * 1024 } else { 0 };
+                    let size = Some(u32::try_from(raw.len().saturating_sub(short)).unwrap());
                     (uid, Opening { raw: raw[..raw.len().min(bytes as usize)].to_vec(), size })
                 })
                 .collect()),
@@ -453,6 +456,33 @@ fn a_message_cut_off_is_fetched_whole_several_a_fetch_and_one_too_large_keeps_on
     // The one over a quarter of a megabyte keeps its opening's text, and its attachment waits to be opened.
     assert_eq!(world.texts(), [2]);
     assert_eq!(world.store.texts.lock().unwrap()[&2].body_text.trim(), "The plans, attached.");
+}
+
+#[test]
+fn a_message_its_server_says_is_shorter_than_its_opening_counts_as_cut_off_and_is_fetched_whole() {
+    let world = World::new(Body::SaysItShorter).holding([(101, sized(66)), (102, sized(64)), (103, sized(10))]);
+    let batch = [(1, 101), (2, 102), (3, 103)];
+    assert_eq!(world.fetching.try_bodies(ADA, "Archive", &batch), Tried::Ran);
+    // 66 KiB said to be 63 came cut off at 64 KiB, as did one of exactly 64 said to be 61: each is fetched whole. One
+    // that ended before 64 KiB is whole, whatever its size is said to be.
+    assert_eq!(
+        world.asked()[1..],
+        ["EXAMINE Archive".to_owned(), "OPENINGS 101,102,103 65536".into(), "BODIES 101,102".into(), "LOGOUT".into()]
+    );
+    assert_eq!(world.kept(), [1, 2, 3]);
+    assert_eq!(world.store.bodies.lock().unwrap()[&1].raw, sized(66), "kept whole, not its first 64 KiB");
+    assert!(world.texts().is_empty());
+}
+
+#[test]
+fn an_opening_is_whole_where_it_ended_before_what_was_asked_or_is_exactly_the_size_said() {
+    let opening = |bytes: usize, size: Option<u32>| Opening { raw: vec![b'x'; bytes], size };
+    assert!(opening(10, None).is_whole(64));
+    assert!(opening(10, Some(9)).is_whole(64));
+    assert!(opening(64, Some(64)).is_whole(64));
+    assert!(!opening(64, None).is_whole(64));
+    assert!(!opening(64, Some(65)).is_whole(64));
+    assert!(!opening(64, Some(63)).is_whole(64), "a size shorter than what came is wrong");
 }
 
 #[test]
