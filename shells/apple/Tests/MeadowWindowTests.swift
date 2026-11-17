@@ -84,12 +84,105 @@ final class MeadowWindowTests: XCTestCase {
 
     /// MailMind Help: its paper runs to the window's top, the traffic lights on it, and its bar moves the window.
     func testHelpsPaperRunsToTheWindowsTop() throws {
+        let size = CGSize(width: HelpWindow.size.width, height: HelpWindow.size.height + Self.titlebarRoom)
         for light in MeadowLight.allCases {
-            let shown = try ShownInAWindow("window-help-\(light.rawValue)", light: light, size: HelpWindow.size) {
+            let shown = try ShownInAWindow("window-help-\(light.rawValue)", light: light, size: size) {
                 HelpWindow(status: Self.firstRun())
             }
             defer { shown.close() }
             XCTAssertTrue(shown.hit(x: 300, y: 20) is WindowDragView, "its bar moves the window")
+        }
+    }
+
+    // MARK: Windows SwiftUI's scenes make (#51)
+
+    /// Settings' window as its scene makes it: in the toolbar style a Settings window takes, its title the place
+    /// shown, and its title bar set up again by SwiftUI from the view's bars on each update (`sceneBridgingOptions`).
+    /// Each place keeps Meadow's head: a clear title bar with no title and no line under it, the traffic lights on
+    /// the head as the title changes under them, and the window's title still the place's, for the Window menu.
+    func testSettingsKeepsMeadowsHeadAsSwiftUISetsItsTitleBarUp() throws {
+        let status = Self.firstRun()
+        status.settingsTab = .accounts
+        let host = NSHostingController(rootView: SettingsWindow(status: status).meadowLight(.day))
+        host.sceneBridgingOptions = .all
+        let window = NSWindow(contentRect: CGRect(origin: .zero, size: SettingsWindow.size),
+                              styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        window.toolbarStyle = .preference
+        window.isReleasedWhenClosed = false
+        window.contentViewController = host
+        defer {
+            window.contentViewController = nil
+            window.close()
+        }
+        Self.settle()
+        for place in [SettingsTab.general, .notifications, .ai, .accounts] {
+            status.settingsTab = place
+            Self.settle()
+            XCTAssertEqual(window.title, place.title, "the window is named for its place")
+            XCTAssertEqual(window.titleVisibility, .hidden, "no title over Meadow's head on \(place)")
+            XCTAssertTrue(window.titlebarAppearsTransparent, "a clear title bar on \(place)")
+            XCTAssertEqual(window.titlebarSeparatorStyle, .none, "no line under the title bar on \(place)")
+            XCTAssertTrue(window.styleMask.contains(.fullSizeContentView), "the paper runs under the title bar")
+            Self.assertLights(of: window, on: SettingsWindow.headHeight, "on \(place)")
+        }
+    }
+
+    /// Settings' paper runs from the window's top to its foot: the scene sizes the window from the dialog's size and
+    /// the title bar's room over it, and the paper takes that room too, rather than leaving a strip of nothing as
+    /// tall as the title bar at the window's foot.
+    func testSettingsPaperRunsToTheWindowsFoot() throws {
+        let size = CGSize(width: SettingsWindow.size.width, height: SettingsWindow.size.height + Self.titlebarRoom)
+        let shown = try ShownInAWindow("window-settings-day", light: .day, size: size) {
+            SettingsWindow(status: Self.firstRun())
+        }
+        defer { shown.close() }
+        for x in stride(from: 20.0, through: size.width - 20, by: 100) {
+            XCTAssertTrue(shown.color(x: x, y: size.height - 2).isDayPaper, "paper at the foot, \(x) across")
+            XCTAssertTrue(shown.color(x: x, y: 2).isDayPaper, "paper at the top, \(x) across")
+        }
+        XCTAssertTrue(shown.hit(x: 400, y: SettingsWindow.headHeight / 2) is WindowDragView, "the head moves the window")
+    }
+
+    /// Help's paper runs to the window's foot too, the window sized as its scene sizes it.
+    func testHelpsPaperRunsToTheWindowsFoot() throws {
+        let size = CGSize(width: HelpWindow.size.width, height: HelpWindow.size.height + Self.titlebarRoom)
+        let shown = try ShownInAWindow("window-help-foot-day", light: .day, size: size) {
+            HelpWindow(status: Self.firstRun())
+        }
+        defer { shown.close() }
+        for x in stride(from: 20.0, through: size.width - 20, by: 100) {
+            XCTAssertTrue(shown.color(x: x, y: size.height - 2).isDayPaper, "paper at the foot, \(x) across")
+        }
+    }
+
+    /// The room a titled window's title bar takes over its content, which a scene adds to the content's size.
+    private static var titlebarRoom: CGFloat {
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 300),
+                              styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        return window.frame.height - window.contentLayoutRect.height
+    }
+
+    /// Let SwiftUI update, AppKit lay the title bar out, and what waits on the main queue run.
+    private static func settle() {
+        for _ in 0..<3 { RunLoop.main.run(until: Date().addingTimeInterval(0.15)) }
+    }
+
+    /// The traffic lights stand at Meadow's places, centred on a head `bar` points high.
+    private static func assertLights(of window: NSWindow, on bar: CGFloat, _ when: String,
+                                     file: StaticString = #filePath, line: UInt = #line)
+    {
+        let kinds: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        let height = window.contentView?.superview?.bounds.height ?? window.frame.height
+        for (index, kind) in kinds.enumerated() {
+            guard let button = window.standardWindowButton(kind) else {
+                return XCTFail("no \(kind) light", file: file, line: line)
+            }
+            let frame = button.convert(button.bounds, to: nil)
+            XCTAssertEqual(frame.minX, WindowLights.left + CGFloat(index) * WindowLights.step,
+                           "light \(index) at its place \(when)", file: file, line: line)
+            XCTAssertEqual(height - frame.midY, bar / 2, accuracy: 1, "light \(index) centred on the head \(when)",
+                           file: file, line: line)
         }
     }
 
@@ -242,6 +335,8 @@ private struct ShownInAWindow {
         var isMoon: Bool { 0.2126 * red + 0.7152 * green + 0.0722 * blue > 0.7 }
         /// Day's ink, dark where the sky and the paper are light.
         var isInk: Bool { 0.2126 * red + 0.7152 * green + 0.0722 * blue < 0.35 }
+        /// Day's paper: light and warm, where nothing drawn is black and the window's own grey is cool.
+        var isDayPaper: Bool { 0.2126 * red + 0.7152 * green + 0.0722 * blue > 0.9 && red >= blue }
     }
 }
 
