@@ -158,7 +158,8 @@ struct Unsent: Equatable {
 
 /// Removing an account, as Meadow's dialog: MailMind stops reading it and lets go of its password, and, unless
 /// unticked, of the mail it keeps of it on this Mac: with a warning when that holds sends or drafts only this Mac has,
-/// and a word that MailMind's backups keep their copies until they are replaced. Its mail on the server stays as it is.
+/// and a word that MailMind's backups keep their copies: an upgrade's until newer ones replace them, Start Fresh's until
+/// a person deletes it. Its mail on the server stays as it is.
 struct RemoveAccount: View {
     let row: API.AccountRow
     /// What only this Mac holds of it, once read.
@@ -218,8 +219,12 @@ struct RemoveAccount: View {
         .presentationBackground { ComposePaper() }
     }
 
-    /// Said while its mail here is to go: the copies an upgrade or Start Fresh kept aren't touched.
-    static let backups = String(localized: "Copies of its mail in MailMind’s backups stay until they’re replaced.")
+    /// Said while its mail here is to go: the copies an upgrade or Start Fresh kept aren't touched. An upgrade's copy
+    /// gives way to newer ones in time; a copy Start Fresh kept is never replaced, and stays until a person deletes it.
+    static let backups = String(localized: """
+        Copies of its mail in MailMind’s backups folder stay there: newer backups replace them in time, and a copy \
+        Start Fresh kept stays until you delete it.
+        """)
 }
 
 extension AccountsPane.Editing {
