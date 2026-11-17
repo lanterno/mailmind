@@ -56,6 +56,11 @@ def launch(app, env, pictures=None):
     said = dict(line.split("=", 1) for line in run.stdout.splitlines() if "=" in line)
     if run.returncode != 0 or "first_rows_ms" not in said:
         sys.stdout.write(run.stdout)
+        # How it ended, and the end of what it wrote to standard error: an app that can't start on this Mac (a
+        # system function its macOS lacks, which dyld names as it launches) says why only there.
+        ended = f"signal {-run.returncode}" if run.returncode < 0 else f"status {run.returncode}"
+        print(f"the app ended with {ended}; the last of its standard error:")
+        sys.stdout.write("".join(run.stderr.splitlines(keepends=True)[-40:]))
         return None
     return said
 
