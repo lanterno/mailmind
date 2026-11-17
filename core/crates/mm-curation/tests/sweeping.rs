@@ -559,6 +559,38 @@ fn a_sweep_reads_the_server_once_and_moves_what_it_says_now_whatever_was_stored(
 }
 
 #[test]
+fn a_sweep_after_a_plan_from_the_stored_inbox_leaves_the_mail_older_than_it_stores() {
+    const SEEN: &[&str] = &["\\Seen"];
+    // A sync that read only recent mail stored the alert alone: Lin's lunch and Loom's issue, older, never were, so the
+    // plan names the alert alone.
+    let world = scanned(world());
+    let stored = world.0.scanned.clone().expect("scanned").split_off(2);
+    let world = Shared(Arc::new(World { scanned: Some(stored), ..Arc::into_inner(world.0).expect("one") }));
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
+    assert_eq!(plan["results"][0]["planned"], json!(1));
+    // Since then a sale came and was read elsewhere: it goes with the alert. Loom's issue, read junk on the server but
+    // older than anything stored, stays.
+    more(&world, &[(4, heads("deals@loom.example.test", "sale", true), SEEN)]);
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
+    let said = |field: &str| done["results"][0][field].clone();
+    assert_eq!((said("planned"), said("moved"), said("held_back")), (json!(2), json!(2), json!(0)));
+    let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
+    assert_eq!(inbox.moves, [(vec![3, 4], "Trash".to_owned())]);
+    assert_eq!(inbox.uids_in, [1, 2].into());
+}
+
+#[test]
+fn a_sweep_after_a_plan_from_an_empty_stored_inbox_moves_nothing() {
+    let world = Shared(Arc::new(World { scanned: Some(Vec::new()), ..Arc::into_inner(world().0).expect("one") }));
+    let plan = sweeps(&world, true).run(None, true, None).expect("planned");
+    assert_eq!(plan["results"][0]["planned"], json!(0));
+    let done = sweeps(&world, true).run(None, false, None).expect("swept");
+    assert_eq!((done["results"][0]["planned"].clone(), done["undo_group"].clone()), (json!(0), Value::Null));
+    let inbox = world.0.inbox.lock().expect("lock").take().expect("closed");
+    assert_eq!((inbox.moves.len(), inbox.uids_in), (0, [1, 2, 3].into()));
+}
+
+#[test]
 fn a_sweep_records_what_it_will_trash_moves_it_and_forgets_its_rows() {
     let world = world();
     let done = sweeps(&world, true).run(None, false, None).expect("swept");
