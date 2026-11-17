@@ -10,11 +10,12 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::thread::ThreadId;
+use std::time::{Duration, Instant};
 
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait, on_gate};
-use mm_mailbox::kept::{Counts, Keeping, KeptAccounts, KeptParts, KeptServers, SlotStats};
+use mm_mailbox::kept::{Counts, Keeping, KeptAccounts, KeptParts, KeptServers, QUIT_SECONDS, SlotStats};
 use mm_mailbox::ports::{MailSession, SessionError};
 use mm_mailbox::roles::Folder;
 use mm_mailbox::session::{Headers, MailServer, MailServers, Search, Selected, ServerError};
@@ -35,6 +36,8 @@ struct Trouble {
     noop_lost: bool,
     /// The server offers CONDSTORE.
     condstore: bool,
+    /// What a LOGOUT waits for its answer: a server gone quiet.
+    logout_takes: Duration,
 }
 
 struct Server {
@@ -60,6 +63,8 @@ impl MailSession for Server {
 
     fn logout(&mut self) {
         self.said("LOGOUT");
+        let takes = self.trouble.lock().unwrap().logout_takes;
+        std::thread::sleep(takes);
     }
 }
 
@@ -658,6 +663,37 @@ fn a_quit_logs_each_connection_out_and_keeps_none_after() {
     let mark = k.mark();
     k.job(ADA, |s| read(s, 1).unwrap());
     assert_eq!(k.log(mark), ["3 LOGIN ada@example.test 60", "3 SELECT INBOX", "3 BODY 1", "3 LOGOUT"]);
+}
+
+#[test]
+fn a_quit_logs_every_connection_out_together() {
+    let k = keeper();
+    for account in [ADA, BEA, PIP] {
+        k.job(account, |s| read(s, 1).unwrap());
+    }
+    // Each server takes a second and a half to answer its LOGOUT: one after another, four and a half.
+    k.trouble().logout_takes = Duration::from_millis(1500);
+    let mark = k.mark();
+    let began = Instant::now();
+    k.kept.close();
+    let took = began.elapsed();
+    assert!(took < Duration::from_millis(3500), "{took:?}");
+    let mut closed = k.log(mark);
+    closed.sort();
+    assert_eq!(closed, ["1 LOGOUT", "1 TIMEOUT 3", "2 LOGOUT", "2 TIMEOUT 3", "3 LOGOUT", "3 TIMEOUT 3"]);
+}
+
+#[test]
+fn a_quit_waits_for_servers_that_dont_answer_no_longer_than_its_limit() {
+    let k = keeper();
+    k.job(ADA, |s| read(s, 1).unwrap());
+    k.job(BEA, |s| read(s, 1).unwrap());
+    k.trouble().logout_takes = Duration::from_secs(60);
+    let began = Instant::now();
+    k.kept.close();
+    let took = began.elapsed();
+    assert_eq!(QUIT_SECONDS, 4);
+    assert!(took >= Duration::from_secs(3) && took < Duration::from_secs(QUIT_SECONDS + 2), "{took:?}");
 }
 
 #[test]
