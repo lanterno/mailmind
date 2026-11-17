@@ -21,6 +21,7 @@ struct StatusHooks: ViewModifier {
             .overlay {
                 if status.firstRun { Welcome(status: status) }
             }
+            .modifier(FirstAccountSheet(status: status))
             .sheet(isPresented: $status.guiding) {
                 GuideSheet(steps: Guide.steps(ai: status.digest?.ai.isOn == true,
                                               singleKeys: status.preferences?.singleKeys ?? true)) {
@@ -74,7 +75,25 @@ struct StatusHooks: ViewModifier {
     /// The guide is offered once the first account has mail, with nothing else in the way.
     private var offersGuide: Bool {
         Guide.offers(preferences: status.preferences, accounts: status.accounts.count,
-                     hasMail: (status.digest?.stats.total ?? 0) > 0, busy: status.firstRun || status.guiding)
+                     hasMail: (status.digest?.stats.total ?? 0) > 0,
+                     busy: status.firstRun || status.guiding || status.addingFirstAccount)
+    }
+}
+
+/// The first run's account sheet, hung on the window rather than on the welcome: saving the first account ends the
+/// first run and takes the welcome away, and a Proton account's sheet stays open after that, saying "Proton Bridge
+/// isn't running…" with its Test, until Done.
+struct FirstAccountSheet: ViewModifier {
+    let status: AppStatus
+
+    func body(content: Content) -> some View {
+        @Bindable var status = status
+        content
+            .sheet(isPresented: $status.addingFirstAccount) {
+                AccountForm(status: status, draft: AccountDraft(), testsFirst: true) { _ in
+                    status.addingFirstAccount = false
+                }
+            }
     }
 }
 

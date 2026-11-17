@@ -10,7 +10,6 @@ struct Welcome: View {
     let status: AppStatus
     /// Whether the window's traffic lights stand over the scene's top left; a test's picture has none.
     var lights = true
-    @State private var adding = false
     @State private var kept: Set<API.AiProvider>?
     @Environment(\.meadow) private var meadow
     @Environment(\.openSettings) private var openSettings
@@ -42,7 +41,8 @@ struct Welcome: View {
                         WelcomeStep(number: 1, title: String(localized: "Connect your first account"),
                                     text: Self.connecting) {
                             VStack(alignment: .leading, spacing: 10) {
-                                Button { adding = true } label: {
+                                // The sheet hangs on the window (`StatusHooks`), so it outlives this welcome.
+                                Button { status.addingFirstAccount = true } label: {
                                     MeadowIconView(.plus, size: 15)
                                     Text("Connect Your First Account…")
                                 }
@@ -93,9 +93,6 @@ struct Welcome: View {
                 MeadowGrain()
             }
             .ignoresSafeArea()
-        }
-        .sheet(isPresented: $adding) {
-            AccountForm(status: status, draft: AccountDraft(), testsFirst: true) { _ in adding = false }
         }
     }
 

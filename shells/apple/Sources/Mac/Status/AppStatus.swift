@@ -45,6 +45,9 @@ final class AppStatus {
     var settingsTab = SettingsTab.accounts
     /// Whether the guide is showing.
     var guiding = false
+    /// Whether the first run's account sheet is open. It is the status's, not the welcome's: the welcome goes as soon
+    /// as an account is saved, and a Proton account's sheet stays open after that, on its Bridge test, until Done.
+    var addingFirstAccount = false
     /// Whether the keyboard's legend is over the window.
     var showingKeys = false
 
