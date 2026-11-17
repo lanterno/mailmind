@@ -3,8 +3,8 @@ import { aiOffered, aiSends, aiSendsInShort, aiStanding, offLine, PROVIDER_LABEL
 import type { AiStatus } from "./api/types";
 
 const status = (over: Partial<AiStatus> = {}): AiStatus => ({
-  engine: "api", provider: "anthropic", off: null, model: "claude-opus-5-5", background_model: "claude-haiku-5-5", key_from: "mailmind.config.json",
-  last_ok: null, last_ts: 0, last_error: null, limit_micros: 15_000_000, spent_today_micros: 0, ...over,
+  engine: "api", provider: "anthropic", off: null, model: "claude-opus-5-5", background_model: "claude-haiku-5-5", cloud_model: false,
+  key_from: "mailmind.config.json", last_ok: null, last_ts: 0, last_error: null, limit_micros: 15_000_000, spent_today_micros: 0, ...over,
 });
 const off = (why: AiStatus["off"], provider: AiStatus["provider"] = "anthropic") => status({ engine: "none", model: "", key_from: "", off: why, provider });
 
