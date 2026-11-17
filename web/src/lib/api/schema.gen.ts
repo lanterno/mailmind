@@ -1067,6 +1067,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/folders/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Folder Create */
+        post: operations["folder_create_api_folders_create_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/folders/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Folder Delete */
+        post: operations["folder_delete_api_folders_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/folders/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Folder Rename */
+        post: operations["folder_rename_api_folders_rename_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/followups/dismiss": {
         parameters: {
             query?: never;
@@ -2978,6 +3029,15 @@ export interface components {
             /** Trash */
             trash: boolean;
         };
+        /** DeleteFolderBody */
+        DeleteFolderBody: {
+            /** Account */
+            account?: string | null;
+            /** Confirm */
+            confirm?: boolean | null;
+            /** Folder */
+            folder?: string | null;
+        };
         /** Delta */
         Delta: {
             /** Cached */
@@ -3671,6 +3731,55 @@ export interface components {
         };
         /** @enum {string} */
         FlagName: "flagged" | "seen";
+        /** FolderChanged */
+        FolderChanged: {
+            /** Folder */
+            folder: string;
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+        };
+        /** FolderDeleted */
+        FolderDeleted: {
+            /**
+             * Ok
+             * @constant
+             */
+            ok: true;
+            /** Trashed */
+            trashed: number;
+        };
+        /** FolderHoldsMail */
+        FolderHoldsMail: {
+            /** Ai Off */
+            ai_off?: true | null;
+            /** Busy */
+            busy?: true | null;
+            /** Detail */
+            detail?: string | null;
+            /** Limit Micros */
+            limit_micros?: number | null;
+            /** Messages */
+            messages?: number | null;
+            /** Over Limit */
+            over_limit?: true | null;
+            /** Read Only */
+            read_only?: true | null;
+            /** Spent Micros */
+            spent_micros?: number | null;
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** To Trash */
+            to_trash?: boolean | null;
+            /** Trashed */
+            trashed?: number | null;
+            /** Type */
+            type: string;
+        };
         /** FolderListing */
         FolderListing: {
             /** Account */
@@ -4399,6 +4508,13 @@ export interface components {
             /** Uid */
             uid?: number | null;
         };
+        /** NewFolderBody */
+        NewFolderBody: {
+            /** Account */
+            account?: string | null;
+            /** Name */
+            name?: string | null;
+        };
         /**
          * NoBody
          * @description A POST that reads nothing of its body, which must still be a JSON object.
@@ -4972,8 +5088,12 @@ export interface components {
         };
         /** RailFolder */
         RailFolder: {
+            /** Changeable */
+            changeable: boolean;
             /** Name */
             name: string;
+            /** Own Name */
+            own_name: string;
             /** Role */
             role: string;
             /** Takes Filing */
@@ -5068,6 +5188,15 @@ export interface components {
             ok: true;
             /** Removed */
             removed: string;
+        };
+        /** RenameFolderBody */
+        RenameFolderBody: {
+            /** Account */
+            account?: string | null;
+            /** Folder */
+            folder?: string | null;
+            /** Name */
+            name?: string | null;
         };
         /** RepliedLater */
         RepliedLater: {
@@ -6178,7 +6307,7 @@ export interface components {
             id: number;
         };
         /** @enum {string} */
-        Theme: "day" | "dusk" | "night";
+        Theme: "auto" | "day" | "dusk" | "night";
         /** Thread */
         Thread: {
             /** Account */
@@ -13782,6 +13911,348 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ViewCounts"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    folder_create_api_folders_create_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewFolderBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderChanged"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    folder_delete_api_folders_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteFolderBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderDeleted"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Payment Required */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["FolderHoldsMail"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Locked */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Failure"];
+                };
+            };
+        };
+    };
+    folder_rename_api_folders_rename_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameFolderBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderChanged"];
                 };
             };
             /** @description Bad Request */

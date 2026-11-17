@@ -18,7 +18,7 @@ export const PREFERENCE_DEFAULTS = {
   undo_send_seconds: 10,
   density: "comfortable",
   high_contrast: false,
-  theme: "day",
+  theme: "auto",
   read_width: "medium",
   read_size: "m",
   read_font: "sans",
