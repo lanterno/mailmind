@@ -11,6 +11,9 @@ tripwire as well.
     python shells/apple/Measure/demo_home.py APP --smoke    # opens, waits for mail in the inbox's rows, quits: 0 if it showed
     python shells/apple/Measure/demo_home.py APP --measure  # launch to first rows and idle memory: one launch to sync, then 7
     python shells/apple/Measure/demo_home.py APP --picture  # the window drawn light and dark: build/screenshots/window
+
+`--arch x86_64` after any of them runs that half of a universal app (a release's) through /usr/bin/arch: on Apple
+silicon, Rosetta runs the Intel half as an Intel Mac would.
 """
 import os
 import secrets
@@ -42,10 +45,11 @@ LIMIT = 120
 
 
 def launch(app, env, pictures=None):
-    """One measured run of the app: its output's `name=value` lines, or None when it didn't show mail."""
+    """One measured run of the app, `app` being the command that starts it: its output's `name=value` lines, or None
+    when it didn't show mail."""
     env = {**env, "MAILMIND_MEASURE": "home", **({"MAILMIND_PICTURE": pictures} if pictures else {})}
     try:
-        run = subprocess.run([app], env=env, capture_output=True, text=True, timeout=LIMIT)
+        run = subprocess.run(app, env=env, capture_output=True, text=True, timeout=LIMIT)
     except subprocess.TimeoutExpired:
         print(f"the app said nothing in {LIMIT} s: did it get a window?")
         return None
@@ -56,8 +60,26 @@ def launch(app, env, pictures=None):
     return said
 
 
+def command(app, arch):
+    """How to start the app: itself, or one half of it through /usr/bin/arch."""
+    if not arch:
+        return [app]
+    halves = subprocess.run(["/usr/bin/lipo", "-archs", app], capture_output=True, text=True).stdout.split()
+    if arch not in halves:
+        sys.exit(f"This app holds {' and '.join(halves) or 'no code lipo can read'}, not {arch}. A release's app holds "
+                 "both: just apple release-check runs each.")
+    if subprocess.run(["/usr/bin/arch", f"-{arch}", "/usr/bin/true"], capture_output=True).returncode != 0:
+        sys.exit(f"This Mac can't run {arch} code. On Apple silicon, Rosetta runs it: softwareupdate --install-rosetta")
+    return ["/usr/bin/arch", f"-{arch}", app]
+
+
 def main():
-    app, mode = sys.argv[1], (sys.argv[2:3] or [""])[0]
+    app, flags = sys.argv[1], sys.argv[2:]
+    arch = flags[flags.index("--arch") + 1] if "--arch" in flags else ""
+    mode = next((flag for flag in flags if flag in ("--smoke", "--measure", "--picture")), "")
+    app = command(app, arch)
+    rosetta = arch == "x86_64" and os.uname().machine == "arm64"
+    how = f" ({arch}{', under Rosetta' if rosetta else ''})" if arch else ""
     with tempfile.TemporaryDirectory(prefix="mailmind-mac-demo-") as home, FakeIMAPServer(keychain=guard.KEYCHAIN) as imap, \
             FakeSMTPServer() as smtp, FakeAnthropic() as claude:
         keychain = os.path.join(home, "keychain.json")
@@ -73,7 +95,8 @@ def main():
             said = launch(app, env)
             if said is None:
                 sys.exit("The Mac app never showed mail in its inbox on the demo home.")
-            print(f"the Mac app showed {said['rows_total']} rows of fictional mail, {said['first_rows_ms']} ms after it started")
+            print(f"the Mac app{how} showed {said['rows_total']} rows of fictional mail, {said['first_rows_ms']} ms after it "
+                  f"started, and kept {said['idle_footprint_mb']} MB idle")
             return
         if mode == "--picture":
             pictures = os.path.join(ROOT, "shells", "apple", "build", "screenshots", "window")
@@ -97,7 +120,7 @@ def main():
             print(f"idle_footprint_mb median: {statistics.median(memory):.1f} (rows in the inbox: {runs[-1]['rows_total']})")
             return
         print("Fictional mail only: a temp data folder, fake servers on loopback and the fake Claude API.", flush=True)
-        with subprocess.Popen([app], env=env) as running:
+        with subprocess.Popen(app, env=env) as running:
             try:
                 running.wait()
             except KeyboardInterrupt:
