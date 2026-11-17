@@ -357,15 +357,39 @@ final class AppStatusTests: XCTestCase {
         let quiet = [both[0], before[1]]
         XCTAssertEqual(AppStatus.synced(before: before, after: quiet, accounts: accounts, ended: true, name: name),
                        "Couldn’t sync news. MailMind tries again on its own.", "a failure that may pass records nothing")
-        let refused = [F.standing("ada@example.test", ok: "2026-11-14T09:00:00Z", error: "no", kind: "AUTH",
-                                  errorAt: "2026-11-14T09:05:00Z", count: 2), before[1]]
-        XCTAssertEqual(AppStatus.synced(before: before, after: refused, accounts: accounts, ended: true, name: name),
-                       "Couldn’t sync 2 accounts. MailMind tries again on its own.")
+        let slow = [F.standing("ada@example.test", ok: "2026-11-14T09:00:00Z", error: "no", kind: "TIMEOUT",
+                               errorAt: "2026-11-14T09:05:00Z", count: 2), before[1]]
+        XCTAssertEqual(AppStatus.synced(before: before, after: slow, accounts: accounts, ended: true, name: name),
+                       "Couldn’t sync 2 accounts. MailMind tries again on its own.", "a timeout may pass")
+        XCTAssertEqual(AppStatus.synced(before: before, after: [slow[0], both[1]], accounts: accounts, ended: true,
+                                        name: name),
+                       "Couldn’t sync Ada. MailMind tries again on its own.")
         let fresh = [F.standing("ada@example.test", ok: "2026-11-14T09:05:00Z", count: 1), before[1]]
         XCTAssertEqual(AppStatus.synced(before: [], after: fresh, accounts: ["ada@example.test"], ended: true, name: name),
                        "Sync complete", "a new account's first sync")
         XCTAssertEqual(AppStatus.synced(before: before, after: before, accounts: accounts, ended: false, name: name),
                        "Still syncing. New mail shows as it comes.")
+    }
+
+    /// A sync that failed in a way trying again won't mend (the password turned down, a certificate to trust, a server
+    /// not reached or one that said no) says where to see what to do, not that MailMind tries again on its own.
+    func testASyncThatWaitsForYouSaysWhereToSeeWhatToDo() {
+        let before = [F.standing("ada@example.test", ok: "2026-11-14T09:00:00Z", count: 1),
+                      F.standing("news@example.test", ok: "2026-11-14T09:00:00Z", count: 1)]
+        let accounts = ["ada@example.test", "news@example.test"]
+        let name: (String) -> String = { $0 == "ada@example.test" ? "Ada" : StatusWords.short($0) }
+        let newsSynced = F.standing("news@example.test", ok: "2026-11-14T09:05:00Z", count: 2)
+        for kind in ["AUTH", "TLS_PIN", "NETWORK", "IMAP", "SOMETHING_NEW"] {
+            let failed = F.standing("ada@example.test", ok: "2026-11-14T09:00:00Z", error: "no", kind: kind,
+                                    errorAt: "2026-11-14T09:05:00Z", count: 2)
+            XCTAssertEqual(AppStatus.synced(before: before, after: [failed, newsSynced], accounts: accounts, ended: true,
+                                            name: name),
+                           "Couldn’t sync Ada. Open Settings › Accounts to see what to do.", kind)
+            XCTAssertEqual(AppStatus.synced(before: before, after: [failed, before[1]], accounts: accounts, ended: true,
+                                            name: name),
+                           "Couldn’t sync 2 accounts. Open Settings › Accounts to see what to do.",
+                           "\(kind), with another that recorded nothing")
+        }
     }
 
     func testTheFirstRunIsNoAccountOnceTheyHaveBeenRead() {
