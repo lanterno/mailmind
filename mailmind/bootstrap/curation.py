@@ -145,6 +145,9 @@ class _Mailboxes:
     def known(self):
         return {a["email"] for a in self.all()}
 
+    def inbox_scanned(self, email):
+        return mailbox.ingest.folder_synced(email, "INBOX")
+
     def preload_creds(self):
         from mailmind.bootstrap import accounts
         accounts.preload_creds()

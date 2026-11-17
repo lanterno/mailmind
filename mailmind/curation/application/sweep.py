@@ -1,14 +1,19 @@
 """Sweeping an inbox: classify it, then move its junk to Trash, verified and audited. Mail is read live before
 anything moves, so a stored row can't send the wrong message anywhere. Starred and unread mail stays where it is, whatever
 it is. What a sweep moves goes on the undo stack under one group, so one Undo puts it all back from Trash, each message
-found there by its Message-ID, an account's on one session."""
+found there by its Message-ID, an account's on one session.
+
+Once the account's first scan has read its INBOX whole, a preview comes from the stored INBOX at once: no server is asked
+and no gate waited for, where reading every message's headers off a big Inbox takes a minute. Confirm reads the INBOX off
+the server once, and moves what it says is still junk, still read and still unstarred. Until the first scan has read the
+INBOX whole, the preview reads it off the server too."""
 import secrets
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from mailmind.curation.application.ports import FilingCommands, LiveSession, Mailboxes, RuleBookRepository, SenderMail, SweepTrail
 from mailmind.curation.domain import sweep_plan
-from mailmind.curation.domain.live import READ_FIELDS, Read, held, read_from_headers
+from mailmind.curation.domain.live import READ_FIELDS, Classified, Read, held, read_from_headers
 from mailmind.kernel.errors import Refused
 from mailmind.kernel.when import now_iso
 from mailmind.platform import profile
@@ -73,21 +78,30 @@ class Sweeps:
     def sweep(self, acct: dict[str, Any], dry: bool = False, group: str | None = None) -> dict[str, Any]:
         """Dry-run plan or verified move of an account's junk buckets to Trash, with a way back for each under `group`
         (one of its own when None). Prunes matching local DB rows on a real run. Returns a result dict."""
+        if dry and (shown := self.preview(acct)) is not None:
+            return shown
         return self._sweep(acct, dry, group or "sweep:" + secrets.token_hex(16))[0]
+
+    def _stored(self, acct: dict[str, Any]) -> list[Classified] | None:
+        """The account's INBOX as stored, classified as a sweep classifies it off the server, once its first scan has read
+        it whole; None while it hasn't, when only the server can say what the INBOX holds."""
+        if not self._boxes.inbox_scanned(acct["email"]):
+            return None
+        return sweep_plan.classified([sweep_plan.read_from_stored(r) for r in self._mail.stored_inbox(acct["email"])],
+                                     self._rules.sets())
+
+    def preview(self, acct: dict[str, Any]) -> dict[str, Any] | None:
+        """A dry run's answer from the stored INBOX, as one read off the server says it, with no server asked and no gate
+        waited for; None while the account's first scan hasn't read its INBOX whole."""
+        rows = self._stored(acct)
+        return None if rows is None else sweep_plan.planned(acct["email"], rows)[0]
 
     def _sweep(self, acct: dict[str, Any], dry: bool, group: str) -> tuple[dict[str, Any], bool]:
         """The sweep's answer, and whether it put anything on the undo stack."""
         p = self.plan(acct)
         if p["error"]:
             return {"account": acct["email"], "error": p["error"], "planned": 0}, False
-        # Starred or unread junk stays: a person's mark, or mail no one has seen yet, is never swept away.
-        junk_rows, capped = sweep_plan.within_cap([r for r in sweep_plan.junk(p["_rows"]) if not held(r)])
-        out: dict[str, Any] = {"account": acct["email"], "planned": len(junk_rows), "by_bucket": p["by_bucket"],
-                               "senders": len(set(r["from"] for r in junk_rows)), "going": sweep_plan.going(junk_rows),
-                               "held_back": p["held_back"], "capped": capped,
-                               # Undo finds a message in Trash by its Message-ID: one with none goes, but can't come back.
-                               "no_undo": sum(1 for r in junk_rows if not r["mid"]),
-                               "moved": 0, "stragglers": [], "error": None}
+        out, junk_rows = sweep_plan.planned(acct["email"], p["_rows"])
         if dry or not junk_rows:
             return out, False
         self._audit.swept(acct["email"], junk_rows)  # log BEFORE moving so a crash still records intent
@@ -215,34 +229,40 @@ class Sweeps:
         self._mail.forget_moved(acct["email"], targets, stragglers)
         return out
 
-    def _each_account(self, account: str | None, job: Callable[[dict[str, Any]], dict[str, Any]]) -> list[dict[str, Any]]:
-        """[job(acct)] for the account named, or for each account in turn when it names "all", each on
-        its own account's gate alone: the accounts' work is independent, so a run over all of them
-        never holds every gate at once, and one account's slow server holds up only its own turn."""
+    def _named(self, account: str | None) -> list[dict[str, Any]]:
+        """The account named, or every account when it names "all"."""
         if account and account != "all":
             try:
-                acct = self._boxes.get(account)
+                return [self._boxes.get(account)]
             except KeyError:
                 raise Refused("unknown account")
-            return [gates.run(account, lambda: job(acct), priority=gates.Priority.INTERACTIVE)]
-        return [gates.run(a["email"], lambda a=a: job(a), priority=gates.Priority.INTERACTIVE)
-                for a in self._boxes.all()]
+        return self._boxes.all()
 
     def run(self, account: str | None, dry_run: bool, undo_group: str | None = None) -> dict[str, Any]:
-        """A sweep the person asked for, of the account named or of "all". What it moves, in every account, goes under
-        one undo group, the request's or one of its own, which the answer names."""
+        """A sweep the person asked for, of the account named or of "all". An account whose sweep reads its server does
+        so on its own gate alone: the accounts' work is independent, so a run over all of them never holds every gate at
+        once, and one account's slow server holds up only its own turn. A preview from the stored INBOX waits for no
+        gate. What it moves, in every account, goes under one undo group, the request's or one of its own, which the
+        answer names."""
         if not dry_run:
             profile.refuse_writes("a sweep")     # it moves mail, and its moves can't wait in a queue
-        self._boxes.preload_creds()
         group = undo_group or "sweep:" + secrets.token_hex(16)
-        pushed = False
+        pushed = loaded = False
 
         def job(a: dict[str, Any]) -> dict[str, Any]:
             nonlocal pushed
             out, went = self._sweep(a, dry_run, group)
             pushed = pushed or went
             return out
-        results = self._each_account(account, job)
+        results: list[dict[str, Any]] = []
+        for a in self._named(account):
+            if dry_run and (shown := self.preview(a)) is not None:
+                results.append(shown)
+                continue
+            if not loaded:                       # every account's secret at once, before a server is asked
+                self._boxes.preload_creds()
+                loaded = True
+            results.append(gates.run(a["email"], lambda a=a: job(a), priority=gates.Priority.INTERACTIVE))
         if not dry_run:
             self._filing.stats_changed()
         return {"ok": True, "dry_run": dry_run, "results": results, "undo_group": group if pushed else None,

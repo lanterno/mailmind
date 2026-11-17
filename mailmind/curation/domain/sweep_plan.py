@@ -6,7 +6,7 @@ from typing import Any, TypedDict
 
 from mailmind.curation.domain import classifier
 from mailmind.curation.domain.classifier import RuleSets
-from mailmind.curation.domain.live import Audited, Classified, Read
+from mailmind.curation.domain.live import Audited, Classified, Read, held
 from mailmind.curation.domain.rulebook import keep_ruled
 from mailmind.kernel.row import Row
 
@@ -46,12 +46,25 @@ def classified(rows: Iterable[Read], rules: RuleSets) -> list[Classified]:
     return out
 
 
+def listed(row: Row) -> bool:
+    """Whether a stored row came from a list, as a sweep reads its List headers live. The row keeps no List header: what
+    ingest saw in them shows in the bucket it gave, or in the way out it kept."""
+    return row["bucket"] == classifier.MKT or bool(row["list_unsub_raw"])
+
+
 def stored_bucket(row: Row, rules: RuleSets) -> tuple[str, str]:
-    """(bucket, sender) of a stored row, as a live sweep would judge it. The row keeps no List header, and a sweep reads them
-    live. What ingest saw in them shows in the bucket: the classifier's rules come first, so a rule made since still wins."""
+    """(bucket, sender) of a stored row, as a live sweep would judge it: the classifier's rules come first, so a rule made
+    since ingest still wins."""
     addr = (row["from_addr"] or "").lower()
-    listed = row["bucket"] == classifier.MKT or bool(row["list_unsub_raw"])
-    return classifier.classify(addr, row["subject"] or "", row["from_name"] or "", listed, rules=rules)[0], addr
+    return classifier.classify(addr, row["subject"] or "", row["from_name"] or "", listed(row), rules=rules)[0], addr
+
+
+def read_from_stored(row: Row) -> Read:
+    """A message of the INBOX as last stored, as a sweep reads it off the server: its List headers as ingest saw them
+    (`listed`), and its flags as the last sync left them, so one stored with no flag that says it was seen is unread."""
+    return {"uid": str(row["uid"]), "from": (row["from_addr"] or "").lower(), "name": row["from_name"] or "",
+            "subject": row["subject"] or "", "mid": (row["message_id"] or "").strip(), "bulk": listed(row),
+            "starred": bool(row["flagged"]), "unread": not row["seen"]}
 
 
 def sweepable(rows: Iterable[Row], judged: Iterable[tuple[str, str]]) -> int:
@@ -73,6 +86,21 @@ def within_cap[R: Read](junk: list[R]) -> tuple[list[R], bool]:
         return junk, False
     newest = sorted(junk, key=lambda r: int(r["uid"]), reverse=True)[:SWEEP_MAX]
     return sorted(newest, key=lambda r: int(r["uid"])), True
+
+
+def planned(account: str, rows: list[Classified]) -> tuple[dict[str, Any], list[Classified]]:
+    """A sweep's answer before anything moves, from the INBOX as `rows` show it, and what it takes: its junk that someone
+    has read and no one starred, the newest SWEEP_MAX. `capped` says some is left for the next sweep."""
+    junk_rows = junk(rows)
+    free = [r for r in junk_rows if not held(r)]      # starred or unread junk stays, whatever it is
+    taken, capped = within_cap(free)
+    return {"account": account, "planned": len(taken),
+            "by_bucket": tally((r["bucket"], r["from"]) for r in rows)["by_bucket"],
+            "senders": len({r["from"] for r in taken}), "going": going(taken), "held_back": len(junk_rows) - len(free),
+            "capped": capped,
+            # Undo finds a message in Trash by its Message-ID: one with none goes, but can't come back.
+            "no_undo": sum(1 for r in taken if not r["mid"]),
+            "moved": 0, "stragglers": [], "error": None}, taken
 
 
 def going(junk: Iterable[Classified]) -> list[dict[str, Any]]:
