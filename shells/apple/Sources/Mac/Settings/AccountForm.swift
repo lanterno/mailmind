@@ -21,6 +21,8 @@ struct AccountForm: View {
     @State private var tested: Tested?
     /// The account added from the first run whose test then failed: the sheet stays open on it until Done.
     @State private var added: String?
+    /// The field the sheet was opened to fix (#51), focused as it opens and again when a fix didn't work.
+    @FocusState private var focused: AccountFormField?
     @Environment(\.meadow) private var meadow
 
     /// How long the address rests before the server is asked which preset it takes.
@@ -141,6 +143,8 @@ struct AccountForm: View {
         }
         .frame(width: 560)
         .frame(minHeight: 540)
+        .defaultFocus($focused, AccountFormField.fixing(draft.fixing))
+        .onAppear { focusTheFix() }
         .onChange(of: draft.presetQuery) { draft.found = nil }
         .task(id: draft.presetQuery) { await askPreset() }
         .background { ComposePaper() }
@@ -165,24 +169,27 @@ struct AccountForm: View {
     @ViewBuilder private var servers: some View {
         row("Incoming") {
             server(host: $draft.host, port: $draft.port, security: $draft.security, hostName: "Incoming server",
-                   portName: "Incoming port", prompt: "imap.yourhost.com")
+                   portName: "Incoming port", prompt: "imap.yourhost.com", field: .server)
         }
         row("Outgoing") {
             VStack(alignment: .leading, spacing: 4) {
                 server(host: $draft.smtpHost, port: $draft.smtpPort, security: $draft.smtpSecurity,
                        hostName: "Outgoing server", portName: "Outgoing port",
-                       prompt: draft.host.isEmpty ? "smtp.yourhost.com" : draft.host)
+                       prompt: draft.host.isEmpty ? "smtp.yourhost.com" : draft.host, field: .outgoingServer)
                 SettingHelp(String(localized: "Where your mail is sent from. Left blank, it is the incoming server."))
             }
         }
     }
 
     private func server(host: Binding<String>, port: Binding<String>, security: Binding<AccountDraft.Security>,
-                        hostName: LocalizedStringKey, portName: LocalizedStringKey, prompt: String) -> some View
+                        hostName: LocalizedStringKey, portName: LocalizedStringKey, prompt: String,
+                        field: AccountFormField) -> some View
     {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                TextField(hostName, text: host, prompt: Text(verbatim: prompt)).meadowComposeField()
+                TextField(hostName, text: host, prompt: Text(verbatim: prompt))
+                    .meadowComposeField()
+                    .focused($focused, equals: field)
                 TextField(portName, text: port).meadowComposeField().frame(width: 72)
             }
             MeadowSegmentedChoice(label: String(localized: "Security"), selection: security,
@@ -214,6 +221,7 @@ struct AccountForm: View {
         } else {
             SecureField("Password", text: $draft.password, prompt: Text(draft.passwordPrompt))
                 .meadowComposeField()
+                .focused($focused, equals: .password)
             SettingHelp(String(localized: "Kept in your login Keychain, never in a file."))
             if draft.type == .gmail {
                 AppPasswordSteps()
@@ -274,6 +282,7 @@ struct AccountForm: View {
         problem = ""
         if let said = draft.problem {
             problem = said
+            focusTheFix()
             return
         }
         guard let core = status.core else { return }
@@ -307,6 +316,7 @@ struct AccountForm: View {
             let refused = (error as? Problem).flatMap { $0.isRefusal ? $0 : nil }
             problem = refused.map { $0.detail ?? String(localized: "Could not save.") } ?? String(localized: "Save failed.")
             saving = false
+            focusTheFix()
             return
         }
         status.say(adding ? String(localized: "Added \(StatusWords.short(address))")
@@ -332,7 +342,30 @@ struct AccountForm: View {
                 return
             }
         }
+        // A fix from the Sync card (#51), tested as saved: the edit let go of the login held back after the refusal,
+        // so the test logs in afresh. One that works syncs the account again now, which clears its trouble; one that
+        // doesn't keeps the sheet open with what the test said, the field emptied and focused for another try.
+        if !adding, draft.fixing != nil {
+            tested = .running
+            do {
+                tested = .of(try await core.post(API.Post.AccountsTest.self, API.TryBody(email: address)))
+            } catch {
+                tested = .of(error)
+            }
+            guard tested == .connected else {
+                saving = false
+                focusTheFix()
+                return
+            }
+            await status.retry(address)
+        }
         finish(address, adding: adding)
+    }
+
+    /// Put the focus in the field the sheet was opened to fix, once the sheet can take it.
+    private func focusTheFix() {
+        guard let field = AccountFormField.fixing(draft.fixing) else { return }
+        DispatchQueue.main.async { focused = field }
     }
 
     /// The sheet is done with `address`, saved. A new connection has no mail yet: it is pulled now, not at the next
@@ -340,6 +373,20 @@ struct AccountForm: View {
     private func finish(_ address: String, adding: Bool) {
         done(address)
         if adding { Task { await status.syncNow() } }
+    }
+}
+
+/// The account form's fields the focus is put in: the one a fix from the Sync card is for (#51).
+enum AccountFormField: Hashable {
+    case password, server, outgoingServer
+
+    /// The field that fixes `fix`: a password's, or the incoming server's name.
+    static func fixing(_ fix: AccountFix?) -> AccountFormField? {
+        switch fix {
+        case .appPassword?, .password?: .password
+        case .server?: .server
+        case nil: nil
+        }
     }
 }
 

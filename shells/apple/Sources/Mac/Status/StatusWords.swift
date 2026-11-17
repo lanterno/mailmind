@@ -203,12 +203,16 @@ enum StatusWords {
         type == "proton" && kind == "TIMEOUT"
     }
 
-    /// What a failed sync's kind (`last_error_kind`) means, in a sentence that says what to do next. A kind this
-    /// build doesn't know reads as something that went wrong. `type` is the account's: a Proton account's trouble is
-    /// its Bridge, and a Gmail account has no server's name or port to check but wants an App Password, each of whose
-    /// refusals `error`, the trouble's class, tells apart. A login held back after a refusal fails as `LoginRefused`
-    /// whatever Google first said, so Gmail's words for that class hold for each of Google's refusals.
-    static func syncProblem(_ kind: String, type: String? = nil, error: String? = nil) -> String {
+    /// What a failed sync's kind (`last_error_kind`) means, in one sentence that says what to do next, naming the
+    /// card's button (`fix`) where one fixes it (#51). A kind this build doesn't know reads as something that went
+    /// wrong. `type` is the account's: a Proton account's trouble is its Bridge, and a Gmail account has no server's
+    /// name or port to check but wants an App Password, each of whose refusals `error`, the trouble's class, tells
+    /// apart. A login held back after a refusal fails as `LoginRefused` whatever Google first said, so Gmail's words
+    /// for that class hold for each of Google's refusals. With no `fix` for a password, the account reads it from
+    /// 1Password or the environment, which is where it is changed.
+    static func syncProblem(_ kind: String, type: String? = nil, error: String? = nil, fix: AccountFix? = nil)
+        -> String
+    {
         if bridgeDown(kind, type: type) {
             return String(localized: """
                 Proton Bridge isn’t running, so MailMind can’t reach this account. Start Proton Bridge and wait until \
@@ -234,16 +238,27 @@ enum StatusWords {
                 then choose Retry.
                 """)
         case ("gmail", "AUTH") where error == "LoginNeedsAppPassword":
-            return String(localized: """
-                Gmail turned down the password: it needs an App Password, not your Google password. Make one, then \
-                choose Edit and paste it.
-                """)
+            return fix == .appPassword
+                ? String(localized: """
+                    Gmail needs an App Password, not your Google password: make one, then choose Enter App Password \
+                    and paste it.
+                    """)
+                : String(localized: """
+                    Gmail needs an App Password, not your Google password: make one, put it where MailMind reads \
+                    this account’s password, then choose Retry.
+                    """)
         case ("gmail", "AUTH"):
-            return String(localized: """
-                Gmail turned down the login. If you typed your Google password, Gmail needs an App Password instead: \
-                make one, then choose Edit and paste it. If you already use one, sign in to Gmail in your browser and \
-                check that IMAP is on, then choose Retry.
-                """)
+            return fix == .appPassword
+                ? String(localized: """
+                    Gmail turned down the login: if you typed your Google password, make an App Password and choose \
+                    Enter App Password; if you already use one, sign in to Gmail in your browser and check that IMAP \
+                    is on, then choose Retry.
+                    """)
+                : String(localized: """
+                    Gmail turned down the login: if MailMind reads your Google password, put an App Password where it \
+                    reads this account’s password; if it already reads one, sign in to Gmail in your browser and \
+                    check that IMAP is on, then choose Retry.
+                    """)
         case ("gmail", "NETWORK"):
             return String(localized: "MailMind couldn’t reach Gmail. Check your internet connection, then choose Retry.")
         default:
@@ -251,20 +266,37 @@ enum StatusWords {
         }
         return switch kind {
         case "AUTH":
-            String(localized: """
-                The server turned down the password. Choose Edit and type it again; if your provider uses app \
-                passwords, make a new one and use that.
-                """)
+            switch fix {
+            case .appPassword:
+                String(localized: """
+                    The server turned down the password: it takes an app password, so make a new one, then choose \
+                    Enter App Password and paste it.
+                    """)
+            case .password:
+                String(localized: """
+                    The server turned down the password: choose Change Password and type it again, or a new app \
+                    password if your provider uses them.
+                    """)
+            default:
+                String(localized: """
+                    The server turned down the password: change it where MailMind reads this account’s password, \
+                    then choose Retry.
+                    """)
+            }
         case "TIMEOUT":
             String(localized: """
                 The server didn’t answer in time. MailMind tries again on its own; if this keeps happening, check \
                 your internet connection.
                 """)
         case "NETWORK":
-            String(localized: """
-                MailMind couldn’t reach the server. Check your internet connection, then the server’s name and port \
-                under Edit.
-                """)
+            fix == .server
+                ? String(localized: """
+                    MailMind couldn’t reach the server: check your internet connection, then its name and port under \
+                    Edit Server.
+                    """)
+                : String(localized: """
+                    MailMind couldn’t reach the server. Check your internet connection, then choose Retry.
+                    """)
         case "UIDVALIDITY":
             String(localized: """
                 The server renumbered this mailbox, so MailMind reads it again from the start. Nothing needs doing.
@@ -293,12 +325,16 @@ enum StatusWords {
         then choose Retry; if it seems stuck, quit Bridge and open it again.
         """)
 
-    /// The page that helps with a sync's trouble at an account of `type`, where there is one: Proton Bridge's, or
-    /// where Google makes the App Password Gmail wants.
-    static func syncHelp(_ kind: String, type: String? = nil, error: String? = nil) -> API.Link? {
+    /// The page that helps with a sync's trouble at an account of `type`, where there is one: Proton Bridge's, where
+    /// Google makes the App Password Gmail wants, or, for a password another provider turned down, where it makes the
+    /// app password it takes (`provider`, which `AccountFix.providerPage` finds).
+    static func syncHelp(_ kind: String, type: String? = nil, error: String? = nil, provider: API.Link? = nil)
+        -> API.Link?
+    {
         if bridgeDown(kind, type: type) || bridgeSlow(kind, type: type) { return protonBridge }
         let signIn = ["LoginNeedsWebSignIn", "LoginImapOff"].contains(error ?? "")
-        return type == "gmail" && kind == "AUTH" && !signIn ? appPasswords : nil
+        if type == "gmail" { return kind == "AUTH" && !signIn ? appPasswords : nil }
+        return type == "imap" && kind == "AUTH" ? provider : nil
     }
 
     /// The banner's words for the accounts that can't connect, and the page that helps. Where each is a Proton account
@@ -349,6 +385,58 @@ enum StatusWords {
         }
         if let ok = record.lastOkTs, !ok.isEmpty { return .synced(when: ago(ok, now: now), count: record.syncCount) }
         return .none
+    }
+}
+
+/// What an account's Sync card offers to fix a sync's trouble with, beside Retry (#51): a button that opens the
+/// account's Edit sheet on the field that fixes it, worded for the account's kind.
+enum AccountFix: Equatable, Hashable, Sendable {
+    /// A new app password, which Gmail and the providers with a page for one take in place of the account's own.
+    case appPassword
+    /// The password, typed again.
+    case password
+    /// An Other IMAP account's server, whose name or port may be wrong.
+    case server
+
+    /// The button's words.
+    var button: String {
+        switch self {
+        case .appPassword: String(localized: "Enter App Password…")
+        case .password: String(localized: "Change Password…")
+        case .server: String(localized: "Edit Server…")
+        }
+    }
+
+    /// The fix for a sync's trouble of `kind` and class `error` at an account of `type` whose password is kept as
+    /// `credential` (its `style`), where the provider makes app passwords when `appPasswords`. None where the sheet
+    /// can't fix it: a Proton account's (its Bridge's password is kept in a card of its own), a password read from
+    /// 1Password or the environment (changed there), a Gmail login Google wants signed in on the web or IMAP turned
+    /// on for, and every other trouble.
+    static func of(kind: String?, type: String?, error: String?, credential: String?, appPasswords: Bool)
+        -> AccountFix?
+    {
+        switch (kind, type) {
+        case ("AUTH", "gmail"), ("AUTH", "imap"):
+            guard credential != "op", credential != "env" else { return nil }
+            if type == "gmail" {
+                return ["LoginNeedsWebSignIn", "LoginImapOff"].contains(error ?? "") ? nil : .appPassword
+            }
+            return appPasswords ? .appPassword : .password
+        case ("NETWORK", "imap"):
+            return .server
+        default:
+            return nil
+        }
+    }
+
+    /// Where the provider of a saved Other IMAP account makes the app password it takes, from what the server said of
+    /// its address (`/api/accounts/preset`): its page, when it is the provider whose server the account reads (a
+    /// custom domain may be any provider's) and one that takes a password at all.
+    static func providerPage(_ found: API.PresetFound?, host: String?) -> API.Link? {
+        guard let found, found.supported, let preset = found.preset, preset != .proton, preset != .gmail,
+              let link = found.link, let theirs = found.settings?.host
+        else { return nil }
+        return theirs.caseInsensitiveCompare(host ?? "") == .orderedSame ? link : nil
     }
 }
 

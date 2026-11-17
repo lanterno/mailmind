@@ -20,10 +20,12 @@ struct AccountsPane: View {
         _chosen = State(initialValue: chosen)
     }
 
-    /// Which form is open: a new account, or the one an address names.
+    /// Which form is open: a new account, the one an address names, or that one opened from its Sync card on what
+    /// fixes its trouble (#51).
     enum Editing: Identifiable, Hashable {
         case adding
         case editing(String)
+        case fixing(String, AccountFix)
         var id: Self { self }
     }
 
@@ -54,6 +56,7 @@ struct AccountsPane: View {
             if let row = status.accounts.first(where: { $0.email == chosen }) {
                 AccountDetail(status: status, row: row, live: stats[row.email ?? ""],
                               edit: { form = .editing(row.email ?? "") }, remove: { removing = row },
+                              fix: { form = .fixing(row.email ?? "", $0) },
                               testNow: row.email == testNext, onTested: { testNext = nil })
             } else if !status.accounts.isEmpty {
                 SettingHelp(String(localized: "Choose an account to see how it stands."))
@@ -72,11 +75,13 @@ struct AccountsPane: View {
             }
         }
         .sheet(item: $form) { editing in
-            AccountForm(status: status, draft: AccountDraft(editing: editing.row(in: status.accounts))) { saved in
+            AccountForm(status: status, draft: AccountDraft(editing: editing.row(in: status.accounts),
+                                                            fixing: editing.fix)) { saved in
                 form = nil
                 if let saved {
                     chosen = saved
-                    testNext = saved
+                    // A fix was tested as it was saved, and its account syncs again.
+                    if editing.fix == nil { testNext = saved }
                 }
             }
         }
@@ -229,8 +234,15 @@ struct RemoveAccount: View {
 
 extension AccountsPane.Editing {
     func row(in accounts: [API.AccountRow]) -> API.AccountRow? {
-        guard case .editing(let email) = self else { return nil }
-        return accounts.first { $0.email == email }
+        switch self {
+        case .adding: nil
+        case .editing(let email), .fixing(let email, _): accounts.first { $0.email == email }
+        }
+    }
+
+    /// What the sheet is opened to fix, if anything.
+    var fix: AccountFix? {
+        if case .fixing(_, let fix) = self { fix } else { nil }
     }
 }
 
@@ -339,11 +351,30 @@ struct AccountDetail: View {
     let live: API.AccountStats?
     let edit: () -> Void
     let remove: () -> Void
+    /// Open the Edit sheet on what fixes the sync's trouble (#51).
+    var fix: (AccountFix) -> Void = { _ in }
     /// Whether to test it as it shows, as one just saved is; `onTested` says it has been.
     var testNow = false
     var onTested: () -> Void = {}
     @State private var tested: Tested?
+    /// The kind of sync trouble the test came to (`Tested.kind(of:)`).
+    @State private var testedKind: String?
+    /// What the server says of the address, for an Other IMAP account whose password was turned down: its provider's
+    /// page for an app password, where it has one.
+    @State private var found: API.PresetFound?
     @Environment(\.meadow) private var meadow
+
+    /// The kind of the sync's trouble the card shows, or nil while it shows none.
+    private var standing: String? {
+        let record = status.health.first { $0.account == row.email }
+        return switch StatusWords.healthLine(record, now: status.now) {
+        case .syncError(let kind, _): kind
+        case .certificateChanged: "TLS_PIN"
+        default: nil
+        }
+    }
+
+    private var providerPage: API.Link? { AccountFix.providerPage(found, host: row.host) }
 
     var body: some View {
         let email = row.email ?? ""
@@ -395,12 +426,19 @@ struct AccountDetail: View {
                 .padding(.top, 2)
             }
             DeskSideCard(title: String(localized: "Sync"), icon: .refresh) {
-                HealthRow(status: status, email: email)
+                HealthRow(status: status, email: email, providerPage: providerPage, fix: fix)
                 HStack(spacing: 10) {
                     Button("Test Connection") { Task { await test(email) } }
                         .meadowButton(small: true)
                         .disabled(tested == .running)
-                    if let tested { TestedWords(tested: tested) }
+                    if let tested {
+                        let record = status.health.first { $0.account == email }
+                        let page = standing.flatMap {
+                            StatusWords.syncHelp($0, type: row.type, error: record?.lastError, provider: providerPage)
+                        }
+                        CardTestedWords(shown: .of(tested, kind: testedKind, standing: standing, type: row.type,
+                                                   page: page))
+                    }
                     Spacer(minLength: 0)
                 }
             }
@@ -424,15 +462,54 @@ struct AccountDetail: View {
             await test(email)
             onTested()
         }
+        .onChange(of: standing) {
+            // A test spoke of the trouble the card showed then: once the sync's trouble is fixed or another, it goes.
+            if tested != .running {
+                tested = nil
+                testedKind = nil
+            }
+        }
+        .task(id: row.type == "imap" && standing == "AUTH" ? row.email : nil) {
+            // Only for a password turned down: the server may ask the address's domain which provider takes its mail.
+            // Asked again for each account the card shows, which never shows another's provider.
+            found = nil
+            guard row.type == "imap", standing == "AUTH", let core = status.core else { return }
+            found = try? await core.get(API.Get.AccountsPreset.self, ["email": email])
+        }
     }
 
     private func test(_ email: String) async {
         guard let core = status.core else { return }
         tested = .running
+        testedKind = nil
         do {
-            tested = .of(try await core.post(API.Post.AccountsTest.self, API.TryBody(email: email)))
+            let answer = try await core.post(API.Post.AccountsTest.self, API.TryBody(email: email))
+            testedKind = Tested.kind(of: answer)
+            tested = .of(answer)
         } catch {
             tested = .of(error)
+        }
+    }
+}
+
+/// What a test says on the Sync card (`TestedOnCard`): only that it failed the same way, when the card already says
+/// how; else as `TestedWords` says it, without the trouble's class.
+struct CardTestedWords: View {
+    let shown: TestedOnCard
+    @Environment(\.meadow) private var meadow
+
+    /// What a test that failed as the sync did says.
+    static let same = String(localized: "Still failing the same way.")
+
+    var body: some View {
+        switch shown {
+        case .running: TestedWords(tested: .running)
+        case .connected: TestedWords(tested: .connected)
+        case .same:
+            Text(Self.same)
+                .font(.meadow(.ui, 13, .semibold))
+                .foregroundStyle(meadow.ink3)
+        case .other(let why, let link): TestedWords(tested: .failed(why, link: link))
         }
     }
 }
@@ -519,10 +596,14 @@ struct TestedWords: View {
 }
 
 /// How an account's syncs stand (`HealthLine`): a certificate that changed, which a person may trust; a sync that
-/// failed, which they may retry; or when it last synced.
+/// failed, which they may retry or fix; or when it last synced.
 struct HealthRow: View {
     let status: AppStatus
     let email: String
+    /// Where an Other IMAP account's provider makes app passwords, where it does (`AccountFix.providerPage`).
+    var providerPage: API.Link?
+    /// Open the account's Edit sheet on what fixes its trouble.
+    var fix: (AccountFix) -> Void = { _ in }
     @State private var busy = false
     @Environment(\.meadow) private var meadow
 
@@ -552,7 +633,11 @@ struct HealthRow: View {
                         .disabled(busy)
                 }
             case .syncError(let kind, let when):
-                // What went wrong in a sentence with what to do, and the kind and class in small type for the owner.
+                // What went wrong, said once (#51): a sentence with what to do, the page that helps, and the button
+                // that opens the sheet on what fixes it. The trouble's kind and class are Copy Diagnostics' to carry.
+                let account = status.accounts.first { $0.email == email }
+                let words = Self.words(kind: kind, error: record?.lastError, type: account?.type,
+                                       credential: account?.credential.style, providerPage: providerPage)
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         warning(when.isEmpty ? String(localized: "Couldn’t sync")
@@ -562,19 +647,31 @@ struct HealthRow: View {
                             .meadowButton(small: true)
                             .disabled(busy)
                     }
-                    let type = status.accounts.first { $0.email == email }?.type
-                    SettingHelp(StatusWords.syncProblem(kind, type: type, error: record?.lastError))
-                    if let link = StatusWords.syncHelp(kind, type: type, error: record?.lastError) {
-                        LinkButton(link: link)
+                    SettingHelp(words.text)
+                    if words.link != nil || words.fix != nil {
+                        HStack(spacing: 8) {
+                            if let link = words.link { LinkButton(link: link) }
+                            if let fixing = words.fix {
+                                Button(fixing.button) { fix(fixing) }
+                                    .meadowButton(.primary, small: true)
+                            }
+                        }
                     }
-                    Text(verbatim: [kind, record?.lastError ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.meadow(.mono, 11))
-                        .foregroundStyle(meadow.ink3)
-                        .textSelection(.enabled)
                 }
             }
         }
         .font(.meadow(.ui, 13.5, .semibold))
+    }
+
+    /// What a sync's trouble of `kind` and class `error` says on the card of an account of `type` whose password is
+    /// kept as `credential`: its sentence, the page that helps, and the fix its button opens the sheet on.
+    static func words(kind: String, error: String?, type: String?, credential: String?, providerPage: API.Link?)
+        -> (text: String, link: API.Link?, fix: AccountFix?)
+    {
+        let fix = AccountFix.of(kind: kind, type: type, error: error, credential: credential,
+                                appPasswords: providerPage != nil)
+        return (StatusWords.syncProblem(kind, type: type, error: error, fix: fix),
+                StatusWords.syncHelp(kind, type: type, error: error, provider: providerPage), fix)
     }
 
     /// A line on what went wrong, as the mockup's warning (`.trust.warn`): rust on its wash.

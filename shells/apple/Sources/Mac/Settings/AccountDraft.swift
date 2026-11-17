@@ -41,6 +41,9 @@ struct AccountDraft: Equatable {
 
     /// The account edited, by its address, which is fixed; nil when adding one.
     let editing: String?
+    /// What the Edit sheet was opened to fix from the account's Sync card (#51): its password, which is then asked
+    /// for, or its server. Nil for a plain edit.
+    let fixing: AccountFix?
     var alias = ""
     var signature = ""
     var email = ""
@@ -77,8 +80,9 @@ struct AccountDraft: Equatable {
         String(localized: "Paste it above as Google shows it, spaces and all."),
     ]
 
-    init(editing row: API.AccountRow? = nil) {
+    init(editing row: API.AccountRow? = nil, fixing: AccountFix? = nil) {
         editing = row?.email
+        self.fixing = row == nil ? nil : fixing
         guard let row else { return }
         alias = row.alias ?? ""
         signature = row.signature
@@ -205,10 +209,19 @@ struct AccountDraft: Equatable {
         return .offer(String(localized: "\(whose): use \(name)’s settings?"), button: String(localized: "Use \(name)"))
     }
 
-    /// What the password field shows before one is typed: an App Password's shape for Gmail.
+    /// Whether the sheet was opened for a new password, which it then asks for: kept is what failed.
+    var asksPassword: Bool { fixing == .appPassword || fixing == .password }
+
+    /// What the password field shows before one is typed: an App Password's shape for Gmail. An edit opened for a new
+    /// password asks for it, as a new account's field does.
     var passwordPrompt: String {
-        if editing != nil { return String(localized: "unchanged — leave blank to keep") }
-        return type == .gmail ? "abcd efgh ijkl mnop" : String(localized: "paste the password or app password")
+        if editing != nil, !asksPassword { return String(localized: "unchanged — leave blank to keep") }
+        if type == .gmail { return "abcd efgh ijkl mnop" }
+        switch fixing {
+        case .appPassword?: return String(localized: "paste the new app password")
+        case .password?: return String(localized: "type the password")
+        default: return String(localized: "paste the password or app password")
+        }
     }
 
     /// Whether a password can be typed: always for a new account, and for one whose password is in the Keychain.
@@ -239,6 +252,10 @@ struct AccountDraft: Equatable {
         if unsupported { return note ?? String(localized: "MailMind can’t log in to this account yet.") }
         if type == .imap, host.trimmed.isEmpty { return String(localized: "Type the incoming server’s name.") }
         if editing == nil, credential == nil { return String(localized: "Type the account’s password.") }
+        if asksPassword, typesPassword, credential == nil {
+            return fixing == .appPassword ? String(localized: "Paste the new app password.")
+                : String(localized: "Type the account’s password.")
+        }
         return nil
     }
 
@@ -311,7 +328,7 @@ extension AccountDraft: CustomStringConvertible, CustomDebugStringConvertible, C
     /// What `dump` and a debugger show: every field but the password, which shows only whether one was typed.
     var customMirror: Mirror {
         Mirror(self, children: [
-            "editing": editing as Any, "alias": alias, "signature": signature, "email": email, "kind": kind as Any,
+            "editing": editing as Any, "fixing": fixing as Any, "alias": alias, "signature": signature, "email": email, "kind": kind as Any,
             "host": host, "port": port, "security": security, "smtpHost": smtpHost, "smtpPort": smtpPort,
             "smtpSecurity": smtpSecurity, "trash": trash as Any, "source": source,
             "password": password.isEmpty ? "none" : "typed", "opRef": opRef, "envVar": envVar,
@@ -349,6 +366,51 @@ enum Tested: Equatable, Sendable {
             return .failed(problem.detail ?? String(localized: "MailMind couldn’t log in."))
         }
         return .failed(String(localized: "The test didn’t finish. Try again."))
+    }
+
+    /// The kind of sync trouble a test's answer is, as a sync's `last_error_kind` names it, from the class
+    /// `connections::quiet` gives it: nil where it logged in, and for a trouble no sync has (the outgoing server's, a
+    /// port typed wrong).
+    static func kind(of answer: API.AccountsTestAnswer) -> String? {
+        guard case .couldntLogIn(let out) = answer else { return nil }
+        switch out.error {
+        case "AUTHENTICATIONFAILED": return "AUTH"
+        case "connection refused", "host not found": return "NETWORK"
+        case "timeout": return "TIMEOUT"
+        case "certificate changed": return "TLS_PIN"
+        default:
+            // Gmail's refusals are said in sentences of their own, which stand for their class too.
+            return !out.error.isEmpty && out.error == out.says ? "AUTH" : nil
+        }
+    }
+}
+
+/// What a test adds to an account's Sync card (#51). The card already says what its sync's trouble is, in one
+/// sentence, with the page that helps: a test that failed the same way adds nothing to them and says only that it
+/// did; one that failed another way says its own sentence, with its page where the card shows none. Never the
+/// trouble's class, which Help › Copy Diagnostics carries.
+enum TestedOnCard: Equatable {
+    case running
+    case connected
+    /// It failed as the sync did.
+    case same
+    /// It failed another way, or the card shows no trouble.
+    case other(String, link: API.Link?)
+
+    /// What the card says of `tested`, a test whose trouble is of `kind` (`Tested.kind(of:)`), at an account of
+    /// `type` whose card shows a sync's trouble of `standing` (nil while there is none) and `page`.
+    static func of(_ tested: Tested, kind: String?, standing: String?, type: String?, page: API.Link?) -> TestedOnCard {
+        switch tested {
+        case .running: return .running
+        case .connected: return .connected
+        case .failed(let why, let link, _):
+            // The same kind of trouble, and the same help: at Gmail, a test with no App Password page is a sign-in
+            // or IMAP switched off, which no App Password fixes, and one with it is a password where the card says
+            // to sign in. A Proton test points to Bridge's own page, which its card's Bridge password stands in for.
+            let sameHelp = type == "proton" || (link == nil) == (page == nil)
+            if let standing, kind == standing, sameHelp { return .same }
+            return .other(why, link: link != nil && link?.url == page?.url ? nil : link)
+        }
     }
 }
 
