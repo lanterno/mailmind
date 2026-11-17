@@ -37,16 +37,20 @@ pub fn sets_of(document: &Value) -> Option<RuleSets> {
     Some(RuleSets::new(keep_senders, block_senders, keep_domains, block_domains))
 }
 
-/// (bucket, sender) of a stored message, as a live sweep would judge it. The store keeps no List header, which a sweep
-/// reads live: what ingest saw of them shows in the bucket it gave, and the rules come first, so a rule made since
-/// still wins.
+/// Whether a stored message came from a list, as a sweep reads its List headers live. The store keeps no List header:
+/// what ingest saw of them shows in the bucket it gave, or in the way out it kept.
+pub fn listed(row: &Stored) -> bool {
+    row.bucket.as_deref() == Some(Bucket::Marketing.name())
+        || row.list_unsub_raw.as_deref().is_some_and(|raw| !raw.is_empty())
+}
+
+/// (bucket, sender) of a stored message, as a live sweep would judge it: the rules come first, so a rule made since
+/// ingest still wins.
 pub fn stored_bucket(row: &Stored, rules: &RuleSets) -> (Bucket, String) {
     let addr = text::lower(row.from_addr.as_deref().unwrap_or_default()).into_owned();
-    let listed = row.bucket.as_deref() == Some(Bucket::Marketing.name())
-        || row.list_unsub_raw.as_deref().is_some_and(|raw| !raw.is_empty());
     let subject = row.subject.as_deref().unwrap_or_default();
     let name = row.from_name.as_deref().unwrap_or_default();
-    (classifier::classify(&addr, subject, name, listed, rules).bucket, addr)
+    (classifier::classify(&addr, subject, name, listed(row), rules).bucket, addr)
 }
 
 /// How an inbox falls, from each message's (bucket, sender): `in_inbox`, `by_bucket` (the buckets holding mail, in the

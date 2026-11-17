@@ -5,6 +5,11 @@
 //! before saying yes. What a sweep moves goes on the undo stack under one group, so one Undo puts it all back from
 //! Trash, each message found there by its Message-ID, an account's on one session. Each account's work is on its own
 //! gate.
+//!
+//! Once the account's first scan has read its INBOX whole, a plan comes from the stored INBOX at once
+//! (`ScannedInbox`): no server is asked and no gate waited for, where reading every message's headers off a big Inbox
+//! takes a minute. Confirm reads the INBOX off the server once, and moves what it says is still junk, still read and
+//! still unstarred. Until the first scan has read the INBOX whole, a plan reads it off the server too.
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashSet};
@@ -16,10 +21,13 @@ use mm_kernel::seams::Clock;
 use serde_json::{Map, Value, json};
 
 use crate::classifier::{self, Bucket};
-use crate::cleanup_ports::{Audited, Ids, LiveError, LiveInboxes, LiveSession, SweepTrail, SweptRows};
+use crate::cleanup_ports::{
+    Audited, Ids, InboxCopy, LiveError, LiveInboxes, LiveSession, ScannedInbox, SweepTrail, SweptRows,
+};
 use crate::ports::{Filing, RuleBook};
 use crate::rules::RuleSets;
-use crate::sweep_plan::tally;
+use crate::sweep_plan::{listed, tally};
+use crate::text;
 
 const TAG: &str = "sweep";
 /// What a sweep asks the server for of each message.
@@ -135,6 +143,23 @@ pub fn read_from_headers(uid: u32, raw: &[u8], flags: Option<&[String]>) -> Read
     }
 }
 
+/// A message of the INBOX as it was last stored, read as a sweep reads it off the server: its List headers as ingest saw
+/// them (`sweep_plan::listed`), and its flags as the last sync left them, so one stored with no flag that says it was
+/// seen is unread.
+pub fn read_from_stored(copy: &InboxCopy) -> Read {
+    let row = &copy.stored;
+    Read {
+        uid: copy.uid.to_string(),
+        from: text::lower(row.from_addr.as_deref().unwrap_or_default()).into_owned(),
+        name: row.from_name.clone().unwrap_or_default(),
+        subject: row.subject.clone().unwrap_or_default(),
+        mid: copy.message_id.as_deref().unwrap_or_default().trim().to_owned(),
+        bulk: listed(row),
+        starred: row.flagged,
+        unread: !row.seen,
+    }
+}
+
 /// What the classifier made of a message read live.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Classified {
@@ -162,6 +187,31 @@ fn fetch_headers(s: &mut dyn LiveSession) -> Result<Vec<Read>, LiveError> {
         out.extend(heads.into_iter().map(|h| read_from_headers(h.uid, &h.raw, Some(&h.flags))));
     }
     Ok(out)
+}
+
+/// A sweep's answer before anything moves, from the INBOX as `rows` show it, and what it takes: its junk that someone has
+/// read and no one starred (starred or unread junk stays, whatever it is, and `held_back` counts it), the newest
+/// `SWEEP_MAX` of it.
+fn planned<'a>(account: &str, rows: &'a [Classified]) -> (Map<String, Value>, Vec<&'a Classified>) {
+    let plan = tally(rows.iter().map(|r| (r.bucket, r.read.from.clone())));
+    let (held, junk): (Vec<&Classified>, Vec<&Classified>) =
+        rows.iter().filter(|r| r.bucket.is_junk()).partition(|r| r.read.held());
+    let (junk, capped) = within_cap(junk);
+    let senders: HashSet<&str> = junk.iter().map(|r| r.read.from.as_str()).collect();
+    let mut out = Map::new();
+    out.insert("account".into(), json!(account));
+    out.insert("planned".into(), json!(junk.len()));
+    out.insert("by_bucket".into(), plan.get("by_bucket").cloned().unwrap_or_else(|| json!({})));
+    out.insert("senders".into(), json!(senders.len()));
+    out.insert("going".into(), going(&junk));
+    out.insert("held_back".into(), json!(held.len()));
+    out.insert("capped".into(), json!(capped));
+    // Undo finds a message in Trash by its Message-ID: one with none goes, but can't come back.
+    out.insert("no_undo".into(), json!(junk.iter().filter(|r| r.read.mid.is_empty()).count()));
+    out.insert("moved".into(), json!(0));
+    out.insert("stragglers".into(), json!([]));
+    out.insert("error".into(), Value::Null);
+    (out, junk)
 }
 
 fn still_in_inbox(s: &mut dyn LiveSession) -> Result<HashSet<String>, LiveError> {
@@ -228,6 +278,8 @@ fn undo_entry(account: &str, trash: &str, r: &Classified) -> Value {
 pub struct SweepsParts {
     pub rules: Arc<dyn RuleBook>,
     pub boxes: Arc<dyn LiveInboxes>,
+    /// The INBOX as stored, which a plan reads once it is all there.
+    pub stored: Arc<dyn ScannedInbox>,
     pub audit: Arc<dyn SweepTrail>,
     pub rows: Arc<dyn SweptRows>,
     pub filing: Arc<dyn Filing>,
@@ -242,6 +294,7 @@ pub struct SweepsParts {
 pub struct Sweeps {
     rules: Arc<dyn RuleBook>,
     boxes: Arc<dyn LiveInboxes>,
+    stored: Arc<dyn ScannedInbox>,
     audit: Arc<dyn SweepTrail>,
     rows: Arc<dyn SweptRows>,
     filing: Arc<dyn Filing>,
@@ -255,8 +308,18 @@ type Swept = (Value, bool);
 
 impl Sweeps {
     pub fn new(parts: SweepsParts) -> Sweeps {
-        let SweepsParts { rules, boxes, audit, rows, filing, ids, clock, writes_allowed } = parts;
-        Sweeps { rules, boxes, audit, rows, filing, ids, clock, writes_allowed }
+        let SweepsParts { rules, boxes, stored, audit, rows, filing, ids, clock, writes_allowed } = parts;
+        Sweeps { rules, boxes, stored, audit, rows, filing, ids, clock, writes_allowed }
+    }
+
+    /// A dry run's answer from the stored INBOX, as one read off the server says it, with no server asked and no gate
+    /// waited for; None while the account's first scan hasn't read its INBOX whole.
+    fn preview(&self, account: &str, rules: &RuleSets) -> Result<Option<Value>, Fault> {
+        let Some(stored) = self.stored.scanned(account)? else {
+            return Ok(None);
+        };
+        let rows = classified(stored.iter().map(read_from_stored).collect(), rules);
+        Ok(Some(Value::Object(planned(account, &rows).0)))
     }
 
     /// A dry run's plan, or a verified move of an account's junk buckets to Trash, with the stored rows of what moved
@@ -279,25 +342,7 @@ impl Sweeps {
             }
         };
         let rows = classified(read, rules);
-        let plan = tally(rows.iter().map(|r| (r.bucket, r.read.from.clone())));
-        // Starred or unread junk stays: a person's mark, or mail no one has seen yet, is never swept away.
-        let (held, junk): (Vec<&Classified>, Vec<&Classified>) =
-            rows.iter().filter(|r| r.bucket.is_junk()).partition(|r| r.read.held());
-        let (junk, capped) = within_cap(junk);
-        let senders: HashSet<&str> = junk.iter().map(|r| r.read.from.as_str()).collect();
-        let mut out = Map::new();
-        out.insert("account".into(), json!(account));
-        out.insert("planned".into(), json!(junk.len()));
-        out.insert("by_bucket".into(), plan.get("by_bucket").cloned().unwrap_or_else(|| json!({})));
-        out.insert("senders".into(), json!(senders.len()));
-        out.insert("going".into(), going(&junk));
-        out.insert("held_back".into(), json!(held.len()));
-        out.insert("capped".into(), json!(capped));
-        // Undo finds a message in Trash by its Message-ID: one with none goes, but can't come back.
-        out.insert("no_undo".into(), json!(junk.iter().filter(|r| r.read.mid.is_empty()).count()));
-        out.insert("moved".into(), json!(0));
-        out.insert("stragglers".into(), json!([]));
-        out.insert("error".into(), Value::Null);
+        let (mut out, junk) = planned(account, &rows);
         if dry || junk.is_empty() {
             s.close(false);
             return Ok((Value::Object(out), false));
@@ -404,9 +449,10 @@ impl Sweeps {
         Ok(!back.is_empty())
     }
 
-    /// `POST /api/sweep`: a sweep a person asked for, of the account named or of every one (`all`, or none named), each
-    /// on its own account's gate alone: one account's slow server holds up only its own turn. What it moves, in every
-    /// account, goes under one undo group, the request's or one of its own, which the answer names.
+    /// `POST /api/sweep`: a sweep a person asked for, of the account named or of every one (`all`, or none named). An
+    /// account whose sweep reads its server does so on its own gate alone: one account's slow server holds up only its
+    /// own turn. A dry run from the stored INBOX waits for no gate. What it moves, in every account, goes under one undo
+    /// group, the request's or one of its own, which the answer names.
     pub fn run(&self, account: Option<&str>, dry_run: bool, undo_group: Option<&str>) -> Result<Value, Failure> {
         if !dry_run && !self.writes_allowed {
             // It moves mail, and its moves can't wait in a queue.
@@ -427,6 +473,10 @@ impl Sweeps {
         let mut results = Vec::with_capacity(named.len());
         let mut pushed = false;
         for each in &named {
+            if dry_run && let Some(shown) = self.preview(&each.email, &rules)? {
+                results.push(shown);
+                continue;
+            }
             let mut job = || {
                 let (answer, went) = self.sweep(&each.email, &each.trash, dry_run, &rules, &group)?;
                 pushed |= went;

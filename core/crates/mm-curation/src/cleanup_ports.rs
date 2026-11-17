@@ -9,6 +9,7 @@ use std::fmt;
 use mm_kernel::errors::Fault;
 use serde_json::Value;
 
+use crate::ports::Stored;
 use crate::unsubscribe::{Attempt, Logged, UnsubWay};
 
 /// One of a sender's INBOX copies, as a cleanup's sweep takes it.
@@ -193,6 +194,22 @@ pub trait LiveInboxes: Send + Sync + fmt::Debug {
     ) -> Result<Option<Value>, Fault>;
     /// A logged-in session on the account's server, or the class of why there is none.
     fn open(&self, account: &str) -> Result<Box<dyn LiveSession>, &'static str>;
+}
+
+/// A message of an INBOX as it was last stored: where it is, by UID and Message-ID, and what the classifier reads of it
+/// again.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InboxCopy {
+    pub uid: i64,
+    pub message_id: Option<String>,
+    pub stored: Stored,
+}
+
+/// The INBOX as it was last stored, which a sweep's preview reads in place of the server once it is all there.
+pub trait ScannedInbox: Send + Sync + fmt::Debug {
+    /// Each message the account's INBOX holds as stored, mail on its way out left out, once a first scan has read the
+    /// INBOX whole (`sync_state.scan_state` `synced`); None while it hasn't, when only the server can say what it holds.
+    fn scanned(&self, account: &str) -> Result<Option<Vec<InboxCopy>>, Fault>;
 }
 
 /// What a sweep and expiry leave of the stored mail they moved, each named by (UID, Message-ID).

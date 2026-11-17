@@ -369,6 +369,7 @@ impl Cleanups {
             sweeps: Sweeps::new(SweepsParts {
                 rules: store.clone(),
                 boxes,
+                stored: database,
                 audit: store.clone(),
                 rows: store,
                 filing,
