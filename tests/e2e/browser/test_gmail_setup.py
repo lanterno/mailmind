@@ -133,8 +133,9 @@ def test_any_other_address_is_other_imap_with_its_outgoing_server_sent_as_typed(
 def test_a_connection_is_tested_as_soon_as_it_is_saved_and_a_refusal_said_plainly(page, world, fake_keychain):
     entry = world.add_account(DEE, password="abcdefghijklmnop")
     fake_keychain.delete(f"account:{DEE}")
+    # Google refuses every login so, as a sync the save starts may log in before the test does.
     world.server.fail("LOGIN", "NO [ALERT] Application-specific password required: "
-                      "https://support.google.com/accounts/answer/185833 (Failure)", user=DEE)
+                      "https://support.google.com/accounts/answer/185833 (Failure)", user=DEE, times=None)
     dialog = settings(page)
     page.get_by_role("button", name="+ Add a connection").click()
     dialog.get_by_label("Email", exact=True).fill(DEE)
