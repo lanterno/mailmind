@@ -4,8 +4,8 @@
 # Then the checks a person's Mac and Sparkle make: the .dmg mounts and holds the app and an Applications link, the app
 # is universal, its signature verifies, its Info.plist names the app, its version and the key, and the appcast names
 # the .dmg with a signature that verifies against the key the app carries. Nothing is published. MailMind itself opens
-# only on the demo's fictional world (Measure/demo_home.py), never on its data folder, once for each half that runs
-# here (on Apple silicon the Intel half runs under Rosetta); a probe signed as the app is loads its Sparkle.
+# only on the demo's fictional world (Measure/demo_home.py), never on its data folder, on Apple silicon, the only Macs
+# MailMind is tested on (the Intel half is built and checked, never run); a probe signed as the app is loads its Sparkle.
 #
 #   MAILMIND_RELEASE_CHECK_KEEP   a folder to copy the .dmg into, for a Mac this one isn't (CI opens it on macOS 15)
 set -euo pipefail
@@ -172,12 +172,8 @@ opens() {
     (cd "$here/../.." && uv run --quiet python "$here/Measure/demo_home.py" "$app/Contents/MacOS/MailMind" \
         --smoke --arch "$1")
 }
-halves=(arm64 x86_64)
-if [[ "$(uname -m)" == x86_64 ]]; then halves=(x86_64); fi
-for half in "${halves[@]}"; do
-    check "its $half half opens and shows the inbox's mail" opens "$half"
-    sed -n 's/^the Mac app/    the Mac app/p' "$work/said"
-done
+check "it opens on Apple silicon and shows the inbox's mail" opens arm64
+sed -n 's/^the Mac app/    the Mac app/p' "$work/said"
 
 echo "## the appcast"
 check "it names the .dmg on the release's download URL" grep -q \

@@ -72,7 +72,7 @@ def command(app, arch):
     halves = subprocess.run(["/usr/bin/lipo", "-archs", app], capture_output=True, text=True).stdout.split()
     if arch not in halves:
         sys.exit(f"This app holds {' and '.join(halves) or 'no code lipo can read'}, not {arch}. A release's app holds "
-                 "both: just apple release-check runs each.")
+                 "both; just apple release-check runs the Apple silicon half.")
     if subprocess.run(["/usr/bin/arch", f"-{arch}", "/usr/bin/true"], capture_output=True).returncode != 0:
         sys.exit(f"This Mac can't run {arch} code. On Apple silicon, Rosetta runs it: softwareupdate --install-rosetta")
     return ["/usr/bin/arch", f"-{arch}", app]
