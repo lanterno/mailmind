@@ -92,14 +92,15 @@ struct LaunchFailure: View {
     }
 
     /// That the mail on the servers is untouched, and what else there is to do: start fresh, where a new copy fixes
-    /// what went wrong, or else the step the core's words name, with the details for whoever gave you MailMind.
+    /// what went wrong, or else the step the core's words name, with the details for whoever gave you MailMind. Where
+    /// no new copy is offered, the words name no copy on this Mac: the core may have said none was made.
     static func safe(startsFresh: Bool) -> String {
         startsFresh ? String(localized: """
             Your mail on its servers is untouched: this is about the copy MailMind keeps on this Mac. Copy the details \
             and send them to whoever gave you MailMind, or start fresh with a new copy.
             """)
             : String(localized: """
-            Your mail on its servers is untouched, and so is the copy MailMind keeps on this Mac. Do what the words \
+            Your mail on its servers is untouched, and so is anything MailMind keeps on this Mac. Do what the words \
             above say; if that doesn’t help, copy the details and send them to whoever gave you MailMind.
             """)
     }
