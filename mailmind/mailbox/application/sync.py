@@ -29,6 +29,7 @@ from mailmind.platform.logging import get_logger
 
 log = get_logger("ingest")
 CUTOFF_DAYS = 90
+WHOLE_BELOW = 65_536    # a message shorter than this is kept whole as it syncs, as the Rust core's opening holds it
 HEADER_FIELDS = ("FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES",
                  "LIST-UNSUBSCRIBE", "LIST-UNSUBSCRIBE-POST", "LIST-ID")
 
@@ -118,7 +119,8 @@ class Ingest:
                  with_body: bool = False, advance: bool = True, stored: list[int] | None = None, arriving: bool = False,
                  flight: Flight | None = None) -> Stored:
         """Store ALL of the given UIDs (junk kept as a badge, with flags) for the folder `session`
-        has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet);
+        has selected. Bodies are fetched only when with_body (INBOX, for the AI snippet), and one
+        shorter than WHOLE_BELOW, or carrying an invite, is kept as opening it would keep it;
         other folders get headers+flags only (fast) and fetch the body lazily on open.
         advance=False stores them without touching the folder's watermark: only a sync that has
         seen every UID up to a point may say the folder is synced to there.
@@ -159,7 +161,7 @@ class Ingest:
                              "recipients": ingested.recipients_text(dec(msg.get("To", "")), dec(msg.get("Cc", "")))})
         queued = False
         for r in rows:
-            snippet, invite = "", None
+            snippet, body = "", None
             if with_body and not r["is_junk"]:
                 try:
                     try:
@@ -171,7 +173,9 @@ class Ingest:
                         raw = b""
                     msg = email.message_from_bytes(raw)
                     snippet = text_body(msg)
-                    invite = raw if mime.has_invite(msg) else None
+                    # Kept whole where the Rust core's opening of it would hold all of it, and an invite whatever its
+                    # size; the rest waits for the body backfill or to be opened.
+                    body = raw if raw and (len(raw) < WHOLE_BELOW or mime.has_invite(msg)) else None
                 except Exception:
                     snippet = ""
             if flight is not None:
@@ -197,11 +201,11 @@ class Ingest:
                 self._index.index_message(c, pk)           # refresh FTS so recipients is searchable immediately
                 if news and self._apply_filters(c, pk):
                     queued = True
-                if invite:                       # Today & next reads invites from stored bodies only
+                if body:                         # as opening it keeps it; Today & next reads invites from stored bodies only
                     try:
-                        self._keep_body(c, pk, invite, mime.parse(invite))
+                        self._keep_body(c, pk, body, mime.parse(body))
                     except Exception as e:
-                        log.warning("keep invite %(account)s uid %(id)s", {"account": acct["email"], "id": r["uid"]}, exc_info=e)
+                        log.warning("keep body %(account)s uid %(id)s", {"account": acct["email"], "id": r["uid"]}, exc_info=e)
         if queued:
             self._curation.flags_queued()
         if flight is not None:
