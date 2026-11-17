@@ -95,6 +95,13 @@ entitled() {
 }
 check "with the entitlement that lets it load Sparkle" entitled
 check "its identifier is io.github.lanterno.mailmind" equal "$(plist "$app" CFBundleIdentifier)" io.github.lanterno.mailmind
+floor="$(sed -n 's/^ *macOS: *"\(.*\)"$/\1/p' "$here/project.yml")"
+check "it runs from macOS $floor, project.yml's floor" equal "$(plist "$app" LSMinimumSystemVersion)" "$floor"
+built_for() {
+    xcrun vtool -show-build "$app/Contents/MacOS/MailMind" | tee "$work/build-version"
+    [[ "$(grep -c "minos $floor\$" "$work/build-version")" == 2 ]]
+}
+check "and both its halves are built for macOS $floor" built_for
 check "its version is project.yml's, $version" equal "$(plist "$app" CFBundleShortVersionString)" "$version"
 check "and so is its build number" equal "$(plist "$app" CFBundleVersion)" "$version"
 check "it carries the update key it was signed for" equal "$(plist "$app" SUPublicEDKey)" "$public"
@@ -153,6 +160,8 @@ echo "## the appcast"
 check "it names the .dmg on the release's download URL" grep -q \
     "url=\"https://github.com/lanterno/mailmind/releases/download/v$version/MailMind-$version.dmg\"" "$appcast"
 check "its version is $version" grep -q "<sparkle:version>$version</sparkle:version>" "$appcast"
+check "and it needs macOS $floor, as the app does" \
+    grep -q "<sparkle:minimumSystemVersion>$floor</sparkle:minimumSystemVersion>" "$appcast"
 check "the .dmg's signature verifies against the key the app carries" \
     "$work/eddsa" verify-appcast "$appcast" "$dmg" "$public"
 signature="$(sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' "$appcast")"
