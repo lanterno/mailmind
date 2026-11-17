@@ -43,14 +43,21 @@ just gen-bindings       # after a change to the core's contract: rewrites Genera
 just apple icon         # the Mac app's icon, drawn by Icon/icon.swift into Icon/Assets.xcassets (commit the images on their own)
 just apple fonts        # Meadow's typefaces, joined from the page's by Fonts/fonts.py into Fonts/*.ttf (commit them on their own)
 just apple release      # the Mac app universal, signed ad hoc, in a .dmg with its appcast: build/release (docs/releasing.md)
-just apple release-check  # the release recipe end to end with a throwaway update key, then checks on what it made
+just apple release-check  # the release recipe end to end with a throwaway update key, then checks on what it made,
+                          # and opens each half of its app on fictional mail (on Apple silicon, Intel's under Rosetta)
 ```
 
 Needs Xcode 26 with the iOS and macOS 26 SDKs, XcodeGen (`brew install xcodegen`), and the core's Rust toolchain
 with the `aarch64-apple-ios`, `aarch64-apple-ios-sim` and `aarch64-apple-darwin` targets, and `x86_64-apple-darwin` for
-a release (`core/rust-toolchain.toml` names them all). iOS builds compile without a simulator runtime; running one needs
-a simulator or a device (`just apple smoke ios` uses the newest iPhone simulator). The first build fetches Sparkle
-through Swift Package Manager.
+a release (`core/rust-toolchain.toml` names them all), and on Apple silicon Rosetta for the release check
+(`softwareupdate --install-rosetta`). iOS builds compile without a simulator runtime; running one needs a simulator or
+a device (`just apple smoke ios` uses the newest iPhone simulator). The first build fetches Sparkle through Swift
+Package Manager.
+
+The Mac app runs from macOS 15, the iPhone and iPad app from iOS 26: `deploymentTarget` in `project.yml`, which the
+core is built for too. An API newer than that fails the build; use it behind `if #available(macOS 26, *)` with a
+fallback that keeps Meadow's look. The tests run on the Mac they're built on, so a test of such an API is marked
+`@available` too. `Measure/demo_home.py APP --smoke --arch x86_64` runs a universal app's Intel half on fictional mail.
 
 The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `project.yml`;
 [docs/releasing.md](../../docs/releasing.md) says how a release is cut and what the owner does once.
@@ -89,7 +96,7 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
 | `Sources/Mac/Attention/` | Snooze (its presets and a time of a person's own), mute, Reply Later and follow-ups: the model, the commands for the mailbox's keys, palette and row menu, and the menu items. |
 | `Sources/Mac/Calendar/` | An invite's RSVP and its Undo, adding it to the calendar, and how an event's time is said (`Upcoming`). |
 | `Generator/swift_api.py` | Writes `API.gen.swift` from the OpenAPI document `tests/support/openapi_doc.py` makes. `just apple check-api`, in `just verify`, fails when the two differ. |
-| `Measure/` | `measure.sh` and the probes it compiles (the crossing cost, a web view's memory), `smoke.sh`, which CI runs, and `demo_home.py`, which `just apple demo` runs (and its `smoke`, `measure` and `picture`). |
+| `Measure/` | `measure.sh` and the probes it compiles (the crossing cost, a web view's memory), `smoke.sh`, which CI runs, and `demo_home.py`, which `just apple demo` runs (and its `smoke`, `measure` and `picture`), and the release check on each half of the release's app (`--arch`). |
 | `build/` | The XCFramework, derived data, measurements and releases. Ignored by git. |
 
 ## Rules
@@ -129,7 +136,9 @@ The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `pr
   panel or shown in Quick Look, never opened by the app.
 - **Fixtures are fictional.** Every address is at example.test, and the fixture key guards only fictional mail.
 - **Only a release checks for updates.** `MAILMIND_CHECKS_FOR_UPDATES` stays `NO` in `Release/mac.yml`; only
-  `just apple release` turns it on. A debug build, `just apple build`'s, a test or a demo never asks the network.
+  `just apple release` turns it on. A debug build, `just apple build`'s, a test or a demo never asks the network, and
+  a release's copy starts Sparkle only in a person's run (`CoreHome.isAPersonsRun`): the release check opens it on a
+  demo's home, and Sparkle keeps its state in the defaults that run shares with the person's own MailMind.
 - **The update key's private half is the owner's alone,** in their login Keychain. Only its public half is in the
   repo (`SPARKLE_PUBLIC_KEY`). A test signs with a throwaway key made for it, never the Keychain's.
 - **A release is published by the owner,** with the `gh release create` command `just apple release` prints.
