@@ -18,14 +18,16 @@
 //!   as it comes back rather than kept.
 //! - One lost, or failing otherwise, while lent is closed and not kept.
 //! - A wake or a change of network (`woke`) closes them all at once, saying nothing to servers that may be gone; a
-//!   change to an account, or its removal (`forget`), closes its own; and a quit (`close`) logs each out.
+//!   change to an account, or its removal (`forget`), closes its own; and a quit (`close`) logs them all out together,
+//!   waiting `QUIT_SECONDS` at most.
 //!
 //! What it counts, and how each connection stands, is `stats`: counts and ages, never an account.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, mpsc};
+use std::time::{Duration, Instant};
 
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::Clock;
@@ -40,6 +42,9 @@ pub const CHECK_SECONDS: u64 = 10;
 /// What a LOGOUT waits for its answer as a kept connection closes: a quit, or an account changed, waits no longer on a
 /// server that has gone quiet.
 pub const LOGOUT_SECONDS: u64 = 3;
+/// What a quit waits, at most, for the LOGOUTs it sends together: a Mac whose network went away quits this soon, however
+/// many accounts it has.
+pub const QUIT_SECONDS: u64 = LOGOUT_SECONDS + 1;
 
 /// What a server says to a command that needs a folder selected before one is: a refusal, which mm-imap names
 /// `error`, as it names every NO and BAD.
@@ -260,14 +265,30 @@ impl KeptServers {
         }
     }
 
-    /// The app is closing: each connection kept is logged out, and one lent as it comes back. None is kept after.
+    /// The app is closing: the connections kept are logged out all at once, each on a thread of its own, and the quit
+    /// waits `QUIT_SECONDS` at most for them; one whose server doesn't answer by then is left to close as the process
+    /// ends. One lent is logged out as it comes back. None is kept after.
     pub fn close(&self) {
         self.shared.closed.store(true, Ordering::SeqCst);
         let slots: Vec<Arc<Slot>> = locked(&self.shared.slots).drain().map(|(_, slot)| slot).collect();
-        for slot in slots {
-            let held = locked(&slot.kept).take();
-            if let Some(kept) = held {
+        let held: Vec<Kept> = slots.iter().filter_map(|slot| locked(&slot.kept).take()).collect();
+        let deadline = Instant::now() + Duration::from_secs(QUIT_SECONDS);
+        let (done, all_done) = mpsc::channel();
+        let mut going = 0;
+        for kept in held {
+            let done = done.clone();
+            let logout = move || {
                 kept.close(true);
+                let _ = done.send(());
+            };
+            // Where no thread can be had, the connection closes as it drops, without a LOGOUT.
+            if std::thread::Builder::new().name("kept-logout".to_owned()).spawn(logout).is_ok() {
+                going += 1;
+            }
+        }
+        for _ in 0..going {
+            if all_done.recv_timeout(deadline.saturating_duration_since(Instant::now())).is_err() {
+                break;
             }
         }
     }
