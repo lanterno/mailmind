@@ -301,6 +301,28 @@ def test_background_summaries_read_the_inbox_alone(app, ai):
     assert app.get("/api/digest").json["ai"]["summaries_waiting"] == 0
 
 
+def test_since_you_last_looked_and_the_brief_read_the_inbox_alone(app, world, ai):
+    """Both are written with no one asking, as the new-mail pill shows and as the Inbox opens: what a person sent,
+    drafted, filed or deleted since goes to no provider, and nor does what triage summarized before it was filed."""
+    triaged(app, ai)
+    assert app.post("/api/archive", world.copy("bea-inbox-01-client.eml")).status == 200        # summarized, then filed
+    app.work("commands")
+    for folder, name, subject in (("Sent", "ada-sent-01-lunch-reply.eml", "Sent just now"),
+                                  ("Trash", "ada-trash-01-promo.eml", "Trashed just now")):
+        world.deliver(w.ADA, folder, w.variant(name, Message_ID=f"<{folder}-now@example.test>", Subject=subject,
+                                               Date="Mon, 02 Nov 2026 11:40:00 +0000"))
+    world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<lunch-5@example.test>",
+                                            Subject="Re: Lunch, running late", Date="Mon, 02 Nov 2026 11:50:00 +0000"))
+    ai.requests.clear()
+    assert app.post("/api/briefing/since", {"since": 0}).json["count"] > 0
+    assert app.post("/api/briefing", {}).status == 200
+    asked = [r.prompt for r in ai.requests]
+    assert len(asked) == 2 and "Re: Lunch, running late" in asked[0]
+    for subject in ("Notes for the review", "Re: Contract draft v2", "Sent just now", "Trashed just now",
+                    "— Contract draft v2"):
+        assert not [p for p in asked if subject in p], subject
+
+
 NO_CREDIT = fa.error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. "
                                                  "Please go to Plans & Billing to upgrade or purchase credits.")
 
