@@ -179,6 +179,20 @@ def test_a_send_read_only_refuses_comes_back_to_its_composer_and_nothing_waits_t
     clean(page)
 
 
+def test_a_draft_saved_read_only_is_kept_on_this_mac_and_the_tray_says_so(read_only, page):
+    opened(page)
+    page.keyboard.press("c")
+    page.get_by_role("textbox", name="subject").fill("Thread colours")
+    page.get_by_role("textbox", name="message body").fill("Which blue did you mean?")
+    page.keyboard.press("Escape")                         # closing saves it, here
+    page.locator("#outboxBtn").click()
+    fly = page.locator("#outboxFly")
+    draft = fly.locator(".ob-row", has_text="Thread colours")
+    expect(draft).to_contain_text("Kept on this Mac")
+    expect(fly).not_to_contain_text("full run")
+    clean(page)
+
+
 def test_opening_unread_mail_read_only_leaves_it_unread_and_asks_no_server(read_only, page, world):
     opened(page)
     receipt = row(page, world, RECEIPT)
