@@ -25,13 +25,9 @@
    "ok": true,
    "profile": "read-only",
    "queues": {
-    "commands": {
-     "queued": 1
-    },
+    "commands": {},
     "drafts_waiting": 0,
-    "outbox": {
-     "queued": 1
-    }
+    "outbox": {}
    }
   },
   "headers": {
@@ -50,25 +46,17 @@
  {
   "note": "59 seconds on",
   "value": {
-   "commands": {
-    "queued": 1
-   },
+   "commands": {},
    "drafts_waiting": 0,
-   "outbox": {
-    "queued": 1
-   }
+   "outbox": {}
   }
  },
  {
   "note": "a minute on",
   "value": {
-   "commands": {
-    "queued": 1
-   },
+   "commands": {},
    "drafts_waiting": 1,
-   "outbox": {
-    "queued": 1
-   }
+   "outbox": {}
   }
  }
 ]

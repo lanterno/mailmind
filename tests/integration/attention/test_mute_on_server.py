@@ -3,6 +3,7 @@ change, and Undo marks unread again only what muting marked read. What Muting as
 tests/unit/attention/test_mute_on_server.py's."""
 from datetime import timedelta
 
+import problems
 from fixtures import world as w
 from mailmind.bootstrap import attention
 from mailmind.bootstrap import background
@@ -157,16 +158,25 @@ def test_a_reply_after_a_marked_one_is_marked_as_well(app, world):
                if b"mute-" in m.raw)
 
 
-def test_read_only_mutes_and_the_mark_waits_in_the_queue(app, world, monkeypatch):
+def test_read_only_refuses_a_mute_and_the_thread_stays_as_it_was(app, world, monkeypatch):
+    """A mute marks its thread read on the server: read-only, it is refused before anything is written, so nothing
+    waits for a run that writes."""
     from mailmind.bootstrap.mailbox import commands
+    from mailmind.bootstrap.mailbox import store
     lunch, uid = thread_with_a_reply(world)
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
     since = world.mark()
-    assert app.post("/api/mute", named(lunch)).json["ok"]
+    r = app.post("/api/mute", named(lunch))
+    assert (r.status, r.json) == (409, problems.read_only())
     commands.drain()
     assert world.writes(since) == []
-    assert row_of(uid)["seen"] == 1
-    assert app.get("/api/pending").json["waiting"] >= 1
+    assert row_of(uid)["seen"] == 0
+    assert app.get("/api/pending").json["waiting"] == 0
+    c = store.conn()
+    try:
+        assert c.execute("SELECT COUNT(*) FROM muted").fetchone()[0] == 0
+    finally:
+        c.close()
 
 
 def test_finished_queue_rows_go_after_a_month(app, world):

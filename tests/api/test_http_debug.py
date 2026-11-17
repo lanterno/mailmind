@@ -135,13 +135,13 @@ def test_the_health_counts_what_waits_in_each_queue_by_its_state(app, golden, wo
     golden.record("once a pass of each has run", no_address(app.get("/api/debug/health")))
 
 
-def test_read_only_a_change_waits_in_its_queue_and_a_save_is_named_once_due(app, golden, world):
-    """Read-only, nothing reaches a mail server: a change waits for a full run, and with no push job to wait for, a save
-    is named as soon as its push is due."""
+def test_read_only_a_change_is_refused_and_a_save_is_named_once_due(app, golden, world):
+    """Read-only, nothing reaches a mail server: a change or a send is refused, and no queue holds it for a full run. A
+    save is kept here, and with no push job to wait for, it is named as soon as its push is due."""
     app.env["MAILMIND_PROFILE"] = "read-only"
     app.restart()
-    assert app.post("/api/archive", world.copy("ada-inbox-05-receipt.eml")).json["status"] == "queued"
-    assert send(app).json["ok"]
+    assert app.post("/api/archive", world.copy("ada-inbox-05-receipt.eml")).status == 409
+    assert send(app).status == 409
     assert autosave(app).json["ok"]
     golden.record("at a glance", no_address(app.get("/api/debug/health")))
     app.clock.shift(timedelta(seconds=59))

@@ -3,6 +3,7 @@ that wakes is unread on the server too, or the next sync that read its flags wou
 queue is tests/unit/attention/test_snooze_durable.py's."""
 from datetime import datetime, timedelta, timezone
 
+import problems
 from fixtures import world as w
 from mailmind.bootstrap import attention
 from mailmind.platform import undo
@@ -201,10 +202,25 @@ def test_a_server_that_refuses_the_mark_doesnt_lose_the_message(app, world):
     assert world.row(CI)["subject"] in listed(app)
 
 
-def test_read_only_wakes_and_the_mark_waits_in_the_queue(world, monkeypatch, app):
-    from mailmind.bootstrap.mailbox import commands
+def test_read_only_refuses_a_snooze_and_hides_nothing(world, monkeypatch, app):
+    """A snooze's waking marks its mail unread on the server: read-only, it is refused before anything is hidden."""
+    from mailmind.bootstrap.mailbox import store
+    shown = listed(app)
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
+    r = app.post("/api/snooze", {**world.copy(RECEIPT), "until": until(app)})
+    assert (r.status, r.json) == (409, problems.read_only())
+    assert listed(app) == shown
+    c = store.conn()
+    try:
+        assert c.execute("SELECT COUNT(*) FROM snoozes").fetchone()[0] == 0
+    finally:
+        c.close()
+
+
+def test_read_only_wakes_what_a_full_run_snoozed_and_the_mark_waits_in_the_queue(world, monkeypatch, app):
+    from mailmind.bootstrap.mailbox import commands
     snooze(app, world, CI)
+    monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
     app.clock.shift(timedelta(hours=7))
     since = world.mark()
     attention.snoozing.wake_due()

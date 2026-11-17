@@ -124,13 +124,17 @@ def read_only(monkeypatch):
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
 
 
-def test_read_only_says_what_it_files_waits_for(read_only, page, world):
+def test_read_only_refuses_what_it_files_and_the_row_stays(read_only, page, world):
+    """Read-only, an archive is refused before anything is queued: nothing waits for a full run, and the row comes back."""
     opened(page)
     expect(page.locator("#statusTxt")).to_have_text("Read-only")
     receipt = row(page, world, RECEIPT)
     receipt.click()
     page.keyboard.press("e")
-    expect(page.locator("#toast")).to_have_text("Archived · waits for a full run")
+    expect(page.locator("#toast")).to_have_text("Couldn’t archive")
+    expect(row(page, world, RECEIPT)).to_have_count(1)
+    assert all("status of 409" in p for p in page.problems), page.problems     # the refusal
+    page.problems.clear()
     clean(page)
 
 

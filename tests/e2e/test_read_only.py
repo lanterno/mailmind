@@ -1,10 +1,11 @@
 """The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
 
-Moves, flag changes and sends wait in their queues, and a full run applies them. What can't wait
-there (a draft, a sweep, an unsubscribe) is refused, with a 409 that says why. Below that, a read-only
-process's IMAP connections open every mailbox with EXAMINE and refuse any command that could
-change mail before it is sent, and it opens no SMTP session. Each test runs read-only through
-MAILMIND_PROFILE until it calls `read_only.end()`, and checks what the fake servers saw.
+A change a person asks for that would reach a server (a move, a flag change, a send, a sweep, a
+cleanup, a draft's copy removed) is refused with a 409 that says why, before anything is queued or
+hidden here, so nothing waits for a full run. A draft is kept here, and a full run pushes it. Below
+that, a read-only process's IMAP connections open every mailbox with EXAMINE and refuse any command
+that could change mail before it is sent, and it opens no SMTP session. Each test runs read-only
+through MAILMIND_PROFILE until it calls `read_only.end()`, and checks what the fake servers saw.
 """
 from datetime import timedelta
 
@@ -111,75 +112,55 @@ def test_it_opens_no_smtp_session(world, read_only):
     assert len(world.smtp.commands) == before and world.smtp.messages == []
 
 
-# -- what waits in a queue ----------------------------------------------------
+# -- what is refused, and waits for nothing -------------------------------------
 
-def test_moves_wait_in_the_queue_until_a_full_run_applies_them(app, world, read_only):
+def test_a_move_is_refused_and_no_full_run_applies_it_later(app, world, read_only):
     from mailmind.bootstrap.mailbox import commands
     since = world.mark()
-    for path, name, extra in (("/api/archive", RECEIPT, {}), ("/api/trash", SCAM, {}),
-                              ("/api/junk", NEWSLETTER, {}), ("/api/archive", CI, {})):
-        r = app.post(path, {**world.copy(name), "mutation_id": f"m-{name}", **extra}).json
-        assert (r["ok"], r["status"]) == (True, "queued"), (path, r)
-    assert app.post("/api/thread/archive", world.copy(LUNCH_CONFIRM)).json["ok"]
-    commands.drain()                                                   # a read-only drain does nothing
-    assert world.writes(since) == []
-    assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"queued"}
-    assert q("SELECT max(attempts) n FROM mail_commands") == [{"n": 0}]
-    assert on_server(world, RECEIPT) == [(w.ADA, "INBOX")]
+    for path, name in (("/api/archive", RECEIPT), ("/api/trash", SCAM), ("/api/junk", NEWSLETTER),
+                       ("/api/archive", CI), ("/api/thread/archive", LUNCH_CONFIRM)):
+        r = app.post(path, {**world.copy(name), "mutation_id": f"m-{name}"})
+        assert (r.status, r.json) == (409, REFUSED), path
+    assert q("SELECT id FROM mail_commands") == []
     listed = [{"key": m["key"], "folder": m["folder"], "uid": m["uid"]} for m in app.get(f"/api/messages?account={w.ADA}&folder=INBOX").json["items"]]
-    assert not [n for n in (RECEIPT, SCAM, NEWSLETTER, CI, LUNCH_CONFIRM) if world.copy(n) in listed]
+    assert [n for n in (RECEIPT, SCAM, NEWSLETTER, CI, LUNCH_CONFIRM) if world.copy(n) in listed] == [RECEIPT, SCAM, NEWSLETTER, CI, LUNCH_CONFIRM]
 
     read_only.end()
     commands.drain()
-    assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"done"}
-    assert on_server(world, RECEIPT) == [(w.ADA, "Archive")]
-    assert on_server(world, SCAM) == [(w.ADA, "Trash")]
-    assert on_server(world, NEWSLETTER) == [(w.ADA, "Junk")]
-    assert on_server(world, CI) == [(w.ADA, "Archive")]
-    assert (w.ADA, "INBOX") not in on_server(world, LUNCH_CONFIRM)
-
-
-def test_undo_takes_a_waiting_move_back_without_a_write(app, world, read_only):
-    since = world.mark()
-    assert app.post("/api/archive", world.copy(RECEIPT)).json["status"] == "queued"
-    assert app.post("/api/undo", {}).json["ok"]
-    assert q("SELECT id FROM mail_commands") == []
     assert world.writes(since) == []
-    assert [(d["account"], d["folder"]) for d in world.where(RECEIPT)["db"]] == [(w.ADA, "INBOX")]
+    assert on_server(world, RECEIPT) == [(w.ADA, "INBOX")]
 
 
-def test_a_send_waits_in_the_outbox_until_a_full_run_sends_it(app, world, read_only):
+def test_a_refused_move_leaves_nothing_to_undo(app, world, read_only):
+    assert app.post("/api/archive", world.copy(RECEIPT)).status == 409
+    r = app.post("/api/undo", {})
+    assert r.status == 404 and r.json["empty"] is True
+
+
+def test_a_send_is_refused_and_no_full_run_sends_it_later(app, world, read_only):
     from mailmind.bootstrap.compose import outbox
-    oid = app.post("/api/send", send(idempotency_key="k-wait")).json["outbox_id"]
+    r = app.post("/api/send", send(idempotency_key="k-wait"))
+    assert (r.status, r.json) == (409, REFUSED)
+    assert q("SELECT id FROM outbox") == []
+
+    read_only.end()
     app.clock.shift(timedelta(seconds=outbox.SEND_DELAY + 1))
     outbox.drain()
-    assert q("SELECT state, attempts FROM outbox WHERE id=?", oid) == [{"state": "queued", "attempts": 0}]
     assert world.smtp.messages == []
 
-    read_only.end()
-    outbox.drain()
-    assert q("SELECT state FROM outbox WHERE id=?", oid) == [{"state": "sent"}]
-    assert [m.rcpts for m in world.smtp.messages] == [["lin@example.test"]]
 
-
-def test_a_flag_change_waits_in_the_queue_until_a_full_run_applies_it(app, world, read_only):
+def test_a_flag_change_is_refused_and_the_row_stays_as_it_was(app, world, read_only):
     from mailmind.bootstrap.mailbox import commands
     since = world.mark()
-    for path, body in (("/api/seen", {"seen": True}), ("/api/flag", {"flag": "flagged", "on": True})):
+    was = {k: world.where(RECEIPT)["db"][0][k] for k in ("seen", "flagged")}
+    for path, body in (("/api/seen", {"seen": not was["seen"]}), ("/api/flag", {"flag": "flagged", "on": True})):
         r = app.post(path, {**world.copy(RECEIPT), **body})
-        assert (r.status, r.json["status"]) == (200, "queued"), path
-    commands.drain()                                                   # a read-only drain does nothing
-    assert world.writes(since) == []
-    assert {k: world.where(RECEIPT)["db"][0][k] for k in ("seen", "flagged")} == {"seen": 1, "flagged": 1}
+        assert (r.status, r.json) == (409, REFUSED), path
+    assert {k: world.where(RECEIPT)["db"][0][k] for k in ("seen", "flagged")} == was
 
     read_only.end()
     commands.drain()
-    assert {r["state"] for r in q("SELECT state FROM mail_commands")} == {"done"}
-    [(_, _, _, flags)] = world.where(RECEIPT)["server"]
-    assert {w.SEEN, "\\Flagged"} <= set(flags)
-
-
-# -- what is refused ----------------------------------------------------------
+    assert q("SELECT id FROM mail_commands") == [] and world.writes(since) == []
 
 
 def test_a_draft_waits_here_until_a_full_run_pushes_it(app, world, read_only):
@@ -195,18 +176,19 @@ def test_a_draft_waits_here_until_a_full_run_pushes_it(app, world, read_only):
     assert app.get("/api/outbox").json["drafts"] == []
 
 
-def test_a_discard_waits_too(app, world, read_only):
+def test_a_discard_that_would_take_a_copy_off_the_server_is_refused(app, world, read_only):
     from mailmind.bootstrap.compose import drafts
     read_only.end()
     saved = app.post("/api/draft", send(subject="Fabric order (draft)")).json
+    assert saved["pushed"] is True
     monkey_env = read_only.again()
     since = world.mark()
     r = app.post("/api/draft", {"delete": True, "draft_id": saved["draft_id"]})
-    assert r.status == 200 and r.json["deleted"] is True
-    assert world.writes(since) == [] and world.server.find(w.ADA, "Drafts", saved["message_id"])
+    assert (r.status, r.json) == (409, REFUSED)
+    assert q("SELECT id FROM drafts WHERE id=?", saved["draft_id"]) == [{"id": saved["draft_id"]}]
     monkey_env()
-    drafts.push_round()
-    assert not world.server.find(w.ADA, "Drafts", saved["message_id"])
+    drafts.push_round()                                                # nothing was asked of it
+    assert world.writes(since) == [] and world.server.find(w.ADA, "Drafts", saved["message_id"])
 
 
 def test_a_sweep_is_refused_but_its_dry_run_still_plans(app, world, read_only):
@@ -218,7 +200,7 @@ def test_a_sweep_is_refused_but_its_dry_run_still_plans(app, world, read_only):
     assert world.writes(since) == []
 
 
-def test_a_cleanup_blocks_and_queues_its_moves_but_sends_no_unsubscribe(app, world, read_only, monkeypatch):
+def test_a_cleanup_is_refused_and_blocks_moves_and_sends_nothing(app, world, read_only, monkeypatch):
     posts = []
     monkeypatch.setattr(safe_http, "one_click_post", lambda url, _redirects=1: posts.append(url))
     mid = "<issue-219@loom.example.test>"                             # one-click, filed where the sweep can't reach
@@ -230,9 +212,10 @@ def test_a_cleanup_blocks_and_queues_its_moves_but_sends_no_unsubscribe(app, wor
     assert plan["unsub"]["method"] == "one-click"
     since = world.mark()
     r = app.post("/api/cleanup/execute", {"from_addr": LOOM, "do_unsubscribe": True,
-                                          "confirm_token": plan["confirm_token"]}).json
-    assert (r["ok"], r["status"], r["sweep_queued"]) == (True, "read_only", 1)
+                                          "confirm_token": plan["confirm_token"]})
+    assert (r.status, r.json) == (409, REFUSED)
     assert posts == [] and world.smtp.messages == [] and world.writes(since) == []
+    assert q("SELECT id FROM mail_commands") == [] and LOOM not in str(app.get("/api/rules").json["rules"])
     assert q("SELECT * FROM unsub_log") == []                          # not latched: a full run can still send it
 
 

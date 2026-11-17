@@ -182,14 +182,15 @@ def test_with_nothing_built_it_runs_says_so_once_and_the_page_says_how(tmp_path)
 
 
 def test_undo_outlives_a_restart(world, tiny_build):
-    """Archived in one run, undone in the next. Both run read-only, so the archive waits in the queue and its Undo asks
-    no server."""
+    """Snoozed in one run, undone in the next. That one runs read-only, which refuses a snooze but takes one back, since
+    its Undo asks no server."""
+    import time
     from fixtures import world as w
+    from mailmind.bootstrap import attention
     receipt = world.copy("ada-inbox-05-receipt.eml")
-    with serving(world.dir, tiny_build) as port:
-        assert post(port, "/api/archive", receipt)["status"] == "queued"
+    attention.snoozing.snooze({"pks": [world.pk("ada-inbox-05-receipt.eml")], "until": int(time.time()) + 6 * 3600})
     with serving(world.dir, tiny_build) as port:
         r = post(port, "/api/undo", {})
-        assert (r["ok"], r["label"], r["remaining"]) == (True, "Archived", 0)
+        assert (r["ok"], r["label"], r["remaining"]) == (True, "Snoozed", 0)
         listed = json.loads(get(port, f"/api/messages?account={w.ADA}&limit=200")[1])["items"]
         assert receipt in [{"key": it["key"], "folder": it["folder"], "uid": it["uid"]} for it in listed]

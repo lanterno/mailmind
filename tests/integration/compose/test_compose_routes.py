@@ -258,7 +258,7 @@ def _raises(error):
 def test_what_a_send_raises(app, monkeypatch):
     for error, status, answer in ((RuntimeError(SECRET), 500, problems.blank(500, "send failed")),
                                   (KeyError(SECRET), 500, problems.blank(500, "send failed")),
-                                  (profile.ReadOnlyError(SECRET), 500, problems.blank(500, "send failed")),
+                                  (profile.ReadOnlyError("a send"), 409, problems.read_only()),
                                   (ValueError("our own words"), 400, problems.refused("our own words")),
                                   (NotFound("not there"), 404, problems.not_found("not there"))):
         monkeypatch.setattr(compose.sending, "send", _raises(error))
