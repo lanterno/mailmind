@@ -115,8 +115,9 @@ jobs:
         run: |
           xcode=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)
           if [ -n "$xcode" ]; then sudo xcode-select -s "$xcode"; fi
-          xcodebuild -version
-          xcodebuild -version | head -n 1 | grep -q '^Xcode 26' || { echo "::error::This runner has no Xcode 26"; exit 1; }
+          version=$(xcodebuild -version)   # read whole: a pipe closed early by head ends xcodebuild with SIGPIPE
+          echo "$version"
+          [[ "$version" == "Xcode 26"* ]] || { echo "::error::This runner has no Xcode 26"; exit 1; }
 
       - name: Rust, as core/rust-toolchain.toml pins it (with the iOS targets)
         working-directory: core
