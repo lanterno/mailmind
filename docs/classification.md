@@ -40,7 +40,14 @@ An account's sweep (`Sweeps.sweep`, `mm_curation::sweeping`) reads the Inbox off
 it as it is now. Junk that is starred (`\Flagged`) or unread (no `\Seen`, or flags the server didn't say) stays, and
 the answer counts it (`held_back`). It takes the newest `SWEEP_MAX` (500) of the rest by UID and says when that left
 some (`capped`). A dry run's plan lists what goes (`going`): each junk bucket that has any, in the classifier's order,
-with its count, the `LISTED` (5) senders with the most of it and its newest five subjects. A real one audits, moves
+with its count, the `LISTED` (5) senders with the most of it and its newest five subjects. Once the account's first
+scan has read its Inbox whole (`sync_state.scan_state` `synced`), the dry run reads the stored Inbox instead
+(`Sweeps.preview`, the core's `ScannedInbox`), so it answers at once on an Inbox of any size, asks no server and waits
+for no gate: each row is read as a sweep reads one off the server (`sweep_plan.read_from_stored`), its List headers as
+ingest saw them (`listed`: its bucket or its kept way out) and its flags as the last sync left them. Until then (a
+first scan still reading older mail, `down-to:N`, or only warmed, `recent`) the dry run reads the server. Confirm always
+reads the Inbox off the server, once, and moves what it says is still junk, still read and still unstarred: junk
+starred or marked unread elsewhere since the last sync stays, and junk read elsewhere since may go too. It audits, moves
 and verifies as before, then puts a way back for each message that went under one undo group: the request's
 `undo_group`, or a `sweep:` one of its own, which the answer names (null when nothing went). Each child is a
 `sweep_back` from the Trash to the Inbox, an account's put back together on one session and found again by its
