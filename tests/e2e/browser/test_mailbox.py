@@ -791,6 +791,7 @@ def test_the_palette_finds_and_runs_a_command_and_escape_closes_it(page, world):
 
 def test_g_then_a_letter_goes_to_that_folder_by_its_role(page, world):
     opened(page)
+    expect(page.locator('#folderrail .frow[data-folder="Trash"]')).to_be_visible()   # the roles come with the folders
     page.keyboard.press("g")
     expect(page.locator("#toast")).to_contain_text("Go to folder")
     page.keyboard.press("t")
