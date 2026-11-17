@@ -6,7 +6,9 @@
 //! once the gate is had, since the job before may have fetched it.
 //!
 //! The body backfill fetches a folder's few messages at a time, as a prefetch gives way, and is told a lost connection
-//! apart from the rest (`try_bodies`). It asks for their openings several a FETCH, with each one's whole size: an
+//! apart from the rest (`try_bodies`). Once it has the gate it looks at each again, as a fetch does: one opened
+//! meanwhile has its body, and one moved or removed is no longer where the round found it, so neither is asked for. It
+//! asks for their openings several a FETCH, with each one's whole size: an
 //! opening that holds the whole message is kept as its body; one cut off is fetched whole, several a FETCH too, where
 //! the message is at most `WHOLE_MOST`; and a larger message keeps only its opening's text, which search indexes, so
 //! its attachments are fetched when it is opened.
@@ -145,10 +147,33 @@ impl Fetching {
         self.fetch_held(pk).map_err(fault)
     }
 
+    /// Of `messages`, those to ask for now the gate is held: each still `account`'s at its UID in `folder`, not on its
+    /// way out, with no body or text kept yet. One opened since the round found it has its body, and one moved,
+    /// removed or in a folder renamed meanwhile is no longer there.
+    fn still_wanted(&self, account: &str, folder: &str, messages: &[(i64, u32)]) -> Result<Vec<(i64, u32)>, Fault> {
+        let mut wanted = Vec::with_capacity(messages.len());
+        for &(pk, uid) in messages {
+            let Some(row) = self.stored.message(pk)? else { continue };
+            let there = text(&row, "account") == account
+                && text(&row, "folder") == folder
+                && row.get("uid").and_then(Value::as_i64) == Some(i64::from(uid))
+                && row.get("pending_removal").is_none_or(Value::is_null);
+            let without_text = row.get("body_text").is_none_or(Value::is_null);
+            if there && without_text && self.as_stored(pk, &row)?.is_none() {
+                wanted.push((pk, uid));
+            }
+        }
+        Ok(wanted)
+    }
+
     /// `try_bodies` with the gate held, on the session its account's jobs share.
     fn bodies_held(&self, account: &str, folder: &str, messages: &[(i64, u32)]) -> Result<(), ServerError> {
+        let messages = self.still_wanted(account, folder, messages).map_err(ServerError::Failed)?;
+        if messages.is_empty() {
+            return Ok(());
+        }
         let mut server = self.servers.open(account, TIMEOUT_SECONDS)?;
-        let read = self.read_bodies(&mut *server, folder, messages);
+        let read = self.read_bodies(&mut *server, folder, &messages);
         match read {
             Err(ServerError::Unreachable(_)) => server.shutdown(),
             _ => server.logout(),
