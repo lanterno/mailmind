@@ -15,7 +15,7 @@ const FROM = "ada@example.test";
 // What the page says of a change read only refused, as the page's env gives it; and that refusal, as the client throws it.
 const READ_ONLY = "Read only is on, so nothing was changed.";
 const refusedReadOnly = () => Object.assign(new Error("MailMind is running read-only"), { status: 409, readOnly: true });
-const flush =async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
 function setup(over: Partial<Env> = {}) {
   const calls: { path: string; body: Json }[] = [];
