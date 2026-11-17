@@ -264,19 +264,36 @@ final class AppStatus {
         return accounts.allSatisfy { mark(before, $0) != mark(after, $0) }
     }
 
-    /// What a person is told as a sync they asked for stops: done, which accounts couldn't sync (they are tried again
-    /// on their own), or that it goes on in the background.
+    /// What a person is told as a sync they asked for stops: done; which accounts couldn't sync, and either that they
+    /// are tried again on their own or, when one of them waits for the person, where to see what to do; or that it
+    /// goes on in the background.
     static func synced(before: [API.AccountStanding], after: [API.AccountStanding], accounts: [String], ended: Bool,
                        name: (String) -> String) -> String
     {
         guard ended else { return String(localized: "Still syncing. New mail shows as it comes.") }
         let failed = accounts.filter { !wentWell(before, after, $0) }
-        switch failed.count {
-        case 0: return String(localized: "Sync complete")
-        case 1: return String(localized: "Couldn’t sync \(name(failed[0])). MailMind tries again on its own.")
-        default: return String(localized: "Couldn’t sync \(failed.count) accounts. MailMind tries again on its own.")
+        guard let first = failed.first else { return String(localized: "Sync complete") }
+        if failed.contains(where: { waitsForYou(after, $0) }) {
+            return failed.count == 1
+                ? String(localized: "Couldn’t sync \(name(first)). Open Settings › Accounts to see what to do.")
+                : String(localized: "Couldn’t sync \(failed.count) accounts. Open Settings › Accounts to see what to do.")
         }
+        return failed.count == 1
+            ? String(localized: "Couldn’t sync \(name(first)). MailMind tries again on its own.")
+            : String(localized: "Couldn’t sync \(failed.count) accounts. MailMind tries again on its own.")
     }
+
+    /// Whether an account's record holds an error that waits for the person: a password turned down (the login hold
+    /// keeps the same one from trying again for a while), a certificate to trust, a server not reached, or one that
+    /// said no. Settings › Accounts says what to do about each (`StatusWords.syncProblem`). Trouble that may pass
+    /// (nothing recorded, a timeout) and a mailbox read again from the start need nothing.
+    private static func waitsForYou(_ after: [API.AccountStanding], _ account: String) -> Bool {
+        guard let record = after.first(where: { $0.account == account }), record.lastErrorTs != nil else { return false }
+        return !passesOnItsOwn.contains(record.lastErrorKind ?? "")
+    }
+
+    /// The sync errors MailMind gets past on its own, as `StatusWords.syncProblem` says of them.
+    private static let passesOnItsOwn: Set<String> = ["TIMEOUT", "UIDVALIDITY"]
 
     /// An account's record of its syncs, as far as telling a new one goes.
     private static func mark(_ records: [API.AccountStanding], _ account: String) -> [String?] {
