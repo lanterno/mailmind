@@ -135,6 +135,14 @@ def test_drafting_ahead_says_under_its_switch_and_ai_modes_that_whole_conversati
     clean(page)
 
 
+def test_the_weeks_review_says_under_its_switch_what_goes_each_monday_beyond_the_inbox(page, app, world):
+    ai_open(page, app)
+    expect(page.locator("#aiWeeklyReview")).to_contain_text(
+        "On, each Monday the senders, subjects and summaries of mail that needs you, the subjects and recipients of threads "
+        "you’re waiting on, and the names of the week’s meetings go to Anthropic to write it.")
+    clean(page)
+
+
 def test_openai_is_chosen_its_key_kept_through_the_server_and_its_models_offered(page, app, world, openai_api, fake_keychain):
     dialog = ai_open(page, app)
     with page.pw.expect_response(lambda r: r.url.endswith("/api/preferences") and r.request.method == "POST"):
@@ -246,11 +254,13 @@ def test_a_model_on_this_mac_that_runs_in_ollamas_cloud_says_what_goes_to_ollama
         dialog.get_by_label("Provider", exact=True).select_option("local")
     expect(page.locator("#aiSends")).to_have_text("With a model on this Mac, nothing leaves this Mac.")
     expect(page.locator("#aiDraftAhead")).to_contain_text("On, they are drafted on this Mac, and nothing leaves it.")
+    expect(page.locator("#aiWeeklyReview")).to_contain_text("On, it is written on this Mac, and nothing leaves it.")
     dialog.get_by_label("Model", exact=True).select_option(label="gpt-oss:120b-cloud")
     expect(page.locator("#aiSends")).to_have_text("gpt-oss:120b-cloud runs in Ollama’s cloud, so what is summarized goes to "
                                                   "Ollama’s servers.")
     expect(page.locator("#aiDraftAhead")).to_contain_text("On, whole conversations of important mail go to Ollama’s servers to "
                                                           "draft them.")
+    expect(page.locator("#aiWeeklyReview")).to_contain_text("the names of the week’s meetings go to Ollama’s servers to write it.")
     dialog.get_by_label("Model", exact=True).select_option(label="qwen3:8b")
     expect(page.locator("#aiSends")).to_have_text("With a model on this Mac, nothing leaves this Mac.")
     clean(page)
