@@ -60,11 +60,14 @@ final class ConversationModel {
     let id: String
     private(set) var stage = Stage.loading
     @ObservationIgnored private let routes: any Routes
+    /// The profile the digest says MailMind runs with, asked as a member opens: nil until it has said.
+    @ObservationIgnored private let profile: @MainActor () -> String?
 
-    init(routes: any Routes, account: String, id: String) {
+    init(routes: any Routes, account: String, id: String, profile: @escaping @MainActor () -> String?) {
         self.routes = routes
         self.account = account
         self.id = id
+        self.profile = profile
     }
 
     func load() async {
@@ -81,11 +84,10 @@ final class ConversationModel {
                              ["key": String(member.key), "folder": member.folder, "uid": String(member.uid)])
     }
 
-    /// Mark a member read as it opens, if it isn't.
+    /// Mark a member read as it opens, if it isn't and the profile lets opening mark it (`MarksOpened`).
     func markRead(_ member: API.ThreadMessage) async {
         guard !member.seen else { return }
-        _ = try? await routes.post(API.Post.Seen.self, API.SeenBody(folder: member.folder, key: member.key, seen: true,
-                                                                    uid: member.uid))
+        await MarksOpened.mark(MailCopy(member, account: account), routes: routes, profile: profile())
     }
 
     /// Each copy once, as the page's `eachCopyOnce` keeps them.
@@ -104,6 +106,25 @@ final class ConversationModel {
     /// What a reply answers, as a copy.
     var replyTo: MailCopy? {
         replyMember.map { MailCopy($0, account: account) }
+    }
+}
+
+/// Opening a message marks it read on its own, as the page's `markOpenedRead` does, only once the digest has said
+/// MailMind runs with its writes on. Read only would turn each one down with its 409, so nothing is asked, and the
+/// row stays as the server has it; nor is anything asked before the profile is known.
+@MainActor
+enum MarksOpened {
+    /// Whether opening a message marks it read under `profile`, the digest's: nil until the digest has said.
+    static func marks(_ profile: String?) -> Bool {
+        guard let profile else { return false }
+        return profile != "read-only"
+    }
+
+    /// Mark `copy` read as it opens, where `profile` lets it.
+    static func mark(_ copy: MailCopy, routes: any Routes, profile: String?) async {
+        guard marks(profile) else { return }
+        _ = try? await routes.post(API.Post.Seen.self, API.SeenBody(folder: copy.folder, key: copy.key, seen: true,
+                                                                    uid: copy.uid))
     }
 }
 

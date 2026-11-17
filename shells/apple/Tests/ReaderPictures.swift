@@ -176,7 +176,7 @@ final class ReaderPictures: XCTestCase {
         await until { app.list?.copy(at: 0) != nil }
 
         let routes = PictureRoutes()
-        let thread = ConversationModel(routes: routes, account: Fixture.work, id: "t1")
+        let thread = ConversationModel(routes: routes, account: Fixture.work, id: "t1", profile: { nil })
         await thread.load()
 
         let desk = Desk()

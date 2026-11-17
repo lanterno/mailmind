@@ -118,7 +118,8 @@ struct ReaderPane: View {
                 conversation = nil
                 return
             }
-            let model = ConversationModel(routes: core, account: thread.account, id: thread.id)
+            let model = ConversationModel(routes: core, account: thread.account, id: thread.id,
+                                          profile: { Composing.shared.digest?.profile })
             conversation = model
             await model.load()
         }
@@ -192,7 +193,8 @@ struct ReaderPane: View {
         }
     }
 
-    /// Opened unread, a message is marked read after a moment on it; and a reply written ahead is looked for.
+    /// Opened unread, a message is marked read after a moment on it, unless read only is on or not yet known
+    /// (`MarksOpened`); and a reply written ahead is looked for.
     private func dwell() async {
         guard let copy = openCopy else {
             composing.viewing(nil, wanted: false, skip: true)
@@ -203,7 +205,7 @@ struct ReaderPane: View {
         guard thread == nil, row?.seen == false, let core = app.core else { return }
         try? await Task.sleep(for: .milliseconds(1200))
         guard !Task.isCancelled else { return }
-        _ = try? await core.post(API.Post.Seen.self, API.SeenBody(folder: copy.folder, key: copy.key, seen: true, uid: copy.uid))
+        await MarksOpened.mark(copy, routes: core, profile: composing.digest?.profile)
     }
 }
 #endif
