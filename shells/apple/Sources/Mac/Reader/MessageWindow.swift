@@ -3,19 +3,26 @@ import SwiftUI
 
 /// A message in a window of its own, as a double-click on a row opens one: the reader's document for that copy, on
 /// the pane's paper under a bar for the traffic lights, in the light the person chose. It speaks the core the mail
-/// window opened (the status holds it), so a window that outlives it, or opens before it, closes.
+/// window opened, the process's one (`MailApp.shared`), and never opens one of its own: a window that opens before
+/// that core is open, or once it didn't open, closes.
 struct MessageWindow: View {
     static let scene = "message"
     /// The bar the traffic lights stand on.
     static let barHeight: CGFloat = 40
     let copy: MailCopy?
+    /// The process's one app, whose core the window speaks.
+    var app = MailApp.shared
     @State private var reader = ReaderModel()
     @State private var find = ReaderFind()
     @Environment(\.dismiss) private var dismiss
-    private var status: AppStatus { .shared }
+
+    /// The core a message's window speaks: `app`'s once it is open, else none.
+    static func core(of app: MailApp) -> Core? {
+        app.stage == .open ? app.core : nil
+    }
 
     var body: some View {
-        if let copy, let core = status.core {
+        if let copy, let core = Self.core(of: app) {
             MessageWindowContent(core: core, copy: copy, reader: reader, find: find)
                 .task(id: copy) {
                     reader.core = core
