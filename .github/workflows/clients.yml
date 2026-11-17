@@ -133,13 +133,17 @@ jobs:
         run: brew install xcodegen
 
       - name: The XCFramework, then the iOS simulator and macOS apps
+        id: build
         run: just apple build
 
       - name: The list model's tests
         run: just apple test
 
+      # From here on each step runs whatever failed before it, so one run shows every part: a failing test doesn't hide
+      # whether the apps open or the release is sound. The smoke needs the build's apps; the release check makes its own.
       # The runner's image carries an iPhone simulator for its Xcode; the Mac app runs in the runner's own session.
       - name: Open the list on the Mac and in an iPhone simulator, and scroll it
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: just apple smoke
 
       - name: The iPhone app's output, when the check failed
@@ -150,6 +154,7 @@ jobs:
       # its acknowledgements, the .dmg and its window, the signed appcast, and the checks a person's Mac and Sparkle
       # make on them. Nothing is published.
       - name: The release, checked
+        if: ${{ !cancelled() }}
         run: just apple release-check
 
   android:
