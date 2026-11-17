@@ -156,9 +156,16 @@ enum AIWords {
     /// whether that model runs in a cloud, and whether replies are drafted ahead.
     static func sends(_ preferences: API.Preferences?, _ ai: API.AiStatus?) -> String {
         let chosen = preferences?.aiModel ?? ""
-        return sends(preferences?.aiProvider ?? ai?.provider ?? .anthropic, url: preferences?.aiBaseUrl ?? "",
-                     model: chosen.isEmpty ? ai?.model ?? "" : chosen, cloudModel: ai?.cloudModel ?? false,
+        let provider = preferences?.aiProvider ?? ai?.provider ?? .anthropic
+        return sends(provider, url: preferences?.aiBaseUrl ?? "",
+                     model: chosen.isEmpty ? ai?.model ?? "" : chosen, cloudModel: cloudModel(ai, chosen: provider),
                      draftAhead: preferences?.draftAhead ?? false)
+    }
+
+    /// Whether the model of `chosen` runs in Ollama's cloud: the status says so only of the provider in use, so a
+    /// provider just chosen and not yet in use is taken at its word, as the page's `sendsOf` takes it.
+    static func cloudModel(_ ai: API.AiStatus?, chosen: API.AiProvider) -> Bool {
+        ai?.provider == chosen && ai?.cloudModel == true
     }
 
     /// What Draft replies ahead adds to what goes.

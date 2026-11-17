@@ -527,7 +527,7 @@ struct AIPane: View {
                 Written on Monday morning, within the daily limit, and only if you’ve used MailMind in the last two \
                 days. Your week shows it until the next Monday, and ↻ there writes a new one.
                 """) + " " + AIWords.reviewGoes(provider, url: preferences?.aiBaseUrl ?? "",
-                                                   cloudModel: status.digest?.ai.cloudModel ?? false),
+                                                   cloudModel: AIWords.cloudModel(status.digest?.ai, chosen: provider)),
                           isOn: status.preference(\.weeklyReview) { .init(weeklyReview: $0) })
             SettingSwitch(String(localized: "File low-priority mail by itself, once a day"), help: String(localized: """
                 Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.
@@ -536,7 +536,7 @@ struct AIPane: View {
                 Written while you’re using MailMind, within the daily limit, so a reply is ready when you open the \
                 message. Off, a reply is drafted only when you ask for one.
                 """) + " " + AIWords.aheadGoes(provider, url: preferences?.aiBaseUrl ?? "",
-                                                   cloudModel: status.digest?.ai.cloudModel ?? false),
+                                                   cloudModel: AIWords.cloudModel(status.digest?.ai, chosen: provider)),
                           isOn: status.preference(\.draftAhead) { .init(draftAhead: $0) })
         }
     }
