@@ -1,0 +1,151 @@
+import Foundation
+import XCTest
+
+/// Read only, as a person meets it: the same plain words wherever the server turned down, up front, something that
+/// would have reached a mail server (a 409 with `read_only`), asked ahead of a busy 409's words. A send it turned down
+/// keeps the message.
+@MainActor
+final class ReadOnlyTests: XCTestCase {
+    private static let refused = "Read only is on, so nothing was changed. Turn it off in Settings › General."
+    nonisolated private static let detail = "MailMind is running read-only"
+
+    /// The read-only 409 as both servers answer it.
+    nonisolated private static var problem: Problem {
+        Problem(FakeServer.refused(409, detail, more: ["read_only": true]))
+    }
+
+    func testTheWordsAreThePagesWords() {
+        XCTAssertEqual(ReadOnlyWords.refused, Self.refused)
+        XCTAssertTrue(Self.problem.isReadOnly)
+        XCTAssertFalse(Problem(FakeServer.refused(409, "busy", more: ["busy": true])).isReadOnly)
+        XCTAssertEqual(ReadOnlyWords.said(Self.problem, else: "other"), Self.refused)
+        XCTAssertEqual(ReadOnlyWords.said(URLError(.timedOut), else: "other"), "other")
+    }
+
+    // MARK: The mailbox
+
+    private func opened(_ server: FakeServer) async -> MailApp {
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        app.mailbox.tab = .all
+        app.place = .folder(account: Fixture.ada, folder: "INBOX")
+        await until { app.list?.copy(at: 0) != nil }
+        return app
+    }
+
+    private func refusing(_ paths: String..., rows: [API.FolderRow]? = nil) -> FakeServer {
+        let server = rows.map { Fixture.server(rows: $0, grouped: false) } ?? Fixture.server(grouped: false)
+        for path in paths {
+            server.on("POST", path) { _ in FakeServer.refused(409, Self.detail, more: ["read_only": true]) }
+        }
+        return server
+    }
+
+    func testFilingAMessageSaysReadOnlyAndTheReaderStays() async throws {
+        let app = await opened(refusing(API.Post.Archive.path))
+        app.mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+        await app.mailbox.fileNow(.archive)
+        XCTAssertEqual(app.mailbox.toast?.text, Self.refused)
+        XCTAssertNil(app.mailbox.toast?.undo, "nothing was done, so nothing undoes")
+        XCTAssertEqual(app.selection.copy?.key, 1, "the message didn't go, so the reader stays on it")
+    }
+
+    func testMovingSaysReadOnly() async throws {
+        let app = await opened(refusing(API.Post.Move.path))
+        app.mailbox.chose([try XCTUnwrap(app.list?.copy(at: 0))])
+        await app.mailbox.moveNow(to: "Receipts", label: "Receipts")
+        XCTAssertEqual(app.mailbox.toast?.text, Self.refused)
+    }
+
+    func testManyRowsAskOnceAndSayReadOnly() async {
+        let rows = (1...1200).map { Fixture.row($0) }
+        let server = refusing(API.Post.BulkFile.path, rows: rows)
+        let app = await opened(server)
+        await app.mailbox.fileNow(.trash, rows: rows)
+        XCTAssertEqual(server.asked(API.Post.BulkFile.path).count, 1, "read only's no is the same for every chunk")
+        XCTAssertEqual(app.mailbox.toast?.text, Self.refused)
+    }
+
+    func testStarringAndMarkingSayReadOnlyAndAskOnce() async throws {
+        let server = refusing(API.Post.Flag.path, API.Post.Seen.path)
+        let app = await opened(server)
+        let first = try XCTUnwrap(app.list?.copy(at: 0)), second = try XCTUnwrap(app.list?.copy(at: 1))
+        await app.mailbox.starNow(rows: [first])
+        XCTAssertEqual(app.mailbox.toast?.text, Self.refused)
+        await app.mailbox.setSeenNow(false, rows: [first])
+        XCTAssertEqual(app.mailbox.toast?.text, Self.refused)
+        await app.mailbox.starNow(rows: [first, second])
+        XCTAssertEqual(server.asked(API.Post.Flag.path).count, 2, "one for the one row, then one for the two")
+        XCTAssertEqual(app.mailbox.toast?.text, Self.refused)
+    }
+
+    func testAnUndoThatWouldReachAServerSaysReadOnly() async {
+        let app = await opened(refusing(API.Post.Undo.path))
+        await app.mailbox.undoNow()
+        XCTAssertEqual(app.mailbox.toast?.text, Self.refused)
+    }
+
+    // MARK: The outbox's tray
+
+    private func tray(refusing paths: [String], with problem: Problem = ReadOnlyTests.problem) -> (OutboxTray, () -> [String]) {
+        let routes = FakeRoutes()
+        for path in paths {
+            routes.answer(path) { _ in throw problem }
+        }
+        var said: [String] = []
+        let tray = OutboxTray(routes: routes) { said.append($0) }
+        return (tray, { said })
+    }
+
+    func testTheTraysRetryAndSendNowSayReadOnlyBeforeABusyNo() async {
+        let (tray, said) = tray(refusing: [API.Post.PendingRetry.path, API.Post.OutboxSendnow.path,
+                                           API.Post.OutboxRetry.path])
+        await tray.act("retry", 3)
+        await tray.sendNow(4)
+        await tray.retry(5)
+        XCTAssertEqual(said(), [Self.refused, Self.refused, Self.refused])
+
+        let busy = Problem(FakeServer.refused(409, "it is being tried", more: ["busy": true]))
+        let (other, saidOther) = self.tray(refusing: [API.Post.PendingRetry.path], with: busy)
+        await other.act("retry", 3)
+        XCTAssertEqual(saidOther(), ["It’s being tried now. Try again in a moment"], "a busy 409 keeps its words")
+    }
+
+    // MARK: Sending
+
+    func testASendReadOnlyTurnsDownComesBackToKeepWithTheWords() async throws {
+        let composing = Composing()
+        let routes = FakeRoutes()
+        routes.answer(API.Post.Send.path) { _ in throw ReadOnlyTests.problem }
+        composing.use(routes, digest: Fixture.digest(readOnly: true))
+        var windows: [UUID] = []
+        composing.openWindow = { windows.append($0) }
+        var seed = ComposeSeed()
+        seed.mode = .reply
+        seed.to = ["bo@example.test"]
+        seed.subject = "Re: Plans"
+        seed.origKey = 7
+        seed.body = "Yes, Thursday."
+        let composer = try XCTUnwrap(composing.open(seed))
+        composer.send()
+        XCTAssertTrue(composer.closed)
+        await eventually("the message to come back") { windows.count == 2 }
+        let back = try XCTUnwrap(composing.composers[windows[1]])
+        XCTAssertEqual(back.subject, "Re: Plans")
+        XCTAssertEqual(back.body, "Yes, Thursday.")
+        XCTAssertEqual(back.to.map(\.address), ["bo@example.test"])
+        XCTAssertEqual(composing.notice, Self.refused)
+        XCTAssertNil(composing.float, "no countdown and no Sent: nothing was queued")
+        back.close(force: true)
+    }
+
+    // MARK: The desk, curation and folders
+
+    func testTheDeskCurationAndFoldersSayReadOnly() {
+        XCTAssertEqual(DeskRefusal.words(Self.problem, else: "Couldn’t change that."), Self.refused)
+        XCTAssertEqual(CurateModel.sweepFailed(Self.problem, planning: false), Self.refused)
+        XCTAssertEqual(CurateModel.sweepFailed(Self.problem, planning: true), Self.refused)
+        XCTAssertEqual(FolderWords.refusal(Self.problem), .refused(Self.refused))
+    }
+}

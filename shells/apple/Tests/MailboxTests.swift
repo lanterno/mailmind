@@ -4,12 +4,11 @@ import XCTest
 /// The mailbox's words, places and rows say what the page says of them.
 final class MailboxWordsTests: XCTestCase {
     func testFilingIsToldInThePagesWords() {
-        XCTAssertEqual(Words.filed("Archived", count: 1, failed: 0, queued: false, readOnly: false), "Archived")
-        XCTAssertEqual(Words.filed("Archived", count: 3, failed: 0, queued: false, readOnly: false), "Archived 3 messages")
-        XCTAssertEqual(Words.filed("Moved", count: 2, failed: 1, queued: false, readOnly: false, to: "Archive"),
+        XCTAssertEqual(Words.filed("Archived", count: 1, failed: 0, queued: false), "Archived")
+        XCTAssertEqual(Words.filed("Archived", count: 3, failed: 0, queued: false), "Archived 3 messages")
+        XCTAssertEqual(Words.filed("Moved", count: 2, failed: 1, queued: false, to: "Archive"),
                        "Moved 2 of 3 to Archive — the rest stayed")
-        XCTAssertEqual(Words.filed("Trashed", count: 1, failed: 0, queued: true, readOnly: false), "Trashed · once the server is back")
-        XCTAssertEqual(Words.filed("Trashed", count: 1, failed: 0, queued: true, readOnly: true), "Trashed · waits for a full run")
+        XCTAssertEqual(Words.filed("Trashed", count: 1, failed: 0, queued: true), "Trashed · once the server is back")
     }
 
     func testAListIsCountedAsItsHeadCountsIt() {
