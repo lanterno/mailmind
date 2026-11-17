@@ -240,11 +240,11 @@ and the AI provider you chose (Claude by default).
 - **Full-text search across every account by default**, with the scope persisted
   between sessions. A polite background worker backfills bodies for mail ingested
   before bodies were stored — yielding instantly to anything you're doing, and moving on past
-  any the server won't give — so search covers the whole mailbox, not just recent mail. On the Rust
-  server and the Mac app a sync keeps the text of each message it reads, and the backfill asks for a
-  folder's dozen at a time over the account's kept connection, reaches back twelve months (older mail
-  is fetched as you open it), and keeps only the text of a message over 256 KB, whose attachments
-  come when you open it.
+  any the server won't give — so search covers the whole mailbox, not just recent mail. A sync keeps
+  each Inbox message of under 64 KB whole as it arrives, so search finds what it says and it opens with
+  no wait. On the Rust server and the Mac app the backfill asks for a folder's dozen at a time over the
+  account's kept connection, reaches back twelve months (older mail is fetched as you open it), and
+  keeps only the text of a message over 256 KB, whose attachments come when you open it.
 - **A safe operator grammar:** `from:` `to:` `cc:` `subject:` `body:` `label:`,
   `is:unread|read|flagged|answered|junk|newsletter|receipt|notification|snoozed`,
   `bucket:` `category:`, `has:attachment`, `in:` `account:`,
@@ -519,8 +519,8 @@ ask, or for a switch you turned on in Settings › AI.
   500 messages and shows them at once, then reads the rest in the background, 500 at a time and newest first, the
   list filling as they come; quit meanwhile and it goes on where it stopped, and a Mac waking from sleep goes on at
   once. The status says how far it has got ("Reading your inbox: 2,300 of 41,000"), a message opens while it reads,
-  and one account's slow server holds up no other. It reads each message's first 64 KiB for its preview and
-  downloads no attachment. On either server, mail that was there before is no new mail: no notification, no badge,
+  and one account's slow server holds up no other. It reads each message's first 64 KiB for its preview, keeping a
+  message that fits in them whole, and downloads no attachment. On either server, mail that was there before is no new mail: no notification, no badge,
   no "N new".
 - **Adding an account starts at its address.** MailMind knows Gmail, iCloud, Yahoo, AOL, Fastmail and Proton by an
   address's domain, or by the mail servers its domain names, and fills in their servers, with the page where the
