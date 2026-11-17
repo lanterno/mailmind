@@ -4,11 +4,11 @@
 //!
 //! A folder that plays a part, that the server keeps, or that holds folders isn't deleted (`folder_change`). One that
 //! holds mail is deleted only once a person has said so, having been told how much it holds, and then its mail goes to
-//! the account's Trash first: a MOVE of each message by UID, or a copy then each original's own UID EXPUNGE, never a
-//! bulk EXPUNGE. If any mail is still there after that, it isn't deleted. On Gmail a folder is a label, and its mail
-//! stays in All Mail and under every other label it has: so nothing moves, and the label alone goes, as Gmail's own
-//! delete does. A delete that stops once mail has gone to Trash says so. A renamed folder's rows go by its new name
-//! here, and a deleted one's go, its mail stored again as Trash is next read.
+//! the account's Trash first, as the server lists it (`roles::trash`): a MOVE of each message by UID, or a copy then
+//! each original's own UID EXPUNGE, never a bulk EXPUNGE. If any mail is still there after that, it isn't deleted. On
+//! Gmail a folder is a label, and its mail stays in All Mail and under every other label it has: so nothing moves, and
+//! the label alone goes, as Gmail's own delete does. A delete that stops once mail has gone to Trash says so. A renamed
+//! folder's rows go by its new name here, and a deleted one's go, its mail stored again as Trash is next read.
 
 use std::fmt;
 use std::sync::Arc;
@@ -22,6 +22,7 @@ use crate::commands::MailCommands;
 use crate::folder_change;
 use crate::folders::Folders;
 use crate::ports::SessionError;
+use crate::roles;
 use crate::session::{MailServer, Search, ServerError, move_to};
 
 pub const SERVER_SAID_NO: &str = "The server didn’t make that change.";
@@ -115,7 +116,8 @@ impl FolderChanges {
         FolderChanges { commands, accounts, store, folders, clock }
     }
 
-    /// The account's Trash, and whether its folders are Gmail's labels; not found when there is no such account.
+    /// The Trash the account names, and whether its folders are Gmail's labels; not found when there is no such
+    /// account.
     fn trash(&self, account: &str) -> Result<(String, bool), Failure> {
         let found = self.accounts.move_account(account)?.ok_or_else(|| Problem::not_found(NO_ACCOUNT))?;
         Ok((found.trash, found.provider.archive_is_label_removal))
@@ -187,11 +189,13 @@ impl FolderChanges {
         else {
             return Err(Problem::refused("account and folder required").into());
         };
-        let (trash, labels) = self.trash(account)?;
-        let (mut moved, mut moving) = (0usize, false);
+        let (named, labels) = self.trash(account)?;
+        let (mut trash, mut moved, mut moving) = (named.clone(), 0usize, false);
         let deleted = self.on_server(account, |s| {
             let folders = s.folders()?;
-            let found = folder_change::changeable(&folders, folder, Some(&trash))?;
+            let found = folder_change::changeable(&folders, folder, Some(&named))?;
+            // As the server lists it: a localised or renamed Trash too.
+            roles::trash(&folders, &named).clone_into(&mut trash);
             if folder_change::has_folders_inside(&folders, found) {
                 return Err(Problem::refused(folder_change::HAS_FOLDERS).into());
             }
