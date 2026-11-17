@@ -5,8 +5,9 @@ found there by its Message-ID, an account's on one session.
 
 Once the account's first scan has read its INBOX whole, a preview comes from the stored INBOX at once: no server is asked
 and no gate waited for, where reading every message's headers off a big Inbox takes a minute. Confirm reads the INBOX off
-the server once, and moves what it says is still junk, still read and still unstarred. Until the first scan has read the
-INBOX whole, the preview reads it off the server too."""
+the server once, and moves what it says is still junk, still read and still unstarred, none of it older than the stored
+INBOX's oldest message, which that preview could not have named. Until the first scan has read the INBOX whole, the
+preview reads it off the server too."""
 import secrets
 from collections.abc import Iterable, Sequence
 from typing import Any
@@ -96,12 +97,16 @@ class Sweeps:
         rows = self._stored(acct)
         return None if rows is None else sweep_plan.planned(acct["email"], rows)[0]
 
-    def _sweep(self, acct: dict[str, Any], dry: bool, group: str) -> tuple[dict[str, Any], bool]:
-        """The sweep's answer, and whether it put anything on the undo stack."""
+    def _sweep(self, acct: dict[str, Any], dry: bool, group: str, as_previewed: bool = False) -> tuple[dict[str, Any], bool]:
+        """The sweep's answer, and whether it put anything on the undo stack. `as_previewed` follows a preview, which
+        named only what the stored INBOX holds once its first scan has read it whole: a move then takes nothing older."""
         p = self.plan(acct)
         if p["error"]:
             return {"account": acct["email"], "error": p["error"], "planned": 0}, False
-        out, junk_rows = sweep_plan.planned(acct["email"], p["_rows"])
+        rows = p["_rows"]
+        if as_previewed and not dry and self._boxes.inbox_scanned(acct["email"]):
+            rows = sweep_plan.since_stored(rows, self._mail.stored_inbox(acct["email"]))
+        out, junk_rows = sweep_plan.planned(acct["email"], rows)
         if dry or not junk_rows:
             return out, False
         self._audit.swept(acct["email"], junk_rows)  # log BEFORE moving so a crash still records intent
@@ -251,7 +256,7 @@ class Sweeps:
 
         def job(a: dict[str, Any]) -> dict[str, Any]:
             nonlocal pushed
-            out, went = self._sweep(a, dry_run, group)
+            out, went = self._sweep(a, dry_run, group, as_previewed=True)
             pushed = pushed or went
             return out
         results: list[dict[str, Any]] = []

@@ -88,6 +88,15 @@ def within_cap[R: Read](junk: list[R]) -> tuple[list[R], bool]:
     return sorted(newest, key=lambda r: int(r["uid"])), True
 
 
+def since_stored[R: Read](live: list[R], stored: Iterable[Row]) -> list[R]:
+    """Of the INBOX read off the server, what a plan from the stored INBOX could have named: its oldest stored message and
+    all since. Older mail was never stored, as a sync that read only recent mail leaves it (a folder taken as read whole
+    before migration 24, or `mailmind sync`'s last N days), so that plan never named it, and the sweep after it leaves it.
+    With nothing stored, it named nothing. Mail since may still go: read elsewhere, or come, since the last sync."""
+    oldest = min((int(r["uid"]) for r in stored), default=None)
+    return [] if oldest is None else [r for r in live if int(r["uid"]) >= oldest]
+
+
 def planned(account: str, rows: list[Classified]) -> tuple[dict[str, Any], list[Classified]]:
     """A sweep's answer before anything moves, from the INBOX as `rows` show it, and what it takes: its junk that someone
     has read and no one starred, the newest SWEEP_MAX. `capped` says some is left for the next sweep."""
