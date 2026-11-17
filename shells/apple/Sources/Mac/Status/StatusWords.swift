@@ -175,6 +175,7 @@ enum StatusWords {
         case "expire": String(localized: "expiry rules")
         case "forget": String(localized: "letting go of old records")
         case "backfill": String(localized: "fetching older messages’ text")
+        case "older-mail": String(localized: "reading your older mail")
         case "assess": String(localized: "summaries")
         case "draft-ahead": String(localized: "replies drafted ahead")
         case "brief-ahead": String(localized: "the brief")
