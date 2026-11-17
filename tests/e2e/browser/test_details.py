@@ -162,6 +162,23 @@ def test_read_only_refuses_a_star_says_so_and_the_row_stays_as_it_was(read_only,
     clean(page)
 
 
+def test_a_send_read_only_refuses_comes_back_to_its_composer_and_nothing_waits_to_go(read_only, page, app):
+    opened(page)
+    page.keyboard.press("c")
+    page.get_by_role("combobox", name="To").fill("lin@example.test")
+    page.get_by_role("textbox", name="subject").fill("Fabric order")
+    page.get_by_role("textbox", name="message body").fill("Hi Lin, the linen came in.")
+    page.locator("#cmpSend").click()
+    expect(page.locator("#toast")).to_have_text(READ_ONLY_REFUSED)
+    expect(page.get_by_role("textbox", name="message body")).to_have_value("Hi Lin, the linen came in.")
+    expect(page.get_by_role("textbox", name="subject")).to_have_value("Fabric order")
+    expect(page.locator("#sendFloat")).to_have_count(0)
+    assert app.get("/api/outbox").json["items"] == []
+    assert all("status of 409" in p for p in page.problems), page.problems     # the refusal
+    page.problems.clear()
+    clean(page)
+
+
 def test_opening_unread_mail_read_only_leaves_it_unread_and_asks_no_server(read_only, page, world):
     opened(page)
     receipt = row(page, world, RECEIPT)
