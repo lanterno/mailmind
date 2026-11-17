@@ -14,7 +14,6 @@ from mailmind.curation.application.ports import ListHeaders, SafeHttp, SenderMai
 from mailmind.curation.domain import unsubscribe
 from mailmind.curation.domain.unsubscribe import NO_METHOD, Attempt, parse_list_unsub
 from mailmind.kernel.row import Row
-from mailmind.platform import profile
 
 MIN_GAP = 3.0              # >= 3s between ANY two outbound unsubscribes (politeness)
 
@@ -90,9 +89,8 @@ class Unsubscribing:
         return sent > 0
 
     def attempt(self, from_addr: str, resolved: tuple[UnsubWay, list[str]]) -> Attempt:
-        """Try the way `resolved` (what resolve gave) names."""
-        if not profile.writes_allowed():
-            return unsubscribe.READ_ONLY
+        """Try the way `resolved` (what resolve gave) names. A read-only process never gets here: the cleanup that asks
+        refuses before anything is blocked or moved, and each way out has a wall of its own."""
         key = unsubscribe.attempt_key(from_addr)
         info, accts = resolved
         repeat = unsubscribe.repeat_of(self._mail.attempt(key), info)

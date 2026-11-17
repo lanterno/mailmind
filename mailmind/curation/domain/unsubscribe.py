@@ -65,9 +65,6 @@ class Attempt:
         return self.status in TERMINAL
 
 
-READ_ONLY = Attempt("read_only")       # sends nothing outside; not latched, so retryable
-
-
 def not_tried(asked: bool) -> Attempt:
     """An unsubscribe that didn't go: nobody asked, or nobody showed a preview's good token. Block and sweep still stand."""
     return Attempt("no_token" if asked else "skipped")
