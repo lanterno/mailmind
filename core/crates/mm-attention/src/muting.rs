@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use mm_kernel::errors::{Failure, Problem};
+use mm_kernel::errors::{Failure, Problem, READ_ONLY};
 use mm_kernel::seams::Clock;
 use serde_json::{Value, json};
 
@@ -35,6 +35,9 @@ pub struct MutingParts {
     pub flags: Arc<dyn Flags>,
     pub events: Arc<dyn Events>,
     pub clock: Arc<dyn Clock>,
+    /// This process only reads: a mute, which marks its thread read on its server, is refused before anything is
+    /// written.
+    pub read_only: bool,
 }
 
 #[derive(Debug)]
@@ -45,21 +48,25 @@ pub struct Muting {
     flags: Arc<dyn Flags>,
     events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
+    read_only: bool,
 }
 
 impl Muting {
     pub fn new(parts: MutingParts) -> Muting {
-        let MutingParts { book, accounts, undo, flags, events, clock } = parts;
-        Muting { threads: Threads::new(book.clone(), accounts), book, undo, flags, events, clock }
+        let MutingParts { book, accounts, undo, flags, events, clock, read_only } = parts;
+        Muting { threads: Threads::new(book.clone(), accounts), book, undo, flags, events, clock, read_only }
     }
 
     /// `POST /api/mute`: the thread silenced, and its unread mail marked read, here and on its server. A thread muted
     /// already is left as it is: by then its mail reads as all seen, and an Undo that remembered that would mark
-    /// nothing unread.
+    /// nothing unread. A read-only process refuses it (`READ_ONLY`), and the thread stays as it was.
     pub fn mute(&self, named: &Named, undo_group: Option<&str>) -> Result<Value, Failure> {
         let Some((account, thread_id)) = self.threads.target(named)? else {
             return Err(Problem::refused("bad mute target").into());
         };
+        if self.read_only {
+            return Err(READ_ONLY.into());
+        }
         let when = mm_kernel::when::iso(self.clock.now());
         let Some(found) = self.book.mute(&account, &thread_id, &when)? else {
             return Ok(json!({"ok": true, "thread_id": thread_id}));

@@ -34,8 +34,8 @@ use crate::workers::{Kick, Queue};
 
 const TAG: &str = "commands";
 
-/// What a read-only process answers a change it may not make and nothing queues: a folder's (`profile.ReadOnlyError`).
-pub const READ_ONLY: Fault = Fault::new("ReadOnlyError");
+/// What a read-only process answers a change to the mail it may not make: nothing is queued (`profile.ReadOnlyError`).
+pub use mm_kernel::errors::READ_ONLY;
 
 /// Why a try at a command didn't come to an outcome.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,7 +77,8 @@ pub struct MailCommands {
     clock: Arc<dyn Clock>,
     events: Arc<dyn Events>,
     tokens: Arc<dyn Tokens>,
-    /// This process only reads: a change waits here for a full run's worker.
+    /// This process only reads: a change is refused before anything is queued or shown, so none waits for a run that
+    /// writes; one queued before still waits for one.
     read_only: bool,
     /// Wakes the worker.
     kicked: Arc<Kick>,
@@ -149,13 +150,16 @@ impl MailCommands {
         }
     }
 
-    /// The new command's row, claimed for a try now; None when this process only reads.
+    /// The new command's row, claimed for a try now.
     fn claim_new(&self, tx: &dyn Tx, id: i64) -> Result<Option<Command>, Fault> {
-        if self.read_only {
-            return Ok(None);
-        }
         tx.set_begun(id, true)?;
         tx.claim(id)
+    }
+
+    /// A read-only process changes nothing on a server, and queues nothing for later: it refuses a change before
+    /// anything is written, so the message stays as it was here too.
+    fn refuse_writes(&self) -> Result<(), Fault> {
+        if self.read_only { Err(READ_ONLY) } else { Ok(()) }
     }
 
     /// Where a move goes, as far as that is known with no server: kept for an Undo before it lands.
@@ -170,7 +174,7 @@ impl MailCommands {
     /// Accept a move of message `pk` in the caller's block, which commits it with whatever else it accepts: None
     /// when there is no such message, it is on its way out already or it is in the folder `to` names already. `to`
     /// is a folder a person picked, for a `move`. `push_undo` keeps what reverses it; without one, nothing will.
-    /// Submit only once the block has committed.
+    /// Submit only once the block has committed. A read-only process refuses it (`READ_ONLY`) before anything is read.
     pub fn accept_move_within(
         &self,
         tx: &dyn Tx,
@@ -180,6 +184,7 @@ impl MailCommands {
         push_undo: Option<PushUndo<'_>>,
         to: Option<&str>,
     ) -> Result<Option<Accepted>, Fault> {
+        self.refuse_writes()?;
         let row = tx.message(pk)?;
         let Some(row) = row.filter(|r| command::takes_a_move(Some(r), to)) else { return Ok(None) };
         let (email, mid) = (row.account.clone(), row.mid());
@@ -253,13 +258,15 @@ impl MailCommands {
         Ok((id, created))
     }
 
-    /// Accept a flag change on message `pk`, which shows on its row at once: None when there is no such message.
+    /// Accept a flag change on message `pk`, which shows on its row at once: None when there is no such message. A
+    /// read-only process refuses it (`READ_ONLY`) before anything is written.
     pub fn accept_flags(
         &self,
         pk: i64,
         flags: &[(&str, bool)],
         mutation_id: Option<&str>,
     ) -> Result<Option<Accepted>, Fault> {
+        self.refuse_writes()?;
         let request = self.request_id(mutation_id);
         command_ports::write(&*self.store, |tx| {
             let Some(row) = tx.message(pk)? else { return Ok(None) };
@@ -413,9 +420,7 @@ impl MailCommands {
         account: &str,
         change: impl FnOnce(&mut dyn MailServer) -> Result<T, ServerError>,
     ) -> Result<Result<T, ServerError>, Failure> {
-        if self.read_only {
-            return Err(READ_ONLY.into());
-        }
+        self.refuse_writes()?;
         let ran = on_gate(&*self.gates, account, Priority::Interactive, Wait::For(Self::FOLDER_WAIT), || {
             self.server.on_server(account, Some(Self::TRY_TIMEOUT), change)
         });
@@ -518,8 +523,10 @@ impl MailCommands {
         command_ports::read(&*self.store, |tx| tx.counts())
     }
 
-    /// Ask again for a change given up on. False when it isn't one.
+    /// Ask again for a change given up on. False when it isn't one. A read-only process refuses it: it would wait for a
+    /// run that writes.
     pub fn retry(&self, id: i64) -> Result<bool, Fault> {
+        self.refuse_writes()?;
         command_ports::write(&*self.store, |tx| {
             let Some(row) = tx.command(id)? else { return Ok(false) };
             if !tx.requeue(id)? {

@@ -12,7 +12,7 @@ use axum::http::{HeaderMap, Method, Response, Uri};
 use axum::routing::{get, post};
 use mm_compose::attachments::PICTURES;
 use mm_compose::composing::Composition;
-use mm_kernel::errors::{Failure, Fault, Kind, Problem};
+use mm_kernel::errors::{Failure, Fault, Kind, Problem, READ_ONLY};
 use mm_kernel::log::{self, Field};
 use serde_json::{Map, Value, json};
 
@@ -78,7 +78,7 @@ const TAG: &str = "send";
 const RESUME_TAG: &str = "resume";
 
 /// A POST's answer: its body read, then `work` on the blocking pool. A fault answers the fixed 500, or, where the
-/// route words its own (`said`), a 500 in those words.
+/// route words its own (`said`), a 500 in those words; a send a read-only process refused is the read-only 409.
 async fn posted(
     app: Arc<App>,
     request: Request<Body>,
@@ -98,6 +98,7 @@ async fn posted(
     match done.unwrap_or(Err(Failure::Fault(Fault::new("Panicked")))) {
         Ok(value) => answer::json(200, &value),
         Err(Failure::Problem(p)) => answer::problem(&p),
+        Err(Failure::Fault(READ_ONLY)) => answer::read_only(uri.path()),
         Err(Failure::Fault(fault)) => {
             log::error(tag, "error", &[(Field::Path, uri.path())], Some(fault.class));
             answer::problem_document(500, &problem::blank(500, said))

@@ -342,7 +342,15 @@ impl App {
         let curation =
             crate::bound::Curation::assemble(&database, &directory, &seams.clock, &zone, curation_filing.clone());
         let flags = Arc::new(FilingFlags(filing.clone()));
-        let attention = crate::bound::Attention::assemble(&database, &directory, &seams.clock, &zone, flags, heard);
+        let attention = crate::bound::Attention::assemble(
+            &database,
+            &directory,
+            &seams.clock,
+            &zone,
+            flags,
+            heard,
+            environment.read_only(),
+        );
         let plans = crate::plan_wiring::plans(&filing, &database, &attention.snoozing);
         let undo = Undo::new(
             database.clone(),

@@ -507,6 +507,11 @@ impl Unsubscribing {
         Unsubscribing { mail, headers, http, send, ids, clock, writes_allowed, pace: Pace::default() }
     }
 
+    /// Whether this process may write to a mail server or anywhere else outside (`profile.writes_allowed`).
+    pub fn writes_allowed(&self) -> bool {
+        self.writes_allowed
+    }
+
     /// Ask the server for one message's unsubscribe headers alone: mail from before ingest kept them, with no body
     /// stored. Keeps what it hears; None if it can't say now.
     fn read_live(&self, row: &UnsubRow) -> Result<Option<UnsubWay>, Fault> {

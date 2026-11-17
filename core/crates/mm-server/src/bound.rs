@@ -228,6 +228,7 @@ impl Attention {
         zone: &Arc<dyn Zone>,
         flags: Arc<dyn Flags>,
         events: Arc<dyn AttentionEvents>,
+        read_only: bool,
     ) -> Attention {
         let book = Arc::new(AttentionStore::new(database.clone()));
         let accounts = Arc::new(Enabled(directory.clone()));
@@ -240,6 +241,7 @@ impl Attention {
                 events: events.clone(),
                 clock: clock.clone(),
                 zone: zone.clone(),
+                read_only,
             })),
             muting: Arc::new(Muting::new(MutingParts {
                 book: book.clone(),
@@ -248,6 +250,7 @@ impl Attention {
                 flags,
                 events: events.clone(),
                 clock: clock.clone(),
+                read_only,
             })),
             follow_ups: FollowUps::new(book.clone(), accounts.clone(), events.clone(), clock.clone()),
             tasks: Tasks::new(book, accounts, events, clock.clone(), zone.clone()),

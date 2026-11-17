@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use mm_kernel::errors::{Failure, Problem};
+use mm_kernel::errors::{Failure, Problem, READ_ONLY};
 use mm_kernel::isoformat::{self, Wall};
 use mm_kernel::seams::{Clock, Moment};
 use mm_kernel::when::days_from_civil;
@@ -196,6 +196,9 @@ pub struct SnoozingParts {
     pub events: Arc<dyn Events>,
     pub clock: Arc<dyn Clock>,
     pub zone: Arc<dyn Zone>,
+    /// This process only reads: a snooze, whose waking marks its mail unread on the server, is refused before
+    /// anything is hidden.
+    pub read_only: bool,
 }
 
 #[derive(Debug)]
@@ -206,15 +209,16 @@ pub struct Snoozing {
     events: Arc<dyn Events>,
     clock: Arc<dyn Clock>,
     zone: Arc<dyn Zone>,
+    read_only: bool,
 }
 
 impl Snoozing {
     pub fn new(parts: SnoozingParts) -> Snoozing {
-        let SnoozingParts { book, undo, flags, events, clock, zone } = parts;
-        Snoozing { book, undo, flags, events, clock, zone }
+        let SnoozingParts { book, undo, flags, events, clock, zone, read_only } = parts;
+        Snoozing { book, undo, flags, events, clock, zone, read_only }
     }
 
-    /// `POST /api/snooze`.
+    /// `POST /api/snooze`. A read-only process refuses it (`READ_ONLY`): nothing is hidden.
     pub fn snooze(
         &self,
         target: &Target,
@@ -225,6 +229,9 @@ impl Snoozing {
         let Some(until) = wake_time(preset, until, self.clock.now(), &*self.zone) else {
             return Err(Problem::refused("bad snooze time").into());
         };
+        if self.read_only {
+            return Err(READ_ONLY.into());
+        }
         let pks = match target.thread() {
             Some(_) => Vec::new(),
             None => target.pks()?,

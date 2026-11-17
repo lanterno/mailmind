@@ -29,7 +29,7 @@ const HEADER_BATCH: usize = 300;
 /// UIDs to one MOVE.
 pub const MOVE_BATCH: usize = 200;
 /// What a read-only process answers a sweep that would move mail: it never runs.
-pub const READ_ONLY: Fault = Fault::new("ReadOnlyError");
+pub use mm_kernel::errors::READ_ONLY;
 /// What Undo says it takes back.
 const UNDO_LABEL: &str = "Swept junk";
 /// The most of an account's junk one sweep moves: Undo puts each back on its own, and a click waits on it. The newest

@@ -3,9 +3,9 @@
 
 use axum::body::Body;
 use axum::http::{HeaderValue, Response, StatusCode, header};
-use mm_kernel::errors::{Failure, Problem};
+use mm_kernel::errors::{Failure, Problem, READ_ONLY};
 use mm_kernel::log::{self, Field};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{json, problem};
 
@@ -38,12 +38,24 @@ pub fn problem(problem: &Problem) -> Response<Body> {
     problem_document(status, &document)
 }
 
-/// What a request that failed answers. A problem says what it says; anything else is the fixed 500, with the
-/// method, the path and the fault's class logged and nothing else: an error's text can hold what a server or a
-/// message said.
+/// What a POST a read-only process refused answers (`shared.failure_answer`'s `ReadOnlyError`): nothing was queued
+/// or kept, so nothing waits for a run that writes.
+pub fn read_only(path: &str) -> Response<Body> {
+    log::info(TAG, "POST %(path)s refused, read-only", &[(Field::Path, path)]);
+    let mut document = problem::blank(409, "MailMind is running read-only");
+    document["type"] = json!("/problems/read-only");
+    document["title"] = json!("Read-only");
+    document["read_only"] = json!(true);
+    problem_document(409, &document)
+}
+
+/// What a request that failed answers. A problem says what it says, and a POST a read-only process refused is the
+/// read-only 409; anything else is the fixed 500, with the method, the path and the fault's class logged and nothing
+/// else: an error's text can hold what a server or a message said.
 pub fn failure(failure: &Failure, method: &str, path: &str) -> Response<Body> {
     match failure {
         Failure::Problem(p) => problem(p),
+        Failure::Fault(READ_ONLY) if method == "POST" => read_only(path),
         Failure::Fault(fault) => {
             log::error(
                 TAG,

@@ -6,7 +6,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mm_kernel::errors::{Failure, Fault, Kind, Problem};
+use mm_kernel::errors::{Failure, Fault, Kind, Problem, READ_ONLY};
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_kernel::when::iso;
@@ -49,7 +49,8 @@ pub struct DraftingParts {
     pub gate: Arc<dyn Gate>,
     pub clock: Arc<dyn Clock>,
     pub mint: Mint,
-    /// Whether this process writes to mail servers: a read-only one keeps its saves in the journal.
+    /// Whether this process writes to mail servers: a read-only one keeps its saves in the journal, and refuses a
+    /// discard that would take a copy off a server.
     pub writes: bool,
 }
 
@@ -289,6 +290,10 @@ impl Drafting {
             let Some(row) = book.draft_get(id)? else { return Ok(None) };
             let waiting = book.journal_get(id)?;
             if draft_journal::copy_may_be_there(row.uid, waiting.as_ref()) {
+                if !self.parts.writes {
+                    // Its copy on the server would go: a read-only process refuses that, and the draft stays.
+                    return Err(READ_ONLY);
+                }
                 let version = draft::next_version(Some(&row));
                 book.journal_discard(id, version, &row.account, now)?;
                 book.draft_note_discard(id, version, &stamp)?;

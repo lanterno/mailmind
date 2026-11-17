@@ -14,8 +14,8 @@ use axum::routing::{get, post};
 use mm_curation::cleaning::Asked;
 use mm_curation::sweeping::READ_ONLY;
 use mm_kernel::errors::{Failure, Fault, NOT_YET, Problem};
-use mm_kernel::log::{self, Field};
-use serde_json::{Value, json};
+use mm_kernel::log;
+use serde_json::Value;
 
 use crate::answer;
 use crate::app::App;
@@ -54,14 +54,7 @@ async fn answered(
     match done.unwrap_or(Err(Failure::Fault(Fault::new("Panicked")))) {
         Ok(value) => answer::json(200, &value),
         Err(Failure::Fault(NOT_YET)) => answer::not_yet(uri.path()),
-        Err(Failure::Fault(READ_ONLY)) if method == Method::POST => {
-            log::info(TAG, "POST %(path)s refused, read-only", &[(Field::Path, uri.path())]);
-            let mut document = problem::blank(409, "MailMind is running read-only");
-            document["type"] = json!("/problems/read-only");
-            document["title"] = json!("Read-only");
-            document["read_only"] = json!(true);
-            answer::problem_document(409, &document)
-        }
+        Err(Failure::Fault(READ_ONLY)) if method == Method::POST => answer::read_only(uri.path()),
         Err(Failure::Fault(fault)) if matches!(worded, Worded::CleanupFailed) => {
             log::error(TAG, "error", &[], Some(fault.class));
             answer::problem_document(500, &problem::blank(500, "cleanup failed"))

@@ -8,14 +8,12 @@ use axum::extract::State;
 use axum::http::{Method, Request, Response, Uri};
 use axum::routing::{get, post};
 use mm_kernel::errors::{Failure, Fault, Problem};
-use mm_mailbox::commands::READ_ONLY;
 use mm_mailbox::folders::AccountFolders;
 use serde_json::{Value, json};
 
 use crate::answer;
 use crate::app::App;
 use crate::body::{self, Fields};
-use crate::problem;
 use crate::query::Query;
 
 pub(super) fn routes() -> Router<Arc<App>> {
@@ -93,13 +91,6 @@ async fn folder_change(
     let done = tokio::task::spawn_blocking(move || work(&app, fields)).await;
     match done.unwrap_or(Err(Failure::Fault(Fault::new("Panicked")))) {
         Ok(value) => answer::json(200, &value),
-        Err(Failure::Fault(READ_ONLY)) => {
-            let mut document = problem::blank(409, "MailMind is running read-only");
-            document["type"] = json!("/problems/read-only");
-            document["title"] = json!("Read-only");
-            document["read_only"] = json!(true);
-            answer::problem_document(409, &document)
-        }
         Err(failure) => answer::failure(&failure, method.as_str(), uri.path()),
     }
 }

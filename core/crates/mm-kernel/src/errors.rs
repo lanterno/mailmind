@@ -80,6 +80,11 @@ impl Fault {
 /// as a route it doesn't implement.
 pub const NOT_YET: Fault = Fault::new("NotOnTheRustServerYet");
 
+/// A change to the mail on a server, a send, or anything else that leaves this machine, that a read-only process
+/// refuses before anything is queued or kept (`profile.ReadOnlyError`): a POST answers it as the read-only 409, and
+/// nothing waits for a run that writes.
+pub const READ_ONLY: Fault = Fault::new("ReadOnlyError");
+
 /// What work that panicked comes to, as a job's last error and an account's sync error name it.
 pub const PANIC: Fault = Fault::new("Panic");
 

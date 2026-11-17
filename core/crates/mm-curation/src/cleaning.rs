@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use mm_kernel::errors::{Failure, Fault, NOT_YET, Problem};
+use mm_kernel::errors::{Failure, Fault, NOT_YET, Problem, READ_ONLY};
 use mm_kernel::log;
 use mm_kernel::seams::Clock;
 use serde_json::{Value, json};
@@ -198,6 +198,12 @@ impl Cleaning {
         Cleaning { rules, classified, mail, unsubscribing, filing, audit, tokens, ids, clock }
     }
 
+    /// A cleanup moves mail to Trash and may unsubscribe: a read-only process does neither, and blocks no one on the
+    /// way to refusing.
+    fn refuse_writes(&self) -> Result<(), Fault> {
+        if self.unsubscribing.writes_allowed() { Ok(()) } else { Err(READ_ONLY) }
+    }
+
     /// An undo group of a cleanup's own, never shared with an earlier one.
     fn group(&self, asked: Option<&str>) -> String {
         match asked {
@@ -250,9 +256,11 @@ impl Cleaning {
     /// `POST /api/cleanup/execute`: the cleanup of one sender. First, and reversible: a block rule, and the sender's
     /// INBOX mail to Trash, under one undo group, so one Undo takes both back. Then, best-effort and only with a good
     /// token from the preview, the unsubscribe, which can't be taken back. What it would send, this server must be
-    /// able to send before anything changes; otherwise nothing does.
+    /// able to send before anything changes; otherwise nothing does. A read-only process refuses it (`READ_ONLY`)
+    /// before anything is blocked or moved.
     pub fn execute(&self, asked: &Asked) -> Result<Value, Failure> {
         let plan = plan_from(asked).ok_or_else(|| Problem::refused("bad address"))?;
+        self.refuse_writes()?;
         let from = plan.from_addr.as_str();
         let block_token = plan.block_token();
         let group = self.group(asked.undo_group.as_deref());
@@ -330,9 +338,10 @@ impl Cleaning {
 
     /// `POST /api/cleanup/batch`: many senders at once: each one's block, then every sweep, under one undo group, so a
     /// single Undo takes the whole batch back. Only the reversible half: an unsubscribe can't be taken back, and each
-    /// wants its own preview's token.
+    /// wants its own preview's token. A read-only process refuses it (`READ_ONLY`) before anything is blocked or moved.
     pub fn batch_execute(&self, senders: Option<&[String]>, undo_group: Option<&str>) -> Result<Value, Failure> {
         let addrs = senders_named(senders).ok_or_else(|| Problem::refused("bad senders"))?;
+        self.refuse_writes()?;
         let group = self.group(undo_group);
         let (sweeps, capped) = self.batch_sweeps(&addrs)?;
         let label = format!("Cleaned up {} senders", addrs.len());

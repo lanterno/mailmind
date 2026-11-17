@@ -8,7 +8,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use mm_kernel::errors::{Failure, Fault, Kind};
+use mm_kernel::errors::{Failure, Fault, Kind, READ_ONLY};
 use mm_kernel::log::{self, Field};
 use serde_json::{Value, json};
 
@@ -93,7 +93,8 @@ impl Plans {
     }
 
     /// Carry out what a plan froze, and only that, whatever else the request names: how many went, failed, had gone
-    /// from where the preview saw them, and wait in the queue, and whether Undo can take any back.
+    /// from where the preview saw them, and wait in the queue, and whether Undo can take any back. A read-only process
+    /// refuses it (`READ_ONLY`) with nothing changed.
     pub fn carry_out(
         &self,
         verb: &str,
@@ -126,6 +127,9 @@ impl Plans {
                     Ok(res) => res,
                     // Counted, and nothing went wrong here.
                     Err(Failure::Problem(no)) if matches!(no.kind, Kind::NotFound | Kind::Conflict) => json!({}),
+                    // A read-only process refuses the first before anything is written, and so every one after it:
+                    // the plan is refused whole.
+                    Err(Failure::Fault(READ_ONLY)) => return Err(READ_ONLY.into()),
                     // The rest still go: this run has no second try.
                     Err(failure) => {
                         let class = match &failure {

@@ -13,7 +13,7 @@ use axum::extract::State;
 use axum::http::{Method, Request, Response, Uri};
 use axum::routing::{get, post};
 use mm_calendar::{publish, rsvp};
-use mm_kernel::errors::{Failure, Fault, NOT_YET, Problem};
+use mm_kernel::errors::{Failure, Fault, NOT_YET, Problem, READ_ONLY};
 use mm_kernel::log;
 use serde_json::Value;
 
@@ -86,6 +86,8 @@ async fn invite_rsvp(State(app): State<Arc<App>>, request: Request<Body>) -> Res
         Ok(value) => answer::json(200, &value),
         Err(Failure::Problem(refused)) => answer::problem(&refused),
         Err(Failure::Fault(NOT_YET)) => answer::not_yet(uri.path()),
+        // An answer is a send: a read-only process queues none.
+        Err(Failure::Fault(READ_ONLY)) => answer::read_only(uri.path()),
         Err(Failure::Fault(fault)) => {
             log::error(TAG, "error", &[], Some(fault.class));
             answer::problem_document(500, &problem::blank(500, "RSVP failed"))

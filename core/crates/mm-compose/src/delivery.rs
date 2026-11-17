@@ -24,7 +24,7 @@ use std::fmt;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Duration;
 
-use mm_kernel::errors::{Fault, PANIC, caught};
+use mm_kernel::errors::{Fault, PANIC, READ_ONLY, caught};
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::Clock;
 use mm_kernel::when::iso;
@@ -68,7 +68,8 @@ pub struct DeliveryParts {
     pub worker: Arc<dyn Worker>,
     pub gate: Arc<dyn Gate>,
     pub clock: Arc<dyn Clock>,
-    /// Whether this process writes to mail servers (`profile.writes_allowed`): a read-only one keeps its sends.
+    /// Whether this process writes to mail servers (`profile.writes_allowed`): a read-only one queues no send, and a
+    /// send queued before waits for a run that writes.
     pub writes: bool,
 }
 
@@ -157,8 +158,15 @@ impl Delivery {
         }))
     }
 
-    /// Queue a send that `build_message` built (`enqueue`): (its id, whether it is new, false for a double submit).
+    /// A read-only process sends nothing, and queues nothing to send later: it refuses before a row is written.
+    fn refuse_writes(&self) -> Result<(), Fault> {
+        if self.parts.writes { Ok(()) } else { Err(READ_ONLY) }
+    }
+
+    /// Queue a send that `build_message` built (`enqueue`): (its id, whether it is new, false for a double submit). A
+    /// read-only process refuses it (`READ_ONLY`): a send, a reply, an invite's answer or an unsubscribe by mail.
     pub fn enqueue(&self, built: &Built, meta: &SendMeta) -> Result<(Option<i64>, bool), Fault> {
+        self.refuse_writes()?;
         let orig = self.original(meta.in_reply_to_pk, None, None)?;
         let row = outbox_item::new_row(built, meta, orig.as_ref(), self.now() + self.send_delay(), &self.stamp());
         let queued = self.write(|book| book.outbox_insert(&row))?;
@@ -172,8 +180,10 @@ impl Delivery {
     }
 
     /// A person's Retry. On an unsure row it may send what went out already: they were told. Where the server files
-    /// sent mail itself, a copy in Sent settles that first, and only the row's bookkeeping is left.
+    /// sent mail itself, a copy in Sent settles that first, and only the row's bookkeeping is left. A read-only process
+    /// refuses it.
     pub fn retry(&self, id: i64) -> Result<Value, Fault> {
+        self.refuse_writes()?;
         let went_out = self.in_sent_already(id);
         let ok = self.write(|book| {
             let ok = book.outbox_requeue(id)?;
@@ -218,8 +228,10 @@ impl Delivery {
         }
     }
 
-    /// Bring a scheduled send forward to now (Send now in the tray): false when it isn't queued.
+    /// Bring a scheduled send forward to now (Send now in the tray): false when it isn't queued. A read-only process
+    /// refuses it: it would only wait for a run that writes.
     pub fn send_now(&self, id: i64) -> Result<bool, Fault> {
+        self.refuse_writes()?;
         let now = self.now();
         let ok = self.write(|book| book.outbox_send_now(id, now))?;
         if ok {
