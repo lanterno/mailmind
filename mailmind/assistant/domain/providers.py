@@ -71,6 +71,14 @@ def on_loopback(url: str) -> bool:
     return ai_provider.on_this_machine(url)
 
 
+def cloud_model(provider: AiProvider, local: bool, model: str) -> bool:
+    """Whether the model a server on this Mac is asked for runs in a cloud: Ollama serves its cloud models at the same
+    loopback address as the rest, and names them with a `-cloud` or `:cloud` ending (`gpt-oss:120b-cloud`), so mail asked
+    of one leaves this Mac. Only a model on this Mac, or a compatible service on loopback (`local`), can be one."""
+    name = model.strip().lower()
+    return provider in ("local", "compatible") and local and name.endswith(("-cloud", ":cloud"))
+
+
 def sendable(key: str) -> bool:
     """Whether `key` can go in a request's header: printable ASCII with no space, as every provider's keys are. A key with a
     blank, a line break or another control character in it was pasted or read wrong, and would break the header it went in."""
@@ -126,6 +134,11 @@ class Engine:
         """It runs on this Mac (a model on this Mac, or any service on loopback), so a model the price table doesn't know
         costs nothing."""
         return self.provider == "local" or on_loopback(self.base_url)
+
+    @property
+    def cloud_model(self) -> bool:
+        """The model chosen for a server on this Mac runs in a cloud, so mail asked of it leaves this Mac."""
+        return cloud_model(self.provider, self.local, self.model)
 
     @property
     def timeout(self) -> int:

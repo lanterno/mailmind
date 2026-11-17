@@ -392,12 +392,15 @@ class SyncState(Answer):
 class AiStatus(Answer):
     """`Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
     is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off.
-    `summaries_waiting` is how many messages from the last 30 days wait for a summary, there while AI is on."""
+    `cloud_model` is whether the model chosen for a server on this Mac (a model on this Mac, or a compatible service on
+    loopback) runs in a cloud, as Ollama's `-cloud` models do, so mail asked of it leaves this Mac: said whether AI is on
+    or off. `summaries_waiting` is how many Inbox messages from the last 30 days wait for a summary, there while AI is on."""
     engine: str
     provider: AiProvider
     off: AiOff | None
     model: str
     background_model: str
+    cloud_model: bool
     key_from: str
     last_ok: bool | None
     last_ts: int
