@@ -87,8 +87,11 @@ half in their login Keychain; it never goes in the repo, a file, CI or anyone el
    key: **Always Allow** saves asking again), and checks that signature against the public key inside the app. It
    prints the .dmg's size and a `gh release create` command, and says so if the tree has changes not committed.
 4. **Try it.** Open the .dmg, drag MailMind to a folder of your own, open it, and look around.
-5. **The notes.** Write what changed at the top of `shells/apple/build/release/notes.md`. The rest of the template
-   (`shells/apple/Release/notes.md`) says how to install and how to open the app the first time.
+5. **The notes.** The template (`shells/apple/Release/notes.md`) opens with the last release's news under that
+   release's own version, and its news is replaced at each release: what changed in this one, under this version, in
+   its place. Do that with the version's commit (step 1), so the build copies it into
+   `shells/apple/build/release/notes.md`, where a last word can still be changed. The rest of the template says how to
+   install and how to open the app the first time, and names the .dmg by `{{version}}`, which the build fills in.
 6. **Publish.** Run the printed command. It tags the commit the build came from, makes the release the latest, and
    uploads the .dmg and `appcast.xml`. The recipe never publishes by itself.
 7. **Check the update.** Open an older copy and choose **MailMind › Check for Updates…**: it should offer the new
