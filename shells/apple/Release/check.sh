@@ -6,6 +6,8 @@
 # the .dmg with a signature that verifies against the key the app carries. Nothing is published. MailMind itself opens
 # only on the demo's fictional world (Measure/demo_home.py), never on its data folder, once for each half that runs
 # here (on Apple silicon the Intel half runs under Rosetta); a probe signed as the app is loads its Sparkle.
+#
+#   MAILMIND_RELEASE_CHECK_KEEP   a folder to copy the .dmg into, for a Mac this one isn't (CI opens it on macOS 15)
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/mailmind-release-check.XXXXXX")"
@@ -55,6 +57,12 @@ appcast="$work/out/appcast.xml"
 
 echo "## the disk image"
 check "MailMind-$version.dmg is made" test -f "$dmg"
+# Kept before the checks below, so a check that fails here doesn't stop it opening on another Mac.
+if [[ -n "${MAILMIND_RELEASE_CHECK_KEEP:-}" && -f "$dmg" ]]; then
+    mkdir -p "$MAILMIND_RELEASE_CHECK_KEEP"
+    /bin/cp "$dmg" "$MAILMIND_RELEASE_CHECK_KEEP/"
+    echo "kept: $MAILMIND_RELEASE_CHECK_KEEP/MailMind-$version.dmg"
+fi
 check "its checksum verifies" hdiutil verify -quiet "$dmg"
 mkdir "$work/mnt"
 hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$work/mnt" "$dmg"
