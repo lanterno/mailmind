@@ -184,6 +184,21 @@ final class ReadOnlyTests: XCTestCase {
         composer.close(force: true)
     }
 
+    // MARK: Attention
+
+    func testMutingSeveralSaysReadOnlyAndAsksOnce() async {
+        let routes = DeskRoutes(), notices = DeskNotices()
+        routes.refuse("POST", API.Post.Mute.path, status: 409, type: "read-only", detail: Self.detail,
+                      more: #""read_only": true"#)
+        let model = AttentionModel(link: CoreLink(routes), notices: notices)
+
+        await model.mute([DeskFixture.ada, DeskFixture.grace])
+
+        XCTAssertEqual(notices.shown?.text, Self.refused, "not \"Muted 0 threads\"")
+        XCTAssertEqual(notices.shown?.undoable, false)
+        XCTAssertEqual(routes.sent("POST", API.Post.Mute.path).count, 1, "read only's no is the same for every thread")
+    }
+
     // MARK: The desk, curation and folders
 
     func testTheDeskCurationAndFoldersSayReadOnly() {
