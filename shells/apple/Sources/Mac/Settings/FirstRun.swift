@@ -2,10 +2,10 @@
 import AppKit
 import SwiftUI
 
-/// The first run: no account yet. A welcome in the brief's manner (#44): the painted meadow across the top with the
-/// greeting on it, a card in the brief's hand saying what MailMind will do, and the two steps as cards: connect an
-/// account (the page's `firstrun`), and AI, if you want it: off, the way to Settings › AI to turn AI mode on; on, as
-/// it stays for whoever kept a key, the key for the provider chosen.
+/// The first run: no account yet. A welcome in the brief's manner (#44): the painted meadow across the window's top,
+/// under the traffic lights, with the greeting on it, a card in the brief's hand saying what MailMind will do, and the
+/// two steps as cards: connect an account (the page's `firstrun`), and AI, if you want it: off, the way to Settings ›
+/// AI to turn AI mode on; on, as it stays for whoever kept a key, the key for the provider chosen.
 struct Welcome: View {
     let status: AppStatus
     /// Whether the window's traffic lights stand over the scene's top left; a test's picture has none.
@@ -87,6 +87,9 @@ struct Welcome: View {
             }
         }
         .scrollContentBackground(.hidden)
+        // The scene runs to the window's top, the traffic lights over its sky, as the mail window's sky does: the
+        // window has no title bar of the system's (`WindowChrome`), so the scroll view keeps no room for one.
+        .ignoresSafeArea(.container, edges: .top)
         .background {
             ZStack {
                 meadow.paper
@@ -118,26 +121,22 @@ struct Welcome: View {
         Settings › AI chooses the service, and turns it off.
         """)
 
-    /// The scene across the top (`.bhero`), with the greeting on its sky. It covers the whole window, so with the
-    /// traffic lights over its corner the scene and the greeting move down by their room.
+    /// The scene across the top (`.bhero`), 220 high from the window's top, with the greeting on its sky: said once,
+    /// with no line over it. With the traffic lights over the scene's corner, the greeting stands just below their
+    /// row, its capitals about as far under the lights as the lights are under the window's top (`room`). A press on
+    /// the sky moves the window, as the top bar's empty stretches do, for the welcome covers the top bar.
     private var hero: some View {
-        let room: CGFloat = lights ? 36 : 0
+        let room: CGFloat = lights ? 8 : 0
         return MeadowScene(seed: 11)
-            .frame(height: 220 + room)
+            .frame(height: 220)
+            .overlay { WindowDragArea() }
             .overlay(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("WELCOME")
-                        .font(.meadow(.ui, 12, .heavy))
-                        .tracking(12 * 0.14)
-                        .foregroundStyle(meadow.ink2)
-                        .accessibilityHidden(true)
-                    Text("Welcome to MailMind.")
-                        .font(.meadow(.display, 40, .bold))
-                        .foregroundStyle(meadow.ink)
-                        .accessibilityAddTraits(.isHeader)
-                }
-                .padding(.leading, 40)
-                .padding(.top, 32 + room)
+                Text("Welcome to MailMind.")
+                    .font(.meadow(.display, 40, .bold))
+                    .foregroundStyle(meadow.ink)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.leading, 40)
+                    .padding(.top, 32 + room)
             }
     }
 
