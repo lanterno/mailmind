@@ -51,7 +51,8 @@ L = a week-plus.
   A gate for each account is the Rust server's default (`environment::gate_per_account`), but two jobs still pass
   `EVERY_ACCOUNT`, which waits for every gate: a draft save whose old copy is in another account (`mm_compose::drafting`;
   it needs just the two accounts' gates, which the gates can't take yet), and an undo entry that names no account, as a
-  snooze's does (`mm_mailbox::undo`), though undoing a snooze asks no server anything.
+  snooze's does (`mm_mailbox::undo`), though undoing a snooze asks no server anything. #3 also asks that
+  `MAILMIND_WORKERS` go once the two weeks on the Rust server (Next up) have soaked a gate for each account.
 
 ## The move to the Rust core
 
