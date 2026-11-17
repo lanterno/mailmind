@@ -161,15 +161,16 @@ def draft_ahead_gc(c, now, orphans=True):
 
 
 def needs_summary(c, limit=200, newer_than=None):
-    """Non-junk messages without a summary yet, newest first: one copy of each, since what the AI says
+    """Non-junk Inbox messages without a summary yet, newest first: one copy of each, since what the AI says
     of it is kept under its key. A message a batch holds isn't one of them, nor a row with no key, which
-    has nowhere to keep an answer until the next start gives it one (repair_keys). With `newer_than`,
-    only what came after that moment: while a batch is out the rest of the backlog waits for the next,
-    or it would go at full price."""
+    has nowhere to keep an answer until the next start gives it one (repair_keys). No other folder is: what
+    a person sent, drafted or deleted, or any folder they opened, goes to no provider unasked. With
+    `newer_than`, only what came after that moment: while a batch is out the rest of the backlog waits for
+    the next, or it would go at full price."""
     return c.execute(
         """SELECT m.* FROM messages m
            LEFT JOIN assessments s ON s.message_key = m.message_key
-           WHERE m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL
+           WHERE m.folder = 'INBOX' AND m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL
              AND m.message_key IS NOT NULL
              AND COALESCE(m.message_key, 0) NOT IN (SELECT message_key FROM ai_batch_items)
              AND COALESCE(m.ts, 0) > ?
@@ -179,12 +180,12 @@ def needs_summary(c, limit=200, newer_than=None):
 
 
 def summaries_waiting(c, newer_than):
-    """How many messages newer than `newer_than` wait for a summary: non-junk, with a key, one count for each, and those
-    a batch holds among them, since they have none yet."""
+    """How many Inbox messages newer than `newer_than` wait for a summary: non-junk, with a key, one count for each, and
+    those a batch holds among them, since they have none yet."""
     return c.execute(
         """SELECT COUNT(DISTINCT m.message_key) FROM messages m
            LEFT JOIN assessments s ON s.message_key = m.message_key
-           WHERE m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL
+           WHERE m.folder = 'INBOX' AND m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL
              AND m.message_key IS NOT NULL AND COALESCE(m.ts, 0) > ?""", (newer_than,)
     ).fetchone()[0]
 
