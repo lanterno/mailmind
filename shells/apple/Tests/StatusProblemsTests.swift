@@ -58,6 +58,32 @@ final class StatusProblemsTests: XCTestCase {
         XCTAssertNil(StatusWords.syncHelp("AUTH", type: "imap"))
     }
 
+    /// A login held back after a refusal fails as LoginRefused whatever Google first said (IMAP off, sign in on the
+    /// web), and so does a wrong App Password: the words for it, in the row and the banner, hold for each.
+    func testAGmailLoginTurnedDownWithoutGooglesReasonSaysWhatHoldsForEveryReason() {
+        for error in ["LoginRefused", nil] {
+            let said = StatusWords.syncProblem("AUTH", type: "gmail", error: error)
+            XCTAssertEqual(said, """
+                Gmail turned down the login. If you typed your Google password, Gmail needs an App Password instead: \
+                make one, then choose Edit and paste it. If you already use one, sign in to Gmail in your browser and \
+                check that IMAP is on, then choose Retry.
+                """)
+            XCTAssertFalse(said.contains("not your Google password"),
+                           "someone who already uses an App Password isn't told they don't: \(said)")
+            XCTAssertEqual(StatusWords.syncHelp("AUTH", type: "gmail", error: error), StatusWords.appPasswords)
+        }
+
+        let held = API.AccountStanding(account: "cy@example.test", healthy: false, lastError: "LoginRefused",
+                                       lastErrorKind: "AUTH", lastErrorTs: "2026-11-16T09:00:00Z", live: "",
+                                       syncCount: 3)
+        let banner = StatusWords.alert(["cy@example.test"], health: [held], type: { _ in "gmail" },
+                                       name: StatusWords.short)
+        XCTAssertEqual(banner.text, """
+            cy can’t connect: Gmail turned down the login. If you typed your Google password, it needs an App Password.
+            """)
+        XCTAssertEqual(banner.link, StatusWords.appPasswords)
+    }
+
     func testTheBannerSaysToStartBridgeOrMakeAnAppPassword() {
         func standing(_ account: String, _ kind: String, _ error: String) -> API.AccountStanding {
             API.AccountStanding(account: account, healthy: false, lastError: error, lastErrorKind: kind,
