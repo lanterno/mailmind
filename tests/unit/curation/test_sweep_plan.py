@@ -202,6 +202,17 @@ def test_a_plan_holds_back_starred_or_unread_junk_and_takes_the_newest_of_the_re
         10, False, 0, [], None)
 
 
+def test_a_sweep_after_a_plan_from_the_stored_inbox_takes_nothing_older_than_it_stores():
+    """As the Rust server takes it (core/crates/mm-curation/tests/sweeping.rs). A sync that read only recent mail stored the
+    alert alone, so the plan named nothing older: Lin's lunch and Loom's issue stay, and a sale that came since may go."""
+    live = [read("lin@example.test", uid="1"), read("news@loom.example.test", bulk=True, uid="2"),
+            read("no-reply@alerts.example.test", uid="3"), read("deals@loom.example.test", bulk=True, uid="4")]
+    alert = kept(3, "no-reply@alerts.example.test")
+    assert [r["uid"] for r in sweep_plan.since_stored(live, [alert])] == ["3", "4"]
+    assert sweep_plan.since_stored(live, [kept(1, "lin@example.test"), alert]) == live
+    assert sweep_plan.since_stored(live, []) == []              # nothing stored: the plan named nothing
+
+
 # ── a sweep of stored junk ───────────────────────────────────────────────────────────────
 def test_only_stored_junk_someone_read_and_no_one_starred_is_sweepable():
     """As the Rust server counts it (core/crates/mm-curation/tests/sweep_plan.rs)."""
