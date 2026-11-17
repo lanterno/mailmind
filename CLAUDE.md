@@ -101,7 +101,7 @@ The docs below say why. These are the ones a change can break without noticing:
   copies beside it, never renumber or delete one. Rename `tests/golden/schema_v<N>.sql` in the commit that adds migration N.
 - **Identity.** `pk` is not stable. Durable state keys on the message key, and the API names no pk: a copy is key, folder and uid.
 - **Changing mail on a server.** Every change a person asks for goes through `mailbox.commands`, and every job that talks IMAP goes through
-  `gates.run`. A new list query leaves out `pending_removal` rows. A new write path queues or calls `profile.refuse_writes` first. Never
+  `gates.run`. A new list query leaves out `pending_removal` rows. A new write path calls `profile.refuse_writes` first. Never
   send a bulk `EXPUNGE`.
 - **What reaches IMAP.** Folder names go only through `accounts.mailbox_arg` and other quoted values through `accounts.imap_quote`. Never
   build `f'"{folder}"'`.
