@@ -21,7 +21,7 @@ use mm_curation::unsubscribe::{
     attempt_key, list_unsub, mail_date, mailto_message, mailto_of, not_tried, parse_list_unsub, preview, preview_said,
     read_only, repeat_of, said, without_sending,
 };
-use mm_kernel::errors::{Failure, Fault, NOT_YET};
+use mm_kernel::errors::{Failure, Fault, NOT_YET, READ_ONLY};
 use mm_kernel::seams::{Clock, Moment};
 use serde_json::{Value, json};
 
@@ -676,7 +676,7 @@ fn without_a_good_token_the_block_and_sweep_stand_and_nothing_leaves() {
 }
 
 #[test]
-fn a_read_only_process_blocks_and_sweeps_and_sends_nothing() {
+fn a_read_only_process_refuses_a_cleanup_before_it_blocks_moves_or_sends_anything() {
     let world = Arc::new(World {
         rows: newest_and_older(),
         stored: Some(one_click()),
@@ -695,8 +695,10 @@ fn a_read_only_process_blocks_and_sweeps_and_sends_nothing() {
         ids: world.clone(),
         clock: world.clone(),
     });
-    let done = read_only.execute(&asked).expect("cleaned up");
-    assert_eq!((done["status"].clone(), done["swept"].clone()), (json!("read_only"), json!(1)));
+    assert_eq!(read_only.execute(&asked), Err(READ_ONLY.into()));
+    let senders = vec![LOOM.to_owned()];
+    assert_eq!(read_only.batch_execute(Some(&senders), Some("cleanup:batch")), Err(READ_ONLY.into()));
+    assert_eq!(world.said(), Vec::<String>::new(), "no rule, no undo, no trash, no unsubscribe and no record");
 }
 
 #[test]

@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use mm_kernel::errors::{Failure, Fault, Kind, Problem};
+use mm_kernel::errors::{Failure, Fault, Kind, Problem, READ_ONLY};
 use mm_mailbox::command_ports::Tokens;
 use mm_mailbox::plans::{OneByOne, PlanCopies, PlanSnooze, Plans, PlansParts};
 use serde_json::{Value, json};
@@ -221,4 +221,12 @@ fn a_snooze_that_fails_otherwise_says_so() {
     let world = Arc::new(World { snoozed: Some(Err(Fault::new("Storage").into())), ..world(&[(1, 11)]) });
     let done = plans(&world).carry_out("snooze", Some("tomorrow"), &seen(&[1]), Some("g"));
     assert_eq!(done, Err(Failure::Fault(Fault::new("Storage"))));
+}
+
+#[test]
+fn a_read_only_process_refuses_the_whole_plan_at_its_first_message() {
+    let world = Arc::new(World { answers: vec![(11, Err(READ_ONLY.into()))], ..world(&[(1, 11), (2, 12)]) });
+    let done = plans(&world).carry_out("archive", None, &seen(&[1, 2]), Some("g"));
+    assert_eq!(done, Err(READ_ONLY.into()));
+    assert_eq!(world.asked(), ["read 2", "archive 11 g"], "none after it was asked");
 }

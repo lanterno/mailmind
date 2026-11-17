@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use mm_kernel::errors::{Fault, PANIC};
+use mm_kernel::errors::{Fault, PANIC, READ_ONLY};
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::command::{Accepted, Command, Message};
 use mm_mailbox::command_ports::{CommandStore, MoveAccount, MoveAccounts, NewCommand, Tokens, Tx, UndoRow};
@@ -361,16 +361,35 @@ impl Tokens for World {
 }
 
 fn commands(world: &Arc<World>) -> MailCommands {
+    commands_of(world, false)
+}
+
+fn commands_of(world: &Arc<World>, read_only: bool) -> MailCommands {
     MailCommands::new(CommandParts {
         store: world.clone(),
         accounts: world.clone(),
-        server: ServerOps::new(world.clone(), false),
+        server: ServerOps::new(world.clone(), read_only),
         gates: world.clone(),
         clock: world.clone(),
         events: world.clone(),
         tokens: world.clone(),
-        read_only: false,
+        read_only,
     })
+}
+
+#[test]
+fn a_read_only_process_refuses_a_change_before_anything_is_written_and_leaves_what_a_full_run_queued() {
+    let world = World::new();
+    world.trash(1, ADA, 10, false, 0);
+    let commands = commands_of(&world, true);
+    assert_eq!(commands.accept_move("archive", 20, None, None, None).err(), Some(READ_ONLY));
+    assert_eq!(commands.accept_flags(20, &[("seen", true)], None).err(), Some(READ_ONLY));
+    assert_eq!(commands.retry(1).err(), Some(READ_ONLY), "nor does the tray's Retry ask again");
+    commands.drain().unwrap();
+    assert_eq!(world.rows.lock().unwrap().len(), 1, "nothing was queued");
+    assert_eq!((world.row(1).state.as_str(), world.row(1).attempts), ("queued", 0), "it waits for a full run");
+    assert_eq!(world.hidden.lock().unwrap().get(&1), Some(&vec![10]));
+    assert_eq!(world.said(), []);
 }
 
 #[test]

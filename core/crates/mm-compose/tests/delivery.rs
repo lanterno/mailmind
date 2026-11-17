@@ -10,14 +10,15 @@ use std::time::Duration;
 
 use mm_compose::delivery::{Delivery, DeliveryParts, PANICKED, PANICKED_AFTER};
 use mm_compose::events::ComposeEvent;
-use mm_compose::outbox_item::{MAX_ATTEMPTS, UNSURE};
+use mm_compose::outbox_item::{MAX_ATTEMPTS, SendMeta, UNSURE};
 use mm_compose::ports::{Row, Tracked};
 use mm_compose::sending_ports::{
     Accounts, Appended, Book, Busy, ComposeStore, Copies, CopyFailed, DraftRow, Effects, Events, Gate, GateWait,
     InPlace, Mark, NewSend, NotSent, OutboxRow, Priority, Quote, Record, Save, Screen, SendingAccount, Transport,
     Waiting, Worker,
 };
-use mm_kernel::errors::Fault;
+use mm_compose::spec::Built;
+use mm_kernel::errors::{Fault, READ_ONLY};
 use mm_kernel::seams::{Clock, Moment};
 
 const ADA: &str = "ada@example.test";
@@ -500,6 +501,10 @@ struct Sending {
 
 impl Sending {
     fn new(saves_sent: bool) -> Sending {
+        Sending::writing(saves_sent, true)
+    }
+
+    fn writing(saves_sent: bool, writes: bool) -> Sending {
         let (outbox, wire) = (Arc::new(Outbox::default()), Arc::new(Wire::default()));
         let sent_folder = Arc::new(SentFolder::default());
         let (said, clock) = (Arc::new(Said::default()), Arc::new(Seconds(AtomicI64::new(1_000))));
@@ -514,7 +519,7 @@ impl Sending {
             worker: Arc::new(NoWorker),
             gate: Arc::new(Open),
             clock: clock.clone(),
-            writes: true,
+            writes,
         }));
         Sending { delivery, outbox, wire, sent_folder, said, clock }
     }
@@ -605,4 +610,19 @@ fn a_send_that_panics_once_it_went_out_owes_only_its_bookkeeping() {
     assert_eq!((finished.state.as_str(), finished.sent_appended), ("sent", true));
     assert_eq!(sending.wire.tries.load(Ordering::SeqCst), 1, "it went on the wire again");
     assert_eq!(sending.said(), [sent(1)]);
+}
+
+#[test]
+fn a_read_only_process_queues_no_send_asks_none_again_and_sends_none() {
+    let sending = Sending::writing(true, false);
+    sending.outbox.queue(1, b"Hi");
+    // A row written would reach `outbox_insert`, which this world never answers: the refusal comes first.
+    let meta = SendMeta { account: ADA.to_owned(), idempotency_key: "k-1".to_owned(), ..SendMeta::default() };
+    assert_eq!(sending.delivery.enqueue(&Built::default(), &meta), Err(READ_ONLY));
+    assert_eq!(sending.delivery.retry(1), Err(READ_ONLY));
+    assert_eq!(sending.delivery.send_now(1), Err(READ_ONLY));
+    sending.pass();
+    assert_eq!(sending.outbox.row(1).state, "queued", "what a full run queued waits for the next");
+    assert_eq!(sending.wire.tries.load(Ordering::SeqCst), 0);
+    assert_eq!(sending.said(), []);
 }
