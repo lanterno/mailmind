@@ -19,6 +19,67 @@ final class StatusProblemsTests: XCTestCase {
         }
     }
 
+    func testAProtonAccountsTroubleIsItsBridgeAndAGmailAccountsIsItsAppPassword() {
+        for kind in ["NETWORK", "TIMEOUT"] {
+            let said = StatusWords.syncProblem(kind, type: "proton", error: "ConnectionRefused")
+            XCTAssertTrue(said.hasPrefix("Proton Bridge isn’t running"), said)
+            XCTAssertTrue(said.contains("Start Proton Bridge"), said)
+            XCTAssertFalse(said.contains("couldn’t reach the server"), "not the generic words: \(said)")
+            XCTAssertFalse(said.contains("name and port"), "a Proton account has no server to edit: \(said)")
+            XCTAssertEqual(StatusWords.syncHelp(kind, type: "proton"), StatusWords.protonBridge)
+        }
+        XCTAssertEqual(StatusWords.protonBridge.url, "https://proton.me/mail/bridge")
+        XCTAssertTrue(StatusWords.syncProblem("AUTH", type: "proton").contains("the password Bridge shows"))
+
+        let gmail = StatusWords.syncProblem("AUTH", type: "gmail", error: "LoginNeedsAppPassword")
+        XCTAssertTrue(gmail.contains("it needs an App Password, not your Google password"), gmail)
+        XCTAssertEqual(StatusWords.syncHelp("AUTH", type: "gmail", error: "LoginNeedsAppPassword"), StatusWords.appPasswords)
+        XCTAssertEqual(StatusWords.appPasswords.url, "https://myaccount.google.com/apppasswords")
+        XCTAssertEqual(StatusWords.syncHelp("AUTH", type: "gmail", error: "LoginRefused"), StatusWords.appPasswords)
+        let offline = StatusWords.syncProblem("NETWORK", type: "gmail", error: "ConnectionRefused")
+        XCTAssertEqual(offline, "MailMind couldn’t reach Gmail. Check your internet connection, then choose Retry.")
+        XCTAssertNil(StatusWords.syncHelp("NETWORK", type: "gmail"))
+        // Google's other refusals aren't an App Password's: each says its own step.
+        XCTAssertTrue(StatusWords.syncProblem("AUTH", type: "gmail", error: "LoginNeedsWebSignIn").contains("sign in on the web"))
+        XCTAssertTrue(StatusWords.syncProblem("AUTH", type: "gmail", error: "LoginImapOff").contains("IMAP is switched off"))
+        XCTAssertNil(StatusWords.syncHelp("AUTH", type: "gmail", error: "LoginNeedsWebSignIn"))
+
+        // An account with servers of its own checks them, as before.
+        XCTAssertTrue(StatusWords.syncProblem("NETWORK", type: "imap").contains("server’s name and port"))
+        XCTAssertNil(StatusWords.syncHelp("NETWORK", type: "imap"))
+        XCTAssertNil(StatusWords.syncHelp("AUTH", type: "imap"))
+    }
+
+    func testTheBannerSaysToStartBridgeOrMakeAnAppPassword() {
+        func standing(_ account: String, _ kind: String, _ error: String) -> API.AccountStanding {
+            API.AccountStanding(account: account, healthy: false, lastError: error, lastErrorKind: kind,
+                                lastErrorTs: "2026-11-16T09:00:00Z", live: "", syncCount: 3)
+        }
+        let types = ["ada@example.test": "proton", "bo@example.test": "proton", "cy@example.test": "gmail",
+                     "di@example.test": "imap"]
+        let health = [standing("ada@example.test", "NETWORK", "ConnectionRefused"),
+                      standing("bo@example.test", "TIMEOUT", "Timeout"),
+                      standing("cy@example.test", "AUTH", "LoginNeedsAppPassword"),
+                      standing("di@example.test", "NETWORK", "ConnectionRefused")]
+        func alert(_ bad: [String]) -> (text: String, link: API.Link?) {
+            StatusWords.alert(bad, health: health, type: { types[$0] }, name: StatusWords.short)
+        }
+
+        let bridge = alert(["ada@example.test", "bo@example.test"])
+        XCTAssertEqual(bridge.text, "Proton Bridge isn’t running, so ada, bo can’t connect. Start Proton Bridge.")
+        XCTAssertEqual(bridge.link, StatusWords.protonBridge)
+        let gmail = alert(["cy@example.test"])
+        XCTAssertEqual(gmail.text, "cy can’t connect: Gmail needs an App Password, not your Google password.")
+        XCTAssertEqual(gmail.link, StatusWords.appPasswords)
+
+        let other = alert(["di@example.test"])
+        XCTAssertEqual(other.text, "1 account couldn’t connect (di).")
+        XCTAssertNil(other.link)
+        let mixed = alert(["ada@example.test", "di@example.test"])
+        XCTAssertEqual(mixed.text, "2 accounts couldn’t connect (ada, di).", "Bridge isn't all that is wrong")
+        XCTAssertNil(mixed.link)
+    }
+
     func testOnlyAJobWhoseLastRoundFailedIsFailing() {
         func job(_ name: String, _ error: String?, failures: Int) -> API.Job {
             StatusFixtures.decode(API.Job.self, """
