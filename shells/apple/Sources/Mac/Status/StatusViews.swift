@@ -202,7 +202,7 @@ struct StatusMenu: View {
 
 
 /// Under the top bar, until it is closed, for as long as an account can't connect (`AccountAlert`), in the light's
-/// sun.
+/// sun: Proton Bridge not running, or Gmail wanting an App Password, said as such with the page that helps.
 struct AccountAlert: View {
     let status: AppStatus
     @Environment(\.openSettings) private var openSettings
@@ -211,10 +211,12 @@ struct AccountAlert: View {
     var body: some View {
         let bad = status.alerting
         if !bad.isEmpty {
+            let said = StatusWords.alert(bad, health: status.health, type: status.type, name: status.name)
             HStack(spacing: 10) {
                 MeadowIconView(.alert).foregroundStyle(meadow.sunInk)
-                Text(words(bad)).lineLimit(2).foregroundStyle(meadow.ink2)
+                Text(said.text).lineLimit(2).foregroundStyle(meadow.ink2)
                 Spacer()
+                if let link = said.link { LinkButton(link: link) }
                 Button("Open Settings") {
                     status.settingsTab = .accounts
                     openSettings()
@@ -234,13 +236,6 @@ struct AccountAlert: View {
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 12).fill(meadow.sunWash))
         }
-    }
-
-    private func words(_ bad: [String]) -> String {
-        let names = bad.map(status.name).joined(separator: ", ")
-        return bad.count == 1
-            ? String(localized: "1 account couldn’t connect (\(names)).")
-            : String(localized: "\(bad.count) accounts couldn’t connect (\(names)).")
     }
 }
 

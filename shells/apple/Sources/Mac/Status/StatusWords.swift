@@ -185,10 +185,55 @@ enum StatusWords {
         }
     }
 
+    /// Proton Bridge's own page, for an account Bridge isn't answering for.
+    static let protonBridge = API.Link(url: "https://proton.me/mail/bridge", words: String(localized: "Get Proton Bridge"))
+    /// Where a Google Account makes the App Password Gmail's IMAP takes.
+    static let appPasswords = API.Link(url: AccountDraft.appPasswords.absoluteString,
+                                       words: String(localized: "Make an App Password"))
+
+    /// Whether a sync's trouble at an account of `type` is Proton Bridge not answering: Bridge runs on this Mac, so a
+    /// Proton account that can't be reached, or answers too late, has a Bridge that isn't running.
+    static func bridgeDown(_ kind: String?, type: String?) -> Bool {
+        type == "proton" && (kind == "NETWORK" || kind == "TIMEOUT")
+    }
+
     /// What a failed sync's kind (`last_error_kind`) means, in a sentence that says what to do next. A kind this
-    /// build doesn't know reads as something that went wrong.
-    static func syncProblem(_ kind: String) -> String {
-        switch kind {
+    /// build doesn't know reads as something that went wrong. `type` is the account's: a Proton account's trouble is
+    /// its Bridge, and a Gmail account has no server's name or port to check but wants an App Password, each of whose
+    /// refusals `error`, the trouble's class, tells apart.
+    static func syncProblem(_ kind: String, type: String? = nil, error: String? = nil) -> String {
+        if bridgeDown(kind, type: type) {
+            return String(localized: """
+                Proton Bridge isn’t running, so MailMind can’t reach this account. Start Proton Bridge and wait until \
+                it says it is connected, then choose Retry.
+                """)
+        }
+        switch (type, kind) {
+        case ("proton", "AUTH"):
+            return String(localized: """
+                Proton Bridge didn’t accept the password. Keep the password Bridge shows for this address under Proton \
+                Bridge password, not your Proton password.
+                """)
+        case ("gmail", "AUTH") where error == "LoginNeedsWebSignIn":
+            return String(localized: """
+                Google wants you to sign in on the web first. Sign in to Gmail in your browser, then choose Retry.
+                """)
+        case ("gmail", "AUTH") where error == "LoginImapOff":
+            return String(localized: """
+                IMAP is switched off for this account. Turn it on in Gmail’s settings, or ask your Workspace admin to, \
+                then choose Retry.
+                """)
+        case ("gmail", "AUTH"):
+            return String(localized: """
+                Gmail turned down the password: it needs an App Password, not your Google password. Make one, then \
+                choose Edit and paste it.
+                """)
+        case ("gmail", "NETWORK"):
+            return String(localized: "MailMind couldn’t reach Gmail. Check your internet connection, then choose Retry.")
+        default:
+            break
+        }
+        return switch kind {
         case "AUTH":
             String(localized: """
                 The server turned down the password. Choose Edit and type it again; if your provider uses app \
@@ -224,6 +269,39 @@ enum StatusWords {
                 Diagnostics and send them to whoever gave you MailMind.
                 """)
         }
+    }
+
+    /// The page that helps with a sync's trouble at an account of `type`, where there is one: Proton Bridge's, or
+    /// where Google makes the App Password Gmail wants.
+    static func syncHelp(_ kind: String, type: String? = nil, error: String? = nil) -> API.Link? {
+        if bridgeDown(kind, type: type) { return protonBridge }
+        let signIn = ["LoginNeedsWebSignIn", "LoginImapOff"].contains(error ?? "")
+        return type == "gmail" && kind == "AUTH" && !signIn ? appPasswords : nil
+    }
+
+    /// The banner's words for the accounts that can't connect, and the page that helps. Where each is a Proton account
+    /// whose Bridge isn't answering, it says to start Bridge; where the one is a Gmail account that wants an App
+    /// Password, it says so; otherwise how many, by name. `type` and `name` look an account up; `health` is each
+    /// account's syncs, which say the trouble's kind and class.
+    static func alert(_ bad: [String], health: [API.AccountStanding], type: (String) -> String?,
+                      name: (String) -> String) -> (text: String, link: API.Link?)
+    {
+        let names = bad.map(name).joined(separator: ", ")
+        let troubles = bad.map { account in
+            (record: health.first { $0.account == account }, type: type(account))
+        }
+        if !troubles.isEmpty, troubles.allSatisfy({ bridgeDown($0.record?.lastErrorKind, type: $0.type) }) {
+            return (String(localized: "Proton Bridge isn’t running, so \(names) can’t connect. Start Proton Bridge."),
+                    protonBridge)
+        }
+        if troubles.count == 1, let one = troubles.first, let kind = one.record?.lastErrorKind, one.type == "gmail",
+           let link = syncHelp(kind, type: one.type, error: one.record?.lastError)
+        {
+            return (String(localized: "\(names) can’t connect: Gmail needs an App Password, not your Google password."),
+                    link)
+        }
+        return (bad.count == 1 ? String(localized: "1 account couldn’t connect (\(names)).")
+                    : String(localized: "\(bad.count) accounts couldn’t connect (\(names))."), nil)
     }
 
     static func healthLine(_ record: API.AccountStanding?, now: Date) -> HealthLine {

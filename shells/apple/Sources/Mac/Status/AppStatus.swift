@@ -383,6 +383,11 @@ final class AppStatus {
         digest?.accounts ?? accounts.compactMap(\.email)
     }
 
+    /// An account's type as Settings lists it (gmail, proton, imap), or nil before the accounts are read.
+    func type(_ account: String) -> String? {
+        accounts.first { $0.email == account }?.type
+    }
+
     func name(_ account: String) -> String {
         if let row = accounts.first(where: { $0.email == account }), let alias = row.alias, !alias.isEmpty {
             return alias

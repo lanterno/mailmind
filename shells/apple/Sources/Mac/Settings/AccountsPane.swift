@@ -557,7 +557,11 @@ struct HealthRow: View {
                             .meadowButton(small: true)
                             .disabled(busy)
                     }
-                    SettingHelp(StatusWords.syncProblem(kind))
+                    let type = status.accounts.first { $0.email == email }?.type
+                    SettingHelp(StatusWords.syncProblem(kind, type: type, error: record?.lastError))
+                    if let link = StatusWords.syncHelp(kind, type: type, error: record?.lastError) {
+                        LinkButton(link: link)
+                    }
                     Text(verbatim: [kind, record?.lastError ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.meadow(.mono, 11))
                         .foregroundStyle(meadow.ink3)
