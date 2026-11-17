@@ -105,6 +105,29 @@ fn what_waits_for_a_summary_counts_each_message_once_those_a_batch_holds_among_t
     assert_eq!(database.summaries_waiting(2000), Ok(1));
 }
 
+/// A message in each folder but the Inbox, none summarized, all of them new.
+const ELSEWHERE: &str = "
+INSERT INTO message_identity (key, account, identity) VALUES
+  (11, 'ada@example.test', 'm11'), (12, 'ada@example.test', 'm12'), (13, 'ada@example.test', 'm13'),
+  (14, 'ada@example.test', 'm14'), (15, 'ada@example.test', 'm15'), (16, 'ada@example.test', 'm16');
+INSERT INTO messages (pk, account, kind, folder, uid, from_addr, subject, ts, is_junk, pending_removal, message_key)
+VALUES
+  (11, 'ada@example.test', 'imap', 'Sent', 1, 'ada@example.test', 'Re: Lunch', 5000, 0, NULL, 11),
+  (12, 'ada@example.test', 'imap', 'Drafts', 1, 'ada@example.test', 'Notes', 5000, 0, NULL, 12),
+  (13, 'ada@example.test', 'imap', 'Trash', 1, 'win@example.test', 'Promo', 5000, 0, NULL, 13),
+  (14, 'ada@example.test', 'imap', '[Gmail]/All Mail', 1, 'lin@example.test', 'Quilt', 5000, 0, NULL, 14),
+  (15, 'ada@example.test', 'imap', 'Archive', 1, 'ivo@example.test', 'Old', 5000, 0, NULL, 15),
+  (16, 'ada@example.test', 'imap', 'INBOX', 16, 'mae@example.test', 'New', 5000, 0, NULL, 16);
+";
+
+#[test]
+fn triage_reads_and_counts_the_inbox_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = database(dir.path(), ELSEWHERE);
+    assert_eq!(keys(&database, 10, None), [Some(16)]);
+    assert_eq!(database.summaries_waiting(-1), Ok(1));
+}
+
 #[test]
 fn a_batch_that_is_out_says_where_it_cuts_off() {
     let dir = tempfile::tempdir().unwrap();
