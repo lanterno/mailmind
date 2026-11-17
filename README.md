@@ -271,8 +271,8 @@ ask, or for a switch you turned on in Settings › AI.
   `MAILMIND_MODEL` names one, which wins;
   per-message triage runs at low effort, everything else at medium). Background summaries ask the
   provider's small model (`claude-haiku-5-5`, OpenAI's `gpt-6-luna`, Gemini's `gemini-3.5-flash-lite`;
-  a model on this Mac or a compatible service, the one chosen), and reach back only 30 days: older mail
-  is summarized when you ask for a summary. Settings' Spending card names both models and how many messages wait.
+  a model on this Mac or a compatible service, the one chosen), read only the Inbox, and reach back only
+  30 days: older mail, and mail filed anywhere else, is summarized when you ask for a summary. Settings' Spending card names both models and how many messages wait.
   Without a key, AI is off and nothing is sent. A safety-classifier decline on a mail body is
   re-run on another model server-side, and rate limits and overloads are retried.
   `uv run python -m mailmind ai key` keeps the key in the login Keychain and points `"anthropic_api_key"` in
@@ -285,7 +285,7 @@ ask, or for a switch you turned on in Settings › AI.
   a choice of provider: Claude (the default), OpenAI, Google Gemini, a model on this Mac (Ollama,
   LM Studio, llama.cpp, vLLM, Jan or GPT4All, which Settings finds running and lists with their models,
   and with none running, links to Ollama with one model to start with and its context length to set;
-  nothing leaves the machine) or any other OpenAI-compatible service at a URL you give, each with a
+  nothing leaves the machine, unless the model is one of Ollama's cloud models, which the AI status says) or any other OpenAI-compatible service at a URL you give, each with a
   model of your choosing from the list the provider offers. Each provider's key is kept in the login
   Keychain like Claude's (`ai key --provider openai`; a model on this Mac needs none); `ai on` and
   `ai off` turn AI mode on and off from the command line. A reasoning model's thinking is left out of
