@@ -12,6 +12,10 @@
 //! - A lending starts with no folder selected: a command that needs one before the borrower selects one is refused,
 //!   as a new connection's would be, so no job acts on the folder the one before it left selected. CONDSTORE is
 //!   enabled as the connection opens, where the server offers it, since ENABLE can't follow a SELECT.
+//! - A folder a person makes, renames or deletes goes on it too. One renamed or deleted that the connection has
+//!   selected on the server, whichever lending selected it, or a folder inside that one, leaves a session servers treat
+//!   differently (some end it): nothing more is asked of that folder in the lending, and the connection is logged out
+//!   as it comes back rather than kept.
 //! - One lost, or failing otherwise, while lent is closed and not kept.
 //! - A wake or a change of network (`woke`) closes them all at once, saying nothing to servers that may be gone; a
 //!   change to an account, or its removal (`forget`), closes its own; and a quit (`close`) logs each out.
@@ -79,6 +83,8 @@ struct Kept {
     condstore: bool,
     /// The wake it was opened after: one opened before the latest is closed.
     generation: u64,
+    /// The folder selected on it, by whichever lending, as the server holds it until the next SELECT; None for none.
+    folder: Option<String>,
 }
 
 impl Kept {
@@ -224,7 +230,7 @@ impl KeptServers {
             }
         };
         self.shared.count(|c| c.created += 1);
-        Ok(Kept { server, born: now, lendings: 1, condstore, generation })
+        Ok(Kept { server, born: now, lendings: 1, condstore, generation, folder: None })
     }
 
     /// A wake or a change of network: every connection kept is closed now, without a LOGOUT, since its server may be
@@ -307,6 +313,7 @@ impl MailServers for KeptServers {
                 shared: self.shared.clone(),
                 selected: false,
                 dirty: false,
+                retire: false,
             })),
             Err(e) => {
                 slot.lent.store(false, Ordering::SeqCst);
@@ -327,6 +334,8 @@ struct Lent {
     selected: bool,
     /// It was lost, or failed otherwise: it is closed, not kept.
     dirty: bool,
+    /// A folder it had selected was renamed or deleted: it is logged out, not kept.
+    retire: bool,
 }
 
 /// What a lending's end does when nothing is left to lend.
@@ -358,6 +367,17 @@ impl Lent {
         self.watch(answer)
     }
 
+    /// After `name` was renamed or deleted on the server: where that is the folder the connection has selected, or
+    /// one whose name begins with it (a folder inside it), nothing more is asked of it in this lending, and the
+    /// connection isn't kept.
+    fn folder_went(&mut self, name: &str) {
+        let held = self.kept.as_ref().and_then(|kept| kept.folder.as_deref());
+        if held.is_some_and(|held| held.starts_with(name)) {
+            self.selected = false;
+            self.retire = true;
+        }
+    }
+
     /// Give it back: kept for the next job if it may be, else closed.
     fn give_back(&mut self) {
         let Some(kept) = self.kept.take() else { return };
@@ -367,7 +387,10 @@ impl Lent {
             kept.close(false);
         } else if stale {
             kept.close(false);
-        } else if self.shared.closed.load(Ordering::SeqCst) || !self.shared.still(&self.account, &self.slot) {
+        } else if self.retire
+            || self.shared.closed.load(Ordering::SeqCst)
+            || !self.shared.still(&self.account, &self.slot)
+        {
             kept.close(true);
         } else {
             *locked(&self.slot.kept) = Some(kept);
@@ -414,6 +437,9 @@ impl MailServer for Lent {
         let answer = self.server()?.select(folder, readonly);
         // A SELECT that fails leaves no folder selected (RFC 3501, 6.3.1).
         self.selected = answer.is_ok();
+        if let Some(kept) = self.kept.as_mut() {
+            kept.folder = answer.is_ok().then(|| folder.to_owned());
+        }
         self.watch(answer)
     }
 
@@ -499,5 +525,26 @@ impl MailServer for Lent {
         if let Ok(server) = self.server() {
             server.set_timeout(seconds);
         }
+    }
+
+    fn create_folder(&mut self, name: &str) -> Result<(), ServerError> {
+        let answer = self.server()?.create_folder(name);
+        self.watch(answer)
+    }
+
+    fn rename_folder(&mut self, name: &str, to: &str) -> Result<(), ServerError> {
+        let answer = self.server()?.rename_folder(name, to);
+        if answer.is_ok() {
+            self.folder_went(name);
+        }
+        self.watch(answer)
+    }
+
+    fn delete_folder(&mut self, name: &str) -> Result<(), ServerError> {
+        let answer = self.server()?.delete_folder(name);
+        if answer.is_ok() {
+            self.folder_went(name);
+        }
+        self.watch(answer)
     }
 }
