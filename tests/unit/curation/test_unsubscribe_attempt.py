@@ -3,7 +3,7 @@ is tests/api/test_http_cleanup.py."""
 import pytest
 
 from mailmind.curation.domain import unsubscribe
-from mailmind.curation.domain.unsubscribe import (NO_METHOD, READ_ONLY, TERMINAL, Attempt, Mailto, after_mailto, after_one_click,
+from mailmind.curation.domain.unsubscribe import (NO_METHOD, TERMINAL, Attempt, Mailto, after_mailto, after_one_click,
                                                   attempt_key, mailto_of, not_tried, offers_a_way, preview, preview_said, repeat_of,
                                                   said, without_sending)
 
@@ -20,7 +20,6 @@ MAILTO = {**NO_METHOD, "method": "mailto", "mailto_to": "leave@list.example.test
     (after_mailto(False), False),
     (without_sending(PAGE), True),
     (without_sending(NO_METHOD), False),
-    (READ_ONLY, False),
     (not_tried(True), False),
     (not_tried(False), False),
 ])
@@ -51,10 +50,6 @@ def test_a_page_is_for_the_person_to_open():
 
 def test_no_way_out_says_so():
     assert without_sending(NO_METHOD) == Attempt("no_method", "none")
-
-
-def test_read_only_sends_nothing_and_stays_retryable():
-    assert READ_ONLY == Attempt("read_only", "none")
 
 
 def test_one_that_did_not_go_says_why():
