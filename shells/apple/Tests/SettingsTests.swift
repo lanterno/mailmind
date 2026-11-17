@@ -416,11 +416,11 @@ final class SettingsCoreTests: XCTestCase {
     }
 
     @MainActor
-    private func opened() async throws -> (Core, AppStatus) {
+    private func opened(notifier: any Notifier = SystemNotifier.Silent()) async throws -> (Core, AppStatus) {
         let core = try await Core.open(CoreHome(folder: folder.path(percentEncoded: false),
                                                 variables: ["MAILMIND_DB_KEY": Self.key, "MAILMIND_NOSYNC": "1"],
                                                 standIn: keychain.path(percentEncoded: false)))
-        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+        let status = AppStatus(newMail: NewMailAlerts(notifier: notifier, isActive: { true },
                                                       badge: { _ in }, announce: { _ in }))
         await status.attach(core)
         return (core, status)
@@ -686,6 +686,42 @@ final class SettingsCoreTests: XCTestCase {
         XCTAssertTrue(read.quietHours)
         XCTAssertEqual(read.quietFrom, "21:15")
         await close(core, status)
+    }
+
+    /// The first run has no account to hear from as the core attaches, so macOS is asked whether MailMind may notify
+    /// as the first one is added, not at the next launch.
+    @MainActor
+    func testNotificationsAreAskedForAsTheFirstAccountIsAdded() async throws {
+        let asks = Asks()
+        let (core, status) = try await opened(notifier: asks)
+        XCTAssertTrue(status.firstRun)
+        XCTAssertEqual(asks.count, 0, "no account to hear from yet")
+        var draft = AccountDraft()
+        draft.email = "ada@example.test"
+        draft.pick(.imap)
+        draft.host = "127.0.0.1"
+        draft.port = "9"
+        draft.password = Self.password
+        _ = try await SecretPost.post(core, API.Post.AccountsAdd.self, draft.body)
+        await status.readAccounts()
+        await deskEventually { asks.count == 1 }
+        await status.readAccounts()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(asks.count, 1, "asked once")
+        await close(core, status)
+    }
+
+    /// Counts how often macOS would be asked.
+    private final class Asks: Notifier, @unchecked Sendable {
+        private let lock = NSLock()
+        private var made = 0
+        var count: Int { lock.withLock { made } }
+        func allowed() async -> Bool? { nil }
+        func ask() async -> Bool {
+            lock.withLock { made += 1 }
+            return true
+        }
+        func post(id: String, title: String, body: String) async {}
     }
 }
 
