@@ -287,7 +287,10 @@ cloud, so what is summarized goes to Ollama’s servers."
 So three things go by themselves, and each reads only the Inbox: new mail's summaries, the line on what came in since
 you looked as the new-mail pill shows, and the day's brief as the Inbox opens when none is stored, the last two
 written from the senders, subjects and summaries already made. Mail you sent, drafted, deleted or filed elsewhere goes
-only when you ask. Everything else waits for you to ask, or for a switch you turned on in Settings › AI.
+only when you ask, or with a switch you turned on in Settings › AI: **Draft replies ahead for important mail** sends
+whole conversations, your own replies in them too, and **Have last week’s review ready each Monday** sends the subjects
+and recipients of the threads you are waiting on, with the names of the week's meetings from invites in any folder.
+Everything else waits for you to ask, or for one of those switches.
 
 - **The Claude API.** With an API key set, the server and every command call the Messages API
   through the official Anthropic SDK (`claude-opus-5-5` unless you choose another in Settings or
@@ -517,7 +520,7 @@ only when you ask. Everything else waits for you to ask, or for a switch you tur
   folder, and an Undo that would have to ask a server. Nothing you ask for waits for a normal run, and a sync, a
   filter, a muted thread or a snooze waking queues nothing either; what a normal run queued earlier still waits for
   the next one. What changes only this Mac still works: reading, rules, AI, cancelling a queued send, and saving a
-  draft, which is kept on this Mac (the outbox panel shows it as kept here) and goes to its server only when you save
+  draft, which is kept on this Mac (the outbox panel says "Kept on this Mac") and goes to its server only when you save
   it again with read-only off. Nothing syncs in the background. The sync pill says Read-only.
   The Mac app has it as a switch in Settings › General ("Read only: MailMind changes nothing on your mail servers"),
   which it applies the next time it opens, offering to open it again; its welcome screen mentions it. Only your own
@@ -746,16 +749,17 @@ Before you add an account:
   and the date and time: send that file too.
 - A sync that fails says why in **Settings › Accounts**, with what to do next, and background work that keeps failing
   says so in the sync menu. If MailMind can't open its copy of your mail, its window says why and what to do, with
-  **Copy Details**, **Show in Finder** and **Start Fresh…**, which moves that copy into `backups/` and reads your mail
-  from its servers again.
+  **Copy Details**, **Show in Finder** and, where a fresh copy would help, **Start Fresh…**, which moves that copy into
+  `backups/` and reads your mail from its servers again.
 
 ### Uninstall the Mac app
 
 Removing an account (**Settings › Accounts**, then **Remove**) takes its password out of the login Keychain and, unless
 you untick it, its mail off this Mac: its messages with their bodies and attachments, what the AI said of them, its
 Undo entries and the records of its sweeps. Its mail on the server stays as it is. The copies of MailMind's database in
-`backups/` (one made before each upgrade changes the database, the newest three kept, and any **Start Fresh** moved
-aside) still hold the account's mail as it was then, until newer copies replace them; step 4 below removes them all.
+`backups/` still hold the account's mail as it was then. The copy made before each upgrade changes the database keeps it
+until newer copies replace it (the newest three are kept). A copy **Start Fresh** moved aside keeps it until you delete
+it, since nothing prunes it. Step 4 below removes them all.
 
 To remove MailMind and everything it keeps:
 
