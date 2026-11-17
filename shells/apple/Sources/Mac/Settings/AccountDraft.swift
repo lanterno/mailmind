@@ -301,6 +301,54 @@ struct AccountDraft: Equatable {
         return editing.map { API.TryBody(email: $0) }
     }
 
+    /// When the sheet's Save tries the login (`AccountSave`).
+    enum Tries: Equatable {
+        /// Never: a plain edit, or an account added from Settings, which its card tests once it shows.
+        case never
+        /// As typed, before anything is kept.
+        case typed
+        /// Once kept, as kept.
+        case kept
+    }
+
+    /// When Save tries the login: from the first run, as typed, but a Proton account, whose Bridge password only a
+    /// saved account is tried with; for a password typed to fix the account's login from its Sync card (#51), as
+    /// typed, so a password that doesn't log in is never kept; for another fix (its server), once kept.
+    func tries(firstRun: Bool) -> Tries {
+        if editing == nil {
+            guard firstRun else { return .never }
+            return type == .proton ? .kept : .typed
+        }
+        if asksPassword, credential != nil { return .typed }
+        return fixing == nil ? .never : .kept
+    }
+
+    /// The page the password's row shows (#51): Google's App Passwords under Gmail's steps, or the provider's page
+    /// where its password is made (`link`); nil where it shows none.
+    var passwordPage: String? {
+        switch type {
+        case .gmail: keptElsewhere == nil ? Self.appPasswords.absoluteString : nil
+        case .imap: keptElsewhere == nil ? link?.url : nil
+        case .proton: link?.url
+        }
+    }
+
+    /// What the sheet says of `tested`, under the password's row, which already says some of it (#51): the page the
+    /// row shows isn't offered twice, and under Gmail's steps, a password Gmail turned down is said in one line that
+    /// leans on them, where the core's sentence would say the steps' first and last lines again. The class stays, in
+    /// small type.
+    func inSheet(_ tested: Tested) -> Tested {
+        guard case .failed(let why, let link, let detail) = tested else { return tested }
+        let shown = link != nil && link?.url == passwordPage
+        if type == .gmail, shown { return .failed(Self.gmailTurnedDown, link: nil, detail: detail) }
+        return .failed(why, link: shown ? nil : link, detail: detail)
+    }
+
+    /// What the sheet says under Gmail's steps of a password Gmail turned down.
+    static let gmailTurnedDown = String(localized: """
+        Gmail turned down the password: paste an App Password made with the steps above.
+        """)
+
     /// Why Test can't run yet, said where it would: a new Proton account is tested once it is added.
     var testsOnceAdded: String? {
         editing == nil && type == .proton ? String(localized: "Add the account, then test it.") : nil

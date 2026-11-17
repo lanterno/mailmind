@@ -7,18 +7,23 @@ import SwiftUI
 /// rests, the server is asked which preset it takes, and its settings go in the form, or are offered where they fit.
 /// From the first run, the login is tested before the account is saved, and the sheet stays open with what to do when
 /// the test fails. A Proton account logs in with the Bridge's password, which only a saved account is tested with: the
-/// first run adds it, then tests it, and keeps the sheet open with what to do until Done when the test fails.
+/// first run adds it, then tests it, and keeps the sheet open with what to do until Done when the test fails. An edit
+/// opened from the account's Sync card to fix its login is tested as it is saved too (`AccountSave`, #51).
 struct AccountForm: View {
     let status: AppStatus
     @State var draft: AccountDraft
     /// Test the login before saving a new account, and save it only once the test says it works (the first run).
     var testsFirst = false
+    /// What the last test said, under the form; a test of the sheet may open it on one.
+    @State var tested: Tested? = nil
+    /// A fix of the account's server kept, whose test then failed (#51): what was kept stays, so Cancel is Done, and
+    /// Save keeps another try. A test of the sheet may open it so.
+    @State var kept = false
     /// Done: the address saved, added or edited, or nil when the form was cancelled.
     let done: (String?) -> Void
 
     @State private var problem = ""
     @State private var saving = false
-    @State private var tested: Tested?
     /// The account added from the first run whose test then failed: the sheet stays open on it until Done.
     @State private var added: String?
     /// The field the sheet was opened to fix (#51), focused as it opens and again when a fix didn't work.
@@ -93,7 +98,7 @@ struct AccountForm: View {
             .scrollContentBackground(.hidden)
 
             if let tested {
-                TestedWords(tested: tested)
+                TestedWords(tested: draft.inSheet(tested))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 18)
                     .padding(.bottom, 8)
@@ -123,13 +128,14 @@ struct AccountForm: View {
                         .meadowButton(.primary)
                         .keyboardShortcut(.defaultAction)
                 } else {
-                    Button("Cancel") {
+                    Button(kept ? "Done" : "Cancel") {
                         draft.forgetPassword()
-                        done(nil)
+                        if kept { finish(draft.address, adding: false) } else { done(nil) }
                     }
                     .meadowButton()
                     .keyboardShortcut(.cancelAction)
-                    Button(saving ? (testsFirst ? "Testing…" : "Saving…") : (draft.editing == nil ? "Add Account" : "Save")) {
+                    Button(saving ? (tested == .running ? "Testing…" : "Saving…")
+                                  : (draft.editing == nil ? "Add Account" : "Save")) {
                         Task { await save() }
                     }
                     .meadowButton(.primary)
@@ -289,77 +295,24 @@ struct AccountForm: View {
         saving = true
         let adding = draft.editing == nil
         let address = draft.address
-        let body = draft.body
-        // Tested first: a login that doesn't work keeps the sheet open, with the password still typed, to fix. A Proton
-        // account logs in with the Bridge's password, which only a saved account may be tested with: it is tested once
-        // added, below.
-        if adding, testsFirst, draft.type != .proton, let trial = draft.test {
-            tested = .running
-            do {
-                tested = .of(try await SecretPost.post(core, API.Post.AccountsTest.self, trial))
-            } catch {
-                tested = .of(error)
-            }
-            guard tested == .connected else {
-                saving = false
-                return
-            }
-        }
-        draft.forgetPassword()
-        do {
-            if adding {
-                _ = try await SecretPost.post(core, API.Post.AccountsAdd.self, body)
-            } else {
-                _ = try await SecretPost.post(core, API.Post.AccountsEdit.self, body)
-            }
-        } catch {
-            let refused = (error as? Problem).flatMap { $0.isRefusal ? $0 : nil }
-            problem = refused.map { $0.detail ?? String(localized: "Could not save.") } ?? String(localized: "Save failed.")
-            saving = false
+        let outcome = await AccountSave(routes: .over(core, status: status))
+            .run(draft, firstRun: testsFirst) { tested = $0 }
+        saving = false
+        // The password typed is let go once it is sent to be kept, or once it didn't log in to fix an account: the
+        // field asks again. From the first run, one that didn't log in stays typed, to fix.
+        if !(adding && outcome == .notKept) { draft.forgetPassword() }
+        switch outcome {
+        case .kept:
+            finish(address, adding: adding)
+        case .notKept:
             focusTheFix()
-            return
+        case .keptFailing:
+            if adding { added = address } else { kept = true }
+            focusTheFix()
+        case .refused(let said):
+            problem = said
+            focusTheFix()
         }
-        status.say(adding ? String(localized: "Added \(StatusWords.short(address))")
-                          : String(localized: "Updated \(StatusWords.short(address))"))
-        await status.readAccounts()
-        await status.readDigest()
-        // The window's rail and list read again now, not at the end of the new account's first sync: the rail shows
-        // it at once, and its Inbox says it is being read for the first time. Not waited for: its folders are read
-        // live from its server, and the sheet closes (or tests a Proton account) meanwhile.
-        if adding { MailApp.shared.accountsChanged() }
-        // A Proton account from the first run, tested now it is saved: one whose Bridge doesn't let it in keeps the
-        // sheet open with what to do, and a Test to try again, until Done.
-        if adding, testsFirst, draft.type == .proton {
-            tested = .running
-            do {
-                tested = .of(try await SecretPost.post(core, API.Post.AccountsTest.self, API.TryBody(email: address)))
-            } catch {
-                tested = .of(error)
-            }
-            guard tested == .connected else {
-                added = address
-                saving = false
-                return
-            }
-        }
-        // A fix from the Sync card (#51), tested as saved: the edit let go of the login held back after the refusal,
-        // so the test logs in afresh. One that works syncs the account again now, which clears its trouble; one that
-        // doesn't keeps the sheet open with what the test said, the field emptied and focused for another try.
-        if !adding, draft.fixing != nil {
-            tested = .running
-            do {
-                tested = .of(try await core.post(API.Post.AccountsTest.self, API.TryBody(email: address)))
-            } catch {
-                tested = .of(error)
-            }
-            guard tested == .connected else {
-                saving = false
-                focusTheFix()
-                return
-            }
-            await status.retry(address)
-        }
-        finish(address, adding: adding)
     }
 
     /// Put the focus in the field the sheet was opened to fix, once the sheet can take it.
@@ -373,6 +326,107 @@ struct AccountForm: View {
     private func finish(_ address: String, adding: Bool) {
         done(address)
         if adding { Task { await status.syncNow() } }
+    }
+}
+
+/// What the account sheet's Save does, step by step, over routes a test stands in for (#51). Where a login can be
+/// tried as typed (a new account from the first run; a password typed to fix an account's login), it is tried before
+/// anything is kept, and one that doesn't log in keeps nothing: Cancel still leaves the account as it was. A test of
+/// what is typed is never held back for the refusal the account's sync met, which names the login that was kept.
+/// Where it can't be (a Proton account from the first run, whose Bridge password only a saved account is tried with;
+/// a server's fix, whose kept password the sheet never sees), the account is kept, then tried as kept. A fix is said
+/// to be kept only once it logs in, and its account then syncs again, which clears the trouble it fixed.
+@MainActor
+struct AccountSave {
+    let routes: AccountRoutes
+
+    enum Outcome: Equatable {
+        /// Kept, and logging in where it was tried: the sheet closes.
+        case kept
+        /// The login typed didn't work, and nothing was kept.
+        case notKept
+        /// Kept, but the login as kept didn't work.
+        case keptFailing
+        /// The server wouldn't keep it: its words, or ours.
+        case refused(String)
+    }
+
+    /// Save `draft`, from the first run when `firstRun`, showing each test as it runs and as it ends.
+    func run(_ draft: AccountDraft, firstRun: Bool, show: (Tested) -> Void) async -> Outcome {
+        let adding = draft.editing == nil
+        let address = draft.address
+        let tries = draft.tries(firstRun: firstRun)
+        if tries == .typed, let trial = draft.test {
+            show(.running)
+            let tested = await routes.test(trial)
+            show(tested)
+            guard tested == .connected else { return .notKept }
+        }
+        do {
+            try await routes.keep(draft.body, adding)
+        } catch {
+            let refused = (error as? Problem).flatMap { $0.isRefusal ? $0 : nil }
+            return .refused(refused.map { $0.detail ?? String(localized: "Could not save.") }
+                ?? String(localized: "Save failed."))
+        }
+        let fixing = !adding && draft.fixing != nil
+        let said = adding ? String(localized: "Added \(StatusWords.short(address))")
+                          : String(localized: "Updated \(StatusWords.short(address))")
+        if !(fixing && tries == .kept) { routes.say(said) }
+        await routes.kept(address, adding)
+        if tries == .kept {
+            show(.running)
+            let tested = await routes.test(API.TryBody(email: address))
+            show(tested)
+            guard tested == .connected else { return .keptFailing }
+            if fixing { routes.say(said) }
+        }
+        if fixing { await routes.retry(address) }
+        return .kept
+    }
+}
+
+/// The routes and the status the account sheet's Save goes through: the core's, or a test's in their place.
+@MainActor
+struct AccountRoutes {
+    /// Try a login: a draft as typed, or an account as kept.
+    var test: (API.TryBody) async -> Tested
+    /// Keep the account: add it (true), or keep its edit.
+    var keep: (API.AccountBody, Bool) async throws -> Void
+    /// Once an account is kept (added when true): Settings and the window read the accounts again.
+    var kept: (String, Bool) async -> Void
+    /// Say a few words in the status line.
+    var say: (String) -> Void
+    /// Sync the account again.
+    var retry: (String) async -> Void
+
+    /// The core's routes, a secret sent through `SecretPost`, and the app's status.
+    static func over(_ core: Core, status: AppStatus) -> AccountRoutes {
+        AccountRoutes(
+            test: { body in
+                do {
+                    return .of(try await SecretPost.post(core, API.Post.AccountsTest.self, body))
+                } catch {
+                    return .of(error)
+                }
+            },
+            keep: { body, adding in
+                if adding {
+                    _ = try await SecretPost.post(core, API.Post.AccountsAdd.self, body)
+                } else {
+                    _ = try await SecretPost.post(core, API.Post.AccountsEdit.self, body)
+                }
+            },
+            kept: { _, adding in
+                await status.readAccounts()
+                await status.readDigest()
+                // The window's rail and list read again now, not at the end of the new account's first sync: the rail
+                // shows it at once, and its Inbox says it is being read for the first time. Not waited for: its
+                // folders are read live from its server, and the sheet closes (or tests a Proton account) meanwhile.
+                if adding { MailApp.shared.accountsChanged() }
+            },
+            say: { status.say($0) },
+            retry: { await status.retry($0) })
     }
 }
 
