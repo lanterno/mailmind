@@ -45,20 +45,38 @@ def new(**kw):
             "text": "Hi Lin,\n\nThe linen came in. Want half?\n\nAda", **kw}
 
 
+def given_up(app, world, name):
+    """A star a full run queued while the server was away, then gave up on when the server refused it: the tray's
+    Retry would ask the server again."""
+    world.server.drop("SELECT", user=w.ADA)
+    assert app.post("/api/flag", {**world.copy(name), "flag": "flagged", "on": True}).json["status"] == "queued"
+    world.server.fail("UID STORE", user=w.ADA)
+    app.work("commands")
+    [stuck] = app.get("/api/pending").json["items"]
+    assert stuck["state"] == "error"
+    return stuck["id"]
+
+
 def test_each_change_to_mail_is_refused_and_none_waits(app, world):
+    stuck = given_up(app, world, "ada-inbox-10-raw-utf8.eml")
     read_only(app)
-    shown = inbox(app)
+    shown, queue = inbox(app), rows("SELECT id, state, attempts, next_attempt_at FROM mail_commands")
     since = world.mark()
-    for path, name, extra in (("/api/archive", RECEIPT, {}), ("/api/trash", SCAM, {}), ("/api/junk", NEWSLETTER, {}),
-                              ("/api/move", CI, {"to": "Archive"}), ("/api/thread/archive", LUNCH, {}),
-                              ("/api/thread/trash", LUNCH, {}), ("/api/seen", RECEIPT, {"seen": True}),
-                              ("/api/flag", RECEIPT, {"flag": "flagged", "on": True}),
-                              ("/api/snooze", RECEIPT, {"until": AT_SIX}), ("/api/mute", LUNCH, {})):
-        r = app.post(path, {**world.copy(name), **extra})
+    for path, body in (("/api/archive", world.copy(RECEIPT)), ("/api/trash", world.copy(SCAM)),
+                       ("/api/junk", world.copy(NEWSLETTER)), ("/api/move", {**world.copy(CI), "to": "Archive"}),
+                       ("/api/thread/archive", world.copy(LUNCH)), ("/api/thread/trash", world.copy(LUNCH)),
+                       ("/api/thread/move", {**world.copy(LUNCH), "to": "Archive"}),
+                       ("/api/bulk/file", {"verb": "archive", "rows": [world.copy(RECEIPT)]}),
+                       ("/api/bulk/move", {"to": "Archive", "rows": [{**world.copy(CI), "whole": False}]}),
+                       ("/api/seen", {**world.copy(RECEIPT), "seen": True}),
+                       ("/api/flag", {**world.copy(RECEIPT), "flag": "flagged", "on": True}),
+                       ("/api/snooze", {**world.copy(RECEIPT), "until": AT_SIX}), ("/api/mute", world.copy(LUNCH)),
+                       ("/api/pending/retry", {"id": stuck})):
+        r = app.post(path, body)
         assert (r.status, r.json) == (409, REFUSED), path
-    assert rows("SELECT id FROM mail_commands") == []
+    assert rows("SELECT id, state, attempts, next_attempt_at FROM mail_commands") == queue    # the given-up star alone
     assert rows("SELECT message_key FROM snoozes") == [] and rows("SELECT thread_id FROM muted") == []
-    assert app.get("/api/pending").json["waiting"] == 0
+    assert (app.get("/api/pending").json["waiting"], app.get("/api/pending").json["stuck"]) == (0, 1)
     assert inbox(app) == shown
     assert app.post("/api/undo", {}).status == 404                     # nothing was done, so there is nothing to undo
     assert world.writes(since) == []
