@@ -1,19 +1,11 @@
 [
  {
   "note": "messages summarized",
-  "value": 20
+  "value": 14
  },
  {
   "note": "follow-ups at Monday noon",
-  "value": [
-   {
-    "account": "ada@example.test",
-    "due_ts": 1793620800,
-    "kind": "received",
-    "state": "due",
-    "thread_id": "rf:ada@example.test:c5862e0831764395"
-   }
-  ]
+  "value": []
  },
  {
   "note": "follow-ups four days later",

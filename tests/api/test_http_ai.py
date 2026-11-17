@@ -287,6 +287,20 @@ def test_the_status_counts_what_waits_for_a_summary_from_the_last_30_days(app, w
     assert waiting() is None
 
 
+def test_background_summaries_read_the_inbox_alone(app, ai):
+    """What a person sent, drafted, filed or deleted goes to no provider unasked, and isn't counted as waiting: the world
+    holds mail in Sent, Drafts, Archive, Trash and a folder of Bea's, all of it from the last 30 days."""
+    waiting = app.get("/api/digest").json["ai"]["summaries_waiting"]
+    ai.responder = triage
+    app.work("assess")
+    asked = [r.prompt for r in ai.requests if r.prompt.startswith("You are triaging ONE email")]
+    assert len(asked) == waiting > 0
+    for subject in ("Notes for the review", "Quilt pattern ideas", "20% off all yarn this weekend", "Kickoff notes",
+                    "Re: Contract draft v2"):
+        assert not [p for p in asked if f"Subject: {subject}" in p], subject
+    assert app.get("/api/digest").json["ai"]["summaries_waiting"] == 0
+
+
 NO_CREDIT = fa.error(400, "invalid_request_error", "Your credit balance is too low to access the Anthropic API. "
                                                  "Please go to Plans & Billing to upgrade or purchase credits.")
 

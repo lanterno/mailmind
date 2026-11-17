@@ -165,10 +165,11 @@ def test_reply_later_records_when_the_thread_last_moved(app, world):
 
 def test_a_received_nudge_stops_after_the_expiry_window(app, world, ai):
     app.work("assess")
-    quilt = world.row("ada-archive-01-old-thread.eml")      # from Lin, read, unanswered, 20 Oct
+    alert = world.row("bea-inbox-02-security.eml")          # in Bea's Inbox, read, unanswered, 31 Oct
+    app.clock.shift(timedelta(days=4))
     app.work("follow-ups")
-    assert rows("SELECT state FROM followups WHERE thread_id=?", quilt["thread_id"]) == [{"state": "due"}]
-    app.clock.move_to(datetime.fromtimestamp(quilt["ts"], timezone.utc)
+    assert rows("SELECT state FROM followups WHERE thread_id=?", alert["thread_id"]) == [{"state": "due"}]
+    app.clock.move_to(datetime.fromtimestamp(alert["ts"], timezone.utc)
                       + timedelta(days=follow_up_rules.EXPIRE_DAYS, hours=1))
     app.work("follow-ups")
-    assert rows("SELECT state FROM followups WHERE thread_id=?", quilt["thread_id"]) == []
+    assert rows("SELECT state FROM followups WHERE thread_id=?", alert["thread_id"]) == []

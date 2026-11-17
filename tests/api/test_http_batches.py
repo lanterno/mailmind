@@ -16,7 +16,7 @@ from fakes import anthropic_api as fa
 from fixtures import world as w
 from stored_rows import q
 
-BACKLOG = 105
+BACKLOG = 111                   # with the 14 messages in the world's inboxes, 125 wait
 NOW_TS = 1_793_620_800          # conftest.NOW, as the server's clock counts it
 
 
@@ -116,7 +116,7 @@ def test_a_backlog_goes_as_a_batch_and_its_answers_come_in_at_half_the_price(app
     golden.note("removed from the API", ai.deleted)
     golden.note("the ledger", ledger())
     golden.note("left with no summary", q("SELECT count(*) AS n FROM messages m LEFT JOIN assessments a "
-                                          "ON a.message_key = m.message_key WHERE m.is_junk = 0 "
+                                          "ON a.message_key = m.message_key WHERE m.folder = 'INBOX' AND m.is_junk = 0 "
                                           "AND m.message_key IS NOT NULL AND a.message_key IS NULL"))
 
 
