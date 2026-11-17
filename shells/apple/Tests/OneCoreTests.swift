@@ -80,10 +80,11 @@ final class OneCoreTests: XCTestCase {
     }
 
     /// Whether every area of a window has hung its hooks on the mailbox: the desk's h, w, l, Ask and the brief, the
-    /// pane's r and c, the shell's [ and the status's ?.
+    /// pane's r and c and its double-click's own window, the shell's [ and the status's ?.
     private func hooked(_ mailbox: Mailbox) -> Bool {
         ["h", "w", "l", "r", "c", "[", "?"].allSatisfy { mailbox.keys[$0] != nil } && mailbox.asks != nil
             && mailbox.opensBrief != nil && mailbox.snoozes != nil && !mailbox.rowMenu.isEmpty
+            && mailbox.opensWindow != nil
     }
 
     /// What the desk hooked on the mailbox reaches a desk that is on screen: Reply later (l) on the message open is
@@ -107,6 +108,7 @@ final class OneCoreTests: XCTestCase {
         await until { mailbox.keys.isEmpty && mailbox.asks == nil && mailbox.more.isEmpty }
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertTrue(mailbox.keys.isEmpty, "the closed window's views never hang theirs again")
+        XCTAssertNil(mailbox.opensWindow, "a double-click opens no window through the closed one's pane")
 
         // Opened again from the Dock: the new window's areas join, and reach its desk and its notices.
         let second = show(app, status)
