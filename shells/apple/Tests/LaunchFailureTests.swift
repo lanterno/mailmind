@@ -115,6 +115,19 @@ final class LaunchFailureTests: XCTestCase {
                        "where it fixes nothing, nothing invites it")
     }
 
+    /// Where no new copy is offered the core may have said no copy was made (a Keychain that wouldn't keep the key),
+    /// so the words below it don't speak of one.
+    func testWhereNoNewCopyIsOfferedTheWordsNameNoCopyOnThisMac() {
+        XCTAssertTrue(Self.said.notTaken.contains("no copy of your mail was made"))
+        XCTAssertFalse(LaunchFailure.startsFresh(Self.said.notTaken))
+        XCTAssertEqual(LaunchFailure.safe(startsFresh: false), """
+            Your mail on its servers is untouched, and so is anything MailMind keeps on this Mac. Do what the words \
+            above say; if that doesn’t help, copy the details and send them to whoever gave you MailMind.
+            """)
+        XCTAssertFalse(LaunchFailure.safe(startsFresh: false).contains("the copy"),
+                       "no copy is named beside words that say none was made")
+    }
+
     func testAKeychainThatWontGiveTheKeyOffersToOpenAgainNotToStartFresh() async throws {
         // The keychain's stand-in, unreadable as a locked Keychain is: the core can't have the key.
         let standIn = folder.appending(path: "keychain.json")
