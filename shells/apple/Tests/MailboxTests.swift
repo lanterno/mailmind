@@ -721,6 +721,17 @@ final class MailboxAccountsTests: XCTestCase {
                        "the removed account's Inbox isn't read again")
     }
 
+    /// A removed account's Screener, open across the window, gives way to every account's Inbox: the Screener names
+    /// its account apart from the place's own.
+    func testARemovedAccountsScreenerGivesWayToEveryInbox() async {
+        let server = server(accounts: [Fixture.ada, Fixture.work])
+        let app = await opened(server)
+        app.place = .desk(.screener(account: Fixture.work))
+        changeTo(server, accounts: [Fixture.ada])
+        await app.accountsChanged().value
+        XCTAssertEqual(app.place, .allInboxes)
+    }
+
     /// A new account's folders are read live from its server, which can take a while: the sheet that added it isn't
     /// held on them, and the rail names the account and the list says its Inbox is being read before they come.
     func testAnAccountAddedShowsBeforeItsFoldersAreReadFromItsServer() async {
