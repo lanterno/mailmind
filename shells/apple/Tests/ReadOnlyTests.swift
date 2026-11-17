@@ -1,9 +1,9 @@
 import Foundation
 import XCTest
 
-/// Read only, as a person meets it: the same plain words wherever the server turned down, up front, something that
-/// would have reached a mail server (a 409 with `read_only`), asked ahead of a busy 409's words. A send it turned down
-/// keeps the message.
+/// Read only, as a person meets it: the status's note while it is on, and the same plain words wherever the server
+/// turned down, up front, something that would have reached a mail server (a 409 with `read_only`), asked ahead of a
+/// busy 409's words. A send it turned down keeps the message, and a draft kept on this Mac says so.
 @MainActor
 final class ReadOnlyTests: XCTestCase {
     private static let refused = "Read only is on, so nothing was changed. Turn it off in Settings › General."
@@ -15,6 +15,10 @@ final class ReadOnlyTests: XCTestCase {
     }
 
     func testTheWordsAreThePagesWords() {
+        XCTAssertEqual(ReadOnlyWords.note, """
+            Read only is on: MailMind changes nothing on your mail servers, so sending, filing and starring are turned \
+            off. Turn it off in Settings › General.
+            """)
         XCTAssertEqual(ReadOnlyWords.refused, Self.refused)
         XCTAssertTrue(Self.problem.isReadOnly)
         XCTAssertFalse(Problem(FakeServer.refused(409, "busy", more: ["busy": true])).isReadOnly)
@@ -110,6 +114,19 @@ final class ReadOnlyTests: XCTestCase {
         let (other, saidOther) = self.tray(refusing: [API.Post.PendingRetry.path], with: busy)
         await other.act("retry", 3)
         XCTAssertEqual(saidOther(), ["It’s being tried now. Try again in a moment"], "a busy 409 keeps its words")
+    }
+
+    func testADraftKeptOnThisMacSaysSoAndOnlyEarlierRowsWaitForAFullRun() {
+        func draft(kept: Bool) -> API.WaitingDraft {
+            API.WaitingDraft(account: Fixture.ada, attempts: 0, discarding: false, id: 1, kept: kept, savedAt: 0,
+                             subject: "Plans")
+        }
+        XCTAssertEqual(OutboxTray.why(draft(kept: true), readOnly: true), "Kept on this Mac")
+        XCTAssertEqual(OutboxTray.why(draft(kept: true), readOnly: false), "Kept on this Mac",
+                       "until it is saved again with read only off")
+        XCTAssertEqual(OutboxTray.why(draft(kept: false), readOnly: true), "reaches the server on a full run",
+                       "a draft a full run queued earlier waits for the next")
+        XCTAssertEqual(OutboxTray.why(draft(kept: false), readOnly: false), "reaches the server once it’s back")
     }
 
     // MARK: Sending
