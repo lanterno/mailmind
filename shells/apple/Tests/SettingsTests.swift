@@ -605,6 +605,47 @@ final class SettingsCoreTests: XCTestCase {
         await close(core, status)
     }
 
+    /// A password typed to fix an account's login is tried as typed and never kept when it doesn't log in, over the
+    /// one the account keeps; a server's fix, whose password the sheet never sees, is kept, then tried as kept (#51).
+    @MainActor
+    func testAFixThatDoesntLogInKeepsNoPasswordAndAServersFixIsKeptThenTried() async throws {
+        let (core, status) = try await opened()
+        var draft = AccountDraft()
+        draft.email = "ada@example.test"
+        draft.pick(.imap)
+        draft.host = "127.0.0.1"
+        draft.port = "9"
+        draft.password = Self.password
+        _ = try await SecretPost.post(core, API.Post.AccountsAdd.self, draft.body)
+        await status.readAccounts()
+        let row = try XCTUnwrap(status.accounts.first)
+        let save = AccountSave(routes: .over(core, status: status))
+
+        // Nothing listens on the discard port: the password typed doesn't log in.
+        let typed = "fixture-new-password-9012"
+        var fix = AccountDraft(editing: row, fixing: .password)
+        fix.password = typed
+        var shown: [Tested] = []
+        let tried = await save.run(fix, firstRun: false) { shown.append($0) }
+        XCTAssertEqual(tried, .notKept)
+        guard case .failed(_, _, let detail)? = shown.last else { return XCTFail("a closed port logged in: \(shown)") }
+        XCTAssertEqual(detail, "connection refused", "the draft as typed was tried")
+        let stood = try String(contentsOf: keychain, encoding: .utf8)
+        XCTAssertTrue(stood.contains(Self.password), "the password kept is still kept")
+        XCTAssertFalse(stood.contains(typed), "one that didn't log in is never kept: Cancel leaves the account as it was")
+        XCTAssertFalse(status.notice?.text.hasPrefix("Updated") == true, "nothing is said to be updated")
+
+        // A server's fix is kept, then tried as kept; one that still doesn't log in stays kept, and isn't said to be.
+        var server = AccountDraft(editing: row, fixing: .server)
+        server.port = "7"
+        let kept = await save.run(server, firstRun: false) { _ in }
+        XCTAssertEqual(kept, .keptFailing)
+        XCTAssertEqual(status.accounts.first?.port, 7, "kept, and read again")
+        XCTAssertFalse(status.notice?.text.hasPrefix("Updated") == true, "said only once it logs in")
+        XCTAssertTrue(try String(contentsOf: keychain, encoding: .utf8).contains(Self.password))
+        await close(core, status)
+    }
+
     @MainActor
     func testAnAddressAtGooglesOwnDomainTakesGmailsPresetAndATestHomeAsksNoNameserver() async throws {
         let (core, status) = try await opened()
@@ -977,6 +1018,189 @@ final class AccountFixTests: XCTestCase {
         XCTAssertEqual(TestedOnCard.of(.connected, kind: nil, standing: "AUTH", type: "gmail", page: page), .connected)
         XCTAssertEqual(TestedOnCard.of(.running, kind: nil, standing: "AUTH", type: "gmail", page: page), .running)
     }
+
+    func testSaveTriesALoginAsTypedWhereItCanAndOnceKeptWhereItCant() {
+        var adding = AccountDraft()
+        adding.email = "ada@example.test"
+        adding.pick(.imap)
+        XCTAssertEqual(adding.tries(firstRun: false), .never, "an account added from Settings is tested on its card")
+        XCTAssertEqual(adding.tries(firstRun: true), .typed)
+        adding.pick(.proton)
+        XCTAssertEqual(adding.tries(firstRun: true), .kept, "Bridge's password is tried only with a saved account")
+
+        let cy = StatusFixtures.account("cy@example.test", type: "gmail")
+        XCTAssertEqual(AccountDraft(editing: cy).tries(firstRun: false), .never, "a plain edit")
+        var password = AccountDraft(editing: cy, fixing: .appPassword)
+        password.password = "fixture-app-password-0001"
+        XCTAssertEqual(password.tries(firstRun: false), .typed, "a password typed to fix the login")
+        let ada = StatusFixtures.account("ada@example.test")
+        XCTAssertEqual(AccountDraft(editing: ada, fixing: .server).tries(firstRun: false), .kept,
+                       "a server's fix: the sheet never sees the password kept")
+        let elsewhere = StatusFixtures.account("news@example.test", style: "op", ref: "op://Private/News/password")
+        XCTAssertEqual(AccountDraft(editing: elsewhere, fixing: .password).tries(firstRun: false), .kept,
+                       "nothing typed to try")
+    }
+
+    @MainActor
+    func testAPasswordTypedToFixALoginIsTriedFirstAndKeptOnlyOnceItLogsIn() async throws {
+        let email = "cy@example.test"
+        let cy = StatusFixtures.account(email, type: "gmail")
+        var draft = AccountDraft(editing: cy, fixing: .appPassword)
+        draft.password = "fixture-app-password-0001"
+        let trial = try XCTUnwrap(draft.test)
+        XCTAssertNotNil(trial.draft?.credential, "the password typed is tried, not the one kept")
+        let turnedDown = Tested.failed("Gmail didn't take it.", link: StatusWords.appPasswords)
+
+        let wrong = SaveRoutes(tests: [turnedDown])
+        var shown: [Tested] = []
+        let notKept = await AccountSave(routes: wrong.routes).run(draft, firstRun: false) { shown.append($0) }
+        XCTAssertEqual(notKept, .notKept)
+        XCTAssertEqual(wrong.calls, [.test(trial)], "nothing kept, said or synced: Cancel leaves the account as it was")
+        XCTAssertEqual(shown, [.running, turnedDown])
+
+        let right = SaveRoutes(tests: [.connected])
+        let kept = await AccountSave(routes: right.routes).run(draft, firstRun: false) { _ in }
+        XCTAssertEqual(kept, .kept)
+        XCTAssertEqual(right.calls, [.test(trial), .keep(draft.body, adding: false), .say("Updated cy"), .kept(email),
+                                     .retry(email)], "kept once it logs in, then synced again, which clears the trouble")
+    }
+
+    @MainActor
+    func testAServersFixIsKeptThenTriedAndSaidToBeUpdatedOnlyOnceItLogsIn() async {
+        let email = "ada@example.test"
+        let ada = StatusFixtures.account(email)
+        var draft = AccountDraft(editing: ada, fixing: .server)
+        draft.host = "imap2.example.test"
+        let unreached = Tested.failed("The server didn't answer.", detail: "connection refused")
+
+        let failing = SaveRoutes(tests: [unreached])
+        let stillFailing = await AccountSave(routes: failing.routes).run(draft, firstRun: false) { _ in }
+        XCTAssertEqual(stillFailing, .keptFailing, "kept: the sheet's Cancel is Done")
+        XCTAssertEqual(failing.calls, [.keep(draft.body, adding: false), .kept(email), .test(API.TryBody(email: email))],
+                       "not said to be updated while the sheet says it still fails, and not synced")
+
+        let working = SaveRoutes(tests: [.connected])
+        let fixed = await AccountSave(routes: working.routes).run(draft, firstRun: false) { _ in }
+        XCTAssertEqual(fixed, .kept)
+        XCTAssertEqual(working.calls, [.keep(draft.body, adding: false), .kept(email), .test(API.TryBody(email: email)),
+                                       .say("Updated ada"), .retry(email)])
+    }
+
+    @MainActor
+    func testAPlainEditTheFirstRunAndARefusalSaveAsTheyDid() async throws {
+        let ada = StatusFixtures.account("ada@example.test")
+        var plain = AccountDraft(editing: ada)
+        plain.alias = "Ada"
+        let edit = SaveRoutes(tests: [])
+        let edited = await AccountSave(routes: edit.routes).run(plain, firstRun: false) { _ in }
+        XCTAssertEqual(edited, .kept)
+        XCTAssertEqual(edit.calls, [.keep(plain.body, adding: false), .say("Updated ada"), .kept("ada@example.test")],
+                       "no test: its card tests it")
+
+        var first = AccountDraft()
+        first.email = "bo@example.test"
+        first.pick(.imap)
+        first.host = "imap.example.test"
+        first.password = "fixture-password-0002"
+        let trial = try XCTUnwrap(first.test)
+        let refused = SaveRoutes(tests: [.failed("No.")])
+        let notAdded = await AccountSave(routes: refused.routes).run(first, firstRun: true) { _ in }
+        XCTAssertEqual(notAdded, .notKept)
+        XCTAssertEqual(refused.calls, [.test(trial)])
+
+        var proton = AccountDraft()
+        proton.email = "pat@example.test"
+        proton.pick(.proton)
+        let bridge = SaveRoutes(tests: [.failed("Bridge isn't running.")])
+        let added = await AccountSave(routes: bridge.routes).run(proton, firstRun: true) { _ in }
+        XCTAssertEqual(added, .keptFailing, "added, then tested: the sheet stays open until Done")
+        XCTAssertEqual(bridge.calls, [.keep(proton.body, adding: true), .say("Added pat"), .kept("pat@example.test"),
+                                      .test(API.TryBody(email: "pat@example.test"))])
+
+        let turnedDown = SaveRoutes(tests: [])
+        turnedDown.refusal = Problem(CoreAnswer(status: 400, contentType: "application/problem+json", headers: [],
+                                                body: Data(#"{"detail": "That port isn't a number."}"#.utf8)))
+        let said = await AccountSave(routes: turnedDown.routes).run(plain, firstRun: false) { _ in }
+        XCTAssertEqual(said, .refused("That port isn't a number."))
+        XCTAssertEqual(turnedDown.calls, [.keep(plain.body, adding: false)])
+    }
+
+    func testTheSheetDoesntSayAgainWhatThePasswordsRowSays() {
+        let page = StatusWords.appPasswords
+        let cy = StatusFixtures.account("cy@example.test", type: "gmail")
+        let gmail = AccountDraft(editing: cy, fixing: .appPassword)
+        XCTAssertEqual(gmail.passwordPage, AccountDraft.appPasswords.absoluteString, "under Gmail's steps")
+        // A Google password, a wrong App Password, a password Gmail's server couldn't take: the steps say the rest.
+        for refusal in [Tested.failed("Gmail needs an App Password here, not your Google password.", link: page),
+                        .failed("Gmail didn't accept that App Password.", link: page)] {
+            XCTAssertEqual(gmail.inSheet(refusal), .failed(AccountDraft.gmailTurnedDown, link: nil), "\(refusal)")
+        }
+        XCTAssertEqual(gmail.inSheet(.failed("Gmail didn't accept that password.", link: page,
+                                             detail: "AUTHENTICATIONFAILED")),
+                       .failed(AccountDraft.gmailTurnedDown, link: nil, detail: "AUTHENTICATIONFAILED"),
+                       "the class stays, in small type")
+        let signIn = Tested.failed("Google wants you to sign in on the web first.", link: nil)
+        XCTAssertEqual(gmail.inSheet(signIn), signIn, "no App Password fixes it: its own words")
+        XCTAssertEqual(gmail.inSheet(.connected), .connected)
+        XCTAssertEqual(gmail.inSheet(.running), .running)
+
+        // A password read from 1Password shows no steps: the page is the test's to show.
+        let kept = StatusFixtures.account("cy@example.test", type: "gmail", style: "op", ref: "op://Private/Cy/password")
+        let elsewhere = AccountDraft(editing: kept)
+        XCTAssertNil(elsewhere.passwordPage)
+        let refusal = Tested.failed("Gmail needs an App Password here.", link: page)
+        XCTAssertEqual(elsewhere.inSheet(refusal), refusal)
+
+        // A new iCloud account's row shows Apple's page: a test's sentence, not the page again.
+        var icloud = AccountDraft()
+        icloud.email = "ada@icloud.com"
+        icloud.take(self.icloud)
+        let apple = self.icloud.link
+        XCTAssertEqual(icloud.passwordPage, apple?.url)
+        XCTAssertEqual(icloud.inSheet(.failed("iCloud didn't accept that password.", link: apple,
+                                              detail: "AUTHENTICATIONFAILED")),
+                       .failed("iCloud didn't accept that password.", link: nil, detail: "AUTHENTICATIONFAILED"))
+        // An edited Other IMAP account's row shows no page: the test's stays.
+        let ada = AccountDraft(editing: StatusFixtures.account("ada@example.test"))
+        XCTAssertEqual(ada.inSheet(.failed("No.", link: apple)), .failed("No.", link: apple))
+    }
+}
+
+/// The routes Save goes through, each call written down, answered as a test says.
+@MainActor
+private final class SaveRoutes {
+    enum Call: Equatable {
+        case test(API.TryBody)
+        case keep(API.AccountBody, adding: Bool)
+        case kept(String)
+        case say(String)
+        case retry(String)
+    }
+
+    private(set) var calls: [Call] = []
+    /// What each test says, in turn; connected once they run out.
+    private var tests: [Tested]
+    /// What keeping the account throws, if anything.
+    var refusal: (any Error)?
+
+    init(tests: [Tested]) {
+        self.tests = tests
+    }
+
+    var routes: AccountRoutes {
+        AccountRoutes(
+            test: { [self] body in
+                calls.append(.test(body))
+                return tests.isEmpty ? .connected : tests.removeFirst()
+            },
+            keep: { [self] body, adding in
+                calls.append(.keep(body, adding: adding))
+                if let refusal { throw refusal }
+            },
+            kept: { [self] address, _ in calls.append(.kept(address)) },
+            say: { [self] in calls.append(.say($0)) },
+            retry: { [self] in calls.append(.retry($0)) })
+    }
 }
 
 /// The Sync card and the Edit sheet as drawn (#51): the card's trouble said once with its button, no class in it, and
@@ -1063,6 +1287,50 @@ final class AccountCardTests: XCTestCase {
                           size: CGSize(width: 560, height: 640))
         defer { shown.close() }
         await deskEventually { (shown.focusedField as? NSTextField)?.stringValue == "imap.example.test" }
+    }
+
+    func testTheSheetSaysAGmailRefusalOnceUnderItsStepsWithOneLinkToGoogle() {
+        let cy = StatusFixtures.account("cy@example.test", type: "gmail")
+        // The core's answer to a Google password at Gmail, with Google's page.
+        let refusal = Tested.failed("""
+            Gmail needs an App Password here, not your Google password. If Google offers none, Advanced Protection or \
+            a Workspace admin has switched them off.
+            """, link: StatusWords.appPasswords)
+        let shown = Shown(AccountForm(status: status(cy, error: "LoginNeedsAppPassword", kind: "AUTH"),
+                                      draft: AccountDraft(editing: cy, fixing: .appPassword), tested: refusal,
+                                      done: { _ in }))
+        defer { shown.close() }
+        // What the sheet says under its fields (the renderer draws no scroll view's content): one line, no page.
+        let said = shown.words
+        XCTAssertTrue(said.contains(AccountDraft.gmailTurnedDown), said)
+        XCTAssertEqual(shown.count("not your Google password"), 0, "the steps say it: \(said)")
+        XCTAssertEqual(shown.count("Advanced Protection"), 0, said)
+        XCTAssertEqual(shown.count("Make an App Password"), 0, "the steps show Google's page: \(said)")
+
+        // And with the steps above it, as the password's row shows them: each thing once.
+        let both = Shown(VStack(alignment: .leading) {
+            AppPasswordSteps()
+            TestedWords(tested: AccountDraft(editing: cy, fixing: .appPassword).inSheet(refusal))
+        })
+        defer { both.close() }
+        XCTAssertEqual(both.count("not your Google password"), 1, both.words)
+        XCTAssertEqual(both.count("Advanced Protection"), 1, both.words)
+        XCTAssertEqual(both.count("Open Google’s App Passwords") + both.count("Make an App Password"), 1, both.words)
+    }
+
+    func testASheetWhoseServersFixWasKeptButStillFailsOffersDoneNotCancel() {
+        let ada = StatusFixtures.account("ada@example.test")
+        var closed: [String?] = []
+        let shown = Shown(AccountForm(status: status(ada, error: "connection refused", kind: "NETWORK"),
+                                      draft: AccountDraft(editing: ada, fixing: .server),
+                                      tested: .failed("The server didn't answer.", detail: "connection refused"),
+                                      kept: true, done: { closed.append($0) }))
+        defer { shown.close() }
+        XCTAssertEqual(shown.count("Cancel"), 0, "nothing to cancel: the fix is kept: \(shown.words)")
+        XCTAssertEqual(shown.count("Done"), 1, shown.words)
+        XCTAssertEqual(shown.count("Save"), 1, "another try is kept the same way: \(shown.words)")
+        XCTAssertTrue(shown.press("Done"))
+        XCTAssertEqual(closed, ["ada@example.test"], "closed on what was kept")
     }
 
     /// A view in a window of its own, off the screen and see-through, as a sheet or a card shows it. A view that is
