@@ -85,6 +85,55 @@ final class LaunchFailureTests: XCTestCase {
         XCTAssertTrue(kept.contains { $0.hasSuffix(".db") }, "the old one is kept: \(kept)")
     }
 
+    /// The core's words for each failure it can meet as it opens (mm-server's `database_version`), as it says them.
+    private static let said = (
+        notKept: "MailMind's key to this Mac's copy of your mail isn't in your Keychain, so the copy can't be read. Start Fresh makes a new copy from your mail's servers.",
+        notGiven: "Your Keychain didn't give MailMind the key to this Mac's copy of your mail. Unlock your login Keychain when macOS asks, then open MailMind again.",
+        notTaken: "Your Keychain wouldn't keep MailMind's key, so no copy of your mail was made on this Mac. Unlock your login Keychain when macOS asks, then open MailMind again.",
+        older: "This Mac's copy of your mail is at version 40, older than version 51, the oldest this MailMind can upgrade, so it was left as it is. Start Fresh makes a new copy from your mail's servers.",
+        newer: "This Mac's copy of your mail is at version 99, made by a newer MailMind than this one, which reads up to version 60: install the newest MailMind to open it.",
+        keyDoesNotFit: "MailMind's key doesn't open this Mac's copy of your mail, so the copy can't be read. Start Fresh makes a new copy from your mail's servers.",
+        storage: "MailMind can't make or read this Mac's copy of your mail. Check that your Mac's disk has room, then open MailMind again.",
+        failed: "The upgrade of this Mac's copy of your mail to version 60 failed, and the copy is as it was before. Open MailMind again to try it again."
+    )
+
+    func testStartFreshIsOfferedOnlyWhereANewCopyFixesWhatWentWrong() {
+        for fixed in [Self.said.notKept, Self.said.older, Self.said.keyDoesNotFit] {
+            XCTAssertTrue(LaunchFailure.startsFresh(fixed), fixed)
+            XCTAssertFalse(LaunchFailure.triesAgain(fixed), "opening again changes nothing: \(fixed)")
+        }
+        for keychain in [Self.said.notGiven, Self.said.notTaken] {
+            XCTAssertFalse(LaunchFailure.startsFresh(keychain), "a locked Keychain isn't fixed by a new copy: \(keychain)")
+            XCTAssertTrue(LaunchFailure.triesAgain(keychain), "unlocked, opening again works: \(keychain)")
+        }
+        XCTAssertFalse(LaunchFailure.startsFresh(Self.said.newer), "a newer MailMind's copy wants that MailMind")
+        XCTAssertFalse(LaunchFailure.triesAgain(Self.said.newer), "opening this MailMind again changes nothing")
+        for again in [Self.said.storage, Self.said.failed, MailApp.unexpected] {
+            XCTAssertTrue(LaunchFailure.triesAgain(again), again)
+        }
+        XCTAssertFalse(LaunchFailure.safe(startsFresh: false).localizedCaseInsensitiveContains("start fresh"),
+                       "where it fixes nothing, nothing invites it")
+    }
+
+    func testAKeychainThatWontGiveTheKeyOffersToOpenAgainNotToStartFresh() async throws {
+        // The keychain's stand-in, unreadable as a locked Keychain is: the core can't have the key.
+        let standIn = folder.appending(path: "keychain.json")
+        try Data("locked".utf8).write(to: standIn)
+        let home = CoreHome(folder: folder.path(percentEncoded: false), variables: ["MAILMIND_NOSYNC": "1"],
+                            standIn: standIn.path(percentEncoded: false))
+        let app = MailApp(home: { home }, open: { try await Core.open($0) })
+        await app.start()
+        guard case .failed(let why) = app.stage else { return XCTFail("it opened: \(app.stage)") }
+        XCTAssertTrue(why.contains("Unlock your login Keychain"), why)
+        XCTAssertFalse(LaunchFailure.startsFresh(why), "no new copy is offered for a Keychain that didn't answer")
+        XCTAssertTrue(LaunchFailure.triesAgain(why))
+        // Unlocked, Try Again opens it.
+        try manager.removeItem(at: standIn)
+        await app.startAgain()
+        XCTAssertEqual(app.stage, .open)
+        await app.core?.close()
+    }
+
     func testAPanicInTheCoreSaysPlainWordsNeverItsMessage() async {
         /// What a panic's message can carry across (UniFFI's `rustPanic`): words that quote mail.
         struct Panicked: LocalizedError {
@@ -98,12 +147,14 @@ final class LaunchFailureTests: XCTestCase {
         for quoted in ["example.test", "char boundary", "Dear"] {
             XCTAssertFalse(MailApp.unexpected.contains(quoted))
         }
+        XCTAssertTrue(LaunchFailure.triesAgain(MailApp.unexpected), "it offers to open again")
     }
 
     func testTheWordsSayTheMailIsSafeInAPersonsWords() {
-        XCTAssertTrue(LaunchFailure.safe.contains("Your mail on its servers is untouched"))
+        XCTAssertTrue(LaunchFailure.safe(startsFresh: true).contains("Your mail on its servers is untouched"))
+        XCTAssertTrue(LaunchFailure.safe(startsFresh: false).contains("Your mail on its servers is untouched"))
         XCTAssertTrue(LaunchFailure.fresh.contains("backups folder"))
-        for words in [LaunchFailure.safe, LaunchFailure.fresh] {
+        for words in [LaunchFailure.safe(startsFresh: true), LaunchFailure.safe(startsFresh: false), LaunchFailure.fresh] {
             for developers in ["Python", "just run", "`", "database key"] {
                 XCTAssertFalse(words.contains(developers), "\(developers) in \(words)")
             }
