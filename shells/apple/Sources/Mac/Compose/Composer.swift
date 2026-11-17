@@ -275,13 +275,13 @@ final class Composer: Identifiable {
         edits += 1
     }
 
-    /// Say something in this window for a moment, and to a screen reader.
-    func say(_ text: String) {
+    /// Say something in this window for a moment (longer words for longer), and to a screen reader.
+    func say(_ text: String, for seconds: Double = 2.6) {
         notice = text
         host.announce(text)
         noticeTimer?.cancel()
         noticeTimer = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.6))
+            try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             self?.notice = nil
         }
@@ -347,12 +347,18 @@ final class Composer: Identifiable {
         return save(silent: true, autosave: true)
     }
 
-    /// Throw it away, the copy on the server too.
+    /// Throw it away, the copy on the server too. Read only turns that down where the server may hold a copy: the
+    /// draft stays, so the composer stays open with its words and says why.
     func discard() async {
         guard !closed else { return }
         if let saving { _ = await saving.value }   // a first save still in flight would leave its copy behind
         if let draftId, let routes = host.routes {
-            _ = try? await routes.post(API.Post.Draft.self, API.DraftBody(delete: true, draftId: draftId))
+            do {
+                _ = try await routes.post(API.Post.Draft.self, API.DraftBody(delete: true, draftId: draftId))
+            } catch let refusal as Problem where refusal.isReadOnly {
+                say(ReadOnlyWords.refused, for: 5)
+                return
+            } catch {}
             host.foldersChanged()
         }
         dirty = false
