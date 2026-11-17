@@ -775,7 +775,7 @@ final class FirstAccountSheetTests: XCTestCase {
 }
 
 /// Removing an account with its mail on this Mac warns of the sends and drafts only this Mac holds, and says MailMind's
-/// backups keep their copies until they are replaced.
+/// backups keep their copies: an upgrade's until newer ones replace them, Start Fresh's until it is deleted.
 @MainActor
 final class RemoveAccountTests: XCTestCase {
     /// The outbox tray as the core lists it: Ada's sends in each state, and drafts waiting for their server.
@@ -816,6 +816,9 @@ final class RemoveAccountTests: XCTestCase {
             This also deletes 3 messages that haven’t been sent and 1 draft that isn’t on the server yet. They’re only \
             on this Mac.
             """)
-        XCTAssertEqual(RemoveAccount.backups, "Copies of its mail in MailMind’s backups stay until they’re replaced.")
+        XCTAssertEqual(RemoveAccount.backups, """
+            Copies of its mail in MailMind’s backups folder stay there: newer backups replace them in time, and a copy \
+            Start Fresh kept stays until you delete it.
+            """, "a copy Start Fresh kept is never replaced, so the words don't say every copy is")
     }
 }
