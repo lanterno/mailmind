@@ -130,6 +130,7 @@ final class Mailbox {
         asks = nil
         plans = nil
         composeTo = nil
+        opensWindow = nil
         more = []
         keys = [:]
         rowMenu = []
