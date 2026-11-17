@@ -20,12 +20,10 @@ on a Developer ID ([#42](https://github.com/lanterno/mailmind/issues/42)).
   can run it. The build fails on a Swift or Objective-C API newer than macOS 15, and such an API goes behind
   `if #available` with a fallback in Meadow's look. That is all a build shows. The core's calls into the system (its
   Rust and the C it compiles in, which dyld binds as the app starts, with no fallback) and how macOS 15 draws the
-  window are covered only by opening the app on macOS 15: CI's `mac-floor` jobs open the release check's .dmg there,
-  on Apple silicon (`macos-15`) and on an Intel Mac (`macos-15-intel`). GitHub's Intel Macs are VMs with no GPU macOS
-  can draw with, so there the job proves the Intel half starts and its core loads, binds and syncs on macOS 15, and
-  says so, but no window is drawn: its Metal stops it ("Target device architecture is nil"), and only that failure is
-  let through. The window's drawing on Intel is seen only under Rosetta, by the release check. The tests and the rest
-  of CI run on macOS 26.
+  window are covered only by opening the app on macOS 15: CI's `mac-floor` job opens the release check's .dmg there,
+  on Apple silicon (`macos-15`). The tests and the rest of CI run on macOS 26.
+- **Tested on Apple silicon only.** A release holds an Intel half, built, signed and checked to be universal like the
+  rest, but nothing runs it: neither CI nor the release check opens the app on an Intel Mac or under Rosetta.
 - **The .dmg's window.** MailMind on the left, an arrow, Applications on the right, over a picture that says to drag
   one onto the other and how to open the app the first time. `Release/dmg-background.swift` draws the picture, and
   `Release/dmg.py` has [dmgbuild](https://github.com/dmgbuild/dmgbuild) (pyproject.toml's `release` group) write the
@@ -84,7 +82,7 @@ half in their login Keychain; it never goes in the repo, a file, CI or anyone el
 1. **The version.** Raise `MARKETING_VERSION` in `shells/apple/project.yml` (0.1.0, 0.2.0, ...), and commit it.
    A version lower than or equal to the last release's is never offered as an update.
 2. **CI on that commit.** The clients workflow's run on it is green, its `mac-floor` jobs among them: they are the
-   only run of the app on the macOS it says it needs, and on an Intel Mac, so a release waits for them.
+   only run of the app on the macOS it says it needs, so a release waits for them.
 3. **Build it.** `just apple release`. It builds and signs everything, writes the appcast with Sparkle's
    `generate_appcast`, which signs the .dmg with the key in the login Keychain (macOS asks once to let it use the
    key: **Always Allow** saves asking again), and checks that signature against the public key inside the app. It
@@ -107,8 +105,8 @@ halves are built for that macOS, a program signed as the app is loads its Sparkl
 acknowledgements, the .dmg's window is laid out, and the .dmg's signature and the appcast's own both verify against the
 app's key and no other, a feed changed after signing doesn't, and the appcast names the same lowest macOS. Then
 the app in the .dmg opens on the demo's fictional mail (`Measure/demo_home.py`: fake servers on loopback, a home of its
-own and a keychain stand-in, where a release's copy starts no update check) until its inbox shows rows, once for each
-half: on Apple silicon the Intel half runs under Rosetta, which the check needs (`softwareupdate --install-rosetta`).
+own and a keychain stand-in, where a release's copy starts no update check) until its inbox shows rows, on Apple
+silicon: the check runs on an Apple silicon Mac, and never opens the Intel half.
 Run it after changing anything in `shells/apple/Release`; CI runs it on every change to the clients, even when an
 earlier step failed. `MAILMIND_RELEASE_CHECK_KEEP=DIR` keeps a copy of the .dmg it made: CI keeps it as an artifact
 for a few days, and `mac-floor` opens it on macOS 15 the same way, each half natively on a Mac of its kind.

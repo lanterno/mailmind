@@ -44,13 +44,12 @@ just apple icon         # the Mac app's icon, drawn by Icon/icon.swift into Icon
 just apple fonts        # Meadow's typefaces, joined from the page's by Fonts/fonts.py into Fonts/*.ttf (commit them on their own)
 just apple release      # the Mac app universal, signed ad hoc, in a .dmg with its appcast: build/release (docs/releasing.md)
 just apple release-check  # the release recipe end to end with a throwaway update key, then checks on what it made,
-                          # and opens each half of its app on fictional mail (on Apple silicon, Intel's under Rosetta)
+                          # and opens its app on fictional mail, on Apple silicon (the Intel half is never run)
 ```
 
 Needs Xcode 26 with the iOS and macOS 26 SDKs, XcodeGen (`brew install xcodegen`), and the core's Rust toolchain
 with the `aarch64-apple-ios`, `aarch64-apple-ios-sim` and `aarch64-apple-darwin` targets, and `x86_64-apple-darwin` for
-a release (`core/rust-toolchain.toml` names them all), and on Apple silicon Rosetta for the release check
-(`softwareupdate --install-rosetta`). iOS builds compile without a simulator runtime; running one needs a simulator or
+a release (`core/rust-toolchain.toml` names them all). The release check runs on an Apple silicon Mac. iOS builds compile without a simulator runtime; running one needs a simulator or
 a device (`just apple smoke ios` uses the newest iPhone simulator). The first build fetches Sparkle through Swift
 Package Manager.
 
@@ -58,9 +57,8 @@ The Mac app runs from macOS 15, the iPhone and iPad app from iOS 26: `deployment
 core is built for too. A Swift or Objective-C API newer than that fails the build; use it behind
 `if #available(macOS 26, *)` with a fallback that keeps Meadow's look. The tests run on the Mac they're built on, so a
 test of such an API is marked `@available` too. Nothing checks the core's calls into the system that way: only CI's
-`mac-floor` jobs, which open the release check's .dmg on macOS 15 on Apple silicon and on an Intel Mac, and a release
-waits for them. GitHub's Intel Mac is a VM with no GPU to draw with: there the app starts and its core syncs, and the
-job lets through only the drawing's failure, saying so. `Measure/demo_home.py APP --smoke --arch x86_64` runs a universal app's Intel half on fictional mail.
+`mac-floor` job, which opens the release check's .dmg on macOS 15 on Apple silicon, and a release waits for it.
+MailMind is tested on Apple silicon only: a release's Intel half is built and checked to be there, never run.
 
 The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `project.yml`;
 [docs/releasing.md](../../docs/releasing.md) says how a release is cut and what the owner does once.
