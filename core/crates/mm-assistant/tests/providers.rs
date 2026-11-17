@@ -396,6 +396,45 @@ fn the_status_names_the_provider_why_ai_is_off_and_the_model_in_force() {
 }
 
 #[test]
+fn a_model_runs_in_a_cloud_when_a_server_on_this_mac_names_it_so() {
+    for model in ["gpt-oss:120b-cloud", "deepseek-v3.1:671b-cloud", "glm-4.6:cloud", " Qwen3-Coder:480B-Cloud "] {
+        assert!(providers::cloud_model(Local, true, model), "{model}");
+        assert!(providers::cloud_model(Compatible, true, model), "{model}");
+    }
+    for model in ["qwen3:8b", "llama-4", "cloudy:7b", "cloud", "gpt-oss:120b-cloudy", ""] {
+        assert!(!providers::cloud_model(Local, true, model), "{model}");
+    }
+    // A compatible service off this Mac is a cloud whatever its model is called, and its words say so already; and the
+    // providers with clouds of their own name none of their models so.
+    assert!(!providers::cloud_model(Compatible, false, "gpt-oss:120b-cloud"));
+    for provider in [Anthropic, OpenAi, Gemini] {
+        assert!(!providers::cloud_model(provider, true, "gpt-oss:120b-cloud"));
+    }
+}
+
+#[test]
+fn the_status_says_whether_the_model_on_this_mac_runs_in_a_cloud_on_or_off() {
+    let w = world();
+    let cloud = |w: &World| w.status.report().expect("a report")["cloud_model"].clone();
+    assert_eq!(cloud(&w), json!(false));
+    w.on(Local, "qwen3:8b", "", true);
+    assert_eq!(cloud(&w), json!(false));
+    w.on(Local, "gpt-oss:120b-cloud", "", true);
+    assert_eq!(cloud(&w), json!(true));
+    w.on(Compatible, "gpt-oss:120b-cloud", "mailmind.config.json", true);
+    assert_eq!(cloud(&w), json!(true));
+    // Said before AI is on too, for the words a person reads before turning it on.
+    w.choose(InForce {
+        provider: Local,
+        model: "gpt-oss:120b-cloud".into(),
+        key_from: "",
+        local: true,
+        lm: Err(Off::TurnedOff),
+    });
+    assert_eq!(cloud(&w), json!(true));
+}
+
+#[test]
 fn a_failure_that_reached_nothing_reads_couldnt_reach_it() {
     let plain = |said: &str, status: Option<u16>| ModelError::new(said, status).plain();
     assert_eq!(plain("openai unreachable: connection refused", None), "couldn't reach it");
