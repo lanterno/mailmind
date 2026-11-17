@@ -21,8 +21,11 @@ on a Developer ID ([#42](https://github.com/lanterno/mailmind/issues/42)).
   `if #available` with a fallback in Meadow's look. That is all a build shows. The core's calls into the system (its
   Rust and the C it compiles in, which dyld binds as the app starts, with no fallback) and how macOS 15 draws the
   window are covered only by opening the app on macOS 15: CI's `mac-floor` jobs open the release check's .dmg there,
-  on Apple silicon (`macos-15`) and on a real Intel Mac (`macos-15-intel`). The tests and the rest of CI run on
-  macOS 26.
+  on Apple silicon (`macos-15`) and on an Intel Mac (`macos-15-intel`). GitHub's Intel Macs are VMs with no GPU macOS
+  can draw with, so there the job proves the Intel half starts and its core loads, binds and syncs on macOS 15, and
+  says so, but no window is drawn: its Metal stops it ("Target device architecture is nil"), and only that failure is
+  let through. The window's drawing on Intel is seen only under Rosetta, by the release check. The tests and the rest
+  of CI run on macOS 26.
 - **The .dmg's window.** MailMind on the left, an arrow, Applications on the right, over a picture that says to drag
   one onto the other and how to open the app the first time. `Release/dmg-background.swift` draws the picture, and
   `Release/dmg.py` has [dmgbuild](https://github.com/dmgbuild/dmgbuild) (pyproject.toml's `release` group) write the

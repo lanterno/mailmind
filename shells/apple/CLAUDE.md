@@ -59,7 +59,8 @@ core is built for too. A Swift or Objective-C API newer than that fails the buil
 `if #available(macOS 26, *)` with a fallback that keeps Meadow's look. The tests run on the Mac they're built on, so a
 test of such an API is marked `@available` too. Nothing checks the core's calls into the system that way: only CI's
 `mac-floor` jobs, which open the release check's .dmg on macOS 15 on Apple silicon and on an Intel Mac, and a release
-waits for them. `Measure/demo_home.py APP --smoke --arch x86_64` runs a universal app's Intel half on fictional mail.
+waits for them. GitHub's Intel Mac is a VM with no GPU to draw with: there the app starts and its core syncs, and the
+job lets through only the drawing's failure, saying so. `Measure/demo_home.py APP --smoke --arch x86_64` runs a universal app's Intel half on fictional mail.
 
 The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `project.yml`;
 [docs/releasing.md](../../docs/releasing.md) says how a release is cut and what the owner does once.
