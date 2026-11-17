@@ -4,7 +4,7 @@ import { get, post } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
 import { copyOf, type Copy } from "../../lib/copy";
 import { toast } from "../../lib/toast";
-import { moveMarked, moveRow, seenRow, snooze, starRow } from "./actions";
+import { armDwell, markOpenedRead, moveMarked, moveRow, readOnly, seenRow, snooze, starRow } from "./actions";
 import type { Row } from "./rows";
 
 vi.mock("../../lib/api/client", () => ({ get: vi.fn(), post: vi.fn(), refusalOf: vi.fn() }));
@@ -170,5 +170,36 @@ describe("a conversation row's star and read buttons", () => {
     await seenRow(qc, row({ seen: false }), true, false);
     expect(vi.mocked(qc.setQueriesData)).toHaveBeenCalledTimes(2);
     expect(toast).toHaveBeenCalledWith("Couldn’t update");
+  });
+});
+
+describe("opening a message", () => {
+  const qc = { setQueriesData: vi.fn(), setQueryData: vi.fn(), invalidateQueries: vi.fn() } as unknown as QueryClient;
+  const one: Copy = { key: 7, folder: "INBOX", uid: 70 };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.mocked(post).mockReset().mockResolvedValue({ ok: true });
+    vi.mocked(qc.setQueriesData).mockReset();
+    readOnly.set(false);
+  });
+  afterEach(() => {
+    readOnly.set(false);
+    vi.useRealTimers();
+  });
+
+  it("marks it read after a moment on it", async () => {
+    armDwell(qc, one);
+    await vi.advanceTimersByTimeAsync(1200);
+    expect(vi.mocked(post).mock.calls).toEqual([["/api/seen", { ...one, seen: true }]]);
+  });
+
+  it("asks no server to mark it read while read only is on, which would refuse it, and leaves its row as it was", async () => {
+    readOnly.set(true);
+    armDwell(qc, one);
+    await vi.advanceTimersByTimeAsync(5000);
+    markOpenedRead(qc, one);              // a conversation's member, opened
+    expect(post).not.toHaveBeenCalled();
+    expect(qc.setQueriesData).not.toHaveBeenCalled();
   });
 });
