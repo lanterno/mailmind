@@ -1,4 +1,5 @@
 """Compose's tables: `outbox` and `drafts`. Each function takes its caller's connection and leaves the commit to it."""
+from mailmind.compose.domain import draft_journal
 from mailmind.platform.db import driver
 
 
@@ -225,12 +226,13 @@ def journal_next_due(c, after, soon):
 
 
 def journal_overdue(c, before):
-    """What should have reached its server by `before` and hasn't, for the tray. Any send of it is in the tray already."""
-    return c.execute("""SELECT j.draft_id, j.account, j.discard, j.saved_at, j.attempts, d.subject
+    """What should have reached its server by `before` and hasn't, and what a read-only process kept on this Mac, for the
+    tray. Any send of it is in the tray already."""
+    return c.execute("""SELECT j.draft_id, j.account, j.discard, j.saved_at, j.attempts, j.due_at, d.subject
                         FROM draft_journal j JOIN drafts d ON d.id=j.draft_id
-                        WHERE (j.attempts>0 OR j.due_at<=?) AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.draft_id=j.draft_id
-                                                                            AND o.state IN ('queued','sending'))
-                        ORDER BY j.saved_at DESC""", (before,)).fetchall()
+                        WHERE (j.attempts>0 OR j.due_at<=? OR j.due_at=?)
+                          AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.draft_id=j.draft_id AND o.state IN ('queued','sending'))
+                        ORDER BY j.saved_at DESC""", (before, draft_journal.KEPT_HERE)).fetchall()
 
 
 def journal_move(c, did, to_did):

@@ -75,7 +75,8 @@ class Drafts:
     def save(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Save a draft, or discard it. Either is local and durable the moment it answers: the journal holds it, and
         the server's copy follows (decision D5). An autosave leaves that to the push job, at most every minute; any other
-        save tries now, for a moment."""
+        save tries now, for a moment. A read-only process keeps the save on this Mac, and no push of it waits for a full
+        run: a later save there sends it."""
         if body.get("delete") and body.get("draft_id"):
             return self._discard(required_int(body["draft_id"]))
         try:
@@ -121,7 +122,8 @@ class Drafts:
                 if key:
                     self._book.draft_set_key(c, new_id, key)
             self._book.draft_note_save(c, new_id, body.get("mode", "new"), spec["subject"], version, key, stamp)
-            due, attempts = draft_journal.after_save(bool(body.get("autosave")), now, waiting, prev["pushed_at"] if prev else None)
+            due, attempts = draft_journal.after_save(bool(body.get("autosave")), now, waiting, prev["pushed_at"] if prev else None,
+                                                     keep=not profile.writes_allowed())   # read-only: kept here, nothing waits
             self._book.journal_put(c, new_id, version, acct["email"], built["message_id"], built["raw"], record["raw_sha"],
                                    record["own_text"], record["tail_text"], record["tail_html"], record["bcc"], now, due, attempts)
             return new_id, version

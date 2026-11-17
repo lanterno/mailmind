@@ -91,6 +91,7 @@ class WaitingDraft(Answer):
     saved_at: int
     attempts: int
     discarding: bool
+    kept: bool                      # kept on this Mac by a read-only run: it reaches its server once saved again
 
 
 class Outbox(Answer):

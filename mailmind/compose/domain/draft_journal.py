@@ -15,6 +15,8 @@ PUSH_TICK = 10               # the push job looks at least this often
 BACKOFF_FIRST = 20
 BACKOFF_MOST = 900
 WAITING_AFTER = 30           # the tray names a save this overdue
+KEPT_HERE = 2 ** 63 - 1      # the due time of a save a read-only process kept on this Mac: it never comes due, so no push
+                             # job sends it on a full run; a later save there gives it a due time again
 
 
 class Record(TypedDict):
@@ -45,12 +47,15 @@ def due_after_failing(now: int, attempts: int) -> int:
     return now + min(BACKOFF_MOST, BACKOFF_FIRST * 2 ** min(attempts - 1, 10))
 
 
-def after_save(autosave: bool, now: int, waiting: Row | None, pushed_at: int | None) -> tuple[int, int]:
+def after_save(autosave: bool, now: int, waiting: Row | None, pushed_at: int | None, keep: bool = False) -> tuple[int, int]:
     """(when the push is due, the tries it has had), for a save replacing what `waiting` asked. An autosave changes neither,
-    so typing never puts a push off or forgets that one failed. Any other save goes now, afresh."""
+    so typing never puts a push off or forgets that one failed. Any other save goes now, afresh. A read-only process
+    (`keep`) keeps it here (KEPT_HERE), and an autosave in a full run over one kept here goes as a first save would."""
+    if keep:
+        return KEPT_HERE, 0
     if not autosave:
         return now, 0
-    if waiting:
+    if waiting and waiting["due_at"] != KEPT_HERE:
         return waiting["due_at"], waiting["attempts"]
     return due_after_typing(now, pushed_at), 0
 
@@ -86,6 +91,7 @@ def overdue_since(now: int, pushing: bool) -> int:
 
 
 def listed(r: Row) -> dict[str, Any]:
-    """A save the tray names."""
+    """A save the tray names: `kept` when a read-only process kept it on this Mac, where it stays until it is saved again
+    in a full run."""
     return {"id": r["draft_id"], "account": r["account"], "subject": r["subject"] or "", "saved_at": r["saved_at"],
-            "attempts": r["attempts"], "discarding": bool(r["discard"])}
+            "attempts": r["attempts"], "discarding": bool(r["discard"]), "kept": r["due_at"] == KEPT_HERE}
