@@ -138,6 +138,19 @@ def test_read_only_refuses_what_it_files_and_the_row_stays(read_only, page, worl
     clean(page)
 
 
+def test_opening_unread_mail_read_only_leaves_it_unread_and_asks_no_server(read_only, page, world):
+    opened(page)
+    receipt = row(page, world, RECEIPT)
+    expect(receipt).to_have_class(re.compile(r"\bunread\b"))
+    receipt.click()
+    expect(page.locator("iframe.rd-iframe").first).to_be_visible()
+    page.clock.run_for(3000)                              # well past the moment that marks an opened message read
+    page.heard_all_asked()
+    expect(receipt).to_have_class(re.compile(r"\bunread\b"))
+    assert "\\Seen" not in world.where(RECEIPT)["server"][0][3]
+    clean(page)                                           # and no refusal: nothing was asked
+
+
 def test_a_rows_snooze_button_asks_when_and_snoozes_that_row(page, world):
     opened(page)
     receipt = row(page, world, RECEIPT)
