@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiOffered, aiSends, aiSendsInShort, aiStanding, draftAheadSends, offLine, PROVIDER_LABEL, PROVIDER_NAME, runsHere, sendsOf, whyOff, type Sends } from "./ai";
+import { aiOffered, aiSends, aiSendsInShort, aiStanding, draftAheadSends, offLine, PROVIDER_LABEL, PROVIDER_NAME, runsHere, sendsOf, weeklyReviewSends, whyOff, type Sends } from "./ai";
 import type { AiProvider, AiStatus } from "./api/types";
 
 const status = (over: Partial<AiStatus> = {}): AiStatus => ({
@@ -117,6 +117,16 @@ describe("what leaves this Mac", () => {
     expect(draftAheadSends(sends("local", "", { model: "gpt-oss:120b-cloud", cloud: true }))).toBe("On, whole conversations of important mail go to Ollama’s servers to draft them.");
     expect(draftAheadSends(sends("local"))).toBe("On, they are drafted on this Mac, and nothing leaves it.");
     expect(draftAheadSends(sends("compatible", "http://localhost:8080/v1"))).toBe("On, they are drafted on this Mac, and nothing leaves it.");
+  });
+  it("says under the weekly review's switch what goes each Monday beyond the Inbox, and that nothing leaves with a model here", () => {
+    const REVIEW = "On, each Monday the senders, subjects and summaries of mail that needs you, the subjects and recipients of threads "
+      + "you’re waiting on, and the names of the week’s meetings go to";
+    expect(weeklyReviewSends(sends("anthropic"))).toBe(`${REVIEW} Anthropic to write it.`);
+    expect(weeklyReviewSends(sends("gemini"))).toBe(`${REVIEW} Google to write it.`);
+    expect(weeklyReviewSends(sends("compatible", "https://llm.example.test/v1"))).toBe(`${REVIEW} the service at the URL you gave to write it.`);
+    expect(weeklyReviewSends(sends("local", "", { model: "gpt-oss:120b-cloud", cloud: true }))).toBe(`${REVIEW} Ollama’s servers to write it.`);
+    expect(weeklyReviewSends(sends("local"))).toBe("On, it is written on this Mac, and nothing leaves it.");
+    expect(weeklyReviewSends(sends("compatible", "http://localhost:8080/v1"))).toBe("On, it is written on this Mac, and nothing leaves it.");
   });
   it("is read from the digest for the provider in force, and from the preferences for one chosen since", () => {
     const p = { ai_provider: "local" as const, ai_base_url: "", ai_model: "gpt-oss:120b-cloud", draft_ahead: true };
