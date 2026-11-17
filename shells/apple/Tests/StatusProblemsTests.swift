@@ -20,14 +20,22 @@ final class StatusProblemsTests: XCTestCase {
     }
 
     func testAProtonAccountsTroubleIsItsBridgeAndAGmailAccountsIsItsAppPassword() {
-        for kind in ["NETWORK", "TIMEOUT"] {
-            let said = StatusWords.syncProblem(kind, type: "proton", error: "ConnectionRefused")
-            XCTAssertTrue(said.hasPrefix("Proton Bridge isn’t running"), said)
-            XCTAssertTrue(said.contains("Start Proton Bridge"), said)
-            XCTAssertFalse(said.contains("couldn’t reach the server"), "not the generic words: \(said)")
-            XCTAssertFalse(said.contains("name and port"), "a Proton account has no server to edit: \(said)")
-            XCTAssertEqual(StatusWords.syncHelp(kind, type: "proton"), StatusWords.protonBridge)
-        }
+        // Bridge closed: nothing listens on this Mac, so the connection is refused at once.
+        let down = StatusWords.syncProblem("NETWORK", type: "proton", error: "ConnectionRefused")
+        XCTAssertTrue(down.hasPrefix("Proton Bridge isn’t running"), down)
+        XCTAssertTrue(down.contains("Start Proton Bridge"), down)
+        XCTAssertFalse(down.contains("couldn’t reach the server"), "not the generic words: \(down)")
+        XCTAssertFalse(down.contains("name and port"), "a Proton account has no server to edit: \(down)")
+        XCTAssertEqual(StatusWords.syncHelp("NETWORK", type: "proton"), StatusWords.protonBridge)
+        // Bridge open but too slow: something took the connection, so it is running, busy or stuck.
+        let slow = StatusWords.syncProblem("TIMEOUT", type: "proton", error: "Timeout")
+        XCTAssertEqual(slow, """
+            Proton Bridge didn’t answer in time. If it is still starting or syncing, wait until it says it is \
+            connected, then choose Retry; if it seems stuck, quit Bridge and open it again.
+            """)
+        XCTAssertFalse(slow.contains("isn’t running"), "Bridge is open in front of the person: \(slow)")
+        XCTAssertFalse(slow.contains("Start Proton Bridge"), slow)
+        XCTAssertEqual(StatusWords.syncHelp("TIMEOUT", type: "proton"), StatusWords.protonBridge)
         XCTAssertEqual(StatusWords.protonBridge.url, "https://proton.me/mail/bridge")
         XCTAssertTrue(StatusWords.syncProblem("AUTH", type: "proton").contains("the password Bridge shows"))
 
@@ -56,11 +64,13 @@ final class StatusProblemsTests: XCTestCase {
                                 lastErrorTs: "2026-11-16T09:00:00Z", live: "", syncCount: 3)
         }
         let types = ["ada@example.test": "proton", "bo@example.test": "proton", "cy@example.test": "gmail",
-                     "di@example.test": "imap"]
+                     "di@example.test": "imap", "ev@example.test": "proton", "fay@example.test": "proton"]
         let health = [standing("ada@example.test", "NETWORK", "ConnectionRefused"),
-                      standing("bo@example.test", "TIMEOUT", "Timeout"),
+                      standing("bo@example.test", "NETWORK", "ConnectionRefused"),
                       standing("cy@example.test", "AUTH", "LoginNeedsAppPassword"),
-                      standing("di@example.test", "NETWORK", "ConnectionRefused")]
+                      standing("di@example.test", "NETWORK", "ConnectionRefused"),
+                      standing("ev@example.test", "TIMEOUT", "Timeout"),
+                      standing("fay@example.test", "TIMEOUT", "Timeout")]
         func alert(_ bad: [String]) -> (text: String, link: API.Link?) {
             StatusWords.alert(bad, health: health, type: { types[$0] }, name: StatusWords.short)
         }
@@ -68,6 +78,14 @@ final class StatusProblemsTests: XCTestCase {
         let bridge = alert(["ada@example.test", "bo@example.test"])
         XCTAssertEqual(bridge.text, "Proton Bridge isn’t running, so ada, bo can’t connect. Start Proton Bridge.")
         XCTAssertEqual(bridge.link, StatusWords.protonBridge)
+        let slow = alert(["ev@example.test", "fay@example.test"])
+        XCTAssertEqual(slow.text, """
+            Proton Bridge didn’t answer in time, so ev, fay can’t connect. If it is still syncing, wait; if it seems \
+            stuck, quit Bridge and open it again.
+            """, "Bridge is open, so it isn't told to start")
+        XCTAssertEqual(slow.link, StatusWords.protonBridge)
+        let both = alert(["ada@example.test", "ev@example.test"])
+        XCTAssertEqual(both.text, "2 accounts couldn’t connect (ada, ev).", "neither sentence holds for both")
         let gmail = alert(["cy@example.test"])
         XCTAssertEqual(gmail.text, "cy can’t connect: Gmail needs an App Password, not your Google password.")
         XCTAssertEqual(gmail.link, StatusWords.appPasswords)
