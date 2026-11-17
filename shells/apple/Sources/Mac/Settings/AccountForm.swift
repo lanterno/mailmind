@@ -313,6 +313,9 @@ struct AccountForm: View {
                           : String(localized: "Updated \(StatusWords.short(address))"))
         await status.readAccounts()
         await status.readDigest()
+        // The window's rail and list read again now, not at the end of the new account's first sync: the rail shows
+        // it at once, and its Inbox says it is being read for the first time.
+        if adding { await MailApp.shared.accountsChanged() }
         // A Proton account from the first run, tested now it is saved: one whose Bridge doesn't let it in keeps the
         // sheet open with what to do, and a Test to try again, until Done.
         if adding, testsFirst, draft.type == .proton {

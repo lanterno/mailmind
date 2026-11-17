@@ -160,6 +160,21 @@ final class MailApp {
         list.start()
     }
 
+    /// An account was added or removed (Settings, or the first run): the rail reads its accounts, folders and counts
+    /// again, and the list reads again, now rather than at the end of the new account's first sync. The rail then shows
+    /// the account, and its Inbox says it is being read for the first time. A place of an account that is gone gives
+    /// way to every account's Inbox.
+    func accountsChanged() async {
+        #if os(macOS)
+        await mailbox.refresh()
+        if let account = place?.account, !mailbox.accounts.contains(account) {
+            place = .allInboxes
+            return
+        }
+        #endif
+        list?.refresh()
+    }
+
     /// A folder's first scan that read it: one that failed leaves the list as it is, or reading it again would scan
     /// the folder again for as long as its server says no.
     private static func readAFolder(_ event: CoreEvent) -> Bool {

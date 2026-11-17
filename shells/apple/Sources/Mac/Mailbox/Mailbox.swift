@@ -226,16 +226,30 @@ final class Mailbox {
     }
 
     /// What the event stream said changed, as the page's realtime.ts reads it again: the counts after mail changed,
-    /// the accounts' names a moment later, and the labels and views after a sync.
+    /// the accounts' names a moment later, and the labels and views after a sync. An event of an account the rail
+    /// doesn't list yet (one just added) reads the accounts first, so its folders are read with the rest; and when the
+    /// accounts the digest names have changed, their folders and counts are read again.
     func heard(_ event: CoreEvent) {
         if MailApp.mailChanged.contains(event.name) || event.name == "folder-synced" {
             lane?.refresh()
-            Task { await readCounts() }
             digestSoon?.cancel()
-            digestSoon = Task {
-                try? await Task.sleep(for: .milliseconds(400))
-                guard !Task.isCancelled else { return }
-                await readDigest()
+            if let account = Self.account(of: event), !accounts.contains(account) {
+                Task {
+                    await readDigest()
+                    await readCounts()
+                }
+            } else {
+                Task { await readCounts() }
+                digestSoon = Task {
+                    try? await Task.sleep(for: .milliseconds(400))
+                    guard !Task.isCancelled else { return }
+                    let was = accounts
+                    await readDigest()
+                    if accounts != was {
+                        await readCounts()
+                        await readLabels()
+                    }
+                }
             }
         }
         if event.name == "sync-done" {
@@ -245,6 +259,13 @@ final class Mailbox {
                 await readViews()
             }
         }
+    }
+
+    /// The account an event says it is of, if it names one.
+    static func account(of event: CoreEvent) -> String? {
+        guard case .string(let account)? = event.decoded([String: JSONValue].self)?["account"], !account.isEmpty
+        else { return nil }
+        return account
     }
 
     // MARK: The list
