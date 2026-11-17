@@ -140,6 +140,24 @@ fn an_account_removed_has_its_connection_logged_out_and_the_others_keep_theirs()
 }
 
 #[test]
+fn an_account_removed_with_its_mail_has_its_connection_logged_out_and_keeps_none_after() {
+    let w = world(inboxes(), &[ADA, BEA], &[]);
+    w.app.syncing.sync_once();
+    job(&w, ADA, 1);
+    job(&w, BEA, 1);
+    let kept_on = *logins(&w, ADA).last().unwrap();
+    // Its mail goes on its gate, after its syncs were told to stop and its connection let go.
+    let asked = json!({"email": ADA, "delete_mail": true}).as_object().unwrap().clone();
+    let removed = w.app.connections.delete(&asked).unwrap();
+    assert_eq!(removed["mail_deleted"], json!(3));
+    assert!(w.imap.sent_on(ADA, "LOGOUT").iter().any(|(on, _)| *on == kept_on));
+    until(|| w.imap.open() == 1);
+    assert_eq!(w.app.kept.stats().slots.len(), 1, "Bea's alone");
+    job(&w, BEA, 2);
+    assert_eq!(logins(&w, BEA).len(), 2, "the sync's, then the one kept");
+}
+
+#[test]
 fn an_account_changed_logs_in_again_as_it_now_is() {
     let w = world(inboxes(), &[ADA], &[]);
     job(&w, ADA, 1);
