@@ -1091,6 +1091,35 @@ final class AccountFixTests: XCTestCase {
     }
 
     @MainActor
+    func testAFixedPasswordThatReadsTheMailIsKeptWhenOnlyTheOutgoingServerTurnsItDown() async throws {
+        let email = "ada@example.test"
+        let ada = StatusFixtures.account(email)
+        var draft = AccountDraft(editing: ada, fixing: .password)
+        draft.password = "fixture-password-0002"
+        let trial = try XCTUnwrap(draft.test)
+        let sending = Tested.failed("Reading mail works, but the outgoing server didn't accept the password.",
+                                    detail: "SMTP AUTHENTICATIONFAILED")
+        XCTAssertTrue(sending.sendingOnly)
+        XCTAssertFalse(Tested.failed("No.", detail: "AUTHENTICATIONFAILED").sendingOnly)
+
+        let routes = SaveRoutes(tests: [sending])
+        let outcome = await AccountSave(routes: routes.routes).run(draft, firstRun: false) { _ in }
+        XCTAssertEqual(outcome, .keptFailing, "the sheet stays on the outgoing server's words")
+        XCTAssertEqual(routes.calls, [.test(trial), .keep(draft.body, adding: false), .say("Updated ada"), .kept(email),
+                                      .retry(email)], "the login the sync was refused works: kept, and synced again")
+
+        var adding = AccountDraft()
+        adding.email = "bo@example.test"
+        adding.pick(.imap)
+        adding.host = "imap.example.test"
+        adding.password = "fixture-password-0003"
+        XCTAssertNotNil(adding.test)
+        let first = SaveRoutes(tests: [sending])
+        let added = await AccountSave(routes: first.routes).run(adding, firstRun: true) { _ in }
+        XCTAssertEqual(added, .notKept, "a first account is still kept only once it sends too")
+    }
+
+    @MainActor
     func testAServersFixIsKeptThenTriedAndSaidToBeUpdatedOnlyOnceItLogsIn() async {
         let email = "ada@example.test"
         let ada = StatusFixtures.account(email)
