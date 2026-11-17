@@ -1,6 +1,7 @@
 """What reverses a move: the Mailbox's kinds of undo entry. One that hasn't reached the server is cancelled; one that has
 gets a counter-move, from where its command says it went. A sweep's ways back (`sweep_back`) go together, an account's
-on one session."""
+on one session. A read-only process cancels as ever, and raises ReadOnlyError for a counter-move before any server is
+asked."""
 import json
 from typing import Any
 
@@ -10,6 +11,7 @@ from mailmind.mailbox.application.commands import MailCommands
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import ServerOps
 from mailmind.mailbox.application.sync import Ingest
+from mailmind.platform import profile
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -83,6 +85,7 @@ class Reversals:
         done, d = self._settled_with_command(d)
         if done:
             return done
+        profile.refuse_writes("a move undone")
         ok, _ = self._server.move_by_msgid(d["account"], d["dest_folder"], d["src_folder"], d["message_id"],
                                            unseen=bool(d.get("unseen")))
         if not ok:
@@ -99,6 +102,7 @@ class Reversals:
         """A sweep's ways back, one account's, at once: on one session each message found in the Trash it went to by its
         Message-ID moves back to where it was, then one more session reads them all in. One still where it was, which the
         sweep never moved, is back. What each came to, in their order."""
+        profile.refuse_writes("a sweep undone")
         places = [(d["account"], d.get("dest_folder") or "", d.get("src_folder") or INBOX) for d in entries]
         answers: list[Reversed] = [(False, account, src) for account, _, src in places]
         for place in dict.fromkeys(p for p, d in zip(places, entries) if d.get("message_id")):
@@ -119,6 +123,7 @@ class Reversals:
         done, d = self._settled_with_command(d)
         if done:
             return done
+        profile.refuse_writes("an archive undone")
         allmail = self._server.find_special(d["account"], "all") or "[Gmail]/All Mail"
         ok, _ = self._server.relabel_by_msgid(d["account"], allmail, d["message_id"], "\\Inbox")
         if not ok:

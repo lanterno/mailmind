@@ -13,7 +13,7 @@ from typing import Any
 
 from mailmind.kernel.errors import Conflict, NotFound
 from mailmind.kernel.row import Connection
-from mailmind.platform import sse
+from mailmind.platform import profile, sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.workers import gates
@@ -212,14 +212,15 @@ class Undo:
         return False, d.get("account"), None
 
 
-    def _reverse_members(self, newest_first: list[Entry]) -> list[Reversed | None]:
+    def _reverse_members(self, newest_first: list[Entry]) -> tuple[list[Reversed | None], bool]:
         """A group's members, newest first, each run of one kind and one account that goes back together at one turn of
-        its gate and the rest one at a time: what each came to, None where it raised. One run's or member's trouble never
-        stops the rest."""
+        its gate and the rest one at a time: what each came to, None where it raised, and whether a read-only process
+        refused any. One run's or member's trouble never stops the rest."""
         def gate(d: Entry) -> str:
             return d.get("account") or gates.EVERY_ACCOUNT
 
         out: list[Reversed | None] = []
+        refused = False
         at = 0
         while at < len(newest_first):
             first = newest_first[at]
@@ -228,6 +229,9 @@ class Undo:
             if together is None:
                 try:
                     out.append(self._reverse_one(first))
+                except profile.ReadOnlyError:
+                    refused = True
+                    out.append(None)
                 except Exception as e:
                     log.warning("a group member: %(why)s", {"why": self._quiet_error(e)})
                     out.append(None)
@@ -241,18 +245,22 @@ class Undo:
             try:
                 answers: list[Reversed | None] = list(gates.run(gate(first), partial(together, members),
                                                                 priority=gates.Priority.INTERACTIVE))
+            except profile.ReadOnlyError:
+                refused = True
+                answers = []
             except Exception as e:
                 log.warning("a group member: %(why)s", {"why": self._quiet_error(e)})
                 answers = []
             out.extend(answers[k] if k < len(answers) else None for k in range(run))
             at += run
-        return out
+        return out, refused
 
 
     def undo_last(self) -> dict[str, Any]:
         """Pop the last undoable action and reverse it, and say what went back: a group says how many of it did and how
         many didn't. Raises NotFound (`empty`) when there is nothing to undo, and Conflict when none of it went back. What
-        didn't go back is on the stack again for another try, and so is all of it when a reversal raised, which goes on up."""
+        didn't go back is on the stack again for another try, and so is all of it when a reversal raised, which goes on up:
+        ReadOnlyError when a read-only process would have to ask a server, and none of it went back."""
         return self._reverse(self._undo_db(pop))  # off the stack before any server is asked
 
     def undo_group(self, group: str) -> dict[str, Any]:
@@ -268,7 +276,8 @@ class Undo:
                 acct = folder = None
                 left = []                             # newest first, as they were tried
                 newest_first = list(reversed(entry["children"]))
-                for child, answer in zip(newest_first, self._reverse_members(newest_first)):
+                answers, refused = self._reverse_members(newest_first)
+                for child, answer in zip(newest_first, answers):
                     if answer is not None and answer[0]:
                         _, acct, folder = answer
                     else:
@@ -278,6 +287,8 @@ class Undo:
                     self._undo_db(lambda c: put_back(c, {**entry, "children": left[::-1]}))
                     kept = True
                 okk = done > 0
+                if refused and not okk:               # each would have asked a server: nothing went back, and it says why
+                    raise profile.ReadOnlyError("an undo")
                 res = {"ok": True, "label": entry.get("label"), "account": acct, "folder": folder,
                        "reversed": done, "failed": len(left)}
             else:
@@ -293,6 +304,10 @@ class Undo:
             res["remaining"] = len(self.entries())
             return res
         except Conflict:
+            raise
+        except profile.ReadOnlyError:                 # refused before any server was asked: it stays to undo on a full run
+            if not kept:
+                self._undo_db(lambda c: put_back(c, entry))
             raise
         except Exception as e:
             if not kept:

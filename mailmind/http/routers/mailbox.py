@@ -64,7 +64,7 @@ from mailmind.http.schemas.mailbox import (
     WaitingOnOthers,
 )
 from mailmind.kernel.errors import NotFound, Problem, Refused
-from mailmind.platform import perimeter
+from mailmind.platform import perimeter, profile
 
 
 _FILED = answers(Filed)
@@ -235,7 +235,7 @@ def router(mailbox):
     def undo(body: NoBody):
         try:
             return mailbox.undo.undo_last()
-        except Problem:
+        except (Problem, profile.ReadOnlyError):   # a read-only process asks no server: the read-only 409
             raise
         except Exception:                   # Undo logged it, and put it back for another try
             return route.problem(500, "couldn’t undo")
@@ -248,7 +248,7 @@ def router(mailbox):
     def tidy_undo(body: TidyUndoBody):
         try:
             return mailbox.tidying.undo(body.group)
-        except Problem:
+        except (Problem, profile.ReadOnlyError):   # a read-only process asks no server: the read-only 409
             raise
         except Exception:                   # Undo logged it, and put it back for another try
             return route.problem(500, "couldn’t undo")

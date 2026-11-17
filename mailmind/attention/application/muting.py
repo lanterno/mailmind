@@ -62,7 +62,10 @@ class Muting:
         return [r["thread_id"]] if r and r["thread_id"] else []
 
     def reverse(self, d: dict[str, Any]) -> tuple[bool, str | None, None]:
-        """Undo of a mute: unmuted, and unread again what it marked read."""
+        """Undo of a mute: unmuted, and unread again what it marked read. A read-only process raises ReadOnlyError for one that
+        marked mail read, with nothing changed: the marks go back on the server."""
+        if mute.marked_read(d):
+            profile.refuse_writes("a mute undone")
         marked, when = False, now_iso()
         with self._uow.write() as c:
             for tid in mute.threads_to_unmute(d, self._thread_now(c, d)):
