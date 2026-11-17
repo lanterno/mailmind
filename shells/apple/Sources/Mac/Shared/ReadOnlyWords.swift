@@ -2,10 +2,16 @@
 import Foundation
 
 /// What the app says of read only (Settings › General's switch, `MAILMIND_PROFILE=read-only`), in the page's words:
-/// what a person is told when the server turned down something that would have reached a mail server (a 409 with
-/// `read_only`). The server says no up front, before anything is queued or hidden, so nothing a person does waits for
-/// later: what they asked for didn't happen.
+/// the status's note while it is on, and what a person is told when the server turned down something that would have
+/// reached a mail server (a 409 with `read_only`). The server says no up front, before anything is queued or hidden,
+/// so nothing a person does waits for later: what they asked for didn't happen.
 enum ReadOnlyWords {
+    /// The status's note while read only is on.
+    static let note = String(localized: """
+        Read only is on: MailMind changes nothing on your mail servers, so sending, filing and starring are turned \
+        off. Turn it off in Settings › General.
+        """)
+
     /// What a person is told of something read only turned down.
     static let refused = String(localized: "Read only is on, so nothing was changed. Turn it off in Settings › General.")
 

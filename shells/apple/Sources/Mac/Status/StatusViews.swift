@@ -167,10 +167,7 @@ struct StatusMenu: View {
         guard readOnly || ai?.failing == true || failing != nil else { return nil }
         return AnyView(VStack(alignment: .leading, spacing: 4) {
             if readOnly {
-                line(String(localized: """
-                    MailMind is running read-only: it writes nothing to your mail servers and syncs only when asked. \
-                    What you file, star or send waits for a full run.
-                    """))
+                line(ReadOnlyWords.note)
             }
             if let ai, ai.failing {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {

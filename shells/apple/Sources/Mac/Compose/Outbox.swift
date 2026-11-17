@@ -54,13 +54,21 @@ final class OutboxTray {
         return ops[change.op] ?? "Change"
     }
 
+    /// Why a change waits. Read only queues nothing a person does: what waits while it is on, a run that wrote to the
+    /// servers queued earlier, and it goes on the next such run.
     static func why(_ change: API.PendingChange, readOnly: Bool) -> String {
         if change.state == "error" { return why[change.error ?? ""] ?? "couldn’t reach the server" }
         if readOnly { return "waits for a full run" }
         return change.attempts > 0 ? "tried \(change.attempts)×, trying again" : "once the server is back"
     }
 
+    /// What a draft saved while read only was on is: kept on this Mac, until it is saved again with read only off.
+    static let kept = String(localized: "Kept on this Mac")
+
+    /// Why a draft waits: kept on this Mac, or on its way to its server, or, while read only is on, queued earlier for
+    /// the next run that writes.
     static func why(_ draft: API.WaitingDraft, readOnly: Bool) -> String {
+        if draft.kept { return kept }
         let goes = draft.discarding ? "leaves the server" : "reaches the server"
         if readOnly { return "\(goes) on a full run" }
         return draft.attempts > 0 ? "tried \(draft.attempts)×, trying again" : "\(goes) once it’s back"
