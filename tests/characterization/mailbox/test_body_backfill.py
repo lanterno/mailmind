@@ -28,6 +28,7 @@ class _Sleeps:
 def test_hwf_backfill_moves_past_bodies_it_cannot_fetch(world, monkeypatch):
     monkeypatch.setattr(syncing_module, "time", _Sleeps(stop_at=float("inf")))   # no real pacing between fetches
     monkeypatch.setattr(mailbox.syncing, "_backfill_missed", {})          # world alone resets no module state
+    world.cut_off(*[r["pk"] for r in q("SELECT pk FROM messages WHERE folder='INBOX'")])   # more than a round waits
     waiting = q("SELECT pk, account, folder, uid FROM messages WHERE body_text IS NULL ORDER BY ts DESC, pk DESC")
     stuck, older = waiting[:12], [r["pk"] for r in waiting[12:]]
     with world.server.lock:                                      # deleted elsewhere, not yet pruned here

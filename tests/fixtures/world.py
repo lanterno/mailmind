@@ -305,3 +305,18 @@ class World:
             return dict(store.get_message(c, self.pk(name)))
         finally:
             c.close()
+
+    def cut_off(self, *pks):
+        """These rows as a sync leaves a message its first 64 KiB didn't hold whole: no body kept and no text, so the
+        backfill or opening it fetches it. The corpus is all short, so a sync keeps its Inbox's bodies whole; a test of
+        fetching one has it forgotten first."""
+        from mailmind.bootstrap.mailbox import store
+        c = store.conn()
+        try:
+            for pk in pks:
+                c.execute("DELETE FROM bodies WHERE message_pk=?", (pk,))
+                c.execute("DELETE FROM attachments WHERE message_pk=?", (pk,))
+                c.execute("UPDATE messages SET body_fetched=0, body_text=NULL, has_attach=0 WHERE pk=?", (pk,))
+            c.commit()
+        finally:
+            c.close()

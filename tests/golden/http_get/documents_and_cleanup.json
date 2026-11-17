@@ -1,13 +1,32 @@
 [
  {
   "body": {
-   "docs": [],
-   "facets": {},
+   "docs": [
+    {
+     "account": "ada@example.test",
+     "filename": "Fabric samples.eml",
+     "folder": "INBOX",
+     "from": "Noor Haddad",
+     "group": "",
+     "key": 7,
+     "kind": "other",
+     "part_id": "2",
+     "preview": null,
+     "size": 254,
+     "subject": "Fwd: Fabric samples",
+     "uid": 7,
+     "url": "/api/message/attachment?key=7&folder=INBOX&uid=7&part_id=2",
+     "when": "3d ago"
+    }
+   ],
+   "facets": {
+    "other": 1
+   },
    "groups": [],
-   "matched": 0,
+   "matched": 1,
    "ok": true,
-   "shown": 0,
-   "total": 0
+   "shown": 1,
+   "total": 1
   },
   "headers": {
    "cache-control": "no-store",
@@ -40,16 +59,33 @@
      "uid": 1,
      "url": "/api/message/attachment?key=21&folder=Drafts&uid=1&part_id=3",
      "when": "16h ago"
+    },
+    {
+     "account": "ada@example.test",
+     "filename": "Fabric samples.eml",
+     "folder": "INBOX",
+     "from": "Noor Haddad",
+     "group": "",
+     "key": 7,
+     "kind": "other",
+     "part_id": "2",
+     "preview": null,
+     "size": 254,
+     "subject": "Fwd: Fabric samples",
+     "uid": 7,
+     "url": "/api/message/attachment?key=7&folder=INBOX&uid=7&part_id=2",
+     "when": "3d ago"
     }
    ],
    "facets": {
+    "other": 1,
     "pdf": 1
    },
    "groups": [],
-   "matched": 1,
+   "matched": 2,
    "ok": true,
-   "shown": 1,
-   "total": 1
+   "shown": 2,
+   "total": 2
   },
   "headers": {
    "cache-control": "no-store",
@@ -82,16 +118,33 @@
      "uid": 1,
      "url": "/api/message/attachment?key=21&folder=Drafts&uid=1&part_id=3",
      "when": "16h ago"
+    },
+    {
+     "account": "ada@example.test",
+     "filename": "Fabric samples.eml",
+     "folder": "INBOX",
+     "from": "Noor Haddad",
+     "group": "",
+     "key": 7,
+     "kind": "other",
+     "part_id": "2",
+     "preview": null,
+     "size": 254,
+     "subject": "Fwd: Fabric samples",
+     "uid": 7,
+     "url": "/api/message/attachment?key=7&folder=INBOX&uid=7&part_id=2",
+     "when": "3d ago"
     }
    ],
    "facets": {
+    "other": 1,
     "pdf": 1
    },
    "groups": [],
-   "matched": 1,
+   "matched": 2,
    "ok": true,
-   "shown": 1,
-   "total": 1
+   "shown": 2,
+   "total": 2
   },
   "headers": {
    "cache-control": "no-store",

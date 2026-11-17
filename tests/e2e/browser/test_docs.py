@@ -28,9 +28,10 @@ def clean(page):
     assert page.blocked == [], page.blocked
 
 
-# The hub's files are rows of the attachments table, which opening a message writes. A test that wants hundreds of them, a
-# file on a corpus message that holds none, or a sender changed writes them itself while the server is stopped
-# (`with app.stopped():`). A file that comes while the page is open comes as mail does: a_stored_file.
+# The hub's files are rows of the attachments table, which opening a message writes, and a sync keeping a short one whole
+# (Noor's forwarded note in Ada's Inbox is one). A test that wants hundreds of them, a file on a corpus message that holds
+# none, or a sender changed writes them itself while the server is stopped (`with app.stopped():`). A file that comes
+# while the page is open comes as mail does: a_stored_file.
 
 
 def hub_files(world, n):
@@ -40,6 +41,17 @@ def hub_files(world, n):
         for i in range(n):
             c.execute("INSERT INTO attachments(message_pk, part_id, filename, content_type, size, is_inline) "
                       "VALUES (?,?,?,'application/pdf',1000,0)", (world.pk(RECEIPT), f"f.{i}", f"report-{i:03}.pdf"))
+        c.commit()
+    finally:
+        c.close()
+
+
+def no_files():
+    """The hub without the files the world's sync kept, for a test that counts its own."""
+    from mailmind.bootstrap.mailbox import store
+    c = store.conn()
+    try:
+        c.execute("DELETE FROM attachments")
         c.commit()
     finally:
         c.close()
@@ -150,6 +162,7 @@ def from_someone(world, name, sender, addr):
 def test_the_hub_opens_in_sections_by_sender_and_shows_by_type_or_newest_when_asked(page, app, world):
     other = "ada-inbox-03-newsletter.eml"
     with app.stopped():
+        no_files()
         one_file(world, RECEIPT, "dee-a.pdf", "a")
         one_file(world, RECEIPT, "dee-b.png", "b", "image/png")
         one_file(world, other, "eli-a.pdf", "c")

@@ -8,6 +8,7 @@ from fixtures import world as w
 from gate import held_elsewhere
 from mailmind.bootstrap import mailbox
 from mailmind.mailbox.application import syncing as syncing_module
+from stored_rows import q
 
 
 class Clock:
@@ -140,6 +141,7 @@ def test_one_accounts_backlog_shares_the_round_with_the_rest(world, clock):
     c.execute("UPDATE messages SET ts=ts+100000000 WHERE account=?", (w.ADA,))
     c.commit()
     c.close()
+    world.cut_off(*[r["pk"] for r in q("SELECT pk FROM messages WHERE account=?", w.ADA)])
     assert len(without_body(w.ADA)) >= 12
     bea, cy = len(without_body(w.BEA)), len(without_body(w.CY))
     mailbox.syncing.backfill_round()

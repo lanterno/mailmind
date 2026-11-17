@@ -119,12 +119,16 @@ def test_a_multipart_with_no_boundary_keeps_its_text(world):
     assert "statement for October" in (ingest.fetch_body(world.pk("ada-inbox-08-boundaryless.eml"))["text"] or "")
 
 
-def test_the_first_sync_keeps_only_invite_bodies(world):
+def test_the_first_sync_keeps_the_inboxs_bodies_whole_and_no_other_folders(world):
+    """The corpus is all short: each Inbox message but junk is kept whole as the sync reads it, as opening it would keep
+    it, its invite or attachment and all."""
+    inbox = {world.pk(name) for name, _, folder, *_ in w.MAIL if folder == "INBOX" and name not in JUNK}
+    assert {r["message_pk"] for r in _rows("SELECT message_pk FROM bodies")} == inbox
     pk = world.pk("ada-inbox-06-outlook-invite.eml")
-    assert [r["message_pk"] for r in _rows("SELECT message_pk FROM bodies")] == [pk]
-    assert _rows("SELECT message_pk, filename, content_type, is_inline FROM attachments") == [
-        {"message_pk": pk, "filename": "invite.ics", "content_type": "text/calendar", "is_inline": 1}]
+    assert {"message_pk": pk, "filename": "invite.ics", "content_type": "text/calendar", "is_inline": 1} in _rows(
+        "SELECT message_pk, filename, content_type, is_inline FROM attachments")
     assert world.row("ada-inbox-06-outlook-invite.eml")["has_attach"] == 1
+    assert all(world.row(name)["body_fetched"] == 0 for name, _, folder, *_ in w.MAIL if folder != "INBOX")
 
 
 def test_sync_state_records_each_folder_at_its_highest_uid(world):

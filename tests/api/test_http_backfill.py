@@ -3,8 +3,8 @@ read without marking anything read, so search finds what they say. Each account 
 first. A body the server didn't give waits six hours; a lost connection rests only its account, for a minute; and mail on
 its way out is left alone.
 
-The world's mail all lacks its body text, and a round asks for twelve with a second and a half between, so each test
-leaves only the few it needs without one, as if the rest had been opened.
+The world's mail lacks its body text but for the Inbox's, which its sync kept whole, and a round asks for twelve with a
+second and a half between, so each test leaves only the few it needs without one, as if the rest had been opened.
 """
 import json
 from datetime import timedelta
@@ -28,13 +28,16 @@ def rows(sql, *args):
 
 
 def only_these_without_a_body(app, world, *names):
-    """Every other message in the world has its body text, as mail opened has, written while the server is stopped."""
-    pks = [world.pk(name) for name in names]
+    """Every other message in the world has its body text, as mail opened has, and these none, as mail a sync read cut
+    off has: written while the server is stopped."""
+    pks = json.dumps([world.pk(name) for name in names])
     with app.stopped():
         c = store.conn()
         try:
-            c.execute("UPDATE messages SET body_text='' WHERE pk NOT IN (SELECT value FROM json_each(?))",
-                      (json.dumps(pks),))
+            c.execute("UPDATE messages SET body_text='' WHERE pk NOT IN (SELECT value FROM json_each(?))", (pks,))
+            c.execute("UPDATE messages SET body_text=NULL, body_fetched=0 WHERE pk IN (SELECT value FROM json_each(?))",
+                      (pks,))
+            c.execute("DELETE FROM bodies WHERE message_pk IN (SELECT value FROM json_each(?))", (pks,))
             c.commit()
         finally:
             c.close()

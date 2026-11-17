@@ -1,7 +1,7 @@
 [
  {
   "body": {
-   "bodies": 1,
+   "bodies": 14,
    "groups": [
     {
      "account": "ada@example.test",
@@ -17,7 +17,7 @@
     },
     {
      "account": "ada@example.test",
-     "bodies": 1,
+     "bodies": 9,
      "folder": "INBOX",
      "messages": 12
     },
@@ -47,13 +47,13 @@
     },
     {
      "account": "bea@example.test",
-     "bodies": 0,
+     "bodies": 2,
      "folder": "INBOX",
      "messages": 2
     },
     {
      "account": "cy@example.test",
-     "bodies": 0,
+     "bodies": 3,
      "folder": "INBOX",
      "messages": 3
     },

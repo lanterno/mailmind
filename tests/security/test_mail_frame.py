@@ -46,10 +46,10 @@ def arrived(world, raw):
     """The pk, key and uid of a message that just arrived in Ada's INBOX, with its body not yet read."""
     uid = world.deliver(w.ADA, "INBOX", raw)
     c = store.conn()
-    r = c.execute("SELECT pk, message_key, body_fetched FROM messages WHERE account=? AND folder='INBOX' AND uid=?",
+    r = c.execute("SELECT pk, message_key FROM messages WHERE account=? AND folder='INBOX' AND uid=?",
                   (w.ADA, uid)).fetchone()
     c.close()
-    assert not r["body_fetched"]
+    world.cut_off(r["pk"])                       # short, its sync kept it whole: the frame is to fetch it
     return r["pk"], r["message_key"], uid
 
 

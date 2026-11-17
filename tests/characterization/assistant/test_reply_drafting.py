@@ -443,7 +443,9 @@ def draft_ahead(app, copy, peek=False):
 @pytest.mark.parametrize("reply_warm", [False, True], ids=["drafting-fetches-a-body", "only-the-open-fetches"])
 def test_hwf_opening_a_message_keeps_its_threads_draft_ready(app, world, ai, reply_warm):
     # Cy's sent reply has no snippet, so writing the draft fetches its body. Warmed first, the
-    # draft fetches nothing and opening the thread's first message is the only change after it.
+    # draft fetches nothing and opening the thread's first message is the only change after it,
+    # one whose body its sync didn't keep.
+    world.cut_off(world.pk(VENUE_START))
     end = triaged_venue(world)
     if reply_warm:
         assert app.get(body_of(world.copy("cy-sent-01-thread-reply.eml"))).json["ok"]

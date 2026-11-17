@@ -15,19 +15,25 @@ from email import policy
 import pytest
 
 
+def utf8(text):
+    """Text as a mail program reads it: a header sent as raw UTF-8 (RFC 6532), which the standard library's parser keeps
+    as escaped bytes, read as UTF-8."""
+    return text.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
+
+
 def read(message):
     """What a mail program reads of a message: who sent it, its subject, its threading, what the export said of where
     it was and how it was sorted, and the start of its text."""
     def header(name):
         value = message[name]
-        return None if value is None else str(value)
+        return None if value is None else utf8(str(value))
     sender = message["From"]
     body = message.get_body(preferencelist=("plain", "html"))
-    return {"from": [[a.display_name, a.addr_spec] for a in sender.addresses] if sender is not None else [],
+    return {"from": [[utf8(a.display_name), utf8(a.addr_spec)] for a in sender.addresses] if sender is not None else [],
             **{name.lower(): header(name) for name in ("Subject", "Message-ID", "In-Reply-To", "References",
                                                        "X-MailMind-Account", "X-MailMind-Folder", "X-MailMind-ThreadID",
                                                        "X-MailMind-Bucket")},
-            "text": body.get_content()[:200] if body is not None else None}
+            "text": utf8(body.get_content()[:200]) if body is not None else None}
 
 
 @pytest.mark.parametrize("form", ["eml", "mbox"])

@@ -144,13 +144,13 @@
     ],
     "in-reply-to": null,
     "message-id": "<atelier-nov@atelier.example.test>",
-    "references": "<atelier-oct@atelier.example.test>   <atelier-sep@atelier.example.test>",
+    "references": "<atelier-oct@atelier.example.test> <atelier-sep@atelier.example.test>",
     "subject": "Projet d’atelier — planning de novembre",
     "text": "Bonjour Ada, voici le planning de novembre pour l’atelier.\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:ada@example.test:b56ed2a0fc20ba1c"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -213,10 +213,10 @@
     "references": null,
     "subject": "Fwd: Fabric samples",
     "text": "Forwarding Lin's note, see attached.\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:ada@example.test:46cc6a37490f7358"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -257,10 +257,10 @@
     "references": null,
     "subject": "Lunch on Thursday?",
     "text": "Hi Ada,\r\n\r\nAre you free for lunch on Thursday? The noodle place by the station reopened.\r\n\r\nLin\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:ada@example.test:f55e4e75612a3def"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -279,10 +279,10 @@
     "references": "<lunch-1@lin.example.test> <lunch-2@ada.example.test>",
     "subject": "Re: Lunch on Thursday?",
     "text": "12:30 is perfect. See you there.\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:ada@example.test:f55e4e75612a3def"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -301,10 +301,10 @@
     "references": null,
     "subject": "Menu d’août — nouveautés ☕",
     "text": "Notre menu d’août arrive : crêpes, galettes et café filtre.\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:ada@example.test:14318281301a68a3"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -322,11 +322,11 @@
     "message-id": "<order-1042@thimble.example.test>",
     "references": null,
     "subject": "Your receipt for order 1042",
-    "text": "Thanks for your order.\r\n\r\nOrder 1042\r\n1 x Linen thread, natural 4.50\r\nTotal 4.50\r\n\r\nPaid with card ending 0000.\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "receipts/transactional",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:ada@example.test:d6830290e0dcf6f0"
+    "text": "Thanks for your order.\r\n\r\nOrder 1042\r\n1 x Linen thread, natural    4.50\r\nTotal                        4.50\r\n\r\nPaid with card ending 0000.\r\n",
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -344,11 +344,11 @@
     "message-id": "<quilt-photo@lin.example.test>",
     "references": null,
     "subject": "The finished quilt",
-    "text": "It's done!\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:ada@example.test:d6e7bd3a63a67d5a"
+    "text": "<html><body><p>It's done!</p><img src=\"cid:quilt@lin.example.test\" alt=\"quilt\"></body></html>\r\n",
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -366,11 +366,11 @@
     "message-id": "<statement-10@mailer.example.test>",
     "references": null,
     "subject": "Monthly statement",
-    "text": "This message claims to be multipart but names no boundary.\r\nYour statement for October is ready.\r\n",
-    "x-mailmind-account": "ada@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:ada@example.test:9652750ff02d44da"
+    "text": null,
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -477,10 +477,10 @@
     "references": null,
     "subject": "Contract draft v2",
     "text": "Bea, the second draft is ready for your comments.\r\n",
-    "x-mailmind-account": "bea@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:bea@example.test:1f7815dd634a2ba6"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -499,10 +499,10 @@
     "references": null,
     "subject": "New sign-in to your account",
     "text": "We noticed a new sign-in from a Mac. If this was you, no action is needed.\r\n",
-    "x-mailmind-account": "bea@example.test",
-    "x-mailmind-bucket": "personal/protected",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "rf:bea@example.test:b3330a7a33c000ec"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -521,10 +521,10 @@
     "references": null,
     "subject": "Your parcel is out for delivery",
     "text": "Parcel 77 will arrive today between 10:00 and 14:00.\r\n",
-    "x-mailmind-account": "cy@example.test",
-    "x-mailmind-bucket": "receipts/transactional",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "gm:cy@example.test:1800000000000000004"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -543,10 +543,10 @@
     "references": null,
     "subject": "Guild meetup venue",
     "text": "Shall we book the library hall again?\r\n",
-    "x-mailmind-account": "cy@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "gm:cy@example.test:1800000000000000001"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },
@@ -565,10 +565,10 @@
     "references": "<venue-1@guild.example.test> <venue-2@cy.example.test>",
     "subject": "Re: Guild meetup venue",
     "text": "Booked for the 14th.\r\n",
-    "x-mailmind-account": "cy@example.test",
-    "x-mailmind-bucket": "other/personal-ish",
-    "x-mailmind-folder": "INBOX",
-    "x-mailmind-threadid": "gm:cy@example.test:1800000000000000001"
+    "x-mailmind-account": null,
+    "x-mailmind-bucket": null,
+    "x-mailmind-folder": null,
+    "x-mailmind-threadid": null
    }
   ]
  },

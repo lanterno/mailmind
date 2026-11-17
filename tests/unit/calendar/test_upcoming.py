@@ -398,7 +398,7 @@ def test_ingest_keeps_an_invite_so_it_is_listed_unopened(data_dir):
     rows = {r["uid"]: r for r in c.execute("SELECT pk, uid, body_fetched, seen FROM messages")}
     c.close()
     assert rows[1]["body_fetched"] == 1 and rows[1]["seen"] == 0, dict(rows[1])
-    assert rows[2]["body_fetched"] == 0, "mail without an invite is stored as before"
+    assert rows[2]["body_fetched"] == 1, "a short message is kept whole too, and lists nothing"
     assert _copies(_up()) == [w.copy_of(rows[1]["pk"])]
 
 

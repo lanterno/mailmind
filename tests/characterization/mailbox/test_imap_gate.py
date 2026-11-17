@@ -65,6 +65,7 @@ def test_hwf_reconcile_takes_the_gate_once_for_each_folder(app, world, monkeypat
 
 
 def test_hwf_a_prefetch_never_waits_for_the_imap_lock(app, world):
+    world.cut_off(world.pk("bea-inbox-01-client.eml"))      # its body not kept as it synced
     prefetch = body_of(world.copy("bea-inbox-01-client.eml"), prefetch=1)
     fetches = len(world.server.commands_for(w.BEA, "UID FETCH"))
     with gate.held_elsewhere():
@@ -114,7 +115,8 @@ def test_hwf_the_workers_hold_the_imap_lock_for_their_mail_commands(app, world):
     commands.drain()
     assert moves == [True]
 
-    pk = world.pk("bea-inbox-01-client.eml")                  # its body was never fetched
+    pk = world.pk("bea-inbox-01-client.eml")
+    world.cut_off(pk)                                         # its body was never fetched
     fetches = lock_spy(world, "UID FETCH", user=w.BEA)
     assistant.context.gather([{"pk": pk, "account": w.BEA, "body_text": None, "snippet": "", "body_fetched": 0,
                                "from_name": "Bea", "from_addr": w.BEA, "date_iso": ""}])
@@ -138,7 +140,8 @@ def while_locked(fn):
 def test_hwf_prefetch_and_the_background_loops_yield_a_held_imap_lock(world, monkeypatch):
     from mailmind.bootstrap.curation import rules
     rules.set_expiry("loom.example.test", 1)
-    pk = world.pk("bea-inbox-01-client.eml")                    # its body was never fetched
+    pk = world.pk("bea-inbox-01-client.eml")
+    world.cut_off(pk)                                           # its body was never fetched
     n = len(world.server.commands)
 
     def background():

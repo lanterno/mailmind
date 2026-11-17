@@ -1,8 +1,12 @@
 """What a sync keeps of new mail beyond its row, over HTTP: an Inbox message that carries an invite is stored with its
-body, as opening it would store it, so Today & next has the invite without the message ever being opened. And when a
-folder is caught up as it opens: once a minute at most, never the Inbox, and at once after MailMind put mail there. An
-account's first sync stores what its Inbox held before, which is no new mail."""
+body, as opening it would store it, so Today & next has the invite without the message ever being opened; so is one
+short enough for the first 64 KiB a sync reads of it to hold all of it, and a longer one waits for the body backfill or
+to be opened. And when a folder is caught up as it opens: once a minute at most, never the Inbox, and at once after
+MailMind put mail there. An account's first sync stores what its Inbox held before, which is no new mail."""
 import json
+from email.message import EmailMessage
+from email.policy import SMTP
+from urllib.parse import quote, urlencode
 
 import pytest
 
@@ -38,11 +42,41 @@ def test_an_invite_that_arrives_is_kept_with_its_body(app, world):
     assert events and all(e["folder"] == "INBOX" for e in events)
 
 
-def test_mail_with_no_invite_waits_to_be_opened(app, world):
-    uid = world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<no-invite@example.test>"))
-    new = row(uid)
-    assert new["body_fetched"] == 0 and new["snippet"]
-    assert rows("SELECT message_pk FROM bodies WHERE message_pk=?", new["pk"]) == []
+def with_pdf(message_id):
+    """A note with a PDF of about 100 KiB: longer than the first 64 KiB of it a sync reads."""
+    m = EmailMessage(policy=SMTP)
+    m["From"], m["To"], m["Subject"] = "Lin Mori <lin@example.test>", "Ada Park <ada@example.test>", "The plans"
+    m["Date"], m["Message-ID"] = "Fri, 30 Oct 2026 09:00:00 +0000", message_id
+    m.set_content("The plans, attached.")
+    m.add_attachment(b"%PDF-1.4\n" + bytes(100 * 1024), maintype="application", subtype="pdf", filename="plans.pdf")
+    return m.as_bytes()
+
+
+def found(app, words):
+    return [r["uid"] for r in app.get(f"/api/search?scope=all&account={w.ADA}&q={quote(words)}").json["items"]
+            if r["folder"] == "INBOX"]
+
+
+def test_a_short_message_is_kept_whole_as_it_arrives_and_a_longer_one_waits_to_be_fetched(app, world):
+    short = world.deliver(w.ADA, "INBOX", w.variant("ada-inbox-02-lunch-confirm.eml", Message_ID="<no-invite@example.test>")
+                          .replace(b"See you there.", b"See you at the boathouse."))
+    kept = row(short)
+    assert kept["body_fetched"] == 1 and kept["snippet"] and "boathouse" in kept["body_text"]
+    assert [r["message_pk"] for r in rows("SELECT message_pk FROM bodies WHERE message_pk=?", kept["pk"])] == [kept["pk"]]
+    longer = world.deliver(w.ADA, "INBOX", with_pdf("<plans@example.test>"))
+    waits = row(longer)
+    assert waits["body_fetched"] == 0 and waits["snippet"] and waits["body_text"] is None
+    assert rows("SELECT message_pk FROM bodies WHERE message_pk=?", waits["pk"]) == []
+    # Search finds what the short one says at once.
+    assert found(app, "boathouse") == [short]
+    # Opened, the short one asks its server nothing, and the longer one is fetched whole, attachment and all.
+    since = world.mark()
+    copy = {"key": kept["message_key"], "folder": "INBOX"}
+    assert "boathouse" in app.get("/api/message/body?" + urlencode(copy)).json["text"]
+    assert [c for c in world.server.commands[since:] if c["command"] == "UID FETCH"] == []
+    opened = app.get("/api/message/body?" + urlencode({"key": waits["message_key"], "folder": "INBOX"})).json
+    assert [a["filename"] for a in opened["attachments"]] == ["plans.pdf"]
+    assert row(longer)["body_fetched"] == 1
 
 
 def test_an_invite_filed_elsewhere_waits_to_be_opened(app, world):

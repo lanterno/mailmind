@@ -74,8 +74,8 @@ def test_a_document_says_who_sent_it(app, world):
         c.commit()
     finally:
         c.close()
-    [doc] = app.get("/api/documents").json["docs"]
-    assert doc["filename"] == "report.pdf" and doc["from"] and "from_" not in doc
+    [doc] = [d for d in app.get("/api/documents").json["docs"] if d["filename"] == "report.pdf"]
+    assert doc["from"] and "from_" not in doc
 
 
 def test_autocomplete_takes_anything(app):
