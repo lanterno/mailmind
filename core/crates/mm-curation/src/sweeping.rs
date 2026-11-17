@@ -9,7 +9,8 @@
 //! Once the account's first scan has read its INBOX whole, a plan comes from the stored INBOX at once
 //! (`ScannedInbox`): no server is asked and no gate waited for, where reading every message's headers off a big Inbox
 //! takes a minute. Confirm reads the INBOX off the server once, and moves what it says is still junk, still read and
-//! still unstarred. Until the first scan has read the INBOX whole, a plan reads it off the server too.
+//! still unstarred, none of it older than the stored INBOX's oldest message, which that plan could not have named.
+//! Until the first scan has read the INBOX whole, a plan reads it off the server too.
 
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashSet};
@@ -158,6 +159,17 @@ pub fn read_from_stored(copy: &InboxCopy) -> Read {
         starred: row.flagged,
         unread: !row.seen,
     }
+}
+
+/// Of the INBOX read off the server, what a plan from the stored INBOX could have named: its oldest stored message and
+/// all since. Older mail was never stored, as a sync that read only recent mail leaves it (a folder taken as read whole
+/// before migration 24, or an ingest of the last N days), so that plan never named it, and the sweep after it leaves
+/// it. With nothing stored, it named nothing. Mail since may still go: read elsewhere, or come, since the last sync.
+pub fn since_stored(read: Vec<Read>, stored: &[InboxCopy]) -> Vec<Read> {
+    let Some(oldest) = stored.iter().map(|c| c.uid).min() else {
+        return Vec::new();
+    };
+    read.into_iter().filter(|r| r.uid.parse::<i64>().is_ok_and(|uid| uid >= oldest)).collect()
 }
 
 /// What the classifier made of a message read live.
@@ -323,9 +335,12 @@ impl Sweeps {
     }
 
     /// A dry run's plan, or a verified move of an account's junk buckets to Trash, with the stored rows of what moved
-    /// forgotten and a way back for each under `group`. What went wrong with the account is in its answer, as the
-    /// class alone; a sweep trail that can't be written fails it before anything moves.
+    /// forgotten and a way back for each under `group`. Once the INBOX counts as read whole, a move takes nothing older
+    /// than what is stored of it (`since_stored`), which the plan before it never named. What went wrong with the
+    /// account is in its answer, as the class alone; a sweep trail that can't be written fails it before anything
+    /// moves.
     fn sweep(&self, account: &str, trash: &str, dry: bool, rules: &RuleSets, group: &str) -> Result<Swept, Fault> {
+        let stored = if dry { None } else { self.stored.scanned(account)? };
         let mut s = match self.boxes.open(account) {
             Ok(s) => s,
             Err(class) => {
@@ -340,6 +355,10 @@ impl Sweeps {
                 s.close(matches!(e, LiveError::Lost(_)));
                 return Ok((failed(account, e.class()), false));
             }
+        };
+        let read = match stored {
+            Some(stored) => since_stored(read, &stored),
+            None => read,
         };
         let rows = classified(read, rules);
         let (mut out, junk) = planned(account, &rows);
