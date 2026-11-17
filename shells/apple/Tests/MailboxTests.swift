@@ -684,7 +684,7 @@ final class MailboxAccountsTests: XCTestCase {
         XCTAssertFalse(app.mailbox.facts.syncing)
 
         changeTo(server, accounts: [Fixture.ada], syncing: true)
-        await app.accountsChanged()
+        await app.accountsChanged().value
         XCTAssertEqual(app.mailbox.accounts, [Fixture.ada], "the rail shows it at once")
         XCTAssertEqual(app.mailbox.folders(of: Fixture.ada).count, Fixture.adaFolders.count)
         await until { app.mailbox.facts.syncing }
@@ -697,9 +697,29 @@ final class MailboxAccountsTests: XCTestCase {
         let app = await opened(server)
         app.place = .folder(account: Fixture.work, folder: "INBOX")
         changeTo(server, accounts: [Fixture.ada])
-        await app.accountsChanged()
+        await app.accountsChanged().value
         XCTAssertEqual(app.mailbox.accounts, [Fixture.ada])
         XCTAssertEqual(app.place, .allInboxes, "its folder isn't there to show")
+    }
+
+    /// A new account's folders are read live from its server, which can take a while: the sheet that added it isn't
+    /// held on them, and the rail names the account and the list says its Inbox is being read before they come.
+    func testAnAccountAddedShowsBeforeItsFoldersAreReadFromItsServer() async {
+        let server = server(accounts: [])
+        let app = await opened(server)
+        let folders = HeldRoute()
+        app.mailbox.wire = Wire { method, target, body in
+            if target.hasPrefix(API.Get.Folders.path + "?") { await folders.waitTillLetGo() }
+            return await server.wire.send(method, target, body)
+        }
+        changeTo(server, accounts: [Fixture.ada], syncing: true)
+        let reading = app.accountsChanged()
+        await until { app.mailbox.facts.syncing }
+        XCTAssertEqual(app.mailbox.accounts, [Fixture.ada], "the rail names it")
+        XCTAssertTrue(app.mailbox.folders(of: Fixture.ada).isEmpty, "its folders haven't come yet")
+        await folders.letGo()
+        await reading.value
+        XCTAssertEqual(app.mailbox.folders(of: Fixture.ada).count, Fixture.adaFolders.count, "then its folders come")
     }
 
     /// An account the rail doesn't list yet syncs: who the accounts are is read first, so its folders are read with the
@@ -728,5 +748,22 @@ final class MailboxAccountsTests: XCTestCase {
         app.mailbox.heard(CoreEvent(id: "1", name: "new-mail", data: #"{"account": "ada@example.test", "count": 1}"#))
         await until { !app.mailbox.folders(of: Fixture.work).isEmpty }
         XCTAssertEqual(app.mailbox.folders(of: Fixture.work).count, Fixture.workFolders.count)
+    }
+}
+
+/// What a test's route waits on until the test lets it go.
+private actor HeldRoute {
+    private var free = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func waitTillLetGo() async {
+        guard !free else { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func letGo() {
+        free = true
+        waiting.forEach { $0.resume() }
+        waiting = []
     }
 }
