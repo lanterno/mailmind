@@ -11,11 +11,12 @@ def _among(accounts, col):
 
 
 def brief_rows(c, accounts, n):
-    """What a brief is made from: the mail the AI said is worth a glance, most important first."""
+    """What a brief is made from: the Inbox's mail the AI said is worth a glance, most important first. A brief is written with
+    no one asking, so mail filed, sent or trashed isn't sent."""
     sql = ("SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, "
            "s.summary, s.importance, s.category, s.action "
            "FROM messages m JOIN assessments s ON s.message_key=m.message_key "
-           f"WHERE m.is_junk=0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance>=2 "
+           f"WHERE m.folder='INBOX' AND m.is_junk=0 AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND s.importance>=2 "
            "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
     params = []
     if accounts:
@@ -27,14 +28,15 @@ def brief_rows(c, accounts, n):
 
 
 def delta_rows(c, accounts, since_ts, n):
-    """What a delta is made from: the mail newer than `since_ts`, newest first."""
+    """What a delta is made from: the Inbox's mail newer than `since_ts`, newest first. It is asked for with no one asking, so
+    no other folder's mail is sent."""
     sql = ("SELECT m.pk, m.account, m.from_name, m.from_addr, m.subject, m.ts, m.message_id, "
            "COALESCE(s.summary,'') AS summary, COALESCE(s.importance,2) AS importance, "
            "COALESCE(s.category,'other') AS category, COALESCE(s.action,0) AS action "
            "FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key "
            # a delta is "what changed" — include newsletters/notifications (the AI buckets them as noise)
            # so it matches the pill count; only drop spam/blocked and snoozed/muted.
-           "WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) "
+           "WHERE m.folder='INBOX' AND (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) "
            f"AND {not_snoozed_sql()} AND m.pending_removal IS NULL AND m.ts > ? "
            "AND NOT EXISTS (SELECT 1 FROM muted mu WHERE mu.account=m.account AND mu.thread_id=m.thread_id) ")
     params = [since_ts]
