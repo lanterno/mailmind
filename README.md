@@ -5,6 +5,11 @@ into your mailboxes over IMAP, throws away the junk, AI-summarizes everything
 that matters, and gives you a fast dashboard to read, triage, search and *send* —
 so you read *summaries of what's important*, not your inbox.
 
+**[Get the Mac app](https://github.com/lanterno/mailmind/releases/latest)**, for macOS 15 or later on Apple silicon or
+Intel: no developer tools needed. [Install it](#install-the-mac-app) in a few steps; [if something goes
+wrong](#if-something-goes-wrong), Help › Copy Diagnostics has what to send; and [Uninstall](#uninstall-the-mac-app)
+takes it all away again.
+
 It started as a summarizer with a reading pane and is now a full mail client:
 compose and SMTP send with a durable outbox and Undo Send, conversation
 threading, attachments, full-text search with an operator grammar, IMAP IDLE
@@ -16,14 +21,17 @@ See [Features](#features) for what ships today and
 - **Little to install.** Python, [Node](https://nodejs.org) to build the app, and eight packages
   (FastAPI, uvicorn, the Anthropic SDK and its httpx2, IMAPClient, icalendar, recurring-ical-events and sqlcipher3) that
   [uv](https://docs.astral.sh/uv/) fetches on first run.
-- **Your data stays local.** Mail is stored in a local SQLite file; the only
-  thing that leaves your machine is the text of the mail the AI works on, sent to
-  the provider you chose (Claude by default), or to none with a model on this Mac or AI mode off.
-  With AI mode on, each new message's sender, subject and opening text go to be summarized by
-  themselves, and those summaries again for the day's brief and what came in since you looked; whole
-  conversations only when you ask, and attachments never.
-- **Any mailbox.** Gmail/Workspace, generic IMAP (cPanel/Dovecot/…), and Proton
-  (via Bridge) — all configured in one JSON file.
+- **Your data stays local.** Mail is stored in an encrypted SQLite file on your machine; the only thing that leaves it
+  is the mail the AI works on, sent to the provider you chose (Claude by default), and nothing at all with AI mode off,
+  as a fresh install starts. With AI mode on, the sender, subject and opening text of each message in your Inbox go to
+  the provider you chose (Anthropic, OpenAI, Google, or the service you named) to be summarized, automatically: the last
+  30 days’ as soon as you turn it on, then each new one. Those senders, subjects and summaries go again to write the
+  day’s brief and what came in since you looked. Whole conversations go only when you ask: for a summary or a draft,
+  with what you type into Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac. See
+  [what AI sends](#ai-intelligence) for a model on this Mac and drafting ahead.
+- **Any mailbox.** Gmail and Google Workspace, iCloud, Yahoo, AOL, Fastmail, any other IMAP server
+  (cPanel/Dovecot/…), and Proton (through its Bridge), added in Settings from the address. Outlook and Hotmail aren't
+  supported yet ([#47](https://github.com/lanterno/mailmind/issues/47)).
 - **It learns.** A keep/block rules layer remembers your decisions so the same
   sender is never re-triaged.
 
@@ -261,10 +269,25 @@ and the AI provider you chose (Claude by default).
 
 Everything here runs through the AI provider you chose (Claude by default) and returns
 **schema-validated** structured output, so malformed-response errors don't reach the UI.
-With AI mode on, three things go by themselves: new mail's summaries, the line on what came in since
-you looked as the new-mail pill shows, and the day's brief as the Inbox opens when none is stored, the
-last two written from the senders, subjects and summaries already made. Everything else waits for you to
-ask, or for a switch you turned on in Settings › AI.
+AI mode starts off on a fresh install, and while it is off nothing goes to any provider. What it sends once it is on,
+as Settings, Help and the Mac app's first run say before you turn it on:
+
+> With AI mode on, the sender, subject and opening text of each message in your Inbox go to the provider you chose
+> (Anthropic, OpenAI, Google, or the service you named) to be summarized, automatically: the last 30 days’ as soon as
+> you turn it on, then each new one. Those senders, subjects and summaries go again to write the day’s brief and what
+> came in since you looked. Whole conversations go only when you ask: for a summary or a draft, with what you type into
+> Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac.
+
+With **Draft replies ahead** on: "With Draft replies ahead on, whole conversations of important mail go too, to draft
+replies before you open them." With a model on this Mac (or a service at an address on it), the words are "nothing
+leaves this Mac", unless the model is one of Ollama's cloud models (its name ends in `-cloud` or `:cloud`, and Ollama
+runs it on its own servers). Then they are, for one named `gpt-oss:120b-cloud`: "gpt-oss:120b-cloud runs in Ollama’s
+cloud, so what is summarized goes to Ollama’s servers."
+
+So three things go by themselves, and each reads only the Inbox: new mail's summaries, the line on what came in since
+you looked as the new-mail pill shows, and the day's brief as the Inbox opens when none is stored, the last two
+written from the senders, subjects and summaries already made. Mail you sent, drafted, deleted or filed elsewhere goes
+only when you ask. Everything else waits for you to ask, or for a switch you turned on in Settings › AI.
 
 - **The Claude API.** With an API key set, the server and every command call the Messages API
   through the official Anthropic SDK (`claude-opus-5-5` unless you choose another in Settings or
@@ -297,13 +320,10 @@ ask, or for a switch you turned on in Settings › AI.
   The sync menu names the model, and in red the reason ("the API key was rejected",
   "rate-limited for now", "the Anthropic account has no credit left") when the last call failed.
   Each paid provider's key card says it is billed per use by that provider, separately from any
-  ChatGPT or Claude subscription, and where to add credit. Settings says what AI mode sends before it
+  ChatGPT or Claude subscription, and where to add credit. Settings says what AI mode sends (above) before it
   is on, and so do Help and the Mac app's first run. With AI mode on and no key, the brief says
   AI is off calmly and the composer drops Draft and Rewrite. The brief's card says what AI mode sends
-  as Settings does, and the sync menu with AI on says it in short: each new message's sender, subject
-  and opening text go to the provider chosen (Anthropic, OpenAI, Google or the service named)
-  automatically, more goes when you ask for something, and attachments never leave this Mac; with a
-  model on this Mac or a service at a URL on it, nothing does.
+  as Settings does, and the sync menu with AI on says it in short.
   Every call is counted by day and by feature (triage, thread summaries, the brief, drafts,
   …) at the provider's list prices. The sync menu shows what today cost so far against the
   daily limit, and `uv run python -m mailmind ai usage --days 30` (`just ai-usage`) lists each day.
@@ -489,10 +509,16 @@ ask, or for a switch you turned on in Settings › AI.
   server refuses, or one the queue gives up on, puts it back where it is, and Undo of a move
   that hasn't gone out restores it without asking the server.
 - **A read-only mode that really is.** `just dev` runs MailMind read-only: it reads your
-  mail when you open it, but writes nothing to a mail server. Its connections can only read,
-  and a send, a move, a read mark or a star, a snooze or a mute, a cleanup or a sweep is refused
-  before anything is queued, so nothing waits to happen on a normal run. A draft is kept on this
-  Mac, and rules and AI work as they do. The sync pill says Read-only.
+  mail when you open it, but writes nothing to a mail server. Its connections can only read, and on either server
+  everything that would reach a mail server is refused at once, saying "MailMind is running read-only", before
+  anything is queued or leaves the list: a send (new, a reply, Send later), the outbox's Retry and Send now, filing
+  (move, trash, archive or junk; one message, a conversation or a selection), read marks and stars, a mute, a snooze,
+  an RSVP, an unsubscribe by mail, a cleanup, a bulk action the AI planned, a sweep, making, renaming or deleting a
+  folder, and an Undo that would have to ask a server. Nothing you ask for waits for a normal run, and a sync, a
+  filter, a muted thread or a snooze waking queues nothing either; what a normal run queued earlier still waits for
+  the next one. What changes only this Mac still works: reading, rules, AI, cancelling a queued send, and saving a
+  draft, which is kept on this Mac (the outbox panel shows it as kept here) and goes to its server only when you save
+  it again with read-only off. Nothing syncs in the background. The sync pill says Read-only.
   The Mac app has it as a switch in Settings › General ("Read only: MailMind changes nothing on your mail servers"),
   which it applies the next time it opens, offering to open it again; its welcome screen mentions it. Only your own
   run reads the switch: a demo or test run (one that names its own data folder) runs as it was started.
@@ -550,7 +576,12 @@ ask, or for a switch you turned on in Settings › AI.
   server, which are only on this Mac, and says that copies in MailMind's backups stay until they're replaced.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
-  banner naming any accounts that couldn't connect.
+  banner naming any accounts that couldn't connect. Trouble that may pass (a connection lost after sleep or a change
+  of Wi-Fi, a timeout, a server busy for now) shows only once the next sync fails too, or three minutes on; a refused
+  password or a changed certificate shows at once.
+- **One thing breaking stops nothing else.** On the Rust server and the Mac app, a sync, a send, a change or a read of
+  older mail whose code breaks part way ends as one that failed, is logged by where it broke, and is tried again as
+  such, and the rest of the background work goes on.
 - **Optional multi-folder warming.** Set `MAILMIND_WARM_FOLDERS=1`, or an account's `"warm_folders": true`, to also pull each
   account's Drafts / Archive / Sent alongside INBOX so search and threading cover more
   than the inbox — throttled, bounded, and never delaying new mail. Warming reads only a
@@ -663,16 +694,8 @@ keeps, as Gmail's Starred); one that holds mail is deleted only once you say so 
 or on Gmail, where a folder is a label, left in All Mail. When one message comes, its notification says who sent it
 and the subject, and a
 click opens it, as a meeting's reminder opens its invite, reopening the window if you closed it. It can be
-your Mac's mail app (**Mail › Settings › General › Default email reader**), so a mailto: link opens its composer. It
-is a .dmg on this repo's [Releases](https://github.com/lanterno/mailmind/releases/latest) page, for macOS 26 or later
-on Apple silicon or Intel:
-
-1. Download the .dmg from the latest release, open it, and drag **MailMind** onto **Applications**.
-2. Open MailMind. It is signed ad hoc, not yet with an Apple Developer ID, so macOS stops it the first time and you
-   say once that it may run. On macOS 15 and later: click **Done** on *"MailMind" Not Opened*, open **System Settings ›
-   Privacy & Security**, scroll down to **Security**, click **Open Anyway** beside *"MailMind" was blocked to protect
-   your Mac*, then **Open Anyway** again, and enter your password.
-3. From then on it updates itself: it asks before its first check, and **MailMind › Check for Updates…** checks at once.
+your Mac's mail app (**Mail › Settings › General › Default email reader**), so a mailto: link opens its composer, and
+**Check Mail Against the Server**, in the status menu, drops at once what another app moved or deleted.
 
 It sends and syncs only while it is open. **Settings › General › Open at login** opens it as you log in, and
 quitting saves whatever you are writing as a draft, sends a message still in its Undo window first, and asks before
@@ -680,14 +703,76 @@ leaving one scheduled for later. Its window
 closed and opened again from the Dock shows the mail already open, and when the Mac wakes or its network changes the
 mail syncs at once.
 
-When something goes wrong, **Help › Copy Diagnostics** copies what the owner needs to see why: the version, this Mac,
-how each account is set up, what failed lately and the log's last lines, with no address, subject, name or password
-in it, and a mail server named only when it is a provider's (Gmail, iCloud, Yahoo, AOL, Fastmail, Outlook) or this
-Mac's own, any other as "own server". **Help › Report a Problem…** copies the same and opens a new issue on GitHub; send it to whoever gave you
-MailMind. A sync that fails says why in **Settings › Accounts**, with what to do next, and background work that keeps
-failing says so in the sync menu. If MailMind can't open its copy of your mail, its window says why and what to do, with **Copy
-Details**, **Show in Finder** and **Start Fresh…**, which moves that copy into `backups/` and reads your mail from its
-servers again.
+### Install the Mac app
+
+MailMind runs on macOS 15 or later, on a Mac with Apple silicon or an Intel processor (**Apple menu › About This Mac**
+says which you have), and needs nothing else installed.
+
+1. Open the [latest release](https://github.com/lanterno/mailmind/releases/latest), download `MailMind-<version>.dmg`
+   under **Assets**, and open it.
+2. Drag **MailMind** onto **Applications**.
+3. Open MailMind from your Applications folder. The first time, macOS stops it: MailMind is signed ad hoc, not yet
+   with an Apple Developer ID, so macOS can't check who made it. It says *"MailMind" Not Opened*: click **Done**.
+4. Open **System Settings › Privacy & Security**, scroll down to **Security**, and click **Open Anyway** beside
+   *"MailMind" was blocked to protect your Mac*. Click **Open Anyway** again in the dialog that follows, and enter your
+   login password or use Touch ID. (Control-click › Open no longer does this, since macOS 15.)
+
+MailMind opens, and from then on it opens like any other app. It updates itself: it asks before its first check, and
+**MailMind › Check for Updates…** checks at once.
+
+Before you add an account:
+
+- **Gmail** takes an App Password, not your Google password: Settings shows the steps and links the page that makes
+  one. **iCloud, Yahoo, AOL and Fastmail** each take an app password of their own too, linked the same way.
+- **Proton** needs [Proton Mail Bridge](https://proton.me/mail/bridge) installed and running, which takes a paid
+  Proton plan; MailMind logs in with the Bridge's password.
+- **Outlook, Hotmail and Microsoft 365** aren't supported yet: they need Microsoft's own sign-in
+  ([#47](https://github.com/lanterno/mailmind/issues/47)), and Settings says so before it asks for a password.
+- **AI is off** until you turn it on in **Settings › AI**, which says first what it would send, and to whom. It needs a
+  key from the provider you choose, billed by them per use, or a model on this Mac.
+- **Read only**, in **Settings › General**, lets you look around with MailMind changing nothing on your mail servers.
+
+### If something goes wrong
+
+- **Help › Copy Diagnostics** copies what the owner needs to see why: the version, this Mac, how each account is set
+  up, what failed lately and the log's last lines, with no address, subject, name or password in it, and a mail server
+  named only when it is a provider's (Gmail, iCloud, Yahoo, AOL, Fastmail, Outlook) or this Mac's own, any other as
+  "own server". Paste it into a message to whoever gave you MailMind.
+- **Help › Report a Problem…** copies the same, and offers to open a new issue on GitHub to paste it into.
+- **The log** is `mailmind.log` in MailMind's data folder, `~/Library/Application Support/io.github.lanterno.mailmind`
+  (in Finder, **Go › Go to Folder…** and paste that), with older lines in `mailmind.log.1` to `.3`. It says what
+  MailMind did and the kinds of error, never an address, a subject or a password, so it is safe to send.
+- **If MailMind quits unexpectedly**, macOS keeps a crash report in `~/Library/Logs/DiagnosticReports`, named MailMind
+  and the date and time: send that file too.
+- A sync that fails says why in **Settings › Accounts**, with what to do next, and background work that keeps failing
+  says so in the sync menu. If MailMind can't open its copy of your mail, its window says why and what to do, with
+  **Copy Details**, **Show in Finder** and **Start Fresh…**, which moves that copy into `backups/` and reads your mail
+  from its servers again.
+
+### Uninstall the Mac app
+
+Removing an account (**Settings › Accounts**, then **Remove**) takes its password out of the login Keychain and, unless
+you untick it, its mail off this Mac: its messages with their bodies and attachments, what the AI said of them, its
+Undo entries and the records of its sweeps. Its mail on the server stays as it is. The copies of MailMind's database in
+`backups/` (one made before each upgrade changes the database, the newest three kept, and any **Start Fresh** moved
+aside) still hold the account's mail as it was then, until newer copies replace them; step 4 below removes them all.
+
+To remove MailMind and everything it keeps:
+
+1. If **Open at login** is on, turn it off in **Settings › General**.
+2. Quit MailMind (**MailMind › Quit MailMind**, ⌘Q).
+3. Move **MailMind** from Applications to the Trash.
+4. In Finder, choose **Go › Go to Folder…**, paste `~/Library/Application Support/io.github.lanterno.mailmind`, and
+   move that folder to the Trash. It holds MailMind's copy of your mail, its backups, its settings and the log.
+5. Open **Keychain Access** (search for it with Spotlight, ⌘Space), type `mailmind` in its search field, and delete
+   each item named mailmind: the key your copy of the mail was encrypted with (account `database-key`), each mail
+   account's password (`account:` and the address), any AI provider's key, and the Proton Bridge's password.
+6. Empty the Trash.
+
+If Open at login was on and you skipped step 1, remove MailMind in **System Settings › General › Login Items &
+Extensions**. MailMind's own preferences (the read-only switch, how the window was laid out) hold nothing of your mail;
+they are anything named `io.github.lanterno.mailmind` in `~/Library/Preferences` and `~/Library/Caches`, and can go
+too.
 
 How a release is made is in [docs/releasing.md](docs/releasing.md).
 
@@ -835,8 +920,8 @@ back, and the startup line `[imap] …` says how many accounts asked.
 **Web dashboard / daemon** — `uv run python -m mailmind serve [port]` (`just run`). Auto-syncs
 every 5 minutes and at once when IDLE hears new mail, and triages what arrived on a schedule of
 its own, so a slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` it serves
-read-only: it writes nothing to a mail server, so it refuses a send, a move or a flag change
-rather than queue it for a full run, and it syncs nothing in the background. `just dev` does that.
+read-only: it writes nothing to a mail server, so it refuses a send, a move or a flag change, and every other change a
+mail server would see, rather than queue it for a full run, and it syncs nothing in the background. `just dev` does that.
 
 The app, at `/`, exists once built (`just build-web`, which needs Node and which `just run` does
 first). With nothing built, the server says so.
@@ -870,7 +955,7 @@ uv run python -m mailmind assess --batch         # the last 30 days' with no sum
 | Variable | Effect |
 |---|---|
 | `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. The server and every `uv run python -m mailmind` command read it. |
-| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: a send, a move, a flag change, a snooze or mute, a cleanup, a sweep and a draft's discard from the server are refused before anything is queued, a draft is kept here until a full run pushes it, and nothing syncs in the background, though a folder you open for the first time is still read to its oldest message. Any other name stops the server from starting. |
+| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server: every change one would see (a send, a move, a flag change, a snooze or mute, an RSVP, a cleanup, a sweep, a folder made, renamed or deleted, a draft's discard from the server, and an Undo that would ask a server) is refused before anything is queued, a draft is kept here until it is saved again on a full run, and nothing syncs in the background, though a folder you open for the first time is still read to its oldest message. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS` | On the Rust server and the Mac app, each account has its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) holds up no other; `one` makes every account share one lane. The Python app shares one unless this is `account`. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature while Claude is the provider, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. AI mode starts on where it is set or `mailmind.config.json` names a key for any provider (`"anthropic_api_key"`, `"openai_api_key"` and the rest), and off otherwise. |
