@@ -1041,6 +1041,31 @@ final class AccountFixTests: XCTestCase {
                        "nothing typed to try")
     }
 
+    func testAnEditedAccountsPasswordIsTriedWhereItReadsItsMail() throws {
+        // A Gmail account whose file names its servers (as a test's world does) is tried there, not at Google's.
+        var gmail = AccountDraft(editing: StatusFixtures.account("cy@example.test", type: "gmail"),
+                                 fixing: .appPassword)
+        gmail.password = "fixture-app-password-0001"
+        let tried = try XCTUnwrap(gmail.test?.draft)
+        XCTAssertEqual(tried.host, .string("imap.example.test"))
+        XCTAssertEqual(tried.port, .number(993))
+        XCTAssertEqual(tried.smtpHost, .string("smtp.example.test"), "and sends where it sends")
+        XCTAssertEqual(tried.smtpPort, .number(465))
+        XCTAssertNil(gmail.body.host, "the edit keeps the account on the servers it has")
+        // An Other IMAP account made a Gmail one is tried at Google's.
+        var picked = AccountDraft(editing: StatusFixtures.account("ada@example.test"))
+        picked.pick(.gmail)
+        picked.password = "fixture-app-password-0001"
+        XCTAssertNil(try XCTUnwrap(picked.test?.draft).host)
+
+        // A new Gmail account's servers are its type's.
+        var adding = AccountDraft()
+        adding.email = "cy@example.test"
+        adding.pick(.gmail)
+        adding.password = "fixture-app-password-0001"
+        XCTAssertNil(try XCTUnwrap(adding.test?.draft).host)
+    }
+
     @MainActor
     func testAPasswordTypedToFixALoginIsTriedFirstAndKeptOnlyOnceItLogsIn() async throws {
         let email = "cy@example.test"
