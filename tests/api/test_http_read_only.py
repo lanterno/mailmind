@@ -179,3 +179,46 @@ def test_a_move_still_waiting_for_its_server_is_taken_back_here(app, world):
     assert app.get("/api/pending").json["waiting"] == 0
     assert world.writes(since) == []
 
+
+def test_a_filter_asks_nothing_of_new_mail_now_or_on_a_full_run(app, world):
+    """What only a sync does on its own isn't kept for a full run either: a filter would star new mail on its server,
+    so read-only it asks nothing, and a full run after finds nothing waiting."""
+    assert app.post("/api/filters", {"verb": "create", "q": "from:lin@example.test", "star": True}).status == 200
+    read_only(app)
+    since = world.mark()
+    uid = world.deliver(w.ADA, "INBOX", w.variant(LUNCH, Message_ID="<filter-ro@example.test>"))
+    assert rows("SELECT flagged FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid) == [{"flagged": 0}]
+    assert rows("SELECT id FROM mail_commands") == []
+    full_run(app)
+    app.work("commands")
+    assert world.writes(since) == []
+
+
+def test_new_mail_in_a_muted_thread_is_marked_read_here_alone(app, world):
+    """A thread a full run muted stays silent: what comes into it is marked read here, and its server hears nothing."""
+    lunch = world.row(LUNCH)
+    assert app.post("/api/mute", world.copy(LUNCH)).json["ok"]
+    app.work("commands")
+    read_only(app)
+    since = world.mark()
+    uid = world.deliver(w.ADA, "INBOX", w.variant(LUNCH, Message_ID="<muted-ro@example.test>",
+                                                  In_Reply_To=lunch["message_id"]))
+    assert rows("SELECT seen FROM messages WHERE account=? AND folder='INBOX' AND uid=?", w.ADA, uid) == [{"seen": 1}]
+    assert rows("SELECT id FROM mail_commands WHERE applied=0") == []
+    assert world.writes(since) == []
+
+
+def test_snoozed_mail_wakes_unread_here_alone(app, world):
+    """A snooze a full run made wakes as ever, unread, which marks it unread here alone: nothing waits for a full run."""
+    receipt = world.pk(RECEIPT)
+    assert app.post("/api/seen", {**world.copy(RECEIPT), "seen": True}).status == 200
+    assert app.post("/api/snooze", {**world.copy(RECEIPT), "until": AT_SIX}).json["ok"]
+    app.work("commands")
+    read_only(app)
+    app.clock.move_to(datetime(2026, 11, 2, 18, 0, 1, tzinfo=timezone.utc))
+    since = world.mark()
+    app.work("snoozes")
+    assert rows("SELECT seen FROM messages WHERE pk=?", receipt) == [{"seen": 0}]
+    assert rows("SELECT message_key FROM snoozes") == []
+    assert rows("SELECT id FROM mail_commands WHERE applied=0") == []
+    assert world.writes(since) == []

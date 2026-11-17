@@ -217,7 +217,7 @@ def test_read_only_refuses_a_snooze_and_hides_nothing(world, monkeypatch, app):
         c.close()
 
 
-def test_read_only_wakes_what_a_full_run_snoozed_and_the_mark_waits_in_the_queue(world, monkeypatch, app):
+def test_read_only_wakes_what_a_full_run_snoozed_and_marks_it_unread_here_alone(world, monkeypatch, app):
     from mailmind.bootstrap.mailbox import commands
     snooze(app, world, CI)
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
@@ -227,7 +227,7 @@ def test_read_only_wakes_what_a_full_run_snoozed_and_the_mark_waits_in_the_queue
     commands.drain()
     assert world.writes(since) == []
     assert copy(world, CI)["seen"] == 0
-    assert app.get("/api/pending").json["waiting"] == 1
+    assert app.get("/api/pending").json["waiting"] == 0
 
 
 def test_two_copies_waking_together_each_get_the_mark(app, world):

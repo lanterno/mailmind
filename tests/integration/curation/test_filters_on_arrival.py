@@ -162,7 +162,7 @@ def test_a_later_sync_doesnt_take_the_mark_back(app, world):
     assert stored(uid)["flagged"] == 1 and len(waiting()) == 1
 
 
-def test_read_only_marks_it_here_and_the_server_waits(app, world, monkeypatch):
+def test_read_only_asks_nothing_and_nothing_waits(app, world, monkeypatch):
     filter_on(app, "from:lin@example.test", star=True)
     uid = world.server.deliver(w.ADA, "INBOX", a_lunch(1))
     monkeypatch.setenv("MAILMIND_PROFILE", "read-only")
@@ -170,7 +170,7 @@ def test_read_only_marks_it_here_and_the_server_waits(app, world, monkeypatch):
     mailbox.ingest.sync_new(accounts.get(w.ADA))
     mailbox.commands.drain()
     assert world.writes(since) == []
-    assert stored(uid)["flagged"] == 1 and len(waiting()) == 1
+    assert stored(uid)["flagged"] == 0 and waiting() == []
 
 
 def test_the_worker_is_woken(app, world, monkeypatch):
