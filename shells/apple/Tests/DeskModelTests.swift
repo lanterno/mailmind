@@ -682,6 +682,52 @@ final class DeskModelTests: XCTestCase {
         XCTAssertTrue(undoable)
     }
 
+    /// Planning a sweep reads the whole Inbox from its server, and the sweep reads it again as it moves what goes: while
+    /// either runs the account's card says so, and Sweep and Confirm ask nothing more of the server.
+    func testWhileASweepIsPlannedOrRunsItSaysSoAndIsntAskedAgain() async {
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", planned: 12)]))
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: false, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", moved: 12, planned: 12)], undoGroup: "ug-sweep"))
+        let model = CurateModel(link: link, notices: notices)
+
+        routes.hold("POST", "/api/sweep")
+        let planning = Task { await model.armSweep("ada@example.test") }
+        await deskEventually { model.sweepBusy != nil }
+        XCTAssertEqual(model.sweepBusy, .init(account: "ada@example.test", step: .planning))
+        XCTAssertEqual(model.sweepBusy?.words, "Reading this Inbox to plan the sweep…")
+        await model.armSweep("ada@example.test")
+        await model.armSweep("work@example.test")
+        XCTAssertEqual(routes.sent("POST", "/api/sweep").count, 1, "Sweep pressed again asks nothing more")
+        routes.release("POST", "/api/sweep")
+        await planning.value
+        XCTAssertNil(model.sweepBusy, "it clears when the answer comes")
+        XCTAssertEqual(model.sweepArmed?.planned, 12)
+
+        routes.hold("POST", "/api/sweep")
+        let sweeping = Task { await model.sweep() }
+        await deskEventually { model.sweepBusy != nil }
+        XCTAssertEqual(model.sweepBusy, .init(account: "ada@example.test", step: .sweeping))
+        XCTAssertEqual(model.sweepBusy?.words, "Sweeping…")
+        await model.sweep()
+        await model.armSweep("ada@example.test")
+        XCTAssertEqual(routes.sent("POST", "/api/sweep").count, 2, "Confirm and Sweep wait for the answer")
+        routes.release("POST", "/api/sweep")
+        await sweeping.value
+        XCTAssertNil(model.sweepBusy)
+        XCTAssertEqual(said, "Swept 12/12")
+    }
+
+    /// A plan the server refused clears too, so Sweep can be pressed again.
+    func testASweepsPlanThatFailedLetsSweepBePressedAgain() async {
+        routes.refuse("POST", "/api/sweep", status: 502, detail: "The server is away")
+        let model = CurateModel(link: link, notices: notices)
+        await model.armSweep("ada@example.test")
+        XCTAssertNil(model.sweepBusy)
+        await model.armSweep("ada@example.test")
+        XCTAssertEqual(routes.sent("POST", "/api/sweep").count, 2)
+    }
+
     /// The server looked at the Inbox again and found nothing had left it, so it kept no way back.
     func testASweepTheServerStoppedBeforeAnythingMovedOffersNoUndo() async {
         routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [

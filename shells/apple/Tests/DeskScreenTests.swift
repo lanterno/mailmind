@@ -152,6 +152,17 @@ final class DeskScreenTests: XCTestCase {
         try draw("curate-activity", width: 620, height: 600,
                  CurateSheet(model: model, nameOf: name, open: { _ in }, part: .activity))
 
+        // A sweep being planned: the card says so, and its Sweep waits.
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", planned: 20)]))
+        routes.hold("POST", "/api/sweep")
+        let planning = Task { await model.armSweep("ada@example.test") }
+        await deskEventually { model.sweepBusy != nil }
+        try draw("curate-inboxes-planning", width: 620, height: 600,
+                 CurateSheet(model: model, nameOf: name, open: { _ in }, part: .inboxes))
+        routes.release("POST", "/api/sweep")
+        await planning.value
+
         await model.previewCleanup("news@shop.example.test")
         await model.pressCleanup()
         try draw("cleanup-armed", width: 500, CleanupSheet(model: model))

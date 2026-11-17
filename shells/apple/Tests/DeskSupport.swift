@@ -46,17 +46,39 @@ final class DeskRoutes: RouteCaller, @unchecked Sendable {
         sent.filter { $0.method == method && $0.path == path }
     }
 
+    /// Keep `method path`'s answers back until `release`, as a slow server does: a request is sent at once and waits
+    /// for its answer.
+    func hold(_ method: String, _ path: String) {
+        lock.withLock { _ = held.insert("\(method) \(path)") }
+    }
+
+    func release(_ method: String, _ path: String) {
+        lock.withLock { _ = held.remove("\(method) \(path)") }
+    }
+
+    private var held: Set<String> = []
+
+    private func waitWhileHeld(_ method: String, _ path: String) async {
+        while lock.withLock({ held.contains("\(method) \(path)") }) {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
     // MARK: RouteCaller
 
     func get<R: GetRoute>(_ route: R.Type, _ query: KeyValuePairs<String, String?>) async throws -> R.Answer
         where R.Answer: Decodable
     {
-        try Core.decoded(R.Answer.self, from: reply("GET", R.path, query, nil))
+        let answer = reply("GET", R.path, query, nil)
+        await waitWhileHeld("GET", R.path)
+        return try Core.decoded(R.Answer.self, from: answer)
     }
 
     func post<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer where R.Answer: Decodable {
         let sent = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(body))
-        return try Core.decoded(R.Answer.self, from: reply("POST", R.path, [:], sent))
+        let answer = reply("POST", R.path, [:], sent)
+        await waitWhileHeld("POST", R.path)
+        return try Core.decoded(R.Answer.self, from: answer)
     }
 
     func postOverLimit<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer
