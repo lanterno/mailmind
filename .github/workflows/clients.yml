@@ -150,12 +150,26 @@ jobs:
         if: failure()
         run: cat shells/apple/build/smoke/ios.log 2>/dev/null || true
 
+      # The release check opens the app's Intel half under Rosetta, which the runner's image may not carry.
+      - name: Rosetta, for the release's Intel half
+        if: ${{ !cancelled() }}
+        run: /usr/bin/arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
+
       # The release recipe end to end with a throwaway update key, never the owner's: the universal app signed ad hoc,
       # its acknowledgements, the .dmg and its window, the signed appcast, and the checks a person's Mac and Sparkle
-      # make on them. Nothing is published.
+      # make on them; then the app opens on fictional mail, each half. Nothing is published.
       - name: The release, checked
         if: ${{ !cancelled() }}
-        run: just apple release-check
+        run: |
+          set +e
+          just apple release-check 2>&1 | tee "$RUNNER_TEMP/release-check.txt"
+          status=${PIPESTATUS[0]}
+          {
+            echo "### Mac: the release's app on fictional mail (macos-26, the Intel half under Rosetta)"
+            grep -h '^    the Mac app' "$RUNNER_TEMP/release-check.txt" | sed 's/^ *the Mac app/- the Mac app/'
+            grep -h '^## the .dmg is' "$RUNNER_TEMP/release-check.txt" | sed 's/^## /- /'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
   android:
     runs-on: ubuntu-latest
