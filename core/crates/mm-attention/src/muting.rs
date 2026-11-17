@@ -91,7 +91,8 @@ impl Muting {
 
     /// Undo of a mute: unmuted, the thread the entry names and the one its member is in now, and unread again what
     /// it marked read, here and on its server. (An entry from before muting told the server, which kept each member's
-    /// `prev_seen`, is a day past what the stack keeps.)
+    /// `prev_seen`, is a day past what the stack keeps.) A read-only process refuses one that marked mail read
+    /// (`READ_ONLY`), with nothing changed: those marks go back on the server.
     pub fn reverse(&self, entry: &Value) -> Result<(), Failure> {
         let text = |name: &str| entry.get(name).and_then(Value::as_str).unwrap_or_default();
         let member = entry.get("member").and_then(copy_named);
@@ -100,6 +101,9 @@ impl Muting {
             .and_then(Value::as_array)
             .map(|l| l.iter().filter_map(copy_named).collect())
             .unwrap_or_default();
+        if self.read_only && !marked.is_empty() {
+            return Err(READ_ONLY.into());
+        }
         let when = mm_kernel::when::iso(self.clock.now());
         if self.book.unmute_reversed(text("account"), text("thread_id"), member.as_ref(), &marked, &when)? {
             self.flags.flags_queued();

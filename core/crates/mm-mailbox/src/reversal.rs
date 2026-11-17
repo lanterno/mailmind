@@ -1,6 +1,7 @@
 //! What reverses a move: the Mailbox's kinds of undo entry (`mailbox.application.reversal`). One that hasn't reached
 //! the server is cancelled; one that has gets a counter-move, from where its command says it went. A sweep's ways back
-//! (`sweep_back`) go together, an account's on one session.
+//! (`sweep_back`) go together, an account's on one session. A read-only process cancels as ever, and refuses a
+//! counter-move (`READ_ONLY`) before any server is asked.
 
 use std::sync::Arc;
 
@@ -117,6 +118,7 @@ impl Reversals {
         if let Some(settled) = settled {
             return Ok(settled);
         }
+        self.commands.refuse_writes()?;
         let (account, src, mid) = (text(&entry, "account"), text(&entry, "src_folder"), text(&entry, "message_id"));
         let unseen = entry.get("unseen").is_some_and(crate::command::truthy);
         let moved = self
@@ -138,6 +140,7 @@ impl Reversals {
         if let Some(settled) = settled {
             return Ok(settled);
         }
+        self.commands.refuse_writes()?;
         let (account, mid) = (text(&entry, "account"), text(&entry, "message_id"));
         let server = self.commands.server();
         let all_mail = server
@@ -164,6 +167,7 @@ impl Reversals {
     /// Message-ID moves back to where it was, then one more session reads them all in. One still where it was, which
     /// the sweep never moved, is back.
     fn swept_back(&self, entries: &[Value]) -> Result<Vec<Reversed>, Fault> {
+        self.commands.refuse_writes()?;
         // Where each went from and to: (its account, its Trash, where it was).
         let places: Vec<(&str, &str, &str)> = entries
             .iter()

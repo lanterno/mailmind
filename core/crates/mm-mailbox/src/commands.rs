@@ -158,7 +158,7 @@ impl MailCommands {
 
     /// A read-only process changes nothing on a server, and queues nothing for later: it refuses a change before
     /// anything is written, so the message stays as it was here too.
-    fn refuse_writes(&self) -> Result<(), Fault> {
+    pub(crate) fn refuse_writes(&self) -> Result<(), Fault> {
         if self.read_only { Err(READ_ONLY) } else { Ok(()) }
     }
 

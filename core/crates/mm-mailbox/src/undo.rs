@@ -8,7 +8,7 @@
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
-use mm_kernel::errors::{Failure, Fault, Kind, Problem};
+use mm_kernel::errors::{Failure, Fault, Kind, Problem, READ_ONLY};
 use mm_kernel::events::Topic;
 use mm_kernel::log::{self, Field};
 use mm_kernel::seams::{Clock, Moment};
@@ -196,15 +196,16 @@ impl Undo {
     }
 
     /// A group's members, newest first, each run of one kind and one account that goes back together (`together`) at
-    /// one turn of its gate and the rest one at a time: what each came to, in their order. One run's or member's
-    /// trouble never stops the rest.
-    fn reverse_members(&self, newest_first: &[Value]) -> Vec<Option<Reversed>> {
+    /// one turn of its gate and the rest one at a time: what each came to, in their order, and whether a read-only
+    /// process refused any. One run's or member's trouble never stops the rest.
+    fn reverse_members(&self, newest_first: &[Value]) -> (Vec<Option<Reversed>>, bool) {
         let mut out = Vec::with_capacity(newest_first.len());
+        let mut refused = false;
         let mut at = 0;
         while let Some(first) = newest_first.get(at) {
             let (kind, gate) = (kind_of(first), gate_of(first));
             let Some(reverser) = self.reverser(kind).filter(|r| r.together(kind)) else {
-                out.push(self.reverse_one(first).map_err(|fault| Self::member_failed(&fault)).ok());
+                out.push(self.reverse_one(first).map_err(|fault| Self::member_failed(&fault, &mut refused)).ok());
                 at += 1;
                 continue;
             };
@@ -213,23 +214,28 @@ impl Undo {
             match self.on_gate(gate, || reverser.reverse_together(members)) {
                 Ok(answers) => out.extend((0..run).map(|k| answers.get(k).cloned())),
                 Err(fault) => {
-                    Self::member_failed(&fault);
+                    Self::member_failed(&fault, &mut refused);
                     out.extend((0..run).map(|_| None));
                 }
             }
             at += run;
         }
-        out
+        (out, refused)
     }
 
-    fn member_failed(fault: &Fault) {
-        log::warning(TAG, "a group member: %(why)s", &[(Field::Why, fault.class)], None);
+    /// A member that didn't go back: a read-only process's refusal is noted, and anything else logged.
+    fn member_failed(fault: &Fault, refused: &mut bool) {
+        if *fault == READ_ONLY {
+            *refused = true;
+        } else {
+            log::warning(TAG, "a group member: %(why)s", &[(Field::Why, fault.class)], None);
+        }
     }
 
     /// Take the last thing done off the stack and reverse it, and say what went back: a group says how many of it
     /// did and how many didn't. Nothing to undo is NotFound (`empty`), and none of it going back a Conflict. What
     /// didn't go back is on the stack again for another try, and so is all of it when a reversal failed, which
-    /// goes on up.
+    /// goes on up: `READ_ONLY` when a read-only process would have to ask a server, and none of it went back.
     pub fn undo_last(&self) -> Result<Value, Failure> {
         let now = self.clock.now();
         let entry = self.on_stack(|tx| pop(tx, now))?;
@@ -258,7 +264,10 @@ impl Undo {
             if !kept {
                 self.put_back(&entry)?;
             }
-            log::error(TAG, "error", &[], Some(fault.class));
+            // A read-only process's refusal asked no server: it stays to undo on a full run, and isn't an error.
+            if *fault != READ_ONLY {
+                log::error(TAG, "error", &[], Some(fault.class));
+            }
         }
         done
     }
@@ -271,7 +280,8 @@ impl Undo {
             // Newest first, as they were tried.
             kids.reverse();
             let mut left = Vec::new();
-            for (child, answer) in kids.iter().zip(self.reverse_members(&kids)) {
+            let (answers, refused) = self.reverse_members(&kids);
+            for (child, answer) in kids.iter().zip(answers) {
                 match answer {
                     Some((true, a, f)) => (account, folder) = (a, f),
                     _ => left.push(child.clone()),
@@ -284,6 +294,10 @@ impl Undo {
                 smaller["children"] = Value::Array(left.clone());
                 self.put_back(&smaller)?;
                 *kept = true;
+            }
+            if refused && done == 0 {
+                // Each would have asked a server: nothing went back, and the answer says why.
+                return Err(READ_ONLY.into());
             }
             (
                 done > 0,

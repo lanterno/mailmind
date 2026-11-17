@@ -12,7 +12,7 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::{Method, Request, Response, Uri};
 use axum::routing::{get, post};
-use mm_kernel::errors::{Failure, Problem};
+use mm_kernel::errors::{Failure, Problem, READ_ONLY};
 use mm_mailbox::command_ports;
 use mm_mailbox::filing::{BULK_MAX, FILING_VERBS, FLAG_NAMES, GONE, NamedCopy};
 use serde_json::Value;
@@ -224,6 +224,8 @@ async fn undo(State(app): State<Arc<App>>, request: Request<Body>) -> Response<B
     match done {
         Ok(Ok(value)) => answer::json(200, &value),
         Ok(Err(Failure::Problem(no))) => answer::problem(&no),
+        // A read-only process asks no server: what it would have reversed is on the stack, for a full run.
+        Ok(Err(Failure::Fault(READ_ONLY))) => answer::read_only("/api/undo"),
         Ok(Err(Failure::Fault(_))) | Err(_) => {
             answer::problem_document(500, &problem::blank(500, "couldn\u{2019}t undo"))
         }

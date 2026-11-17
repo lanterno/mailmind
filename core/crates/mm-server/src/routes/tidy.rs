@@ -8,7 +8,7 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::http::{Method, Request, Response, Uri};
 use axum::routing::{get, post};
-use mm_kernel::errors::{Failure, Problem};
+use mm_kernel::errors::{Failure, Problem, READ_ONLY};
 
 use crate::app::App;
 use crate::body;
@@ -47,6 +47,8 @@ async fn tidy_undo(State(app): State<Arc<App>>, request: Request<Body>) -> Respo
     match done {
         Ok(Ok(value)) => answer::json(200, &value),
         Ok(Err(Failure::Problem(no))) => answer::problem(&no),
+        // A read-only process asks no server: what it would have reversed is on the stack, for a full run.
+        Ok(Err(Failure::Fault(READ_ONLY))) => answer::read_only("/api/tidy/undo"),
         Ok(Err(Failure::Fault(_))) | Err(_) => {
             answer::problem_document(500, &problem::blank(500, "couldn\u{2019}t undo"))
         }
