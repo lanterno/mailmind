@@ -6,6 +6,7 @@ servers saw and what the database kept.
 from datetime import datetime, timezone
 
 import problems
+from fakes import anthropic_api as fa
 from fixtures import world as w
 
 REFUSED = problems.read_only()
@@ -120,4 +121,17 @@ def test_a_cleanup_is_refused_but_a_rule_is_kept(app, world):
     assert (r.status, r.json["ok"], r.json["trashed"]) == (200, True, False)          # the rule, and nothing trashed
     assert LOOM in str(app.get("/api/rules").json["rules"])
     assert rows("SELECT id FROM mail_commands") == []
+    assert world.writes(since) == []
+
+
+def test_a_plan_carried_out_is_refused_and_files_nothing(app, world, ai):
+    read_only(app)
+    ai.queue(fa.answer({"intent": "act", "filter": "from:lin", "verb": "archive"}))
+    plan = app.post("/api/ai/do-plan", {"cmd": "archive what Lin sent"}).json          # asking AI only reads
+    assert plan["intent"] == "act" and plan["count"] > 0, plan
+    shown = inbox(app)
+    since = world.mark()
+    r = app.post("/api/ai/do-confirm", {"plan": plan["plan"]})
+    assert (r.status, r.json) == (409, REFUSED)
+    assert inbox(app) == shown and rows("SELECT id FROM mail_commands") == []
     assert world.writes(since) == []
