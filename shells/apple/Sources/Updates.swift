@@ -5,8 +5,9 @@ import Combine
 import Sparkle
 
 /// Updates through Sparkle, from the appcast on the repo's latest GitHub release (docs/releasing.md). Only a build
-/// `just apple release` made checks: a debug build, `just apple build`'s, a test and a demo never ask the network for
-/// an update, and neither does a build whose public key is still the placeholder.
+/// `just apple release` made checks, and only in a person's run: a debug build, `just apple build`'s, a test and a
+/// demo never ask the network for an update, nor does a release's copy run on a demo's home (the release check's),
+/// nor a build whose public key is still the placeholder.
 @MainActor
 final class Updates {
     static let shared = Updates()
@@ -20,12 +21,17 @@ final class Updates {
             : nil
     }
 
-    /// Whether a build with this Info.plist checks for updates: one the release recipe made, with a real key in it.
-    /// Sparkle asks the person before its first automatic check, and checks once a day after that if they agree.
-    nonisolated static func checks(_ info: [String: Any]) -> Bool {
+    /// Whether a build with this Info.plist checks for updates: one the release recipe made, with a real key in it,
+    /// run as a person runs it. Sparkle asks the person before its first automatic check, and checks once a day after
+    /// that if they agree. Its state is kept in the app's defaults, which a demo's run shares with the person's own
+    /// MailMind, so a run on a home of its own never starts it.
+    nonisolated static func checks(_ info: [String: Any],
+                                   environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool
+    {
         #if DEBUG
         return false
         #else
+        guard CoreHome.isAPersonsRun(environment) else { return false }
         guard info["MailMindChecksForUpdates"] as? String == "YES" else { return false }
         // An Ed25519 public key is 32 bytes. The placeholder isn't base64 at all.
         guard let key = info["SUPublicEDKey"] as? String, Data(base64Encoded: key)?.count == 32 else { return false }
