@@ -257,11 +257,25 @@ jobs:
             --smoke --arch "$HALF" 2>&1 | tee "$RUNNER_TEMP/opened.txt"
           status=${PIPESTATUS[0]}
           hdiutil detach -quiet "$RUNNER_TEMP/mnt"
+          # GitHub's Intel Macs are VMs with no GPU macOS can draw with: its Metal stops any window being drawn
+          # ("Target device architecture is nil"), after the app has started and its core has loaded and synced. Only
+          # that failure is let through, and said; any other fails the step.
+          nogpu=""
+          if [ "$status" != 0 ] && grep -q "Target device architecture is nil" "$RUNNER_TEMP/opened.txt" \
+              && grep -q "\[sync\]" "$RUNNER_TEMP/opened.txt"; then
+            nogpu=1
+            echo "::warning::$RUNNER_LABEL has no GPU macOS can draw with: the app started and its core synced, but its window can't be drawn here"
+          fi
           {
             echo "### Mac: the release's app on macOS $system ($RUNNER_LABEL)"
             grep -h '^the Mac app' "$RUNNER_TEMP/opened.txt" | sed 's/^/- /'
-            if [ "$status" != 0 ]; then echo "- it never showed mail in its inbox: the step's log says why"; fi
+            if [ -n "$nogpu" ]; then
+              echo "- it started and its core loaded and synced, but this runner has no GPU macOS can draw a window with"
+            elif [ "$status" != 0 ]; then
+              echo "- it never showed mail in its inbox: the step's log says why"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$nogpu" ]; then exit 0; fi
           exit "$status"
 
   android:
