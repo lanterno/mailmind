@@ -130,6 +130,7 @@ def test_starting_makes_the_schema_wires_the_workers_and_starts_them(env, tmp_pa
     assert [j["name"] for j in background.JOBS.snapshot()] == [n.removeprefix("job:") for n in names if "job:" in n]
     out = capsys.readouterr().out
     assert ("auto-sync disabled" in out) == read_only
+    assert ("refuses any change that would reach a mail server" in out) == read_only     # and queues none
     assert "[ai] Claude (Anthropic)" in out
     assert "[imap] mail through imaplib" in out
 
