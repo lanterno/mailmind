@@ -147,9 +147,17 @@ pub trait SyncStore: Send + Sync + fmt::Debug {
         mark: Option<u64>,
     ) -> Result<usize, Fault>;
     /// What ends a sync, in one transaction: the folder's mark when a whole scan read every flag, the conversations
-    /// of what it stored, mail arriving in a muted thread marked read, and the follow-ups new mail meets.
-    fn settle(&self, account: &str, folder: &str, modseq: Option<u64>, stored: &[i64], when: &str)
-    -> Result<(), Fault>;
+    /// of what it stored, mail arriving in a muted thread marked read, and the follow-ups new mail meets. With `queue`
+    /// false (a read-only process) those marks are made here alone, and nothing is queued for a server.
+    fn settle(
+        &self,
+        account: &str,
+        folder: &str,
+        modseq: Option<u64>,
+        stored: &[i64],
+        when: &str,
+        queue: bool,
+    ) -> Result<(), Fault>;
     /// Whether any copy of the message these fields name has been seen before in the account: what storing it would
     /// find of its identity (`is_known`).
     fn is_known(&self, account: &str, fields: &Fields) -> Result<bool, Fault>;

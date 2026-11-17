@@ -260,7 +260,8 @@ impl Snoozing {
     /// many woke.
     pub fn wake_due(&self) -> Result<usize, Failure> {
         let now = self.clock.now();
-        let (due, marked) = self.book.wake_due(now.whole_seconds(), &mm_kernel::when::iso(now))?;
+        // A read-only process brings it back unread here alone: nothing waits for a full run to send.
+        let (due, marked) = self.book.wake_due(now.whole_seconds(), &mm_kernel::when::iso(now), !self.read_only)?;
         if marked {
             self.flags.flags_queued();
         }

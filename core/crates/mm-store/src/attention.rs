@@ -21,7 +21,7 @@ use serde_json::Value;
 use crate::blocks;
 use crate::db::Database;
 use crate::discovery::not_snoozed_sql;
-use crate::mailbox_sync::{index_message, queue_flags};
+use crate::mailbox_sync::{index_message, queue_flags, queue_or_show};
 
 /// Attention's view of the database.
 pub struct AttentionStore {
@@ -275,7 +275,7 @@ impl AttentionBook for AttentionStore {
         })
     }
 
-    fn wake_due(&self, now: i64, when: &str) -> Result<(Vec<Message>, bool), Fault> {
+    fn wake_due(&self, now: i64, when: &str, queue: bool) -> Result<(Vec<Message>, bool), Fault> {
         self.db.write(|c| {
             // A snooze come due with no copy left in its folder ends here: the message was filed, and bringing it
             // back later isn't waking it.
@@ -297,7 +297,7 @@ impl AttentionBook for AttentionStore {
                 clear_snooze(c, r.pk)?;
                 // What wakes comes back unread; one already unread asks nothing of its server.
                 if r.seen {
-                    marked |= queue_flags(c, r.pk, &[("seen", false)], &format!("wake:{}:{now}", r.pk), when)?;
+                    marked |= queue_or_show(c, r.pk, &[("seen", false)], &format!("wake:{}:{now}", r.pk), when, queue)?;
                 }
             }
             Ok((due, marked))

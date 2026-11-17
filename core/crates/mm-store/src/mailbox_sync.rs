@@ -352,12 +352,35 @@ pub(crate) fn queue_flags(
          next_attempt_at, created_at) VALUES(?,?,'flag',?,?,NULL,?,'queued',0,?)",
         params![account, key, mid, folder, py_json(&params_json), when],
     )?;
+    show_flags(c, pk, flags)?;
+    Ok(true)
+}
+
+/// A flag change shown on the row here alone, with nothing queued for its server: what a read-only process makes of
+/// one a full one queues (`queue_flags`). The next read of the server's flags takes it back.
+pub(crate) fn show_flags(c: &Connection, pk: i64, flags: &[(&str, bool)]) -> rusqlite::Result<()> {
     for (name, on) in flags {
         if COLUMNS.contains(name) {
             c.execute(&format!("UPDATE messages SET {name}=? WHERE pk=?"), params![i64::from(*on), pk])?;
         }
     }
-    Ok(true)
+    Ok(())
+}
+
+/// `queue_flags` where `queue`, else `show_flags`: whether anything was queued.
+pub(crate) fn queue_or_show(
+    c: &Connection,
+    pk: i64,
+    flags: &[(&str, bool)],
+    mutation_id: &str,
+    when: &str,
+    queue: bool,
+) -> rusqlite::Result<bool> {
+    if queue {
+        return queue_flags(c, pk, flags, mutation_id, when);
+    }
+    show_flags(c, pk, flags)?;
+    Ok(false)
 }
 
 /// JSON as Python's `json.dumps` writes it: `, ` and `: ` between items, non-ASCII escaped.
@@ -419,8 +442,9 @@ fn write_py(value: &serde_json::Value, out: &mut String) {
 }
 
 /// Unseen members of a muted thread are marked read, here and on the server, so a new reply in one stays silent
-/// (`Muting.on_ingest`). One whose mark is still open isn't asked for again.
-fn on_ingest(c: &Connection, account: &str, when: &str) -> rusqlite::Result<()> {
+/// (`Muting.on_ingest`); with `queue` false (a read-only process), here alone. One whose mark is still open isn't
+/// asked for again.
+fn on_ingest(c: &Connection, account: &str, when: &str, queue: bool) -> rusqlite::Result<()> {
     let pks: Vec<i64> = c
         .prepare_cached(
             "SELECT pk FROM messages m WHERE m.account=? AND m.seen=0 AND m.thread_id IN \
@@ -431,7 +455,7 @@ fn on_ingest(c: &Connection, account: &str, when: &str) -> rusqlite::Result<()> 
         .query_map(params![account, account], |r| r.get(0))?
         .collect::<Result<_, _>>()?;
     for pk in pks {
-        queue_flags(c, pk, &[("seen", true)], &format!("mute:{pk}:{when}"), when)?;
+        queue_or_show(c, pk, &[("seen", true)], &format!("mute:{pk}:{when}"), when, queue)?;
     }
     Ok(())
 }
@@ -654,6 +678,7 @@ impl SyncStore for Database {
         modseq: Option<u64>,
         stored: &[i64],
         when: &str,
+        queue: bool,
     ) -> Result<(), Fault> {
         self.write(|c| {
             if let Some(modseq) = modseq {
@@ -663,7 +688,7 @@ impl SyncStore for Database {
                 )?;
             }
             thread_stored(c, account, stored)?;
-            on_ingest(c, account, when)?;
+            on_ingest(c, account, when, queue)?;
             resolve_followups(c, account)?;
             Ok(())
         })

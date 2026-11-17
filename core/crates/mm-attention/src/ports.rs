@@ -99,8 +99,9 @@ pub trait AttentionBook: Send + Sync + fmt::Debug {
     /// Every snooze come due by `now` ended: the rows it brings back, as they were. One with no copy left in its
     /// folder ends too, bringing nothing. What comes back read comes back unread, here and on its server, as a flag
     /// change queued in the same block (`wake:<pk>:<now>`, at `when`), or the next sync that read its flags would
-    /// take that back. Whether a change was queued.
-    fn wake_due(&self, now: i64, when: &str) -> Result<(Vec<Message>, bool), Fault>;
+    /// take that back; with `queue` false (a read-only process), unread here alone, with nothing queued. Whether a
+    /// change was queued.
+    fn wake_due(&self, now: i64, when: &str, queue: bool) -> Result<(Vec<Message>, bool), Fault>;
     /// Undo of a snooze: each message found again where it was, waking when it did before, or not snoozed.
     fn restore_snoozes(&self, restored: &[Restoration]) -> Result<(), Fault>;
 

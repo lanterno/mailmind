@@ -263,7 +263,8 @@ impl App {
                 mailbox_events.clone(),
                 seams.clock.clone(),
             )
-            .flying_in(flights.clone()),
+            .flying_in(flights.clone())
+            .reading_only(environment.read_only()),
         );
         // A message's body from its server where it isn't stored, on its account's gate; the reads a person waits on.
         let fetch: Arc<dyn mm_mailbox::ports::BodyFetch> =

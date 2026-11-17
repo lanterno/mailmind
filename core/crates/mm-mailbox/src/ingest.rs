@@ -121,6 +121,9 @@ pub struct Ingest {
     arrivals: OnceLock<Arc<dyn ArrivalFilters>>,
     /// Each account's syncs now, which its removal stops.
     flights: Arc<Flights>,
+    /// This process only reads: what a sync marks on its own queues nothing for a full run to send. A muted thread's
+    /// new mail is marked read here alone, and the person's filters ask nothing.
+    read_only: bool,
 }
 
 /// A session that logs out however the work on it ends.
@@ -203,13 +206,29 @@ impl Ingest {
         clock: Arc<dyn Clock>,
     ) -> Ingest {
         let flights = Arc::new(Flights::default());
-        Ingest { accounts, servers, store, classifier, events, clock, arrivals: OnceLock::new(), flights }
+        Ingest {
+            accounts,
+            servers,
+            store,
+            classifier,
+            events,
+            clock,
+            arrivals: OnceLock::new(),
+            flights,
+            read_only: false,
+        }
     }
 
     /// The same, its syncs in `flights`, which a removal stops through.
     #[must_use]
     pub fn flying_in(self, flights: Arc<Flights>) -> Ingest {
         Ingest { flights, ..self }
+    }
+
+    /// The same, in a process that only reads (`read_only`): what a sync marks on its own queues nothing.
+    #[must_use]
+    pub fn reading_only(self, read_only: bool) -> Ingest {
+        Ingest { read_only, ..self }
     }
 
     /// Each account's syncs now.
@@ -288,7 +307,7 @@ impl Ingest {
         }
         // A whole read of the folder's flags, or of its newest with the rest read after this mark, leaves the mark.
         let mark = if plan.whole && leaves != Some(Scan::Cut) { modseq.filter(|m| *m != 0) } else { None };
-        self.store.settle(&acct.email, folder, mark, &stored, &self.now())?;
+        self.store.settle(&acct.email, folder, mark, &stored, &self.now(), !self.read_only)?;
         Ok(synced)
     }
 
@@ -325,7 +344,7 @@ impl Ingest {
             let Some((kept, junk, _)) = self.store_step(&mut *s.0, &acct, pass, &step, &mut stored, &flight)? else {
                 return Ok(None);
             };
-            self.store.settle(&acct.email, folder, None, &stored, &self.now())?;
+            self.store.settle(&acct.email, folder, None, &stored, &self.now(), !self.read_only)?;
             left = left.saturating_sub(step.uids.len());
             reached = match step.leaves {
                 Some(Scan::Down(_)) => Some(Progress { done: total.saturating_sub(left), total }),
@@ -378,7 +397,7 @@ impl Ingest {
                 stored.push(pk);
             }
         }
-        self.store.settle(&acct.email, folder, None, &stored, &self.now())?;
+        self.store.settle(&acct.email, folder, None, &stored, &self.now(), !self.read_only)?;
         Ok(uids.len())
     }
 
@@ -480,7 +499,9 @@ impl Ingest {
         stored: &mut Vec<i64>,
         flight: &Flight<'_>,
     ) -> Result<Option<(usize, usize, u32)>, SyncError> {
-        let filters = self.arrivals.get().filter(|_| pass.arriving);
+        // A read-only process asks nothing of a server, and a mark kept here alone the same sync's read of the flags
+        // would take back: the filters speak only in a full one.
+        let filters = self.arrivals.get().filter(|_| pass.arriving && !self.read_only);
         let fetched = self.fetch(s, acct, &step.uids, pass)?;
         going_on(flight)?;
         let junk = fetched.iter().filter(|f| f.verdict.is_junk).count();
