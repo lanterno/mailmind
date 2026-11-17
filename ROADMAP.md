@@ -16,6 +16,12 @@ L = a week-plus.
   (`PREVIEW_POLICY` in `mm-server/src/routes/message.rs`). Chromium won't show a PDF in a sandboxed frame, and a same-origin one would break the
   security model, so a PDF needs a renderer of its own (pdf.js, say), as a new dependency, running with no origin. Waits on the
   flip (#11): its frame is a new route, and until then the Python app gets fixes only.
+- **Keep the sweep's stored preview true to marks changed elsewhere** · low value · effort S ·
+  [#65](https://github.com/lanterno/mailmind/issues/65) — Once a first scan has read the Inbox whole, Sweep's preview
+  and the Curate card count from the stored read and star marks (`ScannedInbox`, `StoredPlans`), which a sync reads
+  again only for the newest 500 stored messages (`sync_plan::FLAG_REFRESH`) where the server has no CONDSTORE. Older
+  mail read or starred in another client is counted on the wrong side; Confirm reads the server and moves only what is
+  still read and unstarred there, so what it moves can differ from what the preview listed.
 
 ## Speed and the connection layer
 
@@ -41,7 +47,7 @@ L = a week-plus.
 - **Log the kept connections out on Ctrl-C or SIGTERM** · low value · effort S ·
   [#56](https://github.com/lanterno/mailmind/issues/56) — `mailmind-server` logs them out as it stops serving, but has
   no signal handler, so a Ctrl-C or a SIGTERM ends it without the LOGOUTs. The Mac app's `Host::close` sends them.
-- **Let the last jobs that wait for every account's gate take only their own** · medium value · effort S · [#52](https://github.com/lanterno/mailmind/issues/52) —
+- **Let the last jobs that wait for every account's gate take only their own** · medium value · effort S · [#3](https://github.com/lanterno/mailmind/issues/3) —
   A gate for each account is the Rust server's default (`environment::gate_per_account`), but two jobs still pass
   `EVERY_ACCOUNT`, which waits for every gate: a draft save whose old copy is in another account (`mm_compose::drafting`;
   it needs just the two accounts' gates, which the gates can't take yet), and an undo entry that names no account, as a
@@ -113,6 +119,23 @@ Python app gets fixes only.
   but `backups/` keeps it: the copy before each upgrade until newer ones replace it (the newest three are kept), and a
   copy Start Fresh moved aside until it is deleted, since nothing prunes those. Take it out of them too, or say in
   Settings that they keep it, and until when.
+- **Warn of every draft not yet on its server when an account is removed** · low value · effort S ·
+  [#62](https://github.com/lanterno/mailmind/issues/62) — The Mac app's Remove dialog counts unsent mail from the outbox
+  tray (`Unsent.read`), which lists a draft only once its push is overdue (`WAITING_AFTER`), so a draft saved in the
+  last minute or so, an autosave's push not yet due (`PUSH_EVERY`), goes with the account's mail unwarned.
+- **Say what a partial Undo leaves for a full run** · low value · effort S ·
+  [#61](https://github.com/lanterno/mailmind/issues/61) — In read only, an Undo of a group that only partly goes back
+  answers 200 with `reversed` and `failed` (`mm_mailbox::undo`'s `reverse_entry`, `mailmind.platform.undo`), not the
+  read-only 409, and the clients then suggest pressing z again, which read only refuses every time. Say how many wait
+  for a full run, and have the page and the Mac app say so.
+- **Let Start Fresh get past a Keychain item that isn't a key** · low value · effort S ·
+  [#63](https://github.com/lanterno/mailmind/issues/63) — A start whose Keychain item for the database's key isn't one
+  offers Start Fresh (`database_version`'s `NOT_A_KEY`), which moves the database aside but leaves the item, so the next
+  start reads the same item and refuses the same way.
+- **Tell launch failures apart by a kind, not by words** · low value · effort S ·
+  [#64](https://github.com/lanterno/mailmind/issues/64) — The Mac app's `LaunchFailure` offers Start Fresh and Try Again
+  by looking for phrases in the core's English sentence (`startsFresh`, `triesAgain`), so a change of wording changes
+  its buttons. Have the host's start failure carry a kind through `mm-ffi`.
 - **Tauri's accepted advisories** · medium value · effort S · [#16](https://github.com/lanterno/mailmind/issues/16) — `shells/desktop/src-tauri/osv-scanner.toml` ignores seven
   until 2027-02-12. Upgrade past them, or look at each again, before then.
 
@@ -143,9 +166,9 @@ Python app gets fixes only.
 
 ## The desktop app
 
-- **Proton Mail goes with the desktop app** — decided on 2026-11-08. Proton offers IMAP only through its Bridge, which has
-  to run on the same computer as the app, so only a desktop app can count on it. The `proton` account type, the
-  `proton_bridge` credential and the loopback handling stay as they are until that app exists; add no new Bridge special cases.
+- **Proton Mail is the Mac app's, through Bridge** — decided on 2026-11-08. Proton offers IMAP only through its Bridge,
+  which has to run on the same computer as the app, so only a desktop app can count on it: the Mac app reaches Proton
+  through Bridge, with the `proton` account type, the `proton_bridge` credential and the loopback handling.
 - **A native Mac app now; the web shell on Windows and Linux** — decided on 2026-11-14 ([#26](https://github.com/lanterno/mailmind/issues/26)),
   and that day the owner chose to build the native Mac app now, in place of shipping the Tauri build first. On the Mac
   the native list opens in 218 ms and idles at 28 MB, against 724 ms and 83.9 MB for the same page in Tauri. It runs
@@ -173,10 +196,9 @@ implementation.
 
 ## Next up
 
-1. **The native Mac app** (high) — it does all the page does in Meadow's look, and it is out to share; signing it with
-   a Developer ID (#42) waits on the owner's Apple account. It runs only the Rust core, so it is also the owner's way into their
-   two weeks on it.
-2. **The owner's two weeks on the Rust server** (high) — step 3 is done: every route the Python app answers is served
+1. **The owner's two weeks on the Rust server** (high) — step 3 is done: every route the Python app answers is served
    there, the debug routes too, and a message whose body isn't stored opens. `just run-rust` starts them, in place of
-   `just run`, and they end in the flip (#11), which waits on nothing else. A gate for each account, the Rust server's
-   default, soaks in them too.
+   `just run`, and so does the Mac app, which runs only the Rust core; they end in the flip (#11), which waits on
+   nothing else. A gate for each account, the Rust server's default, soaks in them too.
+2. **Developer ID signing** (medium) — the Mac app signed and notarized
+   ([#42](https://github.com/lanterno/mailmind/issues/42)), which waits on the owner's Apple account.
