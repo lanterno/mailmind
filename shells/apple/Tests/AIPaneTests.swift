@@ -317,13 +317,14 @@ final class AIWordsTests: XCTestCase {
     /// and that attachments never leave; with a model on this Mac, or a service answering here, nothing leaves.
     func testWhatAIModeSendsIsSaidBeforeItIsOn() {
         XCTAssertEqual(AIWords.sends(.anthropic), """
-            With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be summarized, \
-            automatically, and those senders, subjects and summaries go again to write the day’s brief and what came in \
-            since you looked. Whole conversations go only when you ask: for a summary or a draft, with what you type into \
-            Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac.
+            With AI mode on, the sender, subject and opening text of each message in your Inbox go to Anthropic to be \
+            summarized, automatically: the last 30 days’ as soon as you turn it on, then each new one. Those senders, \
+            subjects and summaries go again to write the day’s brief and what came in since you looked. Whole \
+            conversations go only when you ask: for a summary or a draft, with what you type into Ask, a search written \
+            as a sentence, or Rewrite. Attachments never leave this Mac.
             """)
-        XCTAssertTrue(AIWords.sends(.openai).contains("opening text go to OpenAI to be summarized"))
-        XCTAssertTrue(AIWords.sends(.gemini).contains("opening text go to Google to be summarized"))
+        XCTAssertTrue(AIWords.sends(.openai).contains("each message in your Inbox go to OpenAI to be summarized"))
+        XCTAssertTrue(AIWords.sends(.gemini).contains("each message in your Inbox go to Google to be summarized"))
         XCTAssertTrue(AIWords.sends(.compatible).contains("go to the service at the URL you gave to be summarized"))
         XCTAssertTrue(AIWords.sends(.compatible, url: "https://ai.example.test/v1").contains("go to the service"))
         XCTAssertEqual(AIWords.sends(.local), "With a model on this Mac, nothing leaves this Mac.")
@@ -334,6 +335,53 @@ final class AIWordsTests: XCTestCase {
         for provider in API.AiProvider.allCases where provider != .anthropic {
             XCTAssertFalse(AIWords.sends(provider).contains("Anthropic"), "\(provider)")
         }
+    }
+
+    /// Draft replies ahead sends whole conversations of important mail, and says so wherever what goes is said, and
+    /// under its own switch, naming whom they go to.
+    func testDraftRepliesAheadSaysWholeConversationsGo() {
+        let ahead = "With Draft replies ahead on, whole conversations of important mail go too, to draft replies before "
+            + "you open them."
+        XCTAssertEqual(AIWords.sends(.openai, draftAhead: true), AIWords.sends(.openai) + " " + ahead)
+        XCTAssertFalse(AIWords.sends(.openai).contains("Draft replies ahead"), "off, it isn't said")
+        XCTAssertEqual(AIWords.sends(.local, draftAhead: true), "With a model on this Mac, nothing leaves this Mac.")
+
+        XCTAssertEqual(AIWords.aheadGoes(.gemini), "On, whole conversations of important mail go to Google to draft them.")
+        XCTAssertEqual(AIWords.aheadGoes(.compatible, url: "https://ai.example.test/v1"),
+                       "On, whole conversations of important mail go to the service at the URL you gave to draft them.")
+        XCTAssertEqual(AIWords.aheadGoes(.local), "On, they are drafted on this Mac, and nothing leaves it.")
+        XCTAssertEqual(AIWords.aheadGoes(.local, cloudModel: true),
+                       "On, whole conversations of important mail go to Ollama’s servers to draft them.")
+    }
+
+    /// A model on this Mac whose model runs in Ollama's cloud doesn't say nothing leaves: it says what goes, and where.
+    func testAModelInOllamasCloudSaysWhatLeaves() {
+        XCTAssertEqual(AIWords.sends(.local, model: "gpt-oss:120b-cloud", cloudModel: true),
+                       "gpt-oss:120b-cloud runs in Ollama’s cloud, so what is summarized goes to Ollama’s servers.")
+        XCTAssertEqual(AIWords.sends(.compatible, url: "http://localhost:11434/v1", model: "qwen-fictional-cloud",
+                                     cloudModel: true),
+                       "qwen-fictional-cloud runs in Ollama’s cloud, so what is summarized goes to Ollama’s servers.")
+        XCTAssertTrue(AIWords.sends(.local, cloudModel: true).hasPrefix("The model chosen runs in Ollama’s cloud"))
+        XCTAssertTrue(AIWords.sends(.local, model: "m-cloud", cloudModel: true, draftAhead: true)
+            .hasSuffix("goes to Ollama’s servers. With Draft replies ahead on, whole conversations of important mail go "
+                       + "too, to draft replies before you open them."))
+    }
+
+    /// Settings, the first run, Help and the brief say it from the preferences and the digest alike.
+    func testWhatIsSentIsSaidFromThePreferencesAndTheDigest() {
+        typealias F = StatusFixtures
+        let local = F.preferences(provider: "local", model: "llama-fictional-cloud", draftAhead: true)
+        var ai = F.digest().ai
+        ai.cloudModel = true
+        ai.provider = .local
+        XCTAssertEqual(AIWords.sends(local, ai), AIWords.sends(.local, model: "llama-fictional-cloud", cloudModel: true,
+                                                               draftAhead: true))
+        ai.cloudModel = false
+        XCTAssertEqual(AIWords.sends(local, ai), "With a model on this Mac, nothing leaves this Mac.")
+        let gemini = F.preferences(provider: "gemini", draftAhead: true)
+        XCTAssertTrue(AIWords.sends(gemini, ai).hasSuffix("to draft replies before you open them."))
+        XCTAssertTrue(AIWords.sends(gemini, ai).contains("go to Google to be summarized"))
+        XCTAssertEqual(AIWords.sends(nil, nil), AIWords.sends(.anthropic))
     }
 
     /// Help says the same of the provider chosen, whether AI mode is on or off.

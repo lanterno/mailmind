@@ -307,6 +307,22 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(model.needs.count, 3)
     }
 
+    /// AI off for want of a key, the brief's note says what AI mode would send as Settings says it, Draft replies
+    /// ahead included: it reads Settings' choices.
+    func testWithAIOffTheBriefsNoteSaysWhatWouldGoAsSettingsDoes() async {
+        scriptTheBrief(ai: "none", briefing: Self.missing)
+        routes.answer("GET", "/api/preferences", API.PreferencesAnswer(
+            ok: true, preferences: StatusFixtures.preferences(aiEnabled: true, provider: "openai", draftAhead: true)))
+        let model = briefModel()
+
+        await model.load()
+
+        XCTAssertEqual(model.preferences?.draftAhead, true)
+        let said = AIWords.sends(model.preferences, model.digest?.ai)
+        XCTAssertTrue(said.contains("go to OpenAI to be summarized"), said)
+        XCTAssertTrue(said.hasSuffix("to draft replies before you open them."), said)
+    }
+
     /// Turned off in Settings (#49): the brief stands on the digest, writes nothing, and says nothing of AI.
     func testWithAITurnedOffTheBriefWritesNothing() async {
         scriptTheBrief(ai: "none", off: .turnedOff, briefing: Self.missing)
