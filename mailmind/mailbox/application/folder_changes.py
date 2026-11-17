@@ -3,11 +3,11 @@ then here. Nothing of it queues: a server that can't be reached says so, and not
 
 A folder that plays a part, that the server keeps, or that holds folders isn't deleted (`domain.folder_change`). One that holds
 mail is deleted only once a person has said so, having been told how much it holds, and then its mail goes to the account's
-Trash first: a MOVE of each message by UID, or a copy then each original's own UID EXPUNGE, never a bulk EXPUNGE. If any mail is
-still there after that, it isn't deleted. On Gmail a folder is a label, and its mail stays in All Mail and under every other
-label it has: so nothing moves, and the label alone goes, as Gmail's own delete does. A delete that stops once mail has gone to
-Trash says so. A renamed folder's rows go by its new name here, and a deleted one's go, its mail stored again as Trash is next
-read.
+Trash first, as the server lists it (`roles.trash`): a MOVE of each message by UID, or a copy then each original's own UID
+EXPUNGE, never a bulk EXPUNGE. If any mail is still there after that, it isn't deleted. On Gmail a folder is a label, and its
+mail stays in All Mail and under every other label it has: so nothing moves, and the label alone goes, as Gmail's own delete
+does. A delete that stops once mail has gone to Trash says so. A renamed folder's rows go by its new name here, and a deleted
+one's go, its mail stored again as Trash is next read.
 """
 import imaplib
 from collections.abc import Callable
@@ -19,7 +19,7 @@ from mailmind.mailbox.application.folders import Folders
 from mailmind.mailbox.application.ports import Accounts, StoredMail
 from mailmind.mailbox.application.server_ops import UNREACHABLE
 from mailmind.mailbox.application.session import MailSession
-from mailmind.mailbox.domain import folder_change
+from mailmind.mailbox.domain import folder_change, roles
 from mailmind.platform import profile
 from mailmind.platform.db.uow import UnitOfWork
 
@@ -57,7 +57,7 @@ class FolderChanges:
         self._folders = folders
 
     def _trash(self, account: str) -> tuple[str, bool]:
-        """The account's Trash, and whether its folders are Gmail's labels."""
+        """The Trash the account names, and whether its folders are Gmail's labels."""
         try:
             acct = self._accounts.get(account)
         except KeyError:
@@ -118,13 +118,14 @@ class FolderChanges:
         it goes to Trash, until they have. One that stops once mail has gone says so, and how much went."""
         if not account or not folder:
             raise Refused("account and folder required")
-        trash, labels = self._trash(account)
-        moved, moving = 0, False
+        named, labels = self._trash(account)
+        trash, moved, moving = named, 0, False
 
         def delete(s: MailSession) -> int:
-            nonlocal moved, moving
+            nonlocal trash, moved, moving
             folders = s.folders()
-            found = folder_change.changeable(folders, folder, trash)
+            found = folder_change.changeable(folders, folder, named)
+            trash = roles.trash(folders, named)  # as the server lists it: a localised or renamed Trash too
             if folder_change.has_folders_inside(folders, found):
                 raise Refused(folder_change.HAS_FOLDERS)
             s.select(folder, readonly=False)
