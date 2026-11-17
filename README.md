@@ -699,7 +699,8 @@ MailMind has a native Mac app over the Rust core (`shells/apple`). It runs the w
 with no port open: the mailbox and search, reading and writing, Settings and the first run, and the assistant,
 curation, attention and the calendar, as the page has them, with the menu bar's commands and a Mac's keys. It wears
 the page's Meadow look: paper panels on a painted sky in Day, Dusk, Night or Automatic, the page's typefaces and icons, a rail
-that folds to icons, the summary note and a reply under the message, the brief beside the Inbox. It reads and
+that folds to icons, the summary note and a reply under the message, the brief beside the Inbox, its greeting under a
+line on how your mail stands (what needs you and what's unread). It reads and
 organises as a Mac's mail app does: **File › Print** (⌘P) prints the open message, with the images you chose to show,
 ⌘F goes to the search field and **Find in Message** (⌥⌘F) finds a word in what's open, a double-click opens a message
 in a window of its own, and rows dragged onto one of the rail's folders move there. **Move To** makes a new folder and

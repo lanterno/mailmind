@@ -27,10 +27,12 @@ TEST_RUNNER_MEADOW_PICTURES=DIR just apple test   # the same, and Meadow's frame
                                                   # popovers, the toasts and the keys (overlay-*.png), and the
                                                   # compose window, Settings, the first run, a sender's card and
                                                   # Help (compose-*, settings-*, first-run, contact-card, help-*),
-                                                  # the side cards' facts and the segmented strips (blocks-*.png),
-                                                  # and the reading pane's document (reader-*.png), into DIR; the
-                                                  # brief, Today & next with an invite answered, the gate, the
-                                                  # paper trail and an answer into DIR/desk
+                                                  # the welcome and Help in a window under its traffic lights
+                                                  # (window-*), the side cards' facts and the segmented strips
+                                                  # (blocks-*.png), and the reading pane's document (reader-*.png),
+                                                  # into DIR; the brief, its top with mail and with none
+                                                  # (brief-hero-*), Today & next with an invite answered, the gate,
+                                                  # the paper trail and an answer into DIR/desk
 just apple demo         # the Mac app on fictional mail: fake servers on loopback, a temp home, a keychain stand-in
 just apple demo smoke   # the same until the inbox shows rows (exit 0), or not; `demo measure`: first rows and memory
 just apple demo picture # the app draws its own window on fictional mail, light and dark: build/screenshots/window
