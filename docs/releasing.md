@@ -14,6 +14,12 @@ on a Developer ID ([#42](https://github.com/lanterno/mailmind/issues/42)).
   (`codesign -s -`) under the hardened runtime, inside out (Sparkle's helpers, Sparkle, then the app), and puts it
   in `MailMind-<version>.dmg` beside a link to /Applications. Everything lands in `shells/apple/build/release`,
   which git ignores.
+- **Which Macs.** macOS 15 or later, Apple silicon or Intel. The floor is the `macOS` of `deploymentTarget` in
+  `shells/apple/project.yml`; the core is built for the same (the recipe reads it there), the app's Info.plist says
+  it (`LSMinimumSystemVersion`), and the appcast copies it from there, so Sparkle offers an update only to a Mac that
+  can run it. The app uses nothing newer than macOS 15 has: the build fails on an API that needs a newer macOS, and
+  such an API goes behind `if #available` with a fallback in Meadow's look. The tests and CI run on macOS 26, so the
+  app has yet to open on macOS 15 itself, and its Intel half has opened only under Rosetta (the release check's).
 - **The .dmg's window.** MailMind on the left, an arrow, Applications on the right, over a picture that says to drag
   one onto the other and how to open the app the first time. `Release/dmg-background.swift` draws the picture, and
   `Release/dmg.py` has [dmgbuild](https://github.com/dmgbuild/dmgbuild) (pyproject.toml's `release` group) write the
@@ -85,10 +91,15 @@ half in their login Keychain; it never goes in the repo, a file, CI or anyone el
 
 `just apple release-check` runs the whole recipe with a throwaway key made in a temporary folder, never the login
 Keychain, and checks the result: the .dmg mounts with the app and an Applications link, the app is universal, its
-signature verifies, its Info.plist names the identifier, the version, the key and the feed, a program signed as the
-app is loads its Sparkle, the app carries the acknowledgements, the .dmg's window is laid out, and the .dmg's
-signature and the appcast's own both verify against the app's key and no other, and the feed changed after signing
-doesn't. Run it after changing anything in `shells/apple/Release`; CI runs it on every change to the clients.
+signature verifies, its Info.plist names the identifier, the version, the key, the feed and the lowest macOS, both its
+halves are built for that macOS, a program signed as the app is loads its Sparkle, the app carries the
+acknowledgements, the .dmg's window is laid out, and the .dmg's signature and the appcast's own both verify against the
+app's key and no other, a feed changed after signing doesn't, and the appcast names the same lowest macOS. Then
+the app in the .dmg opens on the demo's fictional mail (`Measure/demo_home.py`: fake servers on loopback, a home of its
+own and a keychain stand-in, where a release's copy starts no update check) until its inbox shows rows, once for each
+half: on Apple silicon the Intel half runs under Rosetta, which the check needs (`softwareupdate --install-rosetta`).
+Run it after changing anything in `shells/apple/Release`; CI runs it on every change to the clients, even when an
+earlier step failed.
 
 ## Symbols, for crash reports
 
@@ -105,9 +116,10 @@ core's line tables.
 ## What people see the first time
 
 The app is signed ad hoc, not with a Developer ID, and not notarized, so Gatekeeper won't open it until the person
-says so, once. On macOS 15 and later Control-click › Open no longer does it: they open the app, click **Done** on
-*"MailMind" Not Opened*, then in **System Settings › Privacy & Security** click **Open Anyway** beside *"MailMind" was
-blocked to protect your Mac*, and confirm with their password. The release notes template and the README say this.
+says so, once. Since macOS 15, the oldest the app runs on, Control-click › Open no longer does it: they open the app,
+click **Done** on *"MailMind" Not Opened*, then in **System Settings › Privacy & Security** click **Open Anyway**
+beside *"MailMind" was blocked to protect your Mac*, and confirm with their password. The release notes template and
+the README say this.
 
 Updates Sparkle installs are downloaded by the app itself, which marks nothing as quarantined, so they should open
 without asking again; check this on the first real update.
