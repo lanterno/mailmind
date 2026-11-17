@@ -72,9 +72,17 @@
   Each answers 409 `/problems/read-only` ("MailMind is running read-only", `read_only: true`): `shared.failure_answer`
   on the Python server, and `answer::failure` on the Rust one, from `mm_kernel::errors::READ_ONLY`. What only changes
   this Mac still works: a draft saved here, a rule (a block's trash of the message it names is skipped), reading, AI.
-  What a full run queued waits for the next, since both queues' drains wait for a full run, and the snooze job's unread
-  mark on a message it wakes queues as it does offline (`ReadOnlyError` is a member of `commands.UNREACHABLE`). A new
-  write path calls `profile.refuse_writes` first.
+  What a full run queued waits for the next: neither queue drains read-only, and a try that got as far as a server
+  would meet `ReadOnlyError`, a member of `commands.UNREACHABLE`, and stay queued. Nor does what a sync or a job does on
+  its own queue anything: a person's filters ask nothing of new mail (`Ingest._apply_filters`, the core's
+  `Ingest::reading_only`), mail arriving in a muted thread is marked read here alone (`Muting.on_ingest`, the core's
+  `SyncStore::settle` with `queue` false), and the snooze job wakes mail unread here alone (`Snoozing.wake_due`, the
+  core's `AttentionBook::wake_due` with `queue` false). The next read of the server's flags takes those marks back. An
+  Undo that would ask a server (a move or a Gmail archive a full run applied, a sweep's way back, a mute that marked
+  mail read) is refused with the same 409 before any server is asked, and stays on the stack for a full run; one that
+  changes only this Mac (a move still waiting, which is cancelled, a snooze, a block) goes back as ever. A draft saved
+  read-only is kept on this Mac until it is saved again in a full run (below). A new write path calls
+  `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
   `_imap_mutate` returns `(False, None)`, and trash, archive and junk answer a 409 (`Conflict`)
   and keep the local row. `set_flags` does the same for a star or a read mark. Never send a bulk
@@ -174,7 +182,10 @@
   couldn't reverse (a refusal, not found, a raise) go back on the stack as a smaller group, and
   the answer counts `reversed` and `failed`. When none went back it raises `Conflict`, and with nothing to undo `NotFound`
   (`empty`). A reversal reports a server NO as `(False, why)`
-  (`server_ops.move_by_msgid`, `relabel_by_msgid`), never as done. A group id must be unique for the database's
+  (`server_ops.move_by_msgid`, `relabel_by_msgid`), never as done. A read-only process refuses one that would ask a
+  server (`profile.refuse_writes` in `Reversals` and `Muting.reverse`, the core's `READ_ONLY`) before it is tried: an
+  entry goes back on the stack and the answer is the read-only 409, and a group keeps those members on the stack and
+  answers the 409 only when none of it went back. A group id must be unique for the database's
   life: the frontend's `undoGroup()` is a UUID, since the stack outlives a page load and a restart. A sweep pushes every
   child of its group at one write (`undo.push_many`, the core's `blocks::push_undo_many`), as pushing each in turn would
   leave the stack, and caps itself at 500 a run, since a click waits on its Undo.
@@ -217,7 +228,9 @@
   the last push (`PUSH_EVERY`). Any other save tries at once, on the account's gate for `PUSH_WAIT`, and answers
   `pushed: true`, or else `pushed: false` and the `draft-push` job (`Drafts.push_round`) has it, backing off from 20 s to 15
   minutes for as long as it takes. A push that lands deletes the row only if no newer save has replaced it. Read-only the job
-  doesn't run, so a save is kept here until a full run pushes it, and a discard that would take a copy off the server is
+  doesn't run and a save is kept on this Mac: it asks no server, and its row's due time is `draft_journal.KEPT_HERE`,
+  which never comes, so no full run pushes it either. The tray lists it at once, `kept: true`, until a save in a full run
+  gives it a due time again, an autosave the one a first save gets. A discard that would take a copy off the server is
   refused (one with no copy there goes at once).
 - A try sets `tried` to its Message-ID before the APPEND. The next try looks for that copy in Drafts: it stands if it is
   this very save, and goes if a newer one has taken over. A discard takes it too, and the row leaves only after the copy
@@ -229,7 +242,8 @@
   journal with it. One scheduled more than a minute off lets the copy catch up.
 - Reopening prefers the journal when the copy opened is the one pushed. Where another app changed it, `Drafts._keep_apart`
   gives the waiting save a row of its own, so both stay. `/api/outbox` also answers `drafts` (`Drafts.waiting`), what should
-  have reached its server and hasn't, for the tray, and `/api/draft/resume` opens one by `draft_id`.
+  have reached its server and hasn't and what a read-only run kept here (`kept`), for the tray, and `/api/draft/resume`
+  opens one by `draft_id`.
 - Reopening a draft (`/api/draft/resume` → `Drafts.resume`) reads the draft's own bytes, never
   the original. At each push `Drafts._push` records beside the `drafts` row what the composer held
   (migration 20: `own_text`, `tail_text`, `tail_html`, `bcc`, `raw_sha`). That record is
@@ -305,11 +319,13 @@
   An Undo of filing brings it back; one come due with
   no copy in its folder ends at `attention.book.due_snoozes`. The undo entry names rows by key and folder too (`where`).
   A message that wakes is unread on the server as well: `Snoozing.wake_due` queues the mark for read mail
-  (`store.queue_flags`), or the next sync that read its flags would take it back.
+  (`store.queue_flags`), or the next sync that read its flags would take it back. A read-only process marks it unread
+  here alone and queues nothing (the core's `queue_or_show`), and its next read of the flags takes the mark back.
 - **Muting tells the server too** (decision D6). `Muting.mute` queues `\\Seen` for the thread's
   unread members and `Muting.on_ingest` for mail that arrives later, skipping one with a mark still open
   (a refused one waits in the tray). The undo entry names those members by key and folder, and Undo marks
-  unread again only them.
+  unread again only them. Read-only, a mute and the Undo of one that marked mail read are refused, and `on_ingest`
+  marks what arrives read here alone, queueing nothing.
 - **A thread id is sticky.** A sync hands `store.thread_stored` what it stored, and any of the account's mail with no
   id yet goes along (a sync that died, `mailmind sync`). `threading.Threader` (`mailbox/domain`) mints an `rf:` id from the
   union-find root of what arrived for the thread (the smallest Message-ID it names) once, and keeps it as the thread grows;

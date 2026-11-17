@@ -17,7 +17,8 @@ document holds expiry rules (`expire_hours`: sender/domain → hours), enforced 
 `Expiry.account` from the CLI and by the server's `expire` job hourly (not read-only).
 `rules.remove` deliberately leaves expiry alone; clear it with `set_expiry(token, 0)`.
 It also holds a person's filters (`curation.domain.filters`): a search that stars or marks read. `Ingest` runs them only on
-mail never seen before, on an incremental sync of the Inbox, and the server hears through the command path. A filter takes the search's
+mail never seen before, on an incremental sync of the Inbox, and the server hears through the command path; a read-only process
+runs none, since a mark kept here alone would be taken back by the same sync's read of the flags. A filter takes the search's
 grammar and its index (`discovery.Conditions`), and refuses what mail arriving can't answer yet (`body:`, `has:attachment`, `category:`, dates).
 `curation.adapters.rules_document` (`bootstrap.curation.rules`, the document's one reader and writer) writes it whole, a version on,
 and a change reads, changes and writes it in one write transaction, which takes the database's write lock before it reads, so the
