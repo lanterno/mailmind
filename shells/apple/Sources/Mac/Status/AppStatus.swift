@@ -134,13 +134,15 @@ final class AppStatus {
         if let read = try? await core.get(API.Get.Digest.self) { digest = read }
     }
 
-    /// The accounts, then how each stands.
+    /// The accounts, then how each stands. Once there is an account to hear from, macOS is asked whether MailMind may
+    /// notify: at launch with one already there, or as the first is added, so the first hour's new mail can say so.
     func readAccounts() async {
         guard let core else { return }
         if let listed = try? await core.get(API.Get.Accounts.self) {
             accounts = listed.accounts
             signatureDefault = listed.signatureDefault
             accountsRead = true
+            if !accounts.isEmpty { newMail.askOnce() }
         }
         await readHealth()
     }
