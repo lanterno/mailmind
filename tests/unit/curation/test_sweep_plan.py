@@ -6,6 +6,7 @@ from mailmind.curation.domain.classifier import BLOCKED, JUNK_BUCKETS, MKT, NOTI
 from mailmind.curation.domain.live import READ_FIELDS, held, read_from_headers
 
 NO_RULES = rulebook.as_sets(rulebook.empty())
+A = "ada@example.test"
 
 
 def rules(**lists):
@@ -150,6 +151,55 @@ def test_a_stored_row_with_nothing_filled_in_is_still_judged():
 
 def test_a_stored_rows_subject_counts():
     assert sweep_plan.stored_bucket(stored("a@example.test", subject="Your receipt"), NO_RULES)[0] == classifier.RECEIPT
+
+
+def kept(uid, sender, subject="Hello", bucket=PERSONAL, mid=None, seen=1, flagged=0, **cols):
+    """A stored INBOX row as a sweep's preview reads it."""
+    return {**stored(sender, bucket=bucket, subject=subject, **cols), "uid": uid, "message_id": mid, "seen": seen,
+            "flagged": flagged}
+
+
+def test_a_stored_row_reads_as_a_sweep_reads_one_off_the_server():
+    """As the Rust server reads it (core/crates/mm-curation/tests/sweeping.rs)."""
+    row = kept(7, "News@Loom.example.test", "Issue 218", mid=" <issue-218@loom.example.test> ", name="The Weekly Loom")
+    assert sweep_plan.read_from_stored(row) == {"uid": "7", "from": "news@loom.example.test", "name": "The Weekly Loom",
+                                                "subject": "Issue 218", "mid": "<issue-218@loom.example.test>",
+                                                "bulk": False, "starred": False, "unread": False}
+    assert sweep_plan.read_from_stored({**row, "bucket": MKT})["bulk"]
+    assert sweep_plan.read_from_stored({**row, "list_unsub_raw": "<https://loom.example.test/u>"})["bulk"]
+    starred = sweep_plan.read_from_stored({**row, "flagged": 1})
+    assert (starred["starred"], held(starred)) == (True, True)
+    unseen = sweep_plan.read_from_stored(kept(8, None, subject=None, seen=None))
+    assert (unseen["unread"], held(unseen), unseen["mid"], unseen["from"], unseen["subject"]) == (True, True, "", "", "")
+
+
+def test_a_plan_from_stored_rows_answers_as_one_read_off_the_server():
+    """The same three messages, stored or read live: Lin's lunch, Loom's issue and a build, each read."""
+    stored_rows = [kept(1, "lin@example.test", "Lunch", mid="<l@example.test>"),
+                   kept(2, "news@loom.example.test", "Issue", mid="<i@example.test>", list_unsub="<https://loom.example.test/u>"),
+                   kept(3, "no-reply@ci.example.test", "Build", mid="<b@example.test>")]
+    live = [read("lin@example.test", "<l@example.test>", "Lunch", uid="1"),
+            read("news@loom.example.test", "<i@example.test>", "Issue", bulk=True, uid="2"),
+            read("no-reply@ci.example.test", "<b@example.test>", "Build", uid="3")]
+    from_store = sweep_plan.planned(A, sweep_plan.classified([sweep_plan.read_from_stored(r) for r in stored_rows], NO_RULES))
+    assert from_store == sweep_plan.planned(A, sweep_plan.classified(live, NO_RULES))
+    answer, taken = from_store
+    assert ([r["uid"] for r in taken], answer["planned"], answer["held_back"], answer["no_undo"]) == (["2", "3"], 2, 0, 0)
+
+
+def test_a_plan_holds_back_starred_or_unread_junk_and_takes_the_newest_of_the_rest_up_to_the_cap():
+    rows = [{**read("news@loom.example.test", mid="", uid=str(uid)), "bucket": MKT, "conf": "high", "reason": "list"}
+            for uid in range(1, sweep_plan.SWEEP_MAX + 4)]
+    rows[0]["starred"], rows[1]["unread"] = True, True
+    rows += [{**read("lin@example.test", uid="900"), "bucket": PERSONAL, "conf": "high", "reason": "person"}]
+    answer, taken = sweep_plan.planned(A, rows)
+    assert (answer["planned"], answer["held_back"], answer["capped"], answer["no_undo"]) == (
+        sweep_plan.SWEEP_MAX, 2, True, sweep_plan.SWEEP_MAX)
+    assert [r["uid"] for r in taken] == [str(u) for u in range(4, sweep_plan.SWEEP_MAX + 4)]
+    assert answer["by_bucket"] == {MKT: sweep_plan.SWEEP_MAX + 3, PERSONAL: 1}
+    answer, taken = sweep_plan.planned(A, rows[2:12])
+    assert (answer["planned"], answer["capped"], answer["moved"], answer["stragglers"], answer["error"]) == (
+        10, False, 0, [], None)
 
 
 # ── a sweep of stored junk ───────────────────────────────────────────────────────────────

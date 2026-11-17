@@ -48,14 +48,14 @@ def test_a_black_holed_account_doesnt_slow_another_accounts_body_open(app, world
     assert not hung.is_alive()
 
 
-@pytest.mark.parametrize("path", ["/api/reconcile", "/api/sweep"])
-def test_a_run_over_every_account_waits_only_for_the_account_that_is_busy(app, world, per_account, path):
+@pytest.mark.parametrize("path, body", [("/api/reconcile", {"account": "all", "dry_run": True}),
+                                        ("/api/sweep", {"account": "all"})])
+def test_a_run_over_every_account_waits_only_for_the_account_that_is_busy(app, world, per_account, path, body):
     import gate
     logins = {who: len(world.server.commands_for(who, "LOGIN")) for who in (w.ADA, w.CY)}
     answers = []
     with gate.held_elsewhere(w.BEA):                           # a long job on Bea's server
-        run = threading.Thread(target=lambda: answers.append(app.post(path, {"account": "all", "dry_run": True})),
-                               daemon=True)
+        run = threading.Thread(target=lambda: answers.append(app.post(path, body)), daemon=True)
         run.start()
         assert wait_until(lambda: len(world.server.commands_for(w.ADA, "LOGIN")) > logins[w.ADA])
         assert wait_until(lambda: gates.held(w.BEA) and not gates.held(w.ADA))
@@ -63,6 +63,18 @@ def test_a_run_over_every_account_waits_only_for_the_account_that_is_busy(app, w
     run.join(30)
     assert not run.is_alive() and answers[0].json["ok"]
     assert [r["account"] for r in answers[0].json["results"]] == [w.ADA, w.BEA, w.CY]
+
+
+def test_a_sweeps_preview_of_every_account_waits_for_no_gate_a_busy_ones_neither(app, world, per_account):
+    """Each Inbox's first scan has read it whole, so the preview is what MailMind stored: it logs in nowhere and answers
+    while a long job holds Bea's server."""
+    import gate
+    logins = len(world.server.commands_for(command="LOGIN"))
+    with gate.held_elsewhere(w.BEA):
+        answer = app.post("/api/sweep", {"account": "all", "dry_run": True})
+        assert gates.held(w.BEA)
+    assert [(r["account"], r["error"]) for r in answer.json["results"]] == [(w.ADA, None), (w.BEA, None), (w.CY, None)]
+    assert len(world.server.commands_for(command="LOGIN")) == logins
 
 
 def test_a_black_holed_accounts_sent_copy_doesnt_hold_up_another_accounts_send(app, world, per_account):

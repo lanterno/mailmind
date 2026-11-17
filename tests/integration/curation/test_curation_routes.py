@@ -80,7 +80,7 @@ def test_a_sweep_left_to_say_nothing(app, monkeypatch, given, account, flag, dry
 def test_a_sweep_that_answers_an_account_by_account_failure_fits(app, world):
     """A login refused: the account's result says how far it got, as its model says."""
     world.server.fail("LOGIN", "NO [AUTHENTICATIONFAILED] no", times=None)
-    r = app.post("/api/sweep", {"account": w.ADA, "dry_run": True})
+    r = app.post("/api/sweep", {"account": w.ADA})
     assert r.status == 200
     assert (r.json["ok"], r.json["results"][0]["planned"]) == (True, 0)
     assert r.json["results"][0]["error"]
