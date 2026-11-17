@@ -10,6 +10,7 @@ import time_machine
 from mailmind.bootstrap import mailbox
 from mailmind.bootstrap.mailbox import store
 from mailmind.kernel.errors import Conflict, NotFound
+from mailmind.platform.profile import ReadOnlyError
 
 
 def move(n):
@@ -99,13 +100,15 @@ def test_a_new_entry_ends_what_has_grown_too_old(data_dir):
 
 class Swept:
     """Reverses `swept` entries together and `move` ones alone, noting each call. One whose Message-ID is `missing`
-    doesn't go back; a run holding a `lost` one raises whole."""
+    doesn't go back; a run holding a `lost` one raises whole, and one `refused` is a read-only process's refusal."""
 
     def __init__(self):
         self.asked = []
 
     def one(self, d):
         self.asked.append(f"one {d['message_id']}")
+        if d["message_id"] == "refused":
+            raise ReadOnlyError("a move undone")
         return d["message_id"] != "missing", d["account"], "INBOX"
 
     def together(self, ds):
@@ -113,6 +116,8 @@ class Swept:
         self.asked.append("together " + " ".join(mids))
         if "lost" in mids:
             raise ConnectionError("scripted")
+        if "refused" in mids:
+            raise ReadOnlyError("a sweep undone")
         return [(d["message_id"] != "missing", d["account"], "INBOX") for d in ds]
 
 
@@ -149,3 +154,30 @@ def test_a_run_that_fails_whole_is_on_the_stack_again_and_stops_no_other(data_di
     with pytest.raises(Conflict):                                   # nothing of it going back is a refusal
         undo.undo_group("ug-1")
     assert ids(undo.entries()) == [["m1", "lost"]]
+
+
+def test_a_group_a_read_only_process_refuses_whole_says_so_and_waits_on_the_stack(data_dir):
+    """As the Rust server's Undo does (core/crates/mm-store/tests/undo_groups.rs)."""
+    undo = undo_over(Swept(), [swept("swept", "refused"), swept("move", "refused")])
+    with pytest.raises(ReadOnlyError):
+        undo.undo_group("ug-1")
+    assert ids(undo.entries()) == [["refused", "refused"]]
+
+
+def test_what_went_back_of_a_group_a_read_only_process_refused_in_part_is_said(data_dir):
+    undo = undo_over(Swept(), [swept("move", "refused"), swept("move", "m2")])
+    done = undo.undo_group("ug-1")
+    assert (done["reversed"], done["failed"]) == (1, 1)
+    assert ids(undo.entries()) == [["refused"]]
+
+
+def test_one_a_read_only_process_refuses_goes_on_up_and_back_on_top(data_dir, monkeypatch):
+    mailbox.undo.push(move(1))
+
+    def refused(d):
+        raise ReadOnlyError("a move undone")
+
+    monkeypatch.setattr(mailbox.undo, "_reverse_one", refused)
+    with pytest.raises(ReadOnlyError):
+        mailbox.undo.undo_last()
+    assert ids(mailbox.undo.entries()) == ["<m1@example.test>"]

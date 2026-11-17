@@ -135,3 +135,47 @@ def test_a_plan_carried_out_is_refused_and_files_nothing(app, world, ai):
     assert (r.status, r.json) == (409, REFUSED)
     assert inbox(app) == shown and rows("SELECT id FROM mail_commands") == []
     assert world.writes(since) == []
+
+
+def full_run(app):
+    app.env.pop("MAILMIND_PROFILE", None)
+    app.restart()
+
+
+def test_an_undo_that_would_reach_a_server_is_refused_and_waits_for_a_full_run(app, world):
+    """What a full run filed is on its server, and so is what a mute marked read: taking either back would ask the
+    server, so read-only refuses it, changes nothing here or there, and keeps it to undo on a full run."""
+    lunch = world.row(LUNCH)
+    world.deliver(w.ADA, "INBOX", w.variant(LUNCH, Message_ID="<mute-reply@example.test>",
+                                            In_Reply_To=lunch["message_id"]))           # unread: the mute marks it read
+    assert app.post("/api/mute", world.copy(LUNCH)).json["ok"]
+    assert app.post("/api/archive", world.copy(RECEIPT)).status == 200
+    app.work("commands")
+    read_only(app)
+    shown, where = inbox(app), world.where(RECEIPT)["server"]
+    since = world.mark()
+    for _ in range(2):                                             # the archive, still on top of the stack
+        r = app.post("/api/undo", {})
+        assert (r.status, r.json) == (409, REFUSED)
+    assert inbox(app) == shown and world.where(RECEIPT)["server"] == where
+    assert rows("SELECT id FROM mail_commands WHERE applied=0") == []
+    assert world.writes(since) == []
+    full_run(app)
+    assert app.post("/api/undo", {}).json["ok"]                        # the archive goes back on a full run
+    read_only(app)
+    r = app.post("/api/undo", {})
+    assert (r.status, r.json) == (409, REFUSED)
+    assert rows("SELECT thread_id FROM muted") == [{"thread_id": lunch["thread_id"]}]
+    assert rows("SELECT id FROM mail_commands WHERE applied=0") == []
+
+
+def test_a_move_still_waiting_for_its_server_is_taken_back_here(app, world):
+    world.queued_move(RECEIPT, "Archive")
+    read_only(app)
+    assert world.key(RECEIPT) not in [k for k, *_ in inbox(app)]           # on its way out
+    since = world.mark()
+    assert app.post("/api/undo", {}).json["ok"]
+    assert world.key(RECEIPT) in [k for k, *_ in inbox(app)]
+    assert app.get("/api/pending").json["waiting"] == 0
+    assert world.writes(since) == []
+
