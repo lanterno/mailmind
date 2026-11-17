@@ -72,6 +72,33 @@ def test_renaming_onto_or_deleting_the_owners_data_is_refused(tmp_path, refused)
     assert src.exists() and len(refused) == 2
 
 
+def test_a_name_given_with_a_directory_is_judged_where_it_is_not_where_the_test_runs(tmp_path, refused, monkeypatch):
+    """shutil.rmtree removes each entry by name relative to its directory (`dir_fd`): a temp home's database goes even
+    while the test runs at the repo root, and a guarded directory's doesn't, wherever the test runs."""
+    home = tmp_path / "home"
+    (home / "backups").mkdir(parents=True)
+    (home / "mailmind.db").write_text("")
+    (home / "backups" / "mailmind.log").write_text("")
+    monkeypatch.chdir(ROOT)
+    import shutil
+    shutil.rmtree(home)
+    assert not home.exists() and not refused
+    guarded = tmp_path / "guarded"
+    guarded.mkdir()
+    (guarded / "mailmind.db").write_text("")
+    guard.protect(str(guarded))
+    monkeypatch.chdir(tmp_path)
+    fd = os.open(guarded, os.O_RDONLY)
+    try:
+        with pytest.raises(guard.Tripwire):
+            os.remove("mailmind.db", dir_fd=fd)
+        with pytest.raises(guard.Tripwire):
+            os.rename("mailmind.db", "moved.db", src_dir_fd=fd, dst_dir_fd=fd)
+    finally:
+        os.close(fd)
+    assert (guarded / "mailmind.db").exists() and len(refused) == 2
+
+
 def test_reading_the_owners_bridge_password_file_is_refused(refused):
     """The Bridge password's last source, read only when the Keychain holds none: a test that reaches it fails, whether or
     not this computer has one. The Python server the served suites start reads one in its own data directory instead."""
