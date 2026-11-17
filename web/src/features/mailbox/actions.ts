@@ -42,6 +42,7 @@ export const undoFloat = createFloat(OFFERS_MS);
 // A toast has just told a screen reader what happened: this adds what can be done about it.
 export const offerUndo = (label: string) => undoFloat.show(label, "Undo is available");
 
+// Whether MailMind runs read only, as the digest says.
 export const readOnly = createStore(false);
 
 // What a move to a folder is about: whose folders it may go to, and the one folder it is in, which it isn't offered.
@@ -335,7 +336,7 @@ const DWELL_MS = 1200;
 let dwell: ReturnType<typeof setTimeout> | undefined;
 export const cancelDwell = () => clearTimeout(dwell);
 
-export async function markSeen(qc: QueryClient, copy: Copy, seen = true) {
+async function markSeen(qc: QueryClient, copy: Copy, seen: boolean) {
   patchRow(qc, copy, { seen });
   try {
     await post("/api/seen", { ...copyOf(copy), seen });
@@ -347,9 +348,15 @@ export async function markSeen(qc: QueryClient, copy: Copy, seen = true) {
   }
 }
 
+// What opening a message marks read, on its own. Read only would refuse it, so it isn't asked, and the row stays as the server
+// has it rather than flicker.
+export function markOpenedRead(qc: QueryClient, copy: Copy) {
+  if (!readOnly.get()) void markSeen(qc, copy, true);
+}
+
 export function armDwell(qc: QueryClient, copy: Copy) {
   cancelDwell();
-  dwell = setTimeout(() => void markSeen(qc, copy), DWELL_MS);
+  dwell = setTimeout(() => markOpenedRead(qc, copy), DWELL_MS);
 }
 
 export async function markUnread(qc: QueryClient, copy: Copy) {

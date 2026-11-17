@@ -12,7 +12,7 @@ import { copyId, copyOf, copyQuery, eachCopyOnce, type Copy } from "../../lib/co
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
-import { armDwell, cancelDwell, leavesOrganisation, MailFrame, markSeen, useBody, useThread, warmMembers, type MailBody, type Mailbox, type Opened } from "../mailbox";
+import { armDwell, cancelDwell, leavesOrganisation, MailFrame, markOpenedRead, useBody, useThread, warmMembers, type MailBody, type Mailbox, type Opened } from "../mailbox";
 import { AiCard, summarize } from "./AiCard";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
@@ -336,7 +336,7 @@ function Member({ m, mine, startsOpen }: { m: Extract<GetAnswers["/api/thread"],
   const [wasOpened, setWasOpened] = useState(startsOpen);
   const { key, folder, uid } = m;
   useEffect(() => {
-    if (open && !m.seen) void markSeen(qc, { key, folder, uid });
+    if (open && !m.seen) markOpenedRead(qc, { key, folder, uid });
   }, [qc, open, key, folder, uid, m.seen]);
   return (
     <div className={open ? "tmsg open" : "tmsg"} data-key={m.key} data-folder={m.folder} data-uid={m.uid}>

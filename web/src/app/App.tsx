@@ -233,7 +233,7 @@ export function App() {
     if (!source && firstAccount) go({ source: { kind: "folder", account: firstAccount, folder: "INBOX" }, opened: null }, { replace: true });
   }, [source, firstAccount]);
   const isReadOnly = m.digest?.profile === "read-only";
-  useEffect(() => readOnly.set(isReadOnly), [isReadOnly]);   // what filing says: it waits for a full run
+  useEffect(() => readOnly.set(isReadOnly), [isReadOnly]);   // what filing says, and whether opening mail marks it read
   const reading = Boolean(opened) || m.briefAsked;
   useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
   useEffect(closeRailDrawer, [source]);
