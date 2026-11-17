@@ -472,13 +472,17 @@ struct TestedWords: View {
     let tested: Tested
     @Environment(\.meadow) private var meadow
 
+    /// While a test runs. A new account's password is in the Keychain, which MailMind reads with no prompt, so there
+    /// is nothing to approve.
+    static let testing = String(localized: "Testing…")
+
     var body: some View {
         Group {
             switch tested {
             case .running:
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("Testing… (approve Touch ID if asked)")
+                    Text(Self.testing)
                 }
                 .foregroundStyle(meadow.ink3)
             case .connected:
