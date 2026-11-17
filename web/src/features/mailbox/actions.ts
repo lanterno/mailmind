@@ -7,6 +7,7 @@ import type { FilingVerb, GetAnswers, PostAnswers, SnoozePreset } from "../../li
 import { currentRoute, go, type Route } from "../../app/route";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
+import { READ_ONLY_REFUSED, readOnlyOr, refusedReadOnly } from "../../lib/readOnly";
 import { createFloat, OFFERS_MS, toast } from "../../lib/toast";
 import type { ListData } from "./data";
 import { filedWords, type Row } from "./rows";
@@ -70,7 +71,8 @@ export const readAgain = (qc: QueryClient) => {
 
 interface Answer { ok: true; msg?: string; filed?: Copy[]; count?: number; failed?: number; status?: string | null; queued?: unknown; undoable?: boolean | null }
 
-// Take rows off the list, ask the server, and say how it went. A no or no answer puts them back. `rows` are copies, by `copyId`.
+// Take rows off the list, ask the server, and say how it went. A no or no answer puts them back, and read only's no says so in
+// its own words. `rows` are copies, by `copyId`.
 export async function act<R extends object>(qc: QueryClient, { rows, after, call, say, undoLabel, fail }: {
   rows: string[];
   after?: Route | null | undefined;
@@ -92,7 +94,7 @@ export async function act<R extends object>(qc: QueryClient, { rows, after, call
     const label = undoLabel?.(r);
     if (label) offerUndo(label);
   } catch (e) {
-    toast(fail(e instanceof Error ? e.message : ""));
+    toast(readOnlyOr(e, fail(e instanceof Error ? e.message : "")));
     if (there && location.pathname + location.search === there) go(was, { replace: true });   // it stayed, so back to it
   } finally {
     unhide(rows);
@@ -110,7 +112,7 @@ export function fileRow(qc: QueryClient, kind: Filing, row: Copy, whole: boolean
     after,
     call: () => post(path, copyOf(row)),
     say: (r) => {
-      const said = filedWords(verb, r, readOnly.get());
+      const said = filedWords(verb, r);
       return card && said === verb ? card.said : said;
     },
     undoLabel: (r) => (r.undoable ? (n(r) > 1 ? `${verb} ${n(r)}` : card?.undo ?? verb) : null),
@@ -125,7 +127,7 @@ export function moveRow(qc: QueryClient, to: string, label: string, row: Copy, w
     rows: [copyId(row)],
     after,
     call: () => post(whole ? "/api/thread/move" : "/api/move", { ...copyOf(row), to }),
-    say: (r) => filedWords("Moved", r, readOnly.get(), label),
+    say: (r) => filedWords("Moved", r, label),
     undoLabel: (r) => (r.undoable ? (n(r) > 1 ? `Moved ${n(r)}` : "Moved") : null),
     fail: (why) => `Couldn’t move${why ? `: ${why}` : ""}`,
   });
@@ -216,7 +218,12 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
       try {
         if (verb === "star") await post("/api/flag", { ...copyOf(r), flag: "flagged", on: true });
         else await post("/api/seen", { ...copyOf(r), seen: verb === "read" });
-      } catch {
+      } catch (e) {
+        if (refusedReadOnly(e)) {   // read only refuses every one of them alike: none changed
+          toast(READ_ONLY_REFUSED);
+          readAgain(qc);
+          return;
+        }
         failed++;
       }
     }
@@ -236,7 +243,9 @@ export async function bulk(qc: QueryClient, verb: BulkVerb, rows: Row[], isWhole
           try {
             await post("/api/mute", { account: r.account, thread_id: r.threadId, undo_group: group });
             done++;
-          } catch { /* counted by what's left */ }
+          } catch (e) {   // any other no is counted by what's left
+            if (refusedReadOnly(e)) throw e;   // read only refuses every one alike: it says so, and the rows come back
+          }
         }
         return { ok: true };
       },
@@ -259,7 +268,8 @@ export async function moveMarked(qc: QueryClient, to: string, label: string, row
     post("/api/bulk/move", { to, rows: chunk.map((r) => ({ ...copyOf(r), whole: isWhole(r) })), undo_group: group }));
 }
 
-// As many requests as what one may file allows, each saying how its rows went. A request that fails counts all of its rows.
+// As many requests as what one may file allows, each saying how its rows went. A request that fails counts all of its rows,
+// unless read only refused it, which it does to all of them.
 async function inChunks(qc: QueryClient, rows: Row[], after: Route | null, words: { said: (n: number) => string; undo: (n: number) => string; couldnt: string }, send: (chunk: Row[]) => Promise<PostAnswers["/api/bulk/file"]>) {
   const ids = rows.map((r) => r.id);
   let failed = 0, partial = false, undoable = false;
@@ -274,7 +284,8 @@ async function inChunks(qc: QueryClient, rows: Row[], after: Route | null, words
           failed += a.rows_failed;
           partial ||= a.partial;
           undoable ||= Boolean(a.undoable);
-        } catch {
+        } catch (e) {
+          if (refusedReadOnly(e)) throw e;   // read only refuses every request alike: it says so, and the rows come back
           failed += chunk.length;
         }
       }
@@ -292,6 +303,7 @@ export async function undo(qc: QueryClient) {
   try {
     d = await post("/api/undo", {});
   } catch (e) {
+    if (refusedReadOnly(e)) return toast(READ_ONLY_REFUSED);   // taking it back would reach a server: it stays on the stack
     const no = refusalOf(e);
     if (!no) return toast("Couldn’t undo");
     toast(no.problem["empty"] ? "Nothing to undo" : no.detail || "Couldn’t undo");
@@ -312,9 +324,9 @@ async function markRow(qc: QueryClient, row: Copy, shows: Partial<Row>, was: Par
     for (const c of await copies()) await send(c);
     void qc.invalidateQueries({ queryKey: ["folders"] });
     toast(said);
-  } catch {
+  } catch (e) {
     patchRow(qc, row, was);
-    toast(couldnt);
+    toast(readOnlyOr(e, couldnt));
   }
 }
 
@@ -336,15 +348,17 @@ const DWELL_MS = 1200;
 let dwell: ReturnType<typeof setTimeout> | undefined;
 export const cancelDwell = () => clearTimeout(dwell);
 
-async function markSeen(qc: QueryClient, copy: Copy, seen: boolean) {
+// A copy marked read or unread, shown on its row at once and then asked of the server: a no puts the row back. It answers why
+// not, in words, or null once the server has it.
+async function markSeen(qc: QueryClient, copy: Copy, seen: boolean): Promise<string | null> {
   patchRow(qc, copy, { seen });
   try {
     await post("/api/seen", { ...copyOf(copy), seen });
     void qc.invalidateQueries({ queryKey: ["folders"] });
-    return true;
-  } catch {
+    return null;
+  } catch (e) {
     patchRow(qc, copy, { seen: !seen });
-    return false;
+    return readOnlyOr(e, "Couldn’t update");
   }
 }
 
@@ -361,7 +375,7 @@ export function armDwell(qc: QueryClient, copy: Copy) {
 
 export async function markUnread(qc: QueryClient, copy: Copy) {
   cancelDwell();
-  toast((await markSeen(qc, copy, false)) ? "Marked unread" : "Couldn’t update");
+  toast((await markSeen(qc, copy, false)) ?? "Marked unread");
 }
 
 // The row's own Mark read and Mark unread. On the open row the dwell mustn't then take it back.

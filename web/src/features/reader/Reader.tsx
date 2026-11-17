@@ -9,6 +9,7 @@ import { BriefPane, findSuggestions, SuggestionCard } from "../assistant";
 import { composing, guardLine, isMine, myAddresses, redirectOf, answer, forget, useDraftAhead, useDraftChip, canQuickReply, QUICK } from "../compose";
 import { createStore } from "../../lib/store";
 import { copyId, copyOf, copyQuery, eachCopyOnce, type Copy } from "../../lib/copy";
+import { READ_ONLY_REFUSED, refusedReadOnly } from "../../lib/readOnly";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
@@ -92,6 +93,10 @@ function Rsvp({ invite }: { invite: Copy }) {
       toast(`RSVP: ${SAID[decision]}`);
       if (r.outbox_id) composing.queued(r.outbox_id, "RSVP", r.undo_seconds);
     } catch (e) {
+      if (refusedReadOnly(e)) {   // nothing went: the answers stay, to give once read only is off
+        setSaid(null);
+        return toast(READ_ONLY_REFUSED);
+      }
       setSaid({ done: false, text: e instanceof ApiError ? `Couldn’t RSVP: ${e.message}` : "Couldn’t RSVP" });
       toast("RSVP failed");
     }

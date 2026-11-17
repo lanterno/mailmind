@@ -9,6 +9,7 @@ import type { AiStatus } from "../../lib/api/types";
 import { EMPTY } from "../../lib/emptyWords";
 import { minute } from "../../lib/clock";
 import { prefs } from "../../lib/prefs";
+import { readOnlyOr } from "../../lib/readOnly";
 import { copyFromId, copyId, copyOf } from "../../lib/copy";
 import { askConfirm } from "../../lib/confirm";
 import { store, stored } from "../../lib/store";
@@ -150,7 +151,7 @@ function TidyRun() {
   const undo = useMutation({
     mutationFn: (group: string) => post("/api/tidy/undo", { group }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["tidy"] }),
-    onError: () => toast("Couldn’t take that back."),
+    onError: (e) => toast(readOnlyOr(e, "Couldn’t take that back.")),
   });
   if (!data?.group || data.group === dismissed) return null;
   const group = data.group, n = data.filed;

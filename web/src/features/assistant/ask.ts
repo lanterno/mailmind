@@ -5,6 +5,7 @@ import { ApiError, post } from "../../lib/api/client";
 import type { PlanVerb, PostAnswers } from "../../lib/api/types";
 import { readAgain, offerUndo, undoGroup } from "../mailbox";
 import { askOverLimit } from "../../lib/overLimit";
+import { readOnlyOr } from "../../lib/readOnly";
 import { createStore } from "../../lib/store";
 import { announce, toast } from "../../lib/toast";
 
@@ -127,7 +128,7 @@ export async function confirmPlan(qc: QueryClient, plan: Plan, clearBox: () => v
     toast([`${done} ${r.count}`, ...(r.failed ? [`${r.failed} failed`] : []), ...(r.gone ? [`${r.gone} had moved`] : [])].join(", "));
     if (r.undoable) offerUndo(`${done} ${r.count}`);
   } catch (e) {
-    toast(e instanceof ApiError && e.status === 410 ? "That preview has expired. Run the command again." : "Couldn’t finish that. Check what was done before trying again.");
+    toast(readOnlyOr(e, e instanceof ApiError && e.status === 410 ? "That preview has expired. Run the command again." : "Couldn’t finish that. Check what was done before trying again."));
   }
   clearBox();
   readAgain(qc);

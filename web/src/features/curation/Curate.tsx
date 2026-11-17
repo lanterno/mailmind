@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { Dialog, Modal, ModalOverlay } from "react-aria-components";
 import { EMPTY } from "../../lib/emptyWords";
 import { get, post, refusalOf } from "../../lib/api/client";
+import { readOnlyOr } from "../../lib/readOnly";
 import type { BlockScope, GetAnswers, PostAnswers, RuleChange } from "../../lib/api/types";
 import { entries } from "../../lib/entries";
 import { go } from "../../app/route";
@@ -61,9 +62,9 @@ async function runCleanup(qc: QueryClient, p: Cleaning) {
   let d;
   try {
     d = await post("/api/cleanup/execute", { from_addr: p.d.from_addr, block_scope: p.scope, do_unsubscribe: p.unsubscribe, confirm_token: p.d.confirm_token, undo_group: undoGroup() });
-  } catch {
+  } catch (e) {
     tab?.close();
-    return toast("Cleanup failed");
+    return toast(readOnlyOr(e, "Cleanup failed"));
   }
   const url = (d as { browser_url?: string }).browser_url;
   if (tab) {
@@ -93,8 +94,8 @@ async function runBatch(qc: QueryClient, senders: string[]) {
   let d;
   try {
     d = await post("/api/cleanup/batch", { senders, undo_group: undoGroup() });
-  } catch {
-    return toast("Cleanup failed");
+  } catch (e) {
+    return toast(readOnlyOr(e, "Cleanup failed"));
   }
   toast(`Blocked ${d.blocked.length} · swept ${d.swept}${d.sweep_failed ? ` · ${d.sweep_failed} failed` : ""}`);
   offerUndo(`Cleaned up ${d.blocked.length} senders`);
@@ -279,7 +280,7 @@ function Inboxes() {
       else if (!r.planned) toast(r.held_back ? `Nothing to sweep: ${r.held_back} starred or unread stay` : "Nothing to sweep");
       else setArmed(r);
     } catch (e) {
-      toast(sweepFailed(refusalOf(e)?.detail, true));
+      toast(readOnlyOr(e, sweepFailed(refusalOf(e)?.detail, true)));
     }
   };
   const sweep = async ({ account, planned }: SweepPlan) => {
@@ -293,7 +294,7 @@ function Inboxes() {
       // back for all of it. One the server stopped before anything moved has none.
       if (d.undo_group && (r.moved || r.error)) offerUndo(r.moved ? `Swept ${r.moved} to Trash` : "Sweep stopped part way");
     } catch (e) {
-      toast(sweepFailed(refusalOf(e)?.detail, false));
+      toast(readOnlyOr(e, sweepFailed(refusalOf(e)?.detail, false)));
     }
     again(qc);
   };

@@ -8,6 +8,7 @@ import { get, post } from "../../lib/api/client";
 import { minute } from "../../lib/clock";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
 import { mayNotify, prefs } from "../../lib/prefs";
+import { READ_ONLY_NOTE } from "../../lib/readOnly";
 import { createStore } from "../../lib/store";
 import { usd } from "../../lib/text";
 import { announce, toast } from "../../lib/toast";
@@ -98,7 +99,7 @@ function StatusMenu({ digest, label, close, m }: { digest: Digest; label: { cls:
     <div ref={inside}>
       <div className="sm-info">
         <div className="sm-hd"><i className={`sdot ${label.cls}`} aria-hidden="true" />{label.text}</div>
-        {digest.profile === "read-only" && <div className="sm-sub">MailMind is running read-only: it writes nothing to your mail servers and syncs only when asked. What you file, star or send waits for a full run.</div>}
+        {digest.profile === "read-only" && <div className="sm-sub" id="readOnlyNote">{READ_ONLY_NOTE}</div>}
         {sy.last && sy.result && <div className="sm-sub">Last sync: {sy.result}</div>}
         <div className="sm-sub">{inboxes !== undefined ? <><b>{inboxes.toLocaleString()}</b> in your inboxes</> : "counting your inboxes…"}{aiOffered(digest.ai) && <> · <b>{(s?.summarized ?? 0).toLocaleString()}</b> summarized</>}</div>
         <AiLine digest={digest} close={close} />

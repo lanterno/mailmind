@@ -130,10 +130,10 @@ export function folderTitle(name: string, folders: FolderInfo[] | undefined): st
   return known ? roleLabel(known) : name;
 }
 
-// How filing went, in words.
-export function filedWords(verb: string, r: { count?: number; failed?: number; status?: string | null; queued?: unknown }, readOnly: boolean, to?: string): string {
+// How filing went, in words. What was queued goes once the server answers again: read only queues nothing, it refuses.
+export function filedWords(verb: string, r: { count?: number; failed?: number; status?: string | null; queued?: unknown }, to?: string): string {
   const n = r.count || 1;
-  const later = r.status === "queued" || r.queued ? (readOnly ? " · waits for a full run" : " · once the server is back") : "";
+  const later = r.status === "queued" || r.queued ? " · once the server is back" : "";
   const where = to ? ` to ${to}` : "";
   return (r.failed ? `${verb} ${n} of ${n + r.failed}${where} — the rest stayed` : n > 1 ? `${verb} ${n} messages${where}` : `${verb}${where}`) + later;
 }

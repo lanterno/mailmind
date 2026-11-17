@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { EMPTY } from "../../lib/emptyWords";
 import { ApiError, get, post, refusalOf } from "../../lib/api/client";
 import type { GetAnswers } from "../../lib/api/types";
+import { readOnlyOr } from "../../lib/readOnly";
 import { toast } from "../../lib/toast";
 import { composing } from "./compose";
 import { fmtWhen } from "./model";
@@ -105,7 +106,7 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
       await post(`/api/pending/${what}`, { id });
       toast(what === "retry" ? "Trying again…" : "Discarded: it stays as it was");
     } catch (e) {
-      toast(e instanceof ApiError && e.status === 409 ? "It’s being tried now. Try again in a moment" : "It has already settled");
+      toast(readOnlyOr(e, e instanceof ApiError && e.status === 409 ? "It’s being tried now. Try again in a moment" : "It has already settled"));
     }
     again();
     void qc.invalidateQueries({ queryKey: ["messages"] });
@@ -119,8 +120,8 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
     try {
       await post("/api/draft", { draft_id: id, delete: true });
       toast("Draft discarded");
-    } catch {
-      toast("Couldn’t discard it");
+    } catch (e) {
+      toast(readOnlyOr(e, "Couldn’t discard it"));
     }
     again();
     void qc.invalidateQueries({ queryKey: ["messages"] });
@@ -132,7 +133,7 @@ export function OutboxButton({ readOnly }: { readOnly: boolean }) {
       const r = await post(path as "/api/outbox/retry", { id });
       toast(ok(r));
     } catch (e) {
-      toast(refused && refusalOf(e) ? refused : fail);
+      toast(readOnlyOr(e, refused && refusalOf(e) ? refused : fail));
     }
     setTimeout(again, 300);
   };
