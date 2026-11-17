@@ -70,6 +70,30 @@ def _private(path):
     return d.lower() in _data_dirs and any(fnmatch.fnmatchcase(name.lower(), pat) for pat in PRIVATE)
 
 
+# Where each file call's audit event carries its path and the directory descriptor that path is relative to, by
+# position: a name given with `dir_fd` (as shutil.rmtree gives each entry) is under that directory, not the working one.
+_AT = {"os.remove": ((0, 1),), "os.rename": ((0, 2), (1, 3)), "os.chmod": ((0, 2),), "os.utime": ((0, 3),),
+       "os.truncate": ((0, None),)}
+
+
+def _at(path, dir_fd):
+    """`path` as the call names it: relative to `dir_fd`'s directory when it has one, else as it is."""
+    if not isinstance(dir_fd, int) or not isinstance(path, (str, bytes, os.PathLike)):
+        return path
+    p = os.fsdecode(os.fspath(path))
+    if os.path.isabs(p):
+        return p
+    try:
+        if sys.platform == "darwin":
+            import fcntl
+            d = os.fsdecode(fcntl.fcntl(dir_fd, fcntl.F_GETPATH, bytes(1024)).split(b"\0", 1)[0])
+        else:
+            d = os.readlink(f"/proc/self/fd/{dir_fd}")
+    except OSError:
+        return path                                     # a directory it can't name is judged as the name alone
+    return os.path.join(d, p)
+
+
 def protect(directory):
     """Guard the data files in `directory` as those at the repo root are."""
     _data_dirs.add(os.path.realpath(os.path.abspath(os.path.expanduser(directory))).lower())
@@ -133,8 +157,9 @@ def _hook(event, args):
             _refuse(f"open {args[0]!r}")
         elif event == "sqlite3.connect" and _private(args[0]):
             _refuse(f"sqlite3.connect {args[0]!r}")
-        elif event in ("os.rename", "os.remove", "os.truncate", "os.chmod", "os.utime") \
-                and any(_private(a) for a in args[:2] if isinstance(a, (str, bytes, os.PathLike))):
+        elif event in _AT and any(
+                _private(_at(args[i], args[j] if j is not None and j < len(args) else None))
+                for i, j in _AT[event] if i < len(args) and isinstance(args[i], (str, bytes, os.PathLike))):
             _refuse(f"{event} {args[:2]!r}")
         elif event == "socket.connect" and isinstance(args[1], tuple) and (_remote(args[1][0]) or _model_server(args[1])):
             _refuse(f"connect to {args[1]!r}")
