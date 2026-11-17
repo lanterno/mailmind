@@ -3,7 +3,7 @@
 (a draft kept here, a rule) still works. Each test runs read-only from `read_only(app)` on, and checks what the fake
 servers saw and what the database kept.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import problems
 from fakes import anthropic_api as fa
@@ -106,6 +106,26 @@ def test_a_draft_is_kept_here_but_one_on_the_server_isnt_discarded(app, world):
     assert (kept["ok"], kept["pushed"]) == (True, False)
     assert app.post("/api/draft", {"delete": True, "draft_id": kept["draft_id"]}).json == {"ok": True, "deleted": True}
     assert world.writes(since) == []
+
+
+def test_a_draft_saved_read_only_stays_on_this_mac_until_it_is_saved_again(app, world):
+    """No push of it waits for a full run: the tray says it is kept here, and only a save in a full run sends it."""
+    read_only(app)
+    kept = app.post("/api/draft", new(subject="Kept here")).json
+    assert (kept["ok"], kept["pushed"]) == (True, False)
+    assert [(d["id"], d["kept"], d["attempts"]) for d in app.get("/api/outbox").json["drafts"]] == [(kept["draft_id"], True, 0)]
+    since = world.mark()
+    full_run(app)
+    app.clock.shift(timedelta(minutes=5))
+    app.work("drafts")
+    assert world.writes(since) == []
+    assert [d["kept"] for d in app.get("/api/outbox").json["drafts"]] == [True]
+    typed = app.post("/api/draft", new(subject="Kept here", draft_id=kept["draft_id"], base_version=kept["version"],
+                                       autosave=True)).json
+    assert typed["pushed"] is False and app.get("/api/outbox").json["drafts"] == []    # due a minute on, as a first save
+    again = app.post("/api/draft", new(subject="Kept here", draft_id=kept["draft_id"], base_version=typed["version"])).json
+    assert again["pushed"] is True
+    assert world.server.find(w.ADA, "Drafts", again["message_id"])
 
 
 def test_a_cleanup_is_refused_but_a_rule_is_kept(app, world):

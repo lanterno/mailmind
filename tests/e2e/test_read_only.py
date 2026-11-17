@@ -2,7 +2,7 @@
 
 A change a person asks for that would reach a server (a move, a flag change, a send, a sweep, a
 cleanup, a draft's copy removed) is refused with a 409 that says why, before anything is queued or
-hidden here, so nothing waits for a full run. A draft is kept here, and a full run pushes it. Below
+hidden here, so nothing waits for a full run. A draft is kept on this Mac, and only a save in a full run sends it. Below
 that, a read-only process's IMAP connections open every mailbox with EXAMINE and refuse any command
 that could change mail before it is sent, and it opens no SMTP session. Each test runs read-only
 through MAILMIND_PROFILE until it calls `read_only.end()`, and checks what the fake servers saw.
@@ -163,16 +163,18 @@ def test_a_flag_change_is_refused_and_the_row_stays_as_it_was(app, world, read_o
     assert q("SELECT id FROM mail_commands") == [] and world.writes(since) == []
 
 
-def test_a_draft_waits_here_until_a_full_run_pushes_it(app, world, read_only):
+def test_a_draft_is_kept_here_and_a_full_run_sends_it_only_once_it_is_saved_again(app, world, read_only):
     from mailmind.bootstrap.compose import drafts
     since = world.mark()
     r = app.post("/api/draft", send(subject="Fabric order (draft)"))
     assert r.status == 200 and r.json["pushed"] is False
-    assert [d["subject"] for d in app.get("/api/outbox").json["drafts"]] == ["Fabric order (draft)"]
-    assert world.writes(since) == []
+    assert [(d["subject"], d["kept"]) for d in app.get("/api/outbox").json["drafts"]] == [("Fabric order (draft)", True)]
     read_only.end()
     drafts.push_round()
-    assert world.server.find(w.ADA, "Drafts", r.json["message_id"])
+    assert world.writes(since) == []
+    again = app.post("/api/draft", send(subject="Fabric order (draft)", draft_id=r.json["draft_id"],
+                                        base_version=r.json["version"])).json
+    assert again["pushed"] is True and world.server.find(w.ADA, "Drafts", again["message_id"])
     assert app.get("/api/outbox").json["drafts"] == []
 
 

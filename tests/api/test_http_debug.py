@@ -135,9 +135,9 @@ def test_the_health_counts_what_waits_in_each_queue_by_its_state(app, golden, wo
     golden.record("once a pass of each has run", no_address(app.get("/api/debug/health")))
 
 
-def test_read_only_a_change_is_refused_and_a_save_is_named_once_due(app, golden, world):
+def test_read_only_a_change_is_refused_and_a_save_is_kept_here_and_named_at_once(app, golden, world):
     """Read-only, nothing reaches a mail server: a change or a send is refused, and no queue holds it for a full run. A
-    save is kept here, and with no push job to wait for, it is named as soon as its push is due."""
+    save is kept on this Mac, where no push of it comes due, and the tray names it at once."""
     app.env["MAILMIND_PROFILE"] = "read-only"
     app.restart()
     assert app.post("/api/archive", world.copy("ada-inbox-05-receipt.eml")).status == 409

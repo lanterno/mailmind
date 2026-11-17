@@ -129,5 +129,20 @@ def test_a_send_takes_a_copy_a_try_left_in_its_own_account_only():
 
 
 def test_the_tray_says_what_waits_with_no_subject_as_empty():
-    assert journal.listed({"draft_id": 4, "account": "ada@example.test", "subject": None, "saved_at": 1000, "attempts": 2, "discard": 1}) == {
-        "id": 4, "account": "ada@example.test", "subject": "", "saved_at": 1000, "attempts": 2, "discarding": True}
+    assert journal.listed({"draft_id": 4, "account": "ada@example.test", "subject": None, "saved_at": 1000, "attempts": 2, "discard": 1,
+                           "due_at": 1020}) == {
+        "id": 4, "account": "ada@example.test", "subject": "", "saved_at": 1000, "attempts": 2, "discarding": True, "kept": False}
+
+
+def test_the_tray_says_what_a_read_only_run_kept_on_this_mac():
+    assert journal.listed({"draft_id": 4, "account": "ada@example.test", "subject": "Notes", "saved_at": 1000, "attempts": 0,
+                           "discard": 0, "due_at": journal.KEPT_HERE})["kept"] is True
+
+
+def test_a_read_only_save_is_kept_here_and_a_full_runs_autosave_over_it_goes_as_a_first_save():
+    assert journal.after_save(False, 1000, None, None, keep=True) == (journal.KEPT_HERE, 0)
+    assert journal.after_save(True, 1000, {"due_at": 1040, "attempts": 3}, 980, keep=True) == (journal.KEPT_HERE, 0)
+    kept = {"due_at": journal.KEPT_HERE, "attempts": 0}
+    assert journal.after_save(True, 1000, kept, None) == (1000 + PUSH_EVERY, 0)
+    assert journal.after_save(True, 1000, kept, 980) == (980 + PUSH_EVERY, 0)
+    assert journal.after_save(False, 1000, kept, None) == (1000, 0)

@@ -26,7 +26,7 @@
    "profile": "read-only",
    "queues": {
     "commands": {},
-    "drafts_waiting": 0,
+    "drafts_waiting": 1,
     "outbox": {}
    }
   },
@@ -47,7 +47,7 @@
   "note": "59 seconds on",
   "value": {
    "commands": {},
-   "drafts_waiting": 0,
+   "drafts_waiting": 1,
    "outbox": {}
   }
  },
