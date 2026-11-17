@@ -85,6 +85,21 @@ final class LaunchFailureTests: XCTestCase {
         XCTAssertTrue(kept.contains { $0.hasSuffix(".db") }, "the old one is kept: \(kept)")
     }
 
+    func testAPanicInTheCoreSaysPlainWordsNeverItsMessage() async {
+        /// What a panic's message can carry across (UniFFI's `rustPanic`): words that quote mail.
+        struct Panicked: LocalizedError {
+            var errorDescription: String? { "byte index 3 is not a char boundary; it is inside 'é' of `Dear ada@example.test`" }
+        }
+        let home = CoreHome(folder: folder.path(percentEncoded: false), variables: [:], standIn: nil)
+        let app = MailApp(home: { home }, open: { _ in throw Panicked() })
+        await app.start()
+        XCTAssertEqual(app.stage, .failed(MailApp.unexpected))
+        XCTAssertEqual(MailApp.words(Panicked()), MailApp.unexpected)
+        for quoted in ["example.test", "char boundary", "Dear"] {
+            XCTAssertFalse(MailApp.unexpected.contains(quoted))
+        }
+    }
+
     func testTheWordsSayTheMailIsSafeInAPersonsWords() {
         XCTAssertTrue(LaunchFailure.safe.contains("Your mail on its servers is untouched"))
         XCTAssertTrue(LaunchFailure.fresh.contains("backups folder"))
