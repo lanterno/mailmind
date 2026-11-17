@@ -3,6 +3,8 @@ import SwiftUI
 /// The licences a release carries (Release/acknowledgements.py writes them into the app as Acknowledgements.txt).
 enum Acknowledgements {
     static let windowID = "acknowledgements"
+    /// What a build without them says, in a person's words: how they get into a build is docs/releasing.md's.
+    static let missing = String(localized: "This copy of MailMind came without them. Every release of MailMind carries them.")
 
     /// The text in `bundle`, or nil in a build that carries none: only `just apple release` puts it there.
     static func text(in bundle: Bundle) -> String? {
@@ -68,7 +70,7 @@ struct AcknowledgementsView: View {
                     Text("No acknowledgements in this build")
                         .font(.meadow(.display, 20, .bold))
                         .foregroundStyle(meadow.ink)
-                    Text("A release carries them: just apple release puts them in the app.")
+                    Text(Acknowledgements.missing)
                         .font(.meadow(.ui, 14))
                         .foregroundStyle(meadow.ink2)
                 }
