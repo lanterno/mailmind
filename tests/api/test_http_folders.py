@@ -23,6 +23,7 @@ FOLDER_WORDS = {
 CLIENTS = "bea-clients-01-harbor.eml"
 UNRELATED = "cy-inbox-03-unrelated.eml"
 LABELLED = "<labelled@example.test>"
+OLD = "<old-folder@example.test>"
 
 
 def on_server(world, user):
@@ -170,6 +171,21 @@ def test_a_folder_holding_mail_is_deleted_only_once_a_person_says_so_and_its_mai
     assert [server[:2] for server in world.where(CLIENTS)["server"]] == [[w.BEA, "Trash"]]
     assert not any(c.split(" ")[-1] == "EXPUNGE" for c in world.writes(since))
     assert "Folders/Clients" not in on_rail(app, w.BEA)
+
+
+def test_a_deleted_folders_mail_goes_to_the_trash_the_server_lists(app, world):
+    # Ada's server keeps its Trash as "Deleted Messages", as iCloud does: the folder's mail goes there, as a trash's does.
+    with world.server.lock:
+        boxes = world.server.accounts[w.ADA].mailboxes
+        trash = boxes.pop("Trash")
+        trash.name = "Deleted Messages"
+        boxes[trash.name] = trash
+    app.post("/api/folders/create", {"account": w.ADA, "name": "Old"})
+    world.server.deliver(w.ADA, "Old", w.variant("ada-inbox-05-receipt.eml", Message_ID=OLD))
+    r = app.post("/api/folders/delete", {"account": w.ADA, "folder": "Old", "confirm": True})
+    assert (r.status, r.json) == (200, {"ok": True, "trashed": 1})
+    assert world.server.find(w.ADA, "Deleted Messages", OLD)
+    assert "Old" not in on_server(world, w.ADA) and "Trash" not in on_server(world, w.ADA)
 
 
 def test_a_gmail_label_goes_and_its_mail_stays_in_all_mail(app, world):
