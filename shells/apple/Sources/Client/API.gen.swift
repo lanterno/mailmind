@@ -355,10 +355,13 @@ extension API {
 
     /// `Status.report`: how AI stands, with no call made. `provider` is the one chosen, and `off` why AI is off (None while it
     /// is on). `model` is what a person's asks go to, and `background_model` what background summaries ask: "" while AI is off.
-    /// `summaries_waiting` is how many messages from the last 30 days wait for a summary, there while AI is on.
+    /// `cloud_model` is whether the model chosen for a server on this Mac (a model on this Mac, or a compatible service on
+    /// loopback) runs in a cloud, as Ollama's `-cloud` models do, so mail asked of it leaves this Mac: said whether AI is on
+    /// or off. `summaries_waiting` is how many Inbox messages from the last 30 days wait for a summary, there while AI is on.
     public struct AiStatus: Codable, Hashable, Sendable {
         public var backgroundModel: String
         public var batchWaiting: Int?
+        public var cloudModel: Bool
         public var engine: String
         public var keyFrom: String
         public var lastError: String?
@@ -371,9 +374,10 @@ extension API {
         public var spentTodayMicros: Int?
         public var summariesWaiting: Int?
 
-        public init(backgroundModel: String, batchWaiting: Int? = nil, engine: String, keyFrom: String, lastError: String? = nil, lastOk: Bool? = nil, lastTs: Int, limitMicros: Int, model: String, off: AiOff? = nil, provider: AiProvider, spentTodayMicros: Int? = nil, summariesWaiting: Int? = nil) {
+        public init(backgroundModel: String, batchWaiting: Int? = nil, cloudModel: Bool, engine: String, keyFrom: String, lastError: String? = nil, lastOk: Bool? = nil, lastTs: Int, limitMicros: Int, model: String, off: AiOff? = nil, provider: AiProvider, spentTodayMicros: Int? = nil, summariesWaiting: Int? = nil) {
             self.backgroundModel = backgroundModel
             self.batchWaiting = batchWaiting
+            self.cloudModel = cloudModel
             self.engine = engine
             self.keyFrom = keyFrom
             self.lastError = lastError
@@ -390,6 +394,7 @@ extension API {
         enum CodingKeys: String, CodingKey {
             case backgroundModel = "background_model"
             case batchWaiting = "batch_waiting"
+            case cloudModel = "cloud_model"
             case engine
             case keyFrom = "key_from"
             case lastError = "last_error"
@@ -6245,14 +6250,16 @@ extension API {
         public var attempts: Int
         public var discarding: Bool
         public var id: Int
+        public var kept: Bool
         public var savedAt: Int
         public var subject: String
 
-        public init(account: String, attempts: Int, discarding: Bool, id: Int, savedAt: Int, subject: String) {
+        public init(account: String, attempts: Int, discarding: Bool, id: Int, kept: Bool, savedAt: Int, subject: String) {
             self.account = account
             self.attempts = attempts
             self.discarding = discarding
             self.id = id
+            self.kept = kept
             self.savedAt = savedAt
             self.subject = subject
         }
@@ -6262,6 +6269,7 @@ extension API {
             case attempts
             case discarding
             case id
+            case kept
             case savedAt = "saved_at"
             case subject
         }
