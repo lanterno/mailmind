@@ -65,14 +65,21 @@ final class SendGuardTests: XCTestCase {
         let runs = ["QUJD".repeated(12500), "-".repeated(50000), "_".repeated(50000), "a-".repeated(25000),
                     ".".repeated(50000), "@".repeated(50000), "ال".repeated(25000), ", ".repeated(25000),
                     "a" + " ".repeated(49998) + "b"]
-        let started = Self.threadSeconds()
+        var spent: [(text: String, seconds: Double)] = []
         for text in runs {
+            let started = Self.threadSeconds()
             for mode in [API.ComposeMode.new, .reply] {
                 _ = SendGuard.check(snapshot(mode: mode, body: text))
                 _ = SendGuard.check(snapshot(mode: mode, subject: text))
             }
+            spent.append((String(text.prefix(4)), Self.threadSeconds() - started))
         }
-        XCTAssertLessThan(Self.threadSeconds() - started, 4, "all of them, as the page's are each under a second")
+        // All of them take about half a second in a debug build on an M5, and under a second with the Mac busy; a
+        // slower runner may take twice that. A guard that folded each character into strings of its own and tried
+        // every word at every dash took six seconds here, and over ten on a busy Mac.
+        let slowest = spent.max { $0.seconds < $1.seconds }!
+        XCTAssertLessThan(spent.map(\.seconds).reduce(0, +), 3,
+                          "the slowest, \(slowest.text)…, took \(String(format: "%.2f", slowest.seconds)) s")
     }
 
     /// The processor time this thread has had: a slow check shows in it as in the wall clock, but a busy machine
