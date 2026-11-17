@@ -734,6 +734,27 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(said, "Swept 12/12")
     }
 
+    /// One plan on screen at a time: planning another account's sweep takes away the plan waiting for Confirm, whose
+    /// Confirm would do nothing while the new plan is read.
+    func testPlanningAnotherAccountsSweepTakesAwayThePlanWaitingForConfirm() async {
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "ada@example.test", planned: 12)]))
+        routes.answer("POST", "/api/sweep", API.Swept(dryRun: true, generated: "", ok: true, results: [
+            API.AccountSwept(account: "work@example.test", planned: 4)]))
+        let model = CurateModel(link: link, notices: notices)
+        await model.armSweep("ada@example.test")
+        XCTAssertEqual(model.sweepArmed?.account, "ada@example.test")
+
+        routes.hold("POST", "/api/sweep")
+        let planning = Task { await model.armSweep("work@example.test") }
+        await deskEventually { model.sweepBusy != nil }
+        XCTAssertNil(model.sweepArmed, "Ada's plan isn't left on screen with a Confirm that would do nothing")
+        routes.release("POST", "/api/sweep")
+        await planning.value
+        XCTAssertEqual(model.sweepArmed?.account, "work@example.test", "only the new plan waits for Confirm")
+        XCTAssertEqual(model.sweepArmed?.planned, 4)
+    }
+
     /// A plan the server refused clears too, so Sweep can be pressed again.
     func testASweepsPlanThatFailedLetsSweepBePressedAgain() async {
         routes.refuse("POST", "/api/sweep", status: 502, detail: "The server is away")
