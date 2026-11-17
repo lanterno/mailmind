@@ -1,7 +1,7 @@
 //! The body backfill on the Rust server (#5), against an IMAP server on loopback: a folder's dozen in one FETCH of
 //! their openings, on the connection the account's jobs share; none older than twelve months; a message too large to
-//! keep whole keeping its opening's text, its attachment fetched when it is opened; and the text of the openings a sync
-//! read kept, so the backfill never fetches that mail again.
+//! keep whole keeping its opening's text, its attachment fetched when it is opened; and an opening a sync read that held
+//! its whole message kept as its body, so the backfill fetches only the Inbox's mail a sync read cut off.
 
 #![allow(clippy::unwrap_used)]
 
@@ -134,19 +134,26 @@ fn a_message_too_large_to_keep_whole_keeps_its_text_and_its_attachment_comes_whe
 }
 
 #[test]
-fn the_text_of_each_opening_a_sync_read_is_kept_and_the_backfill_fetches_none_of_that_mail() {
+fn a_sync_keeps_each_opening_that_held_its_whole_message_and_the_backfill_fetches_the_rest_whole() {
     let imap = Imap::start();
     imap.add(ADA, "INBOX", [(1, note(1)), (2, with_pdf(2, "The plans, attached.", 100))]);
     let w = world(imap, &[ADA], &[]);
     w.app.syncing.sync_once();
-    let text = |uid: u32| {
-        let StoredBody { fetched, text, kept } = w.stored(ADA, "INBOX", uid);
-        (fetched, text.unwrap().trim().to_owned(), kept)
-    };
-    assert_eq!(text(1), (false, "Note 1 says hello.".to_owned(), false));
-    // Only its opening was read: its attachment waits to be opened.
-    assert_eq!(text(2), (false, "The plans, attached.".to_owned(), false));
+    // The note's opening held all of it: kept whole, its text for search.
+    let note = w.stored(ADA, "INBOX", 1);
+    assert_eq!((note.fetched, note.kept), (true, true));
+    assert_eq!(note.text.unwrap().trim(), "Note 1 says hello.");
+    // The plans' was cut off at 64 KiB: it waits for the backfill.
+    assert_eq!(w.stored(ADA, "INBOX", 2), StoredBody { fetched: false, text: None, kept: false });
     let mark = w.imap.mark();
     w.app.backfill.round().unwrap();
+    assert_eq!(openings_asked(&w, mark), ["2"]);
+    assert_eq!(wholes_asked(&w, mark), ["UID FETCH 2 (UID BODY.PEEK[])"]);
+    let plans = w.stored(ADA, "INBOX", 2);
+    assert_eq!((plans.fetched, plans.kept), (true, true));
+    // Opened, the note asks its server nothing.
+    let mark = w.imap.mark();
+    let opened = w.app.reading.bodies.message_body(w.pk(ADA, "INBOX", 1), false).unwrap();
+    assert_eq!(opened["text"].as_str().unwrap().trim(), "Note 1 says hello.");
     assert!(w.imap.since(mark, ADA).iter().all(|c| !c.starts_with("UID FETCH")), "{:?}", w.imap.since(mark, ADA));
 }

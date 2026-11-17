@@ -14,7 +14,6 @@ use mm_content::mime::Fields;
 use mm_kernel::errors::Fault;
 use mm_kernel::seams::{Clock, Moment};
 use mm_mailbox::command_ports::{CommandStore, MoveAccount, MoveAccounts, Tx};
-use mm_mailbox::fetch_ports::KeptBody;
 use mm_mailbox::flights::Flights;
 use mm_mailbox::folders::Folders;
 use mm_mailbox::ingest::{Ingest, SyncError};
@@ -130,9 +129,6 @@ impl SyncStore for World {
         unreachable!()
     }
     fn queue_filtered(&self, _: i64, _: &[(&'static str, bool)], _: &str) -> Result<bool, Fault> {
-        unreachable!()
-    }
-    fn keep_invite(&self, _: i64, _: &KeptBody) -> Result<(), Fault> {
         unreachable!()
     }
 }

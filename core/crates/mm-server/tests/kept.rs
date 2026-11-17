@@ -14,7 +14,7 @@ use mm_mailbox::kept::Keeping;
 use mm_mailbox::session::MailServers;
 use mm_server::kept_wiring::keeping_of;
 use serde_json::json;
-use stand_in::{ADA, BEA, Imap, World, note, until, world};
+use stand_in::{ADA, BEA, Imap, World, note, until, with_pdf, world};
 
 /// Ada's and Bea's Inbox, three notes each.
 fn inboxes() -> Imap {
@@ -59,7 +59,11 @@ fn the_jobs_on_an_accounts_gate_log_in_once_between_them() {
 
 #[test]
 fn messages_opened_and_one_fetched_ahead_share_one_login() {
-    let w = world(inboxes(), &[ADA], &[]);
+    // Each too large for the opening a sync reads to hold it whole, so each is fetched as it is opened.
+    let imap = Imap::start();
+    imap.add(ADA, "INBOX", (1..=3).map(|uid| (uid, with_pdf(uid, "The plans, attached.", 100))));
+    imap.add(ADA, "Archive", []);
+    let w = world(imap, &[ADA], &[]);
     w.app.syncing.sync_once();
     let synced = logins(&w, ADA).len();
     // The sync holds no gate: it logged in and out.
