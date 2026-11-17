@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { go, type DigestList, type ListSource } from "../../app/route";
-import { aiOffered, aiSends, offLine } from "../../lib/ai";
+import { aiOffered, aiSends, offLine, sendsOf } from "../../lib/ai";
 import { get, post } from "../../lib/api/client";
 import type { AiStatus } from "../../lib/api/types";
 import { EMPTY } from "../../lib/emptyWords";
@@ -40,12 +40,12 @@ export function openDigestList(from: ListSource | null, list: DigestList, items:
 
 // AI off for want of a key, a model or a URL: why, for the provider chosen, and where to set it up. Turned off, it isn't shown.
 function AiOff({ ai }: { ai: AiStatus }) {
-  const baseUrl = prefs.useValue().ai_base_url;
+  const p = prefs.useValue();
   return (
     <div className="bf-aioff">
       <p><b>{offLine(ai)}.</b> Summaries, this brief and reply drafts need it. Your mail works the same without it.</p>
       <p className="m"><SetUpAi /></p>
-      <p className="m pv"><Icon name="lock" /><span>{aiSends(ai.provider, baseUrl)}</span></p>
+      <p className="m pv"><Icon name="lock" /><span>{aiSends(sendsOf(ai, p))}</span></p>
     </div>
   );
 }

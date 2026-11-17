@@ -1,6 +1,7 @@
 // What the page says of AI, and whether it offers what only AI can do (#49). Which provider is chosen and why AI is off are the
 // digest's to say (`ai`, as the server has them in force); the page keeps only its words for each.
 import type { AiProvider, AiStatus } from "./api/types";
+import type { Prefs } from "./prefs";
 
 type Said = Pick<AiStatus, "off" | "provider">;
 
@@ -39,22 +40,60 @@ const RECIPIENT: Record<Exclude<AiProvider, "local">, string> = {
   compatible: "the OpenAI-compatible service",
 };
 
-// What AI mode sends, to whom and when, said before it is turned on as after: under its switch and in Help. A model on this
-// Mac, or a service at a loopback address, sends nothing off this Mac. `baseUrl` is the preference as set.
-export function aiSends(provider: AiProvider, baseUrl: string): string {
-  if (provider === "local") return "With a model on this Mac, nothing leaves this Mac.";
-  if (runsHere(provider, baseUrl)) return `With ${PROVIDER_NAME[provider]} on this Mac, nothing leaves this Mac.`;
-  return `With AI mode on, each new message’s sender, subject and opening text go to ${RECIPIENT[provider]} to be summarized, automatically, `
-    + "and those senders, subjects and summaries go again to write the day’s brief and what came in since you looked. Whole "
-    + "conversations go only when you ask: for a summary or a draft, with what you type into Ask, a search written as a "
-    + "sentence, or Rewrite. Attachments never leave this Mac.";
+// What decides what AI mode sends: the provider and its URL as set, the model chosen, whether that model runs in a cloud though
+// it is served on this Mac (the server says so, as `cloud_model`: Ollama's `-cloud` models), and whether replies are drafted ahead.
+export interface Sends {
+  provider: AiProvider;
+  baseUrl: string;
+  model: string;
+  cloud: boolean;
+  draftAhead: boolean;
+}
+
+// The same, from the digest's `ai` and the preferences, for the provider in force or `provider`, one chosen since. The server
+// says whether a model runs in a cloud only for the provider it holds, and names the model only while AI is on.
+export function sendsOf(ai: Pick<AiStatus, "provider" | "model" | "cloud_model"> | null | undefined,
+  p: Pick<Prefs, "ai_provider" | "ai_base_url" | "ai_model" | "draft_ahead">, provider: AiProvider = ai?.provider ?? p.ai_provider): Sends {
+  const said = ai?.provider === provider ? ai : null;
+  return { provider, baseUrl: p.ai_base_url, model: said?.model || p.ai_model, cloud: said?.cloud_model === true, draftAhead: p.draft_ahead };
+}
+
+// Where mail goes for a model served on this Mac: nowhere, unless the model runs in Ollama's cloud. `ahead` is what drafting
+// ahead adds, said only then.
+function servedHere(s: Sends, ahead: string): string {
+  if (!s.cloud) return s.provider === "local" ? "With a model on this Mac, nothing leaves this Mac." : `With ${PROVIDER_NAME[s.provider]} on this Mac, nothing leaves this Mac.`;
+  return `${s.model || "The model"} runs in Ollama’s cloud, so what is summarized goes to Ollama’s servers.${s.draftAhead ? ` ${ahead}` : ""}`;
+}
+
+// Who mail goes to off this Mac: the company behind the provider, or the service named; null for one served here.
+const awayTo = ({ provider, baseUrl }: Sends) => (provider === "local" || runsHere(provider, baseUrl) ? null : RECIPIENT[provider]);
+
+const DRAFTED_AHEAD = "With Draft replies ahead on, whole conversations of important mail go too, to draft replies before you open them.";
+
+// What AI mode sends, to whom and when, said before it is turned on as after: under its switch, where AI is off, and in Help.
+// A model on this Mac, or a service at a loopback address, sends nothing off this Mac unless the model runs in a cloud.
+export function aiSends(s: Sends): string {
+  const to = awayTo(s);
+  if (!to) return servedHere(s, DRAFTED_AHEAD);
+  return `With AI mode on, the sender, subject and opening text of each message in your Inbox go to ${to} to be summarized, `
+    + "automatically: the last 30 days’ as soon as you turn it on, then each new one. Those senders, subjects and summaries go "
+    + "again to write the day’s brief and what came in since you looked. Whole conversations go only when you ask: for a summary "
+    + "or a draft, with what you type into Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac."
+    + `${s.draftAhead ? ` ${DRAFTED_AHEAD}` : ""}`;
 }
 
 // The same in short, for the sync menu with AI on: what goes on its own, that more goes when asked, and never an attachment.
-export function aiSendsInShort(provider: AiProvider, baseUrl: string): string {
-  if (provider === "local" || runsHere(provider, baseUrl)) return aiSends(provider, baseUrl);
-  return `Each new message’s sender, subject and opening text go to ${RECIPIENT[provider]} automatically, and more when you ask `
-    + "for something. Attachments never leave this Mac.";
+export function aiSendsInShort(s: Sends): string {
+  const to = awayTo(s), ahead = "With Draft replies ahead on, whole conversations of important mail go too.";
+  if (!to) return servedHere(s, ahead);
+  return `The sender, subject and opening text of each message in your Inbox go to ${to} automatically, and more when you ask `
+    + `for something.${s.draftAhead ? ` ${ahead}` : ""} Attachments never leave this Mac.`;
+}
+
+// What drafting ahead sends, said under its switch: nothing more, for a model that runs on this Mac.
+export function draftAheadSends(s: Sends): string {
+  const to = awayTo(s) ?? (s.cloud ? "Ollama’s servers" : null);
+  return to ? `On, whole conversations of important mail go to ${to}, to draft replies before you open them.` : "";
 }
 
 // Why AI is off, in plain words for the provider chosen: "" while it is on.

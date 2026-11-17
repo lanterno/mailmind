@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Input, Label, NumberField } from "react-aria-components";
-import { aiSends, aiStanding, PROVIDER_LABEL, PROVIDER_NAME } from "../../lib/ai";
+import { aiSends, aiStanding, draftAheadSends, PROVIDER_LABEL, PROVIDER_NAME, sendsOf } from "../../lib/ai";
 import { get, post, refusalOf } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
 import type { AiProvider } from "../../lib/api/types";
@@ -271,12 +271,14 @@ export function AiForm() {
   else if (!listedNow && wants === "url") listed = "Give the service’s URL, and its models are listed here.";
   else if (!needs.ownModel && !p.ai_model) listed = `${name.charAt(0).toUpperCase()}${name.slice(1)} has no model of its own: choose one.`;
   const parts = new Set(aiParts(p.ai_enabled));
+  const sends = sendsOf(ai, p, provider);
+  const ahead = draftAheadSends(sends);
   return (
     <div className="set-body" id="aiBody">
       <div className="set-form">
         <Check checked={p.ai_enabled} onChange={(ai_enabled) => setPrefs({ ai_enabled }, inForce)}>AI mode</Check>
         <div className="set-help">Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.</div>
-        <div className="set-help" id="aiSends">{aiSends(provider, p.ai_base_url)}</div>
+        <div className="set-help" id="aiSends">{aiSends(sends)}</div>
       </div>
       {parts.has("connection") && (
         <div className="set-form" id="aiConnection">
@@ -388,7 +390,7 @@ export function AiForm() {
           <Check checked={p.auto_tidy} onChange={(auto_tidy) => setPrefs({ auto_tidy })}>File low-priority mail by itself, once a day</Check>
           <div className="set-help">Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.</div>
           <Check checked={p.draft_ahead} onChange={(draft_ahead) => setPrefs({ draft_ahead })}>Draft replies ahead for important mail</Check>
-          <div className="set-help">Written while you’re using MailMind, within the daily limit, so a reply is ready when you open the message. Off, a reply is drafted only when you ask for one.</div>
+          <div className="set-help" id="aiDraftAhead">Written while you’re using MailMind, within the daily limit, so a reply is ready when you open the message. Off, a reply is drafted only when you ask for one.{ahead ? ` ${ahead}` : ""}</div>
         </div>
       )}
     </div>

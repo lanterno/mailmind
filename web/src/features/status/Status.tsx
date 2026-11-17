@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Dialog, Popover } from "react-aria-components";
-import { aiOffered, aiSendsInShort, offLine, PROVIDER_LABEL } from "../../lib/ai";
+import { aiOffered, aiSendsInShort, offLine, PROVIDER_LABEL, sendsOf } from "../../lib/ai";
 import { get, post } from "../../lib/api/client";
 import { minute } from "../../lib/clock";
 import { copyId, copyOf, type Copy } from "../../lib/copy";
@@ -67,7 +67,7 @@ export async function reconcile(qc: QueryClient) {
 
 function AiLine({ digest, close }: { digest: Digest; close: () => void }) {
   const a = digest.ai;
-  const baseUrl = prefs.useValue().ai_base_url;
+  const p = prefs.useValue();
   if (!a || !aiOffered(a)) return null;     // turned off: nothing to say of it here
   if (a.engine === "none") return <div className="sm-sub sm-ai"><Icon name="wind" /><span>{offLine(a)}. <SetUpAi first={close} /></span></div>;
   const failing = a.last_ok === false && a.last_error;
@@ -76,7 +76,7 @@ function AiLine({ digest, close }: { digest: Digest; close: () => void }) {
   return (
     <>
       <div className={failing ? "sm-sub sm-ai err" : "sm-sub sm-ai"}><Icon name="wind" /><span>{what}{failing ? ` · last call failed: ${a.last_error}` : ""}</span></div>
-      <div className="sm-sub sm-ai m"><Icon name="lock" /><span>{aiSendsInShort(a.provider, baseUrl)}</span></div>
+      <div className="sm-sub sm-ai m"><Icon name="lock" /><span>{aiSendsInShort(sendsOf(a, p))}</span></div>
     </>
   );
 }
