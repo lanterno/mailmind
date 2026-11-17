@@ -63,10 +63,18 @@
 - The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
   A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
   before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
-  which refuses any command not known to only read. `SmtpTransport.connect` and `safe_http.one_click_post` refuse too. `ReadOnlyError` is a
-  member of `commands.UNREACHABLE`, so a move or a flag change queues as it does offline, and
-  both queues' drains wait for a full run. What nothing queues (a sweep) answers 409 through
-  `shared.failure_answer`. A new write path either queues or calls `profile.refuse_writes` first.
+  which refuses any command not known to only read. `SmtpTransport.connect` and `safe_http.one_click_post` refuse too.
+  Above them, a change a person asks for that would reach a server is refused before anything is queued or hidden
+  here, so nothing waits for a full run: a move or a flag change and the tray's Retry (`MailCommands`' accepts and
+  `retry`), a send, a reply, Send later, an invite's answer or an unsubscribe by mail (the outbox's `enqueue`, and its
+  Retry and Send now), a draft's discard that would take its copy off a server, a mute, a snooze (its waking marks the
+  mail unread on the server), a cleanup, a sweep, a folder made, renamed or deleted, and a plan the Assistant froze.
+  Each answers 409 `/problems/read-only` ("MailMind is running read-only", `read_only: true`): `shared.failure_answer`
+  on the Python server, and `answer::failure` on the Rust one, from `mm_kernel::errors::READ_ONLY`. What only changes
+  this Mac still works: a draft saved here, a rule (a block's trash of the message it names is skipped), reading, AI.
+  What a full run queued waits for the next, since both queues' drains wait for a full run, and the snooze job's unread
+  mark on a message it wakes queues as it does offline (`ReadOnlyError` is a member of `commands.UNREACHABLE`). A new
+  write path calls `profile.refuse_writes` first.
 - A server NO or BAD means the message didn't move. A session raises it as `IMAP4.error`,
   `_imap_mutate` returns `(False, None)`, and trash, archive and junk answer a 409 (`Conflict`)
   and keep the local row. `set_flags` does the same for a star or a read mark. Never send a bulk
@@ -209,7 +217,8 @@
   the last push (`PUSH_EVERY`). Any other save tries at once, on the account's gate for `PUSH_WAIT`, and answers
   `pushed: true`, or else `pushed: false` and the `draft-push` job (`Drafts.push_round`) has it, backing off from 20 s to 15
   minutes for as long as it takes. A push that lands deletes the row only if no newer save has replaced it. Read-only the job
-  doesn't run, so saves and discards wait for a full run.
+  doesn't run, so a save is kept here until a full run pushes it, and a discard that would take a copy off the server is
+  refused (one with no copy there goes at once).
 - A try sets `tried` to its Message-ID before the APPEND. The next try looks for that copy in Drafts: it stands if it is
   this very save, and goes if a newer one has taken over. A discard takes it too, and the row leaves only after the copy
   has (a server that refuses has the last word: the row goes, and the copy stays listed).

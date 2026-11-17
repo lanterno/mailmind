@@ -490,8 +490,9 @@ ask, or for a switch you turned on in Settings › AI.
   that hasn't gone out restores it without asking the server.
 - **A read-only mode that really is.** `just dev` runs MailMind read-only: it reads your
   mail when you open it, but writes nothing to a mail server. Its connections can only read,
-  sends, moves, read marks and stars wait in their queues for a normal run, and what can't wait
-  is refused. The sync pill says Read-only, and a move says it waits.
+  and a send, a move, a read mark or a star, a snooze or a mute, a cleanup or a sweep is refused
+  before anything is queued, so nothing waits to happen on a normal run. A draft is kept on this
+  Mac, and rules and AI work as they do. The sync pill says Read-only.
   The Mac app has it as a switch in Settings › General ("Read only: MailMind changes nothing on your mail servers"),
   which it applies the next time it opens, offering to open it again; its welcome screen mentions it. Only your own
   run reads the switch: a demo or test run (one that names its own data folder) runs as it was started.
@@ -832,8 +833,8 @@ back, and the startup line `[imap] …` says how many accounts asked.
 **Web dashboard / daemon** — `uv run python -m mailmind serve [port]` (`just run`). Auto-syncs
 every 5 minutes and at once when IDLE hears new mail, and triages what arrived on a schedule of
 its own, so a slow model never holds up a sync. With `MAILMIND_PROFILE=read-only` it serves
-read-only: it writes nothing to a mail server, so sends, moves and flag changes wait in their
-queues until a full run, and it syncs nothing in the background. `just dev` does that.
+read-only: it writes nothing to a mail server, so it refuses a send, a move or a flag change
+rather than queue it for a full run, and it syncs nothing in the background. `just dev` does that.
 
 The app, at `/`, exists once built (`just build-web`, which needs Node and which `just run` does
 first). With nothing built, the server says so.
@@ -867,7 +868,7 @@ uv run python -m mailmind assess --batch         # the last 30 days' with no sum
 | Variable | Effect |
 |---|---|
 | `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. The server and every `uv run python -m mailmind` command read it. |
-| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: sends, moves, flag changes and a draft's copy on the server wait for a full run, sweeps and one-click unsubscribes are refused, and nothing syncs in the background, though a folder you open for the first time is still read to its oldest message. Any other name stops the server from starting. |
+| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server or anywhere else: a send, a move, a flag change, a snooze or mute, a cleanup, a sweep and a draft's discard from the server are refused before anything is queued, a draft is kept here until a full run pushes it, and nothing syncs in the background, though a folder you open for the first time is still read to its oldest message. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS` | On the Rust server and the Mac app, each account has its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) holds up no other; `one` makes every account share one lane. The Python app shares one unless this is `account`. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature while Claude is the provider, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. AI mode starts on where it is set or `mailmind.config.json` names a key for any provider (`"anthropic_api_key"`, `"openai_api_key"` and the rest), and off otherwise. |
