@@ -17,7 +17,7 @@ from waiting import wait_until
 pytestmark = pytest.mark.browser
 
 RECEIPT = "ada-inbox-05-receipt.eml"
-READ_ONLY_REFUSED = "Read only is on, so nothing was changed. Turn it off in Settings › General."
+READ_ONLY_REFUSED = "Read only is on, so nothing was changed."
 # The server waits a while for a folder's first read before it answers with what it has, so a list said to be on its first
 # read comes no sooner than that (8 s, the Python server's).
 FIRST_READ = 30_000
@@ -139,12 +139,11 @@ def test_read_only_refuses_what_it_files_and_the_row_stays(read_only, page, worl
     clean(page)
 
 
-def test_read_only_says_so_in_the_status_menu_with_where_to_turn_it_off(read_only, page):
+def test_read_only_says_so_in_the_status_menu_and_names_no_switch_the_page_hasnt(read_only, page):
     opened(page)
     page.locator("#statusBtn").click()
     expect(page.get_by_role("dialog", name="Sync status").locator("#readOnlyNote")).to_have_text(
-        "Read only is on: MailMind changes nothing on your mail servers, so sending, filing and starring are turned off. "
-        "Turn it off in Settings › General.")
+        "Read only is on: MailMind changes nothing on your mail servers, so sending, filing and starring are turned off.")
     clean(page)
 
 
