@@ -318,8 +318,9 @@ final class AIWordsTests: XCTestCase {
     func testWhatAIModeSendsIsSaidBeforeItIsOn() {
         XCTAssertEqual(AIWords.sends(.anthropic), """
             With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be summarized, \
-            automatically. Whole conversations go when you ask for a summary, a draft or the brief, with what you type \
-            into Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac.
+            automatically, and those senders, subjects and summaries go again to write the day’s brief and what came in \
+            since you looked. Whole conversations go only when you ask: for a summary or a draft, with what you type into \
+            Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac.
             """)
         XCTAssertTrue(AIWords.sends(.openai).contains("opening text go to OpenAI to be summarized"))
         XCTAssertTrue(AIWords.sends(.gemini).contains("opening text go to Google to be summarized"))
