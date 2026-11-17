@@ -59,7 +59,7 @@ MailMind now runs on **macOS 15 or later**, on Apple silicon and Intel Macs.
 - **Help › Copy Diagnostics** and **Help › Report a Problem** copy what the developer needs to see what went wrong,
   with no addresses, subjects or passwords in it.
 - A sync that fails says why in Settings › Accounts, and what to do about it.
-- If MailMind can't open your mail, its window says why, and offers to start fresh.
+- If MailMind can't open your mail, its window says why, and offers to start fresh where that helps.
 
 ## Good to know if you are testing
 
