@@ -16,7 +16,7 @@ settings:
     SWIFT_VERSION: "6.0"
     # The app's version, in this one place. The build number is the same, so it rises with every release, as Sparkle's
     # check for a newer version compares it.
-    MARKETING_VERSION: "0.2.0"
+    MARKETING_VERSION: "0.3.0"
     CURRENT_PROJECT_VERSION: "$(MARKETING_VERSION)"
     GENERATE_INFOPLIST_FILE: YES
     # The core is built for arm64 here: Apple silicon Macs, the iOS simulator on them, and devices. `just apple release`
