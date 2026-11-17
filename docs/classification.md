@@ -47,9 +47,13 @@ for no gate: each row is read as a sweep reads one off the server (`sweep_plan.r
 ingest saw them (`listed`: its bucket or its kept way out) and its flags as the last sync left them. Until then (a
 first scan still reading older mail, `down-to:N`, or only warmed, `recent`) the dry run reads the server. Confirm always
 reads the Inbox off the server, once, and moves what it says is still junk, still read and still unstarred: junk
-starred or marked unread elsewhere since the last sync stays, and junk read elsewhere since may go too. It audits, moves
-and verifies as before, then puts a way back for each message that went under one undo group: the request's
-`undo_group`, or a `sweep:` one of its own, which the answer names (null when nothing went). Each child is a
+starred or marked unread elsewhere since the last sync stays, and junk read elsewhere since may go too. Once the Inbox
+counts as read whole, Confirm takes nothing older than the stored Inbox's oldest message (`sweep_plan.since_stored`,
+the core's `sweeping::since_stored`), and with nothing stored it takes nothing: a sync that read only recent mail
+(`mailmind sync`'s last N days, or a folder migration 24 took as read whole) leaves the Inbox counted whole without
+storing what came before, so the preview never named it. `mailmind sweep` plans off the server and sweeps what that
+plan read. It audits, moves and verifies as before, then puts a way back for each message that went under one undo
+group: the request's `undo_group`, or a `sweep:` one of its own, which the answer names (null when nothing went). Each child is a
 `sweep_back` from the Trash to the Inbox, an account's put back together on one session and found again by its
 Message-ID, so one with none goes but can't come back (`no_undo`). The Trash is the one the server lists, found as the
 sweep's session opens (`session.find_trash`, the core's `LiveSession::trash`): the mail goes there and its way back
