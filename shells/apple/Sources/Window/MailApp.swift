@@ -173,14 +173,18 @@ final class MailApp {
     /// the account isn't held on them: a new account's folders are read live from its server, which can take a while,
     /// or up to a minute when it doesn't answer. Who the accounts are and the list are read first, so the rail shows
     /// the account and its Inbox says it is being read for the first time; its folders, counts, labels and views
-    /// follow. A place of an account that is gone gives way to every account's Inbox. The task is a test's to wait on.
+    /// follow. A place of an account that is gone, or its Inbox listed beside the brief, gives way to every account's
+    /// Inbox. The task is a test's to wait on.
     @discardableResult
     func accountsChanged() -> Task<Void, Never> {
         Task {
             #if os(macOS)
             await mailbox.readDigest()
             let was = listed
-            if let account = place?.account, !mailbox.accounts.contains(account) { place = .allInboxes }
+            // The list beside the brief is an account's Inbox while the place names none: either gone, the window
+            // goes to every account's Inbox rather than keep reading a list of an account that isn't there.
+            let named = [place?.account, listed?.account].compactMap { $0 }
+            if named.contains(where: { !mailbox.accounts.contains($0) }) { place = .allInboxes }
             if listed == was { list?.refresh() }   // else the place's change opened a list of its own
             await mailbox.readCounts()
             await mailbox.readLabels()
