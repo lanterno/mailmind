@@ -21,7 +21,9 @@ from mailmind.platform.db.uow import UnitOfWork
 # Connection-level failures = the op never reached/landed on the server → QUEUE + retry.
 # imaplib.IMAP4.abort subclasses IMAP4.error; socket.timeout subclasses OSError. A NON-abort
 # IMAP4.error is a command-level "NO/BAD" (folder gone, UID invalid, auth) = LOGICAL, not queued.
-# A read-only process (profile.ReadOnlyError) queues its changes too, for a full run to apply.
+# A read-only process refuses a change before it is queued (profile.refuse_writes) and drains no queue. A try
+# that gets this far anyway raises profile.ReadOnlyError first, unreachable, so what a full run queued waits for
+# the next.
 UNREACHABLE = (OSError, socket.timeout, socket.gaierror, ssl.SSLError, imaplib.IMAP4.abort,
                profile.ReadOnlyError)
 
@@ -141,7 +143,7 @@ class ServerOps:
         connection fails. Unless this is the first try, an earlier one may have got part of the way, so it asks the
         server before it repeats anything: exactly once, however many tries it takes. `timeout` is how long each step
         waits for the server, when someone is waiting on the try."""
-        profile.refuse_writes("an IMAP change")      # read-only: raised before any connection, so it queues
+        profile.refuse_writes("an IMAP change")      # read-only: raised before any connection, so it stays queued
         acct = self._accounts.get(row["account"])
         kind, src = row["kind"], row["src_folder"]
         mid = (row["message_id"] or "").strip()

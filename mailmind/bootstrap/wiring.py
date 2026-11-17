@@ -151,7 +151,8 @@ def start(spawn=_daemon):
     """Everything that's done before the app serves: check the profile, refuse a config that holds a secret
     itself (PlaintextSecret, which says how to move it to the Keychain), open the log, create or migrate the schema, wire the workers, and start them: the two queues' workers, the background jobs on a
     scheduler (background.schedule says which), and IDLE. Read-only, only snooze wake starts, since it
-    needs no mail server: sends and moves wait in their queues, and nothing syncs.
+    needs no mail server, and nothing syncs in the background: a change that would reach a server is refused before
+    anything is queued, and what a full run queued waits in its queue for the next.
 
     `spawn(target)` runs each worker and each job's lane; by default on a daemon thread of its own."""
     profile.check()                      # a MAILMIND_PROFILE that names no profile stops the start
@@ -164,8 +165,8 @@ def start(spawn=_daemon):
     background.JOBS = jobs                   # what /api/debug/jobs reports
     if background.nosync():
         jobs.start(spawn)
-        get_logger().info("(auto-sync disabled: the read-only profile writes nothing, so sends and moves wait "
-                          "in their queues; snooze still runs)")
+        get_logger().info("(auto-sync disabled: the read-only profile refuses any change that would reach a mail "
+                          "server, and what a full run queued waits for the next; snooze still runs)")
     else:
         spawn(compose.outbox.worker_loop)
         spawn(mailbox.commands.worker_loop)
