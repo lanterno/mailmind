@@ -648,3 +648,85 @@ final class MailboxGoingTests: XCTestCase {
         XCTAssertTrue(mailbox.aiOn)
     }
 }
+
+/// An account added or removed reads the window again at once: the rail shows it, and its Inbox says it is being read
+/// for the first time, without waiting for the end of its first sync.
+@MainActor
+final class MailboxAccountsTests: XCTestCase {
+    /// The server over `accounts`, each Inbox empty.
+    private func server(accounts: [String], syncing: Bool = false) -> FakeServer {
+        let server = Fixture.server(rows: [])
+        changeTo(server, accounts: accounts, syncing: syncing)
+        return server
+    }
+
+    /// The server now names `accounts`, and every Inbox says whether one is on its first read.
+    private func changeTo(_ server: FakeServer, accounts: [String], syncing: Bool = false) {
+        server.on("GET", API.Get.Digest.path, Fixture.digest(accounts: accounts))
+        server.on("GET", API.Get.Inboxes.path, API.InboxesListing(folder: "INBOX", grouped: true, hasMore: false,
+                                                                  items: [], offset: 0, ok: true,
+                                                                  syncing: syncing ? true : nil, total: 0))
+    }
+
+    private func opened(_ server: FakeServer) async -> MailApp {
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        app.openList()
+        await until { app.list?.firstRowsAt != nil }
+        return app
+    }
+
+    func testAnAccountAddedShowsInTheRailAndItsInboxSaysItIsReadForTheFirstTime() async {
+        let server = server(accounts: [])
+        let app = await opened(server)
+        XCTAssertEqual(app.mailbox.accounts, [])
+        XCTAssertFalse(app.mailbox.facts.syncing)
+
+        changeTo(server, accounts: [Fixture.ada], syncing: true)
+        await app.accountsChanged()
+        XCTAssertEqual(app.mailbox.accounts, [Fixture.ada], "the rail shows it at once")
+        XCTAssertEqual(app.mailbox.folders(of: Fixture.ada).count, Fixture.adaFolders.count)
+        await until { app.mailbox.facts.syncing }
+        XCTAssertTrue(app.mailbox.facts.syncing, "the list says its Inbox is being read for the first time")
+        XCTAssertEqual(app.place, .allInboxes)
+    }
+
+    func testAnAccountRemovedLeavesTheRailAndAPlaceOfItsGivesWayToEveryInbox() async {
+        let server = server(accounts: [Fixture.ada, Fixture.work])
+        let app = await opened(server)
+        app.place = .folder(account: Fixture.work, folder: "INBOX")
+        changeTo(server, accounts: [Fixture.ada])
+        await app.accountsChanged()
+        XCTAssertEqual(app.mailbox.accounts, [Fixture.ada])
+        XCTAssertEqual(app.place, .allInboxes, "its folder isn't there to show")
+    }
+
+    /// An account the rail doesn't list yet syncs: who the accounts are is read first, so its folders are read with the
+    /// rest rather than after the next round.
+    func testAnEventOfAnAccountTheRailDoesntListReadsTheAccountsBeforeTheirCounts() async {
+        let server = server(accounts: [Fixture.ada])
+        let app = await opened(server)
+        XCTAssertTrue(app.mailbox.folders(of: Fixture.work).isEmpty)
+        changeTo(server, accounts: [Fixture.ada, Fixture.work])
+        let before = server.asked.count
+        app.mailbox.heard(CoreEvent(id: "1", name: "sync-done",
+                                    data: #"{"account": "work@example.test", "kept": 3, "junk": 0}"#))
+        await until { !app.mailbox.folders(of: Fixture.work).isEmpty }
+        XCTAssertEqual(app.mailbox.accounts, [Fixture.ada, Fixture.work])
+        let since = server.asked.dropFirst(before).map(\.path)
+        let digest = since.firstIndex(of: API.Get.Digest.path), folders = since.firstIndex(of: API.Get.Folders.path)
+        XCTAssertNotNil(digest)
+        XCTAssertLessThan(digest ?? .max, folders ?? .max, "the accounts first, then their folders")
+    }
+
+    /// An event of an account the rail lists, after which the digest names another: its folders are read too.
+    func testAnAccountTheDigestNamesAnewHasItsFoldersRead() async {
+        let server = server(accounts: [Fixture.ada])
+        let app = await opened(server)
+        changeTo(server, accounts: [Fixture.ada, Fixture.work])
+        app.mailbox.heard(CoreEvent(id: "1", name: "new-mail", data: #"{"account": "ada@example.test", "count": 1}"#))
+        await until { !app.mailbox.folders(of: Fixture.work).isEmpty }
+        XCTAssertEqual(app.mailbox.folders(of: Fixture.work).count, Fixture.workFolders.count)
+    }
+}
