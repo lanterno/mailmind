@@ -52,18 +52,25 @@ work with them unset. `Pool` is a `KeptConnections`, which does the keeping. `Po
 NOOP checks and a LOGOUT closes, and that the provider gives the numbers (`recycle_seconds`, `recycle_uses`).
 
 On the Rust server and in the Mac app every account's connection is kept, with no switch (`mm_mailbox::kept`, bound in
-`mm_server::app` and `kept_wiring`). The jobs that hold an account's gate (a message opened, a change and its undo, the
+`mm_server::app` and `kept_wiring`). The jobs that hold an account's gate (a message opened, a folder synced as a
+person opens it, a change and its undo, a folder made, renamed or deleted, the Trash found in the server's LIST, the
 body backfill, the outbox's copy to Sent, a draft kept on the server) share one logged-in session, lent only to a job
 holding that gate (`Gates::holds`) and to one at a time; any other job opens a session of its own, as before. A NOOP,
 under ten seconds, checks it before each lending; one ten minutes old or lent 200 times is logged out and another
 opened, and a Proton Bridge connection after 90 seconds or 40 lendings (`kept_wiring::keeping_of`). Each job starts as
 on a new connection: a command that needs a folder is refused until the job selects one, though the server may still
-hold the last job's folder selected (an APPEND, which names its own, goes on regardless). A lending that ends with the
-connection lost, a failure or a panic drops it. A wake from sleep
-(`Host::woke`) drops every kept connection without a LOGOUT, as the server forgot them while the Mac slept; an account
-changed or removed (`kept_wiring::KeptHeard`) and a quit (`Host::close`, and `mailmind-server` once it stops serving)
-log theirs out. The sync, the older-mail lane, IDLE and the folder rail take no gate, so they still log in for
-themselves. `/api/debug/pool` says what is kept; `MAILMIND_POOL` and an account's `"pool"` are the Python app's alone.
+hold the last job's folder selected (an APPEND, which names its own, goes on regardless). The connection remembers
+that folder, whichever job selected it: a rename or delete of it, or of a folder it sits inside, ends what the job may
+ask of it there, and the connection is logged out as it comes back rather than kept, since servers differ in what they
+do with a session whose folder went. A lending that ends with the connection lost, a failure or a panic drops it. A
+wake from sleep (`Host::woke`) drops every kept connection without a LOGOUT, as the server forgot them while the Mac
+slept; an account changed or removed (`kept_wiring::KeptHeard`) logs its own out, now or as it comes back, even when the
+removal comes as a job is logging it in. A quit (`Host::close`, and `mailmind-server` once it stops serving) logs them
+all out together, each on a thread of its own, and waits `QUIT_SECONDS` (four) at most. `mailmind-server` has no signal
+handler yet, so a Ctrl-C or a SIGTERM ends it without those LOGOUTs. Each kept connection sends ENABLE CONDSTORE as it
+opens, where the server offers it, whether or not a job will ask for it. The background sync, the older-mail lane,
+IDLE and the folder rail take no gate, so they still log in for themselves; they are most of an account's logins.
+`/api/debug/pool` says what is kept; `MAILMIND_POOL` and an account's `"pool"` are the Python app's alone.
 
 IDLE's workers follow the configuration. `Realtime` is an `IdleSupervisor`, which runs them, and says what a
 worker does: which accounts, how each is reached, the IDLE loop and what a change does.

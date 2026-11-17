@@ -240,11 +240,12 @@ and the AI provider you chose (Claude by default).
 - **Full-text search across every account by default**, with the scope persisted
   between sessions. A polite background worker backfills bodies for mail ingested
   before bodies were stored — yielding instantly to anything you're doing, and moving on past
-  any the server won't give — so search covers the whole mailbox, not just recent mail. A sync keeps
+  any the server won't give — so search covers what your mail says, not just its headers. A sync keeps
   each Inbox message of under 64 KB whole as it arrives, so search finds what it says and it opens with
   no wait. On the Rust server and the Mac app the backfill asks for a folder's dozen at a time over the
-  account's kept connection, reaches back twelve months (older mail is fetched as you open it), and
-  keeps only the text of a message over 256 KB, whose attachments come when you open it.
+  account's kept connection and reaches back twelve months: older mail is found by its sender, subject and
+  the like until you open it, which fetches it. It keeps only the text of a message over 256 KB, whose
+  attachments come when you open it, and asks for nothing you opened, moved or deleted while it waited its turn.
 - **A safe operator grammar:** `from:` `to:` `cc:` `subject:` `body:` `label:`,
   `is:unread|read|flagged|answered|junk|newsletter|receipt|notification|snoozed`,
   `bucket:` `category:`, `has:attachment`, `in:` `account:`,
@@ -507,11 +508,13 @@ ask, or for a switch you turned on in Settings › AI.
   per tick against the server, every folder MailMind has synced, yields instantly to anything
   you're doing, and pushes an event so open lists drop messages deleted in another client. It prunes only what it read
   before asking the server, so mail a sync stores while it runs is never taken for a ghost.
-- **Each account keeps its IMAP connection.** On the Rust server and the Mac app, opening a message, filing,
-  undo, the outbox and the body backfill share one logged-in connection an account, never two jobs at once. It is
-  checked before each use, replaced after ten minutes or 200 uses (90 seconds or 40 for Proton Bridge, with its low
-  connection cap), dropped when the Mac wakes from sleep, and logged out when you quit or change or remove the
-  account. The Python app keeps them only with `MAILMIND_POOL=1` or an account's `"pool": true`.
+- **Each account keeps its IMAP connection.** On the Rust server and the Mac app, opening a message or a folder,
+  filing, undo, making, renaming or deleting a folder, the outbox and the body backfill share one logged-in connection
+  an account, never two jobs at once. It is checked before each use, replaced after ten minutes or 200 uses (90 seconds
+  or 40 for Proton Bridge, with its low connection cap), dropped when the Mac wakes from sleep, and logged out when you
+  change or remove the account, or rename or delete the folder it has open. Quitting logs them all out at once and
+  waits four seconds at most, so a Mac whose network has gone still quits promptly. The Python app keeps them only
+  with `MAILMIND_POOL=1` or an account's `"pool": true`.
 - **A hung server costs a click about twelve seconds, not two minutes,** and Undo is offered as soon as it answers;
   the worker keeps trying. Two processes changing your rules can't lose each other's change.
 - **A first read counts as it goes.** A folder read for the first time says how many messages have arrived so far.

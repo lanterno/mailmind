@@ -146,7 +146,9 @@
   minute. A body the server didn't give waits six hours. That is kept in memory, so a restart tries everything again.
   On the Rust server and in the Mac app (`mm_mailbox::backfill`, `body_backfill` and `fetching`) a round asks for about
   four dozen, of the last twelve months only (`REACH`), a folder's up to twelve in one FETCH of their first 64 KiB with
-  each one's whole size, on the account's kept connection. An opening that holds the whole message (`Opening::is_whole`:
+  each one's whole size, on the account's kept connection. With the gate held it looks at each message again and asks
+  for none opened, moved, removed or in a folder renamed since the round found it. An opening that holds the whole
+  message (`Opening::is_whole`:
   it ended before 64 KiB, or is exactly the size the server says; a size shorter than what came, as an estimate can be,
   counts it cut off) is kept as its body; one cut off is fetched whole, about 2 MiB a FETCH, where the message is at most
   256 KiB (`WHOLE_MOST`); a larger one keeps only its opening's text (`KeptBodies::keep_text`), which search indexes,
