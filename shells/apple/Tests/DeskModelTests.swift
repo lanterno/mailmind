@@ -307,6 +307,21 @@ final class DeskModelTests: XCTestCase {
         XCTAssertEqual(model.needs.count, 3)
     }
 
+    /// The line over the greeting says how the mail stands, with AI off too: the date until the digest or the
+    /// Inbox's unread is known, then what needs you and the unread.
+    func testTheLineOverTheGreetingSaysHowTheMailStandsOnceItIsKnown() async {
+        scriptTheBrief(ai: "none", briefing: Self.missing)
+        let model = briefModel()
+        let now = Date(timeIntervalSince1970: 1_794_739_600)
+        XCTAssertEqual(model.line(unread: nil, now: now), BriefWords.dateLine(now), "nothing read yet")
+        XCTAssertEqual(model.line(unread: 5, now: now), "5 unread", "the counts came before the digest")
+
+        await model.load()
+
+        XCTAssertEqual(model.line(unread: nil, now: now), "3 need you")
+        XCTAssertEqual(model.line(unread: 5, now: now), "3 need you · 5 unread")
+    }
+
     /// AI off for want of a key, the brief's note says what AI mode would send as Settings says it, Draft replies
     /// ahead included: it reads Settings' choices.
     func testWithAIOffTheBriefsNoteSaysWhatWouldGoAsSettingsDoes() async {

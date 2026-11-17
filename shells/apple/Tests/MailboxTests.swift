@@ -676,6 +676,30 @@ final class MailboxAccountsTests: XCTestCase {
         return app
     }
 
+    /// Every account's Inbox unread, for the brief's line: counted only once each account's Inbox is read, never a
+    /// part of it.
+    func testTheInboxesUnreadIsCountedOnceEveryAccountsInboxIsRead() async {
+        let mailbox = Mailbox()
+        mailbox.wire = Fixture.server().wire
+        XCTAssertNil(mailbox.inboxesUnread, "no account read yet")
+        await mailbox.readDigest()
+        XCTAssertNil(mailbox.inboxesUnread, "the accounts, not yet their folders")
+        await mailbox.readCounts()
+        XCTAssertEqual(mailbox.inboxesUnread, 5, "Ada's 4 and Work's 1; Junk's 2 aren't the Inbox's")
+
+        let server = Fixture.server()
+        server.on("GET", API.Get.Folders.path) { asked in
+            let account = asked.query["account"] ?? ""
+            let folders = account == Fixture.work ? [] : Fixture.adaFolders
+            return FakeServer.ok(API.Folders(account: account, folders: folders, muted: 0, ok: true, replylater: 0,
+                                             snoozed: 0, waiting: 0))
+        }
+        let partial = Mailbox()
+        partial.wire = server.wire
+        await partial.refresh()
+        XCTAssertNil(partial.inboxesUnread, "an account with no Inbox listed yet leaves the count unknown")
+    }
+
     func testAnAccountAddedShowsInTheRailAndItsInboxSaysItIsReadForTheFirstTime() async {
         let server = server(accounts: [])
         let app = await opened(server)

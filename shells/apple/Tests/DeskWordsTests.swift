@@ -26,6 +26,21 @@ final class DeskWordsTests: XCTestCase {
         XCTAssertEqual(BriefWords.needsNote(4), "4 need you")
     }
 
+    /// The line over the brief's greeting says how the mail stands, with no count it doesn't know yet.
+    func testTheBriefsLineSaysHowTheMailStands() {
+        let english = Locale(identifier: "en_US")
+        XCTAssertNil(BriefWords.update(unread: nil, needs: nil, locale: english), "the date, until a count is read")
+        XCTAssertNil(BriefWords.update(unread: nil, needs: 0, locale: english), "nothing said of a count unread")
+        XCTAssertEqual(BriefWords.update(unread: 0, needs: nil, locale: english), "Nothing unread")
+        XCTAssertEqual(BriefWords.update(unread: 0, needs: 0, locale: english), "Nothing unread")
+        XCTAssertEqual(BriefWords.update(unread: 1, needs: 0, locale: english), "1 unread")
+        XCTAssertEqual(BriefWords.update(unread: 5, needs: nil, locale: english), "5 unread")
+        XCTAssertEqual(BriefWords.update(unread: 0, needs: 1, locale: english), "1 needs you")
+        XCTAssertEqual(BriefWords.update(unread: nil, needs: 3, locale: english), "3 need you")
+        XCTAssertEqual(BriefWords.update(unread: 5, needs: 2, locale: english), "2 need you · 5 unread")
+        XCTAssertEqual(BriefWords.update(unread: 1204, needs: 1, locale: english), "1 needs you · 1,204 unread")
+    }
+
     func testWhatNeedsYouIsTheMostImportantThenTheNewest() {
         let items = [
             DeskFixture.item(110, from: "a@example.test", name: "A", subject: "a", importance: 3),

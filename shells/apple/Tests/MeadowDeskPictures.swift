@@ -105,11 +105,27 @@ final class MeadowDeskPictures: XCTestCase {
         }
     }
 
+    /// The brief's top, where the line over the greeting says how the mail stands: with mail (what the digest says
+    /// needs you and the Inbox's unread), and on a quiet day with AI turned off (nothing unread, no brief written).
+    func testTheBriefsLineSaysHowTheMailStands() async throws {
+        guard Self.folder != nil else { return }
+        let busy = try await desk()
+        let quiet = try await desk(DeskPictures.routes(digest: DeskPictures.quiet))
+        XCTAssertTrue(quiet.brief.aiTurnedOff)
+        for light in MeadowLight.allCases {
+            for (name, desk, unread) in [("mail", busy, 5), ("none", quiet, 0)] {
+                try await draw("brief-hero-\(name)-\(light.rawValue)", light: light,
+                               size: CGSize(width: 972, height: 380),
+                               brief(desk, light, unread: unread).meadowPanel().environment(desk))
+            }
+        }
+    }
+
     /// The brief with a reply written ahead for the first message, as the mockup's first card has one.
-    private func brief(_ desk: Desk, _ light: MeadowLight) -> some View {
+    private func brief(_ desk: Desk, _ light: MeadowLight, unread: Int? = nil) -> some View {
         BriefScreen(model: desk.brief, attention: desk.attention,
                     actions: BriefActions(reply: { _ in }, draftReady: { $0 == 101 }, paperTrail: {}),
-                    tasks: desk.tasks, now: DeskPictures.now(light), name: "Ada")
+                    tasks: desk.tasks, now: DeskPictures.now(light), name: "Ada", unread: unread)
     }
 
     func testTheGateInEachLight() async throws {
@@ -176,9 +192,9 @@ final class MeadowDeskPictures: XCTestCase {
     }
 
     /// The desk on scripted routes, the brief and the tasks read.
-    private func desk() async throws -> Desk {
+    private func desk(_ routes: DeskRoutes = DeskPictures.routes()) async throws -> Desk {
         let desk = Desk()
-        desk.link.routes = DeskPictures.routes()
+        desk.link.routes = routes
         desk.brief.paperTrailQuery = { "category:receipt" }
         await desk.tasks.load()
         await desk.brief.load()
@@ -309,6 +325,16 @@ enum DeskPictures {
         stats: API.DigestStats(kept: 6, needs: 3, summarized: 11, total: 11, verified: 11),
         status: [:], sync: API.SyncState(result: "ok", running: false))
 
+    /// A quiet day with AI turned off: the same accounts, nothing that needs you, and no brief written.
+    static let quiet = API.Digest(
+        accounts: [work, home],
+        ai: API.AiStatus(backgroundModel: "", cloudModel: false, engine: "none", keyFrom: "", lastTs: 0,
+                         limitMicros: 15_000_000, model: "", off: .turnedOff, provider: .anthropic),
+        aliases: [work: "Work", home: "Personal"], generated: "2026-11-15T09:00:00Z", items: [], profile: "full",
+        sendAccounts: [work, home], signatureDefault: "", signatures: [:],
+        stats: API.DigestStats(kept: 0, needs: 0, summarized: 0, total: 0, verified: 0),
+        status: [:], sync: API.SyncState(result: "ok", running: false))
+
     static let brief = API.Brief(
         cached: false, generated: "2026-11-15T08:10:00Z",
         groups: [API.BriefGroup(count: 2, label: "Work", messages: [API.Copy(folder: "INBOX", key: 101, uid: 1),
@@ -404,7 +430,7 @@ enum DeskPictures {
                                 subject: "Your e-ticket: the coast, Sat 21 Nov", uid: 4)])
 
     /// The routes the desk reads, answered with the day above.
-    static func routes(found: [API.SearchHit] = receipts) -> DeskRoutes {
+    static func routes(found: [API.SearchHit] = receipts, digest: API.Digest = digest) -> DeskRoutes {
         let routes = DeskRoutes()
         routes.answer("GET", "/api/digest", digest)
         routes.answer("GET", "/api/briefing", API.BriefingAnswer.brief(brief))

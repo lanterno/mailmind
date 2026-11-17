@@ -142,6 +142,18 @@ final class OneCoreTests: XCTestCase {
         await app.core?.close()
     }
 
+    /// The brief's line counts the Inbox unread of the mailbox of the window the desk is in.
+    func testTheDeskCountsTheWindowsInboxesForTheBriefsLine() async {
+        let app = await opened()
+        let desk = Desk()
+        XCTAssertNil(desk.inboxesUnread, "in no window yet")
+        desk.attach(app)
+        app.mailbox.wire = Fixture.server().wire
+        await app.mailbox.refresh()
+        XCTAssertEqual(desk.inboxesUnread, 5, "Ada's 4 and Work's 1, as the rail counts them")
+        await app.core?.close()
+    }
+
     func testACoreThatDidntOpenSaysTheCoresOwnWords() async {
         let app = MailApp(home: { self.home }, open: { _ in
             throw HostProblem.NotOpened(why: "the database key doesn't open the database")
