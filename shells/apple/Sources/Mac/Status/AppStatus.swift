@@ -230,36 +230,68 @@ final class AppStatus {
 
     // MARK: What a person starts
 
-    /// Sync every account now, and say so until each has synced or failed again (`syncNow`). The Rust server's digest
-    /// says nothing of a sync running yet, so the end is read off each account's record of its syncs.
+    /// Sync every account now, and say so until each account's sync has ended, whether or not it failed (`syncNow`).
+    /// The end is read off the digest's last round, which a sync sets as it ends however it went, and off each
+    /// account's record of its syncs: a failure that may pass (offline, a timeout) records nothing of its own.
     func syncNow() async {
         guard let core, !syncing else { return }
         syncing = true
         say(String(localized: "Syncing…"))
         await readHealth()
-        let before = health
+        await readDigest()
+        let before = health, round = digest?.sync.last
         _ = try? await core.post(API.Post.Refresh.self, API.NoBody())
+        var ended = false
         for _ in 0..<40 {
             try? await Task.sleep(for: .seconds(3))
             await readHealth()
             await readDigest()
-            if Self.syncEnded(before: before, after: health, accounts: digest?.accounts ?? accounts.compactMap(\.email),
-                              running: digest?.sync.running ?? false) { break }
+            ended = Self.syncEnded(before: before, after: health, accounts: addresses,
+                                   running: digest?.sync.running ?? false, round: round, now: digest?.sync.last)
+            if ended { break }
         }
         syncing = false
-        say(String(localized: "Sync complete"))
+        say(Self.synced(before: before, after: health, accounts: addresses, ended: ended, name: name))
     }
 
-    /// Whether a sync asked for has ended: nothing says one is running, and every account has a sync recorded since.
+    /// Whether a sync asked for has ended: nothing says one is running, and either a round has ended since it was
+    /// asked for (`round` was the last one before, `now` the last one now) or every account has a sync recorded since.
     static func syncEnded(before: [API.AccountStanding], after: [API.AccountStanding], accounts: [String],
-                          running: Bool) -> Bool
+                          running: Bool, round: String? = nil, now: String? = nil) -> Bool
     {
         guard !running else { return false }
-        func mark(_ records: [API.AccountStanding], _ account: String) -> [String?] {
-            let record = records.first { $0.account == account }
-            return [record?.lastOkTs, record?.lastErrorTs, record.map { String($0.syncCount) }]
-        }
+        if let now, now != round { return true }
         return accounts.allSatisfy { mark(before, $0) != mark(after, $0) }
+    }
+
+    /// What a person is told as a sync they asked for stops: done, which accounts couldn't sync (they are tried again
+    /// on their own), or that it goes on in the background.
+    static func synced(before: [API.AccountStanding], after: [API.AccountStanding], accounts: [String], ended: Bool,
+                       name: (String) -> String) -> String
+    {
+        guard ended else { return String(localized: "Still syncing. New mail shows as it comes.") }
+        let failed = accounts.filter { !wentWell(before, after, $0) }
+        switch failed.count {
+        case 0: return String(localized: "Sync complete")
+        case 1: return String(localized: "Couldn’t sync \(name(failed[0])). MailMind tries again on its own.")
+        default: return String(localized: "Couldn’t sync \(failed.count) accounts. MailMind tries again on its own.")
+        }
+    }
+
+    /// An account's record of its syncs, as far as telling a new one goes.
+    private static func mark(_ records: [API.AccountStanding], _ account: String) -> [String?] {
+        let record = records.first { $0.account == account }
+        return [record?.lastOkTs, record?.lastErrorTs, record.map { String($0.syncCount) }]
+    }
+
+    /// Whether an account's record says a sync went well since `before`: one more sync, and no error standing. A sync
+    /// that failed with trouble that may pass records nothing, and one that failed for good records its error.
+    private static func wentWell(_ before: [API.AccountStanding], _ after: [API.AccountStanding],
+                                 _ account: String) -> Bool
+    {
+        guard let now = after.first(where: { $0.account == account }), now.lastErrorTs == nil else { return false }
+        let was = before.first { $0.account == account }
+        return now.syncCount != was?.syncCount || now.lastOkTs != was?.lastOkTs
     }
 
     /// Check the mail kept here against the servers, and let go of what was deleted elsewhere: a dry run first, then
