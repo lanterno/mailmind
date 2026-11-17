@@ -354,6 +354,24 @@ final class AIWordsTests: XCTestCase {
                        "On, whole conversations of important mail go to Ollama’s servers to draft them.")
     }
 
+    /// The weekly review written ahead sends more than the Inbox each Monday: its switch says what, in the page's
+    /// words, and to whom; nothing, with a model on this Mac.
+    func testTheWeeklyReviewsSwitchSaysWhatGoesEachMonday() {
+        let review = "On, each Monday the senders, subjects and summaries of mail that needs you, the subjects and "
+            + "recipients of threads you’re waiting on, and the names of the week’s meetings go to"
+        XCTAssertEqual(AIWords.reviewGoes(.anthropic), "\(review) Anthropic to write it.")
+        XCTAssertEqual(AIWords.reviewGoes(.openai), "\(review) OpenAI to write it.")
+        XCTAssertEqual(AIWords.reviewGoes(.gemini), "\(review) Google to write it.")
+        XCTAssertEqual(AIWords.reviewGoes(.compatible, url: "https://llm.example.test/v1"),
+                       "\(review) the service at the URL you gave to write it.")
+        XCTAssertEqual(AIWords.reviewGoes(.local, cloudModel: true), "\(review) Ollama’s servers to write it.")
+        XCTAssertEqual(AIWords.reviewGoes(.compatible, url: "http://localhost:11434/v1", cloudModel: true),
+                       "\(review) Ollama’s servers to write it.")
+        XCTAssertEqual(AIWords.reviewGoes(.local), "On, it is written on this Mac, and nothing leaves it.")
+        XCTAssertEqual(AIWords.reviewGoes(.compatible, url: "http://localhost:8080/v1"),
+                       "On, it is written on this Mac, and nothing leaves it.")
+    }
+
     /// A model on this Mac whose model runs in Ollama's cloud doesn't say nothing leaves: it says what goes, and where.
     func testAModelInOllamasCloudSaysWhatLeaves() {
         XCTAssertEqual(AIWords.sends(.local, model: "gpt-oss:120b-cloud", cloudModel: true),
