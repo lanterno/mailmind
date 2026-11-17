@@ -1,7 +1,8 @@
 //! Each account's connection kept between the jobs that hold its gate (#5), over servers that write down what each
 //! connection was asked: lent only to a job holding the gate and only once at a time, checked with a NOOP before each
 //! lending, replaced when it has served long enough for its provider, closed when it fails, on a wake, when its
-//! account changes and on a quit; and a lending that starts with no folder selected.
+//! account changes and on a quit; a lending that starts with no folder selected; and a folder made, renamed or deleted
+//! on it, one it had selected logging it out.
 
 #![allow(clippy::unwrap_used)]
 
@@ -144,6 +145,22 @@ impl MailServer for Server {
 
     fn set_timeout(&mut self, seconds: u64) {
         self.said(format!("TIMEOUT {seconds}"));
+    }
+
+    fn create_folder(&mut self, name: &str) -> Result<(), ServerError> {
+        self.said(format!("CREATE {name}"));
+        Ok(())
+    }
+
+    fn rename_folder(&mut self, name: &str, to: &str) -> Result<(), ServerError> {
+        self.said(format!("RENAME {name} {to}"));
+        // A name taken is refused, and nothing changes.
+        if to == "Taken" { Err(ServerError::Refused("error")) } else { Ok(()) }
+    }
+
+    fn delete_folder(&mut self, name: &str) -> Result<(), ServerError> {
+        self.said(format!("DELETE {name}"));
+        Ok(())
     }
 }
 
@@ -607,4 +624,64 @@ fn what_it_counts_names_no_account() {
         [SlotStats { open: true, lendings: 2, age: Some(2.0) }, SlotStats { open: true, lendings: 1, age: Some(7.0) }]
     );
     assert!(!format!("{stats:?}").contains("example.test"));
+}
+
+/// What was asked of folders themselves since `from`.
+fn folder_changes(k: &Keeper, from: usize) -> Vec<String> {
+    k.log(from).into_iter().filter(|l| ["CREATE", "RENAME", "DELETE"].iter().any(|verb| l.contains(verb))).collect()
+}
+
+#[test]
+fn a_folder_made_renamed_or_deleted_goes_on_the_kept_connection() {
+    let k = keeper();
+    k.job(ADA, |s| {
+        s.create_folder("Plans").unwrap();
+        s.rename_folder("Plans", "Projects").unwrap();
+        // As a delete leaves the folder first, for one the folder isn't.
+        s.select("Projects", false).unwrap();
+        s.select("INBOX", true).unwrap();
+        s.delete_folder("Projects").unwrap();
+    });
+    assert_eq!(folder_changes(&k, 0), ["1 CREATE Plans", "1 RENAME Plans Projects", "1 DELETE Projects"]);
+    // A folder that went was not the one selected: the connection is kept for the next job.
+    k.job(ADA, |s| read(s, 1).unwrap());
+    assert_eq!(k.opened(), 1);
+    assert!(!k.log(0).contains(&"1 LOGOUT".to_owned()));
+}
+
+#[test]
+fn a_folder_the_connection_has_selected_renamed_or_deleted_logs_it_out_as_it_comes_back() {
+    let k = keeper();
+    // The job before left Receipts selected on the server.
+    k.job(ADA, |s| s.select("Receipts", false).unwrap());
+    let mark = k.mark();
+    k.job(ADA, |s| s.rename_folder("Receipts", "Paid").unwrap());
+    assert_eq!(k.log(mark)[3..], ["1 RENAME Receipts Paid", "1 TIMEOUT 3", "1 LOGOUT"]);
+    k.job(ADA, |s| read(s, 1).unwrap());
+    assert_eq!(k.opened(), 2);
+    // A folder inside the one deleted, selected in the same job: nothing more is asked of it there.
+    let mark = k.mark();
+    let answer = k.job(ADA, |s| {
+        s.select("Work/Old", false).unwrap();
+        s.delete_folder("Work").unwrap();
+        s.expunge(&[4])
+    });
+    assert_eq!(answer, Err(ServerError::Refused("error")));
+    assert!(!k.log(mark).iter().any(|l| l.contains("EXPUNGE")));
+    assert_eq!(k.log(mark).last().unwrap(), "2 LOGOUT");
+    k.job(ADA, |s| read(s, 1).unwrap());
+    assert_eq!(k.opened(), 3);
+}
+
+#[test]
+fn a_rename_the_server_refuses_leaves_the_folder_selected_and_the_connection_kept() {
+    let k = keeper();
+    let answer = k.job(ADA, |s| {
+        s.select("Receipts", false).unwrap();
+        assert_eq!(s.rename_folder("Receipts", "Taken"), Err(ServerError::Refused("error")));
+        s.expunge(&[4])
+    });
+    assert_eq!(answer, Ok(()));
+    k.job(ADA, |s| read(s, 1).unwrap());
+    assert_eq!(k.opened(), 1);
 }

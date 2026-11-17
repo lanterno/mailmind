@@ -1,7 +1,8 @@
 //! Each account's IMAP connection kept on the Rust server (#5), against a server on loopback that writes down what
 //! each connection was asked: the jobs on an account's gate log in once between them, whatever use case runs them,
 //! and every session holding no gate logs in and out as before; a connection the server ended while it sat is replaced
-//! with no job failing; a wake closes them; an account's change or removal, and a quit, log its connection out; and
+//! with no job failing; a wake closes them; an account's change or removal, and a quit, log its connection out; a
+//! folder made, renamed or deleted shares the login, and one renamed that the connection had selected logs it out; and
 //! how long one may serve is its provider's.
 
 #![allow(clippy::unwrap_used)]
@@ -160,6 +161,53 @@ fn a_quit_logs_each_kept_connection_out() {
     // Nothing is kept after.
     job(&w, ADA, 2);
     assert_eq!(w.imap.sent(ADA, "LOGOUT").len(), 2);
+}
+
+/// What `account` was asked of folders themselves, with the connection each came on.
+fn folder_changes(w: &World, account: &str) -> Vec<String> {
+    let changed = ["CREATE", "RENAME", "DELETE"].iter().flat_map(|verb| w.imap.sent_on(account, verb));
+    let mut changed: Vec<(usize, String)> = changed.collect();
+    changed.sort();
+    changed.into_iter().map(|(on, command)| format!("{on} {command}")).collect()
+}
+
+#[test]
+fn a_folder_made_renamed_and_deleted_shares_the_jobs_login() {
+    let w = world(inboxes(), &[ADA], &[]);
+    job(&w, ADA, 1);
+    let made = w.app.folder_changes.create(Some(ADA), Some("Plans")).unwrap();
+    assert_eq!(made["folder"], json!("Plans"));
+    w.app.folder_changes.rename(Some(ADA), Some("Plans"), Some("Projects")).unwrap();
+    w.app.folder_changes.delete(Some(ADA), Some("Projects"), false).unwrap();
+    job(&w, ADA, 2);
+    assert_eq!(logins(&w, ADA), [1]);
+    assert_eq!(
+        folder_changes(&w, ADA),
+        ["1 CREATE \"Plans\"", "1 DELETE \"Projects\"", "1 RENAME \"Plans\" \"Projects\""]
+    );
+    assert!(w.imap.sent(ADA, "LOGOUT").is_empty());
+}
+
+#[test]
+fn a_folder_renamed_that_the_kept_connection_has_selected_logs_it_out_and_the_next_job_logs_in_afresh() {
+    let imap = inboxes();
+    imap.add(ADA, "Receipts", [(1, note(1))]);
+    let w = world(imap, &[ADA], &[]);
+    // A message read in Receipts, which the server holds selected on the connection after.
+    on_gate(&*w.app.gates, ADA, Priority::Interactive, Wait::Ever, || {
+        let mut s = w.app.kept.open(ADA, 60).unwrap();
+        s.select("Receipts", true).unwrap();
+        assert!(s.body(1).unwrap().is_some());
+        s.logout();
+    })
+    .unwrap();
+    let renamed = w.app.folder_changes.rename(Some(ADA), Some("Receipts"), Some("Paid")).unwrap();
+    assert_eq!(renamed["folder"], json!("Paid"));
+    assert_eq!(folder_changes(&w, ADA), ["1 RENAME \"Receipts\" \"Paid\""]);
+    assert_eq!(w.imap.sent(ADA, "LOGOUT").len(), 1);
+    until(|| w.imap.open() == 0);
+    job(&w, ADA, 1);
+    assert_eq!(logins(&w, ADA), [1, 2]);
 }
 
 #[test]

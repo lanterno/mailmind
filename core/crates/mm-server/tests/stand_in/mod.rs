@@ -319,6 +319,37 @@ impl Connection {
                 self.say(format!("* BYE\r\n{tag} OK\r\n").as_bytes())?;
                 return Ok(false);
             }
+            "LIST" => {
+                let mut said = String::new();
+                for (_, name) in self.held().folders.keys().filter(|(u, _)| *u == user) {
+                    said.push_str(&format!("* LIST (\\HasNoChildren) \"/\" \"{name}\"\r\n"));
+                }
+                said.push_str(&format!("{tag} OK\r\n"));
+                self.say(said.as_bytes())?;
+            }
+            // A folder made, renamed or deleted: each name quoted, as MailMind sends it.
+            "CREATE" | "RENAME" | "DELETE" => {
+                let names: Vec<String> = command.split('"').skip(1).step_by(2).map(str::to_owned).collect();
+                {
+                    let mut state = self.held();
+                    let folders = &mut state.folders;
+                    match (verb.as_str(), names.as_slice()) {
+                        ("CREATE", [name]) => {
+                            folders.entry((user.clone(), name.clone())).or_default();
+                        }
+                        ("RENAME", [from, to]) => {
+                            if let Some(held) = folders.remove(&(user.clone(), from.clone())) {
+                                folders.insert((user.clone(), to.clone()), held);
+                            }
+                        }
+                        ("DELETE", [name]) => {
+                            folders.remove(&(user.clone(), name.clone()));
+                        }
+                        _ => {}
+                    }
+                }
+                self.say(format!("{tag} OK\r\n").as_bytes())?;
+            }
             "UID" if upper.starts_with("UID SEARCH") => {
                 let held = messages(&self.held());
                 let criteria = &command["UID SEARCH ".len()..];
