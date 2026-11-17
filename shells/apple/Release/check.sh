@@ -3,8 +3,9 @@
 # made here, in a temporary folder, so neither this nor the recipe touches the login Keychain or the owner's key.
 # Then the checks a person's Mac and Sparkle make: the .dmg mounts and holds the app and an Applications link, the app
 # is universal, its signature verifies, its Info.plist names the app, its version and the key, and the appcast names
-# the .dmg with a signature that verifies against the key the app carries. Nothing is published, and nothing here
-# opens MailMind itself, which would read and write its data folder: a probe signed as the app is loads its Sparkle.
+# the .dmg with a signature that verifies against the key the app carries. Nothing is published. MailMind itself opens
+# only on the demo's fictional world (Measure/demo_home.py), never on its data folder, once for each half that runs
+# here (on Apple silicon the Intel half runs under Rosetta); a probe signed as the app is loads its Sparkle.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 work="$(mktemp -d "${TMPDIR:-/tmp}/mailmind-release-check.XXXXXX")"
@@ -155,6 +156,20 @@ loads() {
     "$probe/MacOS/Probe" | grep -q '^loaded SPUUpdater$'
 }
 check "a program signed as the app is loads the app's Sparkle.framework" loads
+
+echo "## the app opens on fictional mail"
+# The demo's world: fake servers on loopback, a home of its own and a keychain stand-in, so the app reads nothing of
+# the person's and, on a home of its own, starts no update check (Sources/Updates.swift).
+opens() {
+    (cd "$here/../.." && uv run --quiet python "$here/Measure/demo_home.py" "$app/Contents/MacOS/MailMind" \
+        --smoke --arch "$1")
+}
+halves=(arm64 x86_64)
+if [[ "$(uname -m)" == x86_64 ]]; then halves=(x86_64); fi
+for half in "${halves[@]}"; do
+    check "its $half half opens and shows the inbox's mail" opens "$half"
+    sed -n 's/^the Mac app/    the Mac app/p' "$work/said"
+done
 
 echo "## the appcast"
 check "it names the .dmg on the release's download URL" grep -q \
