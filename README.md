@@ -529,8 +529,9 @@ from invites in any folder. Everything else waits for you to ask, or for one of 
   it again with read-only off: a normal run never pushes it by itself. No sync runs in the background and IDLE
   doesn't listen for new mail, though a sync you ask for still reads your mail, a folder you open for the first time
   is still read, and snoozed mail still wakes, here alone. On the Rust server and in the Mac app, a first scan also
-  goes on reading its older mail in the background. AI does nothing in the background: no summaries, nothing written
-  ahead. The sync pill says Read-only.
+  goes on reading its older mail in the background. AI makes no summaries in the background and writes nothing ahead;
+  the day's brief as the Inbox opens and the line on what came in since you looked still go, written from summaries
+  already made. The sync pill says Read-only.
   The Mac app has it as a switch in Settings › General ("Read only: MailMind changes nothing on your mail servers"),
   which it applies the next time it opens, offering to open it again; its welcome screen mentions it. Only your own
   run reads the switch: a demo or test run (one that names its own data folder) runs as it was started.
