@@ -69,7 +69,7 @@ describe("what leaves this Mac", () => {
       + "automatically, and more when you ask for something. Attachments never leave this Mac.");
     expect(aiSendsInShort(sends("openai"))).toContain(" go to OpenAI automatically");
     expect(aiSendsInShort(sends("gemini"))).toContain(" go to Google automatically");
-    expect(aiSendsInShort(sends("compatible", "https://llm.example.test/v1"))).toContain(" go to the OpenAI-compatible service automatically");
+    expect(aiSendsInShort(sends("compatible", "https://llm.example.test/v1"))).toContain(" go to the service at the URL you gave automatically");
   });
   it("says in short that important mail's whole conversations go too while replies are drafted ahead", () => {
     expect(aiSendsInShort(sends("anthropic", "", { draftAhead: true }))).toBe("The sender, subject and opening text of each message in "
@@ -79,7 +79,7 @@ describe("what leaves this Mac", () => {
   it("says in short that nothing leaves this Mac when the provider answers here", () => {
     expect(aiSendsInShort(sends("local"))).toBe("With a model on this Mac, nothing leaves this Mac.");
     expect(aiSendsInShort(sends("local", "http://localhost:1234/v1"))).toBe("With a model on this Mac, nothing leaves this Mac.");
-    expect(aiSendsInShort(sends("compatible", "http://localhost:8080/v1"))).toBe("With the OpenAI-compatible service on this Mac, nothing leaves this Mac.");
+    expect(aiSendsInShort(sends("compatible", "http://localhost:8080/v1"))).toBe("With the service on this Mac, nothing leaves this Mac.");
     expect(aiSendsInShort(sends("local", "", { draftAhead: true }))).toBe("With a model on this Mac, nothing leaves this Mac.");
   });
   it("says in short that a model here which runs in Ollama's cloud sends what is summarized there", () => {
@@ -91,7 +91,7 @@ describe("what leaves this Mac", () => {
     expect(aiSends(sends("anthropic"))).toBe(SENDS);
     expect(aiSends(sends("openai"))).toContain(" go to OpenAI to be summarized");
     expect(aiSends(sends("gemini"))).toContain(" go to Google to be summarized");
-    expect(aiSends(sends("compatible", "https://llm.example.test/v1"))).toContain(" go to the OpenAI-compatible service to be summarized");
+    expect(aiSends(sends("compatible", "https://llm.example.test/v1"))).toContain(" go to the service at the URL you gave to be summarized");
   });
   it("adds that important mail's whole conversations go too while replies are drafted ahead", () => {
     expect(aiSends(sends("anthropic", "", { draftAhead: true }))).toBe(`${SENDS} ${AHEAD}`);
@@ -100,19 +100,23 @@ describe("what leaves this Mac", () => {
   it("says nothing leaves this Mac when the provider answers here, drafting ahead or not", () => {
     expect(aiSends(sends("local"))).toBe("With a model on this Mac, nothing leaves this Mac.");
     expect(aiSends(sends("local", "", { draftAhead: true }))).toBe("With a model on this Mac, nothing leaves this Mac.");
-    expect(aiSends(sends("compatible", "http://localhost:8080/v1"))).toBe("With the OpenAI-compatible service on this Mac, nothing leaves this Mac.");
+    expect(aiSends(sends("compatible", "http://localhost:8080/v1"))).toBe("With the service on this Mac, nothing leaves this Mac.");
+    expect(aiSends(sends("openai", "http://127.0.0.1:8080/v1"))).toBe("With the service on this Mac, nothing leaves this Mac.");
   });
   it("says a model here that runs in Ollama's cloud sends what is summarized to Ollama's servers, and drafting ahead more", () => {
     expect(aiSends(sends("local", "", { model: "gpt-oss:120b-cloud", cloud: true }))).toBe(CLOUD);
     expect(aiSends(sends("compatible", "http://localhost:11434/v1", { model: "gpt-oss:120b-cloud", cloud: true }))).toBe(CLOUD);
     expect(aiSends(sends("local", "", { model: "gpt-oss:120b-cloud", cloud: true, draftAhead: true }))).toBe(`${CLOUD} ${AHEAD}`);
   });
-  it("says under the draft-ahead switch what drafting ahead sends, and nothing for a model that runs on this Mac", () => {
-    expect(draftAheadSends(sends("anthropic"))).toBe("On, whole conversations of important mail go to Anthropic, to draft replies before you open them.");
-    expect(draftAheadSends(sends("compatible", "https://llm.example.test/v1"))).toContain(" go to the OpenAI-compatible service, ");
-    expect(draftAheadSends(sends("local", "", { model: "gpt-oss:120b-cloud", cloud: true }))).toBe("On, whole conversations of important mail go to Ollama’s servers, to draft replies before you open them.");
-    expect(draftAheadSends(sends("local"))).toBe("");
-    expect(draftAheadSends(sends("compatible", "http://localhost:8080/v1"))).toBe("");
+  it("names the model chosen when the cloud's model has no name yet, as the Mac app does", () => {
+    expect(aiSends(sends("local", "", { model: "", cloud: true }))).toBe("The model chosen runs in Ollama’s cloud, so what is summarized goes to Ollama’s servers.");
+  });
+  it("says under the draft-ahead switch what drafting ahead sends, and that nothing leaves with a model that runs on this Mac", () => {
+    expect(draftAheadSends(sends("anthropic"))).toBe("On, whole conversations of important mail go to Anthropic to draft them.");
+    expect(draftAheadSends(sends("compatible", "https://llm.example.test/v1"))).toBe("On, whole conversations of important mail go to the service at the URL you gave to draft them.");
+    expect(draftAheadSends(sends("local", "", { model: "gpt-oss:120b-cloud", cloud: true }))).toBe("On, whole conversations of important mail go to Ollama’s servers to draft them.");
+    expect(draftAheadSends(sends("local"))).toBe("On, they are drafted on this Mac, and nothing leaves it.");
+    expect(draftAheadSends(sends("compatible", "http://localhost:8080/v1"))).toBe("On, they are drafted on this Mac, and nothing leaves it.");
   });
   it("is read from the digest for the provider in force, and from the preferences for one chosen since", () => {
     const p = { ai_provider: "local" as const, ai_base_url: "", ai_model: "gpt-oss:120b-cloud", draft_ahead: true };
