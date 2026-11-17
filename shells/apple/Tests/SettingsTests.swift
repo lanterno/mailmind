@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import XCTest
 
 private typealias F = StatusFixtures
@@ -685,5 +686,49 @@ final class SettingsCoreTests: XCTestCase {
         XCTAssertTrue(read.quietHours)
         XCTAssertEqual(read.quietFrom, "21:15")
         await close(core, status)
+    }
+}
+
+/// The first run's account sheet hangs on the window, not on the welcome: saving the first account ends the first run
+/// and takes the welcome away, and a Proton account's sheet stays open on its Bridge test until Done.
+@MainActor
+final class FirstAccountSheetTests: XCTestCase {
+    func testTheSheetStaysOpenAsTheFirstAccountEndsTheFirstRun() async throws {
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        status.hold()
+        XCTAssertTrue(status.firstRun)
+        let host = NSHostingView(rootView: Color.clear.frame(width: 1000, height: 700)
+            .modifier(StatusHooks(core: nil, status: status))
+            .meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 1000, height: 700)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        // A sheet attaches only to a window on screen: this one is, but far off it and see-through.
+        window.alphaValue = 0
+        window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        window.orderFront(nil)
+        defer {
+            status.addingFirstAccount = false
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+        status.addingFirstAccount = true
+        await deskEventually { host.layoutSubtreeIfNeeded(); return window.attachedSheet != nil }
+        XCTAssertNotNil(window.attachedSheet, "the welcome's Connect opens the account sheet")
+
+        // The account is saved: the first run ends and the welcome goes, and the sheet stays.
+        status.hold(accounts: [StatusFixtures.account("ada@example.test")])
+        XCTAssertFalse(status.firstRun)
+        for _ in 0..<20 {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertNotNil(window.attachedSheet, "the sheet outlives the welcome")
+        XCTAssertTrue(status.addingFirstAccount)
+
+        status.addingFirstAccount = false
+        await deskEventually { host.layoutSubtreeIfNeeded(); return window.attachedSheet == nil }
     }
 }
