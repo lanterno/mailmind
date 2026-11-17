@@ -91,6 +91,84 @@ final class QuittingTests: XCTestCase {
         XCTAssertEqual(asked, [.stillGoing])
     }
 
+    // MARK: What is being written
+
+    /// Routes that take a draft's save, or refuse it, and list `outbox`.
+    private func writingRoutes(outbox: [String] = [], saves: Bool = true) -> FakeRoutes {
+        let routes = FakeRoutes()
+        routes.answer("/api/contacts/known", #"{"ok": true, "thin": false, "bad": [], "items": {}}"#)
+        routes.answer("/api/draft") { _ in
+            guard saves else { throw FakeRoutes.problem(502, "The server is away") }
+            return #"{"ok": true, "draft_id": 41, "version": 1, "message_id": "<d@example.test>", "pushed": true}"#
+        }
+        routes.answer("/api/outbox", Self.outbox(outbox))
+        return routes
+    }
+
+    /// The composers' host: a composer holds it unowned, so the test keeps it.
+    private var host: FakeHost?
+
+    /// A composer with nothing in it, or with `text` typed into it since its last save.
+    private func writing(_ text: String?, _ routes: FakeRoutes) -> Composer {
+        let host = host ?? FakeHost(routes: routes)
+        self.host = host
+        var seed = ComposeSeed()
+        if text != nil {
+            seed.to = ["bo@example.test"]
+            seed.subject = "Plans"
+        }
+        let composer = Composer(seed, host: host)
+        if let text { composer.setBody(text, selection: NSRange(location: (text as NSString).length, length: 0)) }
+        addTeardownBlock { @MainActor in composer.close(force: true) }
+        return composer
+    }
+
+    /// The reader's reply and a compose window, each typed in since its last autosave: both are saved as drafts before
+    /// MailMind goes, and stay open in case a question that follows keeps it open.
+    func testWhatIsBeingWrittenIsSavedAsADraftBeforeQuitting() async {
+        let routes = writingRoutes()
+        let reply = writing("Typed just now", routes)
+        let window = writing("Half a letter", routes)
+        let idle = writing(nil, routes)
+        let quit = await Quitting.settle(routes, writing: [reply, window, idle],
+                                         ask: { _ in XCTFail("nothing to ask"); return false }, say: { _ in })
+        XCTAssertTrue(quit)
+        let saved = routes.calls(to: "/api/draft").compactMap { $0.body["text"]?.string }
+        XCTAssertEqual(Set(saved), ["Typed just now", "Half a letter"], "one save each, none for a composer with nothing in it")
+        XCTAssertFalse(reply.dirty)
+        XCTAssertFalse(window.dirty)
+        XCTAssertFalse(reply.closed, "open still, as Don’t Quit would leave it")
+        XCTAssertEqual(routes.calls(to: "/api/outbox").count, 1, "then the outbox, as before")
+    }
+
+    /// A read-only run sends nothing, but what is being written is still kept on this Mac as a draft.
+    func testAReadOnlyRunSavesWhatIsBeingWrittenAndLooksAtNoOutbox() async {
+        let routes = writingRoutes(outbox: [Self.item(1, "queued", scheduled: true)])
+        let reply = writing("Kept here", routes)
+        let quit = await Quitting.settle(routes, writing: [reply], readOnly: true,
+                                         ask: { _ in XCTFail("nothing to ask"); return false }, say: { _ in })
+        XCTAssertTrue(quit)
+        XCTAssertEqual(routes.calls(to: "/api/draft").count, 1)
+        XCTAssertEqual(routes.calls(to: "/api/outbox").count, 0)
+    }
+
+    /// A draft that couldn't be saved is asked about: Don't Quit keeps MailMind open with the words where they were.
+    func testWritingThatCouldntBeSavedIsAskedAbout() async {
+        let routes = writingRoutes(saves: false)
+        let reply = writing("Not lost", routes)
+        var asked: [Quitting.Question] = []
+        let stay = await Quitting.settle(routes, writing: [reply], ask: { asked.append($0); return false }, say: { _ in })
+        XCTAssertFalse(stay)
+        XCTAssertEqual(asked, [.unsaved])
+        XCTAssertEqual(reply.body, "Not lost")
+        XCTAssertFalse(reply.closed)
+        XCTAssertEqual(routes.calls(to: "/api/outbox").count, 0, "nothing more until MailMind is quit again")
+        let words = Quitting.words(.unsaved)
+        XCTAssertEqual(words.text,
+                       "A message you’re writing couldn’t be saved as a draft. If you quit now, what you wrote is lost.")
+        XCTAssertEqual(words.quit, "Quit Anyway")
+    }
+
     func testTheQuestionSaysItSendsWhenMailMindIsNextOpen() {
         let one = Quitting.words(.later(count: 1))
         XCTAssertEqual(one.title, "Quit anyway?")
