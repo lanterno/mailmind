@@ -122,7 +122,7 @@ impl SyncStore for World {
     fn write_flags(&self, _: &str, _: &str, _: &[(FlagRow, [i64; 5])], _: Option<u64>) -> Result<usize, Fault> {
         unreachable!()
     }
-    fn settle(&self, _: &str, _: &str, _: Option<u64>, _: &[i64], _: &str) -> Result<(), Fault> {
+    fn settle(&self, _: &str, _: &str, _: Option<u64>, _: &[i64], _: &str, _: bool) -> Result<(), Fault> {
         unreachable!()
     }
     fn is_known(&self, _: &str, _: &Fields) -> Result<bool, Fault> {
