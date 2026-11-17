@@ -110,8 +110,9 @@ Python app gets fixes only.
   `https://mail.google.com/` (and perhaps the Gmail API in place of IMAP), and possibly a yearly security assessment.
 - **A removed account's mail stays in the backups** · medium value · effort S ·
   [#60](https://github.com/lanterno/mailmind/issues/60) — Removing an account can delete its mail from the database,
-  but `backups/` (the copy before each upgrade, the newest three, and any Start Fresh moved aside) keeps it until
-  newer copies replace them. Take it out of them too, or say in Settings that they keep it, and until when.
+  but `backups/` keeps it: the copy before each upgrade until newer ones replace it (the newest three are kept), and a
+  copy Start Fresh moved aside until it is deleted, since nothing prunes those. Take it out of them too, or say in
+  Settings that they keep it, and until when.
 - **Tauri's accepted advisories** · medium value · effort S · [#16](https://github.com/lanterno/mailmind/issues/16) — `shells/desktop/src-tauri/osv-scanner.toml` ignores seven
   until 2027-02-12. Upgrade past them, or look at each again, before then.
 
