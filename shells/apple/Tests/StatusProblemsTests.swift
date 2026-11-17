@@ -44,6 +44,19 @@ final class StatusProblemsTests: XCTestCase {
                        "Some background work isn’t going through: expiry rules. Help › Copy Diagnostics says more.")
     }
 
+    func testEveryJobTheServersRunIsNamedInWordsNeverByItsName() {
+        // Both servers' jobs (mm-server's workers and background, mailmind/bootstrap/background.py), the first scan's
+        // read of older mail among them.
+        let jobs = ["sync", "snooze", "reconcile", "draft-push", "expire", "forget", "backfill", "older-mail", "assess",
+                    "draft-ahead", "brief-ahead", "review-ahead", "tidy"]
+        for job in jobs {
+            XCTAssertNotEqual(StatusWords.jobWords(job), job, "\(job) is said in words")
+        }
+        XCTAssertEqual(StatusWords.failingLine(["older-mail"]), """
+            Some background work isn’t going through: reading your older mail. Help › Copy Diagnostics says more.
+            """)
+    }
+
     func testTheStatusReadsWhichJobsFailFromTheCore() async throws {
         let folder = FileManager.default.temporaryDirectory.appending(path: "mailmind-jobs-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
