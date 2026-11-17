@@ -23,12 +23,13 @@ See [Features](#features) for what ships today and
   [uv](https://docs.astral.sh/uv/) fetches on first run.
 - **Your data stays local.** Mail is stored in an encrypted SQLite file on your machine; the only thing that leaves it
   is the mail the AI works on, sent to the provider you chose (Claude by default), and nothing at all with AI mode off,
-  as a fresh install starts. With AI mode on, the sender, subject and opening text of each message in your Inbox go to
-  the provider you chose (Anthropic, OpenAI, Google, or the service you named) to be summarized, automatically: the last
-  30 days’ as soon as you turn it on, then each new one. Those senders, subjects and summaries go again to write the
-  day’s brief and what came in since you looked. Whole conversations go only when you ask: for a summary or a draft,
-  with what you type into Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac. See
-  [what AI sends](#ai-intelligence) for a model on this Mac and drafting ahead.
+  as a fresh install starts unless a key for AI is already there. With AI mode on, the sender, subject and opening
+  text of each message in your Inbox go to the provider you chose (Anthropic, OpenAI, Google, or the service you
+  named) to be summarized, automatically: the last 30 days’ as soon as you turn it on, then each new one. Those
+  senders, subjects and summaries go again to write the day’s brief and what came in since you looked. Whole
+  conversations go only when you ask: for a summary or a draft, with what you type into Ask, a search written as a
+  sentence, or Rewrite. Attachments never leave this Mac. See [what AI sends](#ai-intelligence) for a model on this
+  Mac and drafting ahead.
 - **Any mailbox.** Gmail and Google Workspace, iCloud, Yahoo, AOL, Fastmail, any other IMAP server
   (cPanel/Dovecot/…), and Proton (through its Bridge), added in Settings from the address. Outlook and Hotmail aren't
   supported yet ([#47](https://github.com/lanterno/mailmind/issues/47)).
@@ -213,9 +214,11 @@ and the AI provider you chose (Claude by default).
   by typing, with Undo.
 - **Clean up several senders at once.** Mark them in the drawer and do it from one preview, each with its reason from
   the AI, under one Undo.
-- **Sweep an inbox's junk, with a look first.** Curate's **Sweep** reads the Inbox on the server and lists what
-  would go before you confirm: each junk bucket with its count, the senders with the most of it and its newest
-  subjects. Starred and unread mail always stays, and the plan says how much; the button counts only what would go. A
+- **Sweep an inbox's junk, with a look first.** Curate's **Sweep** lists what would go at once, from what MailMind
+  has stored of the Inbox (or from the server, until the account's first scan has read it all): each junk bucket with
+  its count, the senders with the most of it and its newest subjects. Confirm reads the Inbox on the server before
+  anything moves, and moves only what is still junk, read and unstarred there, none of it older than what the list
+  could name. Starred and unread mail always stays, and the plan says how much; the button counts only what would go. A
   sweep takes the newest 500 at a time (sweep again for the rest), and one `z` puts it back from the Trash, an
   account's at once (the plan says how much of it, if any, has no Message-ID to find it by and can't come back). A
   sweep the server stops says so in plain words: try again, or, if some went first, Undo brings that back; and when it
@@ -269,7 +272,8 @@ and the AI provider you chose (Claude by default).
 
 Everything here runs through the AI provider you chose (Claude by default) and returns
 **schema-validated** structured output, so malformed-response errors don't reach the UI.
-AI mode starts off on a fresh install, and while it is off nothing goes to any provider. What it sends once it is on,
+AI mode starts off on a fresh install, unless `ANTHROPIC_API_KEY` is set or `mailmind.config.json` names a key for
+any provider, and while it is off nothing goes to any provider. What it sends once it is on,
 as Settings, Help and the Mac app's first run say before you turn it on:
 
 > With AI mode on, the sender, subject and opening text of each message in your Inbox go to the provider you chose
@@ -284,13 +288,13 @@ leaves this Mac", unless the model is one of Ollama's cloud models (its name end
 runs it on its own servers). Then they are, for one named `gpt-oss:120b-cloud`: "gpt-oss:120b-cloud runs in Ollama’s
 cloud, so what is summarized goes to Ollama’s servers."
 
-So three things go by themselves, and each reads only the Inbox: new mail's summaries, the line on what came in since
-you looked as the new-mail pill shows, and the day's brief as the Inbox opens when none is stored, the last two
-written from the senders, subjects and summaries already made. Mail you sent, drafted, deleted or filed elsewhere goes
-only when you ask, or with a switch you turned on in Settings › AI: **Draft replies ahead for important mail** sends
-whole conversations, your own replies in them too, and **Have last week’s review ready each Monday** sends the subjects
-and recipients of the threads you are waiting on, with the names of the week's meetings from invites in any folder.
-Everything else waits for you to ask, or for one of those switches.
+So three things go by themselves, and each reads only the Inbox: the summaries of its mail from the last 30 days, the
+line on what came in since you looked as the new-mail pill shows, and the day's brief as the Inbox opens when none is
+stored, the last two written from the senders, subjects and summaries already made. Mail you sent, drafted, deleted or
+filed elsewhere goes only when you ask, or with a switch you turned on in Settings › AI: **Draft replies ahead for
+important mail** sends whole conversations, your own replies in them too, and **Have last week’s review ready each
+Monday** sends the subjects and recipients of the threads you are waiting on, with the names of the week's meetings
+from invites in any folder. Everything else waits for you to ask, or for one of those switches.
 
 - **The Claude API.** With an API key set, the server and every command call the Messages API
   through the official Anthropic SDK (`claude-opus-5-5` unless you choose another in Settings or
@@ -444,10 +448,11 @@ Everything else waits for you to ask, or for one of those switches.
   folder. Saves of one message go in turn and leave one copy, whatever overlaps them, and the
   Drafts list follows at once: a replaced, discarded or sent draft leaves it, on the server first.
 - **Drafts that don't need the server.** A save lands on this machine first, so writing goes on
-  whether the server is there or not, and read-only too. The server's copy follows when you close the message or
-  save, and at most once a minute while you type, and a short reply sent within the minute never
-  touches your Drafts folder. A draft that can't reach its server waits in the outbox panel, with Edit and Discard,
-  and goes by itself once it can. A discard waits the same way, and a crash mid-save never leaves a second copy.
+  whether the server is there or not, and read-only too, where it stays on this Mac until you save it again in a full
+  run. The server's copy follows when you close the message or save, and at most once a minute while you type, and a
+  short reply sent within the minute never touches your Drafts folder. A draft that can't reach its server waits in
+  the outbox panel, with Edit and Discard, and goes by itself once it can. A discard waits the same way, and a crash
+  mid-save never leaves a second copy.
 - **Drafts that don't lose your words.** What you type during a save is saved next. If the
   save that closes a message fails, the message stays a click away, and reopening it there
   (or by Undo Send) saves it when you close it again. If you changed a draft in another window, a
@@ -521,7 +526,11 @@ Everything else waits for you to ask, or for one of those switches.
   filter, a muted thread or a snooze waking queues nothing either; what a normal run queued earlier still waits for
   the next one. What changes only this Mac still works: reading, rules, AI, cancelling a queued send, and saving a
   draft, which is kept on this Mac (the outbox panel says "Kept on this Mac") and goes to its server only when you save
-  it again with read-only off. Nothing syncs in the background. The sync pill says Read-only.
+  it again with read-only off: a normal run never pushes it by itself. No sync runs in the background and IDLE
+  doesn't listen for new mail, though a sync you ask for still reads your mail, a folder you open for the first time
+  is still read, and snoozed mail still wakes, here alone. On the Rust server and in the Mac app, a first scan also
+  goes on reading its older mail in the background. AI does nothing in the background: no summaries, nothing written
+  ahead. The sync pill says Read-only.
   The Mac app has it as a switch in Settings › General ("Read only: MailMind changes nothing on your mail servers"),
   which it applies the next time it opens, offering to open it again; its welcome screen mentions it. Only your own
   run reads the switch: a demo or test run (one that names its own data folder) runs as it was started.
@@ -960,7 +969,7 @@ uv run python -m mailmind assess --batch         # the last 30 days' with no sum
 | Variable | Effect |
 |---|---|
 | `MAILMIND_HOME` | The data directory: everything under [Where your data lives](#where-your-data-lives-all-local-all-git-ignored). Unset, the repo folder, where it has always lived. It must already exist; MailMind never creates it. The server and every `uv run python -m mailmind` command read it. |
-| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server: every change one would see (a send, a move, a flag change, a snooze or mute, an RSVP, a cleanup, a sweep, a folder made, renamed or deleted, a draft's discard from the server, and an Undo that would ask a server) is refused before anything is queued, a draft is kept here until it is saved again on a full run, and nothing syncs in the background, though a folder you open for the first time is still read to its oldest message. Any other name stops the server from starting. |
+| `MAILMIND_PROFILE` | `full` (the default) or `read-only`. Read-only writes nothing to a mail server: every change one would see (a send, a move, a flag change, a snooze or mute, an RSVP, a cleanup, a sweep, a folder made, renamed or deleted, a draft's discard from the server, and an Undo that would ask a server) is refused before anything is queued. A draft saved read-only is kept on this Mac and reaches its server only once it is saved again in a full run, which never pushes it by itself. No sync or IDLE runs in the background, though a folder you open for the first time is still read to its oldest message (on the Rust server and the Mac app, a first scan's older mail goes on being read in the background), and snoozed mail still wakes, on this Mac alone. Any other name stops the server from starting. |
 | `MAILMIND_WORKERS` | On the Rust server and the Mac app, each account has its own lane to its mail server, so one that hangs (Bridge stuck, a host that stops answering) holds up no other; `one` makes every account share one lane. The Python app shares one unless this is `account`. |
 | `MAILMIND_NOSYNC=1` | The older switch for `MAILMIND_PROFILE=read-only`, which it wins over. |
 | `ANTHROPIC_API_KEY` | Call the Claude API for every AI feature while Claude is the provider, billed to that key's organization. A key `"anthropic_api_key"` in `mailmind.config.json` names (`ai key` keeps one in the Keychain) wins over it. AI mode starts on where it is set or `mailmind.config.json` names a key for any provider (`"anthropic_api_key"`, `"openai_api_key"` and the rest), and off otherwise. |
