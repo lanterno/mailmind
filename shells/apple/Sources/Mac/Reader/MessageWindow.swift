@@ -36,6 +36,16 @@ struct MessageWindow: View {
     }
 }
 
+/// A message window's head: an empty band the traffic lights stand on, and a press anywhere on it moves the window.
+struct MessageWindowBar: View {
+    var body: some View {
+        Color.clear
+            .frame(height: MessageWindow.barHeight)
+            .frame(maxWidth: .infinity)
+            .background { WindowDragArea() }
+    }
+}
+
 private struct MessageWindowContent: View {
     let core: Core
     let copy: MailCopy
@@ -51,7 +61,9 @@ private struct MessageWindowContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: MessageWindow.barHeight)
+            // The bar the traffic lights stand on, which moves the window wherever it is pressed, as every window's
+            // head does.
+            MessageWindowBar()
             if find.open, opened != nil { ReaderFindBar(find: find) }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
