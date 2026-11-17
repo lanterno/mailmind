@@ -18,9 +18,10 @@ pytestmark = pytest.mark.browser
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 KEPT = "Kept on this Mac, with each key in your login Keychain."
-SENDS = ("With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be summarized, automatically. "
-         "Whole conversations go when you ask for a summary, a draft or the brief, with what you type into Ask, a search written "
-         "as a sentence, or Rewrite. Attachments never leave this Mac.")
+SENDS = ("With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be summarized, automatically, "
+         "and those senders, subjects and summaries go again to write the day’s brief and what came in since you looked. Whole "
+         "conversations go only when you ask: for a summary or a draft, with what you type into Ask, a search written as a "
+         "sentence, or Rewrite. Attachments never leave this Mac.")
 
 
 def clean(page):
