@@ -50,6 +50,30 @@ final class CurateModel {
     var batching: Batching?
     /// An account's sweep, planned and waiting for Confirm: what goes, bucket by bucket, and what stays.
     private(set) var sweepArmed: API.AccountSwept?
+    /// A sweep's plan or the sweep itself, while the server reads the account's Inbox and moves what goes: its card
+    /// says so, and Sweep and Confirm wait until the answer comes.
+    private(set) var sweepBusy: SweepBusy?
+
+    /// What a sweep is doing, and of which account.
+    struct SweepBusy: Equatable {
+        enum Step: Equatable {
+            /// Reading the Inbox to plan what goes.
+            case planning
+            /// Moving what goes to the Trash.
+            case sweeping
+        }
+
+        let account: String
+        let step: Step
+
+        /// What the account's card says meanwhile.
+        var words: String {
+            switch step {
+            case .planning: String(localized: "Reading this Inbox to plan the sweep…")
+            case .sweeping: String(localized: "Sweeping…")
+            }
+        }
+    }
     var filterForm: FilterForm?
 
     @ObservationIgnored let link: CoreLink
@@ -197,9 +221,11 @@ final class CurateModel {
 
     // MARK: Sweeps
 
-    /// Plan an account's sweep, and wait for Confirm.
+    /// Plan an account's sweep, and wait for Confirm. One at a time: a plan reads the whole Inbox from its server.
     func armSweep(_ account: String) async {
-        guard let routes = link.routes else { return }
+        guard let routes = link.routes, sweepBusy == nil else { return }
+        sweepBusy = SweepBusy(account: account, step: .planning)
+        defer { sweepBusy = nil }
         do {
             let planned = try await routes.post(API.Post.Sweep.self, API.SweepBody(account: account, dryRun: true))
             guard let result = planned.results.first else { return notices.say(String(localized: "Nothing to sweep")) }
@@ -223,8 +249,9 @@ final class CurateModel {
     }
 
     func sweep() async {
-        guard let routes = link.routes, let armed = sweepArmed else { return }
+        guard let routes = link.routes, let armed = sweepArmed, sweepBusy == nil else { return }
         sweepArmed = nil
+        sweepBusy = SweepBusy(account: armed.account, step: .sweeping)
         notices.say(String(localized: "Sweeping \(armed.planned)…"))
         do {
             let swept = try await routes.post(API.Post.Sweep.self, API.SweepBody(
@@ -242,6 +269,7 @@ final class CurateModel {
         } catch {
             notices.say(Self.sweepFailed(error, planning: false))
         }
+        sweepBusy = nil
         await again()
     }
 

@@ -407,12 +407,25 @@ private struct InboxRow: View {
                     Text("\(account.junk) junk · \(account.keep) keep").foregroundStyle(meadow.ink3)
                 }
                 Spacer()
-                if let offer = CurateModel.sweepOffer(account), model.sweepArmed?.account != account.account {
+                if let offer = CurateModel.sweepOffer(account), model.sweepArmed?.account != account.account,
+                   model.sweepBusy?.account != account.account {
+                    // One sweep at a time: its plan reads the whole Inbox from the server.
                     Button("Sweep \(offer)") { Task { await model.armSweep(account.account) } }
                         .meadowButton(small: true)
+                        .disabled(model.sweepBusy != nil)
                 }
             }
             .font(.meadow(.ui, 13))
+            if let busy = model.sweepBusy, busy.account == account.account {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(busy.words).font(.meadow(.ui, 13.5)).foregroundStyle(meadow.sunInk)
+                    Spacer()
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(meadow.sunWash))
+                .accessibilityElement(children: .combine)
+            }
             if let armed = model.sweepArmed, armed.account == account.account {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Sweep **\(nameOf(account.account))** · **\(armed.planned)** to Trash")
