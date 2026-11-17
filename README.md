@@ -576,7 +576,10 @@ from invites in any folder. Everything else waits for you to ask, or for one of 
   in with the Bridge's password, which only a saved account is tested with, so a new one is tested once it is added.
 - **A failed login says what to do next.** In plain words, by what went wrong: a password refused (with the provider's
   app-password page), a server that didn't answer, a certificate not trusted, Proton Bridge not running, or an outgoing
-  server that refused what the incoming one took. What kind of failure it was stays beside it in small type.
+  server that refused what the incoming one took. On the Mac, an account's Sync card says it once and puts the fix
+  beside it: **Enter App Password…**, **Change Password…** or **Edit Server…** opens the account on that field, tries
+  what you type before keeping it, and syncs again once it logs in. A test that fails the same way says only that.
+  What kind of failure it was goes in **Help › Copy Diagnostics**; the page shows it beside the sentence in small type.
 - **Trash is found, not assumed.** A delete, a sweep and an expiry rule put mail in the account's Trash where its server
   lists it, else in the folder the server marks as Trash (`\Trash`), else in one named like one, so a Gmail in another
   language and iCloud's "Deleted Messages" work as they are, and Undo brings a delete or a sweep back from there.
