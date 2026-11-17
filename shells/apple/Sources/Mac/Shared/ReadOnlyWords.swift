@@ -1,7 +1,8 @@
 #if os(macOS)
 import Foundation
 
-/// What the app says of read only (Settings › General's switch, `MAILMIND_PROFILE=read-only`), in the page's words:
+/// What the app says of read only (Settings › General's switch, `MAILMIND_PROFILE=read-only`), in the page's words and
+/// then where to turn it off, which only the app has a switch for:
 /// the status's note while it is on, and what a person is told when the server turned down something that would have
 /// reached a mail server (a 409 with `read_only`). The server says no up front, before anything is queued or hidden,
 /// so nothing a person does waits for later: what they asked for didn't happen.
