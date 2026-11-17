@@ -157,6 +157,33 @@ final class ReadOnlyTests: XCTestCase {
         back.close(force: true)
     }
 
+    func testADiscardReadOnlyTurnsDownKeepsTheComposerOpenWithItsWords() async {
+        let routes = FakeRoutes()
+        routes.answer(API.Post.Draft.path) { body in
+            if body["delete"] == .bool(true) { throw ReadOnlyTests.problem }   // its copy may be on the server
+            return #"{"ok": true, "draft_id": 41, "version": 2, "message_id": "<d@example.test>", "pushed": false}"#
+        }
+        let host = FakeHost(routes: routes)
+        var seed = ComposeSeed()
+        seed.to = ["bo@example.test"]
+        seed.subject = "Plans"
+        seed.draftId = 41   // opened from Drafts
+        seed.version = 1
+        let composer = Composer(seed, host: host)
+        composer.setBody("Thursday works.", selection: NSRange(location: 15, length: 0))
+
+        await composer.discard()
+
+        XCTAssertEqual(routes.calls(to: API.Post.Draft.path).last?.body["delete"], .bool(true))
+        XCTAssertFalse(composer.closed, "the draft is still there, so its composer stays")
+        XCTAssertEqual(host.closedCount, 0)
+        XCTAssertTrue(composer.dirty, "its words are still to save")
+        XCTAssertEqual(composer.body, "Thursday works.")
+        XCTAssertEqual(composer.notice, Self.refused)
+        XCTAssertEqual(host.announced.last, Self.refused)
+        composer.close(force: true)
+    }
+
     // MARK: The desk, curation and folders
 
     func testTheDeskCurationAndFoldersSayReadOnly() {
