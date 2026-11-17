@@ -17,9 +17,12 @@ on a Developer ID ([#42](https://github.com/lanterno/mailmind/issues/42)).
 - **Which Macs.** macOS 15 or later, Apple silicon or Intel. The floor is the `macOS` of `deploymentTarget` in
   `shells/apple/project.yml`; the core is built for the same (the recipe reads it there), the app's Info.plist says
   it (`LSMinimumSystemVersion`), and the appcast copies it from there, so Sparkle offers an update only to a Mac that
-  can run it. The app uses nothing newer than macOS 15 has: the build fails on an API that needs a newer macOS, and
-  such an API goes behind `if #available` with a fallback in Meadow's look. The tests and CI run on macOS 26, so the
-  app has yet to open on macOS 15 itself, and its Intel half has opened only under Rosetta (the release check's).
+  can run it. The build fails on a Swift or Objective-C API newer than macOS 15, and such an API goes behind
+  `if #available` with a fallback in Meadow's look. That is all a build shows. The core's calls into the system (its
+  Rust and the C it compiles in, which dyld binds as the app starts, with no fallback) and how macOS 15 draws the
+  window are covered only by opening the app on macOS 15: CI's `mac-floor` jobs open the release check's .dmg there,
+  on Apple silicon (`macos-15`) and on a real Intel Mac (`macos-15-intel`). The tests and the rest of CI run on
+  macOS 26.
 - **The .dmg's window.** MailMind on the left, an arrow, Applications on the right, over a picture that says to drag
   one onto the other and how to open the app the first time. `Release/dmg-background.swift` draws the picture, and
   `Release/dmg.py` has [dmgbuild](https://github.com/dmgbuild/dmgbuild) (pyproject.toml's `release` group) write the
@@ -77,16 +80,18 @@ half in their login Keychain; it never goes in the repo, a file, CI or anyone el
 
 1. **The version.** Raise `MARKETING_VERSION` in `shells/apple/project.yml` (0.1.0, 0.2.0, ...), and commit it.
    A version lower than or equal to the last release's is never offered as an update.
-2. **Build it.** `just apple release`. It builds and signs everything, writes the appcast with Sparkle's
+2. **CI on that commit.** The clients workflow's run on it is green, its `mac-floor` jobs among them: they are the
+   only run of the app on the macOS it says it needs, and on an Intel Mac, so a release waits for them.
+3. **Build it.** `just apple release`. It builds and signs everything, writes the appcast with Sparkle's
    `generate_appcast`, which signs the .dmg with the key in the login Keychain (macOS asks once to let it use the
    key: **Always Allow** saves asking again), and checks that signature against the public key inside the app. It
    prints the .dmg's size and a `gh release create` command, and says so if the tree has changes not committed.
-3. **Try it.** Open the .dmg, drag MailMind to a folder of your own, open it, and look around.
-4. **The notes.** Write what changed at the top of `shells/apple/build/release/notes.md`. The rest of the template
+4. **Try it.** Open the .dmg, drag MailMind to a folder of your own, open it, and look around.
+5. **The notes.** Write what changed at the top of `shells/apple/build/release/notes.md`. The rest of the template
    (`shells/apple/Release/notes.md`) says how to install and how to open the app the first time.
-5. **Publish.** Run the printed command. It tags the commit the build came from, makes the release the latest, and
+6. **Publish.** Run the printed command. It tags the commit the build came from, makes the release the latest, and
    uploads the .dmg and `appcast.xml`. The recipe never publishes by itself.
-6. **Check the update.** Open an older copy and choose **MailMind › Check for Updates…**: it should offer the new
+7. **Check the update.** Open an older copy and choose **MailMind › Check for Updates…**: it should offer the new
    one.
 
 `just apple release-check` runs the whole recipe with a throwaway key made in a temporary folder, never the login
@@ -99,7 +104,8 @@ the app in the .dmg opens on the demo's fictional mail (`Measure/demo_home.py`: 
 own and a keychain stand-in, where a release's copy starts no update check) until its inbox shows rows, once for each
 half: on Apple silicon the Intel half runs under Rosetta, which the check needs (`softwareupdate --install-rosetta`).
 Run it after changing anything in `shells/apple/Release`; CI runs it on every change to the clients, even when an
-earlier step failed.
+earlier step failed. `MAILMIND_RELEASE_CHECK_KEEP=DIR` keeps a copy of the .dmg it made: CI keeps it as an artifact
+for a few days, and `mac-floor` opens it on macOS 15 the same way, each half natively on a Mac of its kind.
 
 ## Symbols, for crash reports
 
