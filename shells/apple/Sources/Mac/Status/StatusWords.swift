@@ -206,7 +206,8 @@ enum StatusWords {
     /// What a failed sync's kind (`last_error_kind`) means, in a sentence that says what to do next. A kind this
     /// build doesn't know reads as something that went wrong. `type` is the account's: a Proton account's trouble is
     /// its Bridge, and a Gmail account has no server's name or port to check but wants an App Password, each of whose
-    /// refusals `error`, the trouble's class, tells apart.
+    /// refusals `error`, the trouble's class, tells apart. A login held back after a refusal fails as `LoginRefused`
+    /// whatever Google first said, so Gmail's words for that class hold for each of Google's refusals.
     static func syncProblem(_ kind: String, type: String? = nil, error: String? = nil) -> String {
         if bridgeDown(kind, type: type) {
             return String(localized: """
@@ -232,10 +233,16 @@ enum StatusWords {
                 IMAP is switched off for this account. Turn it on in Gmail’s settings, or ask your Workspace admin to, \
                 then choose Retry.
                 """)
-        case ("gmail", "AUTH"):
+        case ("gmail", "AUTH") where error == "LoginNeedsAppPassword":
             return String(localized: """
                 Gmail turned down the password: it needs an App Password, not your Google password. Make one, then \
                 choose Edit and paste it.
+                """)
+        case ("gmail", "AUTH"):
+            return String(localized: """
+                Gmail turned down the login. If you typed your Google password, Gmail needs an App Password instead: \
+                make one, then choose Edit and paste it. If you already use one, sign in to Gmail in your browser and \
+                check that IMAP is on, then choose Retry.
                 """)
         case ("gmail", "NETWORK"):
             return String(localized: "MailMind couldn’t reach Gmail. Check your internet connection, then choose Retry.")
@@ -296,7 +303,7 @@ enum StatusWords {
 
     /// The banner's words for the accounts that can't connect, and the page that helps. Where each is a Proton account
     /// whose Bridge isn't running, it says to start Bridge, and where each is one whose Bridge didn't answer in time,
-    /// to wait for it or open it again; where the one is a Gmail account that wants an App Password, it says so;
+    /// to wait for it or open it again; where the one is a Gmail account Google turned down, it says what Gmail wants;
     /// otherwise how many, by name. `type` and `name` look an account up; `health` is each account's syncs, which say
     /// the trouble's kind and class.
     static func alert(_ bad: [String], health: [API.AccountStanding], type: (String) -> String?,
@@ -319,8 +326,13 @@ enum StatusWords {
         if troubles.count == 1, let one = troubles.first, let kind = one.record?.lastErrorKind, one.type == "gmail",
            let link = syncHelp(kind, type: one.type, error: one.record?.lastError)
         {
-            return (String(localized: "\(names) can’t connect: Gmail needs an App Password, not your Google password."),
-                    link)
+            // A held login says only LoginRefused, whatever Google said first: only Google's own class is sure.
+            return one.record?.lastError == "LoginNeedsAppPassword"
+                ? (String(localized: "\(names) can’t connect: Gmail needs an App Password, not your Google password."), link)
+                : (String(localized: """
+                    \(names) can’t connect: Gmail turned down the login. If you typed your Google password, it needs \
+                    an App Password.
+                    """), link)
         }
         return (bad.count == 1 ? String(localized: "1 account couldn’t connect (\(names)).")
                     : String(localized: "\(bad.count) accounts couldn’t connect (\(names))."), nil)
