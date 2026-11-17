@@ -17,6 +17,7 @@ import { Icon } from "../../lib/ui/Icon";
 import { offerUndo, readAgain, undoGroup, useDigest } from "../mailbox";
 import { FilterDialog, Filters } from "./Filters";
 import { curateOpen } from "./open";
+import { PLANNING, sweeps, sweepingWords, sweepWhile } from "./sweeping";
 import { sweepFailed, sweepStopped, undoBrings } from "./sweepWords";
 
 const BUCKET_COLOR: Record<string, string> = { "spam/scam": "--scam", blocked: "--block", "newsletters/marketing": "--mkt", "automated-notifications": "--notif", "receipts/transactional": "--txn", "personal/protected": "--keep", "other/personal-ish": "--personal" };
@@ -271,9 +272,10 @@ function Inboxes() {
   const { data: digest } = useDigest();
   const { data } = useQuery({ queryKey: ["stats"], queryFn: () => get("/api/stats") });
   const [armed, setArmed] = useState<SweepPlan | null>(null);
+  const running = sweeps.useValue();
   const nameOf = (a: string) => digest?.aliases?.[a] || shortAddress(a);
   if (!data) return <div style={{ color: "var(--faint)", fontSize: 11 }}>Measuring live inboxes…</div>;
-  const arm = async (account: string) => {
+  const arm = (account: string) => sweepWhile(account, PLANNING, async () => {
     try {
       const r = (await post("/api/sweep", { account, dry_run: true })).results[0]!;
       if (r.error) toast(sweepStopped(r.error));
@@ -282,8 +284,8 @@ function Inboxes() {
     } catch (e) {
       toast(readOnlyOr(e, sweepFailed(refusalOf(e)?.detail, true)));
     }
-  };
-  const sweep = async ({ account, planned }: SweepPlan) => {
+  });
+  const sweep = ({ account, planned }: SweepPlan) => sweepWhile(account, sweepingWords(planned), async () => {
     setArmed(null);
     toast(`Sweeping ${planned}…`);
     try {
@@ -297,12 +299,13 @@ function Inboxes() {
       toast(readOnlyOr(e, sweepFailed(refusalOf(e)?.detail, false)));
     }
     again(qc);
-  };
+  });
   return (
     <>
       {data.accounts.map((a) => {
         const total = a.in_inbox || 0, buckets = (a.by_bucket ?? {}) as Record<string, number>;
         const error = (a as unknown as { error?: string | null }).error;
+        const busy = running.get(a.account);     // a plan or a sweep runs for it: the row says which, and nothing asks again
         return (
           <div className={error ? "acctmod error" : "acctmod ok"} key={a.account} data-acct={a.account}>
             <div className="top2"><span className="led" /><span>{nameOf(a.account)}</span><span className="cnt">{error ? "—" : total}</span></div>
@@ -312,15 +315,16 @@ function Inboxes() {
             <div className="r3">
               <span>{error ? <span style={{ color: "var(--err)" }}>{error.slice(0, 24)}</span> : `${a.junk} junk · ${a.keep} keep`}</span>
               {/* What a sweep would move now: the junk someone read and no one starred */}
-              {a.sweepable > 0 && <button className="sweep" onClick={() => void arm(a.account)}>Sweep {a.sweepable}</button>}
+              {a.sweepable > 0 && <button className="sweep" disabled={busy !== undefined} onClick={() => void arm(a.account)}>Sweep {a.sweepable}</button>}
             </div>
+            <div className="sweep-busy" role="status">{busy}</div>
             {armed?.account === a.account && (
               // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- Esc while the focus is on its buttons: the line itself takes no focus
               <div className="armline" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); abort(); } }}>
                 ▸ sweep <b>{nameOf(a.account)}</b> · <b>{armed.planned}</b> to Trash
                 <SweepGoing plan={armed} />
                 {/* eslint-disable-next-line jsx-a11y/no-autofocus -- it appears because of the click just made on Sweep, and answers that click */}
-                <button className="sweep" autoFocus onClick={() => void sweep(armed)}>Confirm</button> <button className="sweep" onClick={abort}>Abort</button>
+                <button className="sweep" autoFocus disabled={busy !== undefined} onClick={() => void sweep(armed)}>Confirm</button> <button className="sweep" onClick={abort}>Abort</button>
               </div>
             )}
           </div>
