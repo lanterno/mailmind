@@ -1,4 +1,4 @@
-<!-- 0.3.0's news. At the next release, replace this heading and the news under it with that release's. -->
+<!-- 0.3.0's news. At the release after 0.3.0, replace this heading and the news under it with that release's. -->
 ## What's new in MailMind 0.3.0
 
 MailMind now runs on **macOS 15 or later**, on Apple silicon and Intel Macs.
