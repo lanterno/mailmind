@@ -191,10 +191,16 @@ enum StatusWords {
     static let appPasswords = API.Link(url: AccountDraft.appPasswords.absoluteString,
                                        words: String(localized: "Make an App Password"))
 
-    /// Whether a sync's trouble at an account of `type` is Proton Bridge not answering: Bridge runs on this Mac, so a
-    /// Proton account that can't be reached, or answers too late, has a Bridge that isn't running.
+    /// Whether a sync's trouble at an account of `type` is Proton Bridge not running: Bridge listens on this Mac, so
+    /// with Bridge closed the connection is refused at once (NETWORK).
     static func bridgeDown(_ kind: String?, type: String?) -> Bool {
-        type == "proton" && (kind == "NETWORK" || kind == "TIMEOUT")
+        type == "proton" && kind == "NETWORK"
+    }
+
+    /// Whether it is Proton Bridge running but not answering in time (TIMEOUT): something took the connection, so
+    /// Bridge is open, and still starting, busy with its first sync of a big mailbox, or stuck.
+    static func bridgeSlow(_ kind: String?, type: String?) -> Bool {
+        type == "proton" && kind == "TIMEOUT"
     }
 
     /// What a failed sync's kind (`last_error_kind`) means, in a sentence that says what to do next. A kind this
@@ -207,6 +213,9 @@ enum StatusWords {
                 Proton Bridge isn’t running, so MailMind can’t reach this account. Start Proton Bridge and wait until \
                 it says it is connected, then choose Retry.
                 """)
+        }
+        if bridgeSlow(kind, type: type) {
+            return bridgeSlowWords
         }
         switch (type, kind) {
         case ("proton", "AUTH"):
@@ -271,18 +280,25 @@ enum StatusWords {
         }
     }
 
+    /// What a Proton account whose Bridge is open but didn't answer in time is told.
+    static let bridgeSlowWords = String(localized: """
+        Proton Bridge didn’t answer in time. If it is still starting or syncing, wait until it says it is connected, \
+        then choose Retry; if it seems stuck, quit Bridge and open it again.
+        """)
+
     /// The page that helps with a sync's trouble at an account of `type`, where there is one: Proton Bridge's, or
     /// where Google makes the App Password Gmail wants.
     static func syncHelp(_ kind: String, type: String? = nil, error: String? = nil) -> API.Link? {
-        if bridgeDown(kind, type: type) { return protonBridge }
+        if bridgeDown(kind, type: type) || bridgeSlow(kind, type: type) { return protonBridge }
         let signIn = ["LoginNeedsWebSignIn", "LoginImapOff"].contains(error ?? "")
         return type == "gmail" && kind == "AUTH" && !signIn ? appPasswords : nil
     }
 
     /// The banner's words for the accounts that can't connect, and the page that helps. Where each is a Proton account
-    /// whose Bridge isn't answering, it says to start Bridge; where the one is a Gmail account that wants an App
-    /// Password, it says so; otherwise how many, by name. `type` and `name` look an account up; `health` is each
-    /// account's syncs, which say the trouble's kind and class.
+    /// whose Bridge isn't running, it says to start Bridge, and where each is one whose Bridge didn't answer in time,
+    /// to wait for it or open it again; where the one is a Gmail account that wants an App Password, it says so;
+    /// otherwise how many, by name. `type` and `name` look an account up; `health` is each account's syncs, which say
+    /// the trouble's kind and class.
     static func alert(_ bad: [String], health: [API.AccountStanding], type: (String) -> String?,
                       name: (String) -> String) -> (text: String, link: API.Link?)
     {
@@ -293,6 +309,12 @@ enum StatusWords {
         if !troubles.isEmpty, troubles.allSatisfy({ bridgeDown($0.record?.lastErrorKind, type: $0.type) }) {
             return (String(localized: "Proton Bridge isn’t running, so \(names) can’t connect. Start Proton Bridge."),
                     protonBridge)
+        }
+        if !troubles.isEmpty, troubles.allSatisfy({ bridgeSlow($0.record?.lastErrorKind, type: $0.type) }) {
+            return (String(localized: """
+                Proton Bridge didn’t answer in time, so \(names) can’t connect. If it is still syncing, wait; if it \
+                seems stuck, quit Bridge and open it again.
+                """), protonBridge)
         }
         if troubles.count == 1, let one = troubles.first, let kind = one.record?.lastErrorKind, one.type == "gmail",
            let link = syncHelp(kind, type: one.type, error: one.record?.lastError)
