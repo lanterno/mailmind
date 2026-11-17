@@ -4,7 +4,7 @@ import { get, post } from "../../lib/api/client";
 import { LIMITS } from "../../lib/api/limits.gen";
 import { copyOf, type Copy } from "../../lib/copy";
 import { toast } from "../../lib/toast";
-import { armDwell, markOpenedRead, moveMarked, moveRow, readOnly, seenRow, snooze, starRow } from "./actions";
+import { armDwell, bulk, fileRow, filing, markOpenedRead, moveMarked, moveRow, readOnly, seenRow, snooze, starRow, undo } from "./actions";
 import type { Row } from "./rows";
 
 vi.mock("../../lib/api/client", () => ({ get: vi.fn(), post: vi.fn(), refusalOf: vi.fn() }));
@@ -170,6 +170,76 @@ describe("a conversation row's star and read buttons", () => {
     await seenRow(qc, row({ seen: false }), true, false);
     expect(vi.mocked(qc.setQueriesData)).toHaveBeenCalledTimes(2);
     expect(toast).toHaveBeenCalledWith("Couldn’t update");
+  });
+});
+
+describe("a change read only refuses", () => {
+  const qc = { setQueriesData: vi.fn(), setQueryData: vi.fn(), invalidateQueries: vi.fn(), removeQueries: vi.fn() } as unknown as QueryClient;
+  const WORDS = "Read only is on, so nothing was changed. Turn it off in Settings › General.";
+  // The server's 409, as the client throws it: what the page reads is `readOnly`.
+  const refused = () => Object.assign(new Error("MailMind is running read-only"), { status: 409, readOnly: true });
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `${i + 1}:${1000 + i}:INBOX`, key: i + 1, folder: "INBOX", uid: 1000 + i, account: "ada@example.test", threadId: `t${i + 1}`, seen: false, flagged: false })) as unknown as Row[];
+  const one: Copy = { key: 7, folder: "INBOX", uid: 70 };
+
+  beforeEach(() => {
+    vi.mocked(post).mockReset().mockRejectedValue(refused());
+    vi.mocked(get).mockReset();
+    vi.mocked(toast).mockReset();
+    vi.mocked(qc.setQueriesData).mockReset();
+    vi.stubGlobal("location", { pathname: "/", search: "" });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("says so in its own words when filing is refused, and the row comes back", async () => {
+    await fileRow(qc, "archive", one, false, null);
+    expect(toast).toHaveBeenCalledWith(WORDS);
+    expect(filing.get().size).toBe(0);
+  });
+
+  it("says so for a move, not the server's words", async () => {
+    await moveRow(qc, "Clients", "Clients", one, false, null);
+    expect(toast).toHaveBeenCalledWith(WORDS);
+    expect(toast).not.toHaveBeenCalledWith(expect.stringContaining("Couldn’t move"));
+  });
+
+  it("asks once for marked rows, since it refuses every request alike, and says so rather than counting them failed", async () => {
+    await moveMarked(qc, "Clients", "Clients", rows(LIMITS.bulk_rows + 3), () => false, null);
+    expect(vi.mocked(post).mock.calls).toHaveLength(1);
+    expect(toast).toHaveBeenCalledWith(WORDS);
+    await bulk(qc, "archive", rows(3), () => false, null);
+    expect(toast).toHaveBeenLastCalledWith(WORDS);
+  });
+
+  it("stops at the first star or read mark of marked rows, and says so", async () => {
+    await bulk(qc, "star", rows(3), () => false, null);
+    expect(vi.mocked(post).mock.calls).toHaveLength(1);
+    expect(toast).toHaveBeenCalledWith(WORDS);
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/^Updated/));
+  });
+
+  it("says so for muting marked conversations", async () => {
+    await bulk(qc, "mute", rows(2), () => true, null);
+    expect(vi.mocked(post).mock.calls).toHaveLength(1);
+    expect(toast).toHaveBeenCalledWith(WORDS);
+  });
+
+  it("puts a row's mark back and says so", async () => {
+    await seenRow(qc, { ...rows(1)[0]!, seen: false }, false, false);
+    expect(vi.mocked(qc.setQueriesData)).toHaveBeenCalledTimes(2);
+    expect(toast).toHaveBeenCalledWith(WORDS);
+    await starRow(qc, rows(1)[0]!, false);
+    expect(toast).toHaveBeenLastCalledWith(WORDS);
+  });
+
+  it("says so for a snooze", async () => {
+    await snooze(qc, { key: 7, folder: "INBOX", uid: 70 }, { preset: "tomorrow" }, ["7:70:INBOX"], null);
+    expect(toast).toHaveBeenCalledWith(WORDS);
+  });
+
+  it("says so for an Undo that would reach a server, which stays to undo", async () => {
+    await undo(qc);
+    expect(toast).toHaveBeenCalledWith(WORDS);
+    expect(qc.removeQueries).not.toHaveBeenCalled();
   });
 });
 

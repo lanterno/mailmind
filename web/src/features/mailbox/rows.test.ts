@@ -88,19 +88,19 @@ describe("a folder's name", () => {
 
 describe("what filing says", () => {
   it("counts a conversation, and what stayed", () => {
-    expect(filedWords("Archived", {}, false)).toBe("Archived");
-    expect(filedWords("Archived", { count: 3 }, false)).toBe("Archived 3 messages");
-    expect(filedWords("Archived", { count: 2, failed: 1 }, false)).toBe("Archived 2 of 3 — the rest stayed");
+    expect(filedWords("Archived", {})).toBe("Archived");
+    expect(filedWords("Archived", { count: 3 })).toBe("Archived 3 messages");
+    expect(filedWords("Archived", { count: 2, failed: 1 })).toBe("Archived 2 of 3 — the rest stayed");
   });
   it("says where it went, when a person picked that", () => {
-    expect(filedWords("Moved", {}, false, "Clients")).toBe("Moved to Clients");
-    expect(filedWords("Moved", { count: 3 }, false, "Clients")).toBe("Moved 3 messages to Clients");
-    expect(filedWords("Moved", { count: 2, failed: 1 }, false, "Clients")).toBe("Moved 2 of 3 to Clients — the rest stayed");
-    expect(filedWords("Moved", { status: "queued" }, false, "Clients")).toBe("Moved to Clients · once the server is back");
+    expect(filedWords("Moved", {}, "Clients")).toBe("Moved to Clients");
+    expect(filedWords("Moved", { count: 3 }, "Clients")).toBe("Moved 3 messages to Clients");
+    expect(filedWords("Moved", { count: 2, failed: 1 }, "Clients")).toBe("Moved 2 of 3 to Clients — the rest stayed");
+    expect(filedWords("Moved", { status: "queued" }, "Clients")).toBe("Moved to Clients · once the server is back");
   });
-  it("says when it will land", () => {
-    expect(filedWords("Trashed", { status: "queued" }, false)).toBe("Trashed · once the server is back");
-    expect(filedWords("Trashed", { queued: true }, true)).toBe("Trashed · waits for a full run");
+  it("says when it will land: once the server is back, and never a full run, since read only queues nothing", () => {
+    expect(filedWords("Trashed", { status: "queued" })).toBe("Trashed · once the server is back");
+    expect(filedWords("Trashed", { queued: true })).toBe("Trashed · once the server is back");
   });
 });
 
