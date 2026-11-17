@@ -106,15 +106,23 @@ final class MailApp {
         await start()
     }
 
-    /// What a person is told of a core that didn't open: the core's own words, never a Swift type's name.
+    /// What a person is told of a core that didn't open: the core's own words, never a Swift type's name. Any other
+    /// error says only that something unexpected happened, never its own text: a panic in the core crosses into Swift
+    /// carrying its message (UniFFI's `rustPanic`), which can quote mail, and the window and Copy Details show this.
     static func words(_ error: any Error) -> String {
         switch error {
         case HostProblem.NotOpened(let why): why
         case let problem as Problem: problem.description
         case let named as NoHomeNamed: named.description
-        default: error.localizedDescription
+        default: unexpected
         }
     }
+
+    /// What a failure the core didn't word says.
+    static let unexpected = String(localized: """
+        MailMind ran into something it didn’t expect as it opened. Open MailMind again; if this keeps happening, copy \
+        the details and send them to whoever gave you MailMind.
+        """)
 
     /// Choose the message at `position` in the list, or none.
     func choose(_ position: Int?) {
