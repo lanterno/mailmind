@@ -1188,6 +1188,18 @@ extension API {
         }
     }
 
+    public struct DeleteFolderBody: Codable, Hashable, Sendable {
+        public var account: String?
+        public var confirm: Bool?
+        public var folder: String?
+
+        public init(account: String? = nil, confirm: Bool? = nil, folder: String? = nil) {
+            self.account = account
+            self.confirm = confirm
+            self.folder = folder
+        }
+    }
+
     public struct Delta: Codable, Hashable, Sendable {
         public var cached: Bool
         public var count: Int
@@ -2155,6 +2167,74 @@ extension API {
     public enum FlagName: String, Codable, Hashable, Sendable, CaseIterable {
         case flagged
         case seen
+    }
+
+    public struct FolderChanged: Codable, Hashable, Sendable {
+        public var folder: String
+        public var ok: Bool
+
+        public init(folder: String, ok: Bool) {
+            self.folder = folder
+            self.ok = ok
+        }
+    }
+
+    public struct FolderDeleted: Codable, Hashable, Sendable {
+        public var ok: Bool
+        public var trashed: Int
+
+        public init(ok: Bool, trashed: Int) {
+            self.ok = ok
+            self.trashed = trashed
+        }
+    }
+
+    public struct FolderHoldsMail: Codable, Hashable, Sendable {
+        public var aiOff: Bool?
+        public var busy: Bool?
+        public var detail: String?
+        public var limitMicros: Int?
+        public var messages: Int?
+        public var overLimit: Bool?
+        public var readOnly: Bool?
+        public var spentMicros: Int?
+        public var status: Int
+        public var title: String
+        public var toTrash: Bool?
+        public var trashed: Int?
+        public var type: String
+
+        public init(aiOff: Bool? = nil, busy: Bool? = nil, detail: String? = nil, limitMicros: Int? = nil, messages: Int? = nil, overLimit: Bool? = nil, readOnly: Bool? = nil, spentMicros: Int? = nil, status: Int, title: String, toTrash: Bool? = nil, trashed: Int? = nil, type: String) {
+            self.aiOff = aiOff
+            self.busy = busy
+            self.detail = detail
+            self.limitMicros = limitMicros
+            self.messages = messages
+            self.overLimit = overLimit
+            self.readOnly = readOnly
+            self.spentMicros = spentMicros
+            self.status = status
+            self.title = title
+            self.toTrash = toTrash
+            self.trashed = trashed
+            self.type = type
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case aiOff = "ai_off"
+            case busy
+            case detail
+            case limitMicros = "limit_micros"
+            case messages
+            case overLimit = "over_limit"
+            case readOnly = "read_only"
+            case spentMicros = "spent_micros"
+            case status
+            case title
+            case toTrash = "to_trash"
+            case trashed
+            case type
+        }
     }
 
     public struct FolderListing: Codable, Hashable, Sendable {
@@ -3196,6 +3276,16 @@ extension API {
         }
     }
 
+    public struct NewFolderBody: Codable, Hashable, Sendable {
+        public var account: String?
+        public var name: String?
+
+        public init(account: String? = nil, name: String? = nil) {
+            self.account = account
+            self.name = name
+        }
+    }
+
     /// A POST that reads nothing of its body, which must still be a JSON object.
     public struct NoBody: Codable, Hashable, Sendable {
         public init() {}
@@ -4010,14 +4100,18 @@ extension API {
     }
 
     public struct RailFolder: Codable, Hashable, Sendable {
+        public var changeable: Bool
         public var name: String
+        public var ownName: String
         public var role: String
         public var takesFiling: Bool
         public var total: Int
         public var unseen: Int
 
-        public init(name: String, role: String, takesFiling: Bool, total: Int, unseen: Int) {
+        public init(changeable: Bool, name: String, ownName: String, role: String, takesFiling: Bool, total: Int, unseen: Int) {
+            self.changeable = changeable
             self.name = name
+            self.ownName = ownName
             self.role = role
             self.takesFiling = takesFiling
             self.total = total
@@ -4025,7 +4119,9 @@ extension API {
         }
 
         enum CodingKeys: String, CodingKey {
+            case changeable
             case name
+            case ownName = "own_name"
             case role
             case takesFiling = "takes_filing"
             case total
@@ -4167,6 +4263,18 @@ extension API {
             case mailDeleted = "mail_deleted"
             case ok
             case removed
+        }
+    }
+
+    public struct RenameFolderBody: Codable, Hashable, Sendable {
+        public var account: String?
+        public var folder: String?
+        public var name: String?
+
+        public init(account: String? = nil, folder: String? = nil, name: String? = nil) {
+            self.account = account
+            self.folder = folder
+            self.name = name
         }
     }
 
@@ -5785,6 +5893,7 @@ extension API {
     }
 
     public enum Theme: String, Codable, Hashable, Sendable, CaseIterable {
+        case auto
         case day
         case dusk
         case night
@@ -7089,6 +7198,12 @@ extension API {
         public enum Filters {}
         /// POST /api/flag
         public enum Flag {}
+        /// POST /api/folders/create
+        public enum FoldersCreate {}
+        /// POST /api/folders/delete
+        public enum FoldersDelete {}
+        /// POST /api/folders/rename
+        public enum FoldersRename {}
         /// POST /api/followups/dismiss
         public enum FollowupsDismiss {}
         /// POST /api/invite/rsvp
@@ -7643,6 +7758,24 @@ extension API.Post.Flag: PostRoute {
     public static let path = "/api/flag"
     public typealias Answer = API.Filed
     public typealias Body = API.FlagBody
+}
+
+extension API.Post.FoldersCreate: PostRoute {
+    public static let path = "/api/folders/create"
+    public typealias Answer = API.FolderChanged
+    public typealias Body = API.NewFolderBody
+}
+
+extension API.Post.FoldersDelete: PostRoute {
+    public static let path = "/api/folders/delete"
+    public typealias Answer = API.FolderDeleted
+    public typealias Body = API.DeleteFolderBody
+}
+
+extension API.Post.FoldersRename: PostRoute {
+    public static let path = "/api/folders/rename"
+    public typealias Answer = API.FolderChanged
+    public typealias Body = API.RenameFolderBody
 }
 
 extension API.Post.FollowupsDismiss: PostRoute {
