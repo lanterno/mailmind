@@ -1,5 +1,5 @@
-<!-- 0.3.0's news. At the release after 0.3.0, replace this heading and the news under it with that release's. -->
-## What's new in MailMind 0.3.0
+<!-- 0.3.1's news, everything since 0.2.0 (0.3.0 was shared but never published). At the release after 0.3.1, replace this heading and the news under it with that release's. -->
+## What's new in MailMind 0.3.1
 
 MailMind now runs on **macOS 15 or later**, on Apple silicon and Intel Macs.
 
@@ -9,7 +9,8 @@ MailMind now runs on **macOS 15 or later**, on Apple silicon and Intel Macs.
   links the page where you make the app password each one needs. Any other address takes its incoming and outgoing
   servers, so you can send from every account, not only Gmail.
 - **Test** checks sending as well as reading, and your first account is tested before it is saved. When a login fails,
-  MailMind says what went wrong and what to do next, in plain words.
+  MailMind says what went wrong and what to do next, in plain words, with the fix beside it: **Enter App Password…**
+  or **Change Password…** opens the account on its password and tries what you type before keeping it.
 - Delete works on iCloud, and on Gmail in any language: MailMind finds your Trash rather than guessing its name.
 - Removing an account can also delete its mail from this Mac. Your mail on the server stays as it is.
 
