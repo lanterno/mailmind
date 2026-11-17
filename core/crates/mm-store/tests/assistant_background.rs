@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use mm_assistant::background_ports::{Assessment, Backlog, DraftCandidates, FinishedBatches, Outcome, Triage};
-use mm_assistant::ports::Message;
+use mm_assistant::ports::{Message, Overview};
 use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
 use mm_store::{Database, DbKey};
 
@@ -126,6 +126,19 @@ fn triage_reads_and_counts_the_inbox_alone() {
     let database = database(dir.path(), ELSEWHERE);
     assert_eq!(keys(&database, 10, None), [Some(16)]);
     assert_eq!(database.summaries_waiting(-1), Ok(1));
+}
+
+#[test]
+fn a_brief_and_a_delta_read_the_inbox_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    // Every one of them summarized, as one triaged and then filed, sent or trashed is.
+    let summarized = "INSERT INTO assessments (message_key, summary, importance, category) \
+                      SELECT message_key, 'Worth a look', 3, 'other' FROM messages;";
+    let database = database(dir.path(), &format!("{ELSEWHERE}{summarized}"));
+    let pks = |rows: Vec<mm_assistant::ports::Glance>| rows.into_iter().map(|g| g.pk).collect::<Vec<_>>();
+    assert_eq!(pks(database.delta_rows(&[], 0, 50).unwrap()), [16]);
+    assert_eq!(pks(database.brief_rows(&[], 50).unwrap()), [16]);
+    assert_eq!(pks(database.delta_rows(&[ADA.to_owned()], 0, 50).unwrap()), [16]);
 }
 
 #[test]
