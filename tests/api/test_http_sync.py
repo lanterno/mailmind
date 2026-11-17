@@ -2,6 +2,8 @@
 body, as opening it would store it, so Today & next has the invite without the message ever being opened. And when a
 folder is caught up as it opens: once a minute at most, never the Inbox, and at once after MailMind put mail there. An
 account's first sync stores what its Inbox held before, which is no new mail."""
+import json
+
 import pytest
 
 from event_stream import Stream
@@ -144,4 +146,31 @@ def test_an_accounts_first_sync_is_no_new_mail_and_what_comes_after_it_is(app, w
     arrived = heard_until(stream, "new-mail")[-1]
     assert DEE in arrived and '"count": 1' in arrived, arrived
     assert app.get("/api/digest").json["sync"]["result"] == "1 new"
+    stream.close()
+
+
+def test_a_first_sync_of_one_message_names_none_and_the_one_after_it_names_its_uid(app, world):
+    # A first scan that stores one message is no new mail, so no notification names it; the one that comes after is, and
+    # new-mail names its UID, so a notification can say whose it is and open it.
+    entry = world.server.add_account(DEE)
+    world.server.deliver(DEE, "INBOX", w.variant(CONFIRM, Message_ID="<dee-only@example.test>"))
+    added = app.post("/api/accounts/add", {"email": DEE, "type": "imap", "host": entry["host"], "port": entry["port"],
+                                            "starttls": entry["starttls"],
+                                            "credential": {"style": "keychain", "value": "app-password"}})
+    assert added.status == 200, added.json
+    stream = Stream(app)
+    stream.frame()
+
+    app.post("/api/refresh", {})
+    app.settle()
+    app.post("/api/mute", {"account": w.CY, "thread_id": world.row("cy-inbox-01-thread-start.eml")["thread_id"]})
+    said = heard_until(stream, "mute")
+    assert any(is_a(f, "sync-done") and DEE in f for f in said), said
+    assert not any(is_a(f, "new-mail") for f in said), said
+
+    after = world.server.deliver(DEE, "INBOX", w.variant(CONFIRM, Message_ID="<dee-after-one@example.test>"))
+    app.post("/api/refresh", {})
+    app.settle()
+    arrived = heard_until(stream, "new-mail")[-1]
+    assert json.loads(arrived.split("data: ", 1)[1]) == {"account": DEE, "folder": "INBOX", "count": 1, "uid": after}
     stream.close()
