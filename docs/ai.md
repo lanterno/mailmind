@@ -38,17 +38,28 @@ days with no summary yet (`summaries_waiting`, and the core's `SUMMARIES_WAITING
 on the page and in the Mac app.
 
 What AI mode sends is said before it is turned on, under its switch, in the Mac app's first run and in Help
-(`lib/ai.ts`'s `aiSends`, `AIWords.sends`). Each new message's sender, subject and opening text go to the provider by
-themselves, to be summarized, and so do the senders, subjects and summaries that the 'since you looked' line and the
-day's brief are written from, when the page or the Mac app asks for one that isn't stored; whole conversations go only
-when a person asks (a thread's summary, a draft, Ask, a search written as a sentence, Rewrite); attachments never; and
-with a model on this Mac, or a compatible service at a URL on it, nothing leaves this Mac, unless that model runs in a
-cloud: Ollama serves its cloud models at its port on this Mac, named with `-cloud` or `:cloud` at the end, and runs them
-on its own servers. The status's `cloud_model` says so (`providers.cloud_model`, and mm-assistant's), whether AI is on
-or off, so the page and the Mac app can say where mail goes. Each paid provider's key card
-says it bills per use, apart from any ChatGPT or Claude subscription, and where credit is added; Gemini's, that a key
-belongs on a project with billing set up, since on the free tier Google may use what is sent, mail included, to improve
-its products (`BILLING`, `API.AiProvider.billing`).
+(`lib/ai.ts`'s `aiSends`, `AIWords.sends`), and the page, the Mac app, the README and this guide say it in the same words.
+For a provider off this Mac, with its recipient (Anthropic, OpenAI, Google, or the service named):
+
+> With AI mode on, the sender, subject and opening text of each message in your Inbox go to `<recipient>` to be
+> summarized, automatically: the last 30 days’ as soon as you turn it on, then each new one. Those senders, subjects
+> and summaries go again to write the day’s brief and what came in since you looked. Whole conversations go only when
+> you ask: for a summary or a draft, with what you type into Ask, a search written as a sentence, or Rewrite.
+> Attachments never leave this Mac.
+
+With drafting ahead on (`draft_ahead`, below) they add: "With Draft replies ahead on, whole conversations of important
+mail go too, to draft replies before you open them." With a model on this Mac, or a compatible service at a URL on it,
+they are "nothing leaves this Mac", unless that model runs in a cloud: Ollama serves its cloud models at its port on
+this Mac, named with `-cloud` or `:cloud` at the end, and runs them on its own servers. Then they are "`<model>` runs in
+Ollama’s cloud, so what is summarized goes to Ollama’s servers." The status's `cloud_model` says so
+(`providers.cloud_model`, and mm-assistant's), whether AI is on or off, so the page and the Mac app can say where mail
+goes. Each of the three things sent unasked reads only the Inbox: the summaries (`needs_summary`, above), the day's
+brief and what came in since you looked (`brief_rows` and `delta_rows`, in `assistant_reads` and the core's
+`Overview`), so mail a person sent, drafted, deleted or filed elsewhere goes only when they ask.
+
+Each paid provider's key card says it bills per use, apart from any ChatGPT or Claude subscription, and where credit is
+added; Gemini's, that a key belongs on a project with billing set up, since on the free tier Google may use what is
+sent, mail included, to improve its products (`BILLING`, `API.AiProvider.billing`).
 
 AI mode the file doesn't say (`accounts.domain.preferences.ai_mode_default`) is on where `mailmind.config.json` names a
 key for any provider or `ANTHROPIC_API_KEY` is set, so whoever set Claude up keeps AI, and off otherwise: a fresh install
@@ -118,9 +129,10 @@ GPT4All on 4891, each `http://127.0.0.1:<port>/v1`) for `GET {url}/models`, all 
 second at most, with no key, and answers `{ok, servers: [{name, url, models}]}` for those that answered a list, in that
 order, with the models that can chat. It reaches only this Mac, goes with AI mode off, and nothing answering is
 `servers: []`, never an error (`adapters.local_servers`, `Catalog.local_servers`).
-`MAILMIND_NO_SCHEMA=1` falls back to free-form text. Three things go to the AI with no one asking: summaries of the
-Inbox's new mail (`triage`, and a backlog's batch), what came in since you looked (`delta`, which the page and the Mac app ask for as the
-new-mail pill shows), and the day's brief, which they write as the Inbox opens when none is stored. Every other AI action
+`MAILMIND_NO_SCHEMA=1` falls back to free-form text. Three things go to the AI with no one asking, each read
+from the Inbox alone: summaries of the Inbox's mail of the last 30 days (`triage`, and a backlog's batch), what came into
+the Inbox since you looked (`delta`, which the page and the Mac app ask for as the new-mail pill shows), and the day's
+brief, from the Inbox's summarized mail, which they write as the Inbox opens when none is stored. Every other AI action
 waits for a person: drafts wait, and bulk commands take a preview and a confirm. Four more are opt-in and off by default: drafting
 replies ahead for important mail (`draft_ahead`), the morning's brief written ahead of the first open, the week's review,
 written ahead on Monday morning and kept in the database, never sent as mail, and Tidy's daily run, which files only what
