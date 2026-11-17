@@ -10,7 +10,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use mm_content::mime::Fields;
 use mm_kernel::errors::Fault;
 use mm_kernel::identity;
-use mm_mailbox::fetch_ports::KeptBody;
 use mm_mailbox::sync_plan::{COLUMNS, DOWN_TO, Scan, still_to_say};
 use mm_mailbox::sync_ports::{FlagRow, FolderState, Incoming, Place, SyncAccount, SyncStore};
 use mm_mailbox::threading::{StoredCopy, Threader};
@@ -84,10 +83,9 @@ fn upsert(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) -> 
     c.prepare_cached("UPDATE message_identity SET gone_at=NULL WHERE key=? AND gone_at IS NOT NULL")?.execute([key])?;
     c.prepare_cached(
         "INSERT INTO messages (account,kind,folder,uid,message_id,gmail_thread,from_addr,from_name,subject,date_iso,ts,\
-         snippet,body_text,bucket,confidence,reason,is_junk,message_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
+         snippet,bucket,confidence,reason,is_junk,message_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
          ON CONFLICT(account,folder,uid) DO UPDATE SET subject=excluded.subject, \
-         snippet=COALESCE(NULLIF(excluded.snippet, ''), snippet), body_text=COALESCE(body_text, excluded.body_text), \
-         bucket=excluded.bucket, \
+         snippet=COALESCE(NULLIF(excluded.snippet, ''), snippet), bucket=excluded.bucket, \
          confidence=excluded.confidence, reason=excluded.reason, is_junk=excluded.is_junk, \
          message_key=COALESCE(message_key, excluded.message_key) RETURNING pk",
     )?
@@ -105,7 +103,6 @@ fn upsert(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) -> 
             f.date_iso,
             f.ts,
             m.snippet,
-            m.body_text,
             m.verdict.bucket,
             m.verdict.confidence,
             m.verdict.reason,
@@ -116,8 +113,9 @@ fn upsert(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) -> 
     )
 }
 
-/// Store one message, its flags, its way out of a list, its recipients, its labels and its headers, and index it for
-/// search: its pk, and whether threading has yet to hear of it. The caller's transaction holds it.
+/// Store one message, its flags, its way out of a list, its recipients, its labels, its headers and the body read
+/// whole, and index it for search: its pk, and whether threading has yet to hear of it. The caller's transaction holds
+/// it.
 fn store_one(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) -> rusqlite::Result<(i64, bool)> {
     let pk = upsert(c, account, folder, m)?;
     set_flags(c, pk, &m.flags)?;
@@ -147,7 +145,11 @@ fn store_one(c: &Connection, account: &SyncAccount, folder: &str, m: &Incoming) 
         m.fields.recipients,
         pk
     ])?;
-    index_message(c, pk)?;
+    match &m.body {
+        // Kept as opening it keeps one, which indexes it with its text.
+        Some(body) => crate::mailbox::keep_body(c, pk, body)?,
+        None => index_message(c, pk)?,
+    }
     Ok((pk, threads))
 }
 
@@ -685,9 +687,5 @@ impl SyncStore for Database {
             let changes = still_to_say(wanted, &held);
             Ok(!changes.is_empty() && queue_flags(c, pk, &changes, "filter", when)?)
         })
-    }
-
-    fn keep_invite(&self, pk: i64, body: &KeptBody) -> Result<(), Fault> {
-        self.write(|c| crate::mailbox::keep_body(c, pk, body))
     }
 }

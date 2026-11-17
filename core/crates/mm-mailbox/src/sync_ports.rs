@@ -64,9 +64,10 @@ pub struct Incoming {
     pub verdict: Verdict,
     /// Its body's text, for the Inbox; empty elsewhere and for junk.
     pub snippet: String,
-    /// The text search indexes of it (`KeptBody::of`'s), from the opening a sync read for the snippet: kept so the
-    /// body backfill never fetches that mail again. None where no opening was read.
-    pub body_text: Option<String>,
+    /// Its whole body, where the sync read all of it: an Inbox opening that held the whole message, or an invite
+    /// fetched whole (Today & next reads invites from stored bodies only). Kept with the row, in its transaction, as
+    /// opening it keeps one: its bytes, its parts, who it went to and its text. None leaves the body as it was.
+    pub body: Option<KeptBody>,
 }
 
 /// What is stored of a folder's sync so far.
@@ -112,8 +113,8 @@ pub trait SyncStore: Send + Sync + fmt::Debug {
     /// the Unix time a message's identity is gone from, once no copy of it is left.
     fn reset_folder(&self, account: &str, folder: &str, now: i64) -> Result<(), Fault>;
     fn set_uidvalidity(&self, account: &str, folder: &str, uidvalidity: u32) -> Result<(), Fault>;
-    /// Store one message, its flags, its way out of a list, its recipients, its labels and its headers, and index
-    /// it for search. Its pk, and whether threading has yet to hear of it.
+    /// Store one message, its flags, its way out of a list, its recipients, its labels, its headers and the body read
+    /// whole, and index it for search. Its pk, and whether threading has yet to hear of it.
     fn store_copy(&self, account: &SyncAccount, folder: &str, message: &Incoming) -> Result<(i64, bool), Fault>;
     /// Store each of `messages` as `store_copy` does, and where the sync got to, all in one transaction: so a step is
     /// one write to the disk, and a sync that stops goes on from the last step stored. Each one's pk and whether
@@ -155,9 +156,6 @@ pub trait SyncStore: Send + Sync + fmt::Debug {
     /// What a person's filters asked of the stored message `pk`, queued for its server where the row doesn't hold it
     /// already, and shown on the row at once. Whether anything was queued.
     fn queue_filtered(&self, pk: i64, wanted: &[(&'static str, bool)], when: &str) -> Result<bool, Fault>;
-    /// The body of the stored message `pk`, which carries an invite, kept as opening it keeps one: its bytes, its
-    /// parts, who it went to and its text.
-    fn keep_invite(&self, pk: i64, body: &KeptBody) -> Result<(), Fault>;
 }
 
 /// What the Mailbox says happened, for whoever listens (`mailbox.domain.events`).

@@ -7,11 +7,12 @@
 //! at a time, newest first, each step giving way to a sync that read the folder afresh meanwhile.
 //!
 //! A message's text comes from its first `HEAD_BYTES` (`BODY.PEEK[]<0.65536>`), so no attachment is downloaded for a
-//! snippet; that text is kept for search too, so the body backfill never fetches the mail a sync read. The whole
-//! message is fetched only for an invite: an Inbox message that carries one keeps its body as it
-//! is stored, as opening it would, so Today & next finds it. A message whose opening the server won't send costs only
-//! its own text, and one whose headers it won't send is left out of a read of older mail; a connection lost part way
-//! stores nothing of the step, which is read again.
+//! snippet. An opening that holds the whole message is kept as its body, with its row in the step's transaction, as
+//! opening it would keep it: search finds what it says, opening it asks no server, and the body backfill never fetches
+//! it again. One cut off keeps only its snippet, and waits for the backfill or to be opened. The whole of one cut off
+//! is fetched only for an invite, which is kept as its body so Today & next finds it. A message whose opening the
+//! server won't send costs only its own text, and one whose headers it won't send is left out of a read of older mail;
+//! a connection lost part way stores nothing of the step, which is read again.
 //!
 //! Mail new to the Inbox that MailMind has never seen before is judged by the person's filters as it is stored, and
 //! what they ask is queued for the server (`arrival_flags`).
@@ -142,12 +143,6 @@ struct Pass<'a> {
     /// It reads a first scan's older mail: a message whose headers the server won't send is left out, so the scan
     /// still reaches the folder's oldest.
     older: bool,
-}
-
-/// A message fetched, as it will be stored, with its whole body when it carries an invite.
-struct Fetched {
-    row: Incoming,
-    invite: Option<Vec<u8>>,
 }
 
 /// Whether the opening of a message that was cut off may carry an invite further on: it names a calendar part.
@@ -376,27 +371,26 @@ impl Ingest {
         let pass = Pass { folder, with_body: sync_plan::reads_bodies(folder), arriving: false, older: false };
         let fetched = self.fetch(&mut *s.0, &acct, &uids, pass)?;
         let mut stored = Vec::new();
-        for Fetched { row, invite } in fetched {
+        for row in &fetched {
             going_on(&flight)?;
-            let (pk, threads) = self.store.store_copy(&acct, folder, &row)?;
+            let (pk, threads) = self.store.store_copy(&acct, folder, row)?;
             if threads {
                 stored.push(pk);
             }
-            self.keep_invite(pk, invite);
         }
         self.store.settle(&acct.email, folder, None, &stored, &self.now())?;
         Ok(uids.len())
     }
 
     /// The messages `uids` names in the selected folder: their headers, classified, and the Inbox's text read from
-    /// the opening of each that isn't junk, oldest first.
+    /// the opening of each that isn't junk, with the whole body where the sync read it whole, oldest first.
     fn fetch(
         &self,
         s: &mut dyn MailServer,
         acct: &SyncAccount,
         uids: &[u32],
         pass: Pass<'_>,
-    ) -> Result<Vec<Fetched>, SyncError> {
+    ) -> Result<Vec<Incoming>, SyncError> {
         if uids.is_empty() {
             return Ok(Vec::new());
         }
@@ -416,28 +410,25 @@ impl Ingest {
             })
             .collect();
         let verdicts = self.classifier.classify(&envelopes)?;
-        let mut fetched: Vec<Fetched> = headers
+        let mut fetched: Vec<Incoming> = headers
             .into_iter()
             .zip(fields)
             .zip(verdicts)
-            .map(|((h, fields), verdict)| Fetched {
-                row: Incoming {
-                    uid: h.uid,
-                    flags: sync_plan::columns_of(&h.flags),
-                    fields,
-                    gmail_thread: h.gmail_thread,
-                    gmail_labels: h.gmail_labels,
-                    verdict,
-                    snippet: String::new(),
-                    body_text: None,
-                },
-                invite: None,
+            .map(|((h, fields), verdict)| Incoming {
+                uid: h.uid,
+                flags: sync_plan::columns_of(&h.flags),
+                fields,
+                gmail_thread: h.gmail_thread,
+                gmail_labels: h.gmail_labels,
+                verdict,
+                snippet: String::new(),
+                body: None,
             })
             .collect();
         if !pass.with_body {
             return Ok(fetched);
         }
-        let wanted: Vec<u32> = fetched.iter().filter(|f| !f.row.verdict.is_junk).map(|f| f.row.uid).collect();
+        let wanted: Vec<u32> = fetched.iter().filter(|f| !f.verdict.is_junk).map(|f| f.uid).collect();
         let mut heads = match s.heads(&wanted, HEAD_BYTES) {
             Ok(heads) => heads,
             // A connection lost part way stores nothing of the step, which is read again, rather than its mail with
@@ -448,20 +439,20 @@ impl Ingest {
                 BTreeMap::new()
             }
         };
+        let now = self.now();
         for f in &mut fetched {
-            let Some(head) = heads.remove(&f.row.uid) else { continue };
-            f.row.snippet = mime::text_body(&head);
-            f.row.body_text = Some(mime::body_text_of(&mime::parse(&head)));
-            f.invite = self.invite_of(s, f.row.uid, head)?;
+            let Some(head) = heads.remove(&f.uid) else { continue };
+            f.snippet = mime::text_body(&head);
+            f.body = self.body_of(s, f.uid, head)?.map(|raw| KeptBody::of(raw, now.clone()));
         }
         Ok(fetched)
     }
 
-    /// The whole message to keep for the invite it carries, or None. An opening that was cut off is fetched whole
-    /// only where it names a calendar part.
-    fn invite_of(&self, s: &mut dyn MailServer, uid: u32, head: Vec<u8>) -> Result<Option<Vec<u8>>, SyncError> {
+    /// The whole message to keep as its body, or None: its opening, where that held all of it; or, where it was cut
+    /// off naming a calendar part, the whole message fetched for the invite it carries.
+    fn body_of(&self, s: &mut dyn MailServer, uid: u32, head: Vec<u8>) -> Result<Option<Vec<u8>>, SyncError> {
         if head.len() < usize::try_from(HEAD_BYTES).unwrap_or(usize::MAX) {
-            return Ok(mime::has_invite(&head).then_some(head));
+            return Ok((!head.is_empty()).then_some(head));
         }
         if !(mime::has_invite(&head) || may_hold_invite(&head)) {
             return Ok(None);
@@ -473,15 +464,6 @@ impl Ingest {
                 log::warning(TAG, "a body fetch was refused", &[], Some(e.class()));
                 Ok(None)
             }
-        }
-    }
-
-    /// Today & next reads invites from stored bodies only.
-    fn keep_invite(&self, pk: i64, invite: Option<Vec<u8>>) {
-        if let Some(raw) = invite
-            && let Err(fault) = self.store.keep_invite(pk, &KeptBody::of(raw, self.now()))
-        {
-            log::warning(TAG, "an invite's body wasn't kept", &[], Some(fault.class));
         }
     }
 
@@ -501,20 +483,19 @@ impl Ingest {
         let filters = self.arrivals.get().filter(|_| pass.arriving);
         let fetched = self.fetch(s, acct, &step.uids, pass)?;
         going_on(flight)?;
-        let junk = fetched.iter().filter(|f| f.row.verdict.is_junk).count();
-        let newest_kept = fetched.iter().filter(|f| !f.row.verdict.is_junk).map(|f| f.row.uid).max().unwrap_or(0);
+        let junk = fetched.iter().filter(|f| f.verdict.is_junk).count();
+        let newest_kept = fetched.iter().filter(|f| !f.verdict.is_junk).map(|f| f.uid).max().unwrap_or(0);
         let news: Vec<bool> = match filters {
             Some(_) => fetched
                 .iter()
-                .map(|f| self.store.is_known(&acct.email, &f.row.fields).map(|k| !k))
+                .map(|f| self.store.is_known(&acct.email, &f.fields).map(|k| !k))
                 .collect::<Result<_, _>>()?,
             None => vec![false; fetched.len()],
         };
         let place = Place { watermark: step.watermark, leaves: step.leaves, holds: step.holds, when: self.now() };
-        let rows: Vec<Incoming> = fetched.iter().map(|f| f.row.clone()).collect();
-        let Some(pks) = self.store.store_step(acct, pass.folder, &rows, &place)? else { return Ok(None) };
+        let Some(pks) = self.store.store_step(acct, pass.folder, &fetched, &place)? else { return Ok(None) };
         let mut queued = false;
-        for ((f, (pk, threads)), news) in fetched.into_iter().zip(pks).zip(news) {
+        for ((pk, threads), news) in pks.into_iter().zip(news) {
             if threads {
                 stored.push(pk);
             }
@@ -524,12 +505,11 @@ impl Ingest {
                     queued = true;
                 }
             }
-            self.keep_invite(pk, f.invite);
         }
         if let Some(filters) = filters.filter(|_| queued) {
             filters.flags_queued();
         }
-        Ok(Some((rows.len() - junk, junk, newest_kept)))
+        Ok(Some((fetched.len() - junk, junk, newest_kept)))
     }
 
     /// Read the flags of the folder's mail again and store what changed, so mail read, starred or answered in
