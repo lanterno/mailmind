@@ -75,7 +75,7 @@ struct Welcome: View {
                                 }
                                 .meadowButton(aiMode ? .quiet : .ai)
                                 // What would go, and to whom, said before AI mode is turned on.
-                                SettingHelp(AIWords.sends(provider, url: status.preferences?.aiBaseUrl ?? ""))
+                                SettingHelp(AIWords.sends(status.preferences, status.digest?.ai))
                             }
                         }
                     }

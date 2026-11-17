@@ -17,6 +17,8 @@ final class BriefModel {
     }
 
     private(set) var digest: API.Digest?
+    /// Settings' choices, read while AI is off, so the brief's note says what AI mode would send as Settings does.
+    private(set) var preferences: API.Preferences?
     private(set) var brief: API.Brief?
     private(set) var writing = false
     /// None is stored for today and none was written on opening: the brief offers to write it.
@@ -192,6 +194,7 @@ final class BriefModel {
         if let read = try? await routes.get(API.Get.Digest.self, [:]) {
             digest = read
             filing.removeAll()
+            if !read.ai.isOn { preferences = (try? await routes.get(API.Get.Preferences.self, [:]))?.preferences }
         }
     }
 

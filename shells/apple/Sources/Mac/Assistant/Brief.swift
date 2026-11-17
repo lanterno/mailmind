@@ -195,7 +195,7 @@ struct BriefScreen: View {
 
     @ViewBuilder private var narrative: some View {
         if model.aiOn == false && (model.brief?.narrative ?? "").isEmpty {
-            AIOffNote(ai: model.digest?.ai)
+            AIOffNote(ai: model.digest?.ai, preferences: model.preferences)
         } else if model.writing {
             DeskThinking(saying: "Reading your inbox…")
         } else if let narrative = model.brief?.narrative, !narrative.isEmpty {
@@ -405,6 +405,8 @@ struct AIOffNote: View {
     /// How AI stands: off for want of a key, a model or a URL says why and where it turns on; turned off, nothing is
     /// said at all.
     let ai: API.AiStatus?
+    /// Settings' choices: the provider's URL and model, and whether replies are drafted ahead.
+    var preferences: API.Preferences? = nil
     @Environment(\.meadow) private var meadow
 
     var body: some View {
@@ -420,7 +422,7 @@ struct AIOffNote: View {
                     .foregroundStyle(meadow.ink3)
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     MeadowIconView(.lock, size: 14).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 2 }
-                    Text(AIWords.sends(ai.provider))
+                    Text(AIWords.sends(preferences, ai))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(.meadow(.ui, 13))

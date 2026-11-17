@@ -135,8 +135,7 @@ struct HelpWindow: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
-            paragraph(Self.howAI(sends: AIWords.sends(status.preferences?.aiProvider ?? .anthropic,
-                                                      url: status.preferences?.aiBaseUrl ?? "")))
+            paragraph(Self.howAI(sends: AIWords.sends(status.preferences, status.digest?.ai)))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 18)

@@ -319,7 +319,7 @@ struct AIPane: View {
                 SettingSwitch(String(localized: "AI mode"), help: String(localized: """
                     Summaries, the brief, drafts and Ask. Off, MailMind sends nothing to any AI service.
                     """), isOn: status.preference(\.aiEnabled) { .init(aiEnabled: $0) })
-                SettingHelp(AIWords.sends(provider, url: preferences?.aiBaseUrl ?? ""))
+                SettingHelp(AIWords.sends(preferences, status.digest?.ai))
             }
         case .connection:
             DeskSideCard(title: String(localized: "Connection"), icon: .link) {
@@ -533,7 +533,9 @@ struct AIPane: View {
             SettingSwitch(String(localized: "Draft replies ahead for important mail"), help: String(localized: """
                 Written while you’re using MailMind, within the daily limit, so a reply is ready when you open the \
                 message. Off, a reply is drafted only when you ask for one.
-                """), isOn: status.preference(\.draftAhead) { .init(draftAhead: $0) })
+                """) + " " + AIWords.aheadGoes(provider, url: preferences?.aiBaseUrl ?? "",
+                                                   cloudModel: status.digest?.ai.cloudModel ?? false),
+                          isOn: status.preference(\.draftAhead) { .init(draftAhead: $0) })
         }
     }
 

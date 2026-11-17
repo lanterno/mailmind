@@ -132,18 +132,62 @@ enum AIWords {
 
     /// What AI mode sends, to whom and when, said before it is turned on as after: under its switch, in the first
     /// run's AI step, in Help and on the brief while AI waits for a key. A model on this Mac, or a compatible service
-    /// answering here, sends nothing off it.
-    static func sends(_ provider: API.AiProvider, url: String = "") -> String {
-        guard let recipient = provider.recipient, !(provider == .compatible && onThisMac(url)) else {
+    /// answering here, sends nothing off it, unless its model runs in Ollama's cloud (`cloudModel`, named by `model`).
+    /// With Draft replies ahead on, whole conversations of important mail go too.
+    static func sends(_ provider: API.AiProvider, url: String = "", model: String = "", cloudModel: Bool = false,
+                      draftAhead: Bool = false) -> String
+    {
+        let ahead = draftAhead ? " " + aheadSends : ""
+        guard let recipient = recipient(provider, url: url) else {
+            if cloudModel { return inOllamasCloud(model) + ahead }
             return provider == .local ? String(localized: "With a model on this Mac, nothing leaves this Mac.")
                 : String(localized: "With the service on this Mac, nothing leaves this Mac.")
         }
         return String(localized: """
-            With AI mode on, each new message’s sender, subject and opening text go to \(recipient) to be summarized, \
-            automatically, and those senders, subjects and summaries go again to write the day’s brief and what came in \
-            since you looked. Whole conversations go only when you ask: for a summary or a draft, with what you type into \
-            Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac.
-            """)
+            With AI mode on, the sender, subject and opening text of each message in your Inbox go to \(recipient) to \
+            be summarized, automatically: the last 30 days’ as soon as you turn it on, then each new one. Those \
+            senders, subjects and summaries go again to write the day’s brief and what came in since you looked. Whole \
+            conversations go only when you ask: for a summary or a draft, with what you type into Ask, a search \
+            written as a sentence, or Rewrite. Attachments never leave this Mac.
+            """) + ahead
+    }
+
+    /// The same from Settings' preferences and the digest's word on the AI: the provider, its URL and model chosen,
+    /// whether that model runs in a cloud, and whether replies are drafted ahead.
+    static func sends(_ preferences: API.Preferences?, _ ai: API.AiStatus?) -> String {
+        let chosen = preferences?.aiModel ?? ""
+        return sends(preferences?.aiProvider ?? ai?.provider ?? .anthropic, url: preferences?.aiBaseUrl ?? "",
+                     model: chosen.isEmpty ? ai?.model ?? "" : chosen, cloudModel: ai?.cloudModel ?? false,
+                     draftAhead: preferences?.draftAhead ?? false)
+    }
+
+    /// What Draft replies ahead adds to what goes.
+    static let aheadSends = String(localized: """
+        With Draft replies ahead on, whole conversations of important mail go too, to draft replies before you open \
+        them.
+        """)
+
+    /// What the Draft replies ahead switch says goes while it is on, and to whom: nothing, with a model that runs on
+    /// this Mac.
+    static func aheadGoes(_ provider: API.AiProvider, url: String = "", cloudModel: Bool = false) -> String {
+        if let recipient = recipient(provider, url: url) {
+            return String(localized: "On, whole conversations of important mail go to \(recipient) to draft them.")
+        }
+        return cloudModel
+            ? String(localized: "On, whole conversations of important mail go to Ollama’s servers to draft them.")
+            : String(localized: "On, they are drafted on this Mac, and nothing leaves it.")
+    }
+
+    /// Who mail goes to: nil for a model on this Mac, or a compatible service answering here.
+    private static func recipient(_ provider: API.AiProvider, url: String) -> String? {
+        provider == .compatible && onThisMac(url) ? nil : provider.recipient
+    }
+
+    /// What goes, with a model on this Mac that runs in Ollama's cloud: `model` by name, when one is known.
+    private static func inOllamasCloud(_ model: String) -> String {
+        model.isEmpty
+            ? String(localized: "The model chosen runs in Ollama’s cloud, so what is summarized goes to Ollama’s servers.")
+            : String(localized: "\(model) runs in Ollama’s cloud, so what is summarized goes to Ollama’s servers.")
     }
 
     /// Which model background summaries ask, and which one what a person asks for goes to, as the digest has them in
