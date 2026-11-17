@@ -70,9 +70,15 @@ fn a_save_is_overdue_after_a_while_and_at_once_when_nothing_pushes() {
     assert_eq!(overdue_since(1000, true), 1000 - WAITING_AFTER);
     assert_eq!(overdue_since(1000, false), 1000);
     let save = waiting(&row(
-        json!({"draft_id": 3, "account": "a", "subject": null, "saved_at": 9, "attempts": 1, "discard": 1}),
+        json!({"draft_id": 3, "account": "a", "subject": null, "saved_at": 9, "attempts": 1, "discard": 1, "due_at": 20}),
     ));
-    assert_eq!(save, json!({"id": 3, "account": "a", "subject": "", "saved_at": 9, "attempts": 1, "discarding": true}));
+    assert_eq!(
+        save,
+        json!({"id": 3, "account": "a", "subject": "", "saved_at": 9, "attempts": 1, "discarding": true, "kept": false})
+    );
+    let kept = waiting(&row(json!({"draft_id": 4, "account": "a", "subject": "Notes", "saved_at": 9, "attempts": 0,
+                                   "discard": 0, "due_at": mm_compose::draft_journal::KEPT_HERE})));
+    assert_eq!(kept["kept"], json!(true));
 }
 
 #[derive(Debug)]

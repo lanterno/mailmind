@@ -6,7 +6,7 @@
 
 use mm_compose::attachments::{self, FURTHEST};
 use mm_compose::draft;
-use mm_compose::draft_journal::{self, PUSH_EVERY, PUSH_TICK};
+use mm_compose::draft_journal::{self, KEPT_HERE, PUSH_EVERY, PUSH_TICK};
 use mm_compose::outbox_item::{self, OriginalRow, SendMeta, UNSURE};
 use mm_compose::sending_ports::{DraftRow, Mark, OutboxRow, Waiting};
 use mm_compose::spec::Built;
@@ -182,13 +182,24 @@ fn a_push_replaces_its_own_mailboxs_copy_and_leaves_another_accounts_to_be_remov
 }
 
 #[test]
+fn a_read_only_save_is_kept_here_and_a_full_runs_autosave_over_it_goes_as_a_first_save() {
+    let waiting = Waiting { due_at: 130, attempts: 2, ..Waiting::default() };
+    assert_eq!(draft_journal::after_save(false, 100, None, None, true), (KEPT_HERE, 0));
+    assert_eq!(draft_journal::after_save(true, 100, Some(&waiting), Some(90), true), (KEPT_HERE, 0));
+    let kept = Waiting { due_at: KEPT_HERE, attempts: 0, ..Waiting::default() };
+    assert_eq!(draft_journal::after_save(true, 100, Some(&kept), None, false), (100 + PUSH_EVERY, 0));
+    assert_eq!(draft_journal::after_save(true, 100, Some(&kept), Some(90), false), (150, 0));
+    assert_eq!(draft_journal::after_save(false, 100, Some(&kept), None, false), (100, 0));
+}
+
+#[test]
 fn typing_puts_no_push_off_and_a_failed_one_waits_longer_each_time() {
     let waiting = Waiting { due_at: 130, attempts: 2, ..Waiting::default() };
-    assert_eq!(draft_journal::after_save(false, 100, Some(&waiting), Some(90)), (100, 0));
-    assert_eq!(draft_journal::after_save(true, 100, Some(&waiting), Some(90)), (130, 2));
-    assert_eq!(draft_journal::after_save(true, 100, None, Some(90)), (150, 0));
-    assert_eq!(draft_journal::after_save(true, 100, None, None), (100 + PUSH_EVERY, 0));
-    assert_eq!(draft_journal::after_save(true, 100, None, Some(10)), (100, 0));
+    assert_eq!(draft_journal::after_save(false, 100, Some(&waiting), Some(90), false), (100, 0));
+    assert_eq!(draft_journal::after_save(true, 100, Some(&waiting), Some(90), false), (130, 2));
+    assert_eq!(draft_journal::after_save(true, 100, None, Some(90), false), (150, 0));
+    assert_eq!(draft_journal::after_save(true, 100, None, None, false), (100 + PUSH_EVERY, 0));
+    assert_eq!(draft_journal::after_save(true, 100, None, Some(10), false), (100, 0));
     let waits: Vec<i64> = [1, 2, 3, 6, 7, 50].iter().map(|n| draft_journal::due_after_failing(0, *n)).collect();
     assert_eq!(waits, [20, 40, 80, 640, 900, 900]);
     assert_eq!(draft_journal::next_round_in(100, None), PUSH_TICK);
