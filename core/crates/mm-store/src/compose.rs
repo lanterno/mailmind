@@ -23,9 +23,10 @@ const RECENT: &str = "SELECT id,account,subject,recipients,state,attempts,last_e
                       next_attempt_at,delivered,wire_begun,sent_appended,wait_kind \
                       FROM outbox ORDER BY id DESC LIMIT ?";
 
-const OVERDUE: &str = "SELECT j.draft_id, j.account, j.discard, j.saved_at, j.attempts, d.subject \
+/// What should have reached its server by then, and what a read-only process kept on this Mac (`KEPT_HERE`).
+const OVERDUE: &str = "SELECT j.draft_id, j.account, j.discard, j.saved_at, j.attempts, j.due_at, d.subject \
                        FROM draft_journal j JOIN drafts d ON d.id=j.draft_id \
-                       WHERE (j.attempts>0 OR j.due_at<=?) AND NOT EXISTS (SELECT 1 FROM outbox o \
+                       WHERE (j.attempts>0 OR j.due_at<=? OR j.due_at=?) AND NOT EXISTS (SELECT 1 FROM outbox o \
                        WHERE o.draft_id=j.draft_id AND o.state IN ('queued','sending')) \
                        ORDER BY j.saved_at DESC";
 
@@ -35,7 +36,7 @@ impl StoredOutbox for Database {
     }
 
     fn overdue(&self, before: i64) -> Result<Vec<Row>, Fault> {
-        self.read(|c| rows_of(c, OVERDUE, [before]))
+        self.read(|c| rows_of(c, OVERDUE, [before, mm_compose::draft_journal::KEPT_HERE]))
     }
 
     fn counts(&self) -> Result<BTreeMap<String, i64>, Fault> {

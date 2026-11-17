@@ -8,6 +8,9 @@ pub const PUSH_EVERY: i64 = 60;
 pub const PUSH_TICK: i64 = 10;
 pub const BACKOFF_FIRST: i64 = 20;
 pub const BACKOFF_MOST: i64 = 900;
+/// The due time of a save a read-only process made: kept on this Mac, it never comes due, so no push job sends it to
+/// its server. A later save in a full run gives it a due time again.
+pub const KEPT_HERE: i64 = i64::MAX;
 
 /// When an autosave's copy may go: PUSH_EVERY after the last push, or after this first save.
 pub fn due_after_typing(now: i64, pushed_at: Option<i64>) -> i64 {
@@ -24,12 +27,22 @@ pub fn due_after_failing(now: i64, attempts: i64) -> i64 {
 }
 
 /// (When the push is due, the tries it has had), for a save replacing what `waiting` asked (`after_save`). An
-/// autosave changes neither; any other save goes now, afresh.
-pub fn after_save(autosave: bool, now: i64, waiting: Option<&Waiting>, pushed_at: Option<i64>) -> (i64, i64) {
+/// autosave changes neither; any other save goes now, afresh. A read-only process (`keep`) keeps it here
+/// (`KEPT_HERE`), and an autosave in a full run over one kept here goes as a first save would.
+pub fn after_save(
+    autosave: bool,
+    now: i64,
+    waiting: Option<&Waiting>,
+    pushed_at: Option<i64>,
+    keep: bool,
+) -> (i64, i64) {
+    if keep {
+        return (KEPT_HERE, 0);
+    }
     if !autosave {
         return (now, 0);
     }
-    match waiting {
+    match waiting.filter(|w| w.due_at != KEPT_HERE) {
         Some(w) => (w.due_at, w.attempts),
         None => (due_after_typing(now, pushed_at), 0),
     }

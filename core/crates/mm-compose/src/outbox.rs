@@ -95,7 +95,8 @@ pub fn listed(r: &Row) -> Value {
     })
 }
 
-/// A save the tray names (`draft_journal.listed`).
+/// A save the tray names (`draft_journal.listed`): `kept` when a read-only process kept it on this Mac, where it stays
+/// until it is saved again in a full run.
 pub fn waiting(r: &Row) -> Value {
     json!({
         "id": col(r, "draft_id"),
@@ -104,6 +105,7 @@ pub fn waiting(r: &Row) -> Value {
         "saved_at": col(r, "saved_at"),
         "attempts": col(r, "attempts"),
         "discarding": truthy(col(r, "discard")),
+        "kept": col(r, "due_at").as_i64() == Some(crate::draft_journal::KEPT_HERE),
     })
 }
 

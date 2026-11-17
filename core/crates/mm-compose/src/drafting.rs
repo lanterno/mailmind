@@ -49,8 +49,8 @@ pub struct DraftingParts {
     pub gate: Arc<dyn Gate>,
     pub clock: Arc<dyn Clock>,
     pub mint: Mint,
-    /// Whether this process writes to mail servers: a read-only one keeps its saves in the journal, and refuses a
-    /// discard that would take a copy off a server.
+    /// Whether this process writes to mail servers: a read-only one keeps its saves on this Mac, where no push job
+    /// sends them on a full run, and refuses a discard that would take a copy off a server.
     pub writes: bool,
 }
 
@@ -264,8 +264,10 @@ impl Drafting {
                 }
             };
             book.draft_note_save(id, Some(mode), Some(&composed.spec.subject), version, key.as_deref(), &stamp)?;
+            // A read-only process keeps the save here: no push of it waits for a full run.
+            let pushed_at = prev.as_ref().and_then(|p| p.pushed_at);
             let (due, attempts) =
-                draft_journal::after_save(autosave, now, waiting.as_ref(), prev.as_ref().and_then(|p| p.pushed_at));
+                draft_journal::after_save(autosave, now, waiting.as_ref(), pushed_at, !self.parts.writes);
             book.journal_put(&Save {
                 draft_id: id,
                 version,
