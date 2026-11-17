@@ -337,13 +337,14 @@ final class Composer: Identifiable {
         host.closed(self)
     }
 
-    /// Save what's unsaved as MailMind quits, as closing it would, but leave it open: a person may yet choose to stay.
-    /// Nil when there is nothing to save.
+    /// Save what's unsaved as MailMind quits, but leave it open: a person may yet choose to stay. Nil when there is
+    /// nothing to save. It is kept on this Mac only, as an autosave is: the core answers once its journal holds it,
+    /// rather than after trying its server for a while, and the copy goes to the server when MailMind next opens.
     func saveBeforeQuitting() -> Task<Bool?, Never>? {
         guard !closed else { return nil }
         commitTyped()
         guard dirty else { return nil }
-        return save(silent: true)
+        return save(silent: true, autosave: true)
     }
 
     /// Throw it away, the copy on the server too.

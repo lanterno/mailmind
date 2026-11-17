@@ -2,7 +2,8 @@
 import AppKit
 
 /// Quitting with writing open or mail still to go. Every open composer (the reader's reply and each compose window)
-/// saves what it holds as a draft first, as closing it does, so nothing typed since its last autosave is lost.
+/// saves what it holds as a draft on this Mac first, as an autosave does, so nothing typed since its last autosave is
+/// lost; its server's copy follows as an autosave's does, once MailMind is open again.
 /// MailMind sends only while it is open, so a message in its Undo window is sent at once rather than left until the
 /// next launch, and a message that waits for a later time (scheduled, or to try again) is asked about first: "Quit
 /// anyway? It sends when MailMind is next open."
@@ -26,6 +27,18 @@ enum Quitting {
         case stillGoing
         /// Something being written couldn't be saved as a draft.
         case unsaved
+        /// A draft's save hadn't answered when the wait ran out: it may yet be kept, or may not.
+        case stillSaving
+    }
+
+    /// How the open composers' saves stood when quitting stopped waiting for them.
+    enum Saving: Equatable, Sendable {
+        /// Every one was kept, or there was nothing to save.
+        case saved
+        /// One said no.
+        case refused
+        /// One hadn't answered yet.
+        case waiting
     }
 
     /// How long quitting waits for what it sent to go.
@@ -59,6 +72,11 @@ enum Quitting {
             String(localized: """
                 A message you’re writing couldn’t be saved as a draft. If you quit now, what you wrote is lost.
                 """)
+        case .stillSaving:
+            String(localized: """
+                A message you’re writing is still being saved as a draft. If you quit now, some of what you wrote may \
+                be lost.
+                """)
         }
         return (String(localized: "Quit anyway?"), text, String(localized: "Quit Anyway"), String(localized: "Don’t Quit"))
     }
@@ -80,14 +98,19 @@ enum Quitting {
     }
 
     /// Whether to quit. What each open composer holds is saved as a draft first, waited for up to `saveWait`; one that
-    /// couldn't be saved is asked about (no means stay, with every composer as it was). Then, but in a read-only run,
+    /// couldn't be saved, or hadn't answered yet, is asked about (no means stay, with every composer as it was). Then,
+    /// but in a read-only run,
     /// after asking about what waits for later (no means stay, its Undo windows as they were), what is in its Undo
     /// window is sent now and waited for, up to `wait`; what still hadn't gone is asked about too.
     static func settle(_ routes: any Routes, writing: [Composer] = [], readOnly: Bool = false,
                        ask: (Question) async -> Bool, say: (String) -> Void, wait: Duration = Quitting.wait,
                        saveWait: Duration = Quitting.saveWait, poll: Duration = .milliseconds(400)) async -> Bool
     {
-        if !(await saved(writing, wait: saveWait)), !(await ask(.unsaved)) { return false }
+        switch await saved(writing, wait: saveWait) {
+        case .saved: break
+        case .refused: if !(await ask(.unsaved)) { return false }
+        case .waiting: if !(await ask(.stillSaving)) { return false }
+        }
         guard !readOnly else { return true }
         guard let listed = try? await routes.get(API.Get.Outbox.self, ["limit": "50"]) else { return true }
         let plan = plan(listed.items)
@@ -108,11 +131,12 @@ enum Quitting {
         return await ask(.stillGoing)
     }
 
-    /// Save what each composer holds that isn't saved yet, as closing it would, and wait for the saves, up to `wait`.
-    /// Whether every one was saved in time.
-    static func saved(_ writing: [Composer], wait: Duration) async -> Bool {
+    /// Save what each composer holds that isn't saved yet, on this Mac, and wait for the saves, up to `wait`: whether
+    /// every one was kept, one said no, or one hadn't answered yet. A save that hasn't answered isn't one that failed:
+    /// it may yet be kept.
+    static func saved(_ writing: [Composer], wait: Duration) async -> Saving {
         let saves = writing.compactMap { $0.saveBeforeQuitting() }
-        guard !saves.isEmpty else { return true }
+        guard !saves.isEmpty else { return .saved }
         let settled = Settled()
         Task {
             var all = true
@@ -120,19 +144,19 @@ enum Quitting {
                 // Nil is a composer with nothing to save after all.
                 if await save.value == false { all = false }
             }
-            settled.saved = all
+            settled.saving = all ? .saved : .refused
         }
         let until = ContinuousClock.now + wait
-        while settled.saved == nil, ContinuousClock.now < until {
+        while settled.saving == nil, ContinuousClock.now < until {
             try? await Task.sleep(for: .milliseconds(20))
         }
-        return settled.saved ?? false
+        return settled.saving ?? .waiting
     }
 
-    /// Whether the saves were made, once they have all answered.
+    /// How the saves went, once they have all answered.
     @MainActor
     private final class Settled {
-        var saved: Bool?
+        var saving: Saving?
     }
 
     /// The question as an alert of the app's own, Quit Anyway first.
