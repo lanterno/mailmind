@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from mailmind.assistant.domain.providers import (PROVIDERS, background_model, chat_models, in_force, on_loopback, sendable,
-                                                 unkeyed)
+from mailmind.assistant.domain.providers import (PROVIDERS, background_model, chat_models, cloud_model, in_force, on_loopback,
+                                                 sendable, unkeyed)
 from mailmind.kernel.ai_provider import AI_PROVIDERS
 
 KEY = "sk-test-not-a-real-key"
@@ -89,6 +89,32 @@ def test_a_service_on_this_mac_is_local_and_one_elsewhere_is_not():
     assert engine("anthropic", base_url="http://127.0.0.1:9/").local
     assert not engine("openai").local and not engine("anthropic").local
     assert on_loopback("http://[::1]:11434/v1") and not on_loopback("https://llm.example.test") and not on_loopback("http://[")
+
+
+CLOUD_MODELS = ["gpt-oss:120b-cloud", "deepseek-v3.1:671b-cloud", "glm-4.6:cloud", " Qwen3-Coder:480B-Cloud "]
+
+
+@pytest.mark.parametrize("model", CLOUD_MODELS)
+def test_a_model_a_server_on_this_mac_names_for_a_cloud_runs_in_one_on_or_off(model):
+    assert cloud_model("local", True, model) and cloud_model("compatible", True, model)
+    assert engine("local", model=model).cloud_model
+    assert engine("compatible", model=model, base_url="http://127.0.0.1:11434/v1").cloud_model
+    assert engine("local", model=model, enabled=False).cloud_model
+
+
+@pytest.mark.parametrize("model", ["qwen3:8b", "llama-4", "cloudy:7b", "cloud", "gpt-oss:120b-cloudy", ""])
+def test_any_other_model_on_this_mac_runs_here(model):
+    assert not cloud_model("local", True, model)
+    assert not engine("local", model=model).cloud_model
+
+
+def test_only_a_server_on_this_mac_is_said_to_run_a_cloud_model():
+    """A compatible service elsewhere is a cloud whatever its model is called, and its words say so already."""
+    assert not engine("compatible", model="gpt-oss:120b-cloud", base_url="https://llm.example.test/v1").cloud_model
+    assert not cloud_model("compatible", False, "gpt-oss:120b-cloud")
+    for provider in ("anthropic", "openai", "gemini"):
+        assert not cloud_model(provider, True, "gpt-oss:120b-cloud")
+        assert not engine(provider, model="gpt-oss:120b-cloud", base_url="http://127.0.0.1:9/").cloud_model
 
 
 @pytest.mark.parametrize("url", [

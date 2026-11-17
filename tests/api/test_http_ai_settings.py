@@ -123,6 +123,20 @@ def test_the_digest_says_which_provider_and_why_ai_is_off(app, fake_keychain):
         assert "llm.example.test" not in str(st)
 
 
+def test_the_status_says_when_the_model_chosen_on_this_mac_runs_in_a_cloud(app):
+    """Ollama serves its cloud models at the same address as the rest: one named `-cloud` or `:cloud` sends mail off this
+    Mac, and the status says so before AI is turned on."""
+    assert status(app)["cloud_model"] is False
+    choose(app, ai_provider="local", ai_model="qwen3:8b")
+    assert status(app)["cloud_model"] is False
+    choose(app, ai_model="gpt-oss:120b-cloud")
+    assert status(app)["cloud_model"] is True
+    choose(app, ai_provider="compatible", ai_base_url="http://localhost:1234/v1", ai_model="glm-4.6:cloud")
+    assert status(app)["cloud_model"] is True
+    choose(app, ai_base_url="https://llm.example.test/v1")
+    assert status(app)["cloud_model"] is False
+
+
 def test_with_claudes_key_it_is_on_until_turned_off_and_then_a_route_sends_nothing(app, world, ai):
     st = status(app)
     assert (st["engine"], st["provider"], st["off"], st["model"]) == ("api", "anthropic", None, "claude-opus-5-5")
