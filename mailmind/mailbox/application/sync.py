@@ -23,7 +23,7 @@ from mailmind.mailbox.application.session import MailSession
 from mailmind.mailbox.domain import flags as mail_flags
 from mailmind.mailbox.domain import ingested, sync_plan
 from mailmind.mailbox.domain.events import FlagsChanged
-from mailmind.platform import bus
+from mailmind.platform import bus, profile
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -218,7 +218,11 @@ class Ingest:
 
     def _apply_filters(self, c: Connection, pk: int) -> bool:
         """A message never seen before, stored and indexed on this connection: what the person's filters ask of it goes through
-        the command path, so the server hears. Stars and read marks only; no filter moves mail. Whether anything was queued."""
+        the command path, so the server hears. Stars and read marks only; no filter moves mail. Whether anything was queued.
+        A read-only process asks nothing of a server, and a mark kept here alone this sync's read of the flags would take
+        back: there the filters ask nothing, and nothing waits for a full run."""
+        if not profile.writes_allowed():
+            return False
         wanted = self._curation.arrival_flags(c, pk)
         row = self._store.get_message(c, pk) if wanted else None
         if row is None:

@@ -23,8 +23,13 @@ class Muting:
         self._undo = undo
 
     def _mark_read(self, c: object, rows: Iterable[Row], when: str) -> None:
+        """Each read, here and, through the queue, on its server. A read-only process marks them here alone and queues
+        nothing, so no full run asks the server later."""
         for r in rows:
-            self._messages.queue_flags(c, r, {"seen": True}, f"mute:{r['pk']}:{when}", when)
+            if profile.writes_allowed():
+                self._messages.queue_flags(c, r, {"seen": True}, f"mute:{r['pk']}:{when}", when)
+            else:
+                self._messages.set_local_flags(c, r["pk"], seen=1)
 
     def mute(self, body: dict[str, Any]) -> dict[str, Any]:
         with self._uow.write() as c:
@@ -83,5 +88,6 @@ class Muting:
 
     def on_ingest(self, c: object, account: str) -> None:      # the Mailbox's port says `str`
         """After threading assigns thread_ids, mark unseen members of any muted thread read, here and on the
-        server, so freshly-arrived replies in a muted thread stay silent. In the caller's transaction."""
+        server, so freshly-arrived replies in a muted thread stay silent; a read-only process marks them here alone. In
+        the caller's transaction."""
         self._mark_read(c, self._book.unread_in_muted_threads(c, AccountId(account)), now_iso())

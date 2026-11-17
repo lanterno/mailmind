@@ -69,15 +69,20 @@ class Snoozing:
     def wake_due(self) -> None:
         """Resurface messages whose snooze time has passed: clear the snooze, mark unread, and push a realtime event
         so they pop back into the inbox view. Database only: the unread mark reaches the server through the queue, or
-        the next sync that read the flags would take it back."""
+        the next sync that read the flags would take it back. A read-only process marks them here alone and queues
+        nothing, so no full run asks the server later: there, the next read of the flags takes the mark back."""
         now = int(time.time())
         marked = False
         with self._uow.write() as c:
             due = self._book.due_snoozes(c, now)
             for r in due:
                 self._book.clear_snooze(c, r["pk"])
-                if snooze.marks_unread_on_waking(r["seen"]):
+                if not snooze.marks_unread_on_waking(r["seen"]):
+                    continue
+                if profile.writes_allowed():
                     marked = self._messages.queue_flags(c, r, {"seen": False}, f"wake:{r['pk']}:{now}", now_iso()) or marked
+                else:
+                    self._messages.set_local_flags(c, r["pk"], seen=0)
         if marked:
             self._messages.flags_queued()
         if due:
