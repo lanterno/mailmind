@@ -154,14 +154,9 @@ jobs:
         if: failure()
         run: cat shells/apple/build/smoke/ios.log 2>/dev/null || true
 
-      # The release check opens the app's Intel half under Rosetta, which the runner's image may not carry.
-      - name: Rosetta, for the release's Intel half
-        if: ${{ !cancelled() }}
-        run: /usr/bin/arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
-
       # The release recipe end to end with a throwaway update key, never the owner's: the universal app signed ad hoc,
       # its acknowledgements, the .dmg and its window, the signed appcast, and the checks a person's Mac and Sparkle
-      # make on them; then the app opens on fictional mail, each half. Nothing is published.
+      # make on them; then the app opens on fictional mail, on Apple silicon. Nothing is published.
       - name: The release, checked
         id: release
         if: ${{ !cancelled() }}
@@ -172,7 +167,7 @@ jobs:
           just apple release-check 2>&1 | tee "$RUNNER_TEMP/release-check.txt"
           status=${PIPESTATUS[0]}
           {
-            echo "### Mac: the release's app on fictional mail (macos-26, the Intel half under Rosetta)"
+            echo "### Mac: the release's app on fictional mail (macos-26)"
             grep -h '^    the Mac app' "$RUNNER_TEMP/release-check.txt" | sed 's/^ *the Mac app/- the Mac app/'
             grep -h '^## the .dmg is' "$RUNNER_TEMP/release-check.txt" | sed 's/^## /- /'
           } >> "$GITHUB_STEP_SUMMARY"
@@ -191,23 +186,15 @@ jobs:
           compression-level: 0
           retention-days: 3
 
-  # The release's app on the oldest macOS it says it runs on (project.yml's floor), each half on a Mac of its kind:
-  # Apple silicon, and a real Intel Mac rather than Rosetta. The build fails on a Swift or Objective-C call newer than
+  # The release's app on the oldest macOS it says it runs on (project.yml's floor), on Apple silicon: MailMind is
+  # tested on Apple silicon only, though a release still holds an Intel half. The build fails on a Swift or Objective-C call newer than
   # the floor, but nothing checks the core's calls into the system (its Rust and C, which dyld binds as the app
   # starts) or how macOS 15 draws the window: only opening it there does. It needs no Xcode, only the apple job's
   # .dmg, so it runs whenever that job made one, whatever else in it failed.
   mac-floor:
     needs: apple
     if: ${{ !cancelled() && needs.apple.outputs.dmg != '' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            half: arm64
-          - runner: macos-15-intel
-            half: x86_64
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -234,19 +221,18 @@ jobs:
 
       - name: The release's app opens on fictional mail
         env:
-          HALF: ${{ matrix.half }}
-          RUNNER_LABEL: ${{ matrix.runner }}
+          RUNNER_LABEL: macos-15
         run: |
           system=$(sw_vers -productVersion)
           floor=$(sed -n 's/^ *macOS: *"\(.*\)"$/\1/p' shells/apple/project.yml)
           echo "macOS $system on $(uname -m); the app's floor is macOS $floor"
-          # A runner that moved on from the floor, or ran this half under Rosetta, would prove nothing about it.
+          # A runner that moved on from the floor, or ran the app under Rosetta, would prove nothing about it.
           if [ "${system%%.*}" != "${floor%%.*}" ]; then
             echo "::error::$RUNNER_LABEL runs macOS $system, not the floor's macOS ${floor%%.*}: change its label here"
             exit 1
           fi
-          if [ "$(uname -m)" != "$HALF" ]; then
-            echo "::error::$RUNNER_LABEL is $(uname -m), not $HALF"
+          if [ "$(uname -m)" != arm64 ]; then
+            echo "::error::$RUNNER_LABEL is $(uname -m), not Apple silicon"
             exit 1
           fi
           dmg=$(ls "$RUNNER_TEMP"/release-check/MailMind-*.dmg)
@@ -254,28 +240,14 @@ jobs:
           hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$RUNNER_TEMP/mnt" "$dmg"
           set +e
           uv run python shells/apple/Measure/demo_home.py "$RUNNER_TEMP/mnt/MailMind.app/Contents/MacOS/MailMind" \
-            --smoke --arch "$HALF" 2>&1 | tee "$RUNNER_TEMP/opened.txt"
+            --smoke --arch arm64 2>&1 | tee "$RUNNER_TEMP/opened.txt"
           status=${PIPESTATUS[0]}
           hdiutil detach -quiet "$RUNNER_TEMP/mnt"
-          # GitHub's Intel Macs are VMs with no GPU macOS can draw with: its Metal stops any window being drawn
-          # ("Target device architecture is nil"), after the app has started and its core has loaded and synced. Only
-          # that failure is let through, and said; any other fails the step.
-          nogpu=""
-          if [ "$status" != 0 ] && grep -q "Target device architecture is nil" "$RUNNER_TEMP/opened.txt" \
-              && grep -q "\[sync\]" "$RUNNER_TEMP/opened.txt"; then
-            nogpu=1
-            echo "::warning::$RUNNER_LABEL has no GPU macOS can draw with: the app started and its core synced, but its window can't be drawn here"
-          fi
           {
             echo "### Mac: the release's app on macOS $system ($RUNNER_LABEL)"
             grep -h '^the Mac app' "$RUNNER_TEMP/opened.txt" | sed 's/^/- /'
-            if [ -n "$nogpu" ]; then
-              echo "- it started and its core loaded and synced, but this runner has no GPU macOS can draw a window with"
-            elif [ "$status" != 0 ]; then
-              echo "- it never showed mail in its inbox: the step's log says why"
-            fi
+            if [ "$status" != 0 ]; then echo "- it never showed mail in its inbox: the step's log says why"; fi
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "$nogpu" ]; then exit 0; fi
           exit "$status"
 
   android:
