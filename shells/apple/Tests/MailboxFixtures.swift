@@ -139,7 +139,7 @@ enum Fixture {
     static func digest(accounts: [String] = [ada, work], ai: Bool = true, off: API.AiOff = .noKey,
                        readOnly: Bool = false) -> API.Digest {
         API.Digest(accounts: accounts,
-                   ai: API.AiStatus(backgroundModel: ai ? "test" : "", engine: ai ? "api" : "none", keyFrom: "test",
+                   ai: API.AiStatus(backgroundModel: ai ? "test" : "", cloudModel: false, engine: ai ? "api" : "none", keyFrom: "test",
                                     lastTs: 0, limitMicros: 0,
                                     model: ai ? "test" : "", off: ai ? nil : off, provider: .anthropic),
                    aliases: [ada: "Ada", work: nil], generated: "2026-11-15T09:00:00Z", items: [],
