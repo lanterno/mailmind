@@ -519,11 +519,12 @@ fn week_in(
 impl Overview for Database {
     fn brief_rows(&self, accounts: &[String], n: i64) -> Result<Vec<Glance>, Fault> {
         let (ac, ap) = among(accounts, "m.account");
+        // The Inbox's mail alone: a brief is written with no one asking, and mail filed, sent or trashed isn't sent.
         let sql = format!(
             "SELECT m.pk, m.message_key, m.uid, m.account, m.folder, m.from_name, m.from_addr, m.subject, m.message_id, \
              s.summary, s.importance, s.category, s.action \
              FROM messages m JOIN assessments s ON s.message_key=m.message_key \
-             WHERE m.is_junk=0 AND {} AND m.pending_removal IS NULL AND s.importance>=2 AND {NOT_MUTED}{ac} \
+             WHERE m.folder='INBOX' AND m.is_junk=0 AND {} AND m.pending_removal IS NULL AND s.importance>=2 AND {NOT_MUTED}{ac} \
              ORDER BY s.importance DESC, m.ts DESC LIMIT ?",
             not_snoozed_sql("m")
         );
@@ -532,14 +533,15 @@ impl Overview for Database {
 
     fn delta_rows(&self, accounts: &[String], since_ts: i64, n: i64) -> Result<Vec<Glance>, Fault> {
         let (ac, ap) = among(accounts, "m.account");
-        // A delta is what changed: newsletters and notifications count, so it matches the pill; only spam, the
-        // blocked, the snoozed and the muted are left out.
+        // A delta is what came into the Inbox since the person looked at it: newsletters and notifications count, so
+        // it matches the pill; only spam, the blocked, the snoozed and the muted are left out. It is asked for with no
+        // one asking, so no other folder's mail is sent.
         let sql = format!(
             "SELECT m.pk, NULL AS message_key, NULL AS folder, m.from_name, m.from_addr, m.subject, m.message_id, \
              COALESCE(s.summary,'') AS summary, COALESCE(s.importance,2) AS importance, \
              COALESCE(s.category,'other') AS category, NULL AS action \
              FROM messages m LEFT JOIN assessments s ON s.message_key=m.message_key \
-             WHERE (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) \
+             WHERE m.folder='INBOX' AND (m.bucket IS NULL OR m.bucket NOT IN ('spam/scam','blocked')) \
              AND {} AND m.pending_removal IS NULL AND m.ts > ? AND {NOT_MUTED}{ac} ORDER BY m.ts DESC LIMIT ?",
             not_snoozed_sql("m")
         );
