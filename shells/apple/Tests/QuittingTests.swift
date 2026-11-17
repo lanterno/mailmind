@@ -169,6 +169,36 @@ final class QuittingTests: XCTestCase {
         XCTAssertEqual(words.quit, "Quit Anyway")
     }
 
+    /// The quit's save is kept on this Mac, as an autosave is: the core answers once it holds it, rather than after
+    /// trying the draft's server for a while, and the server's copy follows once MailMind is open again.
+    func testQuittingSavesOnThisMacAndLeavesTheServersCopyForLater() async {
+        let routes = writingRoutes()
+        let reply = writing("Typed just now", routes)
+        let quit = await Quitting.settle(routes, writing: [reply], ask: { _ in XCTFail("nothing to ask"); return false },
+                                         say: { _ in })
+        XCTAssertTrue(quit)
+        XCTAssertEqual(routes.calls(to: "/api/draft").map { $0.body["autosave"] }, [.bool(true)])
+    }
+
+    /// A save that hasn't answered when the wait runs out isn't one that failed: it may yet be kept, so the question
+    /// doesn't say what was written is lost.
+    func testASaveStillGoingWhenTheWaitEndsIsAskedAboutAsStillSaving() async {
+        let routes = writingRoutes()
+        host = FakeHost(routes: SlowDrafts(routes: routes, delay: .seconds(1)))
+        let reply = writing("On its way", routes)
+        var asked: [Quitting.Question] = []
+        let stay = await Quitting.settle(routes, writing: [reply], ask: { asked.append($0); return false },
+                                         say: { _ in }, saveWait: .milliseconds(50))
+        XCTAssertFalse(stay)
+        XCTAssertEqual(asked, [.stillSaving], "nothing said no")
+        XCTAssertEqual(Quitting.words(.stillSaving).text, """
+            A message you’re writing is still being saved as a draft. If you quit now, some of what you wrote may be \
+            lost.
+            """)
+        await until { !reply.dirty }
+        XCTAssertEqual(routes.calls(to: "/api/draft").count, 1, "and it was kept after all")
+    }
+
     func testTheQuestionSaysItSendsWhenMailMindIsNextOpen() {
         let one = Quitting.words(.later(count: 1))
         XCTAssertEqual(one.title, "Quit anyway?")
@@ -177,6 +207,29 @@ final class QuittingTests: XCTestCase {
         XCTAssertEqual(Quitting.words(.later(count: 3)).text,
                        "3 messages are waiting to send later. They send when MailMind is next open.")
         XCTAssertTrue(Quitting.words(.stillGoing).text.hasSuffix("It sends when MailMind is next open."))
+    }
+}
+
+/// Routes whose draft saves answer only after `delay`, as a core's might while it is busy.
+private struct SlowDrafts: Routes {
+    let routes: FakeRoutes
+    let delay: Duration
+
+    func get<R: GetRoute>(_ route: R.Type, _ query: KeyValuePairs<String, String?>) async throws -> R.Answer
+        where R.Answer: Decodable
+    {
+        try await routes.get(route, query)
+    }
+
+    func post<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer where R.Answer: Decodable {
+        if R.path == API.Post.Draft.path { try? await Task.sleep(for: delay) }
+        return try await routes.post(route, body)
+    }
+
+    func postOverLimit<R: PostRoute>(_ route: R.Type, _ body: R.Body) async throws -> R.Answer
+        where R.Answer: Decodable
+    {
+        try await routes.postOverLimit(route, body)
     }
 }
 
