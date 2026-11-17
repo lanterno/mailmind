@@ -20,7 +20,7 @@ struct ComposeWindow: View {
                 Task { await Composing.shared.change(API.ChangedPreferences(draftTone: tone)) }
             }
             .ignoresSafeArea()
-            .background { WindowChrome(barHeight: ComposerForm.headHeight) }
+            .meadowWindowChrome(barHeight: ComposerForm.headHeight)
             .navigationTitle(ComposerForm.title(composer.mode))
             // The window closed: what's unsaved is saved, as the page's close does. Sending or discarding closed
             // the composer first, and closing twice does nothing.

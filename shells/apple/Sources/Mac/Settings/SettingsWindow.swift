@@ -13,6 +13,8 @@ struct SettingsWindow: View {
 
     /// The head's height: the title's line and its padding, the traffic lights centred on it.
     static let headHeight: CGFloat = 52
+    /// The dialog's size, below the title bar's room, which its paper takes too.
+    static let size = CGSize(width: 840, height: 640)
 
     var body: some View {
         SettingsLayout(status: status, lights: lights, opened: status.core != nil)
@@ -44,11 +46,15 @@ struct SettingsLayout: View {
                 }
             }
         }
-        .frame(width: 840, height: 640)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background { ComposePaper() }
         .overlay(alignment: .bottom) { NoticeBanner(status: status) }
+        // The window is sized from the frame below, which stands in the room under its title bar; the paper takes
+        // that room as well, up to the window's top, so it runs from edge to edge with no strip of the window's own
+        // colour at its foot.
         .ignoresSafeArea()
-        .background { if lights { WindowChrome(barHeight: SettingsWindow.headHeight) } }
+        .frame(width: SettingsWindow.size.width, height: SettingsWindow.size.height)
+        .meadowWindowChrome(barHeight: SettingsWindow.headHeight, on: lights)
         .navigationTitle(status.settingsTab.title)
     }
 

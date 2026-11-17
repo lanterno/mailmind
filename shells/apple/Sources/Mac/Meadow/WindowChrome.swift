@@ -15,8 +15,32 @@ enum WindowLights {
     static let room: CGFloat = 84
 }
 
+/// A window's root dressed as Meadow's: `WindowChrome` behind it, and SwiftUI's own bars told the same, so that
+/// SwiftUI doesn't put them back. SwiftUI sets a window's title bar up again from its bars on each of the view's
+/// updates, and the window of a `Settings` scene takes no `.hiddenTitleBar` style: left alone, SwiftUI made its title
+/// bar opaque again and showed its title over Meadow's head. `on` is false where a test draws the view with no window
+/// of its own.
+struct MeadowWindowChrome: ViewModifier {
+    var barHeight: CGFloat = ShellLayout.topBar
+    var on = true
+
+    func body(content: Content) -> some View {
+        content
+            .toolbar(removing: .title)
+            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+            .background { if on { WindowChrome(barHeight: barHeight) } }
+    }
+}
+
+extension View {
+    /// This view as its window's root, dressed as Meadow's with its head `barHeight` high (`MeadowWindowChrome`).
+    func meadowWindowChrome(barHeight: CGFloat = ShellLayout.topBar, on: Bool = true) -> some View {
+        modifier(MeadowWindowChrome(barHeight: barHeight, on: on))
+    }
+}
+
 /// Set the window up for Meadow once it is in one, and keep its traffic lights on the top bar as AppKit lays the
-/// title bar out again (a resize, full screen, the window becoming key).
+/// title bar out again (a resize, full screen, the window becoming key, a new title).
 struct WindowChrome: NSViewRepresentable {
     var barHeight: CGFloat = ShellLayout.topBar
 
@@ -57,7 +81,38 @@ final class WindowChromeView: NSView {
                 [weak self] _ in MainActor.assumeIsolated { self?.placeLights() }
             })
         }
+        // A new title (a message's subject, Settings' place) lays the title bar out again, which sets the lights back
+        // where AppKit puts them: they go back where they belong each time AppKit moves them. AppKit ignores a light
+        // moved while it is still moving it, so they are moved once it is done.
+        for view in Self.titlebarViews(of: window) {
+            view.postsFrameChangedNotifications = true
+            watching.append(NotificationCenter.default.addObserver(
+                forName: NSView.frameDidChangeNotification, object: view, queue: .main
+            ) { [weak self] _ in MainActor.assumeIsolated { self?.placeLightsSoon() } })
+        }
         placeLights()
+    }
+
+    private var placing = false
+
+    /// The lights placed once AppKit is done with what it is laying out, once however many frames it changed.
+    private func placeLightsSoon() {
+        guard !placing else { return }
+        placing = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                self?.placing = false
+                self?.placeLights()
+            }
+        }
+    }
+
+    /// The title bar's views that AppKit lays out: the three buttons, the bar and its container.
+    static func titlebarViews(of window: NSWindow) -> [NSView] {
+        let buttons = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton]
+            .compactMap { window.standardWindowButton($0) }
+        guard let titlebar = buttons.first?.superview else { return buttons }
+        return buttons + [titlebar] + [titlebar.superview].compactMap { $0 }
     }
 
     /// No title, a clear title bar with the content under it, and no line beneath it.

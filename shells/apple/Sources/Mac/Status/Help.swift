@@ -35,15 +35,18 @@ struct HelpWindow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(width: Self.size.width, height: Self.size.height)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             ZStack {
                 meadow.paper
                 MeadowGrain()
             }
         }
+        // As Settings' (`SettingsLayout`): the window is sized from the frame below, under the title bar's room, and
+        // the paper takes that room too, so it runs to the window's foot.
         .ignoresSafeArea()
-        .background { if lights { WindowChrome(barHeight: Self.barHeight) } }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .meadowWindowChrome(barHeight: Self.barHeight, on: lights)
     }
 
     /// The notes: a kicker over the title (`.hero-date`, `h1`), the lede, then each part under its `h2`.

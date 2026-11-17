@@ -65,7 +65,7 @@ struct MeadowFrame<Pane: View>: View {
         }
         .background { MeadowSky().ignoresSafeArea() }
         .ignoresSafeArea()
-        .background { if lights { WindowChrome() } }
+        .meadowWindowChrome(on: lights)
         .background { escape }
         .environment(shell)
         .focusedSceneValue(\.meadowShell, shell)

@@ -59,7 +59,7 @@ private struct MessageWindowContent: View {
         }
         .background { ZStack { meadow.paper; MeadowGrain() }.ignoresSafeArea() }
         .ignoresSafeArea()
-        .background { WindowChrome(barHeight: MessageWindow.barHeight) }
+        .meadowWindowChrome(barHeight: MessageWindow.barHeight)
         .navigationTitle(opened?.subject.flatMap { $0.isEmpty ? nil : $0 } ?? String(localized: "Message"))
         .focusedSceneValue(\.readerTools, opened.map { opened in
             ReaderTools(print: {
