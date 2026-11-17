@@ -6,6 +6,7 @@ import type { DraftTone, GetAnswers, PostBodies } from "../../lib/api/types";
 import { currentRoute, go } from "../../app/route";
 import { askOverLimit } from "../../lib/overLimit";
 import { pref } from "../../lib/prefs";
+import { READ_ONLY_REFUSED, refusedReadOnly } from "../../lib/readOnly";
 import { createStore } from "../../lib/store";
 import { announce, toast } from "../../lib/toast";
 import { createComposing, type Focus } from "./machine";
@@ -41,6 +42,7 @@ export const composing = createComposing({
   get: (path) => get(path as "/api/digest"),
   toast,
   say: announce,
+  readOnly: (e) => (refusedReadOnly(e) ? READ_ONLY_REFUSED : null),
   senders: () => {
     const d = digest();
     return d?.send_accounts?.length ? d.send_accounts : d?.accounts ?? [];

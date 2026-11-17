@@ -25,6 +25,7 @@ export interface Env {
   get(path: string): Promise<Answer>;
   toast(message: string): void;
   say(message: string): void;
+  readOnly(e: unknown): string | null;   // what a change read only refused says, or null for any other failure
   senders(): string[];
   current(): string | undefined;
   mine(): Set<string>;
@@ -202,7 +203,10 @@ export function createComposing(env: Env) {
     if (x.draftId) {
       try {
         await env.post("/api/draft", { draft_id: x.draftId, delete: true });
-      } catch { /* the copy stays; it's still a draft */ }
+      } catch (e) {   // the copy stays; it's still a draft
+        const refused = env.readOnly(e);
+        if (refused) env.toast(refused);
+      }
       env.foldersChanged();
     }
     x.dirty = false;
@@ -748,7 +752,12 @@ export function createComposing(env: Env) {
         env.outboxChanged();
       } catch (e) {
         failedSend = { ...snap, draftId: x.draftId };
-        showFailed(`Send failed — ${e instanceof Error ? e.message : ""}`);
+        const refused = env.readOnly(e);
+        showFailed(refused ?? `Send failed — ${e instanceof Error ? e.message : ""}`);
+        if (refused) {   // nothing went, and nothing waits to: the message comes back to its composer
+          env.toast(refused);
+          if (!c) void reopenFailed();   // one opened since stays, and the float's Edit brings this one back
+        }
       }
     })();
   }
