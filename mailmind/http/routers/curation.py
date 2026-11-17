@@ -28,6 +28,7 @@ from mailmind.http.schemas.curation import (
     Swept,
 )
 from mailmind.kernel.errors import Problem
+from mailmind.platform import profile
 from mailmind.platform.logging import get_logger
 
 log = get_logger("cleanup")
@@ -68,7 +69,7 @@ def router(curation, mailbox):
     def cleanup_execute(body: CleanupBody):
         try:
             return curation.cleanup.execute(body.model_dump(exclude_unset=True))
-        except Problem:
+        except (Problem, profile.ReadOnlyError):    # read-only: the 409, with nothing blocked or moved
             raise
         except Exception as ex:
             log.error("error", exc_info=ex)
@@ -82,7 +83,7 @@ def router(curation, mailbox):
     def cleanup_batch(body: BatchCleanupBody):
         try:
             return curation.cleanup.batch_execute(body.model_dump(exclude_unset=True))
-        except Problem:
+        except (Problem, profile.ReadOnlyError):    # read-only: the 409, with nothing blocked or moved
             raise
         except Exception as ex:
             log.error("error", exc_info=ex)

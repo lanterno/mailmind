@@ -27,6 +27,7 @@ from mailmind.http.schemas.compose import (
     Snippets,
 )
 from mailmind.kernel.errors import Conflict, NotFound, Problem, Refused
+from mailmind.platform import profile
 from mailmind.platform.logging import get_logger
 
 log = get_logger("send")
@@ -65,7 +66,7 @@ def router(compose, mailbox):
     def send(body: SendBody):
         try:
             return compose.sending.send(composed(body))
-        except Problem:
+        except (Problem, profile.ReadOnlyError):    # a read-only process queues no send: the read-only 409
             raise
         except ValueError as ve:           # our own validation messages are secret-free
             raise Refused(str(ve)) from ve

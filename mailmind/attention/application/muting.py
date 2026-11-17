@@ -10,7 +10,7 @@ from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import AccountId, ThreadRef
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import now_iso
-from mailmind.platform import bus
+from mailmind.platform import bus, profile
 from mailmind.platform.db.uow import UnitOfWork
 
 
@@ -31,6 +31,7 @@ class Muting:
             acct, tid = self._threads.target(c, body)
             if not acct or not tid:
                 raise Refused("bad mute target")
+            profile.refuse_writes("a mute")      # it marks the thread read on its server: nothing is written
             todo = mute.plan(self._book.is_muted(c, acct, tid), acct, tid, self._book.unread_in_thread(c, acct, tid),
                              self._book.a_member(c, acct, tid))
             if todo is None:

@@ -128,13 +128,15 @@ class Drafts:
 
     def _discard(self, did: int) -> dict[str, Any]:
         """Discard a draft. A copy on the server goes first and the row after it, so a server that's away
-        leaves the journal asking until it's back; with no copy there's nothing to wait for."""
+        leaves the journal asking until it's back; with no copy there's nothing to wait for. A read-only process raises
+        ReadOnlyError for one whose copy may be on the server, and the draft stays."""
         with self._uow.write() as c:
             row = self._book.draft_get(c, did)
             if row is None:
                 return {"ok": True, "deleted": True}
             waiting = self._book.journal_get(c, did)
             if draft_journal.copy_may_be_there(row, waiting):
+                profile.refuse_writes("a draft's copy removed")
                 self._book.journal_discard(c, did, draft.next_version(row), row["account"], _now())
                 self._book.draft_note_discard(c, did, draft.next_version(row), now_iso())
                 there = True

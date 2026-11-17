@@ -2,10 +2,14 @@
 
 - `full` is the real thing. It syncs in the background, and it sends and files mail.
 - `read-only` writes nothing to a mail server or anywhere else outside (decision D4): no IMAP
-  change, no SMTP, no unsubscribe request. Sends and moves wait in their queues for a full run,
-  and what can't wait there is refused with ReadOnlyError. Its one background job is snooze's,
-  which touches the database alone: no sync, IDLE, reconcile, expiry, body backfill or reply
-  drafting. It reads IMAP only when someone asks, by opening mail or a folder or starting a sync.
+  change, no SMTP, no unsubscribe request. A change a person asks for that would reach a server
+  (a send, a move or flag, a mute or snooze, a cleanup or sweep, a folder made, renamed or
+  deleted, a draft's copy removed) is refused with ReadOnlyError before anything is queued or
+  hidden here, so nothing waits for a run that writes; what a full run queued before waits for
+  the next. What changes only this Mac still works: a draft saved here, reading, a rule, AI.
+  Its one background job is snooze's, which touches the database alone: no sync, IDLE,
+  reconcile, expiry, body backfill or reply drafting. It reads IMAP only when someone asks, by
+  opening mail or a folder or starting a sync.
 
 MAILMIND_PROFILE names the profile; unset or empty, it is `full`. MAILMIND_NOSYNC, the older
 switch, still selects read-only, and a value it doesn't take fails toward read-only. When the two

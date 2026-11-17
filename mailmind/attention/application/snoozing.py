@@ -10,7 +10,7 @@ from mailmind.kernel.errors import Refused
 from mailmind.kernel.ids import Pk
 from mailmind.kernel.row import Row
 from mailmind.kernel.when import LOCAL, now_iso
-from mailmind.platform import bus
+from mailmind.platform import bus, profile
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 
@@ -46,6 +46,7 @@ class Snoozing:
         until = snooze.wake_time(body, datetime.now(LOCAL))
         if until is None:
             raise Refused("bad snooze time")
+        profile.refuse_writes("a snooze")        # its waking marks the mail unread on the server: nothing is hidden
         with self._uow.write() as c:
             pks = self._pks(c, body)
             before: list[Row | None] = []

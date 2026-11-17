@@ -3,6 +3,7 @@ from mailmind.http import named, route
 from mailmind.http.schemas.calendar import EventBody, EventFile, RsvpBody, RsvpQueued, Upcoming
 from mailmind.http.schemas.common import answers
 from mailmind.kernel.errors import Problem
+from mailmind.platform import profile
 from mailmind.platform.logging import get_logger
 
 log = get_logger("rsvp")
@@ -19,7 +20,7 @@ def router(calendar, mailbox):
     def rsvp(body: RsvpBody):
         try:
             return calendar.rsvp.respond(named.with_message(mailbox, body.model_dump(exclude_unset=True)))
-        except Problem:
+        except (Problem, profile.ReadOnlyError):    # an answer is a send: a read-only process queues none
             raise
         except Exception as ex:            # never leak a raw exception on a send route
             log.error("error", exc_info=ex)

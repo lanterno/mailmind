@@ -11,6 +11,7 @@ from mailmind.curation.application.unsubscribe import Unsubscribing
 from mailmind.curation.domain import cleanup_plan, noise, rulebook, unsubscribe
 from mailmind.kernel.errors import NotFound, Refused
 from mailmind.kernel.when import now_iso, rel_time
+from mailmind.platform import profile
 from mailmind.platform.perimeter import tokens
 
 type Query = Mapping[str, Sequence[str]]      # a query string as the routes parse it
@@ -92,10 +93,12 @@ class Cleanup:
 
     def batch_execute(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Commit for MANY senders: each one's block, then every sweep, under one undo group, so a single `z` reverses the whole
-        batch. Only the reversible half: an unsubscribe can't be taken back, and each wants its own preview's token."""
+        batch. Only the reversible half: an unsubscribe can't be taken back, and each wants its own preview's token. A
+        read-only process raises ReadOnlyError before anything is blocked or moved."""
         addrs = cleanup_plan.senders_named(body.get("senders"))
         if addrs is None:
             raise Refused("bad senders")
+        profile.refuse_writes("a cleanup")           # it moves mail
         grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))        # never shared with an earlier cleanup
         sweeps, capped = self._batch_sweeps(addrs)
         for addr, _targets in sweeps:
@@ -136,6 +139,7 @@ class Cleanup:
         plan = cleanup_plan.plan_from(body)
         if plan is None:
             raise Refused("bad address")
+        profile.refuse_writes("a cleanup")           # it moves mail and may unsubscribe: nothing is blocked or moved
         from_addr, do_unsub, token, block_token = plan.from_addr, plan.do_unsubscribe, plan.confirm_token, plan.block_token
         grp = body.get("undo_group") or ("cleanup:" + secrets.token_hex(16))   # never shared with an earlier cleanup
         # The unsubscribe is read from the sender's stored mail, so before the sweep: a move deletes

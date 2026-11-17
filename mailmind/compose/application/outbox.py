@@ -69,7 +69,9 @@ class Outbox:
     def enqueue(self, built: Built, meta: SendMeta) -> tuple[int | None, bool]:
         """Persist a queued send. `built` = compose.build_message(...) output; `meta` =
         {account, idempotency_key, in_reply_to_pk, orig_message_id, subject, to, cc, bcc}. Returns
-        (outbox_id, created). Kicks the worker."""
+        (outbox_id, created). Kicks the worker. A read-only process raises ReadOnlyError before a row is written: a send,
+        a reply, an invite's answer or an unsubscribe by mail, none of which waits for a run that writes."""
+        profile.refuse_writes("a send")
         orig = self._mail.original(meta.get("in_reply_to_pk"))         # its row may be gone by the time this goes out
         row = outbox_item.new_row(built, meta, orig, _now() + self.send_delay(), datetime.now(timezone.utc).isoformat())
         with self._uow.write() as c:
@@ -86,7 +88,9 @@ class Outbox:
 
     def retry(self, oid: int) -> dict[str, bool]:
         """A person's Retry. On an unsure row it may send what went out already: they were told. Where the server
-        files sent mail itself, a copy in Sent settles that first, and only the row's bookkeeping is left to do."""
+        files sent mail itself, a copy in Sent settles that first, and only the row's bookkeeping is left to do. A read-only
+        process raises ReadOnlyError."""
+        profile.refuse_writes("a send")
         went_out = self._in_sent_already(oid)
 
         def again(c: Connection) -> bool:
@@ -124,7 +128,9 @@ class Outbox:
         return {"ok": True, "items": out}
 
     def send_now(self, oid: int) -> bool:
-        """Bring a scheduled send forward to now (Send-now from the outbox flyout)."""
+        """Bring a scheduled send forward to now (Send-now from the outbox flyout). A read-only process raises
+        ReadOnlyError: it would only wait for a run that writes."""
+        profile.refuse_writes("a send")
         with self._uow.write() as c:
             ok = self._book.outbox_send_now(c, oid, _now())
         if ok:
@@ -269,7 +275,7 @@ class Outbox:
             log.warning("post-send bookkeeping for #%(id)s deferred", {"id": oid}, exc_info=e)
 
     def drain(self) -> None:
-        if not profile.writes_allowed():     # read-only: sends wait here for a full run (D4)
+        if not profile.writes_allowed():     # read-only: what a full run queued waits here for the next (D4)
             return
         self.QUEUE.drain(self.send_one, _now())        # one bad row is logged and never aborts the rest
 

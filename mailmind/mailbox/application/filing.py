@@ -17,7 +17,7 @@ from mailmind.mailbox.application.stats import LiveStats
 from mailmind.mailbox.application.sync import Ingest
 from mailmind.mailbox.domain import command, filing, filing_answer
 from mailmind.mailbox.domain.filing import NamedCopy
-from mailmind.platform import sse
+from mailmind.platform import profile, sse
 from mailmind.platform.db.uow import UnitOfWork
 from mailmind.platform.logging import get_logger
 from mailmind.platform.undo import Undo
@@ -346,7 +346,8 @@ class Filing:
                   undo_group: str | None = None) -> dict[str, Any]:
         """Carry out what a plan froze, and only that, whatever else the request names. A copy no longer
         in the folder the preview saw it in is left where it is: someone moved it, and a verb that was
-        right for the Inbox may not be for wherever it went."""
+        right for the Inbox may not be for wherever it went. A read-only process raises ReadOnlyError with nothing
+        changed."""
         with self._uow.read() as c:
             pks = [p for p in (self._store.pk_in(c, key, folder) for key, folder in messages) if p is not None]
         group = undo_group or "plan:" + secrets.token_hex(6)
@@ -365,6 +366,8 @@ class Filing:
                 res: dict[str, Any] = self._carry_out_one(verb, {"pk": pk, "undo_group": group})
             except _NOT_FILED:                     # counted, and nothing went wrong here
                 res = {}
+            except profile.ReadOnlyError:          # refused before anything was written, as each after it would be
+                raise
             except Exception as e:                 # the rest still go: this run has no second try
                 do_log.warning("%(what)s failed", {"what": verb}, exc_info=e)
                 res = {}

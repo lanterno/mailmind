@@ -91,10 +91,7 @@ class MailCommands:
     # ── accept ──────────────────────────────────────────────────────────────────────────────────
 
     def _claim(self, c: Connection, id_: int) -> Row | None:
-        """The new command's row, claimed for a try now; None when this process only reads, and only a full run's
-        worker will try it."""
-        if not profile.writes_allowed():
-            return None
+        """The new command's row, claimed for a try now."""
         self._store.command_mark_begun(c, id_)
         return self.QUEUE.claim(c, id_)
 
@@ -124,7 +121,9 @@ class MailCommands:
         Accepted, or None when there is no such message, it is on its way out already or it is in the folder `to` names
         already. `to` is a folder a person picked, for a `move`. `push_undo(c, entry)`, on the same connection, keeps what
         reverses it; without one, nothing will. Submit only once the block has committed: until then no other connection can
-        see the command, and a try would find it cancelled."""
+        see the command, and a try would find it cancelled. A read-only process raises ReadOnlyError before anything is
+        read: nothing is queued for a run that writes."""
+        profile.refuse_writes("a change to mail")
         row = self._store.get_message(c, pk)
         if not command.takes_a_move(row, to):
             return None
@@ -147,7 +146,8 @@ class MailCommands:
 
     def accept_flags(self, pk: int, flags: Mapping[str, bool], mutation_id: object) -> command.Accepted | None:
         """Accept a flag change on message `pk`, which shows on its row at once: an Accepted, or None when there is
-        no such message."""
+        no such message. A read-only process raises ReadOnlyError before anything is written."""
+        profile.refuse_writes("a flag change")
         with self._uow.write() as c:                 # what it reads decides what it writes: no one comes between
             row = self._store.get_message(c, pk)
             if not row:
@@ -339,7 +339,9 @@ class MailCommands:
 
 
     def retry(self, mid: int) -> bool:
-        """Ask again for a change given up on. False when it isn't one."""
+        """Ask again for a change given up on. False when it isn't one. A read-only process raises ReadOnlyError: it
+        would wait for a run that writes."""
+        profile.refuse_writes("a change to mail")
         def go(c: Connection) -> bool:
             row = self._store.command_get(c, mid)
             if row is None or not self.QUEUE.requeue(c, mid):
@@ -415,7 +417,7 @@ class MailCommands:
 
 
     def drain(self) -> None:
-        if not profile.writes_allowed():     # read-only: moves wait here for a full run (D4)
+        if not profile.writes_allowed():     # read-only: what a full run queued waits here for the next (D4)
             return
         self.QUEUE.drain(self.apply_one, _now())       # one bad row is logged and never aborts the rest
 
