@@ -43,17 +43,28 @@ final class MeadowWindowTests: XCTestCase {
 
     // MARK: What meets the window's top
 
-    /// The first run's welcome over the mail window, as it opens with no account: the scene runs to the window's top
-    /// with the traffic lights over its sky (no band of paper over it), the headline stands just below the lights'
-    /// row, and a press on the sky moves the window.
+    /// The first run's welcome over the mail window, as it opens with no account and at the size it opens at
+    /// (MailMindApp's `defaultSize`): the scene runs to the window's top with the traffic lights over its sky (no band
+    /// of paper over it), the sun or the moon still in it, the headline stands just below the lights' row, and a press
+    /// on the sky moves the window.
     func testTheWelcomesSceneRunsToTheWindowsTopUnderTheLights() throws {
         for light in MeadowLight.allCases {
-            let shown = try ShownInAWindow("window-welcome-\(light.rawValue)", light: light,
-                                           size: CGSize(width: 1000, height: 760)) {
+            let shown = try ShownInAWindow("window-welcome-\(light.rawValue)", light: light, size: Self.mailWindow) {
                 Welcome(status: Self.firstRun(), kept: [])
                     .background { WindowChrome() }
             }
             defer { shown.close() }
+            // The scene spans the window, and the wider it is the more of its sky is cropped away: at this width the
+            // sun (a disc about 60 points across, at the window's top right) or the moon's crescent still shows.
+            let corner = CGRect(x: 960, y: 0, width: 200, height: 80)
+            switch light {
+            case .day:
+                XCTAssertGreaterThan(shown.points(in: corner, where: \.isSun), 900, "a third of the sun or more shows")
+            case .night:
+                XCTAssertGreaterThan(shown.points(in: corner, where: \.isMoon), 300, "half the moon or more shows")
+            case .dusk:
+                break
+            }
             guard light == .day else { continue }
             // The Day sky is blue where paper is cream: along the window's top past the lights, it is sky.
             let edge = stride(from: 120.0, through: 520.0, by: 20.0).map { shown.color(x: $0, y: 3) }
@@ -81,6 +92,9 @@ final class MeadowWindowTests: XCTestCase {
             XCTAssertTrue(shown.hit(x: 300, y: 20) is WindowDragView, "its bar moves the window")
         }
     }
+
+    /// The mail window's size as it first opens (MailMindApp's `defaultSize`).
+    private static let mailWindow = CGSize(width: 1180, height: 760)
 
     /// A status with no account yet, AI turned off: the first run's.
     private static func firstRun() -> AppStatus {
@@ -196,6 +210,15 @@ private struct ShownInAWindow {
         return Drawn(red: color?.redComponent ?? 0, green: color?.greenComponent ?? 0, blue: color?.blueComponent ?? 0)
     }
 
+    /// How many of the whole points in `rect`, in points from the window's top left, are drawn as `matches` says.
+    func points(in rect: CGRect, where matches: (Drawn) -> Bool) -> Int {
+        var count = 0
+        for y in stride(from: rect.minY, to: rect.maxY, by: 1) {
+            for x in stride(from: rect.minX, to: rect.maxX, by: 1) where matches(color(x: x, y: y)) { count += 1 }
+        }
+        return count
+    }
+
     /// The first row from `y` down, in points, where any point across `xs` is ink.
     func firstInkRow(from y: CGFloat, xs: ClosedRange<CGFloat>) -> CGFloat? {
         for row in stride(from: y, to: frameView.bounds.height, by: 1) {
@@ -213,6 +236,10 @@ private struct ShownInAWindow {
 
         /// The Day sky: blue over its red, where the paper is warm.
         var isSky: Bool { blue > red + 0.06 }
+        /// The Day sun: bright and warm, where its glow is less bright and the clouds are as blue as they are red.
+        var isSun: Bool { red > 0.96 && red > blue + 0.06 }
+        /// The Night moon: bright, where the night sky, its clouds and the moon's glow are dark.
+        var isMoon: Bool { 0.2126 * red + 0.7152 * green + 0.0722 * blue > 0.7 }
         /// Day's ink, dark where the sky and the paper are light.
         var isInk: Bool { 0.2126 * red + 0.7152 * green + 0.0722 * blue < 0.35 }
     }
