@@ -141,10 +141,11 @@ pub struct Opening {
 
 impl Opening {
     /// Whether this is the whole message, when its first `asked` bytes were asked for: it ended before them, or it is
-    /// as long as the server says the message is.
+    /// exactly as long as the server says the message is. A size shorter than what came is wrong (Exchange's are
+    /// estimates), so says nothing: the message counts as cut off.
     pub fn is_whole(&self, asked: u32) -> bool {
         self.raw.len() < usize::try_from(asked).unwrap_or(usize::MAX)
-            || self.size.is_some_and(|size| self.raw.len() >= usize::try_from(size).unwrap_or(usize::MAX))
+            || self.size.and_then(|size| usize::try_from(size).ok()) == Some(self.raw.len())
     }
 }
 
