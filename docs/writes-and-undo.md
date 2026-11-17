@@ -64,10 +64,13 @@
   is left, and the answer says `gone: true`. A look that can't tell sends it again, as they were told it might.
 - A message MailMind sends for itself goes through the outbox too: a mailto unsubscribe (`SystemSend`), keyed
   `unsub:<sender>:<account>`, waits out a server that's away and is filed in Sent.
-- The read-only profile writes nothing to a mail server or anywhere else outside (decision D4).
+- The read-only profile writes nothing to a mail server or anywhere else outside (decision D4); what AI is asked still
+  goes to its provider, though nothing is asked of AI in the background.
   A session opens every mailbox with EXAMINE and raises `profile.ReadOnlyError` on any write,
-  before it is sent: `ReadOnlySession` over IMAPClient, and over imaplib `accounts.ReadOnlyIMAP`,
-  which refuses any command not known to only read. `SmtpTransport.connect` and `safe_http.one_click_post` refuse too.
+  before it is sent: `ReadOnlySession` over IMAPClient, over imaplib `accounts.ReadOnlyIMAP`,
+  which refuses any command not known to only read, and the core's `mm_mailbox::session::ReadOnly`, whose refusal is
+  unreachable too. `SmtpTransport.connect` and `safe_http.one_click_post` refuse too, and the core's outbox refuses
+  before a row is written (`Delivery::enqueue`).
   Above them, a change a person asks for that would reach a server is refused before anything is queued or hidden
   here, so nothing waits for a full run: a move or a flag change and the tray's Retry (`MailCommands`' accepts and
   `retry`), a send, a reply, Send later, an invite's answer or an unsubscribe by mail (the outbox's `enqueue`, and its
