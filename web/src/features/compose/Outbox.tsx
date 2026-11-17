@@ -8,14 +8,12 @@ import { readOnlyOr } from "../../lib/readOnly";
 import { toast } from "../../lib/toast";
 import { composing } from "./compose";
 import { fmtWhen } from "./model";
+import { draftWhy, heldWhy, type Held, type Waiting } from "./tray";
 
 type Sent = GetAnswers["/api/outbox"]["items"][number];
-type Held = GetAnswers["/api/pending"]["items"][number];
-type Waiting = GetAnswers["/api/outbox"]["drafts"][number];
 
 const OPS: Record<string, string> = { trash: "Move to Trash", archive: "Archive", junk: "Mark as junk", move: "Move" };
 const FLAGS: Record<string, [string, string]> = { seen: ["Mark unread", "Mark read"], flagged: ["Remove star", "Star"], answered: ["Mark unanswered", "Mark answered"] };
-const WHY: Record<string, string> = { refused: "the server refused it", no_folder: "no folder to move it to", "account removed": "its account is gone" };
 
 function whatItDoes(p: Held): string {
   if (p.op === "flag") {
@@ -33,7 +31,7 @@ const useTray = () => {
 
 function HeldRow({ p, readOnly, act }: { p: Held; readOnly: boolean; act: (what: "retry" | "discard", id: number) => void }) {
   const stuck = p.state === "error";
-  const why = stuck ? WHY[p.error ?? ""] ?? "couldn’t reach the server" : readOnly ? "waits for a full run" : p.attempts ? `tried ${p.attempts}×, trying again` : "once the server is back";
+  const why = heldWhy(p, readOnly);
   return (
     <div className="ob-row">
       <span className={`ob-st ${stuck ? "error" : p.state === "running" ? "sending" : "queued"}`}>{stuck ? "stuck" : p.state === "running" ? "trying" : "waiting"}</span>
@@ -45,8 +43,7 @@ function HeldRow({ p, readOnly, act }: { p: Held; readOnly: boolean; act: (what:
 }
 
 function DraftRow({ d, readOnly, edit, discard }: { d: Waiting; readOnly: boolean; edit: () => void; discard: () => void }) {
-  const goes = d.discarding ? "leaves the server" : "reaches the server";
-  const why = readOnly ? `${goes} on a full run` : d.attempts ? `tried ${d.attempts}×, trying again` : `${goes} once it’s back`;
+  const why = draftWhy(d, readOnly);
   return (
     <div className="ob-row">
       <span className="ob-st queued">{d.discarding ? "discarded" : "draft"}</span>
