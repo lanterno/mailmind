@@ -55,7 +55,11 @@ Ollama’s cloud, so what is summarized goes to Ollama’s servers." The status'
 (`providers.cloud_model`, and mm-assistant's), whether AI is on or off, so the page and the Mac app can say where mail
 goes. Each of the three things sent unasked reads only the Inbox: the summaries (`needs_summary`, above), the day's
 brief and what came in since you looked (`brief_rows` and `delta_rows`, in `assistant_reads` and the core's
-`Overview`), so mail a person sent, drafted, deleted or filed elsewhere goes only when they ask.
+`Overview`), so mail a person sent, drafted, deleted or filed elsewhere goes only when they ask, or with a switch they
+turned on in Settings › AI: drafting ahead (`draft_ahead`) sends whole conversations, the person's own replies in them
+too, and the week's review written ahead (`weekly_review`, the `review-ahead` job) sends the subjects and recipients of
+the threads they are waiting on (`awaited_threads`, the sent follow-ups), with the names of the week's meetings from
+invites in any folder but Trash and Junk (`agenda.SKIPPED_ROLES`).
 
 Each paid provider's key card says it bills per use, apart from any ChatGPT or Claude subscription, and where credit is
 added; Gemini's, that a key belongs on a project with billing set up, since on the free tier Google may use what is
