@@ -210,6 +210,11 @@ final class AccountDraftTests: XCTestCase {
         XCTAssertEqual(Tested.of(URLError(.timedOut)), .failed("The test didn’t finish. Try again."))
     }
 
+    func testATestThatRunsSaysOnlyThatItIsTesting() {
+        // A new account's password is in the Keychain, read with no prompt: there's no Touch ID to approve.
+        XCTAssertEqual(TestedWords.testing, "Testing…")
+    }
+
     func testOnlyANewAddressWithAnAtInItIsAskedWhichPresetItTakes() {
         var draft = AccountDraft()
         XCTAssertNil(draft.presetQuery)
