@@ -103,6 +103,9 @@ jobs:
     runs-on: macos-26
     # The release check builds the core for four targets and the app for two architectures.
     timeout-minutes: 90
+    outputs:
+      # The release check's .dmg, kept as an artifact when the check made one: mac-floor opens it on macOS 15.
+      dmg: ${{ steps.dmg.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -159,7 +162,10 @@ jobs:
       # its acknowledgements, the .dmg and its window, the signed appcast, and the checks a person's Mac and Sparkle
       # make on them; then the app opens on fictional mail, each half. Nothing is published.
       - name: The release, checked
+        id: release
         if: ${{ !cancelled() }}
+        env:
+          MAILMIND_RELEASE_CHECK_KEEP: ${{ runner.temp }}/release-check
         run: |
           set +e
           just apple release-check 2>&1 | tee "$RUNNER_TEMP/release-check.txt"
@@ -168,6 +174,92 @@ jobs:
             echo "### Mac: the release's app on fictional mail (macos-26, the Intel half under Rosetta)"
             grep -h '^    the Mac app' "$RUNNER_TEMP/release-check.txt" | sed 's/^ *the Mac app/- the Mac app/'
             grep -h '^## the .dmg is' "$RUNNER_TEMP/release-check.txt" | sed 's/^## /- /'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      # Signed with the check's throwaway key and never published; kept a few days, for mac-floor to open.
+      - name: The release check's .dmg, for macOS 15
+        id: dmg
+        if: ${{ !cancelled() && steps.release.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mac-release-check
+          path: ${{ runner.temp }}/release-check/*.dmg
+          if-no-files-found: ignore
+          # A .dmg is compressed already.
+          compression-level: 0
+          retention-days: 3
+
+  # The release's app on the oldest macOS it says it runs on (project.yml's floor), each half on a Mac of its kind:
+  # Apple silicon, and a real Intel Mac rather than Rosetta. The build fails on a Swift or Objective-C call newer than
+  # the floor, but nothing checks the core's calls into the system (its Rust and C, which dyld binds as the app
+  # starts) or how macOS 15 draws the window: only opening it there does. It needs no Xcode, only the apple job's
+  # .dmg, so it runs whenever that job made one, whatever else in it failed.
+  mac-floor:
+    needs: apple
+    if: ${{ !cancelled() && needs.apple.outputs.dmg != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            half: arm64
+          - runner: macos-15-intel
+            half: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The demo's world is the Python suite's fake servers, and uv builds the leaves the Python app shares with the
+      # core (core/crates/mm-py) to run it.
+      - name: Rust, as core/rust-toolchain.toml pins it
+        working-directory: core
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@682ce6c3c696a4cd5168a05f98e51aa02b877941 # v2.89.1
+        with:
+          tool: uv@0.13.5
+
+      - name: The demo's Python, with the core's leaves
+        run: uv sync --frozen
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mac-release-check
+          path: ${{ runner.temp }}/release-check
+
+      - name: The release's app opens on fictional mail
+        env:
+          HALF: ${{ matrix.half }}
+          RUNNER_LABEL: ${{ matrix.runner }}
+        run: |
+          system=$(sw_vers -productVersion)
+          floor=$(sed -n 's/^ *macOS: *"\(.*\)"$/\1/p' shells/apple/project.yml)
+          echo "macOS $system on $(uname -m); the app's floor is macOS $floor"
+          # A runner that moved on from the floor, or ran this half under Rosetta, would prove nothing about it.
+          if [ "${system%%.*}" != "${floor%%.*}" ]; then
+            echo "::error::$RUNNER_LABEL runs macOS $system, not the floor's macOS ${floor%%.*}: change its label here"
+            exit 1
+          fi
+          if [ "$(uname -m)" != "$HALF" ]; then
+            echo "::error::$RUNNER_LABEL is $(uname -m), not $HALF"
+            exit 1
+          fi
+          dmg=$(ls "$RUNNER_TEMP"/release-check/MailMind-*.dmg)
+          mkdir "$RUNNER_TEMP/mnt"
+          hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$RUNNER_TEMP/mnt" "$dmg"
+          set +e
+          uv run python shells/apple/Measure/demo_home.py "$RUNNER_TEMP/mnt/MailMind.app/Contents/MacOS/MailMind" \
+            --smoke --arch "$HALF" 2>&1 | tee "$RUNNER_TEMP/opened.txt"
+          status=${PIPESTATUS[0]}
+          hdiutil detach -quiet "$RUNNER_TEMP/mnt"
+          {
+            echo "### Mac: the release's app on macOS $system ($RUNNER_LABEL)"
+            grep -h '^the Mac app' "$RUNNER_TEMP/opened.txt" | sed 's/^/- /'
+            if [ "$status" != 0 ]; then echo "- it never showed mail in its inbox: the step's log says why"; fi
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
