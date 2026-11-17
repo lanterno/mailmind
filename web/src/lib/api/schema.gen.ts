@@ -3598,11 +3598,14 @@ export interface components {
         };
         /**
          * ExportPlan
-         * @description `export.plan`: each account's folders, and how many of their messages have a body stored.
+         * @description `export.plan`: each account's folders, and how many of their messages have a body stored; and how much room
+         *     the database takes on this disk, its file and the log of what it hasn't taken in yet, in bytes.
          */
         ExportPlan: {
             /** Bodies */
             bodies: number;
+            /** Database Bytes */
+            database_bytes: number;
             /** Groups */
             groups: components["schemas"]["ExportGroup"][];
             /**
