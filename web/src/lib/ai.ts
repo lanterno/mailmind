@@ -101,6 +101,14 @@ export function draftAheadSends(s: Sends): string {
   return to ? `On, whole conversations of important mail go to ${to} to draft them.` : "On, they are drafted on this Mac, and nothing leaves it.";
 }
 
+// What the week's review written ahead sends each Monday, said under its switch: besides Inbox mail that needs you, the
+// threads you're waiting on, which are mail you sent, and the meetings from invites in any folder.
+export function weeklyReviewSends(s: Sends): string {
+  const to = aheadTo(s);
+  return to ? "On, each Monday the senders, subjects and summaries of mail that needs you, the subjects and recipients of threads "
+    + `you’re waiting on, and the names of the week’s meetings go to ${to} to write it.` : "On, it is written on this Mac, and nothing leaves it.";
+}
+
 // Why AI is off, in plain words for the provider chosen: "" while it is on.
 export function whyOff(ai: Said | null | undefined): string {
   if (!ai?.off) return "";
