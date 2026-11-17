@@ -768,3 +768,49 @@ final class FirstAccountSheetTests: XCTestCase {
         await deskEventually { host.layoutSubtreeIfNeeded(); return window.attachedSheet == nil }
     }
 }
+
+/// Removing an account with its mail on this Mac warns of the sends and drafts only this Mac holds, and says MailMind's
+/// backups keep their copies until they are replaced.
+@MainActor
+final class RemoveAccountTests: XCTestCase {
+    /// The outbox tray as the core lists it: Ada's sends in each state, and drafts waiting for their server.
+    private let tray = StatusFixtures.decode(API.Outbox.self, """
+        {"ok": true, "items": [
+          \(RemoveAccountTests.send(1, "queued")), \(RemoveAccountTests.send(2, "sending")),
+          \(RemoveAccountTests.send(3, "error")), \(RemoveAccountTests.send(4, "sent")),
+          \(RemoveAccountTests.send(5, "cancelled")), \(RemoveAccountTests.send(6, "queued", account: "bo@example.test"))
+         ],
+         "drafts": [
+          {"id": 7, "account": "ADA@example.test", "subject": "Plans", "saved_at": 1, "attempts": 0, "discarding": false, "kept": true},
+          {"id": 8, "account": "ada@example.test", "subject": "Old", "saved_at": 1, "attempts": 0, "discarding": true, "kept": false},
+          {"id": 9, "account": "bo@example.test", "subject": "Bo's", "saved_at": 1, "attempts": 0, "discarding": false, "kept": false}
+         ]}
+        """)
+
+    private static func send(_ id: Int, _ state: String, account: String = "ada@example.test") -> String {
+        """
+        {"id": \(id), "account": "\(account)", "to": ["bo@example.test"], "cc": [], "bcc_count": 0, "subject": "Dinner",
+         "state": "\(state)", "attempts": 0, "next_attempt_at": 0, "scheduled": false, "retrying": false,
+         "unsure": false, "created_at": "2026-11-16 12:00:00"}
+        """
+    }
+
+    func testWhatOnlyThisMacHoldsIsCountedForTheAccountAlone() {
+        XCTAssertEqual(Unsent.of(tray, account: "ada@example.test"), Unsent(sends: 3, drafts: 1),
+                       "waiting, going and failed sends, and a draft not on the server; not one leaving it")
+        XCTAssertEqual(Unsent.of(tray, account: "bo@example.test"), Unsent(sends: 1, drafts: 1))
+        XCTAssertEqual(Unsent.of(tray, account: "eve@example.test"), Unsent())
+    }
+
+    func testTheWarningSaysWhatGoesAndThatItIsOnlyHere() {
+        XCTAssertNil(Unsent().words, "nothing waits, so nothing to warn of")
+        XCTAssertEqual(Unsent(sends: 1).words, "This also deletes 1 message that hasn’t been sent. It’s only on this Mac.")
+        XCTAssertEqual(Unsent(drafts: 2).words,
+                       "This also deletes 2 drafts that aren’t on the server yet. They’re only on this Mac.")
+        XCTAssertEqual(Unsent(sends: 3, drafts: 1).words, """
+            This also deletes 3 messages that haven’t been sent and 1 draft that isn’t on the server yet. They’re only \
+            on this Mac.
+            """)
+        XCTAssertEqual(RemoveAccount.backups, "Copies of its mail in MailMind’s backups stay until they’re replaced.")
+    }
+}
