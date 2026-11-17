@@ -26,5 +26,7 @@ final class AcknowledgementsTests: XCTestCase {
 
     func testABuildWithoutThemSaysSo() throws {
         XCTAssertNil(Acknowledgements.text(in: try bundle(holding: nil)))
+        XCTAssertFalse(Acknowledgements.missing.contains("just "), "a person's words, never a developer's command")
+        XCTAssertTrue(Acknowledgements.missing.contains("release"))
     }
 }
