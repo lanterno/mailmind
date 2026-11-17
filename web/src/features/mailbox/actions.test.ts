@@ -272,4 +272,19 @@ describe("opening a message", () => {
     expect(post).not.toHaveBeenCalled();
     expect(qc.setQueriesData).not.toHaveBeenCalled();
   });
+
+  it("asks no server to mark it read before the digest has said whether read only is on, as after a reload", async () => {
+    vi.resetModules();                    // a page as it loads: nothing has said yet
+    const loaded = await import("./actions");
+    const { post: posted } = await import("../../lib/api/client");
+    vi.mocked(posted).mockResolvedValue({ ok: true });
+    loaded.armDwell(qc, one);
+    await vi.advanceTimersByTimeAsync(5000);
+    loaded.markOpenedRead(qc, one);
+    expect(posted).not.toHaveBeenCalled();
+    expect(qc.setQueriesData).not.toHaveBeenCalled();
+    loaded.readOnly.set(false);           // the digest says read only is off
+    loaded.markOpenedRead(qc, one);
+    expect(vi.mocked(posted).mock.calls).toEqual([["/api/seen", { ...one, seen: true }]]);
+  });
 });
