@@ -203,42 +203,52 @@ enum Guide {
     }
 }
 
-/// The guide as a sheet: a step at a time, Back, Skip and Next, Done at the end.
+/// The guide as a sheet drawn as Meadow's dialog, on its paper in the light's ink: a step at a time, Back, Skip and
+/// Next, Done at the end.
 struct GuideSheet: View {
     let steps: [Guide.Step]
     let end: () -> Void
     @State private var at = 0
+    @Environment(\.meadow) private var meadow
 
     var body: some View {
         let step = steps[min(at, steps.count - 1)]
         let last = at >= steps.count - 1
         VStack(alignment: .leading, spacing: 14) {
             Text("\(at + 1) of \(steps.count)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.meadow(.ui, 12, .bold))
+                .foregroundStyle(meadow.ink3)
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: step.symbol)
-                    .font(.system(size: 28))
-                    .foregroundStyle(.tint)
+                    .font(.system(size: 26))
+                    .foregroundStyle(meadow.primary)
                     .frame(width: 40)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(step.title).font(.title2.weight(.semibold))
-                    Text(step.text).fixedSize(horizontal: false, vertical: true)
+                    Text(step.title)
+                        .font(.meadow(.display, 20, .bold))
+                        .foregroundStyle(meadow.ink)
+                    Text(step.text)
+                        .font(.meadow(.ui, 14))
+                        .foregroundStyle(meadow.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 0)
-            HStack {
-                if at > 0 { Button("Back") { at -= 1 } }
+            HStack(spacing: 8) {
+                if at > 0 { Button("Back") { at -= 1 }.meadowButton() }
                 Spacer()
-                if !last { Button("Skip", action: end).keyboardShortcut(.cancelAction) }
+                if !last { Button("Skip", action: end).meadowButton().keyboardShortcut(.cancelAction) }
                 Button(last ? "Done" : "Next") { last ? end() : (at += 1) }
+                    .meadowButton(.primary)
                     .keyboardShortcut(.defaultAction)
             }
         }
         .padding(22)
-        .frame(width: 420, height: 230)
+        .frame(width: 440, height: 250)
+        .background { ComposePaper() }
+        .presentationBackground { ComposePaper() }
     }
 }
 
