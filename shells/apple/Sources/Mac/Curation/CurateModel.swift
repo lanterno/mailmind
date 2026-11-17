@@ -143,7 +143,7 @@ final class CurateModel {
                 blockScope: asked.scope, confirmToken: asked.preview.confirmToken, doUnsubscribe: asked.unsubscribe,
                 fromAddr: sender, undoGroup: newUndoGroup()))
         } catch {
-            notices.say(String(localized: "Cleanup failed"))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "Cleanup failed")))
             return
         }
         if asked.method == "http-page", asked.unsubscribe, let page = done.browserUrl.flatMap(URL.init(string:)),
@@ -213,7 +213,7 @@ final class CurateModel {
             let failed = done.sweepFailed > 0 ? String(localized: " · \(done.sweepFailed) failed") : ""
             notices.say(String(localized: "Blocked \(done.blocked.count) · swept \(done.swept)") + failed, undoable: true)
         } catch {
-            notices.say(String(localized: "Cleanup failed"))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "Cleanup failed")))
             return
         }
         await again()
@@ -344,6 +344,7 @@ final class CurateModel {
     /// A sweep, or its plan, that got no answer: the server's own words when it refused, else what to do (the page's
     /// `sweepFailed`).
     static func sweepFailed(_ error: any Error, planning: Bool) -> String {
+        if ReadOnlyWords.refuses(error) { return ReadOnlyWords.refused }
         if let problem = error as? Problem, problem.isRefusal, let detail = problem.detail, !detail.isEmpty {
             return detail
         }

@@ -135,7 +135,7 @@ final class ScreenerModel {
             await load()
         } catch {
             decided.remove(sender)
-            notices.say(String(localized: "Couldn’t apply"))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "Couldn’t apply")))
         }
     }
 

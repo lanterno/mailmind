@@ -343,7 +343,8 @@ final class Desk {
                 notices.say(String(localized: "\(undone.label.flatMap { $0.isEmpty ? nil : $0 } ?? String(localized: "Action")) undone"))
             }
         } catch let problem as Problem {
-            notices.say(problem.more["empty"] != nil ? String(localized: "Nothing to undo")
+            notices.say(problem.isReadOnly ? ReadOnlyWords.refused
+                : problem.more["empty"] != nil ? String(localized: "Nothing to undo")
                 : problem.detail ?? String(localized: "Couldn’t undo"))
         } catch {
             notices.say(String(localized: "Couldn’t undo"))

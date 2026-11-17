@@ -51,8 +51,8 @@ final class InviteReplies {
                 self?.said[invite] = .sent(queued)
             }
         } catch {
-            said[invite] = .failed(String(localized: "Couldn’t RSVP: \(DeskRefusal.message(error))"))
-            notices.say(String(localized: "RSVP failed"))
+            said[invite] = .failed(ReadOnlyWords.said(error, else: String(localized: "Couldn’t RSVP: \(DeskRefusal.message(error))")))
+            notices.say(ReadOnlyWords.said(error, else: String(localized: "RSVP failed")))
         }
     }
 

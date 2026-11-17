@@ -18,10 +18,11 @@ enum Words {
         String(address.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
     }
 
-    /// How filing went (`filedWords`): how many, how many stayed, and that it waits when it was queued.
-    static func filed(_ verb: String, count: Int, failed: Int, queued: Bool, readOnly: Bool, to: String? = nil) -> String {
+    /// How filing went (`filedWords`): how many, how many stayed, and that it waits for the server when it was queued.
+    /// Read only queues nothing a person files: the server turns it down instead.
+    static func filed(_ verb: String, count: Int, failed: Int, queued: Bool, to: String? = nil) -> String {
         let n = max(count, 1)
-        let later = queued ? (readOnly ? " · waits for a full run" : " · once the server is back") : ""
+        let later = queued ? " · once the server is back" : ""
         let where_ = to.map { " to \($0)" } ?? ""
         if failed > 0 { return "\(verb) \(n) of \(n + failed)\(where_) — the rest stayed\(later)" }
         return (n > 1 ? "\(verb) \(n) messages\(where_)" : "\(verb)\(where_)") + later

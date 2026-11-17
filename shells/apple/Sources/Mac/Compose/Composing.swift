@@ -292,6 +292,11 @@ final class Composing: ComposeHost {
                 if let replyKey { chips.removeValue(forKey: replyKey) }
                 mailChanged?()
                 outboxChanged()
+            } catch let refusal as Problem where refusal.isReadOnly {
+                // Read only turned it down before anything was queued: the message comes back as it was, to keep.
+                showFloat(nil)
+                open(snapshot, edited: true)
+                say(ReadOnlyWords.refused, for: 5)
             } catch {
                 failedSend = snapshot
                 showFloat(.failed("Send failed — \(said(error))"))

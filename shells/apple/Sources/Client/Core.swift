@@ -158,6 +158,10 @@ public struct Problem: Error, Hashable, Sendable, CustomStringConvertible {
     /// The server's no, which asking again won't change: a 4xx.
     public var isRefusal: Bool { (400..<500).contains(status) }
 
+    /// MailMind runs read only, and turned down, before anything was queued or hidden, a change that would have
+    /// reached a mail server (a 409 with `read_only`).
+    public var isReadOnly: Bool { more["read_only"] == .bool(true) }
+
     /// What to tell a person: the server's words, else its title.
     public var description: String { detail ?? title }
 }

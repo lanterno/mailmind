@@ -108,6 +108,7 @@ enum FolderWords {
     /// which the delete asks about.
     static func refusal(_ error: any Error) -> FolderChange {
         guard let problem = error as? Problem else { return .refused(failed) }
+        if problem.isReadOnly { return .refused(ReadOnlyWords.refused) }
         if case .number(let count)? = problem.more["messages"], count > 0 {
             let toTrash = problem.more["to_trash"] != .bool(false)
             return .holds(Int(count), problem.description, toTrash: toTrash)

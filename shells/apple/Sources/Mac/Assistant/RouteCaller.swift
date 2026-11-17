@@ -47,8 +47,10 @@ enum DeskRefusal {
     }
 
     /// The server's words for a refusal, else `fallback`: what didn't reach the server or didn't read says only that.
+    /// Read only's refusal says so in the app's own words.
     static func words(_ error: any Error, else fallback: String) -> String {
         guard let problem = error as? Problem else { return fallback }
+        if problem.isReadOnly { return ReadOnlyWords.refused }
         return problem.detail.flatMap { $0.isEmpty ? nil : $0 } ?? fallback
     }
 

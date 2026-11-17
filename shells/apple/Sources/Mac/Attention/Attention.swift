@@ -158,7 +158,7 @@ final class AttentionModel {
             let (said, undoable) = try await call(routes)
             notices.say(said, undoable: undoable)
         } catch {
-            notices.say(fail(DeskRefusal.message(error)))
+            notices.say(ReadOnlyWords.said(error, else: fail(DeskRefusal.message(error))))
         }
         changed()
     }

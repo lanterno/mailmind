@@ -4,7 +4,8 @@ import Foundation
 /// What a person can do to mail from the list, the pane's bar, the menus and the keys, as the page's
 /// features/mailbox/actions.ts does it: one message or conversation by its own route, several under one undo group as
 /// many requests as the server's limit asks, each told in the page's words, a refusal with the server's reason, and an
-/// Undo offered where the server says one is possible.
+/// Undo offered where the server says one is possible. Read only's refusal says so, and nothing more is asked once it
+/// has said no.
 extension Mailbox {
     /// A filing verb's words: what is said when it is done, and what a refusal says it couldn't do (`WORDS`).
     static func words(_ verb: API.FilingVerb) -> (done: String, act: String, undo: String) {
@@ -54,10 +55,12 @@ extension Mailbox {
                 filed = Filing(count: 1, failed: 0, queued: answer.status == "queued", undoable: answer.undoable)
             }
             let n = max(filed.count, 1)
-            say(Words.filed(words.done, count: filed.count, failed: filed.failed, queued: filed.queued, readOnly: readOnly),
+            say(Words.filed(words.done, count: filed.count, failed: filed.failed, queued: filed.queued),
                 undo: filed.undoable ? (n > 1 ? "\(words.done) \(n)" : words.done) : nil)
             if filed.undoable { offerUndo(words.undo) }
             moveOn(after)
+        } catch let refusal as Problem where refusal.isReadOnly {
+            say(ReadOnlyWords.refused)
         } catch {
             say("Couldn’t \(words.act)", detail: (error as? Problem)?.detail)
         }
@@ -136,10 +139,12 @@ extension Mailbox {
                 filed = Filing(count: 1, failed: 0, queued: answer.status == "queued", undoable: answer.undoable)
             }
             let n = max(filed.count, 1)
-            say(Words.filed("Moved", count: filed.count, failed: filed.failed, queued: filed.queued, readOnly: readOnly, to: label),
+            say(Words.filed("Moved", count: filed.count, failed: filed.failed, queued: filed.queued, to: label),
                 undo: filed.undoable ? (n > 1 ? "Moved \(n)" : "Moved") : nil)
             if filed.undoable { offerUndo(String(localized: "Move")) }
             moveOn(after)
+        } catch let refusal as Problem where refusal.isReadOnly {
+            say(ReadOnlyWords.refused)
         } catch {
             let why = (error as? Problem)?.description
             say("Couldn’t move" + (why.map { ": \($0)" } ?? ""))
@@ -174,6 +179,8 @@ extension Mailbox {
                 _ = try await calls.post(API.Post.Seen.self, API.SeenBody(folder: copy.folder, key: copy.key, seen: seen, uid: copy.uid))
             }
             say(seen ? String(localized: "Marked read") : String(localized: "Marked unread"))
+        } catch let refusal as Problem where refusal.isReadOnly {
+            say(ReadOnlyWords.refused)
         } catch {
             say(String(localized: "Couldn’t update"), detail: (error as? Problem)?.detail)
         }
@@ -204,6 +211,8 @@ extension Mailbox {
                 _ = try await calls.post(API.Post.Flag.self, API.FlagBody(flag: .flagged, folder: copy.folder, key: copy.key, on: on, uid: copy.uid))
             }
             say(on ? String(localized: "Starred") : String(localized: "Unstarred"))
+        } catch let refusal as Problem where refusal.isReadOnly {
+            say(ReadOnlyWords.refused)
         } catch {
             say(String(localized: "Couldn’t star"), detail: (error as? Problem)?.detail)
         }
@@ -215,11 +224,20 @@ extension Mailbox {
         return try await calls.get(API.Get.Thread.self, ["account": row.account, "thread_id": thread]).items
     }
 
-    /// A mark on each row, one request each: how many took, and how many didn't.
+    /// A mark on each row, one request each: how many took, and how many didn't. Read only turns every one down, so
+    /// its no ends the rest unasked.
     private func eachOne(_ rows: [API.FolderRow], _ send: (API.FolderRow) async throws -> Void) async {
         var failed = 0
         for row in rows {
-            do { try await send(row) } catch { failed += 1 }
+            do {
+                try await send(row)
+            } catch let refusal as Problem where refusal.isReadOnly {
+                say(ReadOnlyWords.refused)
+                readAgain()
+                return
+            } catch {
+                failed += 1
+            }
         }
         say(failed > 0 ? "Updated \(rows.count - failed), \(failed) failed" : "Updated \(rows.count)")
         readAgain()
@@ -247,6 +265,8 @@ extension Mailbox {
             } else {
                 say("\(done.label.flatMap { $0.isEmpty ? nil : $0 } ?? "Action") undone")
             }
+        } catch let problem as Problem where problem.isReadOnly {
+            say(ReadOnlyWords.refused)
         } catch let problem as Problem where problem.isRefusal {
             say(problem.more["empty"] == .bool(true) ? String(localized: "Nothing to undo")
                                                      : problem.detail ?? String(localized: "Couldn’t undo"))
@@ -274,7 +294,8 @@ extension Mailbox {
     }
 
     /// Rows in as many requests as the server's limit on one asks, each saying how its rows went. A request that fails
-    /// counts all of its rows (`inChunks`).
+    /// counts all of its rows (`inChunks`). Read only turns every request down, so its no counts the rest as failed
+    /// unasked.
     func inChunks(_ rows: [API.FolderRow], _ send: ([API.FolderRow]) async throws -> API.RowsFiled) async -> Chunked {
         var said = Chunked(total: rows.count)
         var at = 0
@@ -285,6 +306,10 @@ extension Mailbox {
                 said.failed += answer.rowsFailed
                 said.partial = said.partial || answer.partial
                 said.undoable = said.undoable || answer.undoable
+            } catch let refusal as Problem where refusal.isReadOnly {
+                said.failed += rows.count - at
+                said.readOnly = true
+                break
             } catch {
                 said.failed += chunk.count
             }
@@ -297,6 +322,11 @@ extension Mailbox {
                         undoName: String, undoSaid: ((Int) -> String)? = nil, couldnt: String? = nil)
     {
         let n = chunked.total, done = n - chunked.failed
+        if chunked.readOnly && done == 0 {
+            say(ReadOnlyWords.refused)
+            readAgain()
+            return
+        }
         let text = chunked.failed > 0 ? "\(said(done)), \(chunked.failed) failed"
             : chunked.partial ? "\(said(n)) — some messages stayed" : said(n)
         say(text, undo: chunked.undoable ? undoSaid.map { $0(done) } ?? said(done) : nil)
@@ -346,12 +376,13 @@ struct Filing {
     var undoable: Bool
 }
 
-/// How filing in chunks went: how many rows, how many stayed, whether any request left some, and whether it can be
-/// undone.
+/// How filing in chunks went: how many rows, how many stayed, whether any request left some, whether it can be
+/// undone, and whether read only turned it down.
 struct Chunked: Equatable {
     var total: Int
     var failed = 0
     var partial = false
     var undoable = false
+    var readOnly = false
 }
 #endif

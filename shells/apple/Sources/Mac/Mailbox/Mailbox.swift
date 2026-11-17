@@ -22,8 +22,6 @@ final class Mailbox {
     private(set) var labels: [String: [API.Label]] = [:]
     private(set) var across: API.ViewCounts?
     var views: [API.ListedView] = []
-    /// A read-only run (`MAILMIND_PROFILE=read-only`): filing waits for a full run.
-    private(set) var readOnly = false
     /// Whether the AI is on, which the contact card's summary needs.
     private(set) var aiOn = false
     /// How AI stands, as the digest last said: what is off and why, so what only AI serves can go once it is turned
@@ -186,7 +184,6 @@ final class Mailbox {
         guard let calls, let digest = try? await calls.get(API.Get.Digest.self) else { return }
         accounts = digest.accounts
         aliases = digest.aliases.compactMapValues { $0 }
-        readOnly = digest.profile == "read-only"
         aiOn = digest.ai.isOn
         ai = digest.ai
     }

@@ -90,7 +90,8 @@ final class OutboxTray {
             }
             say(what == "retry" ? "Trying again…" : "Discarded: it stays as it was")
         } catch {
-            say((error as? Problem)?.status == 409 ? "It’s being tried now. Try again in a moment" : "It has already settled")
+            say(ReadOnlyWords.said(error, else: (error as? Problem)?.status == 409
+                ? "It’s being tried now. Try again in a moment" : "It has already settled"))
         }
         await load()
     }
@@ -100,7 +101,7 @@ final class OutboxTray {
             _ = try await routes.post(API.Post.Draft.self, API.DraftBody(delete: true, draftId: id))
             say("Draft discarded")
         } catch {
-            say("Couldn’t discard it")
+            say(ReadOnlyWords.said(error, else: "Couldn’t discard it"))
         }
         await load()
     }
@@ -110,7 +111,7 @@ final class OutboxTray {
             _ = try await routes.post(API.Post.OutboxSendnow.self, API.NamesASend(id: id))
             say("Sending now…")
         } catch {
-            say("Couldn’t send now")
+            say(ReadOnlyWords.said(error, else: "Couldn’t send now"))
         }
         await later()
     }
@@ -130,7 +131,7 @@ final class OutboxTray {
             let retried = try await routes.post(API.Post.OutboxRetry.self, API.NamesASend(id: id))
             say(retried.gone == true ? "It had gone out, so it wasn’t sent again" : "Retrying…")
         } catch {
-            say("Retry failed")
+            say(ReadOnlyWords.said(error, else: "Retry failed"))
         }
         await later()
     }
