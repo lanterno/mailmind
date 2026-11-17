@@ -701,6 +701,26 @@ final class MailboxAccountsTests: XCTestCase {
         XCTAssertEqual(app.place, .allInboxes, "its folder isn't there to show")
     }
 
+    /// The brief names no account, but the list beside it can be the removed account's Inbox: that goes too, rather
+    /// than the list reading an account that isn't there again and again.
+    func testTheBriefBesideARemovedAccountsInboxGivesWayToEveryInbox() async {
+        let server = server(accounts: [Fixture.ada, Fixture.work])
+        let app = await opened(server)
+        app.place = .folder(account: Fixture.work, folder: "INBOX")
+        await until { app.list?.firstRowsAt != nil }
+        app.place = .desk(.brief)
+        XCTAssertEqual(app.listed, .folder(account: Fixture.work, folder: "INBOX"), "the brief keeps its Inbox listed")
+        changeTo(server, accounts: [Fixture.ada])
+        let before = server.asked.count
+        await app.accountsChanged().value
+        await until { app.list?.firstRowsAt != nil }
+        XCTAssertEqual(app.place, .allInboxes)
+        XCTAssertEqual(app.listed, .allInboxes, "every account's Inbox is listed in its place")
+        let since = server.asked.dropFirst(before)
+        XCTAssertFalse(since.contains { $0.path == API.Get.Messages.path && $0.query["account"] == Fixture.work },
+                       "the removed account's Inbox isn't read again")
+    }
+
     /// A new account's folders are read live from its server, which can take a while: the sheet that added it isn't
     /// held on them, and the rail names the account and the list says its Inbox is being read before they come.
     func testAnAccountAddedShowsBeforeItsFoldersAreReadFromItsServer() async {
