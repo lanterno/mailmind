@@ -71,6 +71,8 @@ final class MeadowFontTests: XCTestCase {
         }
     }
 
+    // A Font resolves to its face only from macOS 26 on. The app runs from macOS 15, and its tests on macOS 26.
+    @available(macOS 26, *)
     func testSwiftUIsFontsAreTheSameFaces() {
         let context = EnvironmentValues().fontResolutionContext
         let cases: [(MeadowFace, Font.Weight, NSFont.Weight, Bool)] = [
@@ -91,6 +93,7 @@ final class MeadowFontTests: XCTestCase {
         }
     }
 
+    @available(macOS 26, *)
     @MainActor func testAHalfPointSizeIsSetAtItsSize() {
         // The mockup's sizes are often halves: 12.5 is 12.5, not 13.
         let context = EnvironmentValues().fontResolutionContext
