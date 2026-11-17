@@ -205,6 +205,67 @@ def test_opening_unread_mail_read_only_leaves_it_unread_and_asks_no_server(read_
     clean(page)                                           # and no refusal: nothing was asked
 
 
+DIGEST = re.compile(r"/api/digest$")
+CONFIRM = "ada-inbox-02-lunch-confirm.eml"                # unread, and the latest of its conversation: it opens with it
+RELOADED = pytest.mark.parametrize("name, conversation", [(RECEIPT, False), (CONFIRM, True)], ids=["a message", "a conversation"])
+
+
+def reloaded_with_the_digest_held(page, world, name, conversation):
+    """`name` opened from its link, as a reload opens it, with the digest's answer held: until it comes, the page can't know
+    whether read only is on. Returns what the page asks of /api/seen from here, and what lets the digest come."""
+    opened(page)                                          # on Everything, where the row shows
+    held, seen = [], []
+    page.pw.route(DIGEST, lambda route: held.append(route))
+    page.on("request", lambda r: seen.append(r.post_data_json) if r.url.endswith("/api/seen") else None)
+    account, at = w.ADA.replace("@", "%40"), f"key={world.key(name)}&folder=INBOX&uid={world.uid(name)}"
+    page.goto(f"/m/{account}/INBOX?c={world.row(name)['thread_id']}&ca={account}&{at}" if conversation else f"/m/{account}/INBOX?{at}")
+    if conversation:
+        expect(page.locator(f'#thread .tmsg.open[data-key="{world.key(name)}"]')).to_have_count(1)
+    else:
+        expect(row(page, world, name)).to_have_class(re.compile(r"\bunread\b"))
+    expect(page.locator("iframe.rd-iframe").first).to_be_visible()
+    expect(page.locator("#statusTxt")).to_have_text("Connecting…")
+
+    def release():
+        assert held, "the page never asked for the digest"
+        page.pw.unroute(DIGEST)
+        with page.pw.expect_response(DIGEST):
+            for route in held:
+                route.continue_()
+        expect(page.locator("#statusTxt")).not_to_have_text("Connecting…")
+    return seen, release
+
+
+@RELOADED
+def test_reloaded_open_mail_is_marked_read_once_the_digest_says_read_only_is_off(page, world, name, conversation):
+    seen, release = reloaded_with_the_digest_held(page, world, name, conversation)
+    page.clock.run_for(3000)                              # well past the moment that marks an opened message read
+    page.heard_all_asked()
+    assert seen == []                                     # whether read only is on isn't known yet
+    release()
+    page.clock.run_for(1500)
+    until(page, lambda: "\\Seen" in world.where(name)["server"][0][3], "the open message was never marked read")
+    page.heard_all_asked()
+    assert [(s["key"], s["seen"]) for s in seen] == [(world.key(name), True)]
+    clean(page)
+
+
+@RELOADED
+def test_reloaded_open_mail_read_only_asks_no_server_to_mark_it_read_before_the_digest_comes_or_after(
+        read_only, page, world, name, conversation):
+    seen, release = reloaded_with_the_digest_held(page, world, name, conversation)
+    page.clock.run_for(3000)
+    page.heard_all_asked()
+    assert seen == []
+    release()
+    expect(page.locator("#statusTxt")).to_have_text("Read-only")
+    page.clock.run_for(3000)
+    page.heard_all_asked()
+    assert seen == []
+    assert "\\Seen" not in world.where(name)["server"][0][3]
+    clean(page)                                           # and no refusal: nothing was asked
+
+
 def test_a_rows_snooze_button_asks_when_and_snoozes_that_row(page, world):
     opened(page)
     receipt = row(page, world, RECEIPT)
