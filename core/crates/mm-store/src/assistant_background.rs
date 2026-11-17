@@ -1,5 +1,5 @@
 //! What the Assistant's background work reads and keeps (`assistant.adapters.sqlite`'s `needs_summary`, `batch_open`
-//! and `save_summary`, and `mailbox.adapters.sqlite.assistant_reads.draft_candidates`): the mail triage hasn't
+//! and `save_summary`, and `mailbox.adapters.sqlite.assistant_reads.draft_candidates`): the Inbox mail triage hasn't
 //! summarized, what it says kept under each message's key, and the mail a reply may be drafted ahead for.
 
 use mm_assistant::background_ports::{Assessment, Backlog, DraftCandidates, FinishedBatches, Pending, Triage};
@@ -10,20 +10,22 @@ use rusqlite::{OptionalExtension, params};
 use crate::db::Database;
 use crate::discovery::not_snoozed_sql;
 
-/// One copy of each message, as the Python app reads it (`SELECT m.*`, grouped by the key), so the copy it picks is
-/// the same.
+/// One copy of each message in an Inbox, as the Python app reads it (`SELECT m.*`, grouped by the key), so the copy it
+/// picks is the same. Only the Inbox: what a person sent, drafted or deleted, and any other folder they opened, goes to
+/// no provider unasked.
 const NEEDS_SUMMARY: &str = "SELECT m.* FROM messages m \
      LEFT JOIN assessments s ON s.message_key = m.message_key \
-     WHERE m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL \
+     WHERE m.folder = 'INBOX' AND m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL \
        AND m.message_key IS NOT NULL \
        AND COALESCE(m.message_key, 0) NOT IN (SELECT message_key FROM ai_batch_items) \
        AND COALESCE(m.ts, 0) > ? \
      GROUP BY COALESCE(m.message_key, -m.pk) \
      ORDER BY m.ts DESC LIMIT ?";
 
+/// How many of those wait: the Inbox's alone.
 const SUMMARIES_WAITING: &str = "SELECT COUNT(DISTINCT m.message_key) FROM messages m \
      LEFT JOIN assessments s ON s.message_key = m.message_key \
-     WHERE m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL \
+     WHERE m.folder = 'INBOX' AND m.is_junk = 0 AND s.message_key IS NULL AND m.pending_removal IS NULL \
        AND m.message_key IS NOT NULL AND COALESCE(m.ts, 0) > ?";
 
 const BATCH_CUTOFF: &str =

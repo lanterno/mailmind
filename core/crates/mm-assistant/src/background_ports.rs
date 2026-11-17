@@ -63,8 +63,9 @@ pub trait Triage: Send + Sync + fmt::Debug {
     /// Where the batch that is out cuts off, when one is and says so: while it is out, what came before waits for the
     /// next batch rather than going at full price.
     fn batch_cutoff(&self) -> Result<Option<i64>, Fault>;
-    /// Mail that isn't junk with no summary yet, newest first, one copy of each message, none on its way out, none a
-    /// batch holds and none with no key; with `newer_than`, only what came after that moment.
+    /// Inbox mail that isn't junk with no summary yet, newest first, one copy of each message, none on its way out,
+    /// none a batch holds and none with no key; with `newer_than`, only what came after that moment. No other folder:
+    /// what a person sent, drafted or deleted goes to no provider unasked.
     fn needs_summary(&self, limit: i64, newer_than: Option<i64>) -> Result<Vec<Pending>, Fault>;
     /// Keep what the AI said of the message the copy `pk` is of, under its key, as of `when`.
     fn save_summary(&self, pk: i64, said: &Assessment, when: &str) -> Result<(), Fault>;
@@ -72,8 +73,8 @@ pub trait Triage: Send + Sync + fmt::Debug {
 
 /// How much triage has left (`Answers.summaries_waiting`), as the status says it.
 pub trait Backlog: Send + Sync + fmt::Debug {
-    /// How many messages newer than `newer_than` wait for a summary: not junk, with a key, none on its way out, one
-    /// count for each, and those a batch holds among them, since they have none yet.
+    /// How many Inbox messages newer than `newer_than` wait for a summary: not junk, with a key, none on its way out,
+    /// one count for each, and those a batch holds among them, since they have none yet.
     fn summaries_waiting(&self, newer_than: i64) -> Result<i64, Fault>;
 }
 
