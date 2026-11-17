@@ -115,8 +115,8 @@ def test_with_ai_off_the_brief_and_the_review_say_so_and_ask_for_nothing(page, a
     lunch_needs_a_reply(app, world)
     page.goto("/")
     expect(page.locator(".bf-aioff")).to_contain_text("AI is off: there’s no key for Claude.")
-    expect(page.locator(".bf-aioff")).to_contain_text("each new message’s sender, subject and opening text go to Anthropic "
-                                                      "to be summarized, automatically")
+    expect(page.locator(".bf-aioff")).to_contain_text("the sender, subject and opening text of each message in your Inbox go to "
+                                                      "Anthropic to be summarized, automatically: the last 30 days’")
     page.get_by_role("button", name="Your week").click()
     expect(page.locator("#rvBody")).to_have_text("AI is off: there’s no key for Claude, so there is no review. Set up AI in Settings")
     page.locator("#rvBody").get_by_role("button", name="Set up AI in Settings").click()

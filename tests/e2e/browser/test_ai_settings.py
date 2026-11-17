@@ -18,10 +18,12 @@ pytestmark = pytest.mark.browser
 
 RECEIPT = "ada-inbox-05-receipt.eml"
 KEPT = "Kept on this Mac, with each key in your login Keychain."
-SENDS = ("With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be summarized, automatically, "
-         "and those senders, subjects and summaries go again to write the day’s brief and what came in since you looked. Whole "
-         "conversations go only when you ask: for a summary or a draft, with what you type into Ask, a search written as a "
-         "sentence, or Rewrite. Attachments never leave this Mac.")
+SENDS = ("With AI mode on, the sender, subject and opening text of each message in your Inbox go to Anthropic to be summarized, "
+         "automatically: the last 30 days’ as soon as you turn it on, then each new one. Those senders, subjects and summaries go "
+         "again to write the day’s brief and what came in since you looked. Whole conversations go only when you ask: for a "
+         "summary or a draft, with what you type into Ask, a search written as a sentence, or Rewrite. Attachments never leave "
+         "this Mac.")
+AHEAD = "With Draft replies ahead on, whole conversations of important mail go too, to draft replies before you open them."
 
 
 def clean(page):
@@ -117,6 +119,19 @@ def test_drafting_ahead_starts_off_and_its_switch_is_kept_in_the_file(page, app,
     until(page, lambda: file_of(world).get("preferences", {}).get("draft_ahead") is True, "the file holds the switch")
     ahead.uncheck()
     until(page, lambda: file_of(world).get("preferences", {}).get("draft_ahead") is False, "the file holds it off")
+    clean(page)
+
+
+def test_drafting_ahead_says_under_its_switch_and_ai_modes_that_whole_conversations_of_important_mail_go(page, app, world):
+    dialog = ai_open(page, app)
+    under = page.locator("#aiDraftAhead")
+    expect(under).to_contain_text("On, whole conversations of important mail go to Anthropic, to draft replies before you open them.")
+    expect(page.locator("#aiSends")).to_have_text(SENDS)
+    dialog.get_by_label("Draft replies ahead for important mail", exact=True).check()
+    expect(page.locator("#aiSends")).to_have_text(f"{SENDS} {AHEAD}")
+    page.locator("#setClose").click()
+    page.keyboard.press("?")                              # Help says the same
+    expect(page.get_by_role("dialog", name="Keyboard")).to_contain_text(f"{SENDS} {AHEAD}")
     clean(page)
 
 
@@ -221,6 +236,23 @@ def test_a_model_on_this_mac_is_picked_from_the_servers_found_with_its_url(local
     assert held()["ai_model"] == "qwen3:8b"
     expect(page.locator("#aiStanding")).to_have_text("AI is on: A model on this Mac · qwen3:8b.")
     assert local_ai["Ollama"].requests[-1].path == "/models" and local_ai["LM Studio"].requests[-1].path == "/models"
+    clean(page)
+
+
+def test_a_model_on_this_mac_that_runs_in_ollamas_cloud_says_what_goes_to_ollamas_servers(local_ai, page, app, world):
+    local_ai["Ollama"].models = ["qwen3:8b", "gpt-oss:120b-cloud"]
+    dialog = ai_open(page, app)
+    with local_found(page):
+        dialog.get_by_label("Provider", exact=True).select_option("local")
+    expect(page.locator("#aiSends")).to_have_text("With a model on this Mac, nothing leaves this Mac.")
+    expect(page.locator("#aiDraftAhead")).not_to_contain_text("whole conversations")
+    dialog.get_by_label("Model", exact=True).select_option(label="gpt-oss:120b-cloud")
+    expect(page.locator("#aiSends")).to_have_text("gpt-oss:120b-cloud runs in Ollama’s cloud, so what is summarized goes to "
+                                                  "Ollama’s servers.")
+    expect(page.locator("#aiDraftAhead")).to_contain_text("On, whole conversations of important mail go to Ollama’s servers, "
+                                                          "to draft replies before you open them.")
+    dialog.get_by_label("Model", exact=True).select_option(label="qwen3:8b")
+    expect(page.locator("#aiSends")).to_have_text("With a model on this Mac, nothing leaves this Mac.")
     clean(page)
 
 

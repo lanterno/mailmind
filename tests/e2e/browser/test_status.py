@@ -40,8 +40,8 @@ def test_the_sync_menu_says_what_ai_cost_today_and_sync_now_syncs(page, app, wor
     page.locator("#statusBtn").click()
     menu = page.get_by_role("dialog", name="Sync status")
     expect(menu).to_contain_text("Claude (Anthropic) · claude-opus-5-5 · $0.02 of $15.00 today")
-    expect(menu).to_contain_text("opening text go to Anthropic automatically, and more when you ask for something. "
-                                 "Attachments never leave this Mac.")
+    expect(menu).to_contain_text("The sender, subject and opening text of each message in your Inbox go to Anthropic "
+                                 "automatically, and more when you ask for something. Attachments never leave this Mac.")
     menu.get_by_role("button", name="Sync now").click()
     expect(page.locator("#statusTxt")).to_have_text("Syncing…")
     page.clock.run_for(4000)
