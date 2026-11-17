@@ -7,7 +7,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use mm_kernel::errors::{Failure, Fault};
+use mm_kernel::errors::{Failure, Fault, READ_ONLY};
 use mm_kernel::seams::{Clock, Moment, Outside, Tripped};
 use mm_mailbox::command_ports;
 use mm_mailbox::gates::{Gates, Priority, Refused, Wait};
@@ -95,7 +95,7 @@ impl Gates for Watched {
 }
 
 /// Reverses `swept` entries together and `move` ones alone. One whose `mid` is `missing` doesn't go back; a run
-/// holding a `lost` one fails whole.
+/// holding a `lost` one fails whole, and one `refused` is a read-only process's refusal.
 #[derive(Debug)]
 struct Swept(Arc<Asked>);
 
@@ -114,6 +114,9 @@ impl Reverser for Swept {
 
     fn reverse(&self, entry: &Value) -> Result<Reversed, Fault> {
         self.0.note(format!("one {}", mid(entry)));
+        if mid(entry) == "refused" {
+            return Err(READ_ONLY);
+        }
         Ok(answer(entry))
     }
 
@@ -126,6 +129,9 @@ impl Reverser for Swept {
         self.0.note(format!("together {}", mids.join(" ")));
         if mids.contains(&"lost") {
             return Err(Fault::new("ConnectionLost"));
+        }
+        if mids.contains(&"refused") {
+            return Err(READ_ONLY);
         }
         Ok(entries.iter().map(answer).collect())
     }
@@ -207,4 +213,26 @@ fn a_run_that_fails_whole_is_on_the_stack_again_and_stops_no_other() {
     let none = undo.undo_group("ug-1");
     assert!(matches!(none, Err(Failure::Problem(_))));
     assert_eq!(mids(&undo.entries().unwrap()[0]), ["m1", "lost"]);
+}
+
+#[test]
+fn a_group_a_read_only_process_refuses_whole_says_so_and_waits_on_the_stack() {
+    let dir = tempfile::tempdir().unwrap();
+    let ada = "ada@example.test";
+    let children = [child("swept", ada, "refused"), child("move", ada, "refused")];
+    let (undo, _) = stack(dir.path(), &children);
+    assert_eq!(undo.undo_group("ug-1"), Err(Failure::Fault(READ_ONLY)));
+    let [left] = &undo.entries().unwrap()[..] else { panic!("the group, still to undo") };
+    assert_eq!(mids(left), ["refused", "refused"]);
+}
+
+#[test]
+fn what_went_back_of_a_group_a_read_only_process_refused_in_part_is_said() {
+    let dir = tempfile::tempdir().unwrap();
+    let ada = "ada@example.test";
+    let children = [child("move", ada, "refused"), child("move", ada, "m2")];
+    let (undo, _) = stack(dir.path(), &children);
+    let done = undo.undo_group("ug-1").unwrap();
+    assert_eq!((done["reversed"].clone(), done["failed"].clone()), (json!(1), json!(1)));
+    assert_eq!(mids(&undo.entries().unwrap()[0]), ["refused"]);
 }
