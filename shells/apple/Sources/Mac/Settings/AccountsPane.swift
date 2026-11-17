@@ -109,8 +109,8 @@ struct AccountsPane: View {
         }
         await status.readAccounts()
         await status.readDigest()
-        // The window's rail lets go of it now, and its list with it.
-        await MailApp.shared.accountsChanged()
+        // The window's rail lets go of it now, and its list with it; not waited for.
+        MailApp.shared.accountsChanged()
         if chosen == nil { chosen = status.accounts.first?.email }
     }
 }

@@ -160,19 +160,27 @@ final class MailApp {
         list.start()
     }
 
-    /// An account was added or removed (Settings, or the first run): the rail reads its accounts, folders and counts
-    /// again, and the list reads again, now rather than at the end of the new account's first sync. The rail then shows
-    /// the account, and its Inbox says it is being read for the first time. A place of an account that is gone gives
-    /// way to every account's Inbox.
-    func accountsChanged() async {
-        #if os(macOS)
-        await mailbox.refresh()
-        if let account = place?.account, !mailbox.accounts.contains(account) {
-            place = .allInboxes
-            return
+    /// An account was added or removed (Settings, or the first run): the rail and the list read again now, rather than
+    /// at the end of the new account's first sync. It starts the reads and returns at once, so the sheet that saved
+    /// the account isn't held on them: a new account's folders are read live from its server, which can take a while,
+    /// or up to a minute when it doesn't answer. Who the accounts are and the list are read first, so the rail shows
+    /// the account and its Inbox says it is being read for the first time; its folders, counts, labels and views
+    /// follow. A place of an account that is gone gives way to every account's Inbox. The task is a test's to wait on.
+    @discardableResult
+    func accountsChanged() -> Task<Void, Never> {
+        Task {
+            #if os(macOS)
+            await mailbox.readDigest()
+            let was = listed
+            if let account = place?.account, !mailbox.accounts.contains(account) { place = .allInboxes }
+            if listed == was { list?.refresh() }   // else the place's change opened a list of its own
+            await mailbox.readCounts()
+            await mailbox.readLabels()
+            await mailbox.readViews()
+            #else
+            list?.refresh()
+            #endif
         }
-        #endif
-        list?.refresh()
     }
 
     /// A folder's first scan that read it: one that failed leaves the list as it is, or reading it again would scan
