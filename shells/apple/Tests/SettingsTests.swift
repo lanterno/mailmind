@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import PDFKit
 import SwiftUI
 import XCTest
 
@@ -593,6 +594,7 @@ final class SettingsCoreTests: XCTestCase {
         guard case .failed(let why, _, let detail) = tested else { return XCTFail("a closed port logged in") }
         XCTAssertEqual(why, "The server didn't answer. Check the server's name and port, and that this Mac is online.")
         XCTAssertEqual(detail, "connection refused", "the class, in small type")
+        XCTAssertEqual(Tested.kind(of: answer), "NETWORK", "the kind a sync that couldn't connect has")
         XCTAssertFalse(why.contains(Self.password))
 
         let removed = try await core.post(API.Post.AccountsDelete.self,
@@ -820,5 +822,331 @@ final class RemoveAccountTests: XCTestCase {
             Copies of its mail in MailMind’s backups folder stay there: newer backups replace them in time, and a copy \
             Start Fresh kept stays until you delete it.
             """, "a copy Start Fresh kept is never replaced, so the words don't say every copy is")
+    }
+}
+
+/// An account whose login failed is fixed from its Sync card (#51): the trouble's button opens the Edit sheet on the
+/// field that fixes it, worded for the account, and the card says each thing once.
+final class AccountFixTests: XCTestCase {
+    /// iCloud's preset, as the server says it for an address at its own domain.
+    private let icloud = API.PresetFound(
+        domain: "icloud.com", link: API.Link(url: "https://account.apple.com", words: "Make an app-specific password"),
+        name: "iCloud", note: nil, ok: true, preset: .icloud,
+        settings: API.PresetSettings(host: "imap.mail.me.com", type: "imap"), supported: true, sure: true)
+
+    func testAPasswordTurnedDownIsFixedWithAnAppPasswordOrThePasswordAndAServerUnreachedWithTheServer() {
+        func fix(_ kind: String, _ type: String, error: String? = nil, credential: String = "keychain",
+                 appPasswords: Bool = false) -> AccountFix?
+        {
+            AccountFix.of(kind: kind, type: type, error: error, credential: credential, appPasswords: appPasswords)
+        }
+        XCTAssertEqual(fix("AUTH", "gmail", error: "LoginNeedsAppPassword"), .appPassword)
+        XCTAssertEqual(fix("AUTH", "gmail", error: "LoginRefused"), .appPassword, "a held login may be a wrong one")
+        XCTAssertNil(fix("AUTH", "gmail", error: "LoginNeedsWebSignIn"), "signed in on the web, not in the sheet")
+        XCTAssertNil(fix("AUTH", "gmail", error: "LoginImapOff"), "IMAP is turned on in Gmail, not in the sheet")
+        XCTAssertEqual(fix("AUTH", "imap"), .password)
+        XCTAssertEqual(fix("AUTH", "imap", appPasswords: true), .appPassword)
+        XCTAssertNil(fix("AUTH", "imap", credential: "op"), "1Password's item is changed in 1Password")
+        XCTAssertNil(fix("AUTH", "gmail", credential: "env"), "a variable is changed where it is set")
+        XCTAssertNil(fix("AUTH", "proton", credential: "proton_bridge"), "Bridge's password has a card of its own")
+        XCTAssertEqual(fix("NETWORK", "imap"), .server)
+        XCTAssertNil(fix("NETWORK", "gmail"), "Gmail's servers aren't typed")
+        for kind in ["TIMEOUT", "UIDVALIDITY", "TLS_PIN", "IMAP", "UNKNOWN"] {
+            XCTAssertNil(fix(kind, "imap"), "\(kind): nothing in the sheet fixes it")
+        }
+
+        XCTAssertEqual(AccountFix.appPassword.button, "Enter App Password…")
+        XCTAssertEqual(AccountFix.password.button, "Change Password…")
+        XCTAssertEqual(AccountFix.server.button, "Edit Server…")
+    }
+
+    func testAProvidersAppPasswordPageIsOfferedOnlyWhereTheAccountReadsItsServer() {
+        XCTAssertEqual(AccountFix.providerPage(icloud, host: "imap.mail.me.com"), icloud.link)
+        XCTAssertEqual(AccountFix.providerPage(icloud, host: "IMAP.mail.me.com"), icloud.link, "a name in any case")
+        XCTAssertNil(AccountFix.providerPage(icloud, host: "imap.example.test"),
+                     "a custom domain's mail may be any provider's")
+        XCTAssertNil(AccountFix.providerPage(nil, host: "imap.mail.me.com"))
+        let gmail = API.PresetFound(
+            domain: "example.test", link: StatusWords.appPasswords, name: "Gmail", ok: true, preset: .gmail,
+            settings: API.PresetSettings(host: "imap.gmail.com", type: "gmail"), supported: true, sure: false)
+        XCTAssertNil(AccountFix.providerPage(gmail, host: "imap.gmail.com"), "an IMAP account isn't Gmail's preset")
+    }
+
+    func testEachTroubleTheSheetFixesNamesItsButtonAndNoOtherSaysChooseEdit() {
+        XCTAssertEqual(StatusWords.syncProblem("AUTH", type: "gmail", error: "LoginNeedsAppPassword", fix: .appPassword),
+                       """
+                       Gmail needs an App Password, not your Google password: make one, then choose Enter App \
+                       Password and paste it.
+                       """)
+        XCTAssertTrue(StatusWords.syncProblem("AUTH", type: "gmail", error: "LoginRefused", fix: .appPassword)
+            .contains("choose Enter App Password"))
+        XCTAssertTrue(StatusWords.syncProblem("AUTH", type: "imap", fix: .password).contains("choose Change Password"))
+        XCTAssertTrue(StatusWords.syncProblem("AUTH", type: "imap", fix: .appPassword)
+            .contains("choose Enter App Password"))
+        XCTAssertTrue(StatusWords.syncProblem("NETWORK", type: "imap", fix: .server).contains("under Edit Server"))
+        // A password read from 1Password or a variable is changed there, and the card says so.
+        let elsewhere = StatusWords.syncProblem("AUTH", type: "imap")
+        XCTAssertTrue(elsewhere.contains("where MailMind reads this account’s password"), elsewhere)
+        for kind in ["AUTH", "NETWORK", "TIMEOUT", "UIDVALIDITY", "TLS_PIN", "IMAP", "UNKNOWN"] {
+            for type in ["gmail", "imap", "proton"] {
+                for fix in [nil, AccountFix.appPassword, .password, .server] {
+                    let said = StatusWords.syncProblem(kind, type: type, error: "LoginRefused", fix: fix)
+                    XCTAssertFalse(said.contains("choose Edit and"), "\(kind) \(type): \(said)")
+                }
+            }
+        }
+        // An Other IMAP account's provider's page goes with a password it turned down, and nothing else.
+        XCTAssertEqual(StatusWords.syncHelp("AUTH", type: "imap", provider: icloud.link), icloud.link)
+        XCTAssertNil(StatusWords.syncHelp("NETWORK", type: "imap", provider: icloud.link))
+        XCTAssertEqual(StatusWords.syncHelp("AUTH", type: "gmail", error: "LoginRefused", provider: icloud.link),
+                       StatusWords.appPasswords, "Gmail's page is Google's")
+    }
+
+    func testTheSheetOpenedForAPasswordAsksForANewOneAndFocusesItsField() {
+        let gmail = StatusFixtures.account("cy@example.test", type: "gmail")
+        let fixing = AccountDraft(editing: gmail, fixing: .appPassword)
+        XCTAssertTrue(fixing.asksPassword)
+        XCTAssertEqual(fixing.passwordPrompt, "abcd efgh ijkl mnop", "an App Password's shape, not 'unchanged'")
+        XCTAssertEqual(fixing.problem, "Paste the new app password.", "the kept one is what failed: Save asks again")
+        XCTAssertEqual(AccountFormField.fixing(fixing.fixing), .password)
+
+        let plain = AccountDraft(editing: gmail)
+        XCTAssertFalse(plain.asksPassword)
+        XCTAssertEqual(plain.passwordPrompt, "unchanged — leave blank to keep")
+        XCTAssertNil(plain.problem, "a plain edit keeps the kept password")
+        XCTAssertNil(AccountFormField.fixing(plain.fixing))
+
+        let imap = StatusFixtures.account("ada@example.test")
+        var typing = AccountDraft(editing: imap, fixing: .password)
+        XCTAssertEqual(typing.passwordPrompt, "type the password")
+        XCTAssertEqual(typing.problem, "Type the account’s password.")
+        typing.password = "fixture-password-5678"
+        XCTAssertNil(typing.problem)
+        var dumped = ""
+        dump(typing, to: &dumped)
+        XCTAssertTrue(dumped.contains("fixing"), dumped)
+        XCTAssertFalse(dumped.contains("5678"), "a typed password is never described")
+        XCTAssertEqual(AccountDraft(editing: imap, fixing: .appPassword).passwordPrompt, "paste the new app password")
+
+        let server = AccountDraft(editing: imap, fixing: .server)
+        XCTAssertFalse(server.asksPassword)
+        XCTAssertNil(server.problem, "a server's fix keeps the kept password")
+        XCTAssertEqual(AccountFormField.fixing(server.fixing), .server)
+
+        XCTAssertNil(AccountDraft(fixing: .password).fixing, "a new account has nothing to fix")
+    }
+
+    func testATestsTroubleIsTheKindASyncWouldSayFromTheClassTheCoreGivesIt() {
+        func failed(_ error: String, says: String = "It didn't work.") -> API.AccountsTestAnswer {
+            .couldntLogIn(API.CouldntLogIn(connect: false, email: nil, error: error, ok: true, says: says))
+        }
+        XCTAssertEqual(Tested.kind(of: failed("AUTHENTICATIONFAILED")), "AUTH")
+        XCTAssertEqual(Tested.kind(of: failed("connection refused")), "NETWORK")
+        XCTAssertEqual(Tested.kind(of: failed("host not found")), "NETWORK")
+        XCTAssertEqual(Tested.kind(of: failed("timeout")), "TIMEOUT")
+        XCTAssertEqual(Tested.kind(of: failed("certificate changed")), "TLS_PIN")
+        let gmail = "Gmail needs an App Password here."
+        XCTAssertEqual(Tested.kind(of: failed(gmail, says: gmail)), "AUTH", "Google's own words are its refusal")
+        XCTAssertNil(Tested.kind(of: failed("smtp refused")), "no sync has an outgoing server's trouble")
+        XCTAssertNil(Tested.kind(of: .loggedIn(API.LoggedIn(connect: true, detail: "", email: "ada@example.test", ms: 3, ok: true))))
+    }
+
+    func testATestThatFailsAsTheSyncDidSaysOnlyThatAndOneThatDiffersSaysWhatIsNew() {
+        let page = StatusWords.appPasswords
+        let wrong = Tested.failed("Gmail needs an App Password here.", link: page, detail: "AUTH-ish")
+        XCTAssertEqual(TestedOnCard.of(wrong, kind: "AUTH", standing: "AUTH", type: "gmail", page: page), .same,
+                       "nothing new: not the sentence, the page or the class again")
+        XCTAssertEqual(CardTestedWords.same, "Still failing the same way.")
+
+        // The sync couldn't reach the server and the test was turned down: the test's own words, and its page.
+        XCTAssertEqual(TestedOnCard.of(wrong, kind: "AUTH", standing: "NETWORK", type: "gmail", page: nil),
+                       .other("Gmail needs an App Password here.", link: page))
+        // Turned down both times, but the test's words want a sign-in, where the card says to make a password.
+        let signIn = Tested.failed("Sign in to Gmail on the web first.", link: nil, detail: nil)
+        XCTAssertEqual(TestedOnCard.of(signIn, kind: "AUTH", standing: "AUTH", type: "gmail", page: page),
+                       .other("Sign in to Gmail on the web first.", link: nil))
+        // A different trouble whose page the card already shows: its sentence, not the page a second time.
+        XCTAssertEqual(TestedOnCard.of(wrong, kind: "TIMEOUT", standing: "AUTH", type: "gmail", page: page),
+                       .other("Gmail needs an App Password here.", link: nil))
+        // A Proton test points to Bridge's page, which the card's Bridge password stands for.
+        let bridge = Tested.failed("Bridge said no.", link: StatusWords.protonBridge, detail: nil)
+        XCTAssertEqual(TestedOnCard.of(bridge, kind: "AUTH", standing: "AUTH", type: "proton", page: nil), .same)
+        // A card with no trouble shows the test as it is.
+        XCTAssertEqual(TestedOnCard.of(wrong, kind: "AUTH", standing: nil, type: "gmail", page: nil),
+                       .other("Gmail needs an App Password here.", link: page))
+        XCTAssertEqual(TestedOnCard.of(.connected, kind: nil, standing: "AUTH", type: "gmail", page: page), .connected)
+        XCTAssertEqual(TestedOnCard.of(.running, kind: nil, standing: "AUTH", type: "gmail", page: page), .running)
+    }
+}
+
+/// The Sync card and the Edit sheet as drawn (#51): the card's trouble said once with its button, no class in it, and
+/// the sheet opened from that button with the focus in its emptied password field.
+@MainActor
+final class AccountCardTests: XCTestCase {
+    private let now = StatusFixtures.at("2026-11-16T12:00:00Z")
+
+    private func status(_ account: API.AccountRow, error: String, kind: String) -> AppStatus {
+        let status = AppStatus(newMail: NewMailAlerts(notifier: SystemNotifier.Silent(), isActive: { true },
+                                                      badge: { _ in }, announce: { _ in }))
+        let email = account.email ?? ""
+        status.hold(digest: StatusFixtures.digest(accounts: [email]), accounts: [account],
+                    health: [StatusFixtures.standing(email, ok: "2026-11-16T09:00:00Z", error: error, kind: kind,
+                                                     errorAt: "2026-11-16T11:00:00Z", count: 3)],
+                    now: now)
+        return status
+    }
+
+    func testAGmailLoginTurnedDownSaysItOnceAndOffersEnterAppPassword() throws {
+        let cy = StatusFixtures.account("cy@example.test", type: "gmail")
+        var asked: [AccountFix] = []
+        let shown = Shown(HealthRow(status: status(cy, error: "LoginNeedsAppPassword", kind: "AUTH"),
+                                    email: "cy@example.test", fix: { asked.append($0) }))
+        defer { shown.close() }
+        let said = shown.words
+        XCTAssertEqual(said, """
+            Couldn’t sync · 60m ago Gmail needs an App Password, not your Google password: make one, then choose \
+            Enter App Password and paste it. Make an App Password Enter App Password… Retry
+            """, "each thing once, and no class")
+        XCTAssertFalse(said.contains("LoginNeedsAppPassword"), "Copy Diagnostics carries the class")
+        XCTAssertFalse(said.contains("AUTH"))
+        XCTAssertTrue(shown.press("Enter App Password…"))
+        XCTAssertEqual(asked, [.appPassword], "it opens the sheet for an App Password")
+    }
+
+    func testAnOtherIMAPPasswordTurnedDownOffersChangePasswordUnlessItIsReadElsewhere() throws {
+        let ada = StatusFixtures.account("ada@example.test")
+        var asked: [AccountFix] = []
+        let shown = Shown(HealthRow(status: status(ada, error: "LOGIN refused", kind: "AUTH"),
+                                    email: "ada@example.test", fix: { asked.append($0) }))
+        defer { shown.close() }
+        XCTAssertEqual(shown.count("Change Password…"), 1, shown.words)
+        XCTAssertFalse(shown.words.contains("LOGIN refused"), "no class: \(shown.words)")
+        XCTAssertTrue(shown.press("Change Password…"))
+        XCTAssertEqual(asked, [.password])
+
+        let kept = StatusFixtures.account("news@example.test", style: "op", ref: "op://Private/News/password")
+        let elsewhere = Shown(HealthRow(status: status(kept, error: "LOGIN refused", kind: "AUTH"),
+                                        email: "news@example.test"))
+        defer { elsewhere.close() }
+        XCTAssertEqual(elsewhere.count("Password…"), 0, "1Password's item is changed in 1Password: \(elsewhere.words)")
+        XCTAssertTrue(elsewhere.words.contains("where MailMind reads this account’s password"), elsewhere.words)
+    }
+
+    func testATestThatFailedTheSameWaySaysOnlyThat() {
+        let same = Shown(CardTestedWords(shown: .same))
+        defer { same.close() }
+        XCTAssertEqual(same.words.trimmingCharacters(in: .whitespaces), "Still failing the same way.")
+        let other = Shown(CardTestedWords(shown: .other("The server didn't answer.", link: nil)))
+        defer { other.close() }
+        XCTAssertEqual(other.words.trimmingCharacters(in: .whitespaces), "The server didn't answer.",
+                       "its own sentence, and no class")
+    }
+
+    func testTheSheetOpenedToFixAPasswordHasTheFocusInItsEmptyPasswordField() async throws {
+        for (account, fix) in [(StatusFixtures.account("ada@example.test"), AccountFix.password),
+                               (StatusFixtures.account("cy@example.test", type: "gmail"), .appPassword)] {
+            let status = status(account, error: "LOGIN refused", kind: "AUTH")
+            let shown = Shown(AccountForm(status: status, draft: AccountDraft(editing: account, fixing: fix),
+                                          done: { _ in }),
+                              size: CGSize(width: 560, height: 640))
+            defer { shown.close() }
+            await deskEventually { shown.focusedField is NSSecureTextField }
+            let field = try XCTUnwrap(shown.focusedField as? NSSecureTextField, "\(account.type): \(String(describing: shown.focusedField))")
+            XCTAssertEqual(field.stringValue, "", "empty, for the new one")
+        }
+    }
+
+    func testTheSheetOpenedToFixAServerHasTheFocusInItsIncomingServer() async throws {
+        let ada = StatusFixtures.account("ada@example.test")
+        let shown = Shown(AccountForm(status: status(ada, error: "connection refused", kind: "NETWORK"),
+                                      draft: AccountDraft(editing: ada, fixing: .server), done: { _ in }),
+                          size: CGSize(width: 560, height: 640))
+        defer { shown.close() }
+        await deskEventually { (shown.focusedField as? NSTextField)?.stringValue == "imap.example.test" }
+    }
+
+    /// A view in a window of its own, off the screen and see-through, as a sheet or a card shows it. A view that is
+    /// read is drawn into a PDF too, whose text is what it says and where: SwiftUI builds no accessibility to read
+    /// with no assistive app attached.
+    @MainActor
+    private struct Shown {
+        let window: NSWindow
+        let host: NSView
+        private let drawn: PDFDocument?
+
+        /// `view` laid out in `size`, or, with none, as wide as a Sync card and drawn to be read.
+        init(_ view: some View, size: CGSize? = nil) {
+            _ = NSApplication.shared
+            let lit = AnyView(view.frame(width: size == nil ? 560 : nil).meadowLight(.day))
+            var laid = size ?? .zero
+            var drawn: PDFDocument?
+            if size == nil {
+                let data = NSMutableData()
+                ImageRenderer(content: lit).render { size, draw in
+                    laid = size
+                    var box = CGRect(origin: .zero, size: size)
+                    guard let consumer = CGDataConsumer(data: data as CFMutableData),
+                          let pdf = CGContext(consumer: consumer, mediaBox: &box, nil) else { return }
+                    pdf.beginPDFPage(nil)
+                    draw(pdf)
+                    pdf.endPDFPage()
+                    pdf.closePDF()
+                }
+                drawn = PDFDocument(data: data as Data)
+            }
+            self.drawn = drawn
+            host = NSHostingView(rootView: lit)
+            host.frame = CGRect(origin: .zero, size: laid)
+            window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            // A press and the focus go only to a window on screen: this one is, but far off it and see-through.
+            window.alphaValue = 0
+            window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+            window.makeKeyAndOrderFront(nil)
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            host.layoutSubtreeIfNeeded()
+        }
+
+        func close() {
+            window.orderOut(nil)
+            window.contentView = nil
+        }
+
+        /// Everything the view says, in order, its lines joined where they wrapped.
+        var words: String {
+            (drawn?.string ?? "").split(whereSeparator: \.isNewline).joined(separator: " ")
+        }
+
+        /// How many times the view says `what`.
+        func count(_ what: String) -> Int { words.components(separatedBy: what).count - 1 }
+
+        /// Press where `label` is drawn, as a person clicks the button that says it; false where nothing says it.
+        func press(_ label: String) -> Bool {
+            guard let drawn, let page = drawn.page(at: 0),
+                  let found = drawn.findString(label, withOptions: []).last
+            else { return false }
+            let at = found.bounds(for: page)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: at.midX, y: at.midY),
+                                                     modifierFlags: [],
+                                                     timestamp: ProcessInfo.processInfo.systemUptime,
+                                                     windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                     clickCount: 1, pressure: 1)
+                else { return false }
+                window.sendEvent(event)
+            }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            return true
+        }
+
+        /// The field whose editor has the focus.
+        var focusedField: NSView? {
+            host.layoutSubtreeIfNeeded()
+            let responder = window.firstResponder
+            if let editor = responder as? NSTextView, editor.isFieldEditor { return editor.delegate as? NSView }
+            return responder as? NSView
+        }
     }
 }

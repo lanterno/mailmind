@@ -7,8 +7,9 @@ import XCTest
 final class StatusProblemsTests: XCTestCase {
     func testEachSyncErrorKindIsASentenceWithWhatToDoNext() {
         let next = [
-            "AUTH": "Choose Edit and type it again", "TIMEOUT": "check your internet connection",
-            "NETWORK": "server’s name and port", "UIDVALIDITY": "Nothing needs doing", "TLS_PIN": "Trust it",
+            "AUTH": "change it where MailMind reads this account’s password, then choose Retry",
+            "TIMEOUT": "check your internet connection", "NETWORK": "Check your internet connection, then choose Retry",
+            "UIDVALIDITY": "Nothing needs doing", "TLS_PIN": "Trust it",
             "IMAP": "Copy Diagnostics", "UNKNOWN": "Copy Diagnostics", "SOMETHING_NEW": "Choose Retry",
         ]
         for (kind, step) in next {
@@ -40,7 +41,7 @@ final class StatusProblemsTests: XCTestCase {
         XCTAssertTrue(StatusWords.syncProblem("AUTH", type: "proton").contains("the password Bridge shows"))
 
         let gmail = StatusWords.syncProblem("AUTH", type: "gmail", error: "LoginNeedsAppPassword")
-        XCTAssertTrue(gmail.contains("it needs an App Password, not your Google password"), gmail)
+        XCTAssertTrue(gmail.contains("Gmail needs an App Password, not your Google password"), gmail)
         XCTAssertEqual(StatusWords.syncHelp("AUTH", type: "gmail", error: "LoginNeedsAppPassword"), StatusWords.appPasswords)
         XCTAssertEqual(StatusWords.appPasswords.url, "https://myaccount.google.com/apppasswords")
         XCTAssertEqual(StatusWords.syncHelp("AUTH", type: "gmail", error: "LoginRefused"), StatusWords.appPasswords)
@@ -53,7 +54,8 @@ final class StatusProblemsTests: XCTestCase {
         XCTAssertNil(StatusWords.syncHelp("AUTH", type: "gmail", error: "LoginNeedsWebSignIn"))
 
         // An account with servers of its own checks them, as before.
-        XCTAssertTrue(StatusWords.syncProblem("NETWORK", type: "imap").contains("server’s name and port"))
+        XCTAssertTrue(StatusWords.syncProblem("NETWORK", type: "imap", fix: .server)
+            .contains("its name and port under Edit Server"))
         XCTAssertNil(StatusWords.syncHelp("NETWORK", type: "imap"))
         XCTAssertNil(StatusWords.syncHelp("AUTH", type: "imap"))
     }
@@ -62,14 +64,18 @@ final class StatusProblemsTests: XCTestCase {
     /// web), and so does a wrong App Password: the words for it, in the row and the banner, hold for each.
     func testAGmailLoginTurnedDownWithoutGooglesReasonSaysWhatHoldsForEveryReason() {
         for error in ["LoginRefused", nil] {
-            let said = StatusWords.syncProblem("AUTH", type: "gmail", error: error)
+            let said = StatusWords.syncProblem("AUTH", type: "gmail", error: error, fix: .appPassword)
             XCTAssertEqual(said, """
-                Gmail turned down the login. If you typed your Google password, Gmail needs an App Password instead: \
-                make one, then choose Edit and paste it. If you already use one, sign in to Gmail in your browser and \
-                check that IMAP is on, then choose Retry.
+                Gmail turned down the login: if you typed your Google password, make an App Password and choose \
+                Enter App Password; if you already use one, sign in to Gmail in your browser and check that IMAP is \
+                on, then choose Retry.
                 """)
             XCTAssertFalse(said.contains("not your Google password"),
                            "someone who already uses an App Password isn't told they don't: \(said)")
+            // One whose password MailMind reads from 1Password or a variable is changed there.
+            let elsewhere = StatusWords.syncProblem("AUTH", type: "gmail", error: error)
+            XCTAssertTrue(elsewhere.contains("put an App Password where it reads this account’s password"), elsewhere)
+            XCTAssertFalse(elsewhere.contains("Enter App Password"), "no button to name: \(elsewhere)")
             XCTAssertEqual(StatusWords.syncHelp("AUTH", type: "gmail", error: error), StatusWords.appPasswords)
         }
 
