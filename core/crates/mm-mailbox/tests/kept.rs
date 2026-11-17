@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::thread::ThreadId;
 
 use mm_kernel::errors::Fault;
@@ -363,6 +363,57 @@ fn an_account_the_configuration_no_longer_holds_keeps_none() {
     k.job(GONE, |s| read(s, 1).unwrap());
     assert_eq!(k.opened(), 2);
     assert!(k.log(0).contains(&"2 LOGOUT".to_owned()));
+    assert!(k.kept.stats().slots.is_empty(), "no place is left for it");
+}
+
+/// The accounts, where the next ask of the account `removing` names is answered as the configuration was read, and
+/// then the account is removed and its connection forgotten: a removal that comes just as a job opens its connection.
+#[derive(Debug, Default)]
+struct RemovedAsAsked {
+    kept: OnceLock<Weak<KeptServers>>,
+    removing: Mutex<Option<String>>,
+}
+
+impl KeptAccounts for RemovedAsAsked {
+    fn keeping(&self, account: &str) -> Result<Option<Keeping>, Fault> {
+        let read = Accounts.keeping(account);
+        let removed = {
+            let mut removing = self.removing.lock().unwrap();
+            let now = removing.as_deref() == Some(account);
+            if now {
+                *removing = None;
+            }
+            now
+        };
+        if removed && let Some(kept) = self.kept.get().and_then(Weak::upgrade) {
+            kept.forget(account);
+        }
+        read
+    }
+}
+
+#[test]
+fn an_account_removed_as_a_job_opens_its_connection_keeps_none() {
+    let (gates, opener, accounts) =
+        (Arc::new(ThreadGates::default()), Arc::new(Opener::default()), Arc::new(RemovedAsAsked::default()));
+    let kept = Arc::new(KeptServers::new(KeptParts {
+        opener: opener.clone(),
+        gates: gates.clone(),
+        accounts: accounts.clone(),
+        clock: Arc::new(Hands::default()),
+    }));
+    accounts.kept.set(Arc::downgrade(&kept)).unwrap();
+    *accounts.removing.lock().unwrap() = Some(ADA.to_owned());
+    on_gate(&*gates, ADA, Priority::Interactive, Wait::Ever, || {
+        let mut s = kept.open(ADA, 60).unwrap();
+        read(&mut *s, 1).unwrap();
+        s.logout();
+    })
+    .unwrap();
+    // The job had its connection, and it was logged out as it came back, not kept for an account that is gone.
+    let log = opener.log.lock().unwrap().clone();
+    assert_eq!(log[log.len() - 3..], ["1 BODY 1", "1 TIMEOUT 3", "1 LOGOUT"]);
+    assert!(kept.stats().slots.is_empty());
 }
 
 #[test]
