@@ -175,6 +175,46 @@ final class MeadowWindowTests: XCTestCase {
         }
     }
 
+    /// MailMind › Acknowledgements dresses its own window as Meadow's: no title, a clear title bar with the paper under
+    /// it and no line, the traffic lights on its bar, which moves the window; the licences in the light's ink on the
+    /// paper, with no white page of their own, in each light.
+    func testAcknowledgementsIsMeadowsPaperUnderItsLights() throws {
+        for light in [MeadowLight.day, .night] {
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 720),
+                                  styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered,
+                                  defer: false)
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: light.isDark ? .darkAqua : .aqua)
+            let text = "MailMind's acknowledgements\n\nSparkle, https://sparkle-project.org\n"
+            let host = NSHostingView(rootView: AcknowledgementsView(text: text).meadowLight(light))
+            window.contentView = host
+            Self.settle()
+            defer {
+                window.contentView = nil
+                window.close()
+            }
+            XCTAssertEqual(window.titleVisibility, .hidden, "no title in \(light)")
+            XCTAssertTrue(window.titlebarAppearsTransparent, "a clear title bar in \(light)")
+            XCTAssertEqual(window.titlebarSeparatorStyle, .none)
+            XCTAssertTrue(window.styleMask.contains(.fullSizeContentView), "the paper runs under the title bar")
+            Self.assertLights(of: window, on: AcknowledgementsView.barHeight, "in \(light)")
+            let frameView = try XCTUnwrap(host.superview)
+            let bar = frameView.hitTest(NSPoint(x: 320, y: frameView.bounds.height - 20))
+            XCTAssertTrue(bar is WindowDragView, "its bar moves the window, not \(String(describing: bar))")
+            let licences = try XCTUnwrap(Self.views(in: host, of: NSTextView.self).first, "the licences' text")
+            XCTAssertEqual(licences.string, text)
+            XCTAssertFalse(licences.drawsBackground, "no page of its own over the paper")
+            XCTAssertFalse(licences.enclosingScrollView?.drawsBackground ?? true, "nor its scroll view")
+            let ink = NSColor(MeadowPalette.of(light).ink).usingColorSpace(.sRGB)
+            XCTAssertEqual(licences.textColor?.usingColorSpace(.sRGB), ink, "the light's ink")
+        }
+    }
+
+    /// Every view under `view` of the class `kind`.
+    private static func views<T: NSView>(in view: NSView, of kind: T.Type) -> [T] {
+        ((view as? T).map { [$0] } ?? []) + view.subviews.flatMap { views(in: $0, of: kind) }
+    }
+
     /// The room a titled window's title bar takes over its content, which a scene adds to the content's size.
     private static var titlebarRoom: CGFloat {
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 300),
