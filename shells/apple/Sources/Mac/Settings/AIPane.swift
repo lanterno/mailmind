@@ -526,7 +526,9 @@ struct AIPane: View {
             SettingSwitch(String(localized: "Have last week’s review ready each Monday"), help: String(localized: """
                 Written on Monday morning, within the daily limit, and only if you’ve used MailMind in the last two \
                 days. Your week shows it until the next Monday, and ↻ there writes a new one.
-                """), isOn: status.preference(\.weeklyReview) { .init(weeklyReview: $0) })
+                """) + " " + AIWords.reviewGoes(provider, url: preferences?.aiBaseUrl ?? "",
+                                                   cloudModel: status.digest?.ai.cloudModel ?? false),
+                          isOn: status.preference(\.weeklyReview) { .init(weeklyReview: $0) })
             SettingSwitch(String(localized: "File low-priority mail by itself, once a day"), help: String(localized: """
                 Only what today’s brief offers to tidy. The brief says what went, and one click takes it all back.
                 """), isOn: status.preference(\.autoTidy) { .init(autoTidy: $0) })

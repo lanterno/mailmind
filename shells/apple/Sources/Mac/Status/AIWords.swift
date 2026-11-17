@@ -178,6 +178,19 @@ enum AIWords {
             : String(localized: "On, they are drafted on this Mac, and nothing leaves it.")
     }
 
+    /// What the weekly review's switch says goes each Monday while it is on, and to whom (the page's
+    /// `weeklyReviewSends`): beside Inbox mail that needs you, the threads you're waiting on, which are mail you sent,
+    /// and the meetings from invites in any folder. Nothing, with a model that runs on this Mac.
+    static func reviewGoes(_ provider: API.AiProvider, url: String = "", cloudModel: Bool = false) -> String {
+        guard let to = recipient(provider, url: url) ?? (cloudModel ? String(localized: "Ollama’s servers") : nil) else {
+            return String(localized: "On, it is written on this Mac, and nothing leaves it.")
+        }
+        return String(localized: """
+            On, each Monday the senders, subjects and summaries of mail that needs you, the subjects and recipients of \
+            threads you’re waiting on, and the names of the week’s meetings go to \(to) to write it.
+            """)
+    }
+
     /// Who mail goes to: nil for a model on this Mac, or a compatible service answering here.
     private static func recipient(_ provider: API.AiProvider, url: String) -> String? {
         provider == .compatible && onThisMac(url) ? nil : provider.recipient
