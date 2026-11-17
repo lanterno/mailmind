@@ -155,11 +155,6 @@ impl Shared {
     fn count(&self, what: impl FnOnce(&mut Counts)) {
         what(&mut locked(&self.counts));
     }
-
-    /// Whether `slot` is still `account`'s: one forgotten meanwhile isn't.
-    fn still(&self, account: &str, slot: &Arc<Slot>) -> bool {
-        locked(&self.slots).get(account).is_some_and(|now| Arc::ptr_eq(now, slot))
-    }
 }
 
 /// Sessions on each account's server, as `opener` opens them, with the connection kept between the jobs that hold
@@ -196,6 +191,15 @@ impl KeptServers {
 
     fn slot(&self, account: &str) -> Arc<Slot> {
         locked(&self.shared.slots).entry(account.to_owned()).or_default().clone()
+    }
+
+    /// `slot`, made for a lending that keeps nothing, goes again, unless it keeps or lends a connection now.
+    fn let_go(&self, account: &str, slot: &Arc<Slot>) {
+        let mut slots = locked(&self.shared.slots);
+        let idle = !slot.lent.load(Ordering::SeqCst) && locked(&slot.kept).is_none();
+        if idle && slots.get(account).is_some_and(|now| Arc::ptr_eq(now, slot)) {
+            slots.remove(account);
+        }
     }
 
     /// The kept connection, checked, or a new one: the caller holds the slot.
@@ -247,7 +251,7 @@ impl KeptServers {
     }
 
     /// `account` changed, or was removed: its connection, logged in as it was, is logged out now, or as it comes back
-    /// if it is lent.
+    /// if it is lent or a job is opening it now. None is kept for it until a job opens one after.
     pub fn forget(&self, account: &str) {
         let slot = locked(&self.shared.slots).remove(account);
         let held = slot.and_then(|slot| locked(&slot.kept).take());
@@ -297,10 +301,21 @@ impl MailServers for KeptServers {
         if self.shared.closed.load(Ordering::SeqCst) || !self.gates.holds(account) {
             return self.opener.open(account, timeout_seconds);
         }
-        let Some(keeping) = self.accounts.keeping(account).map_err(ServerError::Failed)? else {
-            return self.opener.open(account, timeout_seconds);
-        };
+        // The account's slot before its keeping: a removal (`forget`) from now on takes this slot away, and what this
+        // lending opens is logged out as it comes back; one before it took the account out of the configuration first,
+        // so there is nothing to keep.
         let slot = self.slot(account);
+        let keeping = match self.accounts.keeping(account) {
+            Ok(Some(keeping)) => keeping,
+            Ok(None) => {
+                self.let_go(account, &slot);
+                return self.opener.open(account, timeout_seconds);
+            }
+            Err(fault) => {
+                self.let_go(account, &slot);
+                return Err(ServerError::Failed(fault));
+            }
+        };
         if slot.lent.swap(true, Ordering::SeqCst) {
             // This job has it already: a session of its own beside it.
             return self.opener.open(account, timeout_seconds);
@@ -381,21 +396,29 @@ impl Lent {
     /// Give it back: kept for the next job if it may be, else closed.
     fn give_back(&mut self) {
         let Some(kept) = self.kept.take() else { return };
-        let stale = kept.generation != self.shared.generation.load(Ordering::SeqCst);
         if self.dirty || std::thread::panicking() {
             self.shared.count(|c| c.discard_dirty += 1);
             kept.close(false);
-        } else if stale {
-            kept.close(false);
-        } else if self.retire
-            || self.shared.closed.load(Ordering::SeqCst)
-            || !self.shared.still(&self.account, &self.slot)
-        {
-            kept.close(true);
-        } else {
-            *locked(&self.slot.kept) = Some(kept);
+        } else if let Err((kept, politely)) = self.keep(kept) {
+            kept.close(politely);
         }
         self.slot.lent.store(false, Ordering::SeqCst);
+    }
+
+    /// Keep `kept` for the next job where it may be kept; else hand it back, with whether to log it out (one opened
+    /// before a wake is closed without a word). It is asked with the slots held, as `forget`, `close` and `woke` change
+    /// them, so each of those either comes first and it isn't kept, or after and finds it kept.
+    fn keep(&self, kept: Kept) -> Result<(), (Kept, bool)> {
+        let slots = locked(&self.shared.slots);
+        if kept.generation != self.shared.generation.load(Ordering::SeqCst) {
+            return Err((kept, false));
+        }
+        let still = slots.get(&self.account).is_some_and(|now| Arc::ptr_eq(now, &self.slot));
+        if self.retire || self.shared.closed.load(Ordering::SeqCst) || !still {
+            return Err((kept, true));
+        }
+        *locked(&self.slot.kept) = Some(kept);
+        Ok(())
     }
 }
 
