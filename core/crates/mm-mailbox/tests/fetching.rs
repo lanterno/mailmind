@@ -3,7 +3,7 @@
 //! prefetch that gives way to a held gate; kept with what opening it records; read from the store once it is there.
 //! And as the body backfill fetches a folder's few: as a prefetch gives way, their openings in one FETCH, the whole
 //! of those cut off several a FETCH where small enough and only the text of one too large, a lost connection told
-//! apart from the rest.
+//! apart from the rest, and nothing asked for a message opened, moved or removed since the round found it.
 
 #![allow(clippy::unwrap_used)]
 
@@ -428,6 +428,11 @@ impl World {
         texts.sort_unstable();
         texts
     }
+
+    /// Message `pk`'s row says `column` is `value` now.
+    fn row_says(&self, pk: i64, column: &str, value: serde_json::Value) {
+        self.store.rows.lock().unwrap().get_mut(&pk).unwrap().insert(column.to_owned(), value);
+    }
 }
 
 #[test]
@@ -445,6 +450,9 @@ fn the_backfill_keeps_a_folders_bodies_from_one_fetch_of_their_openings_at_maint
 fn a_message_cut_off_is_fetched_whole_several_a_fetch_and_one_too_large_keeps_only_its_texts() {
     assert_eq!((WHOLE_MOST, FETCH_BYTES), (256 * 1024, 2 * 1024 * 1024));
     let world = World::new(Body::Gives).holding([(101, sized(100)), (102, sized(300)), (103, sized(256))]);
+    // RAW, at UID 7, as message 7.
+    let row = json!({"pk": 7, "account": ADA, "folder": "Archive", "uid": 7, "body_fetched": 0});
+    world.store.rows.lock().unwrap().insert(7, row.as_object().unwrap().clone());
     let batch = [(1, 101), (2, 102), (3, 103), (7, 7)];
     assert_eq!(world.fetching.try_bodies(ADA, "Archive", &batch), Tried::Ran);
     assert_eq!(
@@ -507,8 +515,33 @@ fn the_backfill_hears_of_a_held_gate_and_a_lost_connection_apart_from_the_rest()
     // A refusal, a folder the server won't select and a message gone each ran, and kept nothing.
     for (body, uid) in [(Body::Refuses, 7), (Body::RefusesTheSelect, 7), (Body::Gives, 8)] {
         let world = World::new(body);
+        world.row_says(1, "uid", json!(uid));
         assert_eq!(world.fetching.try_bodies(ADA, "Archive", &[(1, uid)]), Tried::Ran);
         assert!(world.kept().is_empty() && world.texts().is_empty());
         assert_eq!(world.asked().last().map(String::as_str), Some("LOGOUT"));
     }
+}
+
+#[test]
+fn the_backfill_asks_only_for_what_is_still_where_the_round_found_it_and_has_no_body_once_it_has_the_gate() {
+    let world = World::new(Body::Gives).holding((101..=106).map(|uid| (uid, sized(10))));
+    let batch: Vec<(i64, u32)> = (101..=106).map(|uid| (i64::from(uid) - 100, uid)).collect();
+    // Between the round's look at the store and its batch: message 1 was opened, and its body kept as it opened.
+    let opened = KeptBody::of(b"Subject: Opened\r\n\r\nRead already\r\n".to_vec(), "2026-11-02T00:00:00Z".into());
+    world.store.keep_body(1, &opened).unwrap();
+    // 2 was removed, 3 is on its way to Trash, 4's folder was renamed, and 5's text was kept.
+    world.store.rows.lock().unwrap().remove(&2);
+    world.row_says(3, "pending_removal", json!(1_793_620_800));
+    world.row_says(4, "folder", json!("Old Archive"));
+    world.row_says(5, "body_text", json!("Kept already"));
+    assert_eq!(world.fetching.try_bodies(ADA, "Archive", &batch), Tried::Ran);
+    assert_eq!(
+        world.asked(),
+        ["LOGIN ada@example.test".to_owned(), "EXAMINE Archive".into(), "OPENINGS 106 65536".into(), "LOGOUT".into()]
+    );
+    assert_eq!(world.kept(), [1, 6]);
+    assert_eq!(world.store.bodies.lock().unwrap()[&1].raw, opened.raw, "the body it opened with is kept");
+    // With none left to ask for, no server is asked at all.
+    assert_eq!(world.fetching.try_bodies(ADA, "Archive", &batch[..5]), Tried::Ran);
+    assert!(world.asked().is_empty());
 }
