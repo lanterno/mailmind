@@ -8,7 +8,8 @@
 //!   `ServerError::Unreachable`: the Python app's `IMAP4.error` and `IMAP4.abort`, so every caller tells them apart
 //!   as it does there.
 //! - A read-only process's session (`ReadOnly`) opens every folder read-only and refuses any write before it is
-//!   sent, as unreachable (`profile.ReadOnlyError` is a member of `UNREACHABLE`), so a change queues for a full run.
+//!   sent, as unreachable (`profile.ReadOnlyError` is a member of `UNREACHABLE`). A read-only process refuses a
+//!   change before it is queued, so this is the last wall: what a full run queued and reaches it waits for the next.
 
 use std::collections::BTreeMap;
 use std::fmt;

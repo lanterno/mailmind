@@ -482,7 +482,7 @@ impl Delivery {
 
     /// One pass of the outbox (`drain`): every send due now, each account's in its lane on a thread of its own, one
     /// lane after another's busy pass. It returns once every lane has run. One send that fails is logged and the rest
-    /// still go. A read-only process sends nothing: its sends wait for a full run.
+    /// still go. A read-only process sends nothing and queued none: what a full run queued waits for the next.
     pub fn deliver(&self) -> Result<(), Fault> {
         if !self.parts.writes {
             return Ok(());

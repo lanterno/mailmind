@@ -19,7 +19,8 @@ use crate::sync_plan::{COLUMNS, IMAP_NAMES};
 
 /// Seconds each step waits for the server when no one waits on the answer.
 const SESSION_TIMEOUT: u64 = 60;
-/// A read-only process's changes queue for a full run: refused before any connection, as unreachable.
+/// A read-only process refuses a change before it is queued and drains no queue. A try that gets this far anyway is
+/// refused before any connection, as unreachable, so what a full run queued waits for the next.
 const READ_ONLY: ServerError = ServerError::Unreachable("ReadOnlyError");
 /// UIDs to one MOVE of many messages back, so no command line grows too long.
 const BACK_BATCH: usize = 200;

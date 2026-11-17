@@ -326,7 +326,8 @@ impl Workers {
         if read_only {
             log::info(
                 TAG,
-                "(auto-sync disabled: the read-only profile writes nothing, so moves wait in their queue; snooze still runs)",
+                "(auto-sync disabled: the read-only profile refuses any change that would reach a mail server, \
+                 and what a full run queued waits for the next; snooze still runs)",
                 &[],
             );
         }

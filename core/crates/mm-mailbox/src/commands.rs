@@ -636,7 +636,7 @@ impl MailCommands {
     }
 
     /// Each queued command that is due, oldest first; one that fails, or panics, is logged and never stops the rest.
-    /// A read-only process leaves them for a full run.
+    /// A read-only process queued none, and leaves what a full run queued for the next.
     pub fn drain(&self) -> Result<(), Fault> {
         if self.read_only {
             return Ok(());
