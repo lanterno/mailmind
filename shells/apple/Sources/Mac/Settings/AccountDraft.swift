@@ -44,6 +44,8 @@ struct AccountDraft: Equatable {
     /// What the Edit sheet was opened to fix from the account's Sync card (#51): its password, which is then asked
     /// for, or its server. Nil for a plain edit.
     let fixing: AccountFix?
+    /// The type the edited account is saved as; nil when adding one.
+    private let savedKind: Kind?
     var alias = ""
     var signature = ""
     var email = ""
@@ -83,6 +85,7 @@ struct AccountDraft: Equatable {
     init(editing row: API.AccountRow? = nil, fixing: AccountFix? = nil) {
         editing = row?.email
         self.fixing = row == nil ? nil : fixing
+        savedKind = row.map { Kind(rawValue: $0.type) ?? .imap }
         guard let row else { return }
         alias = row.alias ?? ""
         signature = row.signature
@@ -275,6 +278,16 @@ struct AccountDraft: Equatable {
                 smtpSecurity == outgoingUnsaved.security ? nil : smtpSecurity == .starttls)
     }
 
+    /// The servers an edited account reads and sends its mail at, as the form holds them: an outgoing server the file
+    /// doesn't name is its type's.
+    private var readsAt: (host: JSONValue?, port: JSONValue?, starttls: Bool?, smtpHost: JSONValue?,
+                          smtpPort: JSONValue?, smtpStarttls: Bool?)
+    {
+        (.string(host.trimmed), .number(Double(port993)), security == .starttls,
+         smtpHost.trimmed.isEmpty ? nil : .string(smtpHost.trimmed), .number(Double(port587)),
+         smtpSecurity == .starttls)
+    }
+
     /// The body `/api/accounts/add` or `/api/accounts/edit` takes: an Other IMAP account's servers with it, a preset's
     /// Trash when one names it, and the credential only when one is given.
     var body: API.AccountBody {
@@ -288,11 +301,13 @@ struct AccountDraft: Equatable {
     /// What `/api/accounts/test` is asked: the form as it stands when it gives a credential; the account as it is
     /// saved when editing without one; nil, with nothing to test, when adding without one. A Proton account logs in with
     /// the Bridge's password, which only a saved account is tested with: the one edited, and a new one not until it is
-    /// added (`testsOnceAdded`).
+    /// added (`testsOnceAdded`). An edited account's password is tried where it reads its mail (#51): an Other IMAP
+    /// account's servers as typed, and another's as the server listed them, which are its type's unless its file names
+    /// others; a type picked anew, its type's.
     var test: API.TryBody? {
         if type == .proton { return editing.map { API.TryBody(email: $0) } }
         if let credential {
-            let s = servers
+            let s = type != .imap && type == savedKind && !host.trimmed.isEmpty ? readsAt : servers
             return API.TryBody(draft: API.AccountDraft(credential: credential, email: address, host: s.host, port: s.port,
                                                        smtpHost: s.smtpHost, smtpPort: s.smtpPort,
                                                        smtpStarttls: s.smtpStarttls, starttls: s.starttls,
