@@ -46,8 +46,10 @@ mkdir -p "$out"
 
 echo "## the core, for Apple silicon and Intel"
 # The same build as the xcframework recipe's, with the Mac's slice for both architectures joined by lipo:
-# an XCFramework holds one library for each platform.
-export IPHONEOS_DEPLOYMENT_TARGET=26.0 MACOSX_DEPLOYMENT_TARGET=26.0
+# an XCFramework holds one library for each platform. For the lowest OS the app runs on, project.yml's, as there.
+export IPHONEOS_DEPLOYMENT_TARGET="$(sed -n 's/^ *iOS: *"\(.*\)"$/\1/p' "$here/project.yml")"
+export MACOSX_DEPLOYMENT_TARGET="$(sed -n 's/^ *macOS: *"\(.*\)"$/\1/p' "$here/project.yml")"
+[[ -n "$IPHONEOS_DEPLOYMENT_TARGET" && -n "$MACOSX_DEPLOYMENT_TARGET" ]] || stop "project.yml names no deploymentTarget"
 (
     cd "$core"
     for target in aarch64-apple-ios aarch64-apple-ios-sim aarch64-apple-darwin x86_64-apple-darwin; do

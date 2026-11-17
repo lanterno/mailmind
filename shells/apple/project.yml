@@ -5,9 +5,11 @@ include:
   - Release/mac.yml
 options:
   bundleIdPrefix: io.github.lanterno
+  # The lowest OS each app runs on, which the core is built for too (the justfile's xcframework, Release/release.sh).
+  # The Mac app asks for nothing newer than macOS 15 has, so Macs a year behind run it, Intel ones among them.
   deploymentTarget:
     iOS: "26.0"
-    macOS: "26.0"
+    macOS: "15.0"
   createIntermediateGroups: true
 settings:
   base:
