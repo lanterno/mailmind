@@ -308,7 +308,8 @@ struct AccountForm: View {
             focusTheFix()
         case .keptFailing:
             if adding { added = address } else { kept = true }
-            focusTheFix()
+            // Only the outgoing server turned it down: the password reads the mail, and isn't asked for again.
+            if tested?.sendingOnly != true { focusTheFix() }
         case .refused(let said):
             problem = said
             focusTheFix()
@@ -356,11 +357,18 @@ struct AccountSave {
         let adding = draft.editing == nil
         let address = draft.address
         let tries = draft.tries(firstRun: firstRun)
+        let fixing = !adding && draft.fixing != nil
+        // A fixed password that reads the mail but that the outgoing server turns down has fixed what the sync was
+        // refused: it is kept and the account syncs, while the sheet stays on the outgoing server's words.
+        var readsOnly = false
         if tries == .typed, let trial = draft.test {
             show(.running)
             let tested = await routes.test(trial)
             show(tested)
-            guard tested == .connected else { return .notKept }
+            if tested != .connected {
+                guard fixing, tested.sendingOnly else { return .notKept }
+                readsOnly = true
+            }
         }
         do {
             try await routes.keep(draft.body, adding)
@@ -369,11 +377,14 @@ struct AccountSave {
             return .refused(refused.map { $0.detail ?? String(localized: "Could not save.") }
                 ?? String(localized: "Save failed."))
         }
-        let fixing = !adding && draft.fixing != nil
         let said = adding ? String(localized: "Added \(StatusWords.short(address))")
                           : String(localized: "Updated \(StatusWords.short(address))")
         if !(fixing && tries == .kept) { routes.say(said) }
         await routes.kept(address, adding)
+        if readsOnly {
+            await routes.retry(address)
+            return .keptFailing
+        }
         if tries == .kept {
             show(.running)
             let tested = await routes.test(API.TryBody(email: address))

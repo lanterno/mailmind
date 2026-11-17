@@ -414,6 +414,13 @@ enum Tested: Equatable, Sendable {
         }
     }
 
+    /// It logged in to read the mail, and only the outgoing server turned it down (the class `connections` names
+    /// "SMTP …").
+    var sendingOnly: Bool {
+        guard case .failed(_, _, let detail) = self else { return false }
+        return detail?.hasPrefix("SMTP ") == true
+    }
+
     static func of(_ answer: API.AccountsTestAnswer) -> Tested {
         switch answer {
         case .loggedIn(let answer):
