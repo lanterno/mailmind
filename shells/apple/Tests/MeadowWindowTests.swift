@@ -155,6 +155,26 @@ final class MeadowWindowTests: XCTestCase {
         }
     }
 
+    /// A message's own window: a press anywhere on the bar its traffic lights stand on moves the window, as a title
+    /// bar does, past the lights and across to its right edge.
+    func testAMessageWindowsBarMovesTheWindowWhereverItIsPressed() throws {
+        let shown = try ShownInAWindow("window-message-bar-day", light: .day, size: CGSize(width: 820, height: 300)) {
+            VStack(spacing: 0) {
+                MessageWindowBar()
+                Color.clear
+            }
+            .ignoresSafeArea()
+            .meadowWindowChrome(barHeight: MessageWindow.barHeight)
+        }
+        defer { shown.close() }
+        for x in stride(from: 100.0, through: 800, by: 100) {
+            for y in [6.0, MessageWindow.barHeight / 2, MessageWindow.barHeight - 2] {
+                XCTAssertTrue(shown.hit(x: x, y: y) is WindowDragView,
+                              "a press at \(x), \(y) lands on \(String(describing: shown.hit(x: x, y: y)))")
+            }
+        }
+    }
+
     /// The room a titled window's title bar takes over its content, which a scene adds to the content's size.
     private static var titlebarRoom: CGFloat {
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 300),
