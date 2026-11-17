@@ -69,8 +69,9 @@ describe("what leaves this Mac", () => {
   });
   it("says before AI mode is on what goes to the company behind the provider, when, and that attachments never do", () => {
     expect(aiSends("anthropic", "")).toBe("With AI mode on, each new message’s sender, subject and opening text go to Anthropic to be "
-      + "summarized, automatically. Whole conversations go when you ask for a summary, a draft or the brief, with what you type "
-      + "into Ask, a search written as a sentence, or Rewrite. Attachments never leave this Mac.");
+      + "summarized, automatically, and those senders, subjects and summaries go again to write the day’s brief and what came in "
+      + "since you looked. Whole conversations go only when you ask: for a summary or a draft, with what you type into Ask, a "
+      + "search written as a sentence, or Rewrite. Attachments never leave this Mac.");
     expect(aiSends("openai", "")).toContain(" go to OpenAI to be summarized");
     expect(aiSends("gemini", "")).toContain(" go to Google to be summarized");
     expect(aiSends("compatible", "https://llm.example.test/v1")).toContain(" go to the OpenAI-compatible service to be summarized");
