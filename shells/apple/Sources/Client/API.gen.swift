@@ -1979,18 +1979,29 @@ extension API {
         }
     }
 
-    /// `export.plan`: each account's folders, and how many of their messages have a body stored.
+    /// `export.plan`: each account's folders, and how many of their messages have a body stored; and how much room
+    /// the database takes on this disk, its file and the log of what it hasn't taken in yet, in bytes.
     public struct ExportPlan: Codable, Hashable, Sendable {
         public var bodies: Int
+        public var databaseBytes: Int
         public var groups: [ExportGroup]
         public var ok: Bool
         public var total: Int
 
-        public init(bodies: Int, groups: [ExportGroup], ok: Bool, total: Int) {
+        public init(bodies: Int, databaseBytes: Int, groups: [ExportGroup], ok: Bool, total: Int) {
             self.bodies = bodies
+            self.databaseBytes = databaseBytes
             self.groups = groups
             self.ok = ok
             self.total = total
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case bodies
+            case databaseBytes = "database_bytes"
+            case groups
+            case ok
+            case total
         }
     }
 
