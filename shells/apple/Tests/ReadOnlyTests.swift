@@ -90,6 +90,41 @@ final class ReadOnlyTests: XCTestCase {
         XCTAssertEqual(app.mailbox.toast?.text, Self.refused)
     }
 
+    // MARK: Opening mail
+
+    /// Opening mail marks it read only once the digest says MailMind runs with its writes on, as the page does: read
+    /// only would turn each one down with its 409, and before the profile is known nothing is asked either. Both the
+    /// reader's message and a conversation's members go this way.
+    func testOpeningMailAsksNoServerToMarkItReadWhileReadOnlyOrBeforeTheProfileIsKnown() async throws {
+        let member = API.ThreadMessage(answered: false, flagged: false, folder: "INBOX", hasAttach: false,
+                                       isJunk: false, key: 22, seen: false, snippet: "", subject: "Plans", uid: 22,
+                                       when: "")
+        let copy = MailCopy(member, account: Fixture.ada)
+        for (profile, marks) in [(nil, false), ("read-only", false), ("full", true)] as [(String?, Bool)] {
+            XCTAssertEqual(MarksOpened.marks(profile), marks, "\(profile ?? "not known yet")")
+            let routes = FakeRoutes()
+            routes.answer(API.Post.Seen.path, #"{"msg": "ok", "ok": true, "undoable": true}"#)
+            let conversation = ConversationModel(routes: routes, account: Fixture.ada, id: "t1", profile: { profile })
+            await conversation.markRead(member)
+            await MarksOpened.mark(copy, routes: routes, profile: profile)
+            let asked = routes.calls(to: API.Post.Seen.path)
+            XCTAssertEqual(asked.count, marks ? 2 : 0, "\(profile ?? "not known yet")")
+            for call in asked {
+                XCTAssertEqual(call.body, try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(
+                    API.SeenBody(folder: "INBOX", key: 22, seen: true, uid: 22))))
+            }
+        }
+    }
+
+    func testAMemberAlreadyReadIsntMarkedAgain() async {
+        let routes = FakeRoutes()
+        let conversation = ConversationModel(routes: routes, account: Fixture.ada, id: "t1", profile: { "full" })
+        await conversation.markRead(API.ThreadMessage(answered: false, flagged: false, folder: "INBOX", hasAttach: false,
+                                                      isJunk: false, key: 21, seen: true, snippet: "", subject: "Plans",
+                                                      uid: 21, when: ""))
+        XCTAssertTrue(routes.calls(to: API.Post.Seen.path).isEmpty)
+    }
+
     // MARK: The outbox's tray
 
     private func tray(refusing paths: [String], with problem: Problem = ReadOnlyTests.problem) -> (OutboxTray, () -> [String]) {
