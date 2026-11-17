@@ -200,6 +200,25 @@ def test_a_sweep_reads_the_inbox_off_the_server_once_and_moves_what_it_says_is_s
         assert [box for _, box, *_ in world.where(name)["server"]] == ["INBOX"], name
 
 
+def test_a_sweep_after_its_preview_from_the_stored_inbox_leaves_the_mail_older_than_what_is_stored(app, world):
+    """Ada's Inbox counts as read whole, but a sync that read only her recent mail (`mailmind sync`'s last N days, or an
+    Inbox taken as read whole before migration 24) never stored Loom's issue or the mail before it. The preview names
+    only what is stored, so Confirm, which reads her Inbox off the server, leaves Loom's issue there, read junk as it is."""
+    flagged_elsewhere(app, world, {name: ("\\Seen",) for name in JUNK})
+    with app.stopped():
+        with UnitOfWork().write() as c:
+            c.execute("DELETE FROM messages WHERE account=? AND folder='INBOX' AND uid<=?",
+                      (w.ADA, world.uid("ada-inbox-03-newsletter.eml")))
+    [plan] = app.post("/api/sweep", {"account": w.ADA, "dry_run": True}).json["results"]
+    assert (plan["planned"], plan["held_back"], plan["error"]) == (2, 0, None)
+    assert "newsletters/marketing" not in [b["bucket"] for b in plan["going"]]
+    [swept] = app.post("/api/sweep", {"account": w.ADA, "undo_group": "ug-older"}).json["results"]
+    assert (swept["planned"], swept["moved"], swept["error"]) == (2, 2, None)
+    assert [box for _, box, *_ in world.where("ada-inbox-03-newsletter.eml")["server"]] == ["INBOX"]
+    for name in ("ada-inbox-04-ci.eml", "ada-inbox-12-scam.eml"):
+        assert [box for _, box, *_ in world.where(name)["server"]] == ["Trash"], name
+
+
 def test_the_stats_count_only_the_junk_a_sweep_would_move_now(app, world):
     """The Curate card's Sweep button says how many a sweep would take: Ada's junk that someone read and no one starred.
     Of her corpus junk only the CI mail is read; of three more newsletters, one read, one read and starred and one
