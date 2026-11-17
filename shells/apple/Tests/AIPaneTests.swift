@@ -385,6 +385,19 @@ final class AIWordsTests: XCTestCase {
                        + "too, to draft replies before you open them."))
     }
 
+    /// The status says a model runs in Ollama's cloud only of the provider in use: a provider just chosen on this
+    /// Mac, not yet in use, isn't said to send to Ollama because the one in use did, as the page's `sendsOf` holds.
+    func testACloudModelIsSaidOnlyOfTheProviderInUse() {
+        var ai = StatusFixtures.digest().ai
+        ai.provider = .local
+        ai.cloudModel = true
+        XCTAssertTrue(AIWords.cloudModel(ai, chosen: .local))
+        XCTAssertFalse(AIWords.cloudModel(ai, chosen: .compatible))
+        XCTAssertFalse(AIWords.cloudModel(nil, chosen: .local))
+        let chosen = StatusFixtures.preferences(provider: "compatible", baseURL: "http://localhost:8080/v1")
+        XCTAssertFalse(AIWords.sends(chosen, ai).contains("Ollama’s cloud"))
+    }
+
     /// Settings, the first run, Help and the brief say it from the preferences and the digest alike.
     func testWhatIsSentIsSaidFromThePreferencesAndTheDigest() {
         typealias F = StatusFixtures
