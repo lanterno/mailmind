@@ -85,8 +85,9 @@
   `[Gmail]` tree. Nor is one with folders inside it deleted (`domain.folder_change`). `/api/folders` says of each folder
   whether a person may change it (`changeable`) and its `own_name`, so the Mac app's rail offers its menu only there. A
   folder that holds mail answers a 409 with how many (`messages`) and whether they go to Trash (`to_trash`) until the
-  person confirms (`confirm`); then its mail moves to Trash by UID first, and the folder is deleted only if none is
-  left. On Gmail a folder is a label, so nothing moves: the DELETE goes alone and the mail stays in All Mail, as Gmail's
+  person confirms (`confirm`); then its mail moves by UID first to the Trash the server lists (`roles.trash`, as a
+  trash and a sweep find it), and the folder is deleted only if none is left. On Gmail a folder is a label, so nothing
+  moves: the DELETE goes alone and the mail stays in All Mail, as Gmail's
   own delete does, since a move to Gmail's Trash would take each message out of the Inbox and every other label. A
   delete that stops once mail has gone says so: the server keeping the folder is a 409 saying how many went
   (`trashed`), a lost connection says some may be in Trash already, and either way the folder's rows go so it is read
