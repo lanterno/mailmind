@@ -576,7 +576,8 @@ Everything else waits for you to ask, or for one of those switches.
   read of its older mail, stops at its next message and keeps nothing, not even the trouble its syncs had, so the
   account added again starts afresh; every open window drops the account at once. Its mail on the server stays as it
   is. In the Mac app the dialog warns first when the account has sends that haven't gone or drafts not yet on its
-  server, which are only on this Mac, and says that copies in MailMind's backups stay until they're replaced.
+  server, which are only on this Mac, and says that copies in MailMind's backups folder stay there: newer backups
+  replace them in time, and a copy Start Fresh kept stays until you delete it.
 - **Per-account sync health.** Settings shows last successful sync, sync count, or a
   coarse error kind per connection, with a `↻ Retry` button — plus a dismissible
   banner naming any accounts that couldn't connect. Trouble that may pass (a connection lost after sleep or a change
