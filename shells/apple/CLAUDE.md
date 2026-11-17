@@ -55,9 +55,11 @@ a device (`just apple smoke ios` uses the newest iPhone simulator). The first bu
 Package Manager.
 
 The Mac app runs from macOS 15, the iPhone and iPad app from iOS 26: `deploymentTarget` in `project.yml`, which the
-core is built for too. An API newer than that fails the build; use it behind `if #available(macOS 26, *)` with a
-fallback that keeps Meadow's look. The tests run on the Mac they're built on, so a test of such an API is marked
-`@available` too. `Measure/demo_home.py APP --smoke --arch x86_64` runs a universal app's Intel half on fictional mail.
+core is built for too. A Swift or Objective-C API newer than that fails the build; use it behind
+`if #available(macOS 26, *)` with a fallback that keeps Meadow's look. The tests run on the Mac they're built on, so a
+test of such an API is marked `@available` too. Nothing checks the core's calls into the system that way: only CI's
+`mac-floor` jobs, which open the release check's .dmg on macOS 15 on Apple silicon and on an Intel Mac, and a release
+waits for them. `Measure/demo_home.py APP --smoke --arch x86_64` runs a universal app's Intel half on fictional mail.
 
 The Mac app is `io.github.lanterno.mailmind`, version `MARKETING_VERSION` in `project.yml`;
 [docs/releasing.md](../../docs/releasing.md) says how a release is cut and what the owner does once.
