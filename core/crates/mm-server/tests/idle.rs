@@ -546,7 +546,10 @@ fn a_worker_for_a_refused_login_starts_afresh_on_a_new_password() {
     until(|| w.imap.count(ADA, "LOGIN") == 1);
     w.edit(json!({"email": ADA, "credential": {"style": "keychain", "value": "the-new-password"}}));
     until(|| w.imap.idling(ADA, 1));
-    assert_eq!(w.imap.count(ADA, "LOGIN"), 2);
+    // A connection of its own logged in with the new password and went straight to IDLE. Other logins may come
+    // around it (the account's change is heard more than once), so they aren't counted.
+    assert_eq!(w.imap.idle_connection(ADA), ["LOGIN", "SELECT", "IDLE"]);
+    assert!(w.imap.count(ADA, "LOGIN") >= 2);
 }
 
 #[test]
