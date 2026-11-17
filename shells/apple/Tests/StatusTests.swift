@@ -392,6 +392,13 @@ final class AppStatusTests: XCTestCase {
         }
     }
 
+    func testTheWelcomesCardSaysWhatComesNotAgainThatThereAreNoAccounts() {
+        // Its label says "No accounts yet": the words under it go on from there, as the welcome says welcome once.
+        XCTAssertTrue(Welcome.noAccounts.hasPrefix("Connect an account"))
+        XCTAssertFalse(Welcome.noAccounts.localizedCaseInsensitiveContains("no email accounts"))
+        XCTAssertFalse(Welcome.noAccounts.localizedCaseInsensitiveContains("yet"))
+    }
+
     func testTheFirstRunIsNoAccountOnceTheyHaveBeenRead() {
         let status = AppStatus()
         XCTAssertFalse(status.firstRun, "not before the accounts are read")
