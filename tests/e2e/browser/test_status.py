@@ -291,6 +291,23 @@ def test_a_preference_is_saved_to_the_file_and_outlives_a_browser_data_clear(pag
     clean(page)
 
 
+def test_the_automatic_light_is_night_in_dark_mode_and_else_the_time_of_days(page, world):
+    # A fresh install's light (#44): the page opens at noon, so Day, until this computer goes dark; a light chosen stays.
+    body = page.locator("body")
+    opened(page)
+    assert page.pw.evaluate("JSON.parse(localStorage.getItem('mm_prefs')).theme") == "auto"
+    expect(body).to_have_class(re.compile(r"\btheme-light\b"))
+    expect(page.locator("#themeBtn")).to_have_attribute("aria-label", re.compile("^Theme: Automatic"))
+    page.pw.emulate_media(color_scheme="dark")
+    expect(body).not_to_have_class(re.compile(r"\btheme-light\b"))
+    page.reload()                                   # theme.js paints the first frame on the same terms
+    expect(body).not_to_have_class(re.compile(r"\btheme-light\b"))
+    page.locator("#themeBtn").click()
+    expect(page.locator("#toast")).to_have_text("Day theme")
+    expect(body).to_have_class(re.compile(r"\btheme-light\b"))
+    clean(page)
+
+
 def test_a_page_opened_with_no_block_and_nothing_held_writes_no_block(page, app, world):
     with app.stopped():
         held = file_of(world)

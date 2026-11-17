@@ -228,7 +228,7 @@ def test_a_reading_setting_changes_a_plain_mail_without_fetching_it(page, world)
 
 
 NIGHT_PAPER, NIGHT_INK = "rgb(22, 33, 58)", "rgb(237, 231, 215)"      # :root's --bg and --ink in tokens.css
-THEMES = {"day": 0, "dusk": 1, "night": 2}      # clicks of the theme button, from the Day the page opens on
+THEMES = {"day": 0, "dusk": 2, "night": 3}      # clicks of the theme button, from the Automatic the page opens on: Day at noon
 
 
 def _dark_mail_colors(page):
