@@ -99,6 +99,12 @@ struct Welcome: View {
         }
     }
 
+    /// The card's words under its label, which already says there are no accounts: what comes once there is one.
+    static let noAccounts = String(localized: """
+        Connect an account and MailMind reads it here, on this Mac: a brief each morning, what needs you at the top, \
+        and everything else filed where it belongs.
+        """)
+
     private static let connecting = String(localized: """
         Gmail, iCloud, Yahoo, AOL, Fastmail, Proton through Proton Bridge, or any other IMAP server. Type its address \
         and MailMind fills in the rest it knows. Its password is kept in your login Keychain, never in a file.
@@ -150,10 +156,7 @@ struct Welcome: View {
                 MeadowIconView(.leaf, size: 16).foregroundStyle(meadow.moss)
                 MeadowSectionLabel(String(localized: "No accounts yet"))
             }
-            Text("""
-                No email accounts connected yet. Connect one and MailMind reads it here, on this Mac: a brief each \
-                morning, what needs you at the top, and everything else filed where it belongs.
-                """)
+            Text(Self.noAccounts)
                 .font(.meadow(.hand, 18, .semibold))
                 .foregroundStyle(meadow.moss)
                 .lineSpacing(MeadowFace.hand.lineSpacing(size: 18, lineHeight: 1.7))
