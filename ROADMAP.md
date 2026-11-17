@@ -19,7 +19,29 @@ L = a week-plus.
 
 ## Speed and the connection layer
 
-- **Split the jobs that still wait for every account's gate** · medium value · effort S · [#3](https://github.com/lanterno/mailmind/issues/3) —
+- **Let the sync, the older-mail read, IDLE and the folder rail use the kept connection** · medium value · effort M ·
+  [#54](https://github.com/lanterno/mailmind/issues/54) — Each account's kept connection (`mm_mailbox::kept`) serves
+  only the jobs that hold its gate. The background sync, a folder's read of older mail, IDLE and the folder rail take
+  no gate, so each still logs in for itself, and together they are most of an account's logins, which Proton Bridge's
+  low cap feels most. Let them borrow the kept connection when it is free, or keep one of their own.
+- **Read a smaller opening of older mail in a first scan** · medium value · effort S ·
+  [#53](https://github.com/lanterno/mailmind/issues/53) — A first scan reads every message's first 64 KiB
+  (`mm_mailbox::ingest::HEAD_BYTES`) for its preview, mail past 30 days too, which nothing summarizes unasked and whose
+  preview needs far less. Read a smaller opening there, and leave the rest to the backfill or to opening it.
+- **Set no backfill message aside when the login fails** · low value · effort S ·
+  [#58](https://github.com/lanterno/mailmind/issues/58) — A backfill batch whose try ends unreachable sets each of its
+  messages aside and sends each alone from then on (`body_backfill::connection_lost`), even when the login or the
+  connection failed before any message was asked for. Rest the account then, and leave its messages as they were.
+- **Enable CONDSTORE only for a job that needs it** · low value · effort S ·
+  [#55](https://github.com/lanterno/mailmind/issues/55) — Every kept connection sends `ENABLE CONDSTORE` as it opens,
+  where the server offers it (`mm_mailbox::kept`), whether or not a job lent it reads by MODSEQ.
+- **Unselect a kept connection's folder between jobs** · low value · effort S ·
+  [#57](https://github.com/lanterno/mailmind/issues/57) — A job lent the kept connection may not use the last job's
+  folder, but nothing sends `UNSELECT`, so the server keeps it selected. Send it where offered (RFC 3691), never `CLOSE`.
+- **Log the kept connections out on Ctrl-C or SIGTERM** · low value · effort S ·
+  [#56](https://github.com/lanterno/mailmind/issues/56) — `mailmind-server` logs them out as it stops serving, but has
+  no signal handler, so a Ctrl-C or a SIGTERM ends it without the LOGOUTs. The Mac app's `Host::close` sends them.
+- **Let the last jobs that wait for every account's gate take only their own** · medium value · effort S · [#52](https://github.com/lanterno/mailmind/issues/52) —
   A gate for each account is the Rust server's default (`environment::gate_per_account`), but two jobs still pass
   `EVERY_ACCOUNT`, which waits for every gate: a draft save whose old copy is in another account (`mm_compose::drafting`;
   it needs just the two accounts' gates, which the gates can't take yet), and an undo entry that names no account, as a
@@ -43,8 +65,7 @@ Python app gets fixes only.
   no nameprep; a failed sync or reconcile keeps Rust's class name (`Timeout`, `ConnectionRefused`) where Python kept its
   exception's, and its log line names no account, as a job's `last_error` does in `/api/debug/jobs`, which lists the
   jobs in another order; a snooze commits twice, its undo entry in a block of its own;
-  a login reads its password from the Keychain each time where Python keeps it for the process, and a deleted account's
-  sync status stays until a restart (`Syncing` has no `_forget_status`). Compose: an attached message/rfc822 is
+  a login reads its password from the Keychain each time where Python keeps it for the process. Compose: an attached message/rfc822 is
   rewritten best-effort (about a third of 1,500 random cases differ from Python's bytes), encoded words a person typed
   are decoded only in UTF-8, ASCII or Latin-1, a few broken-MIME drafts reopen differently, and an original fetched to
   reply to isn't stored. Expiry: with no INTERNALDATE, a Date of `-0000` is read as UTC, where Python read it as local time. Two Rust servers
@@ -63,6 +84,10 @@ Python app gets fixes only.
   `just test-rust`'s four browsers, archiving that opens the next message sometimes logs a 404, and `g` then a letter
   sometimes hasn't changed the folder within 5 s; each passes alone. Find the request that 404s and what the folder
   switch waits on, and have the page or the test wait on what it means, not on the clock.
+- **Backfill several messages a FETCH on the Python server** · low value · effort S ·
+  [#59](https://github.com/lanterno/mailmind/issues/59) — The Rust server's backfill asks for a folder's dozen in one
+  FETCH; the Python app's (`Syncing.backfill_round`) fetches one message at a time. Worth it only if the flip (#11)
+  waits long; otherwise it closes with the flip.
 - **The flip** · high value · effort M · [#11](https://github.com/lanterno/mailmind/issues/11) — Step 4: when the served suites pass against both servers and the owner has used
   the Rust server daily for two weeks (`just run-rust`), the Python server goes. Step 3 is done, so it waits only on
   those two weeks; `/api/debug/health`, `/api/debug/jobs` and `/api/debug/ai` say how the jobs, the queues and AI
@@ -83,6 +108,10 @@ Python app gets fixes only.
   does, in place of an App Password: OAuth for an installed app, the token in the Keychain, XOAUTH2 in `mm-imap` and
   `mm-smtp`. Microsoft can come first; Google waits on the owner: a Cloud project, restricted-scope verification for
   `https://mail.google.com/` (and perhaps the Gmail API in place of IMAP), and possibly a yearly security assessment.
+- **A removed account's mail stays in the backups** · medium value · effort S ·
+  [#60](https://github.com/lanterno/mailmind/issues/60) — Removing an account can delete its mail from the database,
+  but `backups/` (the copy before each upgrade, the newest three, and any Start Fresh moved aside) keeps it until
+  newer copies replace them. Take it out of them too, or say in Settings that they keep it, and until when.
 - **Tauri's accepted advisories** · medium value · effort S · [#16](https://github.com/lanterno/mailmind/issues/16) — `shells/desktop/src-tauri/osv-scanner.toml` ignores seven
   until 2027-02-12. Upgrade past them, or look at each again, before then.
 
