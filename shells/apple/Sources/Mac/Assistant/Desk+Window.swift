@@ -197,6 +197,9 @@ final class Desk {
 
     var accounts: [String] { app?.mailbox.accounts ?? [] }
 
+    /// Every account's Inbox unread, as the rail counts it, for the brief's line; none until the counts are read.
+    var inboxesUnread: Int? { app?.mailbox.inboxesUnread }
+
     /// AI was turned off in Settings: the desk offers nothing only AI can do, and asks no one to turn it on.
     var aiTurnedOff: Bool { app?.mailbox.aiTurnedOff ?? false }
 
@@ -481,7 +484,7 @@ struct DeskScreen: View {
                     week: { desk.sheet = .review }, reply: desk.reply, askUntil: { desk.askWhen($0) },
                     draftReady: { Composing.shared.chips[$0] == .ready },
                     paperTrail: desk.paperTrail.map { place in { desk.go(place) } }), tasks: desk.tasks,
-                    name: BriefWords.firstName(NSFullUserName()))
+                    name: BriefWords.firstName(NSFullUserName()), unread: desk.inboxesUnread)
                     .task {
                         await desk.tasks.load()
                         await desk.brief.load()

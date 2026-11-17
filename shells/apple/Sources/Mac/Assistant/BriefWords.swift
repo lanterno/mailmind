@@ -33,7 +33,23 @@ enum BriefWords {
         full.split(whereSeparator: \.isWhitespace).first.map(String.init)
     }
 
-    /// The line over the greeting: the weekday, then the day and the month, as this Mac writes them.
+    /// The line over the greeting: how the mail stands, from counts the window already has. What needs you, once the
+    /// digest is read (`needs`), then every account's Inbox unread, once each account's counts are read (`unread`):
+    /// "2 need you · 5 unread", and "Nothing unread" with neither. Nil while neither is known, so the line says the
+    /// date (`dateLine`) rather than a count that is still coming. Nothing here needs the AI.
+    static func update(unread: Int?, needs: Int?, locale: Locale = .current) -> String? {
+        var parts: [String] = []
+        if let needs, needs > 0 { parts.append(needsNote(needs)) }
+        if let unread, unread > 0 {
+            let count = unread.formatted(.number.locale(locale))
+            parts.append(String(localized: "\(count) unread"))
+        }
+        guard parts.isEmpty else { return parts.joined(separator: " · ") }
+        return unread == nil ? nil : String(localized: "Nothing unread")
+    }
+
+    /// The weekday, then the day and the month, as this Mac writes them: the line over the greeting until the mail's
+    /// counts are known.
     static func dateLine(_ now: Date, calendar: Calendar = .current, locale: Locale = .current) -> String {
         let style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
         return now.formatted(style.weekday(.wide)) + " · " + now.formatted(style.day().month(.wide))

@@ -64,6 +64,12 @@ final class BriefModel {
     }
 
     var needs: [API.DigestItem] { BriefWords.needsYou(items) }
+
+    /// The line over the greeting: how the mail stands (`BriefWords.update`), from what needs you once the digest is
+    /// read and the Inbox's unread the window counts, and the date until either is known.
+    func line(unread: Int?, now: Date) -> String {
+        BriefWords.update(unread: unread, needs: digest == nil ? nil : needs.count) ?? BriefWords.dateLine(now)
+    }
     /// What the AI rates as safe to file, which the brief offers to file and counts as able to wait. None while AI is
     /// turned off: the ratings are the AI's, so neither the offer nor its count shows then.
     var tidy: [API.DigestItem] { aiTurnedOff ? [] : BriefWords.safeToFile(items) }

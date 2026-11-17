@@ -17,11 +17,11 @@ struct BriefActions {
     var paperTrail: (() -> Void)?
 }
 
-/// Today's brief, in the reading pane beside the Inbox, as Meadow draws it (`briefHTML()`): the scene with the date
-/// and a greeting, the brief the AI wrote on a card over the hills with the mail it names as links and the tallies
-/// under it, then what needs you, what is worth a read and what can wait, and beside them (below them in a narrow
-/// pane) today and next, who you're waiting on, the paper trail and your commitments. The cards, tallies and side
-/// come from the digest, so they stand with AI off.
+/// Today's brief, in the reading pane beside the Inbox, as Meadow draws it (`briefHTML()`): the scene with how the
+/// mail stands and a greeting, the brief the AI wrote on a card over the hills with the mail it names as links and
+/// the tallies under it, then what needs you, what is worth a read and what can wait, and beside them (below them in a
+/// narrow pane) today and next, who you're waiting on, the paper trail and your commitments. The cards, tallies, side
+/// and the line over the greeting come from the digest and the mailbox's counts, so they stand with AI off.
 struct BriefScreen: View {
     let model: BriefModel
     let attention: AttentionModel
@@ -32,6 +32,8 @@ struct BriefScreen: View {
     var now: Date?
     /// The person's first name for the greeting: the window passes the one this Mac knows, a test a fictional one.
     var name: String?
+    /// Every account's Inbox unread, which the line over the greeting says; none until the window's counts are read.
+    var unread: Int?
     @State private var showAll = false
     @State private var showAllReads = false
     @State private var topic: String?
@@ -81,13 +83,15 @@ struct BriefScreen: View {
 
     // MARK: The top
 
-    /// The scene, 220 high, with the date and the greeting on its sky (`.bhero`).
+    /// The scene, 220 high, with how the mail stands and the greeting on its sky (`.bhero`). The line over the
+    /// greeting is the mail's counts, with the date in its place only until they are read: the menu bar shows the
+    /// date, and the greeting already says the time of day.
     private var hero: some View {
         ZStack(alignment: .topLeading) {
             MeadowScene(seed: 21)
             BriefClock(fixed: now) { now in
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(BriefWords.dateLine(now).uppercased())
+                    Text(model.line(unread: unread, now: now).uppercased())
                         .font(.meadow(.ui, 12, .heavy))
                         .tracking(12 * 0.14)
                         .foregroundStyle(meadow.ink2)

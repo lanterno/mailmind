@@ -161,6 +161,18 @@ final class Mailbox {
         folders(of: copy.account).first { $0.name == copy.folder }?.role == "trash"
     }
 
+    /// Every account's Inbox unread together, as the rail counts the Inbox; none until each account's folders are read
+    /// with its Inbox among them, so nothing says a count that is still coming.
+    var inboxesUnread: Int? {
+        guard !accounts.isEmpty else { return nil }
+        var unread = 0
+        for account in accounts {
+            guard let inbox = folders(of: account).first(where: { $0.role == "inbox" }) else { return nil }
+            unread += inbox.unseen
+        }
+        return unread
+    }
+
     /// The list's title (`title` in useMailbox.ts).
     var title: String {
         guard let place = app?.place else { return "" }
