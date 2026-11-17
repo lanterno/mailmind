@@ -93,6 +93,16 @@ pub fn local(provider: AiProvider, base_url: &str) -> bool {
         || ai_provider::base_url(base_url).is_some_and(|url| ai_provider::on_this_machine(&url))
 }
 
+/// Whether the model a server on this Mac is asked for runs in a cloud: Ollama serves its cloud models at the same
+/// loopback address as the rest, and names them with a `-cloud` or `:cloud` ending (`gpt-oss:120b-cloud`), so mail
+/// asked of one leaves this Mac. Only a model on this Mac, or a compatible service on loopback (`local`), can be one.
+pub fn cloud_model(provider: AiProvider, local: bool, model: &str) -> bool {
+    let name = model.trim().to_ascii_lowercase();
+    matches!(provider, AiProvider::Local | AiProvider::Compatible)
+        && local
+        && (name.ends_with("-cloud") || name.ends_with(":cloud"))
+}
+
 /// How long one attempt at a call waits for its answer.
 pub const ATTEMPT: Duration = Duration::from_secs(120);
 /// The same for a model on this Mac, which may load on its first use.

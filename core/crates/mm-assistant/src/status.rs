@@ -61,7 +61,8 @@ impl Status {
     }
 
     /// What the page says of AI, with no call made: the engine ("api", or "none" while AI is off), the provider
-    /// chosen and why AI is off (null while it is on), the model in force, where the key came from, how the most
+    /// chosen and why AI is off (null while it is on), the model in force, whether the model chosen for a server on this
+    /// Mac runs in a cloud (`providers::cloud_model`, said on or off), where the key came from, how the most
     /// recent call went, what today's calls cost so far in micro-dollars (null when the ledger can't be read) beside
     /// the daily limit, how many messages a batch out holds, when one does, and while AI is on how many messages from
     /// the last 30 days wait for a summary.
@@ -84,6 +85,10 @@ impl Status {
         report.insert("model".into(), json!(if on { in_force.model.as_str() } else { "" }));
         report
             .insert("background_model".into(), json!(if on { self.gateway.background_model() } else { String::new() }));
+        report.insert(
+            "cloud_model".into(),
+            json!(crate::providers::cloud_model(in_force.provider, in_force.local, &in_force.model)),
+        );
         report.insert("key_from".into(), json!(if on { in_force.key_from } else { "" }));
         report.insert("last_ok".into(), json!(last.ok));
         report.insert("last_ts".into(), json!(last.ts));
