@@ -43,8 +43,9 @@ export const undoFloat = createFloat(OFFERS_MS);
 // A toast has just told a screen reader what happened: this adds what can be done about it.
 export const offerUndo = (label: string) => undoFloat.show(label, "Undo is available");
 
-// Whether MailMind runs read only, as the digest says.
-export const readOnly = createStore(false);
+// Whether MailMind runs read only, as the digest says: null until the digest has said.
+export const readOnly = createStore<boolean | null>(null);
+export const useReadOnly = () => readOnly.useValue();
 
 // What a move to a folder is about: whose folders it may go to, and the one folder it is in, which it isn't offered.
 export interface MoveAsk { account: string; from: string | null }
@@ -363,9 +364,9 @@ async function markSeen(qc: QueryClient, copy: Copy, seen: boolean): Promise<str
 }
 
 // What opening a message marks read, on its own. Read only would refuse it, so it isn't asked, and the row stays as the server
-// has it rather than flicker.
+// has it rather than flicker; nor is it asked before the digest has said whether read only is on, as after a reload.
 export function markOpenedRead(qc: QueryClient, copy: Copy) {
-  if (!readOnly.get()) void markSeen(qc, copy, true);
+  if (readOnly.get() === false) void markSeen(qc, copy, true);
 }
 
 export function armDwell(qc: QueryClient, copy: Copy) {

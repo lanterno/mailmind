@@ -13,7 +13,7 @@ import { READ_ONLY_REFUSED, refusedReadOnly } from "../../lib/readOnly";
 import { fileSize } from "../../lib/text";
 import { toast } from "../../lib/toast";
 import { Icon } from "../../lib/ui/Icon";
-import { armDwell, cancelDwell, leavesOrganisation, MailFrame, markOpenedRead, useBody, useThread, warmMembers, type MailBody, type Mailbox, type Opened } from "../mailbox";
+import { armDwell, cancelDwell, leavesOrganisation, MailFrame, markOpenedRead, useBody, useReadOnly, useThread, warmMembers, type MailBody, type Mailbox, type Opened } from "../mailbox";
 import { AiCard, summarize } from "./AiCard";
 import { MoreMenu } from "./MoreMenu";
 import { ReadMenu } from "./ReadMenu";
@@ -269,9 +269,11 @@ function MessageView({ copy, m }: { copy: Copy; m: Mailbox }) {
   const { data: d, error } = useBody(copy);
   const row = m.openRow;
   const { key, folder, uid } = copy;
-  // Opened unread, it is marked read after a moment on it: decided once, as it opens or as its row first shows. Marked
-  // unread again while it's open, it stays so, rather than have the dwell begin again and take that back.
-  const known = row?.seen !== undefined;
+  // Opened unread, it is marked read after a moment on it: decided once, as it opens or as its row first shows, and not before
+  // the digest has said whether read only is on (after a reload it can come later). Marked unread again while it's open, it
+  // stays so, rather than have the dwell begin again and take that back.
+  const told = useReadOnly() !== null;
+  const known = row?.seen !== undefined && told;
   const unread = useEffectEvent(() => row?.seen === false);
   useEffect(() => {
     if (known && unread()) armDwell(m.qc, { key, folder, uid });
@@ -340,9 +342,11 @@ function Member({ m, mine, startsOpen }: { m: Extract<GetAnswers["/api/thread"],
   const [open, setOpen] = useState(startsOpen);
   const [wasOpened, setWasOpened] = useState(startsOpen);
   const { key, folder, uid } = m;
+  // Opened, it is marked read, once the digest has said read only is off: after a reload that can come after the member.
+  const marks = useReadOnly() === false;
   useEffect(() => {
-    if (open && !m.seen) markOpenedRead(qc, { key, folder, uid });
-  }, [qc, open, key, folder, uid, m.seen]);
+    if (open && !m.seen && marks) markOpenedRead(qc, { key, folder, uid });
+  }, [qc, open, key, folder, uid, m.seen, marks]);
   return (
     <div className={open ? "tmsg open" : "tmsg"} data-key={m.key} data-folder={m.folder} data-uid={m.uid}>
       <button

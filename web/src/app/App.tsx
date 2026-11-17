@@ -233,7 +233,9 @@ export function App() {
     if (!source && firstAccount) go({ source: { kind: "folder", account: firstAccount, folder: "INBOX" }, opened: null }, { replace: true });
   }, [source, firstAccount]);
   const isReadOnly = m.digest?.profile === "read-only";
-  useEffect(() => readOnly.set(isReadOnly), [isReadOnly]);   // read only: opening mail asks no server to mark it read
+  // Read only, or not known until the digest comes: opening mail asks no server to mark it read.
+  const readOnlyIfKnown = m.digest === undefined ? null : isReadOnly;
+  useEffect(() => readOnly.set(readOnlyIfKnown), [readOnlyIfKnown]);
   const reading = Boolean(opened) || m.briefAsked;
   useEffect(() => void document.body.classList.toggle("reading", reading), [reading]);
   useEffect(closeRailDrawer, [source]);
