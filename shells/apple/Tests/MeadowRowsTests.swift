@@ -402,7 +402,9 @@ final class MeadowRowsTests: XCTestCase {
         let noted = try await NotedHeights.during {
             above.value = 1
             list.refresh()
-            await until { list.total == total + 1 }
+            // Each page held is read again at once, and any may come first: the total is new with the first, but the
+            // rows measured here are the first page's, so wait for the new mail at its top.
+            await until { list.total == total + 1 && list.copy(at: 0)?.key == 500_000 }
             table.layoutSubtreeIfNeeded()
         }
         XCTAssertLessThan(noted.count, 2_000, "the rows measured, not the folder's 100,000")
