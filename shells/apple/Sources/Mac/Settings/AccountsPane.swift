@@ -8,6 +8,8 @@ struct AccountsPane: View {
     @State private var chosen: String?
     @State private var form: Editing?
     @State private var removing: API.AccountRow?
+    /// What only this Mac holds of the account being removed, which deleting its mail here lets go of.
+    @State private var unsent: Unsent?
     @State private var stats: [String: API.AccountStats] = [:]
     /// The connection just saved, tested as soon as its card shows.
     @State private var testNext: String?
@@ -80,11 +82,16 @@ struct AccountsPane: View {
         }
         .sheet(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             if let row = removing {
-                RemoveAccount(row: row) { deleteMail in
+                RemoveAccount(row: row, unsent: unsent) { deleteMail in
                     removing = nil
                     if let deleteMail { Task { await remove(row, deleteMail: deleteMail) } }
                 }
             }
+        }
+        .task(id: removing?.email) {
+            unsent = nil
+            guard let email = removing?.email, let core = status.core else { return }
+            unsent = await Unsent.read(core, of: email)
         }
     }
 
@@ -108,10 +115,54 @@ struct AccountsPane: View {
     }
 }
 
+/// What only this Mac holds of an account: sends that haven't gone (waiting, scheduled or failed) and drafts that
+/// haven't reached its server yet, as the outbox tray lists them. Deleting the account's mail from this Mac lets go
+/// of them for good.
+struct Unsent: Equatable {
+    var sends = 0
+    var drafts = 0
+
+    /// What the tray lists of `account`.
+    static func of(_ outbox: API.Outbox, account: String) -> Unsent {
+        let mine = { (other: String) in other.caseInsensitiveCompare(account) == .orderedSame }
+        let going: Set<String> = ["queued", "sending", "error"]
+        return Unsent(sends: outbox.items.filter { mine($0.account) && going.contains($0.state) }.count,
+                      drafts: outbox.drafts.filter { mine($0.account) && !$0.discarding }.count)
+    }
+
+    /// The tray as the core lists it now, or nil when it didn't answer.
+    static func read(_ core: Core, of account: String) async -> Unsent? {
+        guard let outbox = try? await core.get(API.Get.Outbox.self, ["limit": "500"]) else { return nil }
+        return of(outbox, account: account)
+    }
+
+    /// What the Remove dialog warns of, or nil when nothing waits.
+    var words: String? {
+        let sends = switch sends {
+        case 0: ""
+        case 1: String(localized: "1 message that hasn’t been sent")
+        default: String(localized: "\(sends) messages that haven’t been sent")
+        }
+        let drafts = switch drafts {
+        case 0: ""
+        case 1: String(localized: "1 draft that isn’t on the server yet")
+        default: String(localized: "\(drafts) drafts that aren’t on the server yet")
+        }
+        let both = [sends, drafts].filter { !$0.isEmpty }
+        guard !both.isEmpty else { return nil }
+        let what = both.joined(separator: String(localized: " and "))
+        return self.sends + self.drafts == 1 ? String(localized: "This also deletes \(what). It’s only on this Mac.")
+                                             : String(localized: "This also deletes \(what). They’re only on this Mac.")
+    }
+}
+
 /// Removing an account, as Meadow's dialog: MailMind stops reading it and lets go of its password, and, unless
-/// unticked, of the mail it keeps of it on this Mac. Its mail on the server stays as it is.
+/// unticked, of the mail it keeps of it on this Mac: with a warning when that holds sends or drafts only this Mac has,
+/// and a word that MailMind's backups keep their copies until they are replaced. Its mail on the server stays as it is.
 struct RemoveAccount: View {
     let row: API.AccountRow
+    /// What only this Mac holds of it, once read.
+    var unsent: Unsent?
     /// Done: whether its mail here goes too, or nil when the removal was cancelled.
     let done: (Bool?) -> Void
     @State private var deleteMail = true
@@ -133,7 +184,23 @@ struct RemoveAccount: View {
                 .toggleStyle(.checkbox)
                 .font(.meadow(.ui, 13.5, .semibold))
                 .foregroundStyle(meadow.ink)
+            if deleteMail, let warning = unsent?.words {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    MeadowIconView(.alert, size: 15)
+                    Text(warning).fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.meadow(.ui, 13, .semibold))
+                .foregroundStyle(meadow.rust)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(meadow.rustWash, in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityElement(children: .combine)
+            }
             SettingHelp(String(localized: "Its mail on the server stays as it is."))
+            if deleteMail {
+                SettingHelp(Self.backups)
+            }
             HStack(spacing: 8) {
                 Spacer()
                 Button("Cancel") { done(nil) }
@@ -150,6 +217,9 @@ struct RemoveAccount: View {
         .background { ComposePaper() }
         .presentationBackground { ComposePaper() }
     }
+
+    /// Said while its mail here is to go: the copies an upgrade or Start Fresh kept aren't touched.
+    static let backups = String(localized: "Copies of its mail in MailMind’s backups stay until they’re replaced.")
 }
 
 extension AccountsPane.Editing {
