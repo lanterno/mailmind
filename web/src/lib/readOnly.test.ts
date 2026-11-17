@@ -6,12 +6,13 @@ const readOnly = new ApiError(409, { type: "/problems/read-only", title: "MailMi
 const busy = new ApiError(409, { type: "/problems/busy", busy: true });
 
 describe("read only, in words", () => {
-  it("says while it is on that nothing on a mail server changes, what is off, and where to turn it off", () => {
+  // The page's Settings has no switch for it, so neither names one.
+  it("says while it is on that nothing on a mail server changes, and what is off", () => {
     expect(READ_ONLY_NOTE).toBe("Read only is on: MailMind changes nothing on your mail servers, so sending, filing and starring are "
-      + "turned off. Turn it off in Settings › General.");
+      + "turned off.");
   });
-  it("says of a change it refused that nothing was changed, and where to turn it off", () => {
-    expect(READ_ONLY_REFUSED).toBe("Read only is on, so nothing was changed. Turn it off in Settings › General.");
+  it("says of a change it refused that nothing was changed", () => {
+    expect(READ_ONLY_REFUSED).toBe("Read only is on, so nothing was changed.");
   });
   it("knows its refusal by the problem's read_only, ahead of any other 409", () => {
     expect(refusedReadOnly(readOnly)).toBe(true);

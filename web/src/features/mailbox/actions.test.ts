@@ -175,7 +175,7 @@ describe("a conversation row's star and read buttons", () => {
 
 describe("a change read only refuses", () => {
   const qc = { setQueriesData: vi.fn(), setQueryData: vi.fn(), invalidateQueries: vi.fn(), removeQueries: vi.fn() } as unknown as QueryClient;
-  const WORDS = "Read only is on, so nothing was changed. Turn it off in Settings › General.";
+  const WORDS = "Read only is on, so nothing was changed.";
   // The server's 409, as the client throws it: what the page reads is `readOnly`.
   const refused = () => Object.assign(new Error("MailMind is running read-only"), { status: 409, readOnly: true });
   const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `${i + 1}:${1000 + i}:INBOX`, key: i + 1, folder: "INBOX", uid: 1000 + i, account: "ada@example.test", threadId: `t${i + 1}`, seen: false, flagged: false })) as unknown as Row[];
