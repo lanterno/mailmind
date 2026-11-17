@@ -181,9 +181,11 @@ final class MailApp {
             #if os(macOS)
             await mailbox.readDigest()
             let was = listed
-            // The list beside the brief is an account's Inbox while the place names none: either gone, the window
-            // goes to every account's Inbox rather than keep reading a list of an account that isn't there.
-            let named = [place?.account, listed?.account].compactMap { $0 }
+            // The list beside the brief is an account's Inbox while the place names none, and a Screener names its
+            // account apart from `Place.account`: any of them gone, the window goes to every account's Inbox rather
+            // than keep showing an account that isn't there.
+            var named = [place?.account, listed?.account].compactMap { $0 }
+            if case .desk(.screener(let account))? = place { named.append(account) }
             if named.contains(where: { !mailbox.accounts.contains($0) }) { place = .allInboxes }
             if listed == was { list?.refresh() }   // else the place's change opened a list of its own
             await mailbox.readCounts()
