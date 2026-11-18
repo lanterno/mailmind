@@ -192,4 +192,26 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         model.items = []
         XCTAssertFalse(model.key(key(125)), "with no items, the arrows are someone else's")
     }
+
+    // MARK: A popover's anchor
+
+    func testAPopoverAskedForBeforeItsAnchorIsInAWindowShowsAsTheAnchorArrives() throws {
+        let parent = window()
+        let anchor = MeadowPopoverAnchorView(frame: NSRect(x: 40, y: 200, width: 30, height: 20))
+        let popover = MeadowPopoverAnchor<Text>.Coordinator()
+        // h opens the snooze chooser in the same update that makes the anchor it hangs from.
+        popover.show(Text("Later today"), under: anchor)
+        XCTAssertFalse(popover.isShown, "nowhere to hang it yet")
+        parent.contentView?.addSubview(anchor)
+        XCTAssertTrue(popover.isShown, "it shows as its anchor joins the window, not at the next update")
+        let panel = try XCTUnwrap(parent.childWindows?.first)
+        let was = panel.frame.origin
+        anchor.setFrameOrigin(NSPoint(x: 140, y: 200))
+        XCTAssertEqual(panel.frame.origin.x, was.x + 100, "and follows it as it moves")
+        popover.hide()
+        XCTAssertFalse(popover.isShown)
+        anchor.removeFromSuperview()
+        parent.contentView?.addSubview(anchor)
+        XCTAssertFalse(popover.isShown, "a popover closed stays closed as its anchor comes back")
+    }
 }
