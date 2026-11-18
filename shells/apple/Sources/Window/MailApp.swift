@@ -73,7 +73,7 @@ final class MailApp {
         opener = open
     }
 
-    /// Open the core over this process's home, then the first list and the sidebar, then listen. Once: a start while
+    /// Open the core over this process's home, listen, then read the first list and the sidebar. Once: a start while
     /// one is opening, or after one opened, does nothing.
     func start() async {
         guard stage == .opening, core == nil, !opening else { return }
@@ -85,6 +85,9 @@ final class MailApp {
             let core = try await opener(home)
             self.core = core
             reader.core = core
+            // Heard from before the first reads: the core syncs as it opens and keeps no event for a later listener,
+            // so a first sync that ended while the rail was read would leave the rail and list as they were.
+            let events = try? await core.events()
             stage = .open
             openList()
             #if os(macOS)
@@ -95,7 +98,7 @@ final class MailApp {
             self.waking = waking
             await mailbox.refresh()
             #endif
-            listen(to: core)
+            if let events { listen(to: events) }
         } catch {
             stage = .failed(Self.words(error))
         }
@@ -212,9 +215,8 @@ final class MailApp {
         mailChanged.contains(event.name) || readAFolder(event)
     }
 
-    private func listen(to core: Core) {
+    private func listen(to events: AsyncStream<CoreEvent>) {
         listening = Task { [weak self] in
-            guard let events = try? await core.events() else { return }
             for await event in events {
                 guard let self else { return }
                 #if os(macOS)
