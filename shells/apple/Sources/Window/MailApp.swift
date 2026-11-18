@@ -34,14 +34,19 @@ final class MailApp {
     /// Where the window is. Choosing a place opens its list; the brief, in the pane beside the Inbox, keeps the
     /// Inbox's list and closes the message open, as the pane is the brief's. A page across the window (the gate, the
     /// paper trail) closes it too: it spans the window only while no message is open, and one left open from the
-    /// place before would keep it in the list's room, beside a message that isn't its own.
+    /// place before would keep it in the list's room, beside a message that isn't its own. Any other list keeps the
+    /// message left open only if it holds it (`keepIfListed`).
     var place: Place? = .allInboxes {
         didSet {
             guard place != oldValue else { return }
             let was = listed
             listed = place.map { Self.listed($0, beside: was) }
             if listed != was { openList() }
-            if let place, place != listed || place.spansTheWindow { closeMessage() }
+            if let place, place != listed || place.spansTheWindow {
+                closeMessage()
+            } else if listed != was, let open = selection.copy {
+                keepIfListed(open)
+            }
         }
     }
     /// The place whose list the window shows: the place's own (`Place.listed`), but beside the brief the Inbox the
@@ -50,6 +55,9 @@ final class MailApp {
     let selection = Selection()
     private(set) var list: MailListModel?
     let reader = ReaderModel()
+    /// Counted up each time a message is opened on purpose, so the message left open by a change of place is closed
+    /// only if nothing was opened since (`keepIfListed`): a notification opens its message once at its folder.
+    @ObservationIgnored var openings = 0
     @ObservationIgnored private(set) var core: Core?
     @ObservationIgnored private var listening: Task<Void, Never>?
     @ObservationIgnored private let home: () throws -> CoreHome
@@ -145,6 +153,41 @@ final class MailApp {
         #else
         selection.copy = nil
         reader.open(nil)
+        #endif
+    }
+
+    /// The message `open`, left open as the window went to a place with a list of its own, stays only where that list
+    /// holds it, as the page's reader closes on going elsewhere: once the list's first rows come, or a lane's hits, it
+    /// closes unless they hold it, so Sent never shows the Inbox's message nor an empty Snoozed a message it hasn't.
+    /// A message opened since (a notification's, in the folder it opened) is left alone. An answer stands in the list's
+    /// place and leaves the pane reading; the Document Hub holds no mail of its own.
+    private func keepIfListed(_ open: MailCopy) {
+        #if os(macOS)
+        let turn = openings
+        let stays: @MainActor (Bool) -> Void = { [weak self] holds in
+            guard let self, self.selection.copy == open, self.openings == turn, !holds else { return }
+            self.closeMessage()
+        }
+        switch listed {
+        case .desk?:
+            return
+        case .documents?:
+            closeMessage()
+        default:
+            if let list {
+                list.onceRead = { [weak self, weak list] in
+                    guard let list, self?.list === list else { return }
+                    stays(list.position(of: open) != nil)
+                }
+            } else if let lane = mailbox.lane {
+                lane.onceLoaded = { [weak self, weak lane] in
+                    guard let lane, self?.mailbox.lane === lane else { return }
+                    stays(lane.hits.contains { MailCopy(API.FolderRow($0)) == open })
+                }
+            } else {
+                closeMessage()
+            }
+        }
         #endif
     }
 

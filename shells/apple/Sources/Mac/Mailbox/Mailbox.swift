@@ -433,6 +433,7 @@ final class Mailbox {
     /// sender's card, a sheet's message. Where the list on screen holds its row, the row is chosen, as a click on it
     /// would; anywhere else no row stays chosen, so the verbs act on this message and not on a row chosen before.
     func open(_ copy: MailCopy) {
+        app?.openings += 1
         if let app, app.place == app.listed, let row = row(of: copy) {
             chose([row])
             return

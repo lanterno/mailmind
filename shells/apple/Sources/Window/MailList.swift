@@ -84,6 +84,8 @@ final class MailListModel: MessageRows {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private let load: Loader
     let selection: Selection?
+    /// Run once, as the first page's answer comes, read or refused: what waits on knowing which rows the list holds.
+    @ObservationIgnored var onceRead: (@MainActor () -> Void)?
 
     init(selection: Selection? = nil, load: @escaping Loader) {
         self.selection = selection
@@ -197,6 +199,10 @@ final class MailListModel: MessageRows {
             if totalChanged || !changed.isEmpty {
                 display?.rowsChanged(changed, totalChanged: totalChanged)
             }
+        }
+        if let once = onceRead {
+            onceRead = nil
+            once()
         }
     }
 }

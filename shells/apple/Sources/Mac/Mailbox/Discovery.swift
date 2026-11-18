@@ -14,6 +14,8 @@ final class LaneModel {
     /// Set once the first read has come.
     private(set) var loaded = false
     private(set) var problem: String?
+    /// Run once, as the first read is done or refused: what waits on knowing which hits the lane holds.
+    @ObservationIgnored var onceLoaded: (@MainActor () -> Void)?
 
     @ObservationIgnored private let wire: Wire
     @ObservationIgnored private let scope: API.SearchScope
@@ -47,14 +49,22 @@ final class LaneModel {
             } catch {
                 guard number == reading else { return }
                 problem = (error as? Problem)?.description ?? String(localized: "Search failed.")
-                loaded = true
+                read()
                 return
             }
             guard number == reading else { return }
             self.hits = hits
             hasMore = more
             problem = nil
-            loaded = true
+            read()
+        }
+    }
+
+    private func read() {
+        loaded = true
+        if let once = onceLoaded {
+            onceLoaded = nil
+            once()
         }
     }
 
