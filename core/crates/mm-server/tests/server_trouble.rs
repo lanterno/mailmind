@@ -7,9 +7,10 @@
 
 mod stand_in;
 
+use mm_kernel::seams::Keychain;
 use mm_mailbox::lists::Paging;
 use serde_json::Value;
-use stand_in::{ADA, Imap, World, note, world};
+use stand_in::{ADA, BEA, Imap, World, note, world};
 
 /// Ada's Inbox of four notes, her Archive, Trash and Plans empty, synced, and her folders read once.
 fn synced() -> World {
@@ -172,4 +173,49 @@ fn a_folder_another_client_deleted_is_no_longer_read() {
         !w.imap.since(mark, ADA).iter().any(|c| c.contains("Plans")),
         "the lane stopped asking for a folder the server no longer has"
     );
+}
+
+/// Ada's and Bea's Inboxes of three notes each, Bea's password gone from the Keychain, and a sync: what each account's
+/// health says of its last sync, and whether Bea's server was asked anything.
+fn without_beas_password() -> (World, Value, Vec<String>) {
+    let imap = Imap::start();
+    imap.add(ADA, "INBOX", (1..=3).map(|uid| (uid, note(uid))));
+    imap.add(BEA, "INBOX", (1..=3).map(|uid| (uid, note(uid))));
+    let w = world(imap, &[ADA, BEA], &[]);
+    assert!(w.keychain.delete(&format!("account:{BEA}")).unwrap());
+    let mark = w.imap.mark();
+    w.app.syncing.sync_once();
+    w.app.syncing.sync_once();
+    let heard = w.imap.since(mark, BEA);
+    let health = w.app.health.answer().unwrap();
+    (w, health, heard)
+}
+
+fn health_of<'h>(health: &'h Value, email: &str) -> &'h Value {
+    health["accounts"].as_array().unwrap().iter().find(|row| row["account"] == email).unwrap()
+}
+
+#[test]
+fn an_account_whose_password_the_keychain_lost_sends_no_login_and_holds_up_no_other() {
+    let (w, health, heard) = without_beas_password();
+    assert!(heard.is_empty(), "no login without a password: {heard:?}");
+    assert_eq!(health_of(&health, ADA)["healthy"], true);
+    assert!(w.stored(ADA, "INBOX", 3).kept, "Ada's mail came in");
+    let bea = health_of(&health, BEA);
+    assert_eq!((bea["healthy"].clone(), bea["last_error"].clone()), (Value::Bool(false), Value::from("NoCredential")));
+    let page = Paging { offset: 0, limit: 50, grouped: false };
+    let listed = w.app.reading.lists.messages_in(Some(BEA), "INBOX", page).unwrap();
+    assert_eq!((listed["total"].clone(), listed["sync_failed"].clone()), (Value::from(0), Value::Bool(true)));
+}
+
+/// A known bug: an account whose password the Keychain doesn't hold fails its sync as `UNKNOWN`, so the Mac app says
+/// "Something went wrong while syncing. Choose Retry", which never helps, and offers no way to type the password
+/// again. Its kind should say a password is missing (`mm_mailbox::syncing::error_kind`, and the Python app's
+/// `accounts.domain.health.error_kind` with its `ErrorKind`), so the account's card can say so and offer Change
+/// Password. Fixing it fails this test until the marker goes.
+#[test]
+#[should_panic(expected = "the trouble's kind says what is wrong")]
+fn an_account_whose_password_the_keychain_lost_is_told_so() {
+    let (_w, health, _) = without_beas_password();
+    assert_ne!(health_of(&health, BEA)["last_error_kind"], "UNKNOWN", "the trouble's kind says what is wrong");
 }

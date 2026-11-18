@@ -664,6 +664,8 @@ pub struct World {
     pub home: tempfile::TempDir,
     /// The app's clock, at `NOW` until a test moves it.
     pub clock: Arc<Moving>,
+    /// The Keychain the app reads its accounts' passwords from.
+    pub keychain: Arc<Keys>,
 }
 
 /// The app over a data directory of a database at the newest schema, its accounts on `imap`, with `more` of the
@@ -692,14 +694,14 @@ pub fn world(imap: Imap, emails: &[&str], more: &[(&str, &str)]) -> World {
     let seams = Seams {
         clock: clock.clone(),
         outside: Arc::new(Loopback),
-        keychain,
+        keychain: keychain.clone(),
         sanitizer: Arc::new(mm_server::real::Sanitizing),
         mail_hosts: Arc::new(mm_server::mail_hosts::NoLookups),
         local_ai: Arc::new(mm_server::local_ai::NoLocalServers),
     };
     let dist: PathBuf = home.path().join("dist");
     let app = Arc::new(App::assemble(&environment, &settings, dist, 1, &seams).unwrap());
-    World { app, imap, home, clock }
+    World { app, imap, home, clock, keychain }
 }
 
 pub fn database(home: &Path) -> mm_store::Database {
