@@ -676,6 +676,16 @@ struct ChipField: View {
     @State private var height: CGFloat = 34
     @Environment(\.meadow) private var meadow
 
+    /// How far round its 13-point cross a chip's remove button takes a press: about 21 points across.
+    static let removeReach: CGFloat = 4
+
+    /// What VoiceOver calls a chip's remove button: the address it takes away, and what the chip shows of it.
+    static func removeLabel(_ recipient: Recipient, fresh: Bool) -> String {
+        let address = recipient.bad ? recipient.value.trimmingCharacters(in: .whitespaces) : recipient.address
+        let note = recipient.bad ? String(localized: ", not a valid address") : fresh ? String(localized: ", new to you") : ""
+        return String(localized: "Remove \(address)") + note
+    }
+
     /// A chip's words: the name a recipient was written with, else the address.
     static func shown(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
@@ -756,11 +766,14 @@ struct ChipField: View {
             Button {
                 composer.removeChip(field, at: index)
             } label: {
+                // A plain button is pressed only on what it draws, the cross's strokes: it takes a press a little
+                // round them too, as it looks.
                 MeadowIconView(.x, size: 13)
+                    .contentShape(Rectangle().inset(by: -Self.removeReach))
             }
             .buttonStyle(.plain)
             .foregroundStyle(recipient.bad ? meadow.rust : meadow.ink3)
-            .accessibilityLabel("Remove \(recipient.value)\(recipient.bad ? ", not a valid address" : fresh ? ", new to you" : "")")
+            .accessibilityLabel(Self.removeLabel(recipient, fresh: fresh))
         }
         .font(.meadow(.ui, 13, .bold))
         .foregroundStyle(recipient.bad ? meadow.rust : meadow.ink)
