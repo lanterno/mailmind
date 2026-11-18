@@ -4,7 +4,8 @@
 //!
 //! Each change queued for it, out of it or into it, that hasn't reached the server is given back as one the server
 //! refused, in the same transaction: a move's message is listed again where it was, and the tray says why. One a try
-//! holds now is left to that try, which the server refuses too.
+//! holds now is left to that try, which the server refuses too. Open lists hear `reconcile` only where a row went or
+//! a change was given back: a folder never stored, opened from a name the server doesn't have, changes no list.
 
 use std::sync::Arc;
 
@@ -61,8 +62,10 @@ impl ForgetsFolders for GoneFolders {
         for row in &given_back {
             self.events.publish(MailboxEvent::Restored { id: row.id, account: row.account.clone() });
         }
-        let data = json!({"account": account, "folder": folder, "pruned": forgotten});
-        self.events.publish(MailboxEvent::Page { topic: Topic::Reconcile, data });
+        if forgotten > 0 || !given_back.is_empty() {
+            let data = json!({"account": account, "folder": folder, "pruned": forgotten});
+            self.events.publish(MailboxEvent::Page { topic: Topic::Reconcile, data });
+        }
         log::info(
             TAG,
             "a folder the server no longer has was forgotten: %(count)s copies",
