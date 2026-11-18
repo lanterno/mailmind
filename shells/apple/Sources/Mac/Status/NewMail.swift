@@ -27,7 +27,7 @@ final class NewMailAlerts {
     var now: @MainActor () -> Date = Date.init
     var hasAccounts: @MainActor () -> Bool = { false }
     /// The row of the one message that came, by its account, folder and UID, for its sender and subject: the
-    /// status reads the folder's first page for it once it has the core.
+    /// status reads its folder for it once it has the core.
     var lookUp: @MainActor (_ account: String, _ folder: String, _ uid: Int) async -> API.FolderRow? = { _, _, _ in nil }
 
     private let notifier: any Notifier

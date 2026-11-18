@@ -80,12 +80,12 @@ final class AppStatus {
         newMail.lookUp = { [weak self] account, folder, uid in await self?.row(account: account, folder: folder, uid: uid) }
     }
 
-    /// The row of a message just come, by its UID: the folder's first page holds the newest.
+    /// The row of a message just come, by its UID, as its folder lists it (`Lists.row`): no route names one message's
+    /// row by its UID, so the folder is read a page at a time, newest first, until it is found. The newest page
+    /// mostly holds it, but a sync can bring mail dated earlier than the newest already there.
     func row(account: String, folder: String, uid: Int) async -> API.FolderRow? {
-        guard let core, case .folderListing(let listing)? = try? await core.get(API.Get.Messages.self, [
-            "account": account, "folder": folder, "offset": "0", "limit": "50",
-        ]) else { return nil }
-        return listing.items.first { $0.uid == uid && $0.folder == folder }
+        guard let core else { return nil }
+        return await Lists.row(Wire(core), account: account, folder: folder, uid: uid)
     }
 
     /// What a test or a rendering shows with no core: the answers the routes would give.
