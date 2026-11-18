@@ -241,6 +241,49 @@ fn over_a_newer_database_it_says_to_install_the_newest_mailmind_and_opens_nothin
     for_a_person(&said);
 }
 
+/// The bytes of each file in `home`, by name, the config aside.
+fn files(home: &Path) -> Vec<(String, Vec<u8>)> {
+    let mut found: Vec<(String, Vec<u8>)> = std::fs::read_dir(home)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_file() && !path.ends_with("mailmind.config.json"))
+        .map(|path| (path.file_name().unwrap().to_string_lossy().into_owned(), std::fs::read(&path).unwrap()))
+        .collect();
+    found.sort();
+    found
+}
+
+#[test]
+fn a_file_that_isnt_a_database_is_told_as_one_the_key_doesnt_open_and_left_as_it_was() {
+    let home = tempfile::tempdir().unwrap();
+    let garbage: Vec<u8> =
+        (0..64 * 1024).map(|n: u32| u8::try_from(n.wrapping_mul(2_654_435_761) >> 24).unwrap()).collect();
+    std::fs::write(home.path().join("mailmind.db"), &garbage).unwrap();
+    let before = files(home.path());
+    let said = start(home.path()).unwrap_err();
+    assert!(said.starts_with("MailMind's key doesn't open this Mac's copy of your mail"), "{said}");
+    assert!(said.contains("Start Fresh"), "{said}");
+    for_a_person(&said);
+    assert_eq!(files(home.path()), before, "nothing was written over it, and nothing made beside it");
+}
+
+#[test]
+fn a_database_cut_short_is_left_as_it_was() {
+    let home = tempfile::tempdir().unwrap();
+    database(home.path(), [0x5e; 32], VERSION);
+    assert_eq!(start(home.path()), Ok(()));
+    let path = home.path().join("mailmind.db");
+    let whole = std::fs::read(&path).unwrap();
+    // Its first pages only, as a disk that filled or a copy cut off would leave it.
+    std::fs::write(&path, &whole[..whole.len() / 3]).unwrap();
+    let before = files(home.path());
+    let said = start(home.path()).unwrap_err();
+    // SQLCipher can't tell a file cut short from one another key made: either way a new copy is what helps.
+    assert!(said.contains("Start Fresh makes a new copy from your mail's servers"), "{said}");
+    for_a_person(&said);
+    assert_eq!(files(home.path()), before, "nothing was written over it");
+}
+
 #[test]
 fn a_key_that_doesnt_open_it_is_told_apart() {
     let home = tempfile::tempdir().unwrap();
