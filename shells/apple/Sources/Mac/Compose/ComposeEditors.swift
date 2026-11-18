@@ -258,7 +258,9 @@ struct RecipientInput: NSViewRepresentable {
         field.drawsBackground = false
         field.focusRingType = .none
         field.placeholderString = placeholder
+        // The field's name, on the field and on its cell, which AppKit lets speak for a text field.
         field.setAccessibilityLabel(label)
+        field.cell?.setAccessibilityLabel(label)
         field.delegate = context.coordinator
         field.cell?.isScrollable = true
         field.cell?.wraps = false

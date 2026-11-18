@@ -252,6 +252,7 @@ struct ComposerForm: View {
                     .foregroundStyle(meadow.ink)
                     .frame(minHeight: 34)
                     .focused($subjectFocused)
+                    .accessibilityLabel(Text("Subject"))
             }
         }
     }
@@ -722,6 +723,8 @@ struct ChipField: View {
                 quiet: NSColor(meadow.ink3)
             )
             .frame(minHeight: 34)
+            // Named on SwiftUI's side too, where VoiceOver meets the field.
+            .accessibilityLabel(Text(label))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
