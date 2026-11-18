@@ -392,10 +392,10 @@ final class OpenedMessageVerbsTests: XCTestCase {
                            [copy.folder, String(copy.key), String(copy.uid)], said)
             XCTAssertEqual(body.on, true, said)
         }
-        // Filed or moved, it leaves: the list or the lane moves on, else the message closes to where it was opened
-        // from. Undo is offered, and takes it back.
+        // Filed, moved or snoozed, it leaves: the list or the lane moves on, else the message closes to where it was
+        // opened from. Undo is offered, and takes it back. Reply later keeps it where it is, and open.
         switch verb.does {
-        case .file, .move:
+        case .file, .move, .snooze:
             await waiting(for: said + " says so") { mailbox.toast != nil }
             XCTAssertNotNil(mailbox.toast?.undo, said + " offers Undo")
             await waiting(for: said + " moves on to \(opened.next.map { String($0.key) } ?? "nothing")") {
@@ -406,6 +406,7 @@ final class OpenedMessageVerbsTests: XCTestCase {
             await waiting(for: said + " undone") { !server.asked(API.Post.Undo.path).isEmpty }
         default:
             await waiting(for: said + " says so") { mailbox.toast != nil }
+            XCTAssertEqual(app.selection.copy, copy, said + " keeps it open")
         }
         // Nothing else was acted on: no other message, and no other verb.
         XCTAssertEqual(server.asked.filter { Self.verbs.contains($0.path) }.count, 1, said + ": one request")
@@ -450,6 +451,24 @@ final class OpenedMessageVerbsTests: XCTestCase {
             XCTAssertNil(world.app.selection.copy, "\(way)")
             XCTAssertEqual(world.app.place, place, "\(way): where it was opened from shows again")
         }
+    }
+
+    /// In Reply Later, Done takes the message off the list shown, so the list moves on as File does. Reply later
+    /// anywhere else keeps the message where it is, and open (the table's `later` verbs).
+    func testDoneInReplyLaterMovesOnAsFileDoes() async throws {
+        let world = await world()
+        world.app.place = .virtual(.replyLater, account: Fixture.ada)
+        await waiting(for: "Reply Later's rows") { world.app.list?.copy(at: 1) != nil }
+        world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 0))])
+        let done = try XCTUnwrap(world.desk.paneCommands.first { $0.id == "later" }, "the bar's Later")
+        XCTAssertEqual(done.label, "Reply later — Done")
+        done.run()
+        await waiting(for: "Done asks") { !world.server.asked(API.Post.Replylater.path).isEmpty }
+        let body = try JSONDecoder().decode(API.ReplyLaterBody.self,
+                                            from: try XCTUnwrap(world.server.asked(API.Post.Replylater.path).first).body)
+        XCTAssertEqual(body.key, Self.rows[0].key)
+        XCTAssertEqual(body.on, false, "Done takes it off Reply Later")
+        await waiting(for: "the list moves on") { world.app.selection.copy == MailCopy(Self.rows[1]) }
     }
 
     /// The pane over a message no list holds, filed already or in Trash, takes it back to its account's Inbox.
