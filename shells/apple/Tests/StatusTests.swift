@@ -51,7 +51,8 @@ final class StatusWordsTests: XCTestCase {
     }
 
     func testThenWhenMailWasLastSynced() {
-        XCTAssertEqual(pill(F.digest(profile: "read-only")), .init(dot: .none, text: "Read-only"))
+        XCTAssertEqual(pill(F.digest(profile: "read-only")), .init(dot: .none, text: "Read only"),
+                       "as the rest of the app spells it")
         XCTAssertEqual(pill(F.digest(last: "2026-11-14T10:42:00Z")).text, "Synced 10:42\u{202F}AM", "today, by its time")
         XCTAssertEqual(pill(F.digest(last: "2026-11-03T10:42:00Z")).text, "Synced Nov 3", "before today, by its day")
         XCTAssertEqual(pill(F.digest(), [F.standing("ada@example.test", ok: "2026-11-14 14:05:09")]).text,
