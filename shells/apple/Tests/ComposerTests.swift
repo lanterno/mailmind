@@ -441,6 +441,16 @@ final class ComposerTests: XCTestCase {
     private static func views<V: NSView>(_ kind: V.Type, in view: NSView) -> [V] {
         ((view as? V).map { [$0] } ?? []) + view.subviews.flatMap { views(kind, in: $0) }
     }
+
+    /// A chip's remove button names the address it takes away, and takes a press round its cross, not only on it.
+    func testAChipsRemoveButtonNamesItsAddressAndIsEasyToHit() {
+        XCTAssertEqual(ChipField.removeLabel(Recipient("Bo Brown <Bo@example.test>"), fresh: false),
+                       "Remove bo@example.test")
+        XCTAssertEqual(ChipField.removeLabel(Recipient("dee@example.test"), fresh: true),
+                       "Remove dee@example.test, new to you")
+        XCTAssertEqual(ChipField.removeLabel(Recipient("dee@"), fresh: false), "Remove dee@, not a valid address")
+        XCTAssertGreaterThanOrEqual(13 + 2 * ChipField.removeReach, 16, "about 16 points across at least")
+    }
 }
 
 /// What a composer needs of the app, as a test sets it, and what the composer told it.
