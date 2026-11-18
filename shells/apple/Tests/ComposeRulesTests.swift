@@ -488,3 +488,70 @@ final class ComposeModelTests: XCTestCase {
         XCTAssertEqual(span(Snippets.after("{{\(String(repeating: "x", count: 64))}}", at: 0)), [0, 68])
     }
 }
+
+/// A recipient field's completion list, as a person keys it: ↑ and ↓ move the highlight, Return or Tab takes it,
+/// a word that is no address takes the first suggestion, a whole address typed is kept as typed, and Esc takes the
+/// list away, not the composer.
+final class RecipientCompletionTests: XCTestCase {
+    private let lin = API.Suggestion(addr: "lin@example.test", n: 4, name: "Lin Mori")
+    private let linus = API.Suggestion(addr: "linus@example.test", n: 1, name: "")
+    private let bo = API.Suggestion(addr: "Bo@example.test", n: 2, name: "Bo")
+
+    func testAWordThatIsNoAddressHighlightsTheFirstSoReturnTakesIt() {
+        var list = RecipientCompletion()
+        list.show([lin, linus], for: "lin", holding: [])
+        XCTAssertTrue(list.shown)
+        XCTAssertEqual(list.at, 0)
+        XCTAssertEqual(list.taken(typed: "lin"), .suggestion("lin@example.test"), "not a chip that says lin")
+    }
+
+    func testAWholeAddressTypedIsKeptAsTyped() {
+        var list = RecipientCompletion()
+        list.show([linus], for: "lin@example.test", holding: [])
+        XCTAssertEqual(list.at, -1, "nothing highlighted over an address")
+        XCTAssertEqual(list.taken(typed: "lin@example.test"), .typed)
+        XCTAssertTrue(list.move(1))
+        XCTAssertEqual(list.taken(typed: "lin@example.test"), .suggestion("linus@example.test"),
+                       "unless one is highlighted")
+    }
+
+    func testTheArrowsGoRoundTheList() {
+        var list = RecipientCompletion()
+        list.show([lin, linus, bo], for: "x", holding: [])
+        XCTAssertEqual(list.at, 0)
+        XCTAssertTrue(list.move(1))
+        XCTAssertEqual(list.chosen?.addr, "linus@example.test")
+        XCTAssertTrue(list.move(1))
+        XCTAssertTrue(list.move(1))
+        XCTAssertEqual(list.at, 0, "round from the last to the first")
+        XCTAssertTrue(list.move(-1))
+        XCTAssertEqual(list.at, 2, "and back from the first to the last")
+
+        var none = RecipientCompletion()
+        none.show([lin, linus], for: "lin@example.test", holding: [])
+        XCTAssertTrue(none.move(-1))
+        XCTAssertEqual(none.at, 1, "↑ with none highlighted starts at the last")
+        var empty = RecipientCompletion()
+        XCTAssertFalse(empty.move(1), "with no list the arrows are the field's")
+    }
+
+    func testThoseChosenAlreadyAreLeftOut() {
+        var list = RecipientCompletion()
+        list.show([lin, bo], for: "o", holding: [Recipient("bo@example.test")])
+        XCTAssertEqual(list.items.map(\.addr), ["lin@example.test"])
+        list.show([bo], for: "bo", holding: [Recipient("Bo <BO@example.test>")])
+        XCTAssertFalse(list.shown)
+        XCTAssertEqual(list.at, -1)
+        XCTAssertEqual(list.taken(typed: "bo"), .typed, "no list: what is typed goes, as the page's field has it")
+        XCTAssertEqual(list.taken(typed: "  "), .nothing, "nothing typed: Return is the field's own")
+    }
+
+    func testEscTakesTheListAwayAndOnlyTheList() {
+        var list = RecipientCompletion()
+        list.show([lin], for: "lin", holding: [])
+        XCTAssertTrue(list.escape(), "Esc is taken: the composer stays")
+        XCTAssertFalse(list.shown)
+        XCTAssertEqual(list.at, -1)
+        XCTAssertFalse(list.escape(), "with no list, Esc goes on to whatever else answers it")
+    }
+}
