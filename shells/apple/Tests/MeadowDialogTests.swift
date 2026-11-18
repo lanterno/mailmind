@@ -44,6 +44,13 @@ final class MeadowDialogTests: XCTestCase {
         XCTAssertFalse(SettingsTab.order.contains { $0.lede.isEmpty })
     }
 
+    func testTheGuidesArrowsGoBackAndOnAStepAndStayWithinIt() {
+        XCTAssertEqual(GuideSheet.step(from: 2, of: 5, forward: false), 1, "Left goes back")
+        XCTAssertEqual(GuideSheet.step(from: 2, of: 5, forward: true), 3)
+        XCTAssertEqual(GuideSheet.step(from: 0, of: 5, forward: false), 0)
+        XCTAssertEqual(GuideSheet.step(from: 4, of: 5, forward: true), 4, "Done, or Return, ends it, not an arrow")
+    }
+
     func testASendersCardIsNamedForThemByTheirFirstName() {
         func card(_ name: String) -> API.ContactCard {
             API.ContactCard(accounts: [], addr: "aoi@example.test", count: 1, known: false, name: name, ok: true,
