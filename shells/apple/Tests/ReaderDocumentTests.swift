@@ -243,6 +243,16 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertEqual(MessageWords.toWhom("list@example.test", mine: mine), "to list@example.test")
     }
 
+    /// A draft is yours to send: its head names whom it goes to, one of your own accounts among them, never "you".
+    func testADraftsHeadNamesWhomItGoesTo() {
+        let mine = SendGuard.mineSet(["ada@example.test", "cy@example.test"])
+        XCTAssertEqual(MessageWords.toWhom("cy@example.test", mine: mine), "to you", "mail that came to Cy")
+        XCTAssertEqual(MessageWords.toWhom("cy@example.test", mine: mine, draft: true), "to cy@example.test")
+        XCTAssertEqual(MessageWords.toWhom("Cy <cy@example.test>, bo@example.test", mine: mine, draft: true),
+                       "to Cy and 1 more")
+        XCTAssertEqual(MessageWords.toWhom("", mine: mine, draft: true), "", "a draft that names no one yet")
+    }
+
     // MARK: The reply box opened
 
     /// Opened under a long message, the reply box scrolls into sight whole, Send and all, rather than opening below
