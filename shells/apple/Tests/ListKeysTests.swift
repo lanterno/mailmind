@@ -144,6 +144,38 @@ final class ListKeysTests: XCTestCase {
         window.contentView = nil
     }
 
+    // MARK: The keyboard as the list comes
+
+    /// A window's content as SwiftUI's is: it takes the keyboard for a button clicked in it.
+    private final class Host: NSView {
+        override var acceptsFirstResponder: Bool { true }
+    }
+
+    func testAListComingIntoTheWindowTakesTheKeyboard() async throws {
+        let (_, controller) = try await table()
+        let window = window()
+        window.contentView = Host()
+        window.contentView?.addSubview(controller.scrollView)
+        let table = controller.table
+        XCTAssertTrue(window.initialFirstResponder === table, "the list, not the search, as the window opens")
+        await until { window.firstResponder === table }
+
+        // A tab clicked: SwiftUI holds the keyboard, and the list that comes in its place takes it.
+        XCTAssertTrue(window.makeFirstResponder(window.contentView))
+        table.takeKeyboardIfNowhere()
+        XCTAssertTrue(window.firstResponder === window.contentView, "only a list just placed takes it from SwiftUI")
+        table.takeKeyboardIfNowhere(placed: true)
+        XCTAssertTrue(window.firstResponder === table)
+
+        // A field has it: nothing takes it from there.
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        window.contentView?.addSubview(field)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        table.takeKeyboardIfNowhere(placed: true)
+        XCTAssertFalse(window.firstResponder === table)
+        window.contentView = nil
+    }
+
     // MARK: Esc
 
     func testEscEndsFocusReadingBeforeTheListsOwnEsc() async throws {
