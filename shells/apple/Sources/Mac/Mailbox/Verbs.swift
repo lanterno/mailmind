@@ -346,8 +346,11 @@ extension Mailbox {
     /// an answer, the gate, the Document Hub) closes, so the place it was opened from shows again. Nil when what is
     /// open stays; .some(nil) when nothing is left to open.
     func nextOpen(leaving rows: [API.FolderRow]) -> MailCopy?? {
+        nextOpen(leaving: Set(rows.map(MailCopy.init)))
+    }
+
+    func nextOpen(leaving: Set<MailCopy>) -> MailCopy?? {
         guard let open = app?.selection.copy else { return nil }
-        let leaving = Set(rows.map(MailCopy.init))
         guard leaving.contains(open) else { return nil }
         if let app, app.place == app.listed, let list = app.list, let at = list.position(of: open) {
             return Self.next(after: at, leaving: leaving, list.copy(at:))
@@ -372,6 +375,14 @@ extension Mailbox {
             position -= 1
         }
         return .some(nil)
+    }
+
+    /// Where the reader goes once `copies` leave the place shown by another area's verb (a snooze, Reply Later's Done):
+    /// worked out now, while the list and the lane still hold them, and gone to once the server has taken them, as
+    /// File goes.
+    func leaving(_ copies: [MailCopy]) -> @MainActor () -> Void {
+        let after = nextOpen(leaving: Set(copies))
+        return { [weak self] in self?.moveOn(after) }
     }
 
     /// Open what comes next, chosen as a click on its row chooses it, or close the message.

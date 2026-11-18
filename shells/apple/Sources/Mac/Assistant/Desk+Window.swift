@@ -83,6 +83,8 @@ final class Desk {
         plan.changed = readAgain
         brief.changed = readAgain
         attention.changed = readAgain
+        // Snoozed, or done with in Reply Later, the message open moves on as File moves on.
+        attention.leaving = { [weak self] copies in self?.app?.mailbox.leaving(copies) ?? {} }
         curate.changed = readAgain
         curate.openPage = { NSWorkspace.shared.open($0) }
         brief.paperTrailQuery = { [weak self] in self?.paperTrail?.search?.q }

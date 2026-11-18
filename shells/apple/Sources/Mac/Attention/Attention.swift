@@ -47,6 +47,10 @@ final class AttentionModel {
     @ObservationIgnored let link: CoreLink
     @ObservationIgnored let notices: DeskNotices
     @ObservationIgnored var changed: () -> Void = {}
+    /// What the window does once a verb takes mail off the place it shows (a snooze, Reply Later's Done), worked out
+    /// before the verb is sent, while the list still holds it, and run once the server has taken it: the desk's moves
+    /// on as File does (`Mailbox.leaving`).
+    @ObservationIgnored var leaving: @MainActor ([MailCopy]) -> @MainActor () -> Void = { _ in {} }
 
     init(link: CoreLink, notices: DeskNotices) {
         self.link = link
@@ -66,7 +70,9 @@ final class AttentionModel {
             body.copies = copies.map(\.aCopy)
             body.undoGroup = newUndoGroup()
         }
-        await act(copies, fail: { Self.couldnt(String(localized: "Couldn’t snooze"), $0) }) { routes in
+        // Snoozed, it leaves the list until it wakes.
+        await act(copies, left: leaving(copies),
+                  fail: { Self.couldnt(String(localized: "Couldn’t snooze"), $0) }) { routes in
             _ = try await routes.post(API.Post.Snooze.self, body)
             return (String(localized: "Snoozed"), true)
         }
@@ -124,9 +130,10 @@ final class AttentionModel {
         }
     }
 
-    /// Done with it: off the Reply Later stack.
+    /// Done with it: off the Reply Later stack, the one place it is offered, so it leaves the list shown.
     func replyLaterDone(_ copies: [MailCopy]) async {
-        await each(copies, said: String(localized: "Done"), fail: { _ in String(localized: "Couldn’t update") }) {
+        await each(copies, said: String(localized: "Done"), left: leaving(copies),
+                   fail: { _ in String(localized: "Couldn’t update") }) {
             _ = try await $0.post(API.Post.Replylater.self,
                                   API.ReplyLaterBody(folder: $1.folder, key: $1.key, on: false, uid: $1.uid))
         }
@@ -143,9 +150,9 @@ final class AttentionModel {
     // MARK: Asking
 
     /// One request for each copy, in turn.
-    private func each(_ copies: [MailCopy], said: String, fail: (String) -> String,
-                      _ send: (any RouteCaller, MailCopy) async throws -> Void) async {
-        await act(copies, fail: fail) { routes in
+    private func each(_ copies: [MailCopy], said: String, left: (@MainActor () -> Void)? = nil,
+                      fail: (String) -> String, _ send: (any RouteCaller, MailCopy) async throws -> Void) async {
+        await act(copies, left: left, fail: fail) { routes in
             for copy in copies {
                 try await send(routes, copy)
             }
@@ -154,7 +161,8 @@ final class AttentionModel {
     }
 
     /// Ask, then say how it went: the words and whether Undo can take it back, or the failure in the page's words.
-    private func act(_ copies: [MailCopy], fail: (String) -> String,
+    /// Once done, the window goes where `left` says, as mail that left the place it shows.
+    private func act(_ copies: [MailCopy], left: (@MainActor () -> Void)? = nil, fail: (String) -> String,
                      _ call: (any RouteCaller) async throws -> (String, Bool)) async {
         guard let routes = link.routes, !copies.isEmpty, !acting else { return }
         acting = true
@@ -162,6 +170,7 @@ final class AttentionModel {
         do {
             let (said, undoable) = try await call(routes)
             notices.say(said, undoable: undoable)
+            left?()
         } catch {
             notices.say(ReadOnlyWords.said(error, else: fail(DeskRefusal.message(error))))
         }
