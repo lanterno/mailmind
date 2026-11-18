@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import XCTest
 
 /// One composer's life, against routes the test answers: what it saves and when, what holds a send, what a fix
@@ -407,6 +408,38 @@ final class ComposerTests: XCTestCase {
         XCTAssertEqual(draft.preview?.formatted, true)
         draft.write()
         XCTAssertFalse(draft.previewing)
+    }
+
+    // MARK: What VoiceOver hears
+
+    /// The To field says its name, on the field and on the cell AppKit lets speak for a text field. The Subject field
+    /// is SwiftUI's, named by its modifier, which a test can't read back: SwiftUI builds no accessibility tree in a
+    /// test's window.
+    func testTheToFieldSaysItsName() async throws {
+        let host = FakeHost()
+        let composer = Composer(ComposeSeed(), host: host)
+        defer { composer.close(force: true) }
+        let view = NSHostingView(rootView: ComposerForm(composer: composer, host: host, aliases: [:], lights: false) { _ in }
+            .frame(width: 720, height: 560)
+            .meadowLight(.day))
+        view.frame = CGRect(x: 0, y: 0, width: 720, height: 560)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        defer { window.contentView = nil }
+        var found: RecipientField?
+        for _ in 0..<50 where found == nil {
+            view.layoutSubtreeIfNeeded()
+            found = Self.views(RecipientField.self, in: view).first
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let to = try XCTUnwrap(found, "the To field")
+        XCTAssertEqual(to.accessibilityLabel(), "To")
+        XCTAssertEqual(to.cell?.accessibilityLabel(), "To")
+    }
+
+    private static func views<V: NSView>(_ kind: V.Type, in view: NSView) -> [V] {
+        ((view as? V).map { [$0] } ?? []) + view.subviews.flatMap { views(kind, in: $0) }
     }
 }
 
