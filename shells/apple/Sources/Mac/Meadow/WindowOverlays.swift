@@ -92,6 +92,9 @@ struct WindowOverlays: ViewModifier {
                 // The snooze chooser floats above the scrim: a dialog (⇧⌘H's time) takes its place.
                 if up, case .snoozeUntil? = desk?.sheet { desk?.sheet = nil }
             }
+            // A row's clock is where its chooser hung only while that chooser is up: h and the menus hang theirs from
+            // the pane's Snooze.
+            .onChange(of: snoozing) { _, now in if !now { anchors.forget(MailboxTableController.rowSnooze) } }
             // A plan the palette showed and didn't run stops as the palette goes, however it goes (Esc, Move To or a
             // menu's sheet in its place), so a first press never waits armed for the palette to come back.
             .onChange(of: dialog?.kind == "palette") { _, up in
@@ -134,6 +137,12 @@ struct WindowOverlays: ViewModifier {
         }
     }
 
+    /// Whether the snooze chooser is up.
+    private var snoozing: Bool {
+        if case .snoozeUntil? = desk?.sheet { return true }
+        return false
+    }
+
     /// Asking and acting, where the window has an assistant and AI is on.
     private var modes: [Entries.Mode] {
         guard let desk, mailbox.aiOn else { return [] }
@@ -156,12 +165,14 @@ struct WindowOverlays: ViewModifier {
         }
     }
 
-    /// The snooze chooser hangs from where the pane's Snooze stands, or near the middle of the window.
+    /// The snooze chooser hangs from the row's clock it was opened from, else from where the pane's Snooze stands, or
+    /// near the middle of the window.
     @ViewBuilder private var snoozeAnchor: some View {
         if case .snoozeUntil(let copies, let canUnsnooze)? = desk?.sheet, let desk {
             GeometryReader { window in
-                let at = anchors.frames["snooze"].map { $0.offsetBy(dx: -window.frame(in: .global).minX,
-                                                                  dy: -window.frame(in: .global).minY) }
+                let button = anchors.frames[MailboxTableController.rowSnooze] ?? anchors.frames["snooze"]
+                let at = button.map { $0.offsetBy(dx: -window.frame(in: .global).minX,
+                                                  dy: -window.frame(in: .global).minY) }
                     ?? CGRect(x: window.size.width / 2 - 130, y: window.size.height / 3, width: 0, height: 0)
                 Color.clear
                     .frame(width: at.width, height: at.height)

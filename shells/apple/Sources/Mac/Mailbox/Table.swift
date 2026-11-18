@@ -35,6 +35,7 @@ struct MailboxRowsTable: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let controller = context.coordinator
+        controller.anchors = context.environment.meadowAnchors
         controller.shell = shell
         controller.setShowsAccount(showsAccount)
         controller.setSections(sections)
@@ -83,6 +84,11 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private var hovered: (row: Int, target: RowTarget?)?
     /// A choice the mailbox asked for is being shown: the table doesn't tell it back.
     private var following = false
+    /// Where the window's buttons stand, for what opens beside them: a row's snooze clock says where it is, so the
+    /// chooser it opens hangs from it and not from the pane's Snooze, which is the open message's.
+    weak var anchors: MeadowAnchors?
+    /// The name a row's clock is remembered under while its chooser is open.
+    static let rowSnooze = "snooze-row"
     /// The window's shell, whose drawer and focus reading Esc undoes before the list's own Esc.
     weak var shell: MeadowShell?
     private lazy var report = OncePerFrame { [weak self] in self?.reportVisible() }
@@ -433,9 +439,20 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
             }
         case .act(.file): mailbox.file(.archive, rows: [mail])
         case .act(.delete): mailbox.file(.trash, rows: [mail])
-        case .act(.snooze): mailbox.snoozes?([mail])
+        case .act(.snooze):
+            if let clock = clockFrame(row: row) { anchors?.remember(Self.rowSnooze, at: clock) }
+            mailbox.snoozes?([mail])
         case .act(.restore), .act(.toInbox): mailbox.restore([mail])
         }
+    }
+
+    /// Where a row's clock stands in the window, top left first, as SwiftUI's global space has it.
+    func clockFrame(row: Int) -> CGRect? {
+        guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? MailRowCell,
+              let clock = cell.frame(of: .snooze), let content = table.window?.contentView else { return nil }
+        var frame = content.convert(clock, from: cell)
+        if !content.isFlipped { frame.origin.y = content.bounds.height - frame.maxY }
+        return frame
     }
 
     /// Esc with several rows chosen: only the one chosen last stays chosen, and opens, so j and k go on from it.
