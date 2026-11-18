@@ -16,6 +16,8 @@ protocol ComposeHost: AnyObject {
     /// What one message's files may come to, when the app knows; the server refuses past it anyway.
     var attachLimit: Int? { get }
     var aiOn: Bool { get }
+    /// MailMind runs read only, where nothing is sent: Send says so in the composer, which stays as it is.
+    var readOnly: Bool { get }
     /// What asks whether an AI call a person started may go over today's limit: the window's alert in the app.
     var asksOverLimit: AskOverLimit? { get }
     var snippets: [API.Snippet] { get }
@@ -42,6 +44,10 @@ protocol ComposeHost: AnyObject {
     func send(_ composer: Composer, _ body: API.SendBody, snapshot: ComposeSeed, replyKey: Int?, after: Int,
               waitingFor save: Task<Bool?, Never>?)
     func closed(_ composer: Composer)
+}
+
+extension ComposeHost {
+    var readOnly: Bool { false }
 }
 
 /// What the send check shows: the lines, what must be waved through, and whether it may be yet.
@@ -998,6 +1004,11 @@ final class Composer: Identifiable {
         guard !closed else { return }
         pendingAfter = max(after, 0)   // kept if a check holds this attempt
         commitTyped()
+        if host.readOnly {
+            // Nothing can go: the composer stays open as it is, and says why where the person is looking.
+            hideGuard()
+            return say(ReadOnlyWords.refused, for: 5)
+        }
         if let problem = recipientProblem() { return showGuard([problem], sendAfter: after) }
         let warnings: [GuardWarning] = runChecks(after)
         if SendGuard.blocks(warnings) { return showGuard(warnings, sendAfter: after) }

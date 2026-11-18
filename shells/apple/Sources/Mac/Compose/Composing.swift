@@ -194,6 +194,7 @@ final class Composing: ComposeHost {
     /// The limit isn't among the generated types yet: the server refuses a message whose files come to more.
     var attachLimit: Int? { nil }
     var aiOn: Bool { digest?.ai.isOn ?? false }
+    var readOnly: Bool { digest?.profile == "read-only" }
     /// AI was turned off in Settings: a reply written ahead isn't offered either.
     var aiTurnedOff: Bool { digest?.ai.isTurnedOff ?? false }
 
@@ -293,10 +294,16 @@ final class Composing: ComposeHost {
                 mailChanged?()
                 outboxChanged()
             } catch let refusal as Problem where refusal.isReadOnly {
-                // Read only turned it down before anything was queued: the message comes back as it was, to keep.
+                // Read only turned it down before anything was queued, though the composer didn't know it ran read
+                // only (the composer stays open when it does): the message comes back as it was, to keep, saying
+                // why, and the run is read again so the next Send is turned down where it is.
                 showFloat(nil)
-                open(snapshot, edited: true)
-                say(ReadOnlyWords.refused, for: 5, refused: true)
+                if let back = open(snapshot, edited: true) {
+                    back.say(ReadOnlyWords.refused, for: 5)
+                } else {
+                    say(ReadOnlyWords.refused, for: 5, refused: true)
+                }
+                await readDigest()
             } catch {
                 failedSend = snapshot
                 showFloat(.failed("Send failed — \(said(error))"))
