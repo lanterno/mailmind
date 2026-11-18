@@ -55,7 +55,7 @@ final class OpenedMessageVerbsTests: XCTestCase {
 
     /// The server: the mailbox's routes, every verb's, the search's hits, the away message's conversation and any
     /// message's head.
-    static func server(grouped: Bool = true) -> FakeServer {
+    static func server(rows: [API.FolderRow] = rows, grouped: Bool = true) -> FakeServer {
         let server = Fixture.server(rows: rows, grouped: grouped)
         let filed = API.Filed(msg: "ok", ok: true, undoable: true)
         for path in [API.Post.Archive.path, API.Post.Trash.path, API.Post.Junk.path, API.Post.Move.path,
@@ -761,6 +761,74 @@ final class OpenedMessageVerbsTests: XCTestCase {
         world.app.reader.hold(Self.away, Self.head())
         await waiting(for: "the Message menu says Unstar") { Marks(world.mailbox.shownRows).unstars }
         XCTAssertTrue(Marks(world.mailbox.shownRows).unread, "and Mark as Read")
+    }
+
+    // MARK: Read for its moment
+
+    /// After its moment on an unread message the reader marks it read (`ReaderPane.dwell`, a view's task, asks this),
+    /// and the window says so at once, before the list is read again: its row is read in the list, and the Message
+    /// menu offers Mark as Unread. Then the list and the counts are read again, as after a verb's mark.
+    func testAMessageMarkedReadForItsMomentShowsReadAtOnce() async throws {
+        var unread = Self.rows
+        unread[0].seen = false
+        let server = Self.server(rows: unread)
+        let world = await world(server)
+        await inbox(world.app)
+        let row = try XCTUnwrap(world.app.list?.copy(at: 0))
+        world.mailbox.chose([row])
+        XCTAssertTrue(Marks(world.mailbox.shownRows).unread, "the Message menu offers Mark as Read")
+        let lists = server.asked(API.Get.Messages.path).count, counts = server.asked(API.Get.Folders.path).count
+
+        await world.mailbox.markOpenedRead(MailCopy(row), profile: "full")
+        XCTAssertEqual(world.app.list?.copy(at: 0)?.seen, true, "its row is read in the list at once")
+        XCTAssertFalse(Marks(world.mailbox.shownRows).unread, "the Message menu offers Mark as Unread")
+        let marked = try XCTUnwrap(server.asked(API.Post.Seen.path).first).body
+        XCTAssertEqual(try JSONDecoder().decode(API.SeenBody.self, from: marked),
+                       API.SeenBody(folder: "INBOX", key: 1, seen: true, uid: 1))
+        await waiting(for: "the list and the counts read again") {
+            server.asked(API.Get.Messages.path).count > lists && server.asked(API.Get.Folders.path).count > counts
+        }
+    }
+
+    /// Read only, or before the digest has said how MailMind runs, opening marks nothing, and the row stays unread.
+    func testAMessageReadForItsMomentStaysUnreadWhereOpeningMarksNothing() async throws {
+        var unread = Self.rows
+        unread[0].seen = false
+        for profile in [nil, "read-only"] as [String?] {
+            let server = Self.server(rows: unread)
+            let world = await world(server)
+            await inbox(world.app)
+            let row = try XCTUnwrap(world.app.list?.copy(at: 0))
+            world.mailbox.chose([row])
+            await world.mailbox.markOpenedRead(MailCopy(row), profile: profile)
+            XCTAssertTrue(server.asked(API.Post.Seen.path).isEmpty, profile ?? "not known yet")
+            XCTAssertEqual(world.app.list?.copy(at: 0)?.seen, false, profile ?? "not known yet")
+        }
+    }
+
+    /// A message opened from outside the list reads as read at once too, and a conversation's member marked as it
+    /// opens reads the list and the counts again, the conversation's row being the server's to say.
+    func testAMessageOpenedFromOutsideOrAConversationsMemberShowsReadOnceMarked() async throws {
+        let world = await world()
+        _ = try await open(.briefCanWait, in: world)
+        XCTAssertTrue(Marks(world.mailbox.shownRows).unread)
+        await world.mailbox.markOpenedRead(Self.away, profile: "full")
+        XCTAssertFalse(Marks(world.mailbox.shownRows).unread, "the Message menu offers Mark as Unread at once")
+
+        let server = Self.server()
+        let other = await self.world(server)
+        await inbox(other.app)
+        let row = try XCTUnwrap(other.app.list?.copy(at: 1))
+        other.mailbox.chose([row])
+        let lists = server.asked(API.Get.Messages.path).count
+        let conversation = ConversationModel(routes: server.wire, account: Fixture.work, id: "t2",
+                                             profile: { "full" }, marked: { other.mailbox.markedRead($0) })
+        await conversation.markRead(API.ThreadMessage(answered: false, flagged: false, folder: "INBOX",
+                                                      hasAttach: false, isJunk: false, key: 2, seen: false,
+                                                      snippet: "", subject: "Re: The engine's notes", uid: 2,
+                                                      when: ""))
+        XCTAssertFalse(server.asked(API.Post.Seen.path).isEmpty)
+        await waiting(for: "the list read again") { server.asked(API.Get.Messages.path).count > lists }
     }
 
     /// A message whose head names no conversation is read as its folder lists it: unread and starred there, so s
