@@ -16,8 +16,12 @@ enum MessageWords {
     }
 
     /// "to you" when one of yours is among the To (or none is named), else the first one named; and how many more.
-    static func toWhom(_ to: String, mine: Set<String>) -> String {
+    /// A draft is yours to send, so its head names whom it goes to, one of your own accounts among them, as the page's
+    /// does, and nothing while it names no one.
+    static func toWhom(_ to: String, mine: Set<String>, draft: Bool = false) -> String {
         let addresses = Addresses.parse(to).map { $0.lowercased() }
+        if draft && addresses.isEmpty { return "" }
+        let mine = draft ? [] : mine
         let more = addresses.count > 1 ? String(localized: " and \(addresses.count - 1) more") : ""
         guard let first = addresses.first, !addresses.contains(where: { SendGuard.isMine($0, mine) }) else {
             return String(localized: "to you") + more
@@ -69,7 +73,8 @@ struct MessageHead: View {
                     .font(.meadow(.ui, 15, .heavy))
                     .foregroundStyle(meadow.ink)
                     .lineLimit(1)
-                Text(verbatim: [opened.fromAddr ?? "", MessageWords.toWhom(opened.to, mine: mine)]
+                Text(verbatim: [opened.fromAddr ?? "", MessageWords.toWhom(opened.to, mine: mine,
+                                                                               draft: opened.isDraft == true)]
                     .filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.meadow(.ui, 13))
                     .foregroundStyle(meadow.ink3)
