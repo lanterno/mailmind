@@ -252,3 +252,30 @@ fn a_message_with_a_25_mb_attachment_opens_and_its_file_comes_whole() {
     assert!(file.data.len() >= 24 << 20, "the file came whole: {} bytes", file.data.len());
     assert!(w.stored(ADA, "INBOX", 1).fetched, "and is kept, so it isn't fetched again");
 }
+
+#[test]
+fn an_attachment_larger_than_a_message_may_send_downloads_whole() {
+    // About 29 MiB attached: past the 25 MiB a person may send in one message, which is no limit on what they are sent.
+    let imap = stand_in::Imap::start();
+    imap.add(ADA, "INBOX", [(1, stand_in::with_pdf(1, "The plans, attached.", 40 << 10))]);
+    let w = world(imap, &[ADA], &[]);
+    w.app.syncing.sync_once();
+    let opened = w.app.reading.bodies.message_body(w.pk(ADA, "INBOX", 1), false).unwrap();
+    let part = opened["attachments"][0]["part_id"].as_str().unwrap().to_owned();
+    let key = opened["key"].as_i64().unwrap();
+    let target = format!("/api/message/attachment?key={key}&folder=INBOX&uid=1&part_id={part}");
+    let request = axum::http::Request::get(target).body(axum::body::Body::empty()).unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    let (status, kind, bytes) = runtime.block_on(async {
+        let mut routes = mm_server::routes::router(w.app.clone());
+        let response = tower_service::Service::call(&mut routes, request).await.unwrap();
+        let kind = response.headers()[axum::http::header::CONTENT_TYPE].to_str().unwrap().to_owned();
+        (response.status(), kind, axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap())
+    });
+    assert_eq!((status.as_u16(), kind.as_str()), (200, "application/pdf"));
+    // 64 base64 characters a line of 66 bytes, 48 bytes once decoded.
+    let lines = (40 << 20) / 66;
+    assert_eq!(bytes.len(), lines * 48, "the file came whole");
+    assert!(bytes.len() > 25 << 20);
+    assert!(bytes.starts_with(b"%PDF-1.4\n"));
+}
