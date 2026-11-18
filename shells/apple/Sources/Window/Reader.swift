@@ -41,6 +41,18 @@ final class ReaderModel {
         }
     }
 
+    /// The head of `copy` as it opened, while the reader shows it.
+    func opened(_ copy: MailCopy) -> API.MessageOpened? {
+        if case .open(let shown, let opened) = stage, shown == copy { return opened }
+        return nil
+    }
+
+    /// Show `copy` as the core opened it, with no core asked: what a test holds the reader at.
+    func hold(_ copy: MailCopy, _ opened: API.MessageOpened) {
+        opening?.cancel()
+        stage = .open(copy, opened)
+    }
+
     /// The frame's document for `copy`, as the page's `bodyUrl` names it, under the scheme the frame's handler answers.
     static func frameURL(_ copy: MailCopy, images: Bool = false) -> URL? {
         let query = Core.query(["key": String(copy.key), "folder": copy.folder, "uid": String(copy.uid),

@@ -566,7 +566,7 @@ extension Mailbox {
     func restore(_ given: [API.FolderRow]? = nil) {
         Task {
             let rows = if let given { given } else { await targets() }
-            guard let first = rows.first else { return }
+            guard let first = rows.first else { return saysNothingChosen() }
             let inbox = folders(of: first.account).first { $0.role == "inbox" }
             await moveNow(to: inbox?.name ?? "INBOX", label: inbox.map(Words.role) ?? String(localized: "Inbox"),
                           rows: rows)
@@ -577,7 +577,7 @@ extension Mailbox {
     func snoozeChosen() {
         Task {
             let rows = await targets()
-            if !rows.isEmpty { snoozes?(rows) }
+            if rows.isEmpty { saysNothingChosen() } else { snoozes?(rows) }
         }
     }
 }
@@ -784,7 +784,8 @@ enum RowKeys {
 @MainActor
 enum RowMenu {
     static func items(for mailbox: Mailbox, clicked: API.FolderRow?) -> [NSMenuItem] {
-        let rows = mailbox.chosenRows.isEmpty ? clicked.map { [$0] } ?? [] : mailbox.chosenRows
+        // As the list holds them now: a mark since they were chosen changed their flags, and the words follow it.
+        let rows = mailbox.chosenRows.isEmpty ? clicked.map { [$0] } ?? [] : mailbox.current(mailbox.chosenRows)
         guard let first = rows.first else { return [] }
         var items: [NSMenuItem] = []
         if rows.count == 1, let open = mailbox.opensWindow {
@@ -819,8 +820,9 @@ enum RowMenu {
         let anyUnread = rows.contains { !$0.seen }
         items.append(Item(anyUnread ? String(localized: "Mark as Read") : String(localized: "Mark as Unread"),
                           anyUnread ? "envelope.open" : "envelope.badge") { mailbox.setSeen(anyUnread, rows: rows) })
-        items.append(Item(rows.count == 1 && first.flagged ? String(localized: "Unstar") : String(localized: "Star"), "star") {
-            mailbox.star(rows: rows)
+        let unstars = rows.count == 1 && first.flagged
+        items.append(Item(unstars ? String(localized: "Unstar") : String(localized: "Star"), "star") {
+            mailbox.star(on: !unstars, rows: rows)
         })
         let others = mailbox.rowMenu.flatMap { $0(rows) }
         if !others.isEmpty {

@@ -25,7 +25,8 @@ extension Mailbox {
 
     func fileNow(_ verb: API.FilingVerb, rows given: [API.FolderRow]? = nil) async {
         let rows = if let given { given } else { await targets() }
-        guard let calls, !rows.isEmpty else { return }
+        guard let calls else { return }
+        guard !rows.isEmpty else { return saysNothingChosen() }
         let words = Self.words(verb)
         let after = nextOpen(leaving: rows)
         if rows.count > 1 {
@@ -73,7 +74,7 @@ extension Mailbox {
     func askMove() {
         Task {
             let rows = await targets()
-            guard let first = rows.first else { return }
+            guard let first = rows.first else { return saysNothingChosen() }
             if Set(rows.map(\.account)).count > 1 {
                 say(String(localized: "Those are in different accounts — mark one account’s mail to move it"))
                 return
@@ -114,7 +115,9 @@ extension Mailbox {
     func moveNow(to folder: String, label: String, rows given: [API.FolderRow]? = nil) async {
         let chosen = if let given { given } else { await targets() }
         let rows = chosen.filter { $0.folder != folder }
-        guard let calls, !rows.isEmpty else { return }
+        guard let calls else { return }
+        guard !chosen.isEmpty else { return saysNothingChosen() }
+        guard !rows.isEmpty else { return say(String(localized: "Already in \(label)")) }
         let after = nextOpen(leaving: rows)
         if rows.count > 1 {
             let group = Self.undoGroup()
@@ -161,7 +164,8 @@ extension Mailbox {
 
     func setSeenNow(_ wanted: Bool?, rows given: [API.FolderRow]? = nil) async {
         let rows = if let given { given } else { await targets() }
-        guard let calls, let first = rows.first else { return }
+        guard let calls else { return }
+        guard let first = rows.first else { return saysNothingChosen() }
         if rows.count > 1 {
             let seen = wanted ?? true
             await eachOne(rows) { row in
@@ -187,21 +191,23 @@ extension Mailbox {
         readAgain()
     }
 
-    /// Star what is chosen, else star or unstar the open row (`setStar`, `starRow`, `bulk`).
-    func star(rows given: [API.FolderRow]? = nil) {
-        Task { await starNow(rows: given) }
+    /// Star what is chosen, else star or unstar the open row (`setStar`, `starRow`, `bulk`); `on` when the words
+    /// pressed said which.
+    func star(on: Bool? = nil, rows given: [API.FolderRow]? = nil) {
+        Task { await starNow(on: on, rows: given) }
     }
 
-    func starNow(rows given: [API.FolderRow]? = nil) async {
+    func starNow(on wanted: Bool? = nil, rows given: [API.FolderRow]? = nil) async {
         let rows = if let given { given } else { await targets() }
-        guard let calls, let first = rows.first else { return }
+        guard let calls else { return }
+        guard let first = rows.first else { return saysNothingChosen() }
         if rows.count > 1 {
             await eachOne(rows) { row in
                 _ = try await calls.post(API.Post.Flag.self, API.FlagBody(flag: .flagged, folder: row.folder, key: row.key, on: true, uid: row.uid))
             }
             return
         }
-        let on = !first.flagged
+        let on = wanted ?? !first.flagged
         do {
             // A conversation reads as starred when any member is: unstarring it takes each one that is.
             let copies = first.isConversation(grouped: grouped) && !on
@@ -335,35 +341,56 @@ extension Mailbox {
         readAgain()
     }
 
-    /// Where the reader goes once `rows` leave the list: on to the next row, or the one before, when what is open is
-    /// among them (`afterLeaving`). Nil when what is open stays; .some(nil) when nothing is left to open.
+    /// Where the reader goes once `rows` leave, when what is open is among them (`afterLeaving`): on to the next row,
+    /// or the one before, in the list the window is at or the lane; and a message opened from outside them (the brief,
+    /// an answer, the gate, the Document Hub) closes, so the place it was opened from shows again. Nil when what is
+    /// open stays; .some(nil) when nothing is left to open.
     func nextOpen(leaving rows: [API.FolderRow]) -> MailCopy?? {
-        guard let list = app?.list, let open = app?.selection.copy else { return nil }
+        guard let open = app?.selection.copy else { return nil }
         let leaving = Set(rows.map(MailCopy.init))
-        guard leaving.contains(open), let at = list.position(of: open) else { return nil }
+        guard leaving.contains(open) else { return nil }
+        if let app, app.place == app.listed, let list = app.list, let at = list.position(of: open) {
+            return Self.next(after: at, leaving: leaving, list.copy(at:))
+        }
+        if let hits = lane?.hits.map(API.FolderRow.init), let at = hits.firstIndex(where: { MailCopy($0) == open }) {
+            return Self.next(after: at, leaving: leaving) { hits.indices.contains($0) ? hits[$0] : nil }
+        }
+        return .some(nil)
+    }
+
+    /// The first row after `at` that isn't leaving, else the first before it, else none.
+    private static func next(after at: Int, leaving: Set<MailCopy>,
+                             _ row: (Int) -> API.FolderRow?) -> MailCopy?? {
         var position = at + 1
-        while let row = list.copy(at: position) {
-            if !leaving.contains(MailCopy(row)) { return .some(MailCopy(row)) }
+        while let next = row(position) {
+            if !leaving.contains(MailCopy(next)) { return .some(MailCopy(next)) }
             position += 1
         }
         position = at - 1
-        while position >= 0, let row = list.copy(at: position) {
-            if !leaving.contains(MailCopy(row)) { return .some(MailCopy(row)) }
+        while position >= 0, let before = row(position) {
+            if !leaving.contains(MailCopy(before)) { return .some(MailCopy(before)) }
             position -= 1
         }
         return .some(nil)
     }
 
+    /// Open what comes next, chosen as a click on its row chooses it, or close the message.
     private func moveOn(_ after: MailCopy??) {
         guard let after else { return }
-        chosenRows = after.flatMap(row(of:)).map { [$0] } ?? []
-        app?.open(after)
+        chose(after.flatMap(heldRow(of:)).map { [$0] } ?? [])
     }
 
-    /// Read again what a verb changed: the list in place, and the sidebar's counts.
+    /// A verb with nothing chosen or open: said, so a key or a command never does nothing without a word.
+    func saysNothingChosen() {
+        say(String(localized: "Choose a message first"))
+    }
+
+    /// Read again what a verb changed: the list in place, the lane, the message open from outside them, and the
+    /// sidebar's counts.
     func readAgain() {
         app?.list?.refresh()
         lane?.refresh()
+        rereadOutside()
         Task { await readCounts() }
     }
 }

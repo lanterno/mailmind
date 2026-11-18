@@ -135,8 +135,7 @@ struct DocumentHub: View {
     }
 
     private func open(_ doc: API.Document) {
-        mailbox.chose([])
-        mailbox.app?.open(MailCopy(key: doc.key, folder: doc.folder, uid: doc.uid, account: doc.account))
+        mailbox.open(MailCopy(key: doc.key, folder: doc.folder, uid: doc.uid, account: doc.account))
     }
 
     private func look(at doc: API.Document) {

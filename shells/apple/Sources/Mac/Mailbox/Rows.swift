@@ -53,6 +53,19 @@ extension API.FolderRow {
                   when: row.waitingLabel.isEmpty ? row.when : row.waitingLabel)
     }
 
+    /// A message no list holds, by its copy, with what its head (`/api/message/body`) and its conversation's member
+    /// (`/api/thread`) say of it. It stands for itself, never a whole conversation. Where neither says, it reads as
+    /// read and not starred, as the page's reader takes a message it has no row for.
+    init(_ copy: MailCopy, head: API.MessageOpened?, member: API.ThreadMessage?) {
+        self.init(account: copy.account, action: "", commitmentWorthy: false, flagged: member?.flagged ?? false,
+                  folder: copy.folder, fromAddr: member?.fromAddr ?? head?.fromAddr,
+                  fromName: member?.fromName ?? head?.fromName,
+                  hasAttach: member?.hasAttach ?? !(head?.attachments.isEmpty ?? true), isJunk: member?.isJunk ?? false,
+                  key: copy.key, needsYou: false, replyWorthy: false, safeToFile: false, seen: member?.seen ?? true,
+                  snippet: member?.snippet ?? "", subject: member?.subject ?? head?.subject ?? "", summary: "",
+                  threadId: head?.threadId, uid: copy.uid, when: member?.when ?? "")
+    }
+
     /// The copy the server names the row by, as an action's body takes it.
     var copy: API.Copy { API.Copy(folder: folder, key: key, uid: uid) }
 

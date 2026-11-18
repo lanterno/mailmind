@@ -245,7 +245,10 @@ extension Mailbox {
             out.append(MailCommand(id: "trash", group: .actions, label: "Delete", hint: "⌘⌫") { [weak self] in self?.file(.trash) })
             out.append(MailCommand(id: "junk", group: .actions, label: "Mark junk", hint: "⇧⌘J") { [weak self] in self?.file(.junk) })
             out.append(MailCommand(id: "move-to", group: .actions, label: "Move to folder…", hint: "⇧⌘M") { [weak self] in self?.askMove() })
-            out.append(MailCommand(id: "star", group: .actions, label: "Star", hint: "⇧⌘L") { [weak self] in self?.star() })
+            let unstars = Marks(shownRows).unstars
+            out.append(MailCommand(id: "star", group: .actions, label: unstars ? "Unstar" : "Star", hint: "⇧⌘L") {
+                [weak self] in self?.star(on: !unstars)
+            })
             out.append(MailCommand(id: "unread", group: .actions, label: "Mark unread", hint: "⇧⌘U") { [weak self] in self?.setSeen(false) })
         }
         out.append(MailCommand(id: "undo", group: .commands, label: "Undo last action", hint: "⌘Z") { [weak self] in self?.undo() })

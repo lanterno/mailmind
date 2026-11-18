@@ -52,6 +52,9 @@ final class Mailbox {
     var hasTarget: Bool { !chosenRows.isEmpty || !unheld.isEmpty || app?.selection.copy != nil }
     /// Positions chosen whose rows weren't held when chosen (Select All in a long list): read before a verb acts.
     @ObservationIgnored private(set) var unheld = IndexSet()
+    /// The row of the message open when neither the list nor a lane holds it (one opened from the brief, an answer,
+    /// the gate, the Document Hub, a sender's card or a notification), as the server last said it stands.
+    private(set) var outside: API.FolderRow?
 
     /// What a person was last told, with the Undo it offers.
     private(set) var toast: Toast?
@@ -241,6 +244,7 @@ final class Mailbox {
     func heard(_ event: CoreEvent) {
         if MailApp.mailChanged.contains(event.name) || event.name == "folder-synced" {
             lane?.refresh()
+            rereadOutside()
             digestSoon?.cancel()
             if let account = Self.account(of: event), !accounts.contains(account) {
                 Task {
@@ -407,11 +411,34 @@ final class Mailbox {
         chose(app?.selection.copy.flatMap(row(of:)).map { [$0] } ?? [])
     }
 
-    /// The rows a verb acts on: those chosen, else the one open. Rows chosen that weren't held are read first.
+    /// Open a message from outside the list: the brief's cards, an answer's mail, the gate, the Document Hub, a
+    /// sender's card, a sheet's message. Where the list on screen holds its row, the row is chosen, as a click on it
+    /// would; anywhere else no row stays chosen, so the verbs act on this message and not on a row chosen before.
+    func open(_ copy: MailCopy) {
+        if let app, app.place == app.listed, let row = row(of: copy) {
+            chose([row])
+            return
+        }
+        chosenRows = []
+        unheld = []
+        app?.open(copy)
+    }
+
+    /// Open a message where a notification named it: its folder's list, and the message in it.
+    func openInItsFolder(_ copy: MailCopy) {
+        app?.place = .folder(account: copy.account, folder: copy.folder)
+        open(copy)
+    }
+
+    /// The rows a verb acts on: those marked, else the message open, as the list, a lane or the server has its row now.
+    /// Rows marked that weren't held are read first.
     func targets() async -> [API.FolderRow] {
+        guard chosenRows.count > 1 || !unheld.isEmpty else {
+            if let open = app?.selection.copy { return [await openRow(open)] }
+            return chosenRows
+        }
         var rows = chosenRows
-        if rows.isEmpty, let open = app?.selection.copy, let row = row(of: open) { rows = [row] }
-        guard !unheld.isEmpty, let load, let list = app?.list else { return rows }
+        guard let load, let list = app?.list else { return rows }
         let pages = Set(unheld.map { $0 / MailListModel.pageSize })
         var read: [Int: API.FolderRow] = [:]
         for page in pages.sorted() {
@@ -429,6 +456,58 @@ final class Mailbox {
     func row(of copy: MailCopy) -> API.FolderRow? {
         guard let list = app?.list, let position = list.position(of: copy) else { return nil }
         return list.copy(at: position)
+    }
+
+    /// The row the window holds for a copy as it stands now: the list's, a lane's, else the one chosen as it was when
+    /// chosen. A verb's mark and the list read again since change the list's row, never the one kept when chosen.
+    func heldRow(of copy: MailCopy) -> API.FolderRow? {
+        if let row = row(of: copy) { return row }
+        if let hit = lane?.hits.first(where: { MailCopy(API.FolderRow($0)) == copy }) { return API.FolderRow(hit) }
+        return chosenRows.first { MailCopy($0) == copy }
+    }
+
+    /// `rows` as the window holds them now, for one row; several marked are acted on as they were chosen, by verbs
+    /// that say what they do whatever each row's flags.
+    func current(_ rows: [API.FolderRow]) -> [API.FolderRow] {
+        guard rows.count == 1 else { return rows }
+        return [heldRow(of: MailCopy(rows[0])) ?? rows[0]]
+    }
+
+    /// What a verb would act on, as the window knows it without asking, for a menu's words: the rows marked, else the
+    /// message open.
+    var shownRows: [API.FolderRow] {
+        guard chosenRows.count <= 1, unheld.isEmpty, let open = app?.selection.copy else { return chosenRows }
+        return [heldRow(of: open) ?? outside.flatMap { MailCopy($0) == open ? $0 : nil }
+            ?? API.FolderRow(open, head: nil, member: nil)]
+    }
+
+    /// The open message's row: the one the window holds, else what the server says of it.
+    func openRow(_ open: MailCopy) async -> API.FolderRow {
+        if let held = heldRow(of: open) { return held }
+        return await readOutside(open)
+    }
+
+    /// A message neither the list nor a lane holds, as the server says it stands: its head as the reader opened it,
+    /// and whether it is read and starred as its conversation's members say. It stands for itself alone, as the pane
+    /// shows it; one whose conversation isn't known is named by its copy alone.
+    private func readOutside(_ copy: MailCopy) async -> API.FolderRow {
+        let head = app?.reader.opened(copy)
+        var member: API.ThreadMessage?
+        if let calls, let thread = head?.threadId, !thread.isEmpty,
+           let items = try? await calls.get(API.Get.Thread.self, ["account": copy.account, "thread_id": thread]).items
+        {
+            // A Gmail message shows once among them, as whichever of its copies came first: the same message all the same.
+            member = items.first { MailCopy($0, account: copy.account) == copy } ?? items.first { $0.key == copy.key }
+        }
+        let row = API.FolderRow(copy, head: head, member: member)
+        if app?.selection.copy == copy { outside = row }
+        return row
+    }
+
+    /// Read again how the message open from outside the list stands, after mail changed.
+    func rereadOutside() {
+        guard let open = app?.selection.copy, outside.map(MailCopy.init) == open, heldRow(of: open) == nil else { return }
+        Task { _ = await readOutside(open) }
     }
 
     /// The next two rows' bodies made ready, so moving down shows them at once. The server skips one it would wait on.

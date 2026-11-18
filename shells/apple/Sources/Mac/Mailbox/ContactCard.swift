@@ -131,9 +131,7 @@ struct ContactCard: View {
             ForEach(card.recent, id: \.self) { mail in
                 ContactMailRow(mail: mail) {
                     close()
-                    mailbox.chose([])
-                    mailbox.app?.open(MailCopy(key: mail.key, folder: mail.folder, uid: mail.uid,
-                                               account: mail.account))
+                    mailbox.open(MailCopy(key: mail.key, folder: mail.folder, uid: mail.uid, account: mail.account))
                 }
             }
         }

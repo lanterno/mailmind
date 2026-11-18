@@ -61,8 +61,7 @@ private struct OpensFromNotifications: ViewModifier {
             .onChange(of: Ready(copy: status.opening, open: app.stage == .open), initial: true) { _, now in
                 guard now.open, let copy = now.copy else { return }
                 status.opening = nil
-                app.place = .folder(account: copy.account, folder: copy.folder)
-                app.open(copy)
+                app.mailbox.openInItsFolder(copy)
             }
     }
 }

@@ -39,7 +39,8 @@ struct UpNext: View {
     }
 
     var body: some View {
-        if let list = app.list, let position = list.chosenPosition {
+        // Only where the list is the window's place: a message opened from the brief beside it goes back to the brief.
+        if app.place == app.listed, let list = app.list, let position = list.chosenPosition {
             let place = UpNextPlace(position: position, total: max(mailbox.facts.total ?? list.total, list.total))
             VStack(alignment: .leading, spacing: 0) {
                 if place.isLast {

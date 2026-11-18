@@ -107,6 +107,14 @@ final class Desk {
         join(app.mailbox)
     }
 
+    /// A test's window and routes, with no core: the desk reads the window it is given, speaks those routes, and hangs
+    /// its hooks on the window's mailbox, as `attach` does once a core is open.
+    func use(_ app: MailApp, routes: any RouteCaller) {
+        self.app = app
+        connect(routes)
+        join(app.mailbox)
+    }
+
     /// Reach the core's routes, and read what was asked for before they were there.
     func connect(_ routes: any RouteCaller) {
         link.routes = routes
@@ -208,11 +216,9 @@ final class Desk {
         app?.mailbox.name(of: account) ?? account
     }
 
-    /// Open a message in the reader, wherever it is.
+    /// Open a message in the reader, wherever it is: no row chosen before stays chosen, so the verbs act on this one.
     func open(_ copy: MailCopy) {
-        guard let app else { return }
-        app.selection.copy = copy
-        app.reader.open(copy)
+        app?.mailbox.open(copy)
     }
 
     func go(_ place: Place) {
@@ -279,6 +285,12 @@ final class Desk {
     }
 
     // MARK: Commands
+
+    /// The commands the pane's bar offers on what the reader shows (its Snooze and Later), as the keys find them: on
+    /// the rows marked, else the message open, however it was opened.
+    var paneCommands: [DeskCommand] {
+        commands(for: chosenCopies, stack: stack)
+    }
 
     /// The commands only AI can serve, by id: none is offered while AI is turned off.
     static let aiCommands: Set<String> = ["summarize", "extract", "ask", "do", "week"]

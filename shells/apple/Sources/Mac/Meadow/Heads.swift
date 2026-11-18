@@ -385,9 +385,8 @@ struct MeadowPaneBar: View {
         }
         verb(.trash, "Delete", key: "#", help: "Delete · # or Del", del: true, fold: fold) { mailbox.file(.trash) }
             .disabled(none)
-        // What the desk's verbs act on, as its `chosenCopies` says: the rows marked, else the message open.
-        let copies = mailbox.marked.isEmpty ? app.selection.copy.map { [$0] } ?? [] : mailbox.marked
-        let commands = desk?.commands(for: copies, stack: desk?.stack) ?? []
+        // What the desk's verbs act on, as its keys find them: the rows marked, else the message open.
+        let commands = desk?.paneCommands ?? []
         let snooze = commands.first { $0.id == "snooze" }
         verb(.clock, "Snooze", key: "H", help: "Snooze · H", fold: fold) { snooze?.run() }
             .disabled(snooze == nil)

@@ -31,13 +31,13 @@ struct MailboxCommands: Commands {
                 .keyboardShortcut("m", modifiers: [.shift, .command])
                 .disabled(!acting)
             Divider()
-            Button(mailbox?.chosenRows.contains { !$0.seen } == true ? "Mark as Read" : "Mark as Unread") {
-                guard let mailbox else { return }
-                mailbox.setSeen(mailbox.chosenRows.count > 1 ? mailbox.chosenRows.contains { !$0.seen } : nil)
-            }
-            .keyboardShortcut("u", modifiers: [.shift, .command])
-            .disabled(!acting)
-            Button("Star") { mailbox?.star() }
+            // Each says what it will do to the rows as they stand now, and does that.
+            let shown = mailbox?.shownRows ?? []
+            let marks = Marks(shown)
+            Button(marks.unread ? "Mark as Read" : "Mark as Unread") { mailbox?.setSeen(marks.unread) }
+                .keyboardShortcut("u", modifiers: [.shift, .command])
+                .disabled(!acting)
+            Button(marks.unstars ? "Unstar" : "Star") { mailbox?.star(on: !marks.unstars) }
                 .keyboardShortcut("l", modifiers: [.shift, .command])
                 .disabled(!acting)
             Divider()
@@ -50,7 +50,7 @@ struct MailboxCommands: Commands {
                 .keyboardShortcut(.upArrow, modifiers: [.option, .command])
                 .disabled(mailbox == nil)
             Divider()
-            let sender = mailbox?.chosenRows.count == 1 ? mailbox?.chosenRows.first?.fromAddr : nil
+            let sender = shown.count == 1 ? shown[0].fromAddr : nil
             Button("About This Sender") { if let sender { mailbox?.contact = sender } }
                 .disabled(sender?.isEmpty ?? true)
             Button("Search Mail from This Sender") {
@@ -106,6 +106,18 @@ struct MailboxCommands: Commands {
     private static let roles: [(role: String, title: String)] = [
         ("inbox", "Inbox"), ("sent", "Sent"), ("drafts", "Drafts"), ("archive", "Archive"), ("junk", "Junk"), ("trash", "Trash"),
     ]
+}
+
+/// What the read and star verbs say they will do to the rows a verb acts on: mark read while any is unread, and
+/// unstar one starred message.
+struct Marks: Equatable {
+    let unread: Bool
+    let unstars: Bool
+
+    init(_ rows: [API.FolderRow]) {
+        unread = rows.contains { !$0.seen }
+        unstars = rows.count == 1 && rows[0].flagged
+    }
 }
 
 extension Mailbox {
