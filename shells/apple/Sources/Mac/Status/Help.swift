@@ -293,6 +293,7 @@ struct KeysLegend: View {
     static let read = Group(title: String(localized: "Read"), keys: [
         Key("J", String(localized: "Next message")), Key("K", String(localized: "Previous")),
         Key("N", String(localized: "Next unread")), Key("P", String(localized: "Previous unread")),
+        Key("Space", String(localized: "Page down the message, ⇧ up")),
         Key("↵", String(localized: "Focus reading")), Key("Esc", String(localized: "Leave focus")),
         Key("[", String(localized: "Show/hide mailboxes")), Key("/", String(localized: "Search mail")),
         Key("⌘K", String(localized: "Search, jump, ask")),

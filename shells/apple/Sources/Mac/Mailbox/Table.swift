@@ -102,6 +102,9 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         table.allowsEmptySelection = true
         table.allowsColumnReordering = false
         table.allowsColumnResizing = false
+        // A letter the list doesn't use does nothing: the table's own type-select would choose a row by it, or none,
+        // and lose the place.
+        table.allowsTypeSelect = false
         let column = NSTableColumn(identifier: MailRowCell.identifier)
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column)
@@ -730,16 +733,70 @@ final class MailboxTableView: NSTableView {
         if key == "\r" || key == "\u{3}", controller?.briefChosen == true {
             return mailbox.openBrief(deliberately: true)
         }
+        // Space pages the message open beside the list, ⇧Space back up, as Mail's list does.
+        if key == " " {
+            ReaderPage.turn(in: window, down: !event.modifierFlags.contains(.shift))
+            return
+        }
+        // The table's own: the arrows, Page Up and Down, Home and End, Tab.
+        if Self.tablesOwn(scalar) { return super.keyDown(with: event) }
         guard mailbox.singleKeys, event.modifierFlags.intersection([.shift]).isEmpty || "#?".contains(key) else {
-            return super.keyDown(with: event)
+            return
         }
         let lower = Character(key.lowercased())
         if let at = chordAt, Date().timeIntervalSince(at) < 1.8 {
             chordAt = nil
             return mailbox.go(chord: lower)
         }
-        if RowKeys.run(lower, on: mailbox, chord: { chordAt = Date() }) { return }
-        super.keyDown(with: event)
+        // Any other key does nothing: no row is chosen by its letter, and the place stays.
+        _ = RowKeys.run(lower, on: mailbox, chord: { chordAt = Date() })
+    }
+
+    /// Keys the table moves with itself: the function keys (arrows, Page Up and Down, Home, End), Tab and ⇧Tab.
+    /// Return and Enter are the shell's, for focus reading, as the single keys are.
+    static func tablesOwn(_ scalar: Int) -> Bool {
+        (0xF700...0xF8FF).contains(scalar) || [0x09, 0x19].contains(scalar)
+    }
+}
+
+/// Space in the list pages the message open in the reading pane, as Mail's does: the reader's document, which every
+/// frame of the message scrolls as one, moves a page down or up. With no message open it does nothing.
+@MainActor
+enum ReaderPage {
+    @discardableResult
+    static func turn(in window: NSWindow?, down: Bool) -> Bool {
+        guard let scroll = document(in: window?.contentView) else { return false }
+        return turn(scroll, down: down)
+    }
+
+    /// A page down or up `scroll`, less a little of the last page kept in sight.
+    @discardableResult
+    static func turn(_ scroll: NSScrollView, down: Bool) -> Bool {
+        let height = scroll.contentView.bounds.height
+        return by(scroll, max(height - 40, height / 2) * (down ? 1 : -1))
+    }
+
+    /// Move `scroll`'s document by `points`, down for more, within its ends. Whether it moved.
+    @discardableResult
+    static func by(_ scroll: NSScrollView, _ points: CGFloat) -> Bool {
+        guard let document = scroll.documentView else { return false }
+        let clip = scroll.contentView
+        let before = clip.bounds.origin
+        var visible = document.convert(clip.bounds, from: clip)
+        visible.origin.y += document.isFlipped ? points : -points
+        document.scrollToVisible(visible)
+        scroll.reflectScrolledClipView(clip)
+        return clip.bounds.origin != before
+    }
+
+    /// The reader's document: what scrolls the first message frame shown in `view`.
+    static func document(in view: NSView?) -> NSScrollView? {
+        guard let view, !view.isHiddenOrHasHiddenAncestor else { return nil }
+        if let frame = view as? FrameWebView, !frame.visibleRect.isEmpty { return frame.enclosingScrollView }
+        for child in view.subviews {
+            if let found = document(in: child) { return found }
+        }
+        return nil
     }
 }
 
