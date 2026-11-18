@@ -243,6 +243,62 @@ final class ReaderDocumentTests: XCTestCase {
         XCTAssertEqual(MessageWords.toWhom("list@example.test", mine: mine), "to list@example.test")
     }
 
+    // MARK: The reply box opened
+
+    /// Opened under a long message, the reply box scrolls into sight whole, Send and all, rather than opening below
+    /// the fold with only its first line showing.
+    func testAnOpenedReplyComesIntoSightWhole() async throws {
+        let host = NSHostingView(rootView: ScrollView {
+            VStack(spacing: 0) {
+                Color.clear.frame(height: 1500)
+                Color.clear.frame(height: 300).background { BringsIntoView() }
+                Color.clear.frame(height: 400)
+            }
+            .frame(width: 400)
+        }
+        .frame(width: 400, height: 500))
+        host.frame = CGRect(x: 0, y: 0, width: 400, height: 500)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.contentView = nil }
+        var probe: BringsIntoView.Probe?
+        for _ in 0..<100 where probe == nil {
+            host.layoutSubtreeIfNeeded()
+            probe = Self.find(BringsIntoView.Probe.self, in: host)
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let box = try XCTUnwrap(probe, "the box's probe")
+        let scroll = try XCTUnwrap(box.enclosingScrollView, "the reader's document scrolls")
+        func inSight() -> Bool {
+            scroll.contentView.bounds.insetBy(dx: -1, dy: -1).contains(box.convert(box.bounds, to: scroll.contentView))
+        }
+        for _ in 0..<100 where !inSight() {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(inSight(), "the box, 1500 points down, is in sight whole")
+    }
+
+    /// A box taller than what shows brings its foot into sight, where Send is.
+    func testATallBoxBringsItsFootIntoSight() {
+        let box = NSRect(x: 0, y: 0, width: 400, height: 600)
+        XCTAssertEqual(BringsIntoView.Probe.sight(of: box, showing: 800, flipped: true), box)
+        XCTAssertEqual(BringsIntoView.Probe.sight(of: box, showing: nil, flipped: true), box)
+        XCTAssertEqual(BringsIntoView.Probe.sight(of: box, showing: 400, flipped: true),
+                       NSRect(x: 0, y: 200, width: 400, height: 400))
+        XCTAssertEqual(BringsIntoView.Probe.sight(of: box, showing: 400, flipped: false),
+                       NSRect(x: 0, y: 0, width: 400, height: 400))
+    }
+
+    private static func find<V: NSView>(_ kind: V.Type, in view: NSView) -> V? {
+        if let found = view as? V { return found }
+        for child in view.subviews {
+            if let found = find(kind, in: child) { return found }
+        }
+        return nil
+    }
+
     func testWhereAMailIsFrom() {
         XCTAssertEqual(MessageWords.from("ren@Kumo.example.test", facts: API.SenderFacts(count: 41, firstAgo: "8mo",
                                                                                           replied: 12)),
