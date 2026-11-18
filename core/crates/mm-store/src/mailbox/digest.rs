@@ -1,5 +1,5 @@
-//! What the digest reads (`mailbox.adapters.sqlite.lists.digest`, `stored_accounts`, `stats`): the kept mail the AI
-//! found worth something, none on its way out, snoozed or muted, and what is stored all told.
+//! What the digest reads (`mailbox.adapters.sqlite.lists.digest`, `stats`): the kept mail the AI found worth
+//! something, none on its way out, snoozed or muted, and what is stored all told.
 
 use mm_kernel::errors::Fault;
 use mm_mailbox::ports::{DigestReads, StoredDigest};
@@ -31,15 +31,11 @@ impl DigestReads for Database {
     fn digest(&self, limit: i64) -> Result<StoredDigest, Fault> {
         self.read(|c| {
             let rows = rows_of(c, DIGEST, [limit])?;
-            let accounts = c
-                .prepare_cached("SELECT DISTINCT account FROM messages ORDER BY account")?
-                .query_map([], |r| r.get(0))?
-                .collect::<Result<_, _>>()?;
             let mut stats = [("", 0); 5];
             for (slot, (name, sql)) in stats.iter_mut().zip(STATS) {
                 *slot = (name, c.prepare_cached(sql)?.query_row([], |r| r.get(0))?);
             }
-            Ok(StoredDigest { rows, accounts, stats })
+            Ok(StoredDigest { rows, stats })
         })
     }
 }

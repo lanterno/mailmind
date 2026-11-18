@@ -148,13 +148,11 @@ pub struct Faces {
     pub signature_default: String,
 }
 
-/// What the digest reads of the database, together (`lists.digest`, `stored_accounts`, `stats`).
+/// What the digest reads of the database, together (`lists.digest`, `stats`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StoredDigest {
     /// The kept mail the AI found worth something, the most important first, then the newest.
     pub rows: Vec<Row>,
-    /// Each account that has mail stored.
-    pub accounts: Vec<String>,
     /// How many messages are stored, kept, summarized, verified, and kept with no summary yet.
     pub stats: [(&'static str, i64); 5],
 }

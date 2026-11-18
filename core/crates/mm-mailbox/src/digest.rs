@@ -1,6 +1,9 @@
 //! What `/api/digest` answers (`mailmind.mailbox.application.digest`): the items the brief is built from, and with
-//! them what the page needs of the rest of the app as it opens: the identities to send from, the sync's state and
-//! the AI's.
+//! them what the page needs of the rest of the app as it opens: the accounts, the identities to send from, the sync's
+//! state and the AI's.
+//!
+//! The accounts are the ones configured, in the config's order, whether or not any of their mail is stored: an
+//! account whose Inbox is filed empty, or whose first sync hasn't ended, still has its place on the rail.
 
 use std::sync::Arc;
 
@@ -85,8 +88,9 @@ impl Digest {
             faces.aliases.iter().map(|(e, a)| (e.clone(), a.clone().map_or(Value::Null, Value::String))).collect();
         let signatures: Map<String, Value> =
             faces.signatures.iter().map(|(e, s)| (e.clone(), Value::String(s.clone()))).collect();
+        let accounts = self.accounts.emails()?;
         Ok(json!({
-            "items": items, "stats": stats, "accounts": stored.accounts, "send_accounts": self.accounts.emails()?,
+            "items": items, "stats": stats, "accounts": accounts, "send_accounts": accounts,
             "aliases": aliases, "signatures": signatures, "signature_default": faces.signature_default,
             "status": self.syncing.status(), "sync": self.syncing.sync(), "ai": self.ai.report()?,
             "profile": self.profile, "generated": iso(now),
