@@ -70,9 +70,10 @@ final class ConversationModel {
         self.profile = profile
     }
 
+    /// Read the conversation, named as the route names it (`thread_id`), as the page and the mailbox's verbs ask it.
     func load() async {
         do {
-            stage = .open(try await routes.get(API.Get.Thread.self, ["account": account, "id": id]))
+            stage = .open(try await routes.get(API.Get.Thread.self, ["account": account, "thread_id": id]))
         } catch {
             stage = .failed(said(error))
         }
