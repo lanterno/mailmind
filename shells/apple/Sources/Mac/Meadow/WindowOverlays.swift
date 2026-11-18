@@ -70,6 +70,7 @@ struct WindowOverlays: ViewModifier {
             .environment(\.meadowAnchors, anchors)
             .background { DialogFocusWindow(focus: focus) }
             .background { TypingWatch { mailbox.editingText = $0 } }
+            .onAppear { focus.waits = { [status] in status.firstRun } }
             .overlay(alignment: .topLeading) { snoozeAnchor }
             .overlay(alignment: .bottom) {
                 WindowToasts(mailbox: mailbox, status: status, desk: desk)
@@ -193,7 +194,8 @@ struct WindowOverlays: ViewModifier {
 
 /// The keyboard around the window's dialogs: as one comes up, the list's table lets the keyboard go, so its arrows
 /// and keys wait behind the scrim; once the last has gone, the keyboard goes back to what had it before (the list's
-/// table, as a rule), unless something the dialog opened has taken it since.
+/// table, as a rule), unless something the dialog opened has taken it since. Between dialogs, a keyboard that is
+/// nowhere in the window (a field let it go, the list was swapped for another place's) goes to the list.
 @MainActor
 final class DialogFocus {
     weak var window: NSWindow?
@@ -202,9 +204,14 @@ final class DialogFocus {
     /// What the dialog had as it went: while that or nothing has the keyboard, it goes back.
     private weak var dialogHad: NSResponder?
     private var going = false
+    /// A dialog is up, whose keyboard it is.
+    private(set) var up = false
+    /// Whether something over the window holds back the list's keys besides a dialog: the first run's welcome.
+    var waits: @MainActor () -> Bool = { false }
 
     func opened() {
         going = false
+        up = true
         guard let window else { return }
         before = Self.owner(of: window.firstResponder)
         if before is MailboxTableView { window.makeFirstResponder(nil) }
@@ -212,6 +219,7 @@ final class DialogFocus {
 
     func closing() {
         going = true
+        up = false
         dialogHad = window.flatMap { Self.owner(of: $0.firstResponder) }
     }
 
@@ -221,6 +229,21 @@ final class DialogFocus {
         going = false
         if let back = Self.back(to: before, in: window, dialogHad: dialogHad) { window.makeFirstResponder(back) }
         (before, dialogHad) = (nil, nil)
+    }
+
+    /// Nothing in the window has the keyboard: the list takes it, unless a dialog is up or going, which hands it on
+    /// itself.
+    func settle() {
+        guard !up, !going, !waits(), let window, Self.nowhere(window.firstResponder, in: window),
+              let table = ListTable.find(in: window.contentView) else { return }
+        window.makeFirstResponder(table)
+    }
+
+    /// Whether `responder` leaves the keyboard nowhere in `window`: none, the window itself, or a view no longer in it.
+    static func nowhere(_ responder: NSResponder?, in window: NSWindow) -> Bool {
+        guard let responder, responder !== window else { return true }
+        if let view = responder as? NSView { return view.window !== window }
+        return false
     }
 
     /// What stands for a responder: a field for its editor, nothing for the window itself.
@@ -242,8 +265,8 @@ final class DialogFocus {
     }
 }
 
-/// Tells the window's `DialogFocus` which window it is.
-private struct DialogFocusWindow: NSViewRepresentable {
+/// Tells the window's `DialogFocus` which window it is, and when the keyboard moves in it.
+struct DialogFocusWindow: NSViewRepresentable {
     let focus: DialogFocus
 
     func makeNSView(context: Context) -> NSView { Probe(focus) }
@@ -252,6 +275,7 @@ private struct DialogFocusWindow: NSViewRepresentable {
 
     final class Probe: NSView {
         let focus: DialogFocus
+        private var watching: NSKeyValueObservation?
 
         init(_ focus: DialogFocus) {
             self.focus = focus
@@ -262,7 +286,16 @@ private struct DialogFocusWindow: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            watching = nil
+            // SwiftUI may make this view again and take the old one out after the new one is in: the one leaving
+            // says nothing, or it would leave the focus with no window.
+            guard let window else { return }
             focus.window = window
+            // Once whatever let the keyboard go has finished moving it (SwiftUI hands a field's focus on a moment
+            // later), a keyboard left nowhere goes to the list.
+            watching = window.observe(\.firstResponder, options: [.new]) { [weak focus] _, _ in
+                DispatchQueue.main.async { MainActor.assumeIsolated { focus?.settle() } }
+            }
         }
     }
 }
