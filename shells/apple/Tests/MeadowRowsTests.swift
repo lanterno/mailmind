@@ -308,6 +308,29 @@ final class MeadowRowsTests: XCTestCase {
         XCTAssertEqual(controller.position(0), 0)
     }
 
+    /// A draft waiting to go later says when in its time's place: a draft's row only, and only while it waits.
+    func testADraftWaitingToGoLaterSaysWhenInItsTimesPlace() async throws {
+        let rows = [Fixture.row(1, folder: "Drafts", subject: "Second try", when: "just now"),
+                    Fixture.row(2, folder: "INBOX", subject: "Second try", when: "10:42"),
+                    Fixture.row(3, folder: "Drafts", subject: "Half written", when: "4h ago")]
+        let (app, _, controller) = try await table(rows: rows, brief: nil)
+        app.mailbox.draftWhen = { $0.subject == "Second try" ? "Scheduled · tomorrow 9:00" : nil }
+        let window = shown(controller)
+        defer { window.close() }
+        defer { withExtendedLifetime(app) {} }
+        controller.redrawShown()
+        func when(_ row: Int) throws -> String? {
+            let view = controller.table.view(atColumn: 0, row: row, makeIfNecessary: false)
+            return try XCTUnwrap(view as? MailRowCell).row?.when
+        }
+        XCTAssertEqual(try when(0), "Scheduled · tomorrow 9:00")
+        XCTAssertEqual(try when(1), "10:42", "a message with the same subject elsewhere is another")
+        XCTAssertEqual(try when(2), "4h ago")
+        app.mailbox.draftWhen = nil
+        controller.redrawShown()
+        XCTAssertEqual(try when(0), "just now", "gone or cancelled, it says when it was saved")
+    }
+
     func testARowSaysItsAccountWhereTheListHoldsSeveral() async throws {
         let (app, _, controller) = try await table(brief: nil)
         let window = shown(controller)
