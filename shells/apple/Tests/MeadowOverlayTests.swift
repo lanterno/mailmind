@@ -516,7 +516,8 @@ final class MeadowOverlayTests: XCTestCase {
         let (window, _, focus) = listWindow()
         let search = field(in: window)
         focus.opened()
-        XCTAssertTrue(DialogFocus.owner(of: window.firstResponder) === search, "only the list lets it go")
+        XCTAssertFalse(DialogFocus.owner(of: window.firstResponder) === search,
+                       "the search lets it go too, so ⌘K's palette can take it")
         let palette = field(in: window)
         focus.closing()
         palette.removeFromSuperview()
