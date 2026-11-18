@@ -114,8 +114,13 @@ struct Entries: View {
         .onAppear {
             query = initial
             typing = true
-            // Once the field has the focus, which chooses all it holds: the cursor after it instead.
-            Task { @MainActor in selection = TextSelection(insertionPoint: query.endIndex) }
+            // Once the field has the focus, which chooses all it holds: the cursor after it instead. The focus is
+            // asked for again then, as what had the keyboard a moment before (the top search, as ⌘K opens this from
+            // it) lets it go only as the dialog comes up.
+            Task { @MainActor in
+                typing = true
+                selection = TextSelection(insertionPoint: query.endIndex)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(label)

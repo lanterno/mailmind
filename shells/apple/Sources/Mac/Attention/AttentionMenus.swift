@@ -193,7 +193,11 @@ struct SnoozeTimeDialog: View {
             .padding(.horizontal, 16)
             .overlay(alignment: .top) { Rectangle().fill(meadow.line).frame(height: 1) }
         }
-        .onAppear { typing = true }
+        .onAppear {
+            typing = true
+            // Asked again once the dialog is up: the list lets the keyboard go only as the dialog comes.
+            Task { @MainActor in typing = true }
+        }
         .accessibilityLabel(SnoozeChooser.title(copies.count))
     }
 

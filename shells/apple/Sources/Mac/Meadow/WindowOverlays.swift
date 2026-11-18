@@ -82,6 +82,14 @@ struct WindowOverlays: ViewModifier {
                         .id(dialog.kind)
                         .transition(.opacity)
                         .onDisappear { focus.gone() }
+                        // Esc closes the dialog wherever the keyboard is in the window, not only from its field.
+                        .background {
+                            Button("Close", action: close)
+                                .keyboardShortcut(.cancelAction)
+                                .opacity(0)
+                                .frame(width: 0, height: 0)
+                                .accessibilityHidden(true)
+                        }
                 }
             }
             .animation(.easeOut(duration: 0.12), value: dialog?.kind)
@@ -192,10 +200,11 @@ struct WindowOverlays: ViewModifier {
     }
 }
 
-/// The keyboard around the window's dialogs: as one comes up, the list's table lets the keyboard go, so its arrows
-/// and keys wait behind the scrim; once the last has gone, the keyboard goes back to what had it before (the list's
-/// table, as a rule), unless something the dialog opened has taken it since. Between dialogs, a keyboard that is
-/// nowhere in the window (a field let it go, the list was swapped for another place's) goes to the list.
+/// The keyboard around the window's dialogs: as one comes up, whatever had the keyboard lets it go, so the list's
+/// arrows and keys wait behind the scrim and the search field's typing stops, and the dialog takes it; once the last
+/// has gone, the keyboard goes back to what had it before (the list's table, as a rule), unless something the dialog
+/// opened has taken it since. Between dialogs, a keyboard that is nowhere in the window (a field let it go, the list
+/// was swapped for another place's) goes to the list.
 @MainActor
 final class DialogFocus {
     weak var window: NSWindow?
@@ -214,13 +223,15 @@ final class DialogFocus {
         up = true
         guard let window else { return }
         before = Self.owner(of: window.firstResponder)
-        if before is MailboxTableView { window.makeFirstResponder(nil) }
+        if before != nil { window.makeFirstResponder(nil) }
     }
 
     func closing() {
         going = true
         up = false
         dialogHad = window.flatMap { Self.owner(of: $0.firstResponder) }
+        // Its going may be heard before this, as its fade ends: the keyboard comes back all the same.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.gone() }
     }
 
     /// The dialog has left the window.
