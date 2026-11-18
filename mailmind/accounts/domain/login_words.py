@@ -52,6 +52,16 @@ def said_of(error: str, kind: str | None, host: object, email: object, outgoing:
     if error == "certificate changed":
         return Said("The mail server on this Mac showed a different certificate, so MailMind didn't send your password. If "
                     "you reinstalled or reset Proton Bridge, trust the new one in Settings.")
+    if error == conn_error.NO_PASSWORD:
+        if proton:
+            return Said("MailMind has no Proton Bridge password: this Mac's Keychain doesn't hold one. Keep the password "
+                        "Bridge shows for this address under Proton Bridge password, then test again.",
+                        preset.PROTON_BRIDGE)
+        if outgoing:
+            return Said("Reading mail works, but MailMind has no password for the outgoing server. Type it again, then "
+                        "test again.")
+        return Said("MailMind has no password for this account: this Mac's Keychain doesn't hold one. Type the password "
+                    "again, then test again.")
     if error == "AUTHENTICATIONFAILED":
         if outgoing:
             return Said("Reading mail works, but the outgoing server didn't accept the password. Check the outgoing "

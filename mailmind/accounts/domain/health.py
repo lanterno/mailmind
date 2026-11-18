@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-type ErrorKind = Literal["TIMEOUT", "AUTH", "UIDVALIDITY", "NETWORK", "TLS_PIN", "IMAP", "UNKNOWN"]
+type ErrorKind = Literal["NO_PASSWORD", "TIMEOUT", "AUTH", "UIDVALIDITY", "NETWORK", "TLS_PIN", "IMAP", "UNKNOWN"]
 type Live = Literal["ok", "syncing", "error", ""]        # how its sync stands now; "" when none has run since the start
 
 
@@ -37,8 +37,12 @@ class AccountHealth:
 def error_kind(e: BaseException) -> ErrorKind:
     """Coarse, scrubbed error kind for the health surface — derived from the exception TYPE only,
     never its message (which can carry credentials/host strings). The type's bases count, and its
-    full name, since imaplib calls its own `IMAP4.error` and `IMAP4.abort` (a lost connection)."""
+    full name, since imaplib calls its own `IMAP4.error` and `IMAP4.abort` (a lost connection). MailMind having no
+    password for the account (`credential.NoCredential`) is a kind of its own: nothing was sent, and only a password
+    typed again helps."""
     n = " ".join(c.__qualname__ for c in type(e).__mro__).lower()
+    if "nocredential" in n:
+        return "NO_PASSWORD"
     if "tlspinmismatch" in n:
         return "TLS_PIN"
     if "timeout" in n:

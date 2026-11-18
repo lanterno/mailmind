@@ -110,6 +110,13 @@ class PlaintextSecret(RuntimeError):
                          f"{'it' if len(said) == 1 else 'them'} in the login Keychain instead: {how}.")
 
 
+class NoCredential(RuntimeError):
+    """MailMind has no secret for `who`: the Keychain holds no item where the file names one, the file names none, the
+    variable it names isn't set, or the Proton Bridge password is kept nowhere. Nothing was sent to a server, so no
+    server refused anything: the password has to be typed again. It holds no secret, and says only what is missing for
+    `who` (an account's address, or a setting's name). The Rust core's `NoCredential`."""
+
+
 class CredentialMask(TypedDict, total=False):
     """A credential as the API may show it: its style and whether it's set, and only ever a pointer."""
     style: Required[str | None]

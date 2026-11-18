@@ -16,7 +16,7 @@ import pathlib
 import subprocess
 import time
 
-from mailmind.accounts.domain.credential import BRIDGE_ITEM, CredentialRef, PlaintextSecret
+from mailmind.accounts.domain.credential import BRIDGE_ITEM, CredentialRef, NoCredential, PlaintextSecret
 from mailmind.platform import environment, keychain
 
 BRIDGE_FILE = pathlib.Path.home() / ".config" / "mailmind" / "proton_bridge_pass"
@@ -52,7 +52,7 @@ def _keychain_read(item, version, who):
         return _keychain_cache[kept]
     secret = keychain.find(item)
     if secret is None:
-        raise RuntimeError(f"the Keychain holds no item {item} for {who}")
+        raise NoCredential(f"the Keychain holds no item {item} for {who}")
     _keychain_cache[kept] = secret
     return secret
 
@@ -67,7 +67,8 @@ def _drop(item):
 def resolve(cred, *, who, strip=False):
     """The secret `cred` names, for the account (or setting) `who`, which only error messages
     show. `strip` takes the spaces out of an op read (a Gmail app password as 1Password keeps it).
-    Raises when it can't be had, and PlaintextSecret when the file holds it itself."""
+    Raises NoCredential when none is kept where it says, or it says nowhere; RuntimeError when an op read fails; and
+    PlaintextSecret when the file holds it itself."""
     ref = CredentialRef.parse(cred or {})
     if ref.style == "typed":
         return ref.named
@@ -75,24 +76,24 @@ def resolve(cred, *, who, strip=False):
         raise PlaintextSecret([who])
     if ref.style == "keychain":
         if not (isinstance(ref.named, str) and ref.named.strip()):
-            raise RuntimeError(f"no credential configured for {who}")
+            raise NoCredential(f"no credential configured for {who}")
         return _keychain_read(ref.named, ref.version, who)
     if ref.style == "env":
         v = environment.credential(ref.named)
         if not v:
-            raise RuntimeError(f"env var {ref.named} not set for {who}")
+            raise NoCredential(f"env var {ref.named} not set for {who}")
         return v
     if ref.style == "proton_bridge":
         return bridge_password()
     if ref.style == "op":
-        last = RuntimeError("no op refs")
+        last: Exception = NoCredential("no op refs")
         for one in ref.op_refs:
             try:
                 return _op_read(one, strip)
             except Exception as e:
                 last = e
         raise last
-    raise RuntimeError(f"no credential configured for {who}")
+    raise NoCredential(f"no credential configured for {who}")
 
 
 def evict(cred):
@@ -155,7 +156,7 @@ def bridge_password():
     if not pw and BRIDGE_FILE.exists():
         pw = BRIDGE_FILE.read_text().strip()
     if not pw:
-        raise RuntimeError(
+        raise NoCredential(
             f"Proton Bridge password not configured. Set {environment.PROTON_BRIDGE_PASS.name}, "
             f"or {environment.PROTON_OP_ITEM.name} (a 1Password item id), or keep it in the login Keychain "
             f"as MailMind's {BRIDGE_ITEM}, or write it to {BRIDGE_FILE} (chmod 600).")

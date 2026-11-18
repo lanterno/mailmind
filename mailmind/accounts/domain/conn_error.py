@@ -7,6 +7,7 @@ first; IMAP switched off. A wrong App Password at a Gmail account is said as one
 `mm_imap` reads the same words into the same classes, and `mm_accounts::connections::quiet` says the same sentences.
 """
 from mailmind.accounts.domain import tls_pin
+from mailmind.accounts.domain.credential import NoCredential
 from mailmind.accounts.domain.draft import BadPort
 
 # What Gmail's answer to LOGIN says, in its own words, and the class each refusal comes to.
@@ -24,6 +25,8 @@ SAID = {
     IMAP_OFF: "IMAP is switched off for this account: turn it on in Gmail's settings, or ask your Workspace admin to.",
 }
 GMAIL_REFUSED = "Gmail didn't accept that App Password: paste it again, or create a new one."
+# MailMind has no password for the account (`NoCredential`): nothing was sent, and no server refused anything.
+NO_PASSWORD = "no password"
 
 
 def refusal(said: str) -> str | None:
@@ -39,6 +42,8 @@ def quiet(e: BaseException, kind: str | None = None) -> str:
         return "certificate changed"
     if isinstance(e, BadPort):
         return str(e)
+    if isinstance(e, NoCredential):
+        return NO_PASSWORD
     s = f"{type(e).__name__}: {e}".lower()
     google = refusal(s)
     if google:
