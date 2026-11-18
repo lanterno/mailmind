@@ -378,3 +378,6 @@ impl MailServer for Session {
         let _ = self.connection.wire.stream.set_write_timeout(limit);
     }
 }
+
+#[cfg(test)]
+mod tests;
