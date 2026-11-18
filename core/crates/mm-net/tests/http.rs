@@ -142,3 +142,24 @@ fn nothing_listening_is_a_refused_connection_at_once() {
     let request = http::request("GET", "/", &endpoint.host_header(), &[], None);
     assert_eq!(endpoint.send(&request, Duration::from_secs(1)), Err(Lost("ConnectionRefused")));
 }
+
+/// A 429 that says to wait `headers`.
+fn rate_limited(headers: &[(&str, &str)]) -> http::Response {
+    let headers = headers.iter().map(|(name, value)| ((*name).to_owned(), (*value).to_owned())).collect();
+    http::Response { status: 429, headers, body: Vec::new() }
+}
+
+#[test]
+fn a_rate_limit_waits_what_it_says_up_to_a_minute_and_else_a_little_longer_each_try() {
+    let wait = |headers: &[(&str, &str)], retried| http::backoff(Some(&rate_limited(headers)), retried);
+    assert_eq!(wait(&[("retry-after", "7")], 0), Duration::from_secs(7));
+    assert_eq!(wait(&[("retry-after-ms", "250"), ("retry-after", "7")], 0), Duration::from_millis(250));
+    assert_eq!(wait(&[("retry-after", "60")], 0), Duration::from_secs(60));
+    // An hour, a date or words are no wait to hold a person to: the call waits as it would with none said.
+    for said in ["3600", "Wed, 18 Nov 2026 12:00:00 GMT", "soon", "-1", "NaN"] {
+        assert_eq!(wait(&[("retry-after", said)], 0), Duration::from_millis(500), "{said}");
+        assert_eq!(wait(&[("retry-after", said)], 1), Duration::from_secs(1), "{said}");
+    }
+    assert_eq!(http::backoff(None, 2), Duration::from_secs(2));
+    assert_eq!(http::backoff(None, 30), Duration::from_secs(8), "never longer than eight seconds");
+}
