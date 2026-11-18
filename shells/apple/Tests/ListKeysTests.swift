@@ -146,4 +146,19 @@ final class ListKeysTests: XCTestCase {
         press("\u{1b}", controller.table, code: 53)
         XCTAssertNil(app.place?.search, "the next Esc leaves the search")
     }
+
+    func testEscWithSeveralChosenKeepsTheOneChosenLast() async throws {
+        let (app, controller) = try await table()
+        let table = controller.table
+        table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        // ⌘-clicks on two rows below it, the fourth last.
+        table.selectRowIndexes(IndexSet(integer: 2), byExtendingSelection: true)
+        table.selectRowIndexes(IndexSet(integer: 3), byExtendingSelection: true)
+        XCTAssertEqual(app.mailbox.chosenRows.count, 3)
+        press("\u{1b}", table, code: 53)
+        XCTAssertEqual(table.selectedRowIndexes, IndexSet(integer: 3))
+        XCTAssertEqual(app.selection.copy?.key, 4, "the row clicked last stays, open")
+        press("j", table)
+        XCTAssertEqual(app.selection.copy?.key, 5, "and j goes on from it, not from the top")
+    }
 }
