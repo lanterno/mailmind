@@ -223,6 +223,9 @@ private struct OpenReply: View {
                                                               opacity: 0.5), inset: false)],
                                  radius: 16)
         }
+        // Opened under a long message, the box would open below the fold with only its first line showing: it comes
+        // into view whole, Send and all, while its text takes the keys (`focusRequest`).
+        .background { BringsIntoView() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Reply to \(words.name)")
         .onChange(of: composer.wantsFiles) { _, wanted in
@@ -406,6 +409,46 @@ private struct OpenReply: View {
             panel.beginSheetModal(for: window, completionHandler: take)
         } else {
             take(panel.runModal())
+        }
+    }
+}
+
+/// Scrolls what it stands behind into its scroll view's sight once, as it first has a size: whole where it fits, and
+/// its foot where it is taller than what shows, so the reply box's Send is always in sight.
+struct BringsIntoView: NSViewRepresentable {
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ view: Probe, context: Context) {}
+
+    final class Probe: NSView {
+        private var brought = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            bringIn()
+        }
+
+        override func setFrameSize(_ size: NSSize) {
+            super.setFrameSize(size)
+            bringIn()
+        }
+
+        private func bringIn() {
+            guard !brought, window != nil, bounds.height > 0 else { return }
+            brought = true
+            // Once the layout this size came in has finished, so the box stands where it will.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.window != nil else { return }
+                self.scrollToVisible(Self.sight(of: self.bounds, showing: self.enclosingScrollView?.documentVisibleRect.height,
+                                                flipped: self.isFlipped))
+            }
+        }
+
+        /// The part of `bounds` to bring into sight: all of it, or its foot as tall as what shows.
+        static func sight(of bounds: NSRect, showing: CGFloat?, flipped: Bool) -> NSRect {
+            guard let showing, showing > 0, bounds.height > showing else { return bounds }
+            return NSRect(x: bounds.minX, y: flipped ? bounds.maxY - showing : bounds.minY, width: bounds.width,
+                          height: showing)
         }
     }
 }
