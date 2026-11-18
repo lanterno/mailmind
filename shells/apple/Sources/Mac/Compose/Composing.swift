@@ -61,8 +61,9 @@ final class Composing: ComposeHost {
     @ObservationIgnored private var openingAhead: Int?
     /// The last mailto: link that came before the window could write.
     @ObservationIgnored private var waitingMail: Mailto?
-    /// Bumped whenever the tray should read again.
-    private(set) var outboxTurn = 0
+    /// The top bar's outbox, made with the routes and read at once, then again whenever the outbox or the changes
+    /// waiting change: its button shows from launch whenever something waits.
+    private(set) var outbox: OutboxTray?
     /// The sends waiting for the time a person chose (Send later), whose drafts Drafts and the reader say so of
     /// (`Scheduled`).
     private(set) var scheduled: [API.OutboxItem] = []
@@ -101,6 +102,7 @@ final class Composing: ComposeHost {
             await readPreferences()
             await readScheduled()
         }
+        readOutbox(core)
         // AI turned on or off in Settings: the composers' AI rows follow at once.
         hearingAI = Task { [weak self] in
             for await _ in NotificationCenter.default.notifications(named: .mailmindAIChanged) {
@@ -112,10 +114,7 @@ final class Composing: ComposeHost {
             for await event in events {
                 guard let self else { return }
                 switch event.name {
-                case "outbox":
-                    self.outboxTurn += 1
-                    await self.readScheduled()
-                case "commands-changed": self.outboxTurn += 1
+                case "outbox", "commands-changed": self.outboxChanged()
                 case "sync-done", "resync": await self.readDigest()
                 case "draft-ready":
                     if let key = event.decoded([String: JSONValue].self)?["key"], case .number(let n) = key {
@@ -135,6 +134,14 @@ final class Composing: ComposeHost {
         asksOverLimit = asking
         self.digest = digest
         self.preferences = preferences
+        readOutbox(routes)
+    }
+
+    /// The outbox's tray over `routes`, read now.
+    private func readOutbox(_ routes: any Routes) {
+        let tray = OutboxTray(routes: routes) { [weak self] in self?.say($0) }
+        outbox = tray
+        Task { await tray.load() }
     }
 
     func readDigest() async {
@@ -255,7 +262,7 @@ final class Composing: ComposeHost {
     func draftsChanged() { mailChanged?() }
     func foldersChanged() { mailChanged?() }
     func outboxChanged() {
-        outboxTurn += 1
+        if let outbox { Task { await outbox.load() } }
         Task { await readScheduled() }
     }
 

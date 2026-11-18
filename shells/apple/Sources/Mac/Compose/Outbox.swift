@@ -14,6 +14,8 @@ final class OutboxTray {
     private(set) var stuck = 0
     @ObservationIgnored private let routes: any Routes
     @ObservationIgnored private let say: (String) -> Void
+    /// How many reads were begun: only the newest one's answers are shown, whichever comes back last.
+    @ObservationIgnored private var reads = 0
 
     init(routes: any Routes, say: @escaping (String) -> Void) {
         self.routes = routes
@@ -25,11 +27,16 @@ final class OutboxTray {
     var failed: Int { items.filter { $0.state == "error" }.count + stuck }
 
     func load() async {
-        if let outbox = try? await routes.get(API.Get.Outbox.self, ["limit": "50"]) {
+        reads += 1
+        let read = reads
+        let outbox = try? await routes.get(API.Get.Outbox.self, ["limit": "50"])
+        let pending = try? await routes.get(API.Get.Pending.self, [:])
+        guard read == reads else { return }
+        if let outbox {
             items = outbox.items
             drafts = outbox.drafts
         }
-        if let pending = try? await routes.get(API.Get.Pending.self, [:]) {
+        if let pending {
             held = pending.items
             waiting = pending.waiting
             stuck = pending.stuck
@@ -154,37 +161,29 @@ extension API.PendingChange: Identifiable {}
 extension API.WaitingDraft: Identifiable {}
 extension API.OutboxItem: Identifiable {}
 
-/// The top bar's outbox: shown while something is going or failed, with how many.
+/// The top bar's outbox: shown while something is going or failed, with how many. Its tray is the composing model's,
+/// read from launch: a task hung on the button would never run while nothing shows it.
 struct OutboxButton: View {
-    @State private var tray: OutboxTray?
+    var composing = Composing.shared
     @State private var shown = false
-    private var composing: Composing { .shared }
 
     var body: some View {
-        Group {
-            if let tray, tray.active + tray.failed > 0 || shown {
-                // In the top bar, a button beside the light's: the outbox's icon, or the alert's while one
-                // failed, and how many wait.
-                Button {
-                    shown.toggle()
-                } label: {
-                    MeadowIconView(tray.failed > 0 ? .alert : .outbox)
-                    Text(verbatim: "\(tray.active + tray.failed)").monospacedDigit()
-                }
-                .meadowButton()
-                .help("Outbox and changes waiting: \(tray.active + tray.failed)")
-                .accessibilityLabel("Outbox: \(tray.active + tray.failed) waiting")
-                .meadowPopover(isPresented: $shown) {
-                    OutboxList(tray: tray, readOnly: composing.digest?.profile == "read-only")
-                        .task { await tray.load() }
-                }
+        if let tray = composing.outbox, tray.active + tray.failed > 0 || shown {
+            // In the top bar, a button beside the light's: the outbox's icon, or the alert's while one failed, and
+            // how many wait.
+            Button {
+                shown.toggle()
+            } label: {
+                MeadowIconView(tray.failed > 0 ? .alert : .outbox)
+                Text(verbatim: "\(tray.active + tray.failed)").monospacedDigit()
             }
-        }
-        .task(id: composing.outboxTurn) {
-            if tray == nil, let routes = composing.routes {
-                tray = OutboxTray(routes: routes) { composing.say($0) }
+            .meadowButton()
+            .help("Outbox and changes waiting: \(tray.active + tray.failed)")
+            .accessibilityLabel("Outbox: \(tray.active + tray.failed) waiting")
+            .meadowPopover(isPresented: $shown) {
+                OutboxList(tray: tray, readOnly: composing.digest?.profile == "read-only")
+                    .task { await tray.load() }
             }
-            await tray?.load()
         }
     }
 }
