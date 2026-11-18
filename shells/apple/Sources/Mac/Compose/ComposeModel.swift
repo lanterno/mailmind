@@ -161,6 +161,64 @@ enum Addresses {
     }
 }
 
+/// A recipient field's completion list, as the page's field keys it (`onKey` in compose/Composer.tsx): the server's
+/// suggestions for what is typed, less the addresses the field holds, and the one highlighted. ↑ and ↓ move the
+/// highlight round the list, Return or Tab takes it, and Esc takes the list away, not the composer. The first
+/// suggestion stands highlighted while what is typed isn't an address yet, so Return takes the person the list offers
+/// rather than a word that is no address; a whole address typed stands with none highlighted, so Return keeps it.
+struct RecipientCompletion: Equatable {
+    private(set) var items: [API.Suggestion] = []
+    /// The suggestion highlighted, or -1 for none.
+    private(set) var at = -1
+
+    /// What Return or Tab takes.
+    enum Taken: Equatable {
+        /// The suggestion highlighted: its address.
+        case suggestion(String)
+        /// What is typed, as it is.
+        case typed
+        /// Nothing: there is nothing typed, so the key is the field's own.
+        case nothing
+    }
+
+    var shown: Bool { !items.isEmpty }
+
+    /// The suggestion highlighted, if one is.
+    var chosen: API.Suggestion? { items.indices.contains(at) ? items[at] : nil }
+
+    /// What the server suggested for `typed`, without the addresses the field holds already.
+    mutating func show(_ suggested: [API.Suggestion], for typed: String, holding: [Recipient]) {
+        let have = Set(holding.map(\.address))
+        items = suggested.filter { !have.contains($0.addr.lowercased()) }
+        at = items.isEmpty || Addresses.looksLikeAddress(typed) ? -1 : 0
+    }
+
+    /// ↑ (-1) or ↓ (1): the highlight moves round the list. Nothing moves, and the key is the field's, without a list.
+    mutating func move(_ by: Int) -> Bool {
+        guard !items.isEmpty else { return false }
+        at = (at + by + items.count + (at < 0 && by < 0 ? 1 : 0)) % items.count
+        return true
+    }
+
+    /// What Return or Tab takes with `typed` in the field: the suggestion highlighted, else what is typed.
+    func taken(typed: String) -> Taken {
+        if let chosen { return .suggestion(chosen.addr) }
+        return typed.trimmingCharacters(in: .whitespaces).isEmpty ? .nothing : .typed
+    }
+
+    /// Esc: the list goes, and the key is taken only while there was one, so Esc never closes more than the list.
+    mutating func escape() -> Bool {
+        guard shown else { return false }
+        close()
+        return true
+    }
+
+    mutating func close() {
+        items = []
+        at = -1
+    }
+}
+
 /// The seeds a reply and a forward open with.
 enum Seeds {
     private static func quote(_ d: API.MessageOpened) -> Quote {

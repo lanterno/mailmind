@@ -223,9 +223,11 @@ struct RecipientInput: NSViewRepresentable {
     let label: String
     let placeholder: String
     @Binding var text: String
-    /// The completion's keys: up or down (-1, 1), and accepting the one chosen. Each says if it was taken.
+    /// The completion's keys: up or down (-1, 1), which says if it was taken; and Return or Tab, which takes the
+    /// suggestion highlighted, else what is typed, and says which (`RecipientCompletion`).
     let move: (Int) -> Bool
-    let accept: () -> Bool
+    let take: () -> RecipientCompletion.Taken
+    /// A comma or semicolon typed: what is typed becomes a chip.
     let commit: () -> Void
     let backspaceWhenEmpty: () -> Void
     let escape: () -> Bool
@@ -314,15 +316,10 @@ struct RecipientInput: NSViewRepresentable {
             case #selector(NSResponder.moveDown(_:)): return input.move(1)
             case #selector(NSResponder.moveUp(_:)): return input.move(-1)
             case #selector(NSResponder.insertNewline(_:)):
-                if input.accept() { return true }
-                if !input.text.trimmingCharacters(in: .whitespaces).isEmpty {
-                    input.commit()
-                    return true
-                }
-                return false
+                return input.take() != .nothing
             case #selector(NSResponder.insertTab(_:)):
-                if input.accept() { return true }
-                if !input.text.trimmingCharacters(in: .whitespaces).isEmpty { input.commit() }
+                // A suggestion taken keeps the keys here, for the next; what was typed, made a chip, moves on.
+                if case .suggestion = input.take() { return true }
                 return false
             case #selector(NSResponder.cancelOperation(_:)):
                 return input.escape()

@@ -236,9 +236,13 @@ struct ComposerForm: View {
                     }
                 }
             }
+            // Each recipient row stands over the rows after it, which its completion list hangs over.
+            .zIndex(3)
             if composer.showCc {
                 ComposeFieldRow("Cc") { ChipField(composer: composer, field: .cc, label: "Cc", routes: host.routes) }
+                    .zIndex(2)
                 ComposeFieldRow("Bcc") { ChipField(composer: composer, field: .bcc, label: "Bcc", routes: host.routes) }
+                    .zIndex(1)
             }
             ComposeFieldRow("Subject") {
                 TextField(text: Binding(get: { composer.subject }, set: { composer.setSubject($0) }),
@@ -664,10 +668,11 @@ struct ChipField: View {
     let field: ComposeField
     let label: String
     let routes: (any Routes)?
-    @State private var items: [API.Suggestion] = []
-    @State private var at = -1
+    @State private var completion = RecipientCompletion()
     @State private var lookup: Task<Void, Never>?
     @State private var editing = false
+    /// How tall the field stands with its chips, which the list hangs below.
+    @State private var height: CGFloat = 34
     @Environment(\.meadow) private var meadow
 
     /// A chip's words: the name a recipient was written with, else the address.
@@ -691,8 +696,8 @@ struct ChipField: View {
                     composer.setTyped(field, value)
                     lookUp(value)
                 }),
-                move: move,
-                accept: accept,
+                move: { completion.move($0) },
+                take: take,
                 commit: {
                     composer.commitChip(field, composer.typed[field] ?? "")
                     close()
@@ -701,9 +706,8 @@ struct ChipField: View {
                     if !chips.isEmpty { composer.removeChip(field, at: chips.count - 1) }
                 },
                 escape: {
-                    guard !items.isEmpty else { return false }
-                    close()
-                    return true
+                    lookup?.cancel()
+                    return completion.escape()
                 },
                 focused: composer.focusRequest == .field(field),
                 focusTaken: {
@@ -720,8 +724,11 @@ struct ChipField: View {
             .frame(minHeight: 34)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .bottomLeading) {
-            if !items.isEmpty { suggestions }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        // The list hangs below the field, never over it or the rows above: the field's row stands over the rows
+        // after it (`fields`).
+        .overlay(alignment: .topLeading) {
+            if completion.shown { suggestions.offset(y: height + 4) }
         }
     }
 
@@ -766,7 +773,7 @@ struct ChipField: View {
     /// The server's suggestions, as Meadow's popover lists its choices (`.pop`, `.pal-i`).
     private var suggestions: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.element.addr) { index, item in
+            ForEach(Array(completion.items.enumerated()), id: \.element.addr) { index, item in
                 Button {
                     take(item)
                 } label: {
@@ -785,25 +792,24 @@ struct ChipField: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .frame(minHeight: 38)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(index == at ? meadow.primaryWash : .clear))
+                    .background(RoundedRectangle(cornerRadius: 10)
+                        .fill(index == completion.at ? meadow.primaryWash : .clear))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityAddTraits(index == at ? .isSelected : [])
+                .accessibilityAddTraits(index == completion.at ? .isSelected : [])
             }
         }
         .padding(6)
         .frame(minWidth: 280, alignment: .leading)
         .fixedSize()
         .meadowPanel(radius: 14, raised: true)
-        .alignmentGuide(.bottom) { $0[.top] - 4 }
         .accessibilityLabel("Addresses for \(label)")
     }
 
     private func close() {
         lookup?.cancel()
-        items = []
-        at = -1
+        completion.close()
     }
 
     /// The server's suggestions for what's typed, a moment after the typing stops, without those already chosen.
@@ -816,22 +822,25 @@ struct ChipField: View {
             guard !Task.isCancelled,
                   let read = try? await routes.get(API.Get.Contacts.self, ["q": typed]),
                   !Task.isCancelled else { return }
-            let have = Set(composer.recipients(field).map(\.address))
-            items = read.items.filter { !have.contains($0.addr.lowercased()) }
-            at = -1
+            completion.show(read.items, for: composer.typed[field] ?? typed, holding: composer.recipients(field))
         }
     }
 
-    private func move(_ by: Int) -> Bool {
-        guard !items.isEmpty else { return false }
-        at = (at + by + items.count + (at < 0 && by < 0 ? 1 : 0)) % items.count
-        return true
-    }
-
-    private func accept() -> Bool {
-        guard items.indices.contains(at) else { return false }
-        take(items[at])
-        return true
+    /// Return or Tab: the suggestion highlighted, else what is typed, made a chip.
+    private func take() -> RecipientCompletion.Taken {
+        let typed = composer.typed[field] ?? ""
+        let taken = completion.taken(typed: typed)
+        switch taken {
+        case .suggestion(let address):
+            close()
+            composer.commitChip(field, address)
+        case .typed:
+            composer.commitChip(field, typed)
+            close()
+        case .nothing:
+            break
+        }
+        return taken
     }
 
     private func take(_ item: API.Suggestion) {
