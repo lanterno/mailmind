@@ -403,6 +403,8 @@ struct KeysLegend: View {
             Task { @MainActor in if !focused { reading = true } }
         }
         .onExitCommand(perform: close)
+        // A group VoiceOver reads part by part, each key with its words, under the legend's name.
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Keyboard")
     }
 }
