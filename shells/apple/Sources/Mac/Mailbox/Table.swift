@@ -832,6 +832,33 @@ enum ReaderPage {
         return turn(scroll, down: down)
     }
 
+    /// A key that scrolls a reader with nothing else to type in, as a message's own window has it: Space and ⇧Space,
+    /// the arrows a line, Page Up and Down, Home and End. Whether it was one; with ⌘, ⌃ or ⌥ held, none is.
+    static func scrolls(_ event: NSEvent, in window: NSWindow?) -> Bool {
+        guard event.modifierFlags.isDisjoint(with: [.command, .control, .option]),
+              let key = event.charactersIgnoringModifiers?.unicodeScalars.first.map({ Int($0.value) }) else {
+            return false
+        }
+        let up = event.modifierFlags.contains(.shift)
+        let move: (NSScrollView) -> Void
+        switch key {
+        case 0x20: move = { turn($0, down: !up) }
+        case NSDownArrowFunctionKey: move = { by($0, line) }
+        case NSUpArrowFunctionKey: move = { by($0, -line) }
+        case NSPageDownFunctionKey: move = { turn($0, down: true) }
+        case NSPageUpFunctionKey: move = { turn($0, down: false) }
+        case NSHomeFunctionKey: move = { by($0, -far) }
+        case NSEndFunctionKey: move = { by($0, far) }
+        default: return false
+        }
+        if let scroll = document(in: window?.contentView) { move(scroll) }
+        return true
+    }
+
+    /// What an arrow key scrolls by, and further than any message is long, for Home and End.
+    static let line: CGFloat = 40
+    static let far: CGFloat = 10_000_000
+
     /// A page down or up `scroll`, less a little of the last page kept in sight.
     @discardableResult
     static func turn(_ scroll: NSScrollView, down: Bool) -> Bool {

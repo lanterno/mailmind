@@ -176,6 +176,7 @@ private struct MessageWindowContent: View {
         }
         .background { ZStack { meadow.paper; MeadowGrain() }.ignoresSafeArea() }
         .background { if let verbs { TypingWatch { verbs.typing = $0 } } }
+        .background { MessageWindowKeys() }
         .overlay { if let verbs { MessageWindowDialog(verbs: verbs) } }
         .ignoresSafeArea()
         .meadowWindowChrome(barHeight: MessageWindow.barHeight)
@@ -227,6 +228,40 @@ private struct MessageWindowDialog: View {
     private func close() {
         verbs.moving = nil
         verbs.attention.choosingTime = nil
+    }
+}
+
+/// The keyboard in a message's window while nothing else there has it: as it opens, and once a field or a dialog
+/// lets it go. Space, the arrows, Page Up and Down, Home and End scroll the message, as a Mac's reader does; any other
+/// key goes on to the window and its menus.
+struct MessageWindowKeys: NSViewRepresentable {
+    func makeNSView(context: Context) -> Keys { Keys() }
+
+    func updateNSView(_ view: Keys, context: Context) {}
+
+    final class Keys: NSView {
+        private var watching: NSKeyValueObservation?
+
+        override var acceptsFirstResponder: Bool { true }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            watching = nil
+            guard let window else { return }
+            window.initialFirstResponder = self
+            watching = window.observe(\.firstResponder, options: [.initial, .new]) { [weak self] _, _ in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.takeIfNowhere() } }
+            }
+        }
+
+        func takeIfNowhere() {
+            guard let window, DialogFocus.nowhere(window.firstResponder, in: window) else { return }
+            window.makeFirstResponder(self)
+        }
+
+        override func keyDown(with event: NSEvent) {
+            if !ReaderPage.scrolls(event, in: window) { super.keyDown(with: event) }
+        }
     }
 }
 #endif
