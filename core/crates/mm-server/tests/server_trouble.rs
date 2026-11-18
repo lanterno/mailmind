@@ -9,7 +9,7 @@ mod stand_in;
 
 use mm_kernel::seams::Keychain;
 use mm_mailbox::lists::Paging;
-use serde_json::Value;
+use serde_json::{Value, json};
 use stand_in::{ADA, BEA, Imap, World, note, world};
 
 /// Ada's Inbox of four notes, her Archive, Trash and Plans empty, synced, and her folders read once.
@@ -208,14 +208,16 @@ fn an_account_whose_password_the_keychain_lost_sends_no_login_and_holds_up_no_ot
     assert_eq!((listed["total"].clone(), listed["sync_failed"].clone()), (Value::from(0), Value::Bool(true)));
 }
 
-/// A known bug: an account whose password the Keychain doesn't hold fails its sync as `UNKNOWN`, so the Mac app says
-/// "Something went wrong while syncing. Choose Retry", which never helps, and offers no way to type the password
-/// again. Its kind should say a password is missing (`mm_mailbox::syncing::error_kind`, and the Python app's
-/// `accounts.domain.health.error_kind` with its `ErrorKind`), so the account's card can say so and offer Change
-/// Password. Fixing it fails this test until the marker goes.
+/// An account whose password the Keychain doesn't hold fails its sync as a kind of its own, so the Mac app's card says
+/// the password is missing and offers Change Password, rather than a Retry that never helps; and a Test says so too,
+/// not that a server refused a password none was sent.
 #[test]
-#[should_panic(expected = "the trouble's kind says what is wrong")]
 fn an_account_whose_password_the_keychain_lost_is_told_so() {
-    let (_w, health, _) = without_beas_password();
-    assert_ne!(health_of(&health, BEA)["last_error_kind"], "UNKNOWN", "the trouble's kind says what is wrong");
+    let (w, health, _) = without_beas_password();
+    assert_eq!(health_of(&health, BEA)["last_error_kind"], "NO_PASSWORD", "the trouble's kind says what is wrong");
+    let mark = w.imap.mark();
+    let tested = w.app.connections.test(json!({"email": BEA}).as_object().unwrap()).unwrap();
+    assert_eq!((&tested["connect"], &tested["error"]), (&json!(false), &json!("no password")), "{tested}");
+    assert!(tested["says"].as_str().unwrap().contains("Keychain doesn't hold one"), "{tested}");
+    assert!(!w.imap.since(mark, BEA).iter().any(|c| c == "LOGIN"), "no login without a password");
 }

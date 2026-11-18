@@ -64,4 +64,6 @@ fn a_syncs_failure_is_called_by_its_class_alone() {
     assert_eq!(error_kind(SyncError::Server(ServerError::Refused("BadMailbox"))), "IMAP");
     assert_eq!(error_kind(SyncError::Store(Fault::new("StorageError"))), "UNKNOWN");
     assert_eq!(error_kind(SyncError::UnknownAccount), "UNKNOWN");
+    // No password to send: nothing was sent, and only a password typed again helps.
+    assert_eq!(error_kind(SyncError::Server(ServerError::Failed(Fault::new("NoCredential")))), "NO_PASSWORD");
 }

@@ -1,7 +1,7 @@
 //! `mm_accounts::login_words`: what a person is told of a login that didn't work, by its class and the provider it
 //! was tried at, and the page that helps. Every sentence says what to do next; none holds what a server said.
 
-use mm_accounts::connections::{GMAIL_APP_PASSWORD, GMAIL_IMAP_OFF, GMAIL_REFUSED, quiet};
+use mm_accounts::connections::{GMAIL_APP_PASSWORD, GMAIL_IMAP_OFF, GMAIL_REFUSED, NO_PASSWORD, quiet};
 use mm_accounts::draft::{BAD_PORT, BAD_SMTP_PORT};
 use mm_accounts::login_words::{Said, Whose, said_of};
 use mm_accounts::ports::LoginTrouble;
@@ -66,6 +66,21 @@ fn a_bridge_that_refuses_a_connection_isnt_running() {
     assert_eq!(said.link, Some(PROTON_BRIDGE));
     let said = said_of("AUTHENTICATIONFAILED", proton, false);
     assert!(said.says.contains("the password Bridge shows"), "{}", said.says);
+}
+
+#[test]
+fn no_password_kept_says_the_keychain_holds_none_and_to_type_it_again() {
+    let error = quiet(LoginTrouble("NoCredential"));
+    assert_eq!(error, NO_PASSWORD);
+    let said = said_of(error, imap("ada@icloud.com"), false);
+    assert!(said.says.contains("this Mac's Keychain doesn't hold one"), "{}", said.says);
+    assert!(said.says.contains("Type the password again") && !said.says.contains("didn't accept"), "{}", said.says);
+    assert_eq!(said.link, None);
+    let said = said_of(error, at("proton", Some("127.0.0.1"), "pia@proton.me"), false);
+    assert!(said.says.contains("no Proton Bridge password"), "{}", said.says);
+    assert_eq!(said.link, Some(PROTON_BRIDGE));
+    let said = said_of(error, imap("ada@example.test"), true);
+    assert!(said.says.starts_with("Reading mail works, but MailMind has no password"), "{}", said.says);
 }
 
 #[test]
