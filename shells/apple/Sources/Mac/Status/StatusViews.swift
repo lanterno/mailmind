@@ -79,19 +79,23 @@ struct StatusMenu: View {
             .task { await status.readJobs() }
     }
 
-    /// How an account stands on the right of its row: can't connect, syncing, or when its mail last came in.
+    /// How an account stands on the right of its row: can't connect, syncing, trying again after a sync that failed,
+    /// or when its own last sync worked. `tryingAgain` rows are the sun's, never moss.
     static func state(of account: String, digest: API.Digest?, health: [API.AccountStanding],
-                      now: Date) -> (standing: StatusWords.Standing, words: String) {
+                      now: Date) -> (standing: StatusWords.Standing, words: String, tryingAgain: Bool) {
         let standing = StatusWords.standing(of: account, digest: digest, health: health)
         switch standing {
-        case .cantConnect: return (standing, String(localized: "Can’t connect"))
-        case .syncing: return (standing, String(localized: "Syncing…"))
+        case .cantConnect: return (standing, String(localized: "Can’t connect"), false)
+        case .syncing: return (standing, String(localized: "Syncing…"), false)
         case .connected, .unknown:
+            if StatusWords.tryingAgain(account, digest: digest) {
+                return (standing, String(localized: "Trying again"), true)
+            }
             if case .synced(let when, _) = StatusWords.healthLine(health.first { $0.account == account }, now: now),
                !when.isEmpty {
-                return (standing, String(localized: "Synced \(when)"))
+                return (standing, String(localized: "Synced \(when)"), false)
             }
-            return (standing, standing == .connected ? String(localized: "Connected") : "")
+            return (standing, standing == .connected ? String(localized: "Connected") : "", false)
         }
     }
 
@@ -143,8 +147,10 @@ struct StatusMenu: View {
         VStack(spacing: 0) {
             ForEach(status.addresses, id: \.self) { account in
                 let state = Self.state(of: account, digest: status.digest, health: status.health, now: status.now)
-                MeadowHealthRow(dot: dot(state.standing), title: status.name(account), detail: account,
-                                state: state.words, stateColor: state.standing == .cantConnect ? meadow.rust : nil)
+                MeadowHealthRow(dot: state.tryingAgain ? meadow.sun : dot(state.standing), title: status.name(account),
+                                detail: account, state: state.words,
+                                stateColor: state.standing == .cantConnect ? meadow.rust
+                                    : state.tryingAgain ? meadow.sunInk : nil)
             }
         }
     }

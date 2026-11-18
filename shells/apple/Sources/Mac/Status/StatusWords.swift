@@ -51,10 +51,25 @@ enum StatusWords {
         accounts.filter { standing(of: $0, digest: digest, health: health) == .cantConnect }
     }
 
-    /// When mail was last synced: the digest's last sync, else the latest any account's syncs record.
+    /// Whether the account's last sync failed with trouble that may pass, which the digest says nothing louder of until
+    /// the next fails too (or three minutes on): it is trying again, and nothing says it synced.
+    static func tryingAgain(_ account: String, digest: API.Digest?) -> Bool {
+        digest?.status[account]?.tryingAgain == true
+    }
+
+    /// The pill's quiet words while an account's last sync failed and it is trying again.
+    static let tryingAgainWords = String(localized: "Couldn’t reach the server · trying again")
+
+    /// When mail was last synced: the latest sync that worked, as each account's record of its syncs says. The
+    /// digest's last round is set as a sync ends however it went, so it speaks only before the records are read, and
+    /// never while an account's last sync failed.
     static func lastSynced(digest: API.Digest?, health: [API.AccountStanding]) -> Date? {
-        if let last = digest?.sync.last, let at = Moment.parse(last) { return at }
-        return health.compactMap { $0.lastOkTs.flatMap(Moment.parse) }.max()
+        if let worked = health.compactMap({ $0.lastOkTs.flatMap(Moment.parse) }).max() { return worked }
+        guard let digest, let last = digest.sync.last else { return nil }
+        let failed = digest.accounts.contains {
+            tryingAgain($0, digest: digest) || standing(of: $0, digest: digest, health: health) == .cantConnect
+        }
+        return failed ? nil : Moment.parse(last)
     }
 
     /// How far the Inboxes' first syncs have got, over the accounts whose older mail is still being read: how many
@@ -69,7 +84,7 @@ enum StatusWords {
     }
 
     /// The pill's words (`pillLabel`): what can't connect, then how far a first sync has got, then what is running,
-    /// then when mail was last synced.
+    /// then an account trying again after a sync that failed, then when mail was last synced.
     static func pill(digest: API.Digest?, health: [API.AccountStanding], syncing: Bool, reconciling: Bool,
                      now: Date, calendar: Calendar = .current, locale: Locale = .current) -> Pill
     {
@@ -89,6 +104,9 @@ enum StatusWords {
         if reconciling { return Pill(dot: .busy, text: String(localized: "Checking against the server…")) }
         let anySyncing = digest.accounts.contains { standing(of: $0, digest: digest, health: health) == .syncing }
         if syncing || digest.sync.running || anySyncing { return Pill(dot: .busy, text: String(localized: "Syncing…")) }
+        if digest.accounts.contains(where: { tryingAgain($0, digest: digest) }) {
+            return Pill(dot: .busy, text: tryingAgainWords)
+        }
         if digest.profile == "read-only" { return Pill(dot: .none, text: String(localized: "Read only")) }
         if let last = lastSynced(digest: digest, health: health) {
             var style = calendar.isDate(last, inSameDayAs: now)
