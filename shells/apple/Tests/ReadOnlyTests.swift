@@ -166,29 +166,66 @@ final class ReadOnlyTests: XCTestCase {
 
     // MARK: Sending
 
-    func testASendReadOnlyTurnsDownComesBackToKeepWithTheWords() async throws {
-        let composing = Composing()
+    private func readOnlySend(_ composing: Composing, digest: API.Digest) -> (FakeRoutes, () -> [UUID]) {
         let routes = FakeRoutes()
         routes.answer(API.Post.Send.path) { _ in throw ReadOnlyTests.problem }
-        composing.use(routes, digest: Fixture.digest(readOnly: true))
+        composing.use(routes, digest: digest)
         var windows: [UUID] = []
         composing.openWindow = { windows.append($0) }
+        return (routes, { windows })
+    }
+
+    private var reply: ComposeSeed {
         var seed = ComposeSeed()
         seed.mode = .reply
         seed.to = ["bo@example.test"]
         seed.subject = "Re: Plans"
         seed.origKey = 7
         seed.body = "Yes, Thursday."
-        let composer = try XCTUnwrap(composing.open(seed))
+        return seed
+    }
+
+    /// Send, read only: the composer stays open as it is, saying why in itself, and nothing is asked to go.
+    func testASendReadOnlyKeepsTheComposerOpenWithTheWordsInIt() async throws {
+        let composing = Composing()
+        let (routes, windows) = readOnlySend(composing, digest: Fixture.digest(readOnly: true))
+        let composer = try XCTUnwrap(composing.open(reply))
+        composer.send()
+        composer.send()
+        XCTAssertFalse(composer.closed, "it stays open")
+        XCTAssertEqual(windows().count, 1, "and no window opens again")
+        XCTAssertEqual(composer.subject, "Re: Plans")
+        XCTAssertEqual(composer.body, "Yes, Thursday.")
+        XCTAssertEqual(composer.to.map(\.address), ["bo@example.test"])
+        XCTAssertEqual(composer.notice, Self.refused, "said in the composer")
+        XCTAssertNil(composing.notice, "not in the main window")
+        XCTAssertNil(composing.float, "no countdown and no Sent")
+        XCTAssertTrue(routes.calls(to: API.Post.Send.path).isEmpty, "nothing was asked to go")
+        composer.close(force: true)
+    }
+
+    /// The server's no to a send, from a run the composer didn't know was read only yet: the message comes back as it
+    /// was, saying why in its composer, and the next Send is turned down where it is.
+    func testASendTheServerTurnsDownReadOnlyComesBackSayingSoInItsComposer() async throws {
+        let composing = Composing()
+        let (routes, windows) = readOnlySend(composing, digest: Fixture.digest())
+        let now = try XCTUnwrap(String(data: JSONEncoder().encode(Fixture.digest(readOnly: true)), encoding: .utf8))
+        routes.answer(API.Get.Digest.path, now)
+        let composer = try XCTUnwrap(composing.open(reply))
         composer.send()
         XCTAssertTrue(composer.closed)
-        await eventually("the message to come back") { windows.count == 2 }
-        let back = try XCTUnwrap(composing.composers[windows[1]])
+        await eventually("the message to come back") { windows().count == 2 }
+        let back = try XCTUnwrap(composing.composers[windows()[1]])
         XCTAssertEqual(back.subject, "Re: Plans")
         XCTAssertEqual(back.body, "Yes, Thursday.")
         XCTAssertEqual(back.to.map(\.address), ["bo@example.test"])
-        XCTAssertEqual(composing.notice?.text, Self.refused)
+        XCTAssertEqual(back.notice, Self.refused, "said in its composer")
+        XCTAssertNil(composing.notice, "not in the main window")
         XCTAssertNil(composing.float, "no countdown and no Sent: nothing was queued")
+        await eventually("the run read again") { composing.readOnly }
+        back.send()
+        XCTAssertFalse(back.closed, "the next Send is turned down where it is")
+        XCTAssertEqual(routes.calls(to: API.Post.Send.path).count, 1)
         back.close(force: true)
     }
 
