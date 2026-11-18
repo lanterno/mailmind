@@ -538,6 +538,37 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertEqual(MailboxToast.icon("Notifications on"), .check)
     }
 
+    /// A refusal or a failure never shows the tick that says something was done: read only's sentence, a server's
+    /// no, nothing chosen.
+    func testARefusalNeverShowsTheTick() {
+        XCTAssertEqual(MailboxToast.icon("Choose a message first", refused: true), .alert)
+        XCTAssertEqual(MailboxToast.icon(ReadOnlyWords.refused), .alert, "read only's sentence, however it came")
+        XCTAssertEqual(MailboxToast.icon("Too late to cancel"), .alert)
+        XCTAssertEqual(MailboxToast.icon("Nothing to undo"), .alert)
+        XCTAssertEqual(MailboxToast.icon("Notifications on", refused: false), .check)
+        let held = "This draft is in the outbox, waiting to be sent. Cancel it there first to change it."
+        XCTAssertEqual(ToastWords(text: held, refused: true).icon, .alert)
+        XCTAssertEqual(ToastWords(text: "Couldn’t load the message").icon, .alert)
+        XCTAssertEqual(ToastWords(text: "Saved to Drafts").icon, .check)
+
+        let mailbox = Mailbox()
+        mailbox.saysNothingChosen()
+        XCTAssertEqual(mailbox.toast?.refused, true)
+        mailbox.say("Archived")
+        XCTAssertEqual(mailbox.toast?.refused, false)
+    }
+
+    /// A draft that can't be opened to change, as one waiting in the outbox, is turned down with the alert.
+    func testADraftTurnedDownSaysSoWithTheAlert() async {
+        let routes = FakeRoutes()
+        routes.answer(API.Post.DraftResume.path) { _ in throw FakeRoutes.problem(409, "This draft is in the outbox") }
+        let composing = Composing()
+        composing.use(routes, digest: Fixture.digest())
+        await composing.editDraft(MailCopy(key: 1, folder: "Drafts", uid: 1, account: Fixture.ada))
+        XCTAssertEqual(composing.notice?.refused, true)
+        XCTAssertEqual(composing.notice?.icon, .alert)
+    }
+
     func testASendsFloatSaysItsWordsUnderItsIcon() {
         XCTAssertEqual(SendFloatView.said("↑ Sending…", clock: false).words, "Sending…")
         XCTAssertEqual(SendFloatView.said("↑ Sending…", clock: false).icon, .send)

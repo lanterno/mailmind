@@ -187,7 +187,7 @@ final class ReadOnlyTests: XCTestCase {
         XCTAssertEqual(back.subject, "Re: Plans")
         XCTAssertEqual(back.body, "Yes, Thursday.")
         XCTAssertEqual(back.to.map(\.address), ["bo@example.test"])
-        XCTAssertEqual(composing.notice, Self.refused)
+        XCTAssertEqual(composing.notice?.text, Self.refused)
         XCTAssertNil(composing.float, "no countdown and no Sent: nothing was queued")
         back.close(force: true)
     }
