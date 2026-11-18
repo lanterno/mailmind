@@ -154,7 +154,7 @@ final class SinceLooked {
     }
 }
 
-/// The pill over the list: a press opens the Inbox the mail came to.
+/// The pill above the list, in its own room so it covers no row: a press opens the Inbox the mail came to.
 struct DeskNewMailPill: View {
     @Environment(Desk.self) private var desk: Desk?
 
@@ -177,6 +177,7 @@ struct DeskNewMailPill: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
+            .padding(.bottom, 4)
             .padding(.horizontal, 12)
             .transition(.move(edge: .top).combined(with: .opacity))
             .accessibilityHint("Opens the Inbox")

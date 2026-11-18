@@ -18,10 +18,11 @@ struct MailboxColumn: View {
             if !(app.listed?.isDesk ?? false), !(app.place?.spansTheWindow == true && app.selection.copy == nil) {
                 MeadowListHead(app: app, mailbox: mailbox)
             }
+            // Mail that landed elsewhere, and what came in since you last looked (Mac/Assistant): above the place's
+            // mail, as the page's pill stands above its list, so it never covers a row; not over an answer or a gate.
+            if !(app.listed?.isDesk ?? false) { DeskNewMailPill() }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Mail that landed elsewhere, and what came in since you last looked (Mac/Assistant).
-                .overlay(alignment: .top) { DeskNewMailPill() }
         }
         .focusedSceneValue(\.mailbox, mailbox)
         .onAppear { mailbox.undoManager = undoManager }

@@ -170,13 +170,14 @@ final class Desk {
         AppStatus.shared.curate = { [weak self] in self?.sheet = .curate }
     }
 
-    private func heard(_ event: CoreEvent) async {
-        // New mail is told of first: nothing read again below holds it up.
+    func heard(_ event: CoreEvent) async {
+        // New mail is told of first: nothing read again below holds it up. Mail that lands in the list on screen shows
+        // there, the Inbox's beside the brief too, so the pill says only what landed elsewhere.
         if event.name == "new-mail", let said = event.decoded(SinceLooked.Arrived.self) {
-            since.newMail(said, on: app?.place, ai: app?.mailbox.aiOn ?? false)
+            since.newMail(said, on: app?.listed, ai: app?.mailbox.aiOn ?? false)
         }
         if event.name == "snooze-wake", let said = event.decoded(SinceLooked.Woke.self) {
-            since.snoozeWake(said, on: app?.place)
+            since.snoozeWake(said, on: app?.listed)
         }
         if MailApp.mailChanged.contains(event.name) {
             brief.reread()
@@ -415,11 +416,12 @@ struct DeskSurfaces: ViewModifier {
                 if app.stage == .open { desk.attach(app) }
             }
             // An Inbox opened, or the app come back to with one on screen, is a look; away, a line not yet written is.
-            .onChange(of: app.place, initial: true) { _, place in
-                desk.since.lookedAt(place, accounts: desk.accounts)
+            // The brief beside the Inbox shows the Inbox's list, so going to it is a look at that Inbox.
+            .onChange(of: app.place, initial: true) { _, _ in
+                desk.since.lookedAt(app.listed, accounts: desk.accounts)
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                desk.since.lookedAt(app.place, accounts: desk.accounts)
+                desk.since.lookedAt(app.listed, accounts: desk.accounts)
                 desk.since.cameBack()
             }
             // AI's settings changed: the brief reads how AI stands, and AI just turned on writes what AI-off left out.
