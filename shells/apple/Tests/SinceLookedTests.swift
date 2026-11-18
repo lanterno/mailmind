@@ -89,4 +89,23 @@ final class SinceLookedTests: XCTestCase {
         XCTAssertEqual(since.pending?.headline, "")
         XCTAssertEqual(since.words, "▾ 1 new — open the Inbox")
     }
+
+    /// The desk tells the pill of mail by the list on screen: with the brief beside the Inbox, mail to that Inbox shows
+    /// in the list there and isn't said, and going to the brief is a look at it; away from it, the mail is said.
+    func testTheDeskSaysOnlyMailThatLandedAwayFromTheListOnScreen() async {
+        let server = Fixture.server()
+        let app = MailApp()
+        app.mailbox.wire = server.wire
+        await app.mailbox.refresh()
+        let desk = Desk()
+        desk.use(app, routes: server.wire)
+        let mail = CoreEvent(id: "1", name: "new-mail", data: #"{"account": "ada@example.test", "folder": "INBOX"}"#)
+        app.place = .desk(.brief)
+        XCTAssertEqual(app.listed, .allInboxes)
+        await desk.heard(mail)
+        XCTAssertNil(desk.since.words, "the Inbox beside the brief shows it")
+        app.place = .folder(account: ada, folder: "Sent")
+        await desk.heard(mail)
+        XCTAssertEqual(desk.since.words, "▾ 1 new — open the Inbox", "Sent's list doesn't")
+    }
 }
