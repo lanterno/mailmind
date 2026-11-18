@@ -72,14 +72,18 @@ extension Mailbox {
     // MARK: Up and down the list
 
     /// The row `by` rows from the open one, or the first. Up from the Inbox's first row is today's brief, over it, as
-    /// the up arrow goes there.
+    /// the up arrow goes there; at either end of the list, the list says so, as n and p do.
     func move(by: Int) {
         guard let list = app?.list, list.total > 0 else { return }
         let at = app?.selection.copy.flatMap { list.position(of: $0) }
         if by < 0, at == 0, showsBrief { return openBrief(deliberately: false) }
         // On the brief already, there is nothing above it.
         if by < 0, at == nil, app?.place == .desk(.brief) { return }
-        let target = at.map { max(0, min(list.total - 1, $0 + by)) } ?? 0
+        if let at, at + by < 0 || at + by >= list.total {
+            return say(by > 0 ? String(localized: "No more messages below") : String(localized: "No more messages above"),
+                       refused: true)
+        }
+        let target = at.map { $0 + by } ?? 0
         if let row = list.copy(at: target) { chose([row]) }
     }
 
