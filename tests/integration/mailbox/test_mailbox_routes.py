@@ -316,13 +316,17 @@ def test_an_active_type_keeps_its_type_and_still_downloads(app, world):
     assert r.headers["content-security-policy"] == "default-src 'none'; sandbox"
 
 
-def test_a_file_past_what_may_go_is_the_413(app, world, monkeypatch):
-    copy = delivered(world, WITH_A_FILE)
+def test_a_file_past_what_one_message_may_send_still_downloads_whole(app, world, monkeypatch):
+    """What a person may attach to a message they send is no limit on what they were sent, from wherever the route
+    might read it."""
+    from mailmind.compose.domain import limits
     from mailmind.http.routers import mailbox as routes
+    monkeypatch.setattr(limits, "MAX_ATTACH_BYTES", len(PDF) - 1)
+    monkeypatch.setattr(routes, "MAX_ATTACH_BYTES", len(PDF) - 1, raising=False)
+    copy = delivered(world, WITH_A_FILE)
     parts = {a["filename"]: a["part_id"] for a in opened(app, copy).json["attachments"]}
-    monkeypatch.setattr(routes, "MAX_ATTACH_BYTES", len(PDF) - 1)
     r = part_of(app, copy, parts['../../café "final".pdf'])
-    assert (r.status, r.json) == (413, problems.blank(413, "too large"))
+    assert (r.status, r.body) == (200, PDF)
 
 
 def test_no_such_part_is_the_404(app, world):
