@@ -146,7 +146,7 @@ def test_the_bridges_password_is_kept_and_a_proton_account_logs_in_with_it(app, 
     added = app.post("/api/accounts/add", {**at(entry), "email": PIA, "type": "proton", "credential": {"style": "proton_bridge"}})
     assert added.json["account"]["credential"] == {"style": "proton_bridge", "set": True}
     tested = app.post("/api/accounts/test", {"email": PIA}).json
-    assert (tested["connect"], tested["error"]) == (False, "AUTHENTICATIONFAILED")
+    assert (tested["connect"], tested["error"]) == (False, "no password"), "none kept: no server refused it"
 
     kept = app.post("/api/accounts/bridge-password", {"password": BRIDGE})
     assert (kept.status, kept.json) == (200, {"ok": True, "set": True}) and says_nothing_of(kept, BRIDGE)
