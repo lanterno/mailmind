@@ -22,7 +22,6 @@ struct DocumentHub: View {
                     .focused($typing)
             }
             .deskField(focused: typing)
-            .onChange(of: typing) { _, now in mailbox.typing = now }
             if let first = model.first {
                 ScrollView(.horizontal) {
                     HStack(spacing: 6) {

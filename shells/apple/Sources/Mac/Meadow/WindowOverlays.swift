@@ -69,6 +69,7 @@ struct WindowOverlays: ViewModifier {
             .blur(radius: dialog == nil ? 0 : 2)
             .environment(\.meadowAnchors, anchors)
             .background { DialogFocusWindow(focus: focus) }
+            .background { TypingWatch { mailbox.editingText = $0 } }
             .overlay(alignment: .topLeading) { snoozeAnchor }
             .overlay(alignment: .bottom) {
                 WindowToasts(mailbox: mailbox, status: status, desk: desk)
@@ -86,12 +87,11 @@ struct WindowOverlays: ViewModifier {
             // What a dialog types is its own: the list's keys and the frame's Esc wait while one is up, and the
             // keyboard goes back to where it was once the last goes.
             .onChange(of: dialog != nil) { _, up in
-                mailbox.typing = up
+                mailbox.dialogUp = up
                 if up { focus.opened() } else { focus.closing() }
                 // The snooze chooser floats above the scrim: a dialog (⇧⌘H's time) takes its place.
                 if up, case .snoozeUntil? = desk?.sheet { desk?.sheet = nil }
             }
-            .onChange(of: mailbox.typing) { _, now in if !now && dialog != nil { mailbox.typing = true } }
             // A plan the palette showed and didn't run stops as the palette goes, however it goes (Esc, Move To or a
             // menu's sheet in its place), so a first press never waits armed for the palette to come back.
             .onChange(of: dialog?.kind == "palette") { _, up in

@@ -68,7 +68,7 @@ final class MessageWindowVerbs {
     /// Move To's folders, while the window asks where.
     var moving: MoveAsk?
     /// Text is being typed in the window (the reply box, Find's field, a dialog's), where ⌘⌫ deletes text and not
-    /// the message.
+    /// the message: its window's `TypingWatch` says.
     var typing = false
     /// The message has left (filed, deleted, junked, moved, snoozed): the window closes.
     private(set) var left = false
@@ -175,7 +175,7 @@ private struct MessageWindowContent: View {
                 .environment(\.readerFind, find)
         }
         .background { ZStack { meadow.paper; MeadowGrain() }.ignoresSafeArea() }
-        .background { if let verbs { TypingInWindow(verbs: verbs) } }
+        .background { if let verbs { TypingWatch { verbs.typing = $0 } } }
         .overlay { if let verbs { MessageWindowDialog(verbs: verbs) } }
         .ignoresSafeArea()
         .meadowWindowChrome(barHeight: MessageWindow.barHeight)
@@ -227,44 +227,6 @@ private struct MessageWindowDialog: View {
     private func close() {
         verbs.moving = nil
         verbs.attention.choosingTime = nil
-    }
-}
-
-/// Tells a message window's verbs whether text is being typed in it, as its window's first responder changes: ⌘⌫
-/// deletes text there, and the message only from the message itself.
-private struct TypingInWindow: NSViewRepresentable {
-    let verbs: MessageWindowVerbs
-
-    func makeNSView(context: Context) -> Probe { Probe(verbs) }
-
-    func updateNSView(_ view: Probe, context: Context) {}
-
-    final class Probe: NSView {
-        let verbs: MessageWindowVerbs
-        private var watching: NSKeyValueObservation?
-
-        init(_ verbs: MessageWindowVerbs) {
-            self.verbs = verbs
-            super.init(frame: .zero)
-        }
-
-        required init?(coder: NSCoder) { nil }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            watching = window?.observe(\.firstResponder, options: [.initial, .new]) { [weak self] window, _ in
-                MainActor.assumeIsolated {
-                    self?.verbs.typing = MessageWindowVerbs.types(window.firstResponder)
-                }
-            }
-        }
-    }
-}
-
-extension MessageWindowVerbs {
-    /// Whether a window's first responder takes typing: a field's editor or a text view that can be edited.
-    static func types(_ responder: NSResponder?) -> Bool {
-        (responder as? NSTextView)?.isEditable == true
     }
 }
 #endif

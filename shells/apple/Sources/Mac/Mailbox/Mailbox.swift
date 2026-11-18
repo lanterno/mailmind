@@ -72,8 +72,14 @@ final class Mailbox {
     var contact: String?
     /// Whether the search field has the focus: `/` and Search (⌘F) put it there.
     var searchFocus = false
-    /// A field of the window's is being typed in, where ⌘⌫ deletes text and not mail.
-    var typing = false
+    /// A text of the window's that can be edited has the keys (the search, the reader's reply box, Find, a dialog's
+    /// field), as the window's first responder says (`TypingWatch`).
+    var editingText = false
+    /// A dialog of the window's is up, whose keys are its own.
+    var dialogUp = false
+    /// The list's keys, the frame's Esc and the Message menu's ⌘⌫ wait: text is being typed, where ⌘⌫ deletes text
+    /// and not mail, or a dialog is up.
+    var typing: Bool { editingText || dialogUp }
     /// The rows being dragged from the list, which the rail's folders take (`drop(on:of:)`); none between drags.
     var dragging: [API.FolderRow] = []
 

@@ -166,7 +166,6 @@ struct MeadowSearchBox: View {
             let search = place?.search
             text = search.map { $0.asked ?? $0.q } ?? ""
         }
-        .onChange(of: focused) { _, now in mailbox.typing = now }
         .onChange(of: mailbox.searchFocus) { _, wanted in
             if wanted { focused = true }
             mailbox.searchFocus = false
