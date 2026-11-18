@@ -350,6 +350,65 @@ final class MeadowOverlayTests: XCTestCase {
         window.contentView = nil
     }
 
+    /// ⌘⌫ deletes text while text that can be edited has the keys anywhere in the mail window (the reader's reply
+    /// box, the search, Find's field), and mail only from the list or the message: the window's first responder says
+    /// which, so the Message menu's Delete and the list's keys wait.
+    func testTextTypedAnywhereInTheWindowHoldsTheMessageMenusDelete() async throws {
+        let mailbox = Mailbox()
+        let host = NSHostingView(rootView: Color.clear.frame(width: 1000, height: 700)
+            .modifier(WindowOverlays(mailbox: mailbox))
+            .meadowLight(.day))
+        host.frame = CGRect(x: 0, y: 0, width: 1000, height: 700)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        // The reader's reply box's text (`ComposeTextView`'s), the search's field, and a message's text shown.
+        let reply = BodyTextView(frame: CGRect(x: 40, y: 40, width: 400, height: 160))
+        let search = NSTextField(frame: CGRect(x: 600, y: 600, width: 200, height: 24))
+        let shown = NSTextView(frame: CGRect(x: 600, y: 500, width: 200, height: 60))
+        shown.isEditable = false
+        host.addSubview(reply)
+        host.addSubview(search)
+        host.addSubview(shown)
+        func menu() -> MessageMenuVerbs { MessageMenuVerbs(window: nil, mailbox: mailbox) }
+        XCTAssertFalse(menu().typing)
+
+        window.makeFirstResponder(reply)
+        try await settle(host) { mailbox.typing }
+        XCTAssertTrue(mailbox.typing, "the reply box has the keys")
+        XCTAssertTrue(menu().typing, "so ⌘⌫ deletes its text, not the message")
+
+        window.makeFirstResponder(shown)
+        try await settle(host) { !mailbox.typing }
+        XCTAssertFalse(menu().typing, "a message's text shown is no text typed")
+
+        window.makeFirstResponder(search)
+        try await settle(host) { mailbox.typing }
+        XCTAssertTrue(menu().typing, "a field's editor has the keys")
+
+        window.makeFirstResponder(nil)
+        try await settle(host) { !mailbox.typing }
+        XCTAssertFalse(menu().typing, "nothing typed: ⌘⌫ deletes mail again")
+
+        // A dialog's keys are its own, whatever has them inside it, until it goes.
+        mailbox.contact = "aoi@example.test"
+        try await settle(host) { mailbox.dialogUp }
+        XCTAssertTrue(mailbox.typing, "the card is up")
+        XCTAssertFalse(mailbox.editingText)
+        mailbox.contact = nil
+        try await settle(host) { !mailbox.dialogUp }
+        XCTAssertFalse(mailbox.dialogUp)
+
+        // The window gone, nothing is typed in it.
+        window.makeFirstResponder(reply)
+        try await settle(host) { mailbox.editingText }
+        XCTAssertTrue(mailbox.typing)
+        window.contentView = nil
+        try await settle(host) { !mailbox.typing }
+        XCTAssertFalse(mailbox.typing)
+    }
+
     func testOnlyTheDesksOwnSheetsOpenAsSheets() {
         XCTAssertTrue(Desk.Sheet.ask.floats)
         XCTAssertTrue(Desk.Sheet.plan.floats)

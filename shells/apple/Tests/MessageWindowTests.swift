@@ -90,10 +90,10 @@ final class MessageWindowTests: XCTestCase {
     func testAMessagesWindowKnowsWhenTextIsTyped() async throws {
         let editable = NSTextView(), shown = NSTextView()
         shown.isEditable = false
-        XCTAssertTrue(MessageWindowVerbs.types(editable))
-        XCTAssertFalse(MessageWindowVerbs.types(shown), "text shown, not typed")
-        XCTAssertFalse(MessageWindowVerbs.types(NSView()))
-        XCTAssertFalse(MessageWindowVerbs.types(nil))
+        XCTAssertTrue(TypingWatch.types(editable))
+        XCTAssertFalse(TypingWatch.types(shown), "text shown, not typed")
+        XCTAssertFalse(TypingWatch.types(NSView()))
+        XCTAssertFalse(TypingWatch.types(nil))
 
         let app = MailApp()
         app.mailbox.wire = Fixture.server().wire
