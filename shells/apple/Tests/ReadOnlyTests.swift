@@ -6,7 +6,8 @@ import XCTest
 /// busy 409's words. A send it turned down keeps the message, and a draft kept on this Mac says so.
 @MainActor
 final class ReadOnlyTests: XCTestCase {
-    private static let refused = "Read only is on, so nothing was changed. Turn it off in Settings › General."
+    /// A test's run has no switch for read only, so its words name none: the page's.
+    private static let refused = "Read only is on, so nothing was changed."
     nonisolated private static let detail = "MailMind is running read-only"
 
     /// The read-only 409 as both servers answer it.
@@ -14,11 +15,17 @@ final class ReadOnlyTests: XCTestCase {
         Problem(FakeServer.refused(409, detail, more: ["read_only": true]))
     }
 
-    func testTheWordsAreThePagesPlusWhereToTurnItOff() {
-        XCTAssertEqual(ReadOnlyWords.note, """
+    func testTheWordsAreThePagesAndNameTheSwitchOnlyWhereThereIsOne() {
+        let note = """
             Read only is on: MailMind changes nothing on your mail servers, so sending, filing and starring are turned \
-            off. Turn it off in Settings › General.
-            """)
+            off.
+            """
+        XCTAssertEqual(ReadOnlyWords.note(switchable: true), note + " Turn it off in Settings › General.")
+        XCTAssertEqual(ReadOnlyWords.note(switchable: false), note)
+        XCTAssertEqual(ReadOnlyWords.refused(switchable: true), Self.refused + " Turn it off in Settings › General.")
+        XCTAssertEqual(ReadOnlyWords.refused(switchable: false), Self.refused)
+        XCTAssertFalse(ReadOnlyRun.switchable, "a test's run has no switch in Settings")
+        XCTAssertEqual(ReadOnlyWords.note, note, "so its words name none")
         XCTAssertEqual(ReadOnlyWords.refused, Self.refused)
         XCTAssertTrue(Self.problem.isReadOnly)
         XCTAssertFalse(Problem(FakeServer.refused(409, "busy", more: ["busy": true])).isReadOnly)
