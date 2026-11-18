@@ -44,6 +44,13 @@ final class MeadowDialogTests: XCTestCase {
         XCTAssertFalse(SettingsTab.order.contains { $0.lede.isEmpty })
     }
 
+    func testTheArrowsGoFromOneOfSettingsPlacesToTheNext() {
+        XCTAssertEqual(SettingsTab.step(from: .accounts, by: 1), .general)
+        XCTAssertEqual(SettingsTab.step(from: .general, by: -1), .accounts)
+        XCTAssertEqual(SettingsTab.step(from: .ai, by: 1), .accounts, "round from the last to the first")
+        XCTAssertEqual(SettingsTab.step(from: .accounts, by: -1), .ai)
+    }
+
     func testTheGuidesArrowsGoBackAndOnAStepAndStayWithinIt() {
         XCTAssertEqual(GuideSheet.step(from: 2, of: 5, forward: false), 1, "Left goes back")
         XCTAssertEqual(GuideSheet.step(from: 2, of: 5, forward: true), 3)
