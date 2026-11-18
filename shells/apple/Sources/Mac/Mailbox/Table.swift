@@ -753,6 +753,11 @@ final class MailboxTableView: NSTableView {
               let typed = event.charactersIgnoringModifiers, let key = typed.first else {
             return super.keyDown(with: event)
         }
+        // A dialog or a chooser is up over the list: its keys are its own, and Esc goes on to close it.
+        if mailbox.typing {
+            if key == "\u{1b}" { super.keyDown(with: event) }
+            return
+        }
         let scalar = key.unicodeScalars.first.map { Int($0.value) } ?? 0
         if scalar == NSDeleteCharacter || scalar == NSDeleteFunctionKey || scalar == NSBackspaceCharacter {
             return mailbox.file(.trash)

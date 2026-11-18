@@ -648,22 +648,30 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
             return panel
         }
 
-        /// Close on a click outside the menu and on Esc, and hand it the other keys it wants: only those typed in the
-        /// window it hangs in, as `MeadowPopoverKeys` says.
+        /// A key typed while it is up, and what goes on of it: Esc closes it; a key it may take is its own, taken or
+        /// not, as an open menu holds the keyboard, so the list behind never acts on it (j would move the list's choice
+        /// under the snooze chooser, and its 1 would then snooze another message); any other goes on untouched.
+        func typed(_ event: NSEvent) -> NSEvent? {
+            switch MeadowPopoverKeys.verdict(keyCode: event.keyCode, modifiers: event.modifierFlags,
+                                             typedIn: event.window, hungIn: panel?.parent, panel: panel) {
+            case .close:
+                close()
+                return nil
+            case .offer:
+                _ = keys(event)
+                return nil
+            case .pass:
+                return event
+            }
+        }
+
+        /// Close on a click outside the menu and on Esc, and hand it the other keys typed in the window it hangs in, as
+        /// `MeadowPopoverKeys` says.
         private func watch(_ panel: NSPanel) {
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) {
                 [weak self, weak panel] event in
                 guard let self else { return event }
-                if event.type == .keyDown {
-                    switch MeadowPopoverKeys.verdict(keyCode: event.keyCode, modifiers: event.modifierFlags,
-                                                     typedIn: event.window, hungIn: panel?.parent, panel: panel) {
-                    case .close:
-                        self.close()
-                        return nil
-                    case .offer: return self.keys(event) ? nil : event
-                    case .pass: return event
-                    }
-                }
+                if event.type == .keyDown { return self.typed(event) }
                 guard event.window !== panel else { return event }
                 self.close()
                 // A press on the button it hangs from only closes it: the button's own press would open it again.
@@ -707,7 +715,7 @@ enum MeadowPopoverKeys {
     enum Verdict: Equatable {
         /// Esc: the popover closes.
         case close
-        /// The popover's keys may take it.
+        /// The popover's keys may take it, and it goes no further.
         case offer
         /// Not the popover's: it goes on untouched.
         case pass
