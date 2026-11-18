@@ -89,7 +89,7 @@ enum StatusWords {
         if reconciling { return Pill(dot: .busy, text: String(localized: "Checking against the server…")) }
         let anySyncing = digest.accounts.contains { standing(of: $0, digest: digest, health: health) == .syncing }
         if syncing || digest.sync.running || anySyncing { return Pill(dot: .busy, text: String(localized: "Syncing…")) }
-        if digest.profile == "read-only" { return Pill(dot: .none, text: String(localized: "Read-only")) }
+        if digest.profile == "read-only" { return Pill(dot: .none, text: String(localized: "Read only")) }
         if let last = lastSynced(digest: digest, health: health) {
             var style = calendar.isDate(last, inSameDayAs: now)
                 ? Date.FormatStyle(date: .omitted, time: .shortened)
