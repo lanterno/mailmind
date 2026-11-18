@@ -291,6 +291,25 @@ final class MeadowOverlayTests: XCTestCase {
         XCTAssertEqual(StatusMenu.state(of: "new@example.test", digest: digest, health: health, now: now).words, "")
     }
 
+    /// An account whose last sync failed says it is trying again, in the sun's words and dot, never Synced; each other
+    /// account's time is its own last sync that worked.
+    func testAnAccountTryingAgainSaysSoAndNeverSynced() {
+        let now = StatusFixtures.at("2026-11-14T15:00:00Z")
+        let health = [
+            StatusFixtures.standing("ada@example.test", ok: "2026-11-14T14:58:00Z", count: 3),
+            StatusFixtures.standing("news@example.test", ok: "2026-11-14T09:00:00Z", count: 1),
+        ]
+        var digest = StatusFixtures.digest(status: ["ada@example.test": "ok", "news@example.test": "ok"],
+                                           last: "2026-11-14T14:59:00Z")
+        digest.status["ada@example.test"]?.tryingAgain = true
+        let ada = StatusMenu.state(of: "ada@example.test", digest: digest, health: health, now: now)
+        XCTAssertEqual(ada.words, "Trying again")
+        XCTAssertTrue(ada.tryingAgain, "the sun's, never moss")
+        let news = StatusMenu.state(of: "news@example.test", digest: digest, health: health, now: now)
+        XCTAssertEqual(news.words, "Synced 6h ago", "its own last sync, not the round's")
+        XCTAssertFalse(news.tryingAgain)
+    }
+
     // MARK: Which dialog
 
     func testTheDialogShownIsTheOneToAnswerFirst() {

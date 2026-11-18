@@ -60,6 +60,34 @@ final class StatusWordsTests: XCTestCase {
         XCTAssertEqual(pill(F.digest()), .init(dot: .none, text: "Not synced yet"))
     }
 
+    /// A sync that failed for every account, once: the digest's round says when it ended, but nothing synced then. The
+    /// pill says so at once in the sun's quiet words, never Synced in moss; the louder words wait for the digest's
+    /// error. Once the accounts sync again it says when, by the syncs that worked.
+    func testASyncThatFailedSaysItIsTryingAgainAndNeverSynced() {
+        var failed = F.digest(status: ["ada@example.test": "ok"], last: "2026-11-14T14:59:00Z")
+        failed.status["ada@example.test"]?.tryingAgain = true
+        failed.status["news@example.test"] = API.AccountSync(health: "", msg: "", tryingAgain: true)
+        let worked = [F.standing("ada@example.test", ok: "2026-11-14T14:05:00Z"),
+                      F.standing("news@example.test", ok: "2026-11-14T13:00:00Z")]
+        let trying = StatusWords.Pill(dot: .busy, text: "Couldn’t reach the server · trying again")
+        XCTAssertEqual(pill(failed, worked), trying)
+        XCTAssertEqual(pill(failed), trying, "before the accounts' records are read too")
+        XCTAssertEqual(pill(failed, worked, syncing: true).text, "Syncing…", "what runs comes first")
+        XCTAssertEqual(StatusWords.lastSynced(digest: failed, health: worked), F.at("2026-11-14T14:05:00Z"),
+                       "the last sync that worked, not the round that failed")
+        XCTAssertNil(StatusWords.lastSynced(digest: failed, health: []), "a round that failed is no sync")
+
+        var one = F.digest(status: ["ada@example.test": "ok"], last: "2026-11-14T14:59:00Z")
+        one.status["news@example.test"] = API.AccountSync(health: "", msg: "", tryingAgain: true)
+        XCTAssertEqual(pill(one, worked), trying, "one account trying again is enough")
+
+        let again = F.digest(status: ["ada@example.test": "ok", "news@example.test": "ok"],
+                             last: "2026-11-14T14:59:00Z")
+        let synced = [F.standing("ada@example.test", ok: "2026-11-14T14:59:00Z"),
+                      F.standing("news@example.test", ok: "2026-11-14T14:58:00Z")]
+        XCTAssertEqual(pill(again, synced), .init(dot: .ok, text: "Synced 2:59\u{202F}PM"))
+    }
+
     func testHowLongAgoInTheFewestWords() {
         XCTAssertEqual(StatusWords.ago("2026-11-14T14:59:00Z", now: now), "just now")
         XCTAssertEqual(StatusWords.ago("2026-11-14T14:55:00Z", now: now), "5m ago")
