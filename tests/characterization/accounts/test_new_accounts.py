@@ -19,11 +19,12 @@ def test_hwf_testing_a_draft_never_sends_a_stored_secret(app, world, monkeypatch
     assert world.server.commands_for(user="dee@example.test", command="LOGIN") == []
 
 
-def test_hwf_send_accounts_come_from_config_before_any_sync(app, world):
+def test_hwf_accounts_come_from_config_before_any_sync(app, world):
+    """An account added can be sent from at once, and has its place on the rail before any of its mail is stored."""
     dee = "dee@example.test"
     entry = world.server.add_account(dee, password="dee-password")
     assert app.post("/api/accounts/add", {"email": dee, "type": "imap", "host": entry["host"], "port": entry["port"],
                                           "starttls": True, "credential": {"style": "keychain", "value": "dee-password"}
                                           }).json["ok"]
     d = app.get("/api/digest").json
-    assert dee in d["send_accounts"] and dee not in d["accounts"]
+    assert dee in d["send_accounts"] and dee in d["accounts"]

@@ -320,6 +320,19 @@ def test_the_digest_and_each_accounts_health_say_how_the_sync_stands(app, world)
     assert {h["account"]: h["live"] for h in health} == {w.ADA: "ok", w.BEA: "ok", w.CY: "ok"}
 
 
+def test_the_digest_names_every_configured_account_in_the_configs_order_mail_stored_or_not(app, world):
+    """The rail's accounts, which the page and the Mac app read from the digest: an account just added has its place
+    before any of its mail is stored, after those the config lists before it, though its name sorts first."""
+    abe = "abe@example.test"
+    entry = world.server.add_account(abe, password="abe-password")
+    assert app.post("/api/accounts/add", {"email": abe, "type": "imap", "host": entry["host"], "port": entry["port"],
+                                          "starttls": True, "credential": {"style": "keychain", "value": "abe-password"}
+                                          }).json["ok"]
+    digest = app.get("/api/digest").json
+    assert digest["accounts"] == [w.ADA, w.BEA, w.CY, abe]
+    assert digest["send_accounts"] == digest["accounts"]
+
+
 def test_known_contacts(app, golden):
     post(app, golden, "who is known", "/api/contacts/known", {"addrs": [
         "lin@example.test", "LIN@example.test", "Lin Mori <lin@example.test>", "noor@studio.example.test",
