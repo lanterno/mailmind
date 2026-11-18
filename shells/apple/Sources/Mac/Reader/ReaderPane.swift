@@ -123,7 +123,8 @@ struct ReaderPane: View {
                 return
             }
             let model = ConversationModel(routes: core, account: thread.account, id: thread.id,
-                                          profile: { Composing.shared.digest?.profile })
+                                          profile: { Composing.shared.digest?.profile },
+                                          marked: { [weak app] in app?.mailbox.markedRead($0) })
             conversation = model
             await model.load()
         }
@@ -198,7 +199,7 @@ struct ReaderPane: View {
     }
 
     /// Opened unread, a message is marked read after a moment on it, unless read only is on or not yet known
-    /// (`MarksOpened`); and a reply written ahead is looked for.
+    /// (`MarksOpened`), and shows read at once wherever the window shows it; and a reply written ahead is looked for.
     private func dwell() async {
         guard let copy = openCopy else {
             composing.viewing(nil, wanted: false, skip: true)
@@ -206,15 +207,12 @@ struct ReaderPane: View {
         }
         composing.viewing(replyTo ?? copy, wanted: thread == nil && (row?.replyWorthy ?? false),
                           skip: openMessage?.isDraft == true)
-        guard thread == nil, row?.seen != true, let core = app.core else { return }
+        guard thread == nil, row?.seen != true else { return }
         try? await Task.sleep(for: .milliseconds(1200))
         guard !Task.isCancelled else { return }
         // A message no list on screen holds (opened from the brief, an answer, the gate) is asked after, once the
         // reader has opened it and so knows its conversation.
-        let unread = if let row { !row.seen } else { await app.mailbox.opensUnread(copy) }
-        guard unread, !Task.isCancelled else { return }
-        await MarksOpened.mark(copy, routes: core, profile: composing.digest?.profile)
-        app.mailbox.rereadOutside()
+        await app.mailbox.markOpenedRead(copy, profile: composing.digest?.profile)
     }
 }
 #endif

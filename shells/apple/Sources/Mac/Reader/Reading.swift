@@ -62,12 +62,17 @@ final class ConversationModel {
     @ObservationIgnored private let routes: any Routes
     /// The profile the digest says MailMind runs with, asked as a member opens: nil until it has said.
     @ObservationIgnored private let profile: @MainActor () -> String?
+    /// A member was marked read as it opened: the window's list and counts say so.
+    @ObservationIgnored private let marked: @MainActor (MailCopy) -> Void
 
-    init(routes: any Routes, account: String, id: String, profile: @escaping @MainActor () -> String?) {
+    init(routes: any Routes, account: String, id: String, profile: @escaping @MainActor () -> String?,
+         marked: @escaping @MainActor (MailCopy) -> Void = { _ in })
+    {
         self.routes = routes
         self.account = account
         self.id = id
         self.profile = profile
+        self.marked = marked
     }
 
     /// Read the conversation, named as the route names it (`thread_id`), as the page and the mailbox's verbs ask it.
@@ -88,7 +93,8 @@ final class ConversationModel {
     /// Mark a member read as it opens, if it isn't and the profile lets opening mark it (`MarksOpened`).
     func markRead(_ member: API.ThreadMessage) async {
         guard !member.seen else { return }
-        await MarksOpened.mark(MailCopy(member, account: account), routes: routes, profile: profile())
+        let copy = MailCopy(member, account: account)
+        if await MarksOpened.mark(copy, routes: routes, profile: profile()) { marked(copy) }
     }
 
     /// Each copy once, as the page's `eachCopyOnce` keeps them.
@@ -121,11 +127,12 @@ enum MarksOpened {
         return profile != "read-only"
     }
 
-    /// Mark `copy` read as it opens, where `profile` lets it.
-    static func mark(_ copy: MailCopy, routes: any Routes, profile: String?) async {
-        guard marks(profile) else { return }
-        _ = try? await routes.post(API.Post.Seen.self, API.SeenBody(folder: copy.folder, key: copy.key, seen: true,
-                                                                    uid: copy.uid))
+    /// Mark `copy` read as it opens, where `profile` lets it: whether the server took it, so what shows it can say so.
+    @discardableResult
+    static func mark(_ copy: MailCopy, routes: any OverLimitRoutes, profile: String?) async -> Bool {
+        guard marks(profile) else { return false }
+        return (try? await routes.post(API.Post.Seen.self, API.SeenBody(folder: copy.folder, key: copy.key, seen: true,
+                                                                        uid: copy.uid))) != nil
     }
 }
 

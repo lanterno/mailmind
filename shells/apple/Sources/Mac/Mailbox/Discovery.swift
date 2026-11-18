@@ -63,6 +63,12 @@ final class LaneModel {
         reach += Lists.pageSize
         refresh()
     }
+
+    /// Change the hit for `copy` now, as the server has just changed it, until the lane is read again.
+    func patch(_ copy: MailCopy, _ change: (inout API.SearchHit) -> Void) {
+        guard let at = hits.firstIndex(where: { MailCopy(API.FolderRow($0)) == copy }) else { return }
+        change(&hits[at])
+    }
 }
 
 /// The Document Hub (discovery/Docs.tsx): every attachment across the accounts, which the server filters, groups and

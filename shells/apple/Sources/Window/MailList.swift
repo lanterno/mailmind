@@ -127,6 +127,22 @@ final class MailListModel: MessageRows {
         }
     }
 
+    /// Change the row held for `copy` now, as the server has just changed it, so the row says so at once rather than
+    /// once the list is read again. Whether a row held was changed.
+    @discardableResult
+    func patch(_ copy: MailCopy, _ change: (inout API.FolderRow) -> Void) -> Bool {
+        for (number, page) in pages {
+            guard let index = page.firstIndex(where: { MailCopy($0) == copy }) else { continue }
+            var row = page[index]
+            change(&row)
+            guard row != page[index] else { return false }
+            pages[number]?[index] = row
+            display?.rowsChanged(IndexSet(integer: number * Self.pageSize + index), totalChanged: false)
+            return true
+        }
+        return false
+    }
+
     /// Read again what is held, as the page refetches a list in place when the event stream says mail changed.
     func refresh() {
         generation += 1

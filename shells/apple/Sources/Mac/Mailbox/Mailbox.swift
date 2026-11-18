@@ -521,6 +521,30 @@ final class Mailbox {
         return await !openRow(copy).seen
     }
 
+    /// The message open was read for its moment (the reader's dwell): marked read at the server where the profile lets
+    /// opening mark it, if it is unread, and shown read at once (`markedRead`).
+    func markOpenedRead(_ copy: MailCopy, profile: String?) async {
+        guard let calls, await opensUnread(copy) else { return }
+        guard app?.selection.copy == copy, await MarksOpened.mark(copy, routes: calls, profile: profile) else { return }
+        markedRead(copy)
+    }
+
+    /// `copy` was marked read on opening: its row says so now wherever the window holds it (the list's, a lane's, the
+    /// one chosen, the message open from outside), so its dot, its weight and the Message menu's words change at once;
+    /// then the lists and the counts are read again, as after a verb's mark. A row that stands for a whole
+    /// conversation is left to the server, which says whether any of it is still unread.
+    func markedRead(_ copy: MailCopy) {
+        let grouped = grouped
+        app?.list?.patch(copy) { if !$0.isConversation(grouped: grouped) { $0.seen = true } }
+        lane?.patch(copy) { $0.seen = true }
+        for at in chosenRows.indices
+        where MailCopy(chosenRows[at]) == copy && !chosenRows[at].isConversation(grouped: grouped) {
+            chosenRows[at].seen = true
+        }
+        if let open = outside, MailCopy(open) == copy { outside?.seen = true }
+        readAgain()
+    }
+
     /// A message neither the list nor a lane holds, as the server says it stands (`standing`), its head as the reader
     /// opened it: once the reader has, when it is still opening it. It stands for itself alone, as the pane shows it.
     /// The last read asked is the one kept.
