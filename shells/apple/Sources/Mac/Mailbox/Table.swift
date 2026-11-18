@@ -21,6 +21,7 @@ struct MailboxRowsTable: NSViewRepresentable {
     let briefChosen: Bool
     /// The list stands in days, with a head over each day's first row.
     let sections: Bool
+    @Environment(MeadowShell.self) private var shell: MeadowShell?
 
     func makeCoordinator() -> MailboxTableController {
         MailboxTableController(list: list, mailbox: mailbox, look: look, sections: sections)
@@ -34,6 +35,7 @@ struct MailboxRowsTable: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let controller = context.coordinator
+        controller.shell = shell
         controller.setShowsAccount(showsAccount)
         controller.setSections(sections)
         controller.setLook(look)
@@ -81,6 +83,8 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
     private var hovered: (row: Int, target: RowTarget?)?
     /// A choice the mailbox asked for is being shown: the table doesn't tell it back.
     private var following = false
+    /// The window's shell, whose drawer and focus reading Esc undoes before the list's own Esc.
+    weak var shell: MeadowShell?
     private lazy var report = OncePerFrame { [weak self] in self?.reportVisible() }
 
     init(list: MailListModel, mailbox: Mailbox, look: RowLook, sections: Bool) {
@@ -727,6 +731,8 @@ final class MailboxTableView: NSTableView {
             return mailbox.file(.trash)
         }
         if key == "\u{1b}" {
+            // The shell's first: the drawer closes, or focus reading ends, while the list stands aside behind it.
+            if controller?.shell?.escape() == true { return }
             return mailbox.chosenRows.count > 1 ? mailbox.clearMarks() : mailbox.leaveSearch()
         }
         // Return on the brief's row opens it, as a click does.
