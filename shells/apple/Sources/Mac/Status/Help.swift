@@ -252,6 +252,24 @@ struct GuideSheet: View {
     }
 }
 
+/// Where a dialog with no field keeps the keyboard as it opens: it draws nothing, and the keys `press` takes are the
+/// dialog's. It stands beside the dialog's buttons, never around them, so none of them rings as if it had the
+/// keyboard, and Space presses none of them.
+struct DialogKeys: View {
+    var focused: FocusState<Bool>.Binding
+    let press: (KeyPress) -> KeyPress.Result
+
+    var body: some View {
+        Color.clear
+            .frame(width: 1, height: 1)
+            .focusable()
+            .focused(focused)
+            .focusEffectDisabled()
+            .onKeyPress(phases: .down, action: press)
+            .accessibilityHidden(true)
+    }
+}
+
 /// The keyboard's legend (the mockup's `keys()`), over the window from the top bar's keys button, `?` and the palette:
 /// the window's own keys in groups, and the setting WCAG 2.1.4 asks for, single keys off.
 struct KeysLegend: View {
@@ -273,7 +291,10 @@ struct KeysLegend: View {
     let status: AppStatus
     let close: () -> Void
     @Environment(\.meadow) private var meadow
+    /// The checkbox has the keyboard, by Tab: Space turns it.
     @FocusState private var focused: Bool
+    /// The legend itself has the keyboard, as it opens: Space does nothing, and Esc or ? closes it.
+    @FocusState private var reading: Bool
 
     static let keysOn = String(localized: """
         Single-letter shortcuts are on. Turn them off if you use voice control or a switch device — ⌘K and \
@@ -369,7 +390,18 @@ struct KeysLegend: View {
         }
         .padding(.vertical, 22)
         .padding(.horizontal, 24)
-        .onAppear { focused = true }
+        .background {
+            DialogKeys(focused: $reading) { press in
+                guard press.characters == "?" || press.key == .escape else { return .ignored }
+                close()
+                return .handled
+            }
+        }
+        .onAppear {
+            reading = true
+            // Asked again once the dialog is up: what had the keyboard lets it go only as the dialog comes.
+            Task { @MainActor in if !focused { reading = true } }
+        }
         .onExitCommand(perform: close)
         .accessibilityLabel("Keyboard")
     }
