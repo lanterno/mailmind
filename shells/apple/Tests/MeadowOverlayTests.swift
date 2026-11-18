@@ -588,6 +588,9 @@ final class MeadowOverlayTests: XCTestCase {
         }
         // Snooze is H, as the window has it.
         XCTAssertEqual(KeysLegend.triage.keys.first { $0.words.hasPrefix("Snooze") }?.keys, ["H"])
+        // Space pages the message, as the list's keyDown has it, and x, which the list doesn't use, isn't listed.
+        XCTAssertTrue(listed.contains("Space"))
+        XCTAssertFalse(listed.contains("X"))
     }
 
     func testWithAITurnedOffTheLegendLeavesOutOnlySummarize() {
