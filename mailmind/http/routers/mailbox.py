@@ -7,7 +7,6 @@ from typing import Annotated
 from fastapi import Query
 from starlette.responses import Response
 
-from mailmind.compose.api import MAX_ATTACH_BYTES
 from mailmind.http import named, route
 from mailmind.http.schemas.common import NoBody, NotJson, answers
 from mailmind.http.schemas.mailbox import (
@@ -137,15 +136,15 @@ def router(mailbox):
         return mailbox.commands.list_open()
 
     def _part(pk, part_id):
-        """A part of a message as a download, or what says why not."""
+        """A part of a message as a download, or what says why not. A part of any size goes: what one message may carry
+        as it is sent (`MAX_ATTACH_BYTES`) is no limit on what a person was sent, and a part is never larger than its
+        message, which was held whole to open it."""
         if not re.fullmatch(r"[0-9]+", part_id):   # only the part ids mime gives: `$` would let a newline after one through
             raise Refused("bad part id")
         found = mailbox.bodies.attachment(pk, part_id)
         if "error" in found:
             raise NotFound(found["error"])
         data = found["data"]
-        if len(data) > MAX_ATTACH_BYTES:
-            return route.problem(413, "too large")
         ctype = (found["content_type"] or "application/octet-stream").split(";")[0].strip()
         # never inline-render active types from the top frame; force download regardless
         fn = _safe_filename(found["filename"])
