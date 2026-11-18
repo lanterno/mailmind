@@ -554,9 +554,9 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> NSView { NSView() }
+    func makeNSView(context: Context) -> MeadowPopoverAnchorView { MeadowPopoverAnchorView() }
 
-    func updateNSView(_ view: NSView, context: Context) {
+    func updateNSView(_ view: MeadowPopoverAnchorView, context: Context) {
         let coordinator = context.coordinator
         coordinator.close = { shown = false }
         coordinator.keys = keys
@@ -567,7 +567,7 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
         }
     }
 
-    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
+    static func dismantleNSView(_ view: MeadowPopoverAnchorView, coordinator: Coordinator) {
         coordinator.hide()
     }
 
@@ -582,13 +582,27 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
         private var monitor: Any?
         /// What it hangs from: the button that opened it.
         private weak var anchor: NSView?
+        /// What it shows while it is asked to: kept until its anchor is in a window to hang it in.
+        private var root: AnyView?
 
+        /// Whether the panel is up over a window.
+        var isShown: Bool { panel?.parent != nil }
+
+        /// Show `content` under `anchor`. An anchor made in the same update that asks for the popover (the snooze
+        /// chooser's, as `h` opens it) isn't in a window yet: the popover shows as the anchor joins one.
         func show(_ content: Content, under anchor: NSView) {
-            guard let window = anchor.window else { return }
             self.anchor = anchor
             let root = AnyView(content.padding(Self.room))
-            let panel = panel ?? made(root)
+            self.root = root
             host?.rootView = root
+            (anchor as? MeadowPopoverAnchorView)?.moved = { [weak self] in self?.place() }
+            place()
+        }
+
+        /// Hang the panel at its anchor, or at its anchor's new place, once the anchor is in a window.
+        func place() {
+            guard let root, let anchor, let window = anchor.window else { return }
+            let panel = panel ?? made(root)
             let size = host?.fittingSize ?? .zero
             let pop = CGSize(width: max(0, size.width - 2 * Self.room), height: max(0, size.height - 2 * Self.room))
             // The button in the window, its origin at the top left as the placement has it.
@@ -609,6 +623,7 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
         }
 
         func hide() {
+            root = nil
             if let monitor { NSEvent.removeMonitor(monitor) }
             monitor = nil
             if let panel {
@@ -656,6 +671,29 @@ struct MeadowPopoverAnchor<Content: View>: NSViewRepresentable {
                 return again ? nil : event
             }
         }
+    }
+}
+
+/// What a popover hangs from: it says when it joins a window or moves in one, so a popover asked for before its anchor
+/// was in a window shows as it arrives, and one that is up follows it.
+final class MeadowPopoverAnchorView: NSView {
+    var moved: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        moved?()
+    }
+
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        let was = frame.origin
+        super.setFrameOrigin(newOrigin)
+        if newOrigin != was, window != nil { moved?() }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let was = frame.size
+        super.setFrameSize(newSize)
+        if newSize != was, window != nil { moved?() }
     }
 }
 
