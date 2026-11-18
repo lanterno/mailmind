@@ -313,12 +313,22 @@ extension API {
         public var health: String
         public var msg: String
         public var total: Int?
+        public var tryingAgain: Bool?
 
-        public init(done: Int? = nil, health: String, msg: String, total: Int? = nil) {
+        public init(done: Int? = nil, health: String, msg: String, total: Int? = nil, tryingAgain: Bool? = nil) {
             self.done = done
             self.health = health
             self.msg = msg
             self.total = total
+            self.tryingAgain = tryingAgain
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case done
+            case health
+            case msg
+            case total
+            case tryingAgain = "trying_again"
         }
     }
 
