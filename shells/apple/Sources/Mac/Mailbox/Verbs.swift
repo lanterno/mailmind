@@ -24,7 +24,7 @@ extension Mailbox {
     }
 
     func fileNow(_ verb: API.FilingVerb, rows given: [API.FolderRow]? = nil) async {
-        let rows = if let given { given } else { await targets() }
+        let rows = if let given { given } else { await targets(standing: false) }
         guard let calls else { return }
         guard !rows.isEmpty else { return saysNothingChosen() }
         let words = Self.words(verb)
@@ -73,7 +73,7 @@ extension Mailbox {
     /// Ask where to move what is chosen, else what is open: only one account's mail moves at once (`askMove`).
     func askMove() {
         Task {
-            let rows = await targets()
+            let rows = await targets(standing: false)
             guard let first = rows.first else { return saysNothingChosen() }
             if Set(rows.map(\.account)).count > 1 {
                 say(String(localized: "Those are in different accounts — mark one account’s mail to move it"))
@@ -113,7 +113,7 @@ extension Mailbox {
 
     /// Move `given`, else what is chosen or open, to `folder`.
     func moveNow(to folder: String, label: String, rows given: [API.FolderRow]? = nil) async {
-        let chosen = if let given { given } else { await targets() }
+        let chosen = if let given { given } else { await targets(standing: false) }
         let rows = chosen.filter { $0.folder != folder }
         guard let calls else { return }
         guard !chosen.isEmpty else { return saysNothingChosen() }

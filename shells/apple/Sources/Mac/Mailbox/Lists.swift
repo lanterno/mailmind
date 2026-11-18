@@ -29,6 +29,30 @@ struct Sheet: Sendable {
 /// them with: `/api/messages` for a folder or a virtual folder, `/api/inboxes` for All Inboxes, `/api/search`.
 enum Lists {
     static let pageSize = 200
+    /// How far down its folder one message is looked for (`row`): ten pages, newest first.
+    static let lookingFor = 2_000
+
+    /// The row a folder lists for one message, by its UID and, where it is known, its key: the folder read a message
+    /// a row, newest first, a page at a time, until a page holds it, the folder ends, or `lookingFor` rows are read.
+    /// No route names one message's row by its copy or its UID (`/api/message/body` wants its key and says nothing of
+    /// its flags), so its folder is read for it. The row stands for that message alone.
+    static func row(_ wire: Wire, account: String, folder: String, uid: Int, key: Int? = nil) async -> API.FolderRow? {
+        var offset = 0
+        while offset < lookingFor {
+            guard let page = try? await Self.folder(wire, account: account, folder: folder, grouped: false,
+                                                    offset: offset, limit: pageSize) else { return nil }
+            if var row = page.rows.first(where: {
+                $0.uid == uid && $0.folder == folder && (key == nil || $0.key == key)
+            }) {
+                row.count = nil
+                row.threadCount = nil
+                return row
+            }
+            guard page.hasMore, !page.rows.isEmpty else { return nil }
+            offset += page.rows.count
+        }
+        return nil
+    }
 
     /// A folder's page, or a virtual folder's (`account` nil reads it over every account).
     static func folder(_ wire: Wire, account: String?, folder: String, grouped: Bool, offset: Int, limit: Int)

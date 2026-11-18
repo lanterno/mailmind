@@ -47,10 +47,29 @@ final class ReaderModel {
         return nil
     }
 
+    /// The head of `copy` once the reader has it: at once while it shows it, once the core has answered while it is
+    /// opening it (a verb pressed before the body came waits for it), else none.
+    func head(of copy: MailCopy) async -> API.MessageOpened? {
+        if case .loading(let loading) = stage, loading == copy, let opening { await opening.value }
+        return opened(copy)
+    }
+
     /// Show `copy` as the core opened it, with no core asked: what a test holds the reader at.
     func hold(_ copy: MailCopy, _ opened: API.MessageOpened) {
         opening?.cancel()
         stage = .open(copy, opened)
+    }
+
+    /// Show `copy` opening until `head` answers, then open, with no core asked: what a test holds the reader at
+    /// while the core reads a body.
+    func hold(_ copy: MailCopy, until head: @escaping @MainActor @Sendable () async -> API.MessageOpened) {
+        opening?.cancel()
+        stage = .loading(copy)
+        opening = Task { [weak self] in
+            let opened = await head()
+            guard !Task.isCancelled else { return }
+            self?.stage = .open(copy, opened)
+        }
     }
 
     /// The frame's document for `copy`, as the page's `bodyUrl` names it, under the scheme the frame's handler answers.

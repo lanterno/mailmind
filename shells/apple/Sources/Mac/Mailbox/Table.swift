@@ -565,7 +565,7 @@ extension Mailbox {
     /// row's own; with none, every row chosen, those whose pages aren't held too, as many as the bulk bar counts.
     func restore(_ given: [API.FolderRow]? = nil) {
         Task {
-            let rows = if let given { given } else { await targets() }
+            let rows = if let given { given } else { await targets(standing: false) }
             guard let first = rows.first else { return saysNothingChosen() }
             let inbox = folders(of: first.account).first { $0.role == "inbox" }
             await moveNow(to: inbox?.name ?? "INBOX", label: inbox.map(Words.role) ?? String(localized: "Inbox"),
@@ -576,7 +576,7 @@ extension Mailbox {
     /// Ask when to bring back every row chosen, those whose pages aren't held too (the bulk bar's Snooze).
     func snoozeChosen() {
         Task {
-            let rows = await targets()
+            let rows = await targets(standing: false)
             if rows.isEmpty { saysNothingChosen() } else { snoozes?(rows) }
         }
     }
