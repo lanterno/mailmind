@@ -126,31 +126,45 @@ extension SettingsTab {
     }
 }
 
-/// Settings' places down the left (`.nav-i`): each with its icon, the one open in the indigo wash. The arrow keys go
-/// from one to the next.
+/// Settings' places down the left (`.nav-i`): each with its icon, the one open in the indigo wash. They have the
+/// keyboard as Settings opens, and the arrow keys go from one to the next, as a Mac's settings' sidebar does.
 struct SettingsPlaces: View {
     @Binding var selection: SettingsTab
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(Array(SettingsTab.order.enumerated()), id: \.element) { index, tab in
+            ForEach(SettingsTab.order, id: \.self) { tab in
                 SettingsPlace(tab: tab, current: tab == selection) { selection = tab }
-                    .onKeyPress(.downArrow) { step(from: index, by: 1) }
-                    .onKeyPress(.upArrow) { step(from: index, by: -1) }
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 12)
         .frame(width: 200)
+        .focusable()
+        .focused($focused)
+        .focusEffectDisabled()
+        // From the column, or from a place that Tab reached: either way the place open moves.
+        .onKeyPress(.downArrow) { step(by: 1) }
+        .onKeyPress(.upArrow) { step(by: -1) }
+        .onAppear { focused = true }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Settings")
     }
 
-    private func step(from index: Int, by: Int) -> KeyPress.Result {
-        let all = SettingsTab.order
-        selection = all[(index + by + all.count) % all.count]
+    private func step(by: Int) -> KeyPress.Result {
+        selection = SettingsTab.step(from: selection, by: by)
         return .handled
+    }
+}
+
+extension SettingsTab {
+    /// The place `by` places from `tab` in the list's order, round from the last to the first.
+    static func step(from tab: SettingsTab, by: Int) -> SettingsTab {
+        let all = order
+        let index = all.firstIndex(of: tab) ?? 0
+        return all[((index + by) % all.count + all.count) % all.count]
     }
 }
 
