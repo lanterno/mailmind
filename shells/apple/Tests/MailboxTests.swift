@@ -828,6 +828,30 @@ final class MailboxAccountsTests: XCTestCase {
         await until { !app.mailbox.folders(of: Fixture.work).isEmpty }
         XCTAssertEqual(app.mailbox.folders(of: Fixture.work).count, Fixture.workFolders.count)
     }
+
+    /// A first sync ends, and the older-mail lane then says folder-synced at each step, for minutes, with no mail
+    /// changing that a person sees: the rail reads the digest again while the steps go on, not once they stop, and
+    /// the folders the digest names come with it.
+    func testTheRailFillsInAfterAFirstSyncWhileTheOlderMailLaneGoesOn() async {
+        let server = server(accounts: [Fixture.ada])
+        let app = await opened(server)
+        changeTo(server, accounts: [Fixture.ada, Fixture.work])
+        app.mailbox.heard(CoreEvent(id: "1", name: "sync-done",
+                                    data: #"{"account": "ada@example.test", "kept": 40, "junk": 0}"#))
+        let started = ContinuousClock.now
+        var step = 1
+        while app.mailbox.folders(of: Fixture.work).isEmpty {
+            guard ContinuousClock.now - started < .seconds(3) else {
+                return XCTFail("the rail waited out \(step) steps of the lane")
+            }
+            step += 1
+            app.mailbox.heard(CoreEvent(id: String(step), name: "folder-synced",
+                                        data: #"{"account": "ada@example.test", "folder": "INBOX", "ok": true, "new": 50}"#))
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertEqual(app.mailbox.accounts, [Fixture.ada, Fixture.work])
+        XCTAssertEqual(app.mailbox.folders(of: Fixture.work).count, Fixture.workFolders.count)
+    }
 }
 
 /// What a test's route waits on until the test lets it go.
