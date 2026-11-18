@@ -71,12 +71,21 @@ extension Mailbox {
 
     // MARK: Up and down the list
 
-    /// The row `by` rows from the open one, or the first.
+    /// The row `by` rows from the open one, or the first. Up from the Inbox's first row is today's brief, over it, as
+    /// the up arrow goes there.
     func move(by: Int) {
         guard let list = app?.list, list.total > 0 else { return }
         let at = app?.selection.copy.flatMap { list.position(of: $0) }
+        if by < 0, at == 0, showsBrief { return openBrief(deliberately: false) }
+        // On the brief already, there is nothing above it.
+        if by < 0, at == nil, app?.place == .desk(.brief) { return }
         let target = at.map { max(0, min(list.total - 1, $0 + by)) } ?? 0
         if let row = list.copy(at: target) { chose([row]) }
+    }
+
+    /// Whether today's brief stands over the list, as its first row: in an Inbox, where the desk has joined.
+    private var showsBrief: Bool {
+        opensBrief != nil && app?.listed?.isInbox == true
     }
 
     /// The next unread row above or below the open one, among the rows held. False when there is none.
