@@ -214,4 +214,33 @@ final class MeadowOverlayBlocksTests: XCTestCase {
         parent.contentView?.addSubview(anchor)
         XCTAssertFalse(popover.isShown, "a popover closed stays closed as its anchor comes back")
     }
+
+    func testAnOpenPopoverKeepsTheListsKeysFromTheListBehindIt() {
+        let parent = window()
+        let list = Keyed(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        let anchor = MeadowPopoverAnchorView(frame: NSRect(x: 200, y: 200, width: 30, height: 20))
+        parent.contentView?.addSubview(list)
+        parent.contentView?.addSubview(anchor)
+        XCTAssertTrue(parent.makeFirstResponder(list))
+        let popover = MeadowPopoverAnchor<Text>.Coordinator()
+        var offered: [String] = [], closed = 0
+        popover.keys = { event in
+            offered.append(event.charactersIgnoringModifiers ?? "")
+            return event.charactersIgnoringModifiers == "1"
+        }
+        popover.close = { closed += 1 }
+        popover.show(Text("Later today"), under: anchor)
+        func typed(_ code: UInt16, _ characters: String, held: NSEvent.ModifierFlags = []) -> NSEvent? {
+            popover.typed(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: held, timestamp: 0,
+                                           windowNumber: parent.windowNumber, context: nil, characters: characters,
+                                           charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!)
+        }
+        XCTAssertNil(typed(38, "j"), "j stays with the chooser, though it takes none: the list's choice holds")
+        XCTAssertNil(typed(18, "1"), "1 snoozes the message the chooser opened for")
+        XCTAssertEqual(offered, ["j", "1"])
+        XCTAssertNotNil(typed(18, "1", held: .command), "⌘1 goes on to the menus")
+        XCTAssertNil(typed(53, "\u{1b}"))
+        XCTAssertEqual(closed, 1, "Esc closes it")
+        popover.hide()
+    }
 }

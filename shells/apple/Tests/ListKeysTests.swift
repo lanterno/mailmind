@@ -97,6 +97,18 @@ final class ListKeysTests: XCTestCase {
         XCTAssertFalse(MailboxTableView.tablesOwn(Int(("x" as Character).asciiValue!)))
     }
 
+    func testWhileADialogIsUpTheListsKeysWait() async throws {
+        let (app, controller) = try await table()
+        let table = controller.table
+        table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        let open = app.selection.copy
+        app.mailbox.dialogUp = true
+        press("j", table)
+        press("e", table)
+        XCTAssertEqual(app.selection.copy, open, "j doesn't move the list behind the scrim")
+        XCTAssertNil(app.mailbox.toast, "and e files nothing")
+    }
+
     // MARK: Space
 
     private final class Flipped: NSView {
