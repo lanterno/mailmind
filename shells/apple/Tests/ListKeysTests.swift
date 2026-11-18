@@ -219,6 +219,23 @@ final class ListKeysTests: XCTestCase {
         XCTAssertTrue(routes.sent.filter { $0.method == "POST" }.isEmpty, "the brief opens; nothing is written")
     }
 
+    func testJAndKAtTheEndsSaySo() async throws {
+        let (app, _) = try await table()
+        let mailbox = app.mailbox
+        app.place = .folder(account: Fixture.ada, folder: "Archive")
+        let list = try XCTUnwrap(app.list)
+        await until { list.total > 0 && list.copy(at: list.total - 1) != nil }
+        let last = try XCTUnwrap(list.copy(at: list.total - 1))
+        mailbox.chose([last])
+        mailbox.move(by: 1)
+        XCTAssertEqual(app.selection.copy?.key, last.key, "the last row stays open")
+        XCTAssertEqual(mailbox.toast?.text, "No more messages below", "as n says there's no more unread")
+        XCTAssertEqual(mailbox.toast?.refused, true, "with the alert, not the tick")
+        mailbox.chose([try XCTUnwrap(list.copy(at: 0))])
+        mailbox.move(by: -1)
+        XCTAssertEqual(mailbox.toast?.text, "No more messages above", "outside the Inbox no brief is above")
+    }
+
     // MARK: A row's clock
 
     func testARowsClockIsWhereItsSnoozeChooserHangs() async throws {
