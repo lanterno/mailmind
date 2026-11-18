@@ -63,6 +63,11 @@ final class Composing: ComposeHost {
     @ObservationIgnored private var waitingMail: Mailto?
     /// Bumped whenever the tray should read again.
     private(set) var outboxTurn = 0
+    /// The sends waiting for the time a person chose (Send later), whose drafts Drafts and the reader say so of
+    /// (`Scheduled`).
+    private(set) var scheduled: [API.OutboxItem] = []
+    /// Draws the list's rows again once what waits for later changed: a draft's row says when it goes.
+    @ObservationIgnored var scheduledChanged: (() -> Void)?
 
     /// A reply written in the reader, under the message it answers (#44), rather than in a window of its own.
     struct InlineReply {
@@ -94,6 +99,7 @@ final class Composing: ComposeHost {
         Task {
             await readDigest()
             await readPreferences()
+            await readScheduled()
         }
         // AI turned on or off in Settings: the composers' AI rows follow at once.
         hearingAI = Task { [weak self] in
@@ -106,7 +112,10 @@ final class Composing: ComposeHost {
             for await event in events {
                 guard let self else { return }
                 switch event.name {
-                case "outbox", "commands-changed": self.outboxTurn += 1
+                case "outbox":
+                    self.outboxTurn += 1
+                    await self.readScheduled()
+                case "commands-changed": self.outboxTurn += 1
                 case "sync-done", "resync": await self.readDigest()
                 case "draft-ready":
                     if let key = event.decoded([String: JSONValue].self)?["key"], case .number(let n) = key {
@@ -245,7 +254,19 @@ final class Composing: ComposeHost {
 
     func draftsChanged() { mailChanged?() }
     func foldersChanged() { mailChanged?() }
-    func outboxChanged() { outboxTurn += 1 }
+    func outboxChanged() {
+        outboxTurn += 1
+        Task { await readScheduled() }
+    }
+
+    /// Read again what waits to go at a time a person chose, and draw the mail again when that changed.
+    func readScheduled() async {
+        guard let core, let outbox = try? await core.get(API.Get.Outbox.self, ["limit": "200"]) else { return }
+        let waiting = outbox.items.filter { $0.scheduled && $0.state == "queued" }
+        guard waiting != scheduled else { return }
+        scheduled = waiting
+        scheduledChanged?()
+    }
 
     func closing(_ composer: Composer, save: Task<Bool?, Never>, snapshot: ComposeSeed) {
         Task {

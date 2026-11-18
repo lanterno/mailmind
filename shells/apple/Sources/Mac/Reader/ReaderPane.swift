@@ -31,6 +31,7 @@ struct ReaderPane: View {
             mailbox.composeTo = { [weak app] address in
                 Composing.shared.newMessage(to: [address], current: Self.current(in: app?.place))
             }
+            mailbox.draftWhen = { Composing.shared.scheduledWhen($0) }
             let writing: [(id: String, label: String, key: Character, run: @MainActor (MailCopy) -> Void)] = [
                 ("reply", String(localized: "Reply"), "r", { to in Task { await Composing.shared.answer(to) } }),
                 ("reply-all", String(localized: "Reply all"), "a", { to in Task { await Composing.shared.reply(to, all: true) } }),
@@ -107,6 +108,9 @@ struct ReaderPane: View {
             composing.mailChanged = { [weak app] in
                 app?.list?.refresh()
                 Task { await app?.mailbox.readCounts() }
+            }
+            composing.scheduledChanged = { [weak app] in
+                (app?.list?.display as? MailboxTableController)?.redrawShown()
             }
             if let core = app.core { composing.attach(core) }
             joinMailbox()

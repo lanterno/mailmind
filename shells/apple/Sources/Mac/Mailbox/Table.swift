@@ -338,10 +338,12 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
 
     private func show(_ view: Any?, row: Int) {
         if let cell = view as? MailRowCell, let position = position(row) {
-            let mail = list.copy(at: position)
+            var mail = list.copy(at: position)
             let role = mail.flatMap { mail in
                 mailbox?.folders(of: mail.account).first { $0.name == mail.folder }?.role
             }
+            // A draft waiting to go later says when, in its time's place.
+            if role == "drafts", let draft = mail, let when = mailbox?.draftWhen?(draft) { mail?.when = when }
             let account = showsAccount ? mail.flatMap { mail in mailbox?.name(of: mail.account) } : nil
             cell.show(mail, head: mail.flatMap { head(at: position, $0) }, account: account,
                       acts: RowAct.shown(role: role), look: look)

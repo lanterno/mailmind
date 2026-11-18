@@ -67,6 +67,11 @@ struct MessageContent: View {
             if let note = ReplyGoesElsewhere.text(opened, mine: mine) {
                 TrustWarning(text: note).padding(.top, 8)
             }
+            if opened.isDraft == true,
+               let item = Composing.shared.scheduledSend(account: copy.account, subject: opened.subject ?? "",
+                                                         to: opened.to) {
+                ScheduledLine(copy: copy, item: item).padding(.top, 8)
+            }
             ReaderCards(placement: .message, context: context)
             frame
                 .padding(.top, 20)

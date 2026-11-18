@@ -101,6 +101,8 @@ final class Mailbox {
     @ObservationIgnored var keys: [Character: @MainActor () -> Void] = [:]
     /// The reader's: a message in a window of its own, which a double-click on its row opens.
     @ObservationIgnored var opensWindow: ((MailCopy) -> Void)?
+    /// The composer's: what a draft's row says in its time's place, when it waits to go later ("Scheduled · …").
+    @ObservationIgnored var draftWhen: (@MainActor (API.FolderRow) -> String?)?
     /// The other areas' items in a row's context menu, for the rows it acts on.
     @ObservationIgnored var rowMenu: [@MainActor ([API.FolderRow]) -> [NSMenuItem]] = []
     /// The desk's: today's brief in the pane, opened on purpose (a click, Return) or only arrived at (the arrow
@@ -140,6 +142,7 @@ final class Mailbox {
         plans = nil
         composeTo = nil
         opensWindow = nil
+        draftWhen = nil
         more = []
         keys = [:]
         rowMenu = []
