@@ -169,6 +169,44 @@ def test_select_read_only_is_examine(world, session):
     assert sent(world, since) == ['EXAMINE "INBOX"', 'SELECT "INBOX"']
 
 
+def test_a_select_whose_no_says_nonexistent_is_the_folder_gone_and_no_other_refusal_is(world, session):
+    from mailmind.mailbox.application.session import FolderGone
+    with pytest.raises(FolderGone):
+        session.select("Plans")                                      # the fake's NO says [NONEXISTENT]
+    for answer in ("NO [UNAVAILABLE] not now", "NO no such mailbox", "BAD [NONEXISTENTISH] what"):
+        world.server.fail("EXAMINE", answer)
+        with pytest.raises(imaplib.IMAP4.error) as refused:
+            session.select("Archive")
+        assert not isinstance(refused.value, FolderGone), answer
+    world.server.fail("EXAMINE", "NO [nonexistent] gone")
+    with pytest.raises(FolderGone):
+        session.select("Archive")
+    assert session.select("Archive").exists == len(box(world, "Archive").messages)
+
+
+def test_select_or_gone_asks_list_after_a_bare_no_and_only_a_list_that_leaves_the_folder_out_is_gone(world, session):
+    from mailmind.mailbox.application.session import FolderGone, select_or_gone
+    with world.server.lock:
+        world.server.accounts[w.ADA].mailboxes.pop("Archive")
+    world.server.fail("EXAMINE", "NO can't open that")
+    world.server.fail("LIST", "NO [UNAVAILABLE] can't list now")
+    with pytest.raises(imaplib.IMAP4.error) as refused:
+        select_or_gone(session, "Archive")
+    assert not isinstance(refused.value, FolderGone)                # the LIST failed: nothing is known of it
+    world.server.fail("EXAMINE", "NO can't open that")
+    with pytest.raises(FolderGone):
+        select_or_gone(session, "Archive")                           # a LIST that works leaves it out
+    world.server.fail("EXAMINE", "NO [UNAVAILABLE] not now")
+    with pytest.raises(imaplib.IMAP4.error) as refused:
+        select_or_gone(session, "Sent")
+    assert not isinstance(refused.value, FolderGone)                # the LIST names it
+    since = len(world.server.commands)
+    world.server.fail("EXAMINE", "NO can't open that")
+    with pytest.raises(imaplib.IMAP4.error) as refused:
+        select_or_gone(session, "INBOX")
+    assert not isinstance(refused.value, FolderGone) and sent(world, since) == ['EXAMINE "INBOX"']   # never gone
+
+
 def test_uids_search_the_selected_folder_in_order(world, session):
     session.select("INBOX")
     every = sorted(box(world).messages)
