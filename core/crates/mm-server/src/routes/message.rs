@@ -23,10 +23,6 @@ use crate::app::App;
 use crate::query::{Query, as_int};
 use crate::{answer, problem};
 
-/// The decoded bytes of attachments one message may carry (`compose.domain.limits.MAX_ATTACH_BYTES`): a part past
-/// it isn't sent.
-pub const MAX_ATTACH_BYTES: usize = 25 << 20;
-
 pub(super) fn routes() -> Router<Arc<App>> {
     Router::new()
         .route("/api/message/body", get(body))
@@ -156,11 +152,10 @@ fn quoted(text: &str) -> String {
     out
 }
 
-/// A part as a download: its own type, never shown in the top frame, under a sandbox that allows nothing.
+/// A part as a download: its own type, never shown in the top frame, under a sandbox that allows nothing. A part of
+/// any size goes: what one message may carry as it is sent (`mm_compose::spec::MAX_ATTACH_BYTES`) is no limit on what
+/// a person was sent, and a part is never larger than its message, which was held whole to open it.
 fn download(part: Part) -> Response<Body> {
-    if part.data.len() > MAX_ATTACH_BYTES {
-        return answer::problem_document(413, &problem::blank(413, "too large"));
-    }
     let kind = part.content_type.as_str().filter(|t| !t.is_empty()).unwrap_or("application/octet-stream");
     let kind = mm_kernel::text::strip(kind.split(';').next().unwrap_or_default()).to_owned();
     let disposition = format!("attachment; filename*=UTF-8''{}", quoted(&safe_filename(&part.filename)));
