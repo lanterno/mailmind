@@ -763,6 +763,82 @@ final class OpenedMessageVerbsTests: XCTestCase {
         XCTAssertTrue(Marks(world.mailbox.shownRows).unread, "and Mark as Read")
     }
 
+    // MARK: Going elsewhere
+
+    /// A server whose folders each hold mail of their own: the Inbox its rows, Sent and Drafts one message each, and
+    /// Snoozed none.
+    static func ownFolders() -> FakeServer {
+        let server = Self.server()
+        let inbox = Self.rows
+        let sent = [Fixture.row(60, folder: "Sent", subject: "Sent on")]
+        let drafts = [Fixture.row(70, folder: "Drafts", subject: "Not yet")]
+        server.on("GET", API.Get.Messages.path) { asked in
+            let items: [API.FolderRow] = switch asked.query["folder"] {
+            case "INBOX": inbox
+            case "Sent": sent
+            case "Drafts": drafts
+            default: []
+            }
+            return FakeServer.ok(API.MessagesAnswer.folderListing(API.FolderListing(
+                account: asked.query["account"], folder: asked.query["folder"] ?? "INBOX", grouped: false,
+                hasMore: false, items: items, offset: 0, ok: true, total: items.count)))
+        }
+        return server
+    }
+
+    /// Going to a place whose list doesn't hold the message open closes it once the list has come, so File and Delete
+    /// have nothing to act on: Sent doesn't show the Inbox's message, an empty Snoozed shows none, the Inbox doesn't
+    /// keep a draft, a search or the Feed doesn't keep mail it didn't find, and the Document Hub holds no mail.
+    func testGoingToAPlaceWhoseListDoesntHoldTheMessageOpenClosesIt() async throws {
+        let inbox = Place.folder(account: Fixture.ada, folder: "INBOX")
+        let drafts = Place.folder(account: Fixture.ada, folder: "Drafts")
+        let goings: [(from: Place, to: Place)] = [
+            (inbox, .folder(account: Fixture.ada, folder: "Sent")), (inbox, .virtual(.snoozed, account: Fixture.ada)),
+            (drafts, inbox), (inbox, .search(Search(q: "paid", account: Fixture.ada))),
+            (inbox, .search(Search(q: "category:newsletter", lane: .feed))), (inbox, .documents),
+        ]
+        for (from, to) in goings {
+            let said = "\(from) → \(to)"
+            let world = await world(Self.ownFolders())
+            world.app.place = from
+            await waiting(for: said + ": the rows") { world.app.list?.copy(at: 0) != nil }
+            world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 0))])
+            XCTAssertNotNil(world.app.selection.copy, said)
+            world.app.place = to
+            await waiting(for: said + " closes the message") { world.app.selection.copy == nil }
+            XCTAssertTrue(world.mailbox.chosenRows.isEmpty, said)
+            XCTAssertFalse(world.mailbox.hasTarget, said + ": File and Delete have nothing to act on")
+            XCTAssertEqual(world.app.place, to, said)
+        }
+    }
+
+    /// A list that holds the message open keeps it open, and so does an answer, which stands in the list's place
+    /// with the pane reading beside it. A message opened as the window goes to its folder (a notification's) stays,
+    /// whether that folder's list holds it or not.
+    func testGoingToAPlaceWhoseListHoldsTheMessageOpenKeepsIt() async throws {
+        for to in [Place.allInboxes, .desk(.ask)] {
+            let world = await world(Self.ownFolders())
+            await inbox(world.app)
+            let row = try XCTUnwrap(world.app.list?.copy(at: 0))
+            world.mailbox.chose([row])
+            world.app.place = to
+            if to == .allInboxes {
+                await waiting(for: "every Inbox's rows") { world.app.list?.copy(at: 0) != nil }
+            }
+            try await Task.sleep(for: .milliseconds(20))
+            XCTAssertEqual(world.app.selection.copy, MailCopy(row), "\(to) keeps it open")
+        }
+
+        let world = await world(Self.ownFolders())
+        world.app.place = .folder(account: Fixture.ada, folder: "Sent")
+        await waiting(for: "Sent's rows") { world.app.list?.copy(at: 0) != nil }
+        world.mailbox.chose([try XCTUnwrap(world.app.list?.copy(at: 0))])
+        world.mailbox.openInItsFolder(Self.away)
+        await waiting(for: "the Inbox's rows") { world.app.list?.copy(at: 0) != nil }
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(world.app.selection.copy, Self.away, "a notification's message stays open in its folder")
+    }
+
     // MARK: Read for its moment
 
     /// After its moment on an unread message the reader marks it read (`ReaderPane.dwell`, a view's task, asks this),
