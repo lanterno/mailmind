@@ -106,3 +106,6 @@ fn literal_length(line: &str) -> Option<usize> {
     let open = line.strip_suffix('}')?.rfind('{')?;
     line[open + 1..line.len() - 1].parse().ok()
 }
+
+#[cfg(test)]
+mod tests;
