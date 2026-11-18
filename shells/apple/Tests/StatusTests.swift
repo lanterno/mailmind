@@ -176,7 +176,9 @@ final class SoonTests: XCTestCase {
 /// New mail counts on the Dock and notifies only while nobody is at the app, and only as the preferences allow.
 @MainActor
 final class NewMailAlertsTests: XCTestCase {
-    private final class Posted: Notifier, @unchecked Sendable {
+    /// What was posted and asked. Each arrival posts from a task of its own: on the main actor, one at a time.
+    @MainActor
+    private final class Posted: Notifier {
         var said: [(id: String, title: String, body: String)] = []
         var asked = 0
         var answer: Bool? = nil
@@ -203,9 +205,15 @@ final class NewMailAlertsTests: XCTestCase {
         return alerts
     }
 
+    /// A moment for what should not happen, to have had its chance to.
     private func settle() async {
         for _ in 0..<5 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(50))
+    }
+
+    /// Until `count` notifications are posted, each from a task a slow runner may not have run within any fixed time.
+    private func posts(_ count: Int) async {
+        await until { posted.said.count >= count }
     }
 
     func testWithSomeoneAtTheAppOnlyVoiceOverHearsIt() async {
@@ -222,7 +230,7 @@ final class NewMailAlertsTests: XCTestCase {
         let alerts = alerts(F.preferences())
         alerts.arrived(.init(account: "ada@example.test", folder: "INBOX", count: 1))
         alerts.arrived(.init(account: "news@example.test", folder: "INBOX", count: 2))
-        await settle()
+        await posts(2)
         XCTAssertEqual(badge, "3")
         XCTAssertEqual(posted.said.map(\.title).sorted(), ["New mail · Ada", "New mail · news"])
         XCTAssertEqual(Set(posted.said.map(\.body)), ["1 new message", "2 new messages"])
@@ -252,6 +260,7 @@ final class NewMailAlertsTests: XCTestCase {
         let soon = Soon.next([F.meeting("Stand-up", start: now.addingTimeInterval(240))], now: now, closed: [])
         alerts.meetingSoon(soon)
         alerts.meetingSoon(soon)
+        await posts(1)
         await settle()
         XCTAssertEqual(posted.said.map(\.title), ["Stand-up starts in 4 min"])
         XCTAssertTrue(posted.said[0].body.contains("Room 4"))
@@ -266,6 +275,7 @@ final class NewMailAlertsTests: XCTestCase {
         let on = alerts(F.preferences())
         on.askOnce()
         on.askOnce()
+        await until { posted.asked >= 1 }
         await settle()
         XCTAssertEqual(posted.asked, 1)
     }
