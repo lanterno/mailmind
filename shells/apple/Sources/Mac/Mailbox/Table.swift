@@ -438,6 +438,16 @@ final class MailboxTableController: NSObject, NSTableViewDataSource, NSTableView
         }
     }
 
+    /// Esc with several rows chosen: only the one chosen last stays chosen, and opens, so j and k go on from it.
+    func keepLastChosen() {
+        let last = table.selectedRow
+        guard last >= 0, let position = position(last), list.copy(at: position) != nil else {
+            mailbox?.clearMarks()
+            return
+        }
+        table.selectRowIndexes(IndexSet(integer: last), byExtendingSelection: false)
+    }
+
     // MARK: NSTableViewDataSource, NSTableViewDelegate
 
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -733,7 +743,7 @@ final class MailboxTableView: NSTableView {
         if key == "\u{1b}" {
             // The shell's first: the drawer closes, or focus reading ends, while the list stands aside behind it.
             if controller?.shell?.escape() == true { return }
-            return mailbox.chosenRows.count > 1 ? mailbox.clearMarks() : mailbox.leaveSearch()
+            return escape()
         }
         // Return on the brief's row opens it, as a click does.
         if key == "\r" || key == "\u{3}", controller?.briefChosen == true {
@@ -756,6 +766,17 @@ final class MailboxTableView: NSTableView {
         }
         // Any other key does nothing: no row is chosen by its letter, and the place stays.
         _ = RowKeys.run(lower, on: mailbox, chord: { chordAt = Date() })
+    }
+
+    /// Esc in the list, once nothing over it wants it: several rows chosen keep only the one chosen last; out of a
+    /// search, back where it was asked.
+    func escape() {
+        guard let mailbox else { return }
+        if mailbox.chosenRows.count + mailbox.unheld.count > 1 {
+            if let controller { controller.keepLastChosen() } else { mailbox.clearMarks() }
+        } else {
+            mailbox.leaveSearch()
+        }
     }
 
     /// Keys the table moves with itself: the function keys (arrows, Page Up and Down, Home, End), Tab and ⇧Tab.
